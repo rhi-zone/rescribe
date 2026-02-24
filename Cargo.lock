@@ -925,6 +925,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ooxml-pml"
+version = "0.1.0"
+source = "git+https://github.com/pterror/ooxml#7127bb19d4448f7db90ef6dee0c8ff46c6e820f2"
+dependencies = [
+ "base64",
+ "ooxml-codegen",
+ "ooxml-dml",
+ "ooxml-opc",
+ "ooxml-xml",
+ "quick-xml",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "ooxml-sml"
 version = "0.1.0"
 source = "git+https://github.com/pterror/ooxml#7127bb19d4448f7db90ef6dee0c8ff46c6e820f2"
@@ -1737,10 +1752,9 @@ dependencies = [
 name = "rescribe-read-pptx"
 version = "0.1.0"
 dependencies = [
- "quick-xml",
+ "ooxml-pml",
  "rescribe-core",
  "rescribe-std",
- "zip 2.4.2",
 ]
 
 [[package]]
@@ -2256,9 +2270,9 @@ dependencies = [
 name = "rescribe-write-pptx"
 version = "0.1.0"
 dependencies = [
+ "ooxml-pml",
  "rescribe-core",
  "rescribe-std",
- "zip 2.4.2",
 ]
 
 [[package]]

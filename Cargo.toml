@@ -148,6 +148,7 @@ rescribe = { path = "crates/rescribe" }
 # External dependencies
 ooxml-wml = { git = "https://github.com/pterror/ooxml", package = "ooxml-wml" }
 ooxml-sml = { git = "https://github.com/pterror/ooxml", package = "ooxml-sml" }
+ooxml-pml = { git = "https://github.com/pterror/ooxml", package = "ooxml-pml" }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
