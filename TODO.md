@@ -1,10 +1,5 @@
 # Rescribe Backlog
 
-## Blocked
-
-- [ ] Pre-commit hook blocks all commits — `ooxml-wml` git dependency (rev `3aa50763`) has broken import (`types::ns` no longer exists). Clippy fails on it. Need to update the ooxml pin or patch the dep.
-- [ ] CLAUDE.md and hook changes staged but uncommitted (auto-format hook + workflow guidance) — commit once clippy passes
-
 ## Completed
 
 - [x] CLI tool (`rescribe-cli`)
@@ -13,37 +8,67 @@
 - [x] ParseOptions / EmitOptions implementation
 - [x] Transforms crate (ShiftHeadings, StripEmpty, MergeText, etc.)
 - [x] Pandoc JSON compatibility layer
-- [x] DOCX reader/writer (via ooxml crate)
+- [x] DOCX reader/writer (via `ooxml-wml`)
 - [x] PDF reader (text extraction)
-- [x] 54 readers, 64 writers - comprehensive format coverage
+- [x] PPTX reader/writer (migrated to `ooxml-pml`)
+- [x] XLSX reader/writer (via `ooxml-sml`)
+- [x] 54 readers, 64 writers — comprehensive format coverage
 
-## Priority 1: Quality Audit
+## Priority 1: Replace RTF with a library
 
-- [ ] **Review existing readers** - check for:
-  - Edge cases and malformed input handling
-  - Completeness of element support
-  - Proper fidelity warnings when losing information
-  - Test coverage
+RTF is the highest-risk handwritten impl — complex group nesting, hex escaping, codepage
+handling, binary blobs. The `rtf-parser` crate on crates.io is a candidate.
 
-- [ ] **Review existing writers** - check for:
-  - Output validity (well-formed HTML/XML/etc.)
-  - Roundtrip accuracy (parse → emit → parse)
-  - Escaping and special character handling
-  - Missing node type handlers
+- [ ] Evaluate `rtf-parser` (and alternatives) for feature completeness
+- [ ] Replace `rescribe-read-rtf` with library-backed impl
+- [ ] Replace `rescribe-write-rtf` with library-backed impl (harder — fewer RTF writers exist)
+- [ ] Add fixture tests for RTF round-trip
 
-- [ ] **Core format deep-dive** (highest priority):
-  - Markdown (all variants)
-  - HTML
-  - LaTeX
-  - DOCX/ODT
-  - Org-mode
+## Priority 2: Local Pandoc fixture harness
 
-## Priority 2: Infrastructure
+Use the Pandoc test corpus at `~/git/pandoc/test/` as a local correctness oracle.
+Fixtures are GPL so they never enter the repo — tests skip gracefully if the path is absent.
 
-- [ ] **Roundtrip tests** - automated format A → B → A comparison
-- [ ] **Pandoc fixture tests** - validate against Pandoc test suite
-- [ ] **Fuzz testing** - catch crashes on malformed input
-- [ ] **Documentation** - API docs, format support matrix
+- [ ] Write a test helper that discovers `~/git/pandoc/test/` and skips if missing
+- [ ] Wire up the harness for markdown (baseline — should be near-perfect via pulldown-cmark)
+- [ ] Wire up HTML, LaTeX, org-mode, rst
+- [ ] Wire up the wiki formats (mediawiki, creole, dokuwiki, …) — expect failures, file them
+- [ ] Wire up ODT, RTF — use failures to drive fixes
+
+## Priority 3: Owned fixture suite (MIT-licensed, lives in repo, runs in CI)
+
+Complement the local Pandoc harness with our own golden files. Use Pandoc failures as
+inspiration for what cases to cover, then write clean fixtures we can commit.
+
+- [ ] Create `tests/fixtures/` directory structure (`{format}/input.{ext}`, `expected.json`)
+- [ ] Write fixture runner that parses input, serializes to rescribe JSON, diffs vs expected
+- [ ] Author fixtures for: markdown, html, org, rst, mediawiki (start small, grow with bugs)
+- [ ] Add fixture tests to CI
+
+## Priority 4: ODT writer correctness
+
+ODT writer generates ODF zip by hand (404 lines, no schema library). No ODT equivalent
+of `ooxml-pml` exists, so the path here is testing rather than library replacement.
+
+- [ ] Run ODT output through LibreOffice (`libreoffice --headless --convert-to pdf`) in CI
+  to catch malformed XML that Office apps reject
+- [ ] Add roundtrip fixture tests (write ODT → re-read → compare node tree)
+
+## Priority 5: RST and AsciiDoc reader correctness
+
+Both are large handwritten parsers (1,263 and 1,290 lines respectively) with tricky specs.
+
+- [ ] Run RST reader against Pandoc fixture harness (Priority 2), catalogue failures
+- [ ] Run AsciiDoc reader against sample docs, catalogue failures
+- [ ] Fix failures in priority order
+
+## Priority 6: Fuzz testing
+
+Prevent crashes/panics on malformed input for all formats.
+
+- [ ] Audit which formats already have fuzz targets in `fuzz/`
+- [ ] Add fuzz targets for formats that parse binary or complex structured data (RTF, ODT, EPUB)
+- [ ] Run fuzzer against all handwritten text parsers for at least a few hours
 
 ## Someday/Maybe: Niche Formats
 
