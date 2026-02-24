@@ -60,8 +60,11 @@ fn convert_node(
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
             // Create a paragraph with heading style
             let para = builder.body_mut().add_paragraph();
-            para.set_properties(ooxml_wml::ParagraphProperties {
-                style: Some(format!("Heading{}", level)),
+            para.set_properties(ooxml_wml::types::ParagraphProperties {
+                paragraph_style: Some(Box::new(ooxml_wml::types::CTString {
+                    value: format!("Heading{}", level),
+                    extra_attrs: std::collections::HashMap::new(),
+                })),
                 ..Default::default()
             });
             para.add_run().set_text(&text);

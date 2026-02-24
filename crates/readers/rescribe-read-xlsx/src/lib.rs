@@ -13,7 +13,7 @@
 //! // Process the document...
 //! ```
 
-use ooxml_sml::{CellValue, Workbook};
+use ooxml_sml::{CellValue, RowExt, Workbook, ext::ResolvedSheet};
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Severity,
     SourceInfo, WarningKind,
@@ -94,7 +94,7 @@ impl Converter {
             .collect::<Vec<_>>();
 
         for (i, name) in sheet_names.iter().enumerate() {
-            let sheet = workbook.sheet(i).map_err(|e| {
+            let sheet = workbook.resolved_sheet(i).map_err(|e| {
                 ParseError::Invalid(format!("Failed to load sheet '{}': {}", name, e))
             })?;
 
@@ -115,10 +115,8 @@ impl Converter {
         Ok(children)
     }
 
-    fn convert_sheet(&mut self, sheet: &ooxml_sml::Sheet) -> Result<Option<Node>, ParseError> {
-        let rows = sheet.rows();
-
-        if rows.is_empty() {
+    fn convert_sheet(&mut self, sheet: &ResolvedSheet) -> Result<Option<Node>, ParseError> {
+        if sheet.row_count() == 0 {
             return Ok(None);
         }
 
@@ -137,7 +135,8 @@ impl Converter {
             for col_num in min_col..=max_col {
                 let cell_value = if let Some(row) = sheet.row(row_num) {
                     if let Some(cell) = row.cell_at_column(col_num) {
-                        self.convert_cell_value(cell.value())
+                        let val = sheet.cell_value(cell);
+                        self.convert_cell_value(&val)
                     } else {
                         String::new()
                     }
