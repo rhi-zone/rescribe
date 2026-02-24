@@ -1,0 +1,15 @@
+[package]
+name = "rescribe-fixtures"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+rescribe-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+rescribe-read-markdown = { workspace = true }
+rescribe-read-html = { workspace = true }

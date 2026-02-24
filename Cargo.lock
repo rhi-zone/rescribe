@@ -1394,6 +1394,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-fixtures"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-read-html",
+ "rescribe-read-markdown",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rescribe-math"
 version = "0.1.0"
 dependencies = [

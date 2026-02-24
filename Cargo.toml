@@ -9,6 +9,7 @@ members = [
     "crates/writers/*",
     "crates/rescribe-transforms",
     "crates/rescribe-cli",
+    "crates/rescribe-fixtures",
 ]
 
 [workspace.package]
@@ -144,6 +145,9 @@ rescribe-write-fountain = { path = "crates/writers/rescribe-write-fountain" }
 
 # CLI crate
 rescribe = { path = "crates/rescribe" }
+
+# Test infrastructure
+rescribe-fixtures = { path = "crates/rescribe-fixtures" }
 
 # External dependencies
 ooxml-wml = { git = "https://github.com/pterror/ooxml", package = "ooxml-wml" }
