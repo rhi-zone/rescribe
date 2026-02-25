@@ -1,0 +1,10 @@
+{
+  "description": "EPUB paragraph with title metadata and body text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "title": "Test Document" } },
+    { "path": "/3", "kind": "div" },
+    { "path": "/3/1", "kind": "paragraph" },
+    { "path": "/3/1/0", "kind": "text", "props": { "content": "Hello world." } }
+  ]
+}

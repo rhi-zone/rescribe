@@ -1,0 +1,12 @@
+{
+  "description": "PPTX slide with title and content paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "div", "props": { "slide": 1 } },
+    { "path": "/0/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Slide Title" } },
+    { "path": "/0/1", "kind": "paragraph" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Content paragraph." } }
+  ]
+}

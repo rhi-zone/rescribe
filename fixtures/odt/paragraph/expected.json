@@ -1,0 +1,9 @@
+{
+  "description": "ODT paragraph with plain text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Hello world." } }
+  ]
+}

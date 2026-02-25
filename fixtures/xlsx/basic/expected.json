@@ -1,0 +1,17 @@
+{
+  "description": "XLSX spreadsheet with header row and one data row",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_header" },
+    { "path": "/0/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "Name" } },
+    { "path": "/0/0/1", "kind": "table_header" },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" },
+    { "path": "/0/1/0/0", "kind": "paragraph" },
+    { "path": "/0/1/0/0/0", "kind": "text", "props": { "content": "Alice" } }
+  ]
+}

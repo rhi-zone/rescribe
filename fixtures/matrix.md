@@ -1200,12 +1200,8 @@ The following formats have readers but no fixtures yet.
 
 | Format | Reader status | Priority |
 |--------|--------------|----------|
-| typst | partial coverage | 7 |
-| jats | reader exists | 8 |
-| endnotexml | reader exists | 8 |
-| tei | reader exists | 8 |
-| docx, epub, odt, pptx, xlsx | binary/library-backed | 10 |
-| pdf, rtf | complex binary | 10 |
+| pdf | complex binary | 10 |
+| rtf | complex binary, high risk | 10 |
 | commonmark, gfm, markdown-strict, multimarkdown | alias markdown reader | — |
 
 ## Completed formats
@@ -1251,10 +1247,15 @@ The following formats have readers but no fixtures yet.
 | docbook | ✓ | hand-rolled XML |
 | fb2 | ✓ | hand-rolled XML |
 | ipynb | ✓ | serde_json |
-
----
-
-## csv
+| typst | ✓ | typst crate |
+| jats | ✓ | quick-xml |
+| endnotexml | ✓ | quick-xml |
+| tei | ✓ | quick-xml |
+| docx | ✓ | ooxml-wml |
+| odt | ✓ | quick-xml |
+| epub | ✓ | epub crate |
+| pptx | ✓ | ooxml-pml |
+| xlsx | ✓ | ooxml-sml |
 
 Reader: custom hand-rolled CSV parser. First row always treated as headers (table_header cells). Subsequent rows are table_cell. Empty file produces an empty table node.
 
@@ -1567,3 +1568,55 @@ Reader: quick-xml based TEI (Text Encoding Initiative) parser. `<TEI>`, `<text>`
 | Scenario | Fixture | Category | Status |
 |----------|---------|----------|--------|
 | empty body | `adv-empty` | adversarial | ✓ |
+
+---
+
+## docx
+
+Reader: ooxml-wml library. Accepts `&[u8]`. Paragraphs, headings (via outline level/style), inline formatting (bold, italic, etc.).
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| plain paragraph | `paragraph` | happy | ✓ |
+| level-1 heading | `heading` | happy | ✓ |
+
+---
+
+## odt
+
+Reader: quick-xml based ODF parser. Accepts `&[u8]`. Same structure as DOCX.
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| plain paragraph | `paragraph` | happy | ✓ |
+| level-1 heading | `heading` | happy | ✓ |
+
+---
+
+## epub
+
+Reader: epub crate. Accepts `&[u8]`. Each chapter becomes a div (parsed via HTML reader). Chapter filenames are inserted as heading nodes for navigation. Document metadata extracted from OPF.
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph with metadata | `paragraph` | happy | ✓ |
+
+---
+
+## pptx
+
+Reader: ooxml-pml library. Accepts `&[u8]`. Each slide becomes a `div(slide=N)`. Titles become heading(level=1). Body text becomes paragraphs.
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| slide with title and paragraph | `slide` | happy | ✓ |
+
+---
+
+## xlsx
+
+Reader: ooxml-sml library. Accepts `&[u8]`. Single sheet → table. First row → table_header cells. Subsequent rows → table_cell. Cell content wrapped in paragraph > text.
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| 2-column spreadsheet with header row | `basic` | happy | ✓ |

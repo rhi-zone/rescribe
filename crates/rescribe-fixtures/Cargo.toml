@@ -60,3 +60,9 @@ rescribe-read-bibtex = { workspace = true }
 rescribe-read-biblatex = { workspace = true }
 rescribe-read-endnotexml = { workspace = true }
 rescribe-read-tei = { workspace = true }
+rescribe-read-docx = { workspace = true }
+rescribe-read-odt = { workspace = true }
+rescribe-read-epub = { workspace = true }
+rescribe-read-pptx = { workspace = true }
+rescribe-read-xlsx = { workspace = true }
+ooxml-sml = { workspace = true }

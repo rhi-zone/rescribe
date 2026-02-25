@@ -445,3 +445,48 @@ fn tei() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn docx() {
+    run_format_fixtures(&fixtures_root(), "docx", |input| {
+        rescribe_read_docx::parse_bytes(input)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn odt() {
+    run_format_fixtures(&fixtures_root(), "odt", |input| {
+        rescribe_read_odt::parse(input)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn epub() {
+    run_format_fixtures(&fixtures_root(), "epub", |input| {
+        rescribe_read_epub::parse_bytes(input)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn pptx() {
+    run_format_fixtures(&fixtures_root(), "pptx", |input| {
+        rescribe_read_pptx::parse(input)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn xlsx() {
+    run_format_fixtures(&fixtures_root(), "xlsx", |input| {
+        rescribe_read_xlsx::parse_bytes(input)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
