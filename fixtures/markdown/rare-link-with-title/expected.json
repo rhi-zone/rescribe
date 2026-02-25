@@ -1,0 +1,12 @@
+{
+  "description": "Link with title attribute sets the title prop",
+  "category": "rare",
+  "assertions": [
+    {
+      "path": "/0/0",
+      "kind": "link",
+      "props": { "url": "https://example.com", "title": "My Title" }
+    },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "text" } }
+  ]
+}

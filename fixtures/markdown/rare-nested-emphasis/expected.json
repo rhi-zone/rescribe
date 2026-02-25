@@ -1,0 +1,9 @@
+{
+  "description": "Triple asterisk: pulldown-cmark produces emphasis wrapping strong (outer=emphasis, inner=strong)",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0/0",     "kind": "emphasis" },
+    { "path": "/0/0/0",   "kind": "strong" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "bold italic" } }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "description": "Unclosed code fence is handled gracefully; must not panic",
+  "category": "adversarial",
+  "assertions": []
+}

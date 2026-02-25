@@ -1,0 +1,11 @@
+{
+  "description": "Fenced code block with language tag sets language and content props",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "code_block",
+      "props": { "language": "rust", "content": "fn main() {}\n" },
+      "children_count": 0
+    }
+  ]
+}

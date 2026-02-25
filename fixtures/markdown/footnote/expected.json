@@ -1,0 +1,7 @@
+{
+  "description": "Footnote reference and definition produce footnote_ref and footnote_def nodes",
+  "assertions": [
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "1" } },
+    { "path": "/1",   "kind": "footnote_def", "props": { "label": "1" } }
+  ]
+}

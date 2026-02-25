@@ -1,6 +1,6 @@
 # Rescribe Fixture Specification
 
-Version: 1.0
+Version: 1.1
 License: MIT
 
 This document defines the cross-language fixture format used by rescribe tests.
@@ -20,11 +20,24 @@ fixtures/
 `{feature}` is a short descriptive name for the feature being tested.
 The input extension matches the format (`.md`, `.html`, `.rst`, …).
 
+**Naming conventions for feature directories:**
+
+| Prefix | Meaning |
+|--------|---------|
+| (none) | Happy path — standard, valid input |
+| `rare-` | Valid but uncommon/obscure syntax |
+| `adv-` | Adversarial — malformed or extreme input |
+
 ## `expected.json` schema
 
 ```json
 {
   "description": "Human-readable description of what is being tested",
+  "category": "happy",
+  "expect_error": false,
+  "metadata": {
+    "title": "My Document"
+  },
   "assertions": [
     { "path": "/0",   "kind": "paragraph" },
     { "path": "/0/0", "kind": "text", "props": { "content": "hello" } }
@@ -32,12 +45,23 @@ The input extension matches the format (`.md`, `.html`, `.rst`, …).
 }
 ```
 
-### Fields
+### Top-level fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `description` | string | yes | Free-text description |
-| `assertions` | array | yes | List of node assertions |
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `description` | string | yes | — | Free-text description |
+| `category` | string | no | `"happy"` | One of `"happy"`, `"rare"`, `"adversarial"` |
+| `expect_error` | bool | no | `false` | If true, a parse error is acceptable (skip assertions). Parser must still not panic. |
+| `metadata` | object | no | `{}` | Assertions about document-level metadata (same value semantics as `props`) |
+| `assertions` | array | no | `[]` | List of node assertions |
+
+**`category` meanings:**
+
+| Value | Meaning |
+|-------|---------|
+| `"happy"` | Standard valid input — tests correct recognition of the construct |
+| `"rare"` | Valid but obscure or uncommon syntax — tests edge-case coverage |
+| `"adversarial"` | Malformed, truncated, or extreme input — tests robustness (must not panic) |
 
 ### Assertion fields
 
@@ -58,13 +82,17 @@ of the current node.
 
 | Path | Meaning |
 |------|---------|
+| `""` | `document.content` itself (the document node) |
 | `/0` | `content.children[0]` |
 | `/0/0` | `content.children[0].children[0]` |
 | `/0/2/1` | `content.children[0].children[2].children[1]` |
 
+The empty path `""` is useful in adversarial tests to assert top-level structure
+(e.g., `{ "path": "", "kind": "document", "children_count": 0 }` for an empty doc).
+
 ## Property matching
 
-Each key in `props` is a property name. The value specifies what to expect:
+Each key in `props` (or `metadata`) is a property name. The value specifies what to expect:
 
 | JSON value type | Matches rescribe prop type |
 |-----------------|---------------------------|
@@ -73,6 +101,38 @@ Each key in `props` is a property name. The value specifies what to expect:
 | float (e.g. `1.5`) | `PropValue::Float` |
 | `true` / `false` | `PropValue::Bool` |
 | `null` | prop must be **absent** |
+
+## Metadata assertions
+
+The `metadata` object asserts against document-level metadata (e.g., YAML frontmatter,
+HTML `<meta>` tags). Keys and value semantics are identical to `props` assertions.
+
+```json
+{
+  "description": "YAML frontmatter title is parsed into metadata",
+  "metadata": { "title": "My Doc" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}
+```
+
+## Adversarial fixtures
+
+Fixtures with `"category": "adversarial"` test robustness. Rules:
+
+- The parser **must not panic** under any circumstances.
+- If `expect_error` is false (default), the parser must return a document (even if degraded).
+- If `expect_error` is true, a parse error is acceptable; no assertions are checked.
+- Assertions may be empty (`[]`) when the only goal is no-panic verification.
+
+```json
+{
+  "description": "Unclosed code fence is handled gracefully",
+  "category": "adversarial",
+  "assertions": []
+}
+```
 
 ## Rescribe node JSON representation
 
@@ -97,7 +157,8 @@ For reference, the rescribe document IR serialises as:
 A validator can:
 1. Invoke `rescribe convert --from {format} --to native-json < input.{ext}`
 2. Parse the resulting JSON
-3. Walk paths and check assertions
+3. Check `metadata` assertions against the top-level `metadata` field
+4. Walk paths and check node assertions
 
 ## Example
 

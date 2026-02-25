@@ -75,6 +75,17 @@ cd docs && bun dev # Local docs
 
 Pandoc fixtures at `~/git/pandoc/test/` can be used as local reference inputs (GPL - don't copy into repo). Run rescribe against them to validate parsing.
 
+## Long-term Goal: 100% Spec Coverage
+
+The owned fixture suite (`fixtures/`) is the primary deliverable for correctness:
+
+- **Language-agnostic**: any implementation in any language uses `fixtures/{format}/{feature}/input.{ext}` + `expected.json`
+- **100% pass rate = 100% implementation support** — rich enough that passing all fixtures means you have correctly implemented the format's full construct set
+- **Coverage definition**: one fixture per (format × construct) pair, including all block kinds, all inline kinds, all significant properties, and key composition cases
+- **See `fixtures/spec.md`** for the fixture format spec
+
+When adding fixtures, always think: "would a correct alternative implementation of this format, reading this fixture, know exactly what to produce?" If not, the fixture is underspecified.
+
 ## Conventions
 
 - Crate names: `rescribe-{name}` (no rhi prefix per ecosystem convention)

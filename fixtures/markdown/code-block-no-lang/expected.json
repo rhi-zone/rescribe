@@ -1,0 +1,11 @@
+{
+  "description": "Fenced code block without language has no language prop",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "code_block",
+      "props": { "content": "hello\n", "language": null },
+      "children_count": 0
+    }
+  ]
+}

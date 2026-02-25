@@ -22,7 +22,7 @@ fn markdown() {
     run_format_fixtures(&fixtures_root(), "markdown", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
         rescribe_read_markdown::parse(s)
-            .map(|r| r.value.content)
+            .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
 }
@@ -32,7 +32,7 @@ fn html() {
     run_format_fixtures(&fixtures_root(), "html", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
         rescribe_read_html::parse(s)
-            .map(|r| r.value.content)
+            .map(|r| r.value)
             .map_err(|e| e.to_string())
     });
 }

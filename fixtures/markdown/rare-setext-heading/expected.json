@@ -1,0 +1,8 @@
+{
+  "description": "Setext-style heading produces the same heading node as ATX style",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Level One" } }
+  ]
+}

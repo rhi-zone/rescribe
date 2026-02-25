@@ -1,0 +1,8 @@
+{
+  "description": "Single newline within a paragraph produces a soft_break node",
+  "assertions": [
+    { "path": "/0/0", "kind": "text",       "props": { "content": "first line" } },
+    { "path": "/0/1", "kind": "soft_break", "children_count": 0 },
+    { "path": "/0/2", "kind": "text",       "props": { "content": "second line" } }
+  ]
+}

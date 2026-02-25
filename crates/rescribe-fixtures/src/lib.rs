@@ -8,7 +8,7 @@
 
 pub mod pandoc_harness;
 
-use rescribe_core::{Node, PropValue};
+use rescribe_core::{Document, Node, PropValue, Properties};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt;
@@ -22,7 +22,24 @@ use std::path::Path;
 #[derive(Debug, Deserialize)]
 pub struct Fixture {
     pub description: String,
+    /// One of "happy", "rare", "adversarial". Informational; affects reporting.
+    #[serde(default = "default_category")]
+    pub category: String,
+    /// If true, a parse error is acceptable (no assertions are checked).
+    /// The parser must still not panic.
+    #[serde(default)]
+    pub expect_error: bool,
+    /// Assertions against document-level metadata (e.g. YAML frontmatter).
+    /// Same value semantics as `props` in assertions.
+    #[serde(default)]
+    pub metadata: HashMap<String, serde_json::Value>,
+    /// Node tree assertions.
+    #[serde(default)]
     pub assertions: Vec<Assertion>,
+}
+
+fn default_category() -> String {
+    "happy".into()
 }
 
 /// A single assertion in a fixture manifest.
@@ -66,7 +83,8 @@ impl fmt::Display for Failure {
 
 /// Walk a `/`-delimited integer path from a content root node.
 ///
-/// `/0/1/2` → `root.children[0].children[1].children[2]`
+/// `""` or `"/"` → root itself
+/// `"/0/1/2"` → `root.children[0].children[1].children[2]`
 pub fn walk_path<'a>(root: &'a Node, path: &str) -> Option<&'a Node> {
     let components = path.trim_start_matches('/');
     if components.is_empty() {
@@ -84,7 +102,24 @@ pub fn walk_path<'a>(root: &'a Node, path: &str) -> Option<&'a Node> {
 // Assertion checking
 // ---------------------------------------------------------------------------
 
-/// Check all assertions against `content_root` (the `document` node).
+/// Check metadata assertions against `doc.metadata`.
+///
+/// Returns a list of failures; empty means all assertions passed.
+pub fn check_metadata(doc: &Document, fixture: &Fixture) -> Vec<Failure> {
+    let mut failures = Vec::new();
+    for (key, expected_json) in &fixture.metadata {
+        check_prop_in(
+            "(metadata)",
+            &doc.metadata,
+            key,
+            expected_json,
+            &mut failures,
+        );
+    }
+    failures
+}
+
+/// Check all node assertions against `content_root` (the `document` node).
 ///
 /// Returns a list of failures; empty means all assertions passed.
 pub fn check(content_root: &Node, fixture: &Fixture) -> Vec<Failure> {
@@ -117,7 +152,7 @@ fn check_assertion(node: &Node, assertion: &Assertion, failures: &mut Vec<Failur
         });
     }
     for (key, expected_json) in &assertion.props {
-        check_prop(&assertion.path, node, key, expected_json, failures);
+        check_prop_in(&assertion.path, &node.props, key, expected_json, failures);
     }
     if let Some(expected_count) = assertion.children_count {
         let actual = node.children.len();
@@ -130,15 +165,15 @@ fn check_assertion(node: &Node, assertion: &Assertion, failures: &mut Vec<Failur
     }
 }
 
-fn check_prop(
+fn check_prop_in(
     path: &str,
-    node: &Node,
+    props: &Properties,
     key: &str,
     expected_json: &serde_json::Value,
     failures: &mut Vec<Failure>,
 ) {
     if expected_json.is_null() {
-        if node.props.get(key).is_some() {
+        if props.get(key).is_some() {
             failures.push(Failure {
                 path: path.to_string(),
                 message: format!("prop {key:?}: expected absent, but is present"),
@@ -146,7 +181,7 @@ fn check_prop(
         }
         return;
     }
-    let actual = match node.props.get(key) {
+    let actual = match props.get(key) {
         Some(v) => v,
         None => {
             failures.push(Failure {
@@ -205,13 +240,15 @@ pub fn discover_fixtures(fixtures_root: &Path, format: &str) -> Vec<std::path::P
 
 /// Run all fixtures for `format` against `parse_fn`.
 ///
-/// `parse_fn` receives the raw input bytes and must return the document
-/// content root (`Document::content`, the `"document"` node) or an error
-/// string.  Panics if any fixture fails, printing a full report.
+/// `parse_fn` receives the raw input bytes and must return the parsed
+/// `Document` or an error string.  Panics if any fixture fails.
+///
+/// **Adversarial fixtures**: if `expect_error` is true, a parse error is
+/// acceptable and no assertions are checked. The parser must still not panic.
 pub fn run_format_fixtures(
     fixtures_root: &Path,
     format: &str,
-    parse_fn: impl Fn(&[u8]) -> Result<Node, String>,
+    parse_fn: impl Fn(&[u8]) -> Result<Document, String>,
 ) {
     let dirs = discover_fixtures(fixtures_root, format);
     if dirs.is_empty() {
@@ -238,26 +275,30 @@ pub fn run_format_fixtures(
         let input = std::fs::read(&input_path)
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", input_path.display()));
 
-        let content_root = match parse_fn(&input) {
-            Ok(node) => node,
+        let desc = format!("{} ({})", fixture.description, dir.display());
+
+        let doc = match parse_fn(&input) {
+            Ok(doc) => doc,
             Err(e) => {
-                all_failures.push((
-                    format!("{} ({})", fixture.description, dir.display()),
-                    vec![Failure {
-                        path: String::new(),
-                        message: format!("parse error: {e}"),
-                    }],
-                ));
+                if !fixture.expect_error {
+                    all_failures.push((
+                        desc,
+                        vec![Failure {
+                            path: String::new(),
+                            message: format!("parse error: {e}"),
+                        }],
+                    ));
+                }
+                // Whether expected or not, skip assertions on error.
                 continue;
             }
         };
 
-        let failures = check(&content_root, &fixture);
-        if !failures.is_empty() {
-            all_failures.push((
-                format!("{} ({})", fixture.description, dir.display()),
-                failures,
-            ));
+        let mut fixture_failures = check_metadata(&doc, &fixture);
+        fixture_failures.extend(check(&doc.content, &fixture));
+
+        if !fixture_failures.is_empty() {
+            all_failures.push((desc, fixture_failures));
         }
     }
 

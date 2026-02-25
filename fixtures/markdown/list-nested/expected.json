@@ -1,0 +1,9 @@
+{
+  "description": "Nested list appears as a list child inside the parent list_item",
+  "assertions": [
+    { "path": "/0",     "kind": "list" },
+    { "path": "/0/0",   "kind": "list_item" },
+    { "path": "/0/0/1", "kind": "list" },
+    { "path": "/0/0/1/0", "kind": "list_item" }
+  ]
+}

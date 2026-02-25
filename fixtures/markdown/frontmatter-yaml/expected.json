@@ -1,0 +1,7 @@
+{
+  "description": "YAML frontmatter is parsed into document metadata",
+  "metadata": { "title": "My Document" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

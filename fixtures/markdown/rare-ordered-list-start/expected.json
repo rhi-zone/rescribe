@@ -1,0 +1,7 @@
+{
+  "description": "Ordered list starting at 5 sets the start prop",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": true, "start": 5 } }
+  ]
+}

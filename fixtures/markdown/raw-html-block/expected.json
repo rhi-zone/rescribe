@@ -1,0 +1,6 @@
+{
+  "description": "Block-level raw HTML becomes a raw_block node with format=html",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "format": "html" } }
+  ]
+}

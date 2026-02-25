@@ -1,0 +1,12 @@
+{
+  "description": "Image with title sets the title prop alongside alt",
+  "category": "rare",
+  "assertions": [
+    {
+      "path": "/0/0",
+      "kind": "image",
+      "props": { "url": "https://example.com/img.png", "alt": "alt text", "title": "Caption" },
+      "children_count": 0
+    }
+  ]
+}

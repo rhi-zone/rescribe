@@ -13,7 +13,9 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 # Our MIT fixture suite (tests/run.rs)
-rescribe-read-markdown = { workspace = true }
+# Explicitly use pulldown-cmark backend for consistent behaviour; tree-sitter
+# (the default) lacks YAML frontmatter, footnotes, and other GFM extensions.
+rescribe-read-markdown = { workspace = true, features = ["pulldown"] }
 rescribe-read-html = { workspace = true }
 
 # Pandoc corpus harness (tests/pandoc.rs)

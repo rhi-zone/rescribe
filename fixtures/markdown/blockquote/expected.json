@@ -1,0 +1,8 @@
+{
+  "description": "Blockquote wraps content in a blockquote node",
+  "assertions": [
+    { "path": "/0",     "kind": "blockquote" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "quoted text" } }
+  ]
+}

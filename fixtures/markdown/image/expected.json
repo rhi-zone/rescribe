@@ -1,0 +1,11 @@
+{
+  "description": "Image produces an image node with url and alt props; no children",
+  "assertions": [
+    {
+      "path": "/0/0",
+      "kind": "image",
+      "props": { "url": "https://example.com/logo.png", "alt": "logo", "title": null },
+      "children_count": 0
+    }
+  ]
+}

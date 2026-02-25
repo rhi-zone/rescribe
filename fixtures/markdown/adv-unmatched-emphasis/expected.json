@@ -1,0 +1,7 @@
+{
+  "description": "Unmatched emphasis delimiter is handled gracefully; must not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

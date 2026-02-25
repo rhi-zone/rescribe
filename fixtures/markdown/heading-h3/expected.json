@@ -1,0 +1,6 @@
+{
+  "description": "ATX h3 heading has level 3",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 3 } }
+  ]
+}
