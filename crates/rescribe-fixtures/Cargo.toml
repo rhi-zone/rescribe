@@ -66,3 +66,5 @@ rescribe-read-epub = { workspace = true }
 rescribe-read-pptx = { workspace = true }
 rescribe-read-xlsx = { workspace = true }
 ooxml-sml = { workspace = true }
+rescribe-read-pdf = { workspace = true }
+rescribe-read-rtf = { workspace = true }

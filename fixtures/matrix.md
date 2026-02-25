@@ -1200,8 +1200,6 @@ The following formats have readers but no fixtures yet.
 
 | Format | Reader status | Priority |
 |--------|--------------|----------|
-| pdf | complex binary | 10 |
-| rtf | complex binary, high risk | 10 |
 | commonmark, gfm, markdown-strict, multimarkdown | alias markdown reader | — |
 
 ## Completed formats
@@ -1256,6 +1254,8 @@ The following formats have readers but no fixtures yet.
 | epub | ✓ | epub crate |
 | pptx | ✓ | ooxml-pml |
 | xlsx | ✓ | ooxml-sml |
+| pdf | ✓ | pdf-extract |
+| rtf | ✓ | rtf-parser |
 
 Reader: custom hand-rolled CSV parser. First row always treated as headers (table_header cells). Subsequent rows are table_cell. Empty file produces an empty table node.
 
@@ -1620,3 +1620,24 @@ Reader: ooxml-sml library. Accepts `&[u8]`. Single sheet → table. First row �
 | Construct | Fixture | Category | Status |
 |-----------|---------|----------|--------|
 | 2-column spreadsheet with header row | `basic` | happy | ✓ |
+
+---
+
+## pdf
+
+Reader: pdf-extract crate. Accepts `&[u8]`. Extracts text as plain paragraphs; structural information (headings, tables) not preserved.
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| single paragraph | `paragraph` | happy | ✓ |
+
+---
+
+## rtf
+
+Reader: rtf-parser crate. Accepts `&str`. RTF bold (`\b`) maps to `strong` inline — `\outlinelevel` is not mapped to `heading` nodes.
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| plain paragraph | `paragraph` | happy | ✓ |
+| bold heading + paragraph | `heading` | happy | ✓ |

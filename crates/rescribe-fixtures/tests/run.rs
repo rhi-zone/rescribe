@@ -490,3 +490,22 @@ fn xlsx() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn pdf() {
+    run_format_fixtures(&fixtures_root(), "pdf", |input| {
+        rescribe_read_pdf::parse(input)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn rtf() {
+    run_format_fixtures(&fixtures_root(), "rtf", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_rtf::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

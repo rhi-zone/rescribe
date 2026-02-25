@@ -1,0 +1,12 @@
+{
+  "description": "RTF document with a bold heading and a paragraph — RTF bold maps to strong, not heading",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "strong" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "My Heading" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Some content." } }
+  ]
+}
