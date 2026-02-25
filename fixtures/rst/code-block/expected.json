@@ -1,0 +1,7 @@
+{
+  "description": "Literal code block via standalone ::",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "hello world" } }
+  ]
+}

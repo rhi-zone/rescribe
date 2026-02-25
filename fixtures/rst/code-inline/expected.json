@@ -1,0 +1,8 @@
+{
+  "description": "Inline code with double backticks",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "code", "props": { "content": "print" } }
+  ]
+}

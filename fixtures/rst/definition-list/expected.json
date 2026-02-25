@@ -1,0 +1,14 @@
+{
+  "description": "Definition list with two term/desc pairs",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list", "children_count": 4 },
+    { "path": "/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "term one" } },
+    { "path": "/0/1", "kind": "definition_desc" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Definition of term one." } },
+    { "path": "/0/2", "kind": "definition_term" },
+    { "path": "/0/2/0", "kind": "text", "props": { "content": "term two" } },
+    { "path": "/0/3", "kind": "definition_desc" }
+  ]
+}

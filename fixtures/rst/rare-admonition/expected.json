@@ -1,0 +1,9 @@
+{
+  "description": "Note admonition directive becomes div with class",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "note" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "This is an important note." } }
+  ]
+}

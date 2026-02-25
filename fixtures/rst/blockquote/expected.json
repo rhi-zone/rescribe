@@ -1,0 +1,10 @@
+{
+  "description": "Block quote (indented paragraph)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "blockquote" },
+    { "path": "/1/0", "kind": "paragraph" },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "An indented block quote." } }
+  ]
+}

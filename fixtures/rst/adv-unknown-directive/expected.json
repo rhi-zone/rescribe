@@ -1,0 +1,7 @@
+{
+  "description": "Unknown directive becomes div with rst:directive prop",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "rst:directive": "custom-widget" } }
+  ]
+}

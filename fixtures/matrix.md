@@ -210,28 +210,55 @@ Reader: custom hand-rolled org-mode parser.
 
 ## rst
 
+Reader: custom hand-rolled RST parser. Heading levels are inferred dynamically from underline character order.
+
 ### Block constructs
 
 | Construct | Fixture | Category | Status |
 |-----------|---------|----------|--------|
-| paragraph | — | happy | — |
-| section heading | — | happy | — |
-| code block (:: style) | — | happy | — |
-| code-block directive | — | happy | — |
-| blockquote | — | happy | — |
-| bullet list | — | happy | — |
-| enumerated list | — | happy | — |
-| field list | — | happy | — |
-| table (simple) | — | happy | — |
+| paragraph | `paragraph` | happy | ✓ |
+| section heading h1 | `heading` | happy | ✓ |
+| section heading h2 | `heading-h2` | happy | ✓ |
+| code block (:: style) | `code-block` | happy | ✓ |
+| code-block directive | `code-block-directive` | happy | ✓ |
+| blockquote | `blockquote` | happy | ✓ |
+| bullet list | `list-unordered` | happy | ✓ |
+| enumerated list | `list-ordered` | happy | ✓ |
+| definition list | `definition-list` | happy | ✓ |
 
 ### Inline constructs
 
 | Construct | Fixture | Category | Status |
 |-----------|---------|----------|--------|
-| emphasis | — | happy | — |
-| strong | — | happy | — |
-| inline code | — | happy | — |
-| hyperlink | — | happy | — |
+| emphasis | `emphasis` | happy | ✓ |
+| strong | `strong` | happy | ✓ |
+| inline code | `code-inline` | happy | ✓ |
+| hyperlink (embedded) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| named hyperlink reference | `rare-link-named` | rare | ✓ |
+| image directive | `rare-image` | rare | ✓ |
+| note admonition | `rare-admonition` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+| unknown directive | `adv-unknown-directive` | adversarial | ✓ |
+| unmatched emphasis | `adv-unmatched-emphasis` | adversarial | ✓ |
+
+### Not yet covered
+
+| Construct | Notes |
+|-----------|-------|
+| field list | Not implemented in reader |
+| table (simple/grid) | Not implemented in reader |
+| footnotes | `[1]_` style |
+| substitution definitions | `\|name\|` syntax |
 
 ---
 

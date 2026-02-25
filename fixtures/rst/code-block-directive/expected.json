@@ -1,0 +1,7 @@
+{
+  "description": "Code block via directive with language",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "python", "content": "print(\"hello\")" } }
+  ]
+}

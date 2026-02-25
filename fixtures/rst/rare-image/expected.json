@@ -1,0 +1,7 @@
+{
+  "description": "Image directive with alt text",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "image", "props": { "url": "/images/logo.png", "alt": "Project logo" } }
+  ]
+}
