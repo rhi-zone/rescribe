@@ -1,0 +1,6 @@
+{
+  "description": "code cell produces code_block with content prop and default language python",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "print('hello')", "language": "python" }, "children_count": 0 }
+  ]
+}

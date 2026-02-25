@@ -1,0 +1,8 @@
+{
+  "description": "Native nested: paragraph inside a div inside document",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Nested text" } }
+  ]
+}

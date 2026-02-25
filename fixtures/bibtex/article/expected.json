@@ -1,0 +1,11 @@
+{
+  "description": "Journal article with cite key, author, title, journal, year",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "bibtex:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "smith2020" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:key": "smith2020", "bibtex:type": "article" } }
+  ]
+}

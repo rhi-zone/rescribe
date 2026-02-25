@@ -1,0 +1,11 @@
+{
+  "description": "Entry with UR field produces a URL link in description",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "ris:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code" },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "ris:type": "ELEC", "ris:key": "lee2023" } }
+  ]
+}

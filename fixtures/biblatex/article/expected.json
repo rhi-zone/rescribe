@@ -1,0 +1,11 @@
+{
+  "description": "Journal article using journaltitle and date (BibLaTeX extended fields)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "biblatex:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "smith2020" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "biblatex:key": "smith2020", "biblatex:type": "article" } }
+  ]
+}

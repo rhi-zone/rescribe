@@ -1,0 +1,10 @@
+{
+  "description": "Article-journal entry becomes a csl:item inside a definition_list",
+  "assertions": [
+    { "path": "/0",       "kind": "definition_list" },
+    { "path": "/0/0",     "kind": "csl:item" },
+    { "path": "/0/0/0",   "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "smith2020" } },
+    { "path": "/0/0/1",   "kind": "definition_desc", "props": { "csl:id": "smith2020", "csl:type": "article-journal" } }
+  ]
+}

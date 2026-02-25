@@ -1,0 +1,11 @@
+{
+  "description": "Article with subtitle field (BibLaTeX extension not present in BibTeX)",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "biblatex:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "miller2022" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "biblatex:key": "miller2022", "biblatex:type": "article" } }
+  ]
+}

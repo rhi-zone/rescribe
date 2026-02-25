@@ -1,0 +1,12 @@
+Document {
+  content:
+  document() [
+    div() [
+      paragraph() [
+        text( { content: "Nested text" })
+      ]
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

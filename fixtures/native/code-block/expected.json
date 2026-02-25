@@ -1,0 +1,6 @@
+{
+  "description": "Native code_block with content and language props",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "print(42)", "language": "python" } }
+  ]
+}

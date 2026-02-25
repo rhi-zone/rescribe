@@ -1,0 +1,12 @@
+{
+  "description": "OPML outline with xmlUrl attribute produces a link node instead of text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com/feed.xml" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Example Feed" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Plain item" } }
+  ]
+}

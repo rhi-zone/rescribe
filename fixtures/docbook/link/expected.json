@@ -1,0 +1,9 @@
+{
+  "description": "link with url attribute becomes a link node with url prop and text child",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/0",   "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "click here" } }
+  ]
+}

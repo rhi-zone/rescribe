@@ -1,0 +1,10 @@
+Document {
+  content:
+  document() [
+    heading( { level: 1 }) [
+      text( { content: "My Heading" })
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

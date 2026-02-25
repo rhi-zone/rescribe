@@ -1,0 +1,6 @@
+{
+  "description": "source as array of strings is joined without separator; the result is parsed as markdown",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

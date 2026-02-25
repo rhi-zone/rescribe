@@ -1,0 +1,7 @@
+{
+  "description": "code cell with stream output produces two code_block nodes: source then stream output with ipynb:output_type=stream",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "print('hello')", "language": "python" } },
+    { "path": "/1", "kind": "code_block", "props": { "content": "hello\n", "ipynb:output_type": "stream", "ipynb:stream_name": "stdout" } }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "Entry with doi field produces a DOI hyperlink in description",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "bibtex:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "garcia2019" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:key": "garcia2019", "bibtex:type": "article" } }
+  ]
+}

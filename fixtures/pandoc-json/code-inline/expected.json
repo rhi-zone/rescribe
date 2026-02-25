@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc Code inline becomes a code node with content prop",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "code", "props": { "content": "x = 1" } }
+  ]
+}

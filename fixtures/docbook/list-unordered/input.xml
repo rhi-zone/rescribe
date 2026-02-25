@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <itemizedlist>
+    <listitem><para>First item</para></listitem>
+    <listitem><para>Second item</para></listitem>
+    <listitem><para>Third item</para></listitem>
+  </itemizedlist>
+</article>

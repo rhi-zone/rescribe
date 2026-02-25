@@ -1,0 +1,7 @@
+{
+  "description": "programlisting becomes code_block with content and language props; no children",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "code_block", "props": { "content": "print(\"hello\")", "language": "python" }, "children_count": 0 }
+  ]
+}

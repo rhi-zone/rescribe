@@ -1,0 +1,22 @@
+{
+  "description": "TSV with an empty field between two populated fields",
+  "category": "rare",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_header" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "A" } },
+    { "path": "/0/0/1", "kind": "table_header" },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "B" } },
+    { "path": "/0/0/2", "kind": "table_header" },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "C" } },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "1" } },
+    { "path": "/0/1/1", "kind": "table_cell" },
+    { "path": "/0/1/1/0", "kind": "text", "props": { "content": "" } },
+    { "path": "/0/1/2", "kind": "table_cell" },
+    { "path": "/0/1/2/0", "kind": "text", "props": { "content": "3" } }
+  ]
+}

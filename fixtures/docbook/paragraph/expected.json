@@ -1,0 +1,8 @@
+{
+  "description": "para inside article becomes a paragraph node with text child; article becomes a div",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Hello world." } }
+  ]
+}

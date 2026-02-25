@@ -1,0 +1,6 @@
+{
+  "description": "raw cell produces raw_block with content prop and format=text (default when no format metadata)",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "content": "<div>raw html content</div>", "format": "text" }, "children_count": 0 }
+  ]
+}

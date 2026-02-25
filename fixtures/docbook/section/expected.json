@@ -1,0 +1,11 @@
+{
+  "description": "section inside article becomes a div; its title becomes heading level 2",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div" },
+    { "path": "/0/0/0",   "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Section Title" } },
+    { "path": "/0/0/1",   "kind": "paragraph" },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Text." } }
+  ]
+}

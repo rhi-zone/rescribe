@@ -1,0 +1,9 @@
+{
+  "description": "p inside section becomes a paragraph node; body and section become div nodes",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div" },
+    { "path": "/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Hello world." } }
+  ]
+}

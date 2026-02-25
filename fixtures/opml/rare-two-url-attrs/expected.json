@@ -1,0 +1,10 @@
+{
+  "description": "OPML outline with both xmlUrl and htmlUrl uses xmlUrl as the link target",
+  "category": "rare",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com/feed.xml" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Both URLs" } }
+  ]
+}

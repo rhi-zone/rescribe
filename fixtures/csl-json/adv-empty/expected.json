@@ -1,0 +1,7 @@
+{
+  "description": "Empty JSON array produces a document with no definition_list",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document", "children_count": 0 }
+  ]
+}

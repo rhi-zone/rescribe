@@ -1,0 +1,10 @@
+{
+  "description": "Article with multiple authors produces correct csl:item",
+  "assertions": [
+    { "path": "/0",       "kind": "definition_list" },
+    { "path": "/0/0",     "kind": "csl:item" },
+    { "path": "/0/0/0",   "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "brown2018" } },
+    { "path": "/0/0/1",   "kind": "definition_desc", "props": { "csl:id": "brown2018", "csl:type": "article-journal" } }
+  ]
+}

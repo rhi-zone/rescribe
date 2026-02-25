@@ -1,0 +1,6 @@
+{
+  "description": "Pandoc CodeBlock becomes a code_block node with content and language props",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "print('hello')", "language": "python" } }
+  ]
+}

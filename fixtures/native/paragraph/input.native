@@ -1,0 +1,10 @@
+Document {
+  content:
+  document() [
+    paragraph() [
+      text( { content: "Hello world" })
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

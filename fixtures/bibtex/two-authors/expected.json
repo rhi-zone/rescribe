@@ -1,0 +1,11 @@
+{
+  "description": "Entry with two authors joined by 'and' in BibTeX syntax",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "bibtex:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "smith2021" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:key": "smith2021", "bibtex:type": "article" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Empty TSV file produces a document with a single empty table",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "table", "children_count": 0 }
+  ]
+}

@@ -49,3 +49,12 @@ rescribe-read-texinfo = { workspace = true }
 rescribe-read-markua = { workspace = true }
 rescribe-read-fountain = { workspace = true }
 rescribe-read-ansi = { workspace = true }
+rescribe-read-ipynb = { workspace = true }
+rescribe-read-csl-json = { workspace = true }
+rescribe-read-native = { workspace = true }
+rescribe-read-csv = { workspace = true }
+rescribe-read-tsv = { workspace = true }
+rescribe-read-opml = { workspace = true }
+rescribe-read-ris = { workspace = true }
+rescribe-read-bibtex = { workspace = true }
+rescribe-read-biblatex = { workspace = true }

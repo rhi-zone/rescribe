@@ -1,0 +1,6 @@
+{
+  "description": "empty article produces a single div with no children",
+  "assertions": [
+    { "path": "/0", "kind": "div", "children_count": 0 }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "OPML head title is extracted into document metadata",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "title": "My Document Title" } },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "An item" } }
+  ]
+}

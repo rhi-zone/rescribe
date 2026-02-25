@@ -1,0 +1,6 @@
+{
+  "description": "kernelspec language is used for code cell language prop; execution_count is stored as ipynb:execution_count",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "puts 'hello'", "language": "ruby", "ipynb:execution_count": 1 }, "children_count": 0 }
+  ]
+}

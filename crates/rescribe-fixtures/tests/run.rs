@@ -286,3 +286,122 @@ fn ansi() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn csl_json() {
+    run_format_fixtures(&fixtures_root(), "csl-json", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_csl_json::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn native() {
+    run_format_fixtures(&fixtures_root(), "native", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_native::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn pandoc_json() {
+    run_format_fixtures(&fixtures_root(), "pandoc-json", |input| {
+        rescribe_read_pandoc_json::parse(std::str::from_utf8(input).map_err(|e| e.to_string())?)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn docbook() {
+    run_format_fixtures(&fixtures_root(), "docbook", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_docbook::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn fb2() {
+    run_format_fixtures(&fixtures_root(), "fb2", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_fb2::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn ipynb() {
+    run_format_fixtures(&fixtures_root(), "ipynb", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_ipynb::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn csv() {
+    run_format_fixtures(&fixtures_root(), "csv", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_csv::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn tsv() {
+    run_format_fixtures(&fixtures_root(), "tsv", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_tsv::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn opml() {
+    run_format_fixtures(&fixtures_root(), "opml", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_opml::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn ris() {
+    run_format_fixtures(&fixtures_root(), "ris", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_ris::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn bibtex() {
+    run_format_fixtures(&fixtures_root(), "bibtex", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_bibtex::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn biblatex() {
+    run_format_fixtures(&fixtures_root(), "biblatex", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_biblatex::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

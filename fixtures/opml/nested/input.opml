@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>Nested Outline</title>
+  </head>
+  <body>
+    <outline text="Parent item">
+      <outline text="Child one"/>
+      <outline text="Child two"/>
+    </outline>
+    <outline text="Sibling item"/>
+  </body>
+</opml>

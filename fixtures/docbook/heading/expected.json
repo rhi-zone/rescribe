@@ -1,0 +1,8 @@
+{
+  "description": "title directly inside article becomes a heading at level 1",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Article Title" } }
+  ]
+}

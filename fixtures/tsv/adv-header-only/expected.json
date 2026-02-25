@@ -1,0 +1,13 @@
+{
+  "description": "TSV with only a header row and no data rows",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_header" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Name" } },
+    { "path": "/0/0/1", "kind": "table_header" },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Age" } }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "Conference paper with booktitle and pages",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "bibtex:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "brown2019" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:key": "brown2019", "bibtex:type": "inproceedings" } }
+  ]
+}

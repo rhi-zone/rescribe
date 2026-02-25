@@ -1,0 +1,12 @@
+{
+  "description": "nested sections produce heading levels based on section nesting depth: outer section=level 1, inner section=level 2",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "div" },
+    { "path": "/0/0/0",     "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0/0/0",   "kind": "text", "props": { "content": "Outer Section" } },
+    { "path": "/0/0/1",     "kind": "div" },
+    { "path": "/0/0/1/0",   "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0/1/0/0", "kind": "text", "props": { "content": "Inner Section" } }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "Book entry with BibLaTeX date field instead of year",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "biblatex:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "jones2021" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "biblatex:key": "jones2021", "biblatex:type": "book" } }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "description": "a element with l:href (XLink namespace) becomes a link node with url prop",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "div" },
+    { "path": "/0/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/0/0",   "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "click here" } }
+  ]
+}

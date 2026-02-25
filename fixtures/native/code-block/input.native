@@ -1,0 +1,8 @@
+Document {
+  content:
+  document() [
+    code_block( { content: "print(42)", language: "python" })
+  ]
+  metadata: {}
+  resources: {}
+}

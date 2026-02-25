@@ -1,0 +1,10 @@
+{
+  "description": "Entry with DOI field produces correct csl:item",
+  "assertions": [
+    { "path": "/0",       "kind": "definition_list" },
+    { "path": "/0/0",     "kind": "csl:item" },
+    { "path": "/0/0/0",   "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "lee2022" } },
+    { "path": "/0/0/1",   "kind": "definition_desc", "props": { "csl:id": "lee2022", "csl:type": "article-journal" } }
+  ]
+}

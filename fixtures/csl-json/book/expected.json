@@ -1,0 +1,10 @@
+{
+  "description": "Book entry becomes a csl:item with type book",
+  "assertions": [
+    { "path": "/0",       "kind": "definition_list" },
+    { "path": "/0/0",     "kind": "csl:item" },
+    { "path": "/0/0/0",   "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "knuth1984" } },
+    { "path": "/0/0/1",   "kind": "definition_desc", "props": { "csl:id": "knuth1984", "csl:type": "book" } }
+  ]
+}

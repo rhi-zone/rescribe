@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc Header becomes a heading node with level and text child",
+  "assertions": [
+    { "path": "/0",   "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Introduction" } }
+  ]
+}

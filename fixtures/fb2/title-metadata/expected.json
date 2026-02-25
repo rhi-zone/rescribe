@@ -1,0 +1,5 @@
+{
+  "description": "book-title inside description sets document metadata title field",
+  "metadata": { "title": "My Book Title" },
+  "assertions": []
+}

@@ -1,0 +1,9 @@
+{
+  "description": "OPML with no head element parses successfully using body content only",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Minimal item" } }
+  ]
+}

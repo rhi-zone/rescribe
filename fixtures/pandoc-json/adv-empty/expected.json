@@ -1,0 +1,7 @@
+{
+  "description": "Empty Pandoc document produces document node with no children",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document", "children_count": 0 }
+  ]
+}

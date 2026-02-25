@@ -1,0 +1,10 @@
+{
+  "description": "section title in a single section becomes heading level 1; p elements inside title are unwrapped to inline children",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div" },
+    { "path": "/0/0/0",   "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Chapter One" } },
+    { "path": "/0/0/1",   "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "description": "OPML with a parent outline containing two child outlines (flattened into a single list)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Parent item" } },
+    { "path": "/0/1", "kind": "list_item" },
+    { "path": "/0/1/0", "kind": "paragraph" },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Child one" } },
+    { "path": "/0/2", "kind": "list_item" },
+    { "path": "/0/2/0", "kind": "paragraph" },
+    { "path": "/0/2/0/0", "kind": "text", "props": { "content": "Child two" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Sibling item" } }
+  ]
+}

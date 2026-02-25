@@ -1,0 +1,7 @@
+{
+  "description": "markdown cell with ATX heading produces a heading node at the specified level",
+  "assertions": [
+    { "path": "/0",   "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Notebook Title" } }
+  ]
+}

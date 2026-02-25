@@ -1,0 +1,8 @@
+{
+  "description": "multiple cells are concatenated: markdown cell produces heading, code cell produces code_block",
+  "assertions": [
+    { "path": "/0",   "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Section" } },
+    { "path": "/1",   "kind": "code_block", "props": { "content": "x = 42", "language": "python" } }
+  ]
+}

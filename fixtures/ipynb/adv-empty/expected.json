@@ -1,0 +1,4 @@
+{
+  "description": "notebook with empty cells array produces a document with no content children",
+  "assertions": []
+}

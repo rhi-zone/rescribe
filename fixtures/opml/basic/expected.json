@@ -1,0 +1,13 @@
+{
+  "description": "Basic OPML flat list of 3 items",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "First item" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Second item" } },
+    { "path": "/2", "kind": "paragraph" },
+    { "path": "/2/0", "kind": "text", "props": { "content": "Third item" } }
+  ]
+}

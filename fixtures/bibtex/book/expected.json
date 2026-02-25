@@ -1,0 +1,11 @@
+{
+  "description": "Book entry with cite key, author, title, publisher, year",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "bibtex:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "jones2021" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:key": "jones2021", "bibtex:type": "book" } }
+  ]
+}

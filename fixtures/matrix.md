@@ -1200,8 +1200,13 @@ The following formats have readers but no fixtures yet.
 
 | Format | Reader status | Priority |
 |--------|--------------|----------|
-| typst | ~5% coverage | 7 |
-| docx, epub, pdf, … | library-backed | 10 |
+| typst | partial coverage | 7 |
+| jats | reader exists | 8 |
+| endnotexml | reader exists | 8 |
+| tei | reader exists | 8 |
+| docx, epub, odt, pptx, xlsx | binary/library-backed | 10 |
+| pdf, rtf | complex binary | 10 |
+| commonmark, gfm, markdown-strict, multimarkdown | alias markdown reader | — |
 
 ## Completed formats
 
@@ -1234,3 +1239,236 @@ The following formats have readers but no fixtures yet.
 | markua | ✓ | hand-rolled |
 | fountain | ✓ | hand-rolled |
 | ansi | ✓ | hand-rolled |
+| csv | ✓ | hand-rolled |
+| tsv | ✓ | hand-rolled |
+| opml | ✓ | quick-xml |
+| ris | ✓ | hand-rolled |
+| bibtex | ✓ | biblatex crate |
+| biblatex | ✓ | biblatex crate |
+| csl-json | ✓ | serde_json |
+| native | ✓ | hand-rolled |
+| pandoc-json | ✓ | serde_json |
+| docbook | ✓ | hand-rolled XML |
+| fb2 | ✓ | hand-rolled XML |
+| ipynb | ✓ | serde_json |
+
+---
+
+## csv
+
+Reader: custom hand-rolled CSV parser. First row always treated as headers (table_header cells). Subsequent rows are table_cell. Empty file produces an empty table node.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| basic 2-column table | `basic` | happy | ✓ |
+| single-column table | `single-column` | happy | ✓ |
+| three-column table | `three-columns` | happy | ✓ |
+| quoted field with comma | `rare-comma-in-field` | rare | ✓ |
+| empty field | `rare-empty-field` | rare | ✓ |
+| empty file → empty table | `adv-empty` | adversarial | ✓ |
+| header-only (no data rows) | `adv-header-only` | adversarial | ✓ |
+
+---
+
+## tsv
+
+Reader: custom hand-rolled TSV parser. Same structure as CSV but tab-delimited.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| basic 2-column table | `basic` | happy | ✓ |
+| three-column table | `three-columns` | happy | ✓ |
+| quoted field with tab | `rare-quoted-tab` | rare | ✓ |
+| empty field | `rare-empty-field` | rare | ✓ |
+| empty file → empty table | `adv-empty` | adversarial | ✓ |
+| header-only (no data rows) | `adv-header-only` | adversarial | ✓ |
+
+---
+
+## opml
+
+Reader: quick-xml based OPML parser. **Note**: Self-closing outlines at the top level become direct paragraph nodes. Only non-self-closing outlines with children produce a list. Metadata from `<head>` is extracted to document metadata.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| single top-level outline item | `single-item` | happy | ✓ |
+| flat list of 3 items (paragraph per item) | `basic` | happy | ✓ |
+| parent with children (flattened list) | `nested` | happy | ✓ |
+| outline with xmlUrl → link node | `with-url` | happy | ✓ |
+| metadata from head/title | `metadata` | happy | ✓ |
+| both xmlUrl and htmlUrl (xmlUrl wins) | `rare-two-url-attrs` | rare | ✓ |
+| empty body | `adv-empty` | adversarial | ✓ |
+| no head element | `adv-minimal` | adversarial | ✓ |
+
+---
+
+## ris
+
+Reader: custom hand-rolled RIS parser. Produces `definition_list > ris:entry > definition_term + definition_desc`. `ris:type` prop has the raw RIS type code (JOUR, BOOK, ELEC, etc.).
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| journal article (TY JOUR) | `article` | happy | ✓ |
+| book (TY BOOK) | `book` | happy | ✓ |
+| multiple authors | `multi-author` | happy | ✓ |
+| entry with DOI | `with-doi` | happy | ✓ |
+| entry with URL (TY ELEC) | `with-url` | happy | ✓ |
+| entry without ER terminator | `rare-no-er` | rare | ✓ |
+| empty file | `adv-empty` | adversarial | ✓ |
+
+---
+
+## bibtex
+
+Reader: biblatex crate. Produces `definition_list > bibtex:entry > definition_term + definition_desc`.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| article entry | `article` | happy | ✓ |
+| book entry | `book` | happy | ✓ |
+| inproceedings entry | `inproceedings` | happy | ✓ |
+| misc entry | `misc` | happy | ✓ |
+| entry with two authors | `two-authors` | happy | ✓ |
+| entry with DOI | `rare-with-doi` | rare | ✓ |
+| empty file | `adv-empty` | adversarial | ✓ |
+
+---
+
+## biblatex
+
+Reader: biblatex crate. Same structure as bibtex but uses biblatex:entry node kind.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| article entry | `article` | happy | ✓ |
+| book entry | `book` | happy | ✓ |
+| inproceedings entry | `inproceedings` | happy | ✓ |
+| entry with subtitle | `rare-with-subtitle` | rare | ✓ |
+| empty file | `adv-empty` | adversarial | ✓ |
+
+---
+
+## csl-json
+
+Reader: serde_json based CSL-JSON parser. Produces `definition_list > csl:item > definition_term + definition_desc`.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| article-journal | `article-journal` | happy | ✓ |
+| book | `book` | happy | ✓ |
+| chapter | `chapter` | happy | ✓ |
+| multiple authors | `multi-author` | happy | ✓ |
+| item with DOI | `with-doi` | happy | ✓ |
+| date with literal string | `rare-literal-date` | rare | ✓ |
+| empty array | `adv-empty` | adversarial | ✓ |
+
+---
+
+## native
+
+Reader: custom parser for rescribe's native text format. Node kinds with colons cannot be used (identifier parser stops at non-alphanumeric characters).
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph with text | `paragraph` | happy | ✓ |
+| heading | `heading` | happy | ✓ |
+| unordered list | `list-unordered` | happy | ✓ |
+| code block | `code-block` | happy | ✓ |
+| nested structure | `nested` | happy | ✓ |
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## pandoc-json
+
+Reader: serde_json based Pandoc AST JSON parser.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading | `heading` | happy | ✓ |
+| unordered list | `list-unordered` | happy | ✓ |
+| ordered list | `list-ordered` | happy | ✓ |
+| bold | `bold` | happy | ✓ |
+| italic | `italic` | happy | ✓ |
+| code block | `code-block` | happy | ✓ |
+| inline code | `code-inline` | happy | ✓ |
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## docbook
+
+Reader: XML-based DocBook parser. `<article>` → div, `<section>` → div, `<title>` → heading, `<para>` → paragraph.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading (title in section) | `heading` | happy | ✓ |
+| section with nested title | `section` | happy | ✓ |
+| unordered list (itemizedlist) | `list-unordered` | happy | ✓ |
+| ordered list (orderedlist) | `list-ordered` | happy | ✓ |
+| code block (programlisting) | `code-block` | happy | ✓ |
+| emphasis | `emphasis` | happy | ✓ |
+| strong (emphasis role="bold") | `strong` | happy | ✓ |
+| link (ulink) | `link` | happy | ✓ |
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## fb2
+
+Reader: XML-based FictionBook 2 parser. `<body><section>` → div, section `<title><p>` → heading, `<p>` → paragraph. Link uses XLink namespace.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| title metadata | `title-metadata` | happy | ✓ |
+| section heading | `section-heading` | happy | ✓ |
+| emphasis | `emphasis` | happy | ✓ |
+| strong | `strong` | happy | ✓ |
+| link (l:href XLink) | `link` | happy | ✓ |
+| nested section | `nested-section` | happy | ✓ |
+| empty body | `adv-empty` | adversarial | ✓ |
+
+---
+
+## ipynb
+
+Reader: serde_json based Jupyter Notebook parser. Markdown cells delegate to the markdown reader. Code cells produce `code_block` with `language` and `ipynb:execution_count` props. Raw cells produce `raw_block`.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| markdown cell | `markdown-cell` | happy | ✓ |
+| heading in markdown cell | `heading-cell` | happy | ✓ |
+| code cell | `code-cell` | happy | ✓ |
+| code cell with language | `code-cell-with-language` | happy | ✓ |
+| raw cell | `raw-cell` | happy | ✓ |
+| multiple cells | `multi-cell` | happy | ✓ |
+| source as array of strings | `rare-source-array` | rare | ✓ |
+| cell with output stream | `rare-output-stream` | rare | ✓ |
+| empty notebook | `adv-empty` | adversarial | ✓ |
