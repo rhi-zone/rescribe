@@ -70,6 +70,14 @@ fn convert_markup_to_blocks(markup: Markup, source: &str) -> Vec<Node> {
                         .children(vec![list_item]),
                 );
             }
+            Expr::TermItem(item) => {
+                flush_paragraph(&mut inline_buf, &mut blocks);
+                let term_children = convert_markup_to_inlines(item.term(), source);
+                let desc_children = convert_markup_to_inlines(item.description(), source);
+                let term_node = Node::new(node::DEFINITION_TERM).children(term_children);
+                let desc_node = Node::new(node::DEFINITION_DESC).children(desc_children);
+                blocks.push(Node::new(node::DEFINITION_LIST).children(vec![term_node, desc_node]));
+            }
             Expr::Raw(raw) if raw.block() => {
                 flush_paragraph(&mut inline_buf, &mut blocks);
                 let content: String = raw
@@ -87,9 +95,18 @@ fn convert_markup_to_blocks(markup: Markup, source: &str) -> Vec<Node> {
                 blocks.push(n);
             }
             Expr::FuncCall(call) => {
-                flush_paragraph(&mut inline_buf, &mut blocks);
-                if let Some(block) = convert_func_call(call, source) {
-                    blocks.push(block);
+                // Some functions are inherently inline; route them to the inline
+                // buffer rather than flushing the current paragraph.
+                let callee_text = call.callee().to_untyped().text().to_string();
+                if is_inline_func(callee_text.as_str()) {
+                    if let Some(n) = convert_func_call(call, source) {
+                        inline_buf.push(n);
+                    }
+                } else {
+                    flush_paragraph(&mut inline_buf, &mut blocks);
+                    if let Some(block) = convert_func_call(call, source) {
+                        blocks.push(block);
+                    }
                 }
             }
 
@@ -204,7 +221,11 @@ fn convert_expr_to_inlines(expr: Expr, source: &str) -> Vec<Node> {
             }
         }
         // Block-level things shouldn't appear at inline level, but be safe.
-        Expr::Parbreak(_) | Expr::Heading(_) | Expr::ListItem(_) | Expr::EnumItem(_) => vec![],
+        Expr::Parbreak(_)
+        | Expr::Heading(_)
+        | Expr::ListItem(_)
+        | Expr::EnumItem(_)
+        | Expr::TermItem(_) => vec![],
         // Everything else: emit raw with source text if non-empty.
         other => {
             let text = other.to_untyped().text().to_string();
@@ -225,6 +246,22 @@ fn convert_expr_to_inlines(expr: Expr, source: &str) -> Vec<Node> {
 fn convert_list_item_body(body: Markup, source: &str) -> Node {
     let children = convert_markup_to_inlines(body, source);
     Node::new(node::LIST_ITEM).children(vec![Node::new(node::PARAGRAPH).children(children)])
+}
+
+/// Returns true if the named Typst function should be treated as inline content.
+fn is_inline_func(name: &str) -> bool {
+    matches!(
+        name,
+        "sub"
+            | "super"
+            | "underline"
+            | "strike"
+            | "emph"
+            | "strong"
+            | "footnote"
+            | "link"
+            | "linebreak"
+    )
 }
 
 /// Handle common Typst built-in function calls at block level.
@@ -269,8 +306,88 @@ fn convert_func_call(call: typst_syntax::ast::FuncCall, source: &str) -> Option<
                     .children(vec![Node::new(node::PARAGRAPH).children(body)]),
             )
         }
-        "figure" => Some(Node::new(node::FIGURE)),
-        "table" => Some(Node::new(node::TABLE)),
+        "footnote" => {
+            let body = first_content_arg(call.args(), source).unwrap_or_default();
+            Some(Node::new(node::FOOTNOTE_DEF).children(body))
+        }
+        "sub" => {
+            let body = first_content_arg(call.args(), source).unwrap_or_default();
+            Some(Node::new(node::SUBSCRIPT).children(body))
+        }
+        "super" => {
+            let body = first_content_arg(call.args(), source).unwrap_or_default();
+            Some(Node::new(node::SUPERSCRIPT).children(body))
+        }
+        "underline" => {
+            let body = first_content_arg(call.args(), source).unwrap_or_default();
+            Some(Node::new(node::UNDERLINE).children(body))
+        }
+        "strike" => {
+            let body = first_content_arg(call.args(), source).unwrap_or_default();
+            Some(Node::new(node::STRIKEOUT).children(body))
+        }
+        "figure" => {
+            let mut figure = Node::new(node::FIGURE);
+            let mut caption_children: Option<Vec<Node>> = None;
+            let mut first_pos: Option<Node> = None;
+            for arg in call.args().items() {
+                match arg {
+                    typst_syntax::ast::Arg::Named(named) if named.name().as_str() == "caption" => {
+                        if let Expr::ContentBlock(cb) = named.expr() {
+                            caption_children = Some(convert_markup_to_inlines(cb.body(), source));
+                        }
+                    }
+                    typst_syntax::ast::Arg::Pos(expr) if first_pos.is_none() => {
+                        if let Some(n) = convert_func_call_expr(expr, source) {
+                            first_pos = Some(n);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let mut children = Vec::new();
+            if let Some(img) = first_pos {
+                children.push(img);
+            }
+            if let Some(cap) = caption_children {
+                children.push(Node::new(node::PARAGRAPH).children(cap));
+            }
+            figure = figure.children(children);
+            Some(figure)
+        }
+        "table" => {
+            let mut columns: i64 = 1;
+            let mut cells: Vec<Node> = Vec::new();
+            for arg in call.args().items() {
+                match arg {
+                    typst_syntax::ast::Arg::Named(named) if named.name().as_str() == "columns" => {
+                        if let Expr::Int(i) = named.expr() {
+                            columns = i.get();
+                        }
+                    }
+                    typst_syntax::ast::Arg::Pos(Expr::ContentBlock(cb)) => {
+                        let cell_children = convert_markup_to_inlines(cb.body(), source);
+                        cells.push(Node::new(node::TABLE_CELL).children(cell_children));
+                    }
+                    _ => {}
+                }
+            }
+            // Build rows from flat cell list using column count.
+            let rows: Vec<Node> = if columns > 0 {
+                cells
+                    .chunks(columns as usize)
+                    .map(|row_cells| Node::new(node::TABLE_ROW).children(row_cells.to_vec()))
+                    .collect()
+            } else {
+                // Fall back: emit all cells directly.
+                cells
+            };
+            Some(
+                Node::new(node::TABLE)
+                    .prop("columns", columns)
+                    .children(rows),
+            )
+        }
         "linebreak" => Some(Node::new(node::LINE_BREAK)),
         "emph" => {
             let body = first_content_arg(call.args(), source).unwrap_or_default();
@@ -312,15 +429,37 @@ fn first_content_arg(args: typst_syntax::ast::Args, source: &str) -> Option<Vec<
     None
 }
 
-/// Merge adjacent `LIST` nodes with the same `ordered` value.
+/// Convert a positional `Expr` in a function call position to a rescribe node,
+/// used when extracting figure body content.
+fn convert_func_call_expr(expr: Expr, source: &str) -> Option<Node> {
+    match expr {
+        Expr::FuncCall(call) => convert_func_call(call, source),
+        Expr::ContentBlock(cb) => {
+            let children = convert_markup_to_inlines(cb.body(), source);
+            Some(Node::new(node::PARAGRAPH).children(children))
+        }
+        other => {
+            let inlines = convert_expr_to_inlines(other, source);
+            if inlines.is_empty() {
+                None
+            } else {
+                Some(Node::new(node::PARAGRAPH).children(inlines))
+            }
+        }
+    }
+}
+
+/// Merge adjacent `LIST` nodes with the same `ordered` value, and adjacent
+/// `DEFINITION_LIST` nodes.
 ///
-/// Individual list items arrive as separate single-item LIST blocks because
-/// Typst's flat markup sequence gives us one ListItem/EnumItem per step.
+/// Individual list items arrive as separate single-item LIST / DEFINITION_LIST
+/// blocks because Typst's flat markup sequence gives us one item per step.
 fn merge_adjacent_lists(blocks: Vec<Node>) -> Vec<Node> {
     let mut result: Vec<Node> = Vec::new();
 
     for block in blocks {
-        if block.kind.as_str() == node::LIST {
+        let kind = block.kind.as_str();
+        if kind == node::LIST {
             let ordered = block.props.get_bool(prop::ORDERED).unwrap_or(false);
             if let Some(last) = result.last_mut()
                 && last.kind.as_str() == node::LIST
@@ -329,6 +468,12 @@ fn merge_adjacent_lists(blocks: Vec<Node>) -> Vec<Node> {
                 last.children.extend(block.children);
                 continue;
             }
+        } else if kind == node::DEFINITION_LIST
+            && let Some(last) = result.last_mut()
+            && last.kind.as_str() == node::DEFINITION_LIST
+        {
+            last.children.extend(block.children);
+            continue;
         }
         result.push(block);
     }
@@ -447,5 +592,96 @@ mod tests {
         let para = &doc.content.children[0];
         let link = para.children.iter().find(|c| c.kind.as_str() == node::LINK);
         assert!(link.is_some(), "Expected a link node");
+    }
+
+    #[test]
+    fn test_parse_term_list() {
+        let doc = parse_str("/ Rust: A systems language\n/ Python: A scripting language");
+        assert_eq!(
+            doc.content.children.len(),
+            1,
+            "Adjacent term items should merge"
+        );
+        let dl = &doc.content.children[0];
+        assert_eq!(dl.kind.as_str(), node::DEFINITION_LIST);
+        // Two terms merged: 4 children total (term+desc, term+desc).
+        assert_eq!(dl.children.len(), 4);
+        assert_eq!(dl.children[0].kind.as_str(), node::DEFINITION_TERM);
+        assert_eq!(dl.children[1].kind.as_str(), node::DEFINITION_DESC);
+    }
+
+    #[test]
+    fn test_parse_footnote() {
+        let doc = parse_str("#footnote[A note here]");
+        // Footnotes are inline; they end up inside a paragraph.
+        let para = &doc.content.children[0];
+        assert_eq!(para.kind.as_str(), node::PARAGRAPH);
+        let footnote = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::FOOTNOTE_DEF);
+        assert!(
+            footnote.is_some(),
+            "Expected a footnote_def node in paragraph"
+        );
+        assert!(!footnote.unwrap().children.is_empty());
+    }
+
+    #[test]
+    fn test_parse_sub_super() {
+        let doc = parse_str("#sub[2] and #super[3]");
+        let para = &doc.content.children[0];
+        let sub = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::SUBSCRIPT);
+        assert!(sub.is_some(), "Expected subscript node");
+        let sup = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::SUPERSCRIPT);
+        assert!(sup.is_some(), "Expected superscript node");
+    }
+
+    #[test]
+    fn test_parse_underline_strike() {
+        let doc = parse_str("#underline[hello] and #strike[world]");
+        let para = &doc.content.children[0];
+        let u = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::UNDERLINE);
+        assert!(u.is_some(), "Expected underline node");
+        let s = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::STRIKEOUT);
+        assert!(s.is_some(), "Expected strikeout node");
+    }
+
+    #[test]
+    fn test_parse_table() {
+        let doc = parse_str("#table(columns: 2, [A], [B], [C], [D])");
+        let table = &doc.content.children[0];
+        assert_eq!(table.kind.as_str(), node::TABLE);
+        // 4 cells / 2 columns = 2 rows
+        assert_eq!(table.children.len(), 2, "Expected 2 rows");
+        assert_eq!(table.children[0].kind.as_str(), node::TABLE_ROW);
+        assert_eq!(
+            table.children[0].children.len(),
+            2,
+            "Expected 2 cells per row"
+        );
+    }
+
+    #[test]
+    fn test_parse_figure() {
+        let doc = parse_str("#figure(image(\"cat.png\"), caption: [A cat])");
+        let figure = &doc.content.children[0];
+        assert_eq!(figure.kind.as_str(), node::FIGURE);
+        // First child should be an image.
+        assert_eq!(figure.children[0].kind.as_str(), node::IMAGE);
+        // Second child should be a paragraph (caption).
+        assert_eq!(figure.children[1].kind.as_str(), node::PARAGRAPH);
     }
 }
