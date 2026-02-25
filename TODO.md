@@ -29,11 +29,22 @@ handling, binary blobs. The `rtf-parser` crate on crates.io is a candidate.
 Use the Pandoc test corpus at `~/git/pandoc/test/` as a local correctness oracle.
 Fixtures are GPL so they never enter the repo — tests skip gracefully if the path is absent.
 
-- [ ] Write a test helper that discovers `~/git/pandoc/test/` and skips if missing
-- [ ] Wire up the harness for markdown (baseline — should be near-perfect via pulldown-cmark)
-- [ ] Wire up HTML, LaTeX, org-mode, rst
-- [ ] Wire up the wiki formats (mediawiki, creole, dokuwiki, …) — expect failures, file them
-- [ ] Wire up ODT, RTF — use failures to drive fixes
+**Done:**
+- [x] Harness in `crates/rescribe-fixtures/src/pandoc_harness.rs` — discovers corpus, runs
+  pandoc as oracle, computes word-coverage, prints report
+- [x] Single ignored test `all_formats` covering 25 formats
+- [x] Pandoc added to `flake.nix` dev shell
+
+**Remaining:**
+- [ ] **Identify the hanging parser** — add `eprintln!("testing {}/{}", e.format, e.filename)`
+  before each `run_entry()` call in `tests/pandoc.rs`, then re-run to see which format hangs
+- [ ] **Add per-format timeout** — spawn parse in a thread in `run_entry`, join with a 10s
+  timeout, emit a FAIL result instead of blocking the whole suite
+- [ ] **Run with pandoc in PATH** — enter `nix develop`, run
+  `cargo test -p rescribe-fixtures -- --ignored --nocapture` to get real coverage numbers
+- [ ] **Fix the hanging parser** — once identified, fix the reader or add an input size guard
+- [ ] **Expand corpus entries** — some formats have weak test files (e.g. `org-select-tags.org`
+  is a narrow org-mode test); add more entries per format once the suite is green
 
 ## Priority 3: Owned fixture suite (MIT-licensed, lives in repo, runs in CI)
 
