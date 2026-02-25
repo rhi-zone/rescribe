@@ -7,9 +7,36 @@ publish = false
 
 [dependencies]
 rescribe-core = { workspace = true }
+rescribe-read-pandoc-json = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+# Our MIT fixture suite (tests/run.rs)
 rescribe-read-markdown = { workspace = true }
 rescribe-read-html = { workspace = true }
+
+# Pandoc corpus harness (tests/pandoc.rs)
+rescribe-read-pandoc-json = { workspace = true }
+rescribe-read-rst = { workspace = true }
+rescribe-read-latex = { workspace = true }
+rescribe-read-org = { workspace = true }
+rescribe-read-djot = { workspace = true }
+rescribe-read-mediawiki = { workspace = true }
+rescribe-read-creole = { workspace = true }
+rescribe-read-textile = { workspace = true }
+rescribe-read-haddock = { workspace = true }
+rescribe-read-jira = { workspace = true }
+rescribe-read-tikiwiki = { workspace = true }
+rescribe-read-twiki = { workspace = true }
+rescribe-read-vimwiki = { workspace = true }
+rescribe-read-t2t = { workspace = true }
+rescribe-read-pod = { workspace = true }
+rescribe-read-man = { workspace = true }
+rescribe-read-asciidoc = { workspace = true }
+rescribe-read-typst = { workspace = true }
+rescribe-read-docbook = { workspace = true }
+rescribe-read-jats = { workspace = true }
+rescribe-read-dokuwiki = { workspace = true }
+rescribe-read-muse = { workspace = true }
+rescribe-read-fb2 = { workspace = true }

@@ -616,6 +616,15 @@ pub mod fountain {
     pub use rescribe_write_fountain::emit_with_options;
 }
 
+/// Pandoc JSON format support.
+#[cfg(feature = "pandoc-json")]
+pub mod pandoc_json {
+    pub use rescribe_read_pandoc_json::parse;
+    pub use rescribe_read_pandoc_json::parse_with_options;
+    pub use rescribe_write_pandoc_json::emit;
+    pub use rescribe_write_pandoc_json::emit_with_options;
+}
+
 /// Common imports for typical usage.
 pub mod prelude {
     pub use crate::{ConversionResult, Document, Node, PropValue, Properties};

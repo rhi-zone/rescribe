@@ -38,6 +38,8 @@
             clang
             # JS tooling for docs
             bun
+            # Pandoc — used by the local fixture harness (tests/pandoc.rs)
+            pandoc
           ];
           LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH";
         };

@@ -6,6 +6,8 @@
 //!
 //! See `fixtures/spec.md` for the full cross-language specification.
 
+pub mod pandoc_harness;
+
 use rescribe_core::{Node, PropValue};
 use serde::Deserialize;
 use std::collections::HashMap;

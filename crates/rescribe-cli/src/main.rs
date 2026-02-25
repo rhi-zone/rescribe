@@ -1,10 +1,10 @@
 //! Rescribe CLI - Universal document converter.
+//!
+//! All formats supported by the `rescribe` library (54 readers, 64 writers)
+//! are accessible via `--from` and `--to`.  Run `rescribe formats` to list them.
 
 use clap::{Parser, Subcommand};
-use rescribe::{
-    Document, djot, docx, epub, html, ipynb, latex, markdown, mediawiki, opml, org, pdf, plaintext,
-    xlsx,
-};
+use rescribe::Document;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
@@ -23,123 +23,18 @@ enum Commands {
     Convert {
         /// Input file (use - for stdin)
         input: PathBuf,
-
-        /// Output file (use - for stdout, or omit to use stdout)
+        /// Output file (omit or use - for stdout)
         #[arg(short, long)]
         output: Option<PathBuf>,
-
-        /// Input format (auto-detected from extension if not specified)
+        /// Input format (auto-detected from file extension if omitted)
         #[arg(short, long)]
-        from: Option<Format>,
-
-        /// Output format (required if output is stdout or has no extension)
+        from: Option<String>,
+        /// Output format (required if writing to stdout or a file with no known extension)
         #[arg(short, long)]
-        to: Option<Format>,
+        to: Option<String>,
     },
-
-    /// List available formats
+    /// List all available formats
     Formats,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
-enum Format {
-    Markdown,
-    Html,
-    Latex,
-    Org,
-    Plaintext,
-    Pdf,
-    Docx,
-    Ipynb,
-    Xlsx,
-    Epub,
-    Djot,
-    Opml,
-    Mediawiki,
-}
-
-impl Format {
-    fn from_extension(ext: &str) -> Option<Self> {
-        match ext.to_lowercase().as_str() {
-            "md" | "markdown" => Some(Format::Markdown),
-            "html" | "htm" => Some(Format::Html),
-            "tex" | "latex" => Some(Format::Latex),
-            "org" => Some(Format::Org),
-            "txt" | "text" => Some(Format::Plaintext),
-            "pdf" => Some(Format::Pdf),
-            "docx" => Some(Format::Docx),
-            "ipynb" => Some(Format::Ipynb),
-            "xlsx" => Some(Format::Xlsx),
-            "epub" => Some(Format::Epub),
-            "dj" | "djot" => Some(Format::Djot),
-            "opml" => Some(Format::Opml),
-            "mediawiki" | "wiki" => Some(Format::Mediawiki),
-            _ => None,
-        }
-    }
-
-    fn name(&self) -> &'static str {
-        match self {
-            Format::Markdown => "markdown",
-            Format::Html => "html",
-            Format::Latex => "latex",
-            Format::Org => "org",
-            Format::Plaintext => "plaintext",
-            Format::Pdf => "pdf",
-            Format::Docx => "docx",
-            Format::Ipynb => "ipynb",
-            Format::Xlsx => "xlsx",
-            Format::Epub => "epub",
-            Format::Djot => "djot",
-            Format::Opml => "opml",
-            Format::Mediawiki => "mediawiki",
-        }
-    }
-
-    fn extensions(&self) -> &'static [&'static str] {
-        match self {
-            Format::Markdown => &["md", "markdown"],
-            Format::Html => &["html", "htm"],
-            Format::Latex => &["tex", "latex"],
-            Format::Org => &["org"],
-            Format::Plaintext => &["txt", "text"],
-            Format::Pdf => &["pdf"],
-            Format::Docx => &["docx"],
-            Format::Ipynb => &["ipynb"],
-            Format::Xlsx => &["xlsx"],
-            Format::Epub => &["epub"],
-            Format::Djot => &["dj", "djot"],
-            Format::Opml => &["opml"],
-            Format::Mediawiki => &["mediawiki", "wiki"],
-        }
-    }
-
-    fn can_read(&self) -> bool {
-        matches!(
-            self,
-            Format::Markdown
-                | Format::Html
-                | Format::Pdf
-                | Format::Docx
-                | Format::Ipynb
-                | Format::Xlsx
-                | Format::Epub
-                | Format::Djot
-                | Format::Opml
-                | Format::Mediawiki
-        )
-    }
-
-    fn can_write(&self) -> bool {
-        !matches!(self, Format::Pdf | Format::Xlsx) // PDF and XLSX have no writer
-    }
-
-    fn is_binary(&self) -> bool {
-        matches!(
-            self,
-            Format::Pdf | Format::Docx | Format::Xlsx | Format::Epub
-        )
-    }
 }
 
 fn main() {
@@ -151,200 +46,960 @@ fn main() {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-
     match cli.command {
         Commands::Convert {
             input,
             output,
             from,
             to,
-        } => {
-            convert(input, output, from, to)?;
-        }
+        } => convert(input, output, from, to),
         Commands::Formats => {
             list_formats();
+            Ok(())
         }
     }
-
-    Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Format tables
+// ---------------------------------------------------------------------------
+
+/// Metadata about one format.
+struct FormatInfo {
+    name: &'static str,
+    aliases: &'static [&'static str],
+    extensions: &'static [&'static str],
+    can_read: bool,
+    can_write: bool,
+    /// True if the reader requires raw bytes rather than UTF-8 text.
+    binary_read: bool,
+    /// True if the writer produces raw bytes (content type not plain text).
+    _binary_write: bool,
+}
+
+const FORMATS: &[FormatInfo] = &[
+    FormatInfo {
+        name: "markdown",
+        aliases: &[],
+        extensions: &["md", "markdown"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "markdown-strict",
+        aliases: &[],
+        extensions: &[],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "commonmark",
+        aliases: &[],
+        extensions: &[],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "gfm",
+        aliases: &["github-markdown"],
+        extensions: &[],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "multimarkdown",
+        aliases: &["mmd"],
+        extensions: &[],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "markua",
+        aliases: &[],
+        extensions: &["markua"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "html",
+        aliases: &["html4", "html5"],
+        extensions: &["html", "htm"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "latex",
+        aliases: &["tex"],
+        extensions: &["tex", "latex"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "org",
+        aliases: &["org-mode"],
+        extensions: &["org"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "rst",
+        aliases: &["restructuredtext"],
+        extensions: &["rst"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "asciidoc",
+        aliases: &["adoc"],
+        extensions: &["adoc", "asciidoc"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "typst",
+        aliases: &[],
+        extensions: &["typ"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "djot",
+        aliases: &[],
+        extensions: &["dj", "djot"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "textile",
+        aliases: &[],
+        extensions: &["textile"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "mediawiki",
+        aliases: &[],
+        extensions: &["mediawiki", "wiki"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "creole",
+        aliases: &[],
+        extensions: &["creole"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "dokuwiki",
+        aliases: &[],
+        extensions: &["dokuwiki"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "vimwiki",
+        aliases: &[],
+        extensions: &["vimwiki"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "zimwiki",
+        aliases: &[],
+        extensions: &["zimwiki"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "tikiwiki",
+        aliases: &[],
+        extensions: &["tikiwiki"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "twiki",
+        aliases: &[],
+        extensions: &["twiki"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "xwiki",
+        aliases: &[],
+        extensions: &["xwiki"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "jira",
+        aliases: &[],
+        extensions: &["jira"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "confluence",
+        aliases: &[],
+        extensions: &[],
+        can_read: false,
+        can_write: false,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "haddock",
+        aliases: &[],
+        extensions: &["haddock"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "pod",
+        aliases: &[],
+        extensions: &["pod"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "bbcode",
+        aliases: &[],
+        extensions: &["bbcode"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "fountain",
+        aliases: &[],
+        extensions: &["fountain"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "man",
+        aliases: &["groff", "nroff"],
+        extensions: &["man"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "muse",
+        aliases: &[],
+        extensions: &["muse"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "t2t",
+        aliases: &["txt2tags"],
+        extensions: &["t2t"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "texinfo",
+        aliases: &["texi"],
+        extensions: &["texi", "texinfo"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "docbook",
+        aliases: &["docbook4", "docbook5"],
+        extensions: &["docbook", "dbk"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "jats",
+        aliases: &[],
+        extensions: &["jats"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "tei",
+        aliases: &[],
+        extensions: &["tei"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "fb2",
+        aliases: &[],
+        extensions: &["fb2"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "opml",
+        aliases: &[],
+        extensions: &["opml"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "bibtex",
+        aliases: &[],
+        extensions: &["bib"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "biblatex",
+        aliases: &[],
+        extensions: &[],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "csl-json",
+        aliases: &["csl"],
+        extensions: &["csl"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "ris",
+        aliases: &[],
+        extensions: &["ris"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "endnotexml",
+        aliases: &[],
+        extensions: &["xml"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "csv",
+        aliases: &[],
+        extensions: &["csv"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "tsv",
+        aliases: &[],
+        extensions: &["tsv"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "ipynb",
+        aliases: &["jupyter"],
+        extensions: &["ipynb"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "pandoc-json",
+        aliases: &["json"],
+        extensions: &[],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "native",
+        aliases: &[],
+        extensions: &[],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "ansi",
+        aliases: &[],
+        extensions: &["ansi"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "plaintext",
+        aliases: &["plain", "txt"],
+        extensions: &["txt"],
+        can_read: false,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "pdf",
+        aliases: &[],
+        extensions: &["pdf"],
+        can_read: true,
+        can_write: false,
+        binary_read: true,
+        _binary_write: true,
+    },
+    FormatInfo {
+        name: "docx",
+        aliases: &["word"],
+        extensions: &["docx"],
+        can_read: true,
+        can_write: true,
+        binary_read: true,
+        _binary_write: true,
+    },
+    FormatInfo {
+        name: "xlsx",
+        aliases: &["excel"],
+        extensions: &["xlsx"],
+        can_read: true,
+        can_write: true,
+        binary_read: true,
+        _binary_write: true,
+    },
+    FormatInfo {
+        name: "epub",
+        aliases: &[],
+        extensions: &["epub"],
+        can_read: true,
+        can_write: true,
+        binary_read: true,
+        _binary_write: true,
+    },
+    FormatInfo {
+        name: "odt",
+        aliases: &[],
+        extensions: &["odt"],
+        can_read: true,
+        can_write: true,
+        binary_read: true,
+        _binary_write: true,
+    },
+    FormatInfo {
+        name: "pptx",
+        aliases: &["powerpoint"],
+        extensions: &["pptx"],
+        can_read: true,
+        can_write: true,
+        binary_read: true,
+        _binary_write: true,
+    },
+    // Writers only
+    FormatInfo {
+        name: "rtf",
+        aliases: &[],
+        extensions: &["rtf"],
+        can_read: true,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "beamer",
+        aliases: &[],
+        extensions: &[],
+        can_read: false,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "revealjs",
+        aliases: &[],
+        extensions: &[],
+        can_read: false,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "slidy",
+        aliases: &[],
+        extensions: &[],
+        can_read: false,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "slideous",
+        aliases: &[],
+        extensions: &[],
+        can_read: false,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "s5",
+        aliases: &[],
+        extensions: &[],
+        can_read: false,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "dzslides",
+        aliases: &[],
+        extensions: &[],
+        can_read: false,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "context",
+        aliases: &[],
+        extensions: &["ctx"],
+        can_read: false,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "ms",
+        aliases: &[],
+        extensions: &["ms"],
+        can_read: false,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "icml",
+        aliases: &[],
+        extensions: &["icml"],
+        can_read: false,
+        can_write: true,
+        binary_read: false,
+        _binary_write: false,
+    },
+    FormatInfo {
+        name: "chunkedhtml",
+        aliases: &[],
+        extensions: &[],
+        can_read: false,
+        can_write: false,
+        binary_read: false,
+        _binary_write: false,
+    },
+];
+
+fn find_format(name: &str) -> Option<&'static FormatInfo> {
+    let lower = name.to_lowercase();
+    FORMATS
+        .iter()
+        .find(|f| f.name == lower || f.aliases.contains(&lower.as_str()))
+}
+
+fn format_from_extension(ext: &str) -> Option<&'static FormatInfo> {
+    let lower = ext.to_lowercase();
+    FORMATS
+        .iter()
+        .find(|f| f.extensions.contains(&lower.as_str()) && (f.can_read || f.can_write))
+}
+
+// ---------------------------------------------------------------------------
+// Conversion entry point
+// ---------------------------------------------------------------------------
 
 fn convert(
     input: PathBuf,
     output: Option<PathBuf>,
-    from: Option<Format>,
-    to: Option<Format>,
+    from: Option<String>,
+    to: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Determine input format
-    let input_format = from
+    // Determine input format.
+    let in_fmt = from
+        .as_deref()
+        .and_then(find_format)
         .or_else(|| {
             if input.as_os_str() == "-" {
-                None
-            } else {
-                input
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .and_then(Format::from_extension)
+                return None;
             }
+            input
+                .extension()
+                .and_then(|e| e.to_str())
+                .and_then(format_from_extension)
         })
-        .ok_or("Cannot determine input format. Use --from to specify.")?;
+        .ok_or_else(|| {
+            if let Some(ref name) = from {
+                format!(
+                    "unknown format {:?}; run `rescribe formats` for a list",
+                    name
+                )
+            } else {
+                "cannot detect input format; use --from".into()
+            }
+        })?;
 
-    if !input_format.can_read() {
-        return Err(format!("No reader available for {} format", input_format.name()).into());
+    if !in_fmt.can_read {
+        return Err(format!("format {:?} has no reader", in_fmt.name).into());
     }
 
-    // Determine output format
-    let output_format = to
+    // Determine output format.
+    let out_fmt = to
+        .as_deref()
+        .and_then(find_format)
         .or_else(|| {
             output.as_ref().and_then(|p| {
                 if p.as_os_str() == "-" {
-                    None
-                } else {
-                    p.extension()
-                        .and_then(|e| e.to_str())
-                        .and_then(Format::from_extension)
+                    return None;
                 }
+                p.extension()
+                    .and_then(|e| e.to_str())
+                    .and_then(format_from_extension)
             })
         })
-        .ok_or("Cannot determine output format. Use --to to specify.")?;
+        .ok_or_else(|| {
+            if let Some(ref name) = to {
+                format!(
+                    "unknown format {:?}; run `rescribe formats` for a list",
+                    name
+                )
+            } else {
+                "cannot detect output format; use --to".into()
+            }
+        })?;
 
-    // Read input (binary for PDF, text for others)
-    let doc = if input_format.is_binary() {
-        let input_bytes = if input.as_os_str() == "-" {
-            let mut buf = Vec::new();
-            io::stdin().read_to_end(&mut buf)?;
-            buf
-        } else {
-            fs::read(&input)?
-        };
-        parse_binary(&input_bytes, input_format)?
+    if !out_fmt.can_write {
+        return Err(format!("format {:?} has no writer", out_fmt.name).into());
+    }
+
+    // Read input.
+    let doc = if in_fmt.binary_read {
+        let bytes = read_bytes(&input)?;
+        parse_binary(&bytes, in_fmt.name)?
     } else {
-        let input_text = if input.as_os_str() == "-" {
-            let mut buf = String::new();
-            io::stdin().read_to_string(&mut buf)?;
-            buf
-        } else {
-            fs::read_to_string(&input)?
-        };
-        parse_text(&input_text, input_format)?
+        let text = read_text(&input)?;
+        parse_text(&text, in_fmt.name)?
     };
 
-    // Emit
-    let output_bytes = emit(&doc, output_format)?;
+    // Emit output.
+    let out_bytes = emit(&doc, out_fmt.name)?;
 
-    // Write output
+    // Write output.
     match output {
-        Some(path) if path.as_os_str() != "-" => {
-            fs::write(&path, &output_bytes)?;
-        }
-        _ => {
-            io::stdout().write_all(&output_bytes)?;
-        }
+        Some(ref p) if p.as_os_str() != "-" => fs::write(p, &out_bytes)?,
+        _ => io::stdout().write_all(&out_bytes)?,
     }
 
     Ok(())
 }
 
-fn parse_text(input: &str, format: Format) -> Result<Document, Box<dyn std::error::Error>> {
-    let result = match format {
-        Format::Markdown => markdown::parse(input)?,
-        Format::Html => html::parse(input)?,
-        Format::Ipynb => ipynb::parse(input)?,
-        Format::Djot => djot::parse(input)?,
-        Format::Opml => opml::parse(input)?,
-        Format::Mediawiki => mediawiki::parse(input)?,
-        Format::Latex
-        | Format::Org
-        | Format::Plaintext
-        | Format::Pdf
-        | Format::Docx
-        | Format::Xlsx
-        | Format::Epub => {
-            return Err(format!("No text reader for {} format", format.name()).into());
-        }
-    };
-
-    // Report warnings to stderr
-    for warning in &result.warnings {
-        eprintln!("warning: {}", warning.message);
+fn read_bytes(path: &PathBuf) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    if path.as_os_str() == "-" {
+        let mut buf = Vec::new();
+        io::stdin().read_to_end(&mut buf)?;
+        Ok(buf)
+    } else {
+        Ok(fs::read(path)?)
     }
-
-    Ok(result.value)
 }
 
-fn parse_binary(input: &[u8], format: Format) -> Result<Document, Box<dyn std::error::Error>> {
-    let result = match format {
-        Format::Pdf => pdf::parse(input)?,
-        Format::Docx => docx::parse_bytes(input)?,
-        Format::Xlsx => xlsx::parse_bytes(input)?,
-        Format::Epub => epub::parse_bytes(input)?,
-        _ => {
-            return Err(format!("No binary reader for {} format", format.name()).into());
-        }
-    };
-
-    // Report warnings to stderr
-    for warning in &result.warnings {
-        eprintln!("warning: {}", warning.message);
+fn read_text(path: &PathBuf) -> Result<String, Box<dyn std::error::Error>> {
+    if path.as_os_str() == "-" {
+        let mut buf = String::new();
+        io::stdin().read_to_string(&mut buf)?;
+        Ok(buf)
+    } else {
+        Ok(fs::read_to_string(path)?)
     }
-
-    Ok(result.value)
 }
 
-fn emit(doc: &Document, format: Format) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let result = match format {
-        Format::Markdown => markdown::emit(doc)?,
-        Format::Html => html::emit(doc)?,
-        Format::Latex => latex::emit(doc)?,
-        Format::Org => org::emit(doc)?,
-        Format::Plaintext => plaintext::emit(doc)?,
-        Format::Docx => docx::emit(doc)?,
-        Format::Ipynb => ipynb::emit(doc)?,
-        Format::Epub => epub::emit(doc)?,
-        Format::Djot => djot::emit(doc)?,
-        Format::Opml => opml::emit(doc)?,
-        Format::Mediawiki => mediawiki::emit(doc)?,
-        Format::Pdf => {
-            return Err("PDF writer is not available (PDF is read-only)".into());
-        }
-        Format::Xlsx => {
-            return Err("XLSX writer is not available (XLSX is read-only)".into());
-        }
-    };
+// ---------------------------------------------------------------------------
+// Readers
+// ---------------------------------------------------------------------------
 
-    // Report warnings to stderr
-    for warning in &result.warnings {
-        eprintln!("warning: {}", warning.message);
+#[allow(clippy::too_many_lines)]
+fn parse_text(input: &str, fmt: &str) -> Result<Document, Box<dyn std::error::Error>> {
+    macro_rules! r {
+        ($mod:ident) => {{
+            let res = rescribe::$mod::parse(input)?;
+            for w in &res.warnings {
+                eprintln!("warning: {}", w.message);
+            }
+            return Ok(res.value);
+        }};
     }
-
-    Ok(result.value)
+    match fmt {
+        "markdown" => r!(markdown),
+        "markdown-strict" => r!(markdown_strict),
+        "commonmark" => r!(commonmark),
+        "gfm" => r!(gfm),
+        "multimarkdown" => r!(multimarkdown),
+        "markua" => r!(markua),
+        "html" => r!(html),
+        "latex" => r!(latex),
+        "org" => r!(org),
+        "rst" => r!(rst),
+        "asciidoc" => r!(asciidoc),
+        "typst" => r!(typst),
+        "djot" => r!(djot),
+        "textile" => r!(textile),
+        "mediawiki" => r!(mediawiki),
+        "creole" => r!(creole),
+        "dokuwiki" => r!(dokuwiki),
+        "vimwiki" => r!(vimwiki),
+        "zimwiki" => r!(zimwiki),
+        "tikiwiki" => r!(tikiwiki),
+        "twiki" => r!(twiki),
+        "xwiki" => r!(xwiki),
+        "jira" => r!(jira),
+        "haddock" => r!(haddock),
+        "pod" => r!(pod),
+        "bbcode" => r!(bbcode),
+        "fountain" => r!(fountain),
+        "man" => r!(man),
+        "muse" => r!(muse),
+        "t2t" => r!(t2t),
+        "texinfo" => r!(texinfo),
+        "docbook" => r!(docbook),
+        "jats" => r!(jats),
+        "tei" => r!(tei),
+        "fb2" => r!(fb2),
+        "opml" => r!(opml),
+        "bibtex" => r!(bibtex),
+        "biblatex" => r!(biblatex),
+        "csl-json" => r!(csl_json),
+        "ris" => r!(ris),
+        "endnotexml" => r!(endnotexml),
+        "csv" => r!(csv),
+        "tsv" => r!(tsv),
+        "ipynb" => r!(ipynb),
+        "pandoc-json" => {
+            let res = rescribe::pandoc_json::parse(input)?;
+            for w in &res.warnings {
+                eprintln!("warning: {}", w.message);
+            }
+            Ok(res.value)
+        }
+        "native" => r!(native),
+        "ansi" => r!(ansi_read),
+        "rtf" => r!(rtf),
+        _ => Err(format!("no text reader for {fmt:?}").into()),
+    }
 }
+
+fn parse_binary(input: &[u8], fmt: &str) -> Result<Document, Box<dyn std::error::Error>> {
+    macro_rules! rb {
+        ($mod:ident, $fn:ident) => {{
+            let res = rescribe::$mod::$fn(input)?;
+            for w in &res.warnings {
+                eprintln!("warning: {}", w.message);
+            }
+            return Ok(res.value);
+        }};
+    }
+    match fmt {
+        "pdf" => rb!(pdf, parse),
+        "docx" => rb!(docx, parse_bytes),
+        "xlsx" => rb!(xlsx, parse_bytes),
+        "epub" => rb!(epub, parse_bytes),
+        "odt" => rb!(odt, parse),
+        "pptx" => rb!(pptx, parse),
+        _ => Err(format!("no binary reader for {fmt:?}").into()),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Writers
+// ---------------------------------------------------------------------------
+
+#[allow(clippy::too_many_lines)]
+fn emit(doc: &Document, fmt: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    macro_rules! w {
+        ($mod:ident) => {{
+            let res = rescribe::$mod::emit(doc)?;
+            for w in &res.warnings {
+                eprintln!("warning: {}", w.message);
+            }
+            return Ok(res.value);
+        }};
+    }
+    match fmt {
+        "markdown"        => w!(markdown),
+        "markdown-strict" => w!(markdown_strict),
+        "commonmark"      => w!(commonmark),
+        "gfm"             => w!(gfm),
+        "multimarkdown"   => w!(multimarkdown),
+        "markua"          => w!(markua),
+        "html"            => w!(html),
+        "latex"           => w!(latex),
+        "org"             => w!(org),
+        "rst"             => w!(rst),
+        "asciidoc"        => w!(asciidoc),
+        "typst"           => w!(typst),
+        "djot"            => w!(djot),
+        "textile"         => w!(textile),
+        "mediawiki"       => w!(mediawiki),
+        "creole"          => w!(creole),
+        "dokuwiki"        => w!(dokuwiki),
+        "vimwiki"         => w!(vimwiki),
+        "zimwiki"         => w!(zimwiki),
+        "tikiwiki"        => w!(tikiwiki),
+        "twiki"           => w!(twiki),
+        "xwiki"           => w!(xwiki),
+        "jira"            => w!(jira),
+        "haddock"         => w!(haddock),
+        "pod"             => w!(pod),
+        "bbcode"          => w!(bbcode),
+        "fountain"        => w!(fountain),
+        "man"             => w!(man),
+        "muse"            => w!(muse),
+        "t2t"             => w!(t2t),
+        "texinfo"         => w!(texinfo),
+        "docbook"         => w!(docbook),
+        "jats"            => w!(jats),
+        "tei"             => w!(tei),
+        "fb2"             => w!(fb2),
+        "opml"            => w!(opml),
+        "bibtex"          => w!(bibtex),
+        "biblatex"        => w!(biblatex),
+        "csl-json"        => w!(csl_json),
+        "ris"             => w!(ris),
+        "endnotexml"      => w!(endnotexml),
+        "csv"             => w!(csv),
+        "tsv"             => w!(tsv),
+        "ipynb"           => w!(ipynb),
+        "pandoc-json"     => { let res = rescribe::pandoc_json::emit(doc)?; for w in &res.warnings { eprintln!("warning: {}", w.message); } Ok(res.value) }
+        "native"          => w!(native),
+        "ansi"            => w!(ansi),
+        "plaintext"       => w!(plaintext),
+        "rtf"             => w!(rtf),
+        "beamer"          => w!(beamer),
+        "revealjs"        => w!(revealjs),
+        "slidy"           => w!(slidy),
+        "slideous"        => w!(slideous),
+        "s5"              => w!(s5),
+        "dzslides"        => w!(dzslides),
+        "context"         => w!(context),
+        "ms"              => w!(ms),
+        "icml"            => w!(icml),
+        "chunkedhtml"     => Err("chunkedhtml produces multiple files and cannot be used as a single-output writer via CLI".into()),
+        "docx"            => { let res = rescribe::docx::emit(doc)?; for w in &res.warnings { eprintln!("warning: {}", w.message); } Ok(res.value) }
+        "xlsx"            => { let res = rescribe::xlsx::emit(doc)?; for w in &res.warnings { eprintln!("warning: {}", w.message); } Ok(res.value) }
+        "epub"            => { let res = rescribe::epub::emit(doc)?; for w in &res.warnings { eprintln!("warning: {}", w.message); } Ok(res.value) }
+        "odt"             => { let res = rescribe::odt::emit(doc)?;  for w in &res.warnings { eprintln!("warning: {}", w.message); } Ok(res.value) }
+        "pptx"            => { let res = rescribe::pptx::emit(doc)?; for w in &res.warnings { eprintln!("warning: {}", w.message); } Ok(res.value) }
+        _ => Err(format!("no writer for {fmt:?}").into()),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Format listing
+// ---------------------------------------------------------------------------
 
 fn list_formats() {
-    println!("Available formats:\n");
-    println!("  {:12} {:6} {:6}  EXTENSIONS", "FORMAT", "READ", "WRITE");
-    println!("  {:12} {:6} {:6}  ----------", "------", "----", "-----");
-
-    let formats = [
-        Format::Markdown,
-        Format::Html,
-        Format::Latex,
-        Format::Org,
-        Format::Plaintext,
-        Format::Pdf,
-        Format::Docx,
-        Format::Ipynb,
-        Format::Xlsx,
-        Format::Epub,
-        Format::Djot,
-        Format::Opml,
-        Format::Mediawiki,
-    ];
-
-    for fmt in formats {
-        let read = if fmt.can_read() { "yes" } else { "-" };
-        let write = if fmt.can_write() { "yes" } else { "-" };
-        let exts = fmt.extensions().join(", ");
-        println!("  {:12} {:6} {:6}  {}", fmt.name(), read, write, exts);
+    println!(
+        "Available formats ({} total):\n",
+        FORMATS.iter().filter(|f| f.can_read || f.can_write).count()
+    );
+    println!(
+        "  {:<20} {:<5} {:<5}  EXTENSIONS",
+        "FORMAT", "READ", "WRITE"
+    );
+    println!(
+        "  {:<20} {:<5} {:<5}  ----------",
+        "------", "----", "-----"
+    );
+    for f in FORMATS {
+        if !f.can_read && !f.can_write {
+            continue;
+        }
+        let r = if f.can_read { "yes" } else { "-" };
+        let w = if f.can_write { "yes" } else { "-" };
+        let exts = f.extensions.join(", ");
+        println!("  {:<20} {:<5} {:<5}  {}", f.name, r, w, exts);
     }
 }
