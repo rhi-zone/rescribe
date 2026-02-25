@@ -1,0 +1,9 @@
+{
+  "description": "dl/dt/dd produce definition_list with definition_term and definition_desc children",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "definition_list" },
+    { "path": "/0/0", "kind": "definition_term" },
+    { "path": "/0/1", "kind": "definition_desc" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "ul produces list with ordered=false; li text appears directly in list_item",
+  "assertions": [
+    { "path": "/0",     "kind": "list", "props": { "ordered": false }, "children_count": 3 },
+    { "path": "/0/0",   "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "alpha" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "em element produces an emphasis node",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "emphasis" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "italic text" } }
+  ]
+}

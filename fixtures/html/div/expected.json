@@ -1,0 +1,7 @@
+{
+  "description": "div with id and class attributes sets id and classes props",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "id": "main", "classes": "container" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

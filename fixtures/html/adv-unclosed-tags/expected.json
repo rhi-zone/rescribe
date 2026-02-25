@@ -1,0 +1,7 @@
+{
+  "description": "Unclosed tags: html5ever auto-closes, must parse without panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

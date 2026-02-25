@@ -1,0 +1,11 @@
+{
+  "description": "pre>code without language class has no language prop",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "code_block",
+      "props": { "content": "hello world", "language": null },
+      "children_count": 0
+    }
+  ]
+}

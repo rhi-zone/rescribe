@@ -1,0 +1,7 @@
+{
+  "description": "title element in head becomes doc.metadata[\"title\"]",
+  "metadata": { "title": "My Page" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

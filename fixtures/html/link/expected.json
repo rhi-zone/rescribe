@@ -1,0 +1,7 @@
+{
+  "description": "a element with href produces a link node with url prop",
+  "assertions": [
+    { "path": "/0/0",   "kind": "link", "props": { "url": "https://example.com", "title": null } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "visit" } }
+  ]
+}

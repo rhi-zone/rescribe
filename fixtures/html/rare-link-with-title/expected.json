@@ -1,0 +1,7 @@
+{
+  "description": "a with title attribute sets the title prop on the link node",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com", "title": "Example Site" } }
+  ]
+}

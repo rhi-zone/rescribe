@@ -98,37 +98,50 @@ Readers: html5ever; handles block/inline classification, data-URI embedding, met
 | Construct | Fixture | Category | Status |
 |-----------|---------|----------|--------|
 | paragraph | `paragraph` | happy | ✓ |
-| heading h1–h6 | — | happy | — |
-| blockquote | — | happy | — |
-| ordered list | — | happy | — |
-| unordered list | — | happy | — |
-| code block (`<pre><code>`) | — | happy | — |
-| table | — | happy | — |
-| horizontal rule | — | happy | — |
-| div | — | happy | — |
+| heading h1 | `heading-h1` | happy | ✓ |
+| heading h2 | `heading-h2` | happy | ✓ |
+| heading h3 | `heading-h3` | happy | ✓ |
+| heading h4 | `heading-h4` | happy | ✓ |
+| heading h5 | `heading-h5` | happy | ✓ |
+| heading h6 | `heading-h6` | happy | ✓ |
+| blockquote | `blockquote` | happy | ✓ |
+| ordered list | `list-ordered` | happy | ✓ |
+| unordered list | `list-unordered` | happy | ✓ |
+| code block (with language) | `code-block` | happy | ✓ |
+| code block (no language) | `code-block-no-lang` | happy | ✓ |
+| table (thead/tbody) | `table` | happy | ✓ |
+| horizontal rule | `horizontal-rule` | happy | ✓ |
+| div (with id/class) | `div` | happy | ✓ |
+| definition list | `rare-definition-list` | rare | ✓ |
+| title metadata | `metadata-title` | happy | ✓ |
+| meta tag metadata | `metadata-meta` | happy | ✓ |
 
 ### Inline constructs
 
 | Construct | Fixture | Category | Status |
 |-----------|---------|----------|--------|
-| emphasis (`<em>`) | — | happy | — |
-| strong (`<strong>`) | — | happy | — |
-| strikethrough (`<del>`) | — | happy | — |
-| inline code (`<code>`) | — | happy | — |
-| link (`<a>`) | — | happy | — |
-| image (`<img>`) | — | happy | — |
-| line break (`<br>`) | — | happy | — |
-| superscript (`<sup>`) | — | happy | — |
-| subscript (`<sub>`) | — | happy | — |
+| emphasis (`<em>`) | `emphasis` | happy | ✓ |
+| strong (`<strong>`) | `strong` | happy | ✓ |
+| strikethrough (`<del>`) | `strikeout` | happy | ✓ |
+| underline (`<u>`) | `underline` | happy | ✓ |
+| inline code (`<code>`) | `code-inline` | happy | ✓ |
+| link (`<a>`) | `link` | happy | ✓ |
+| image (`<img>`) | `image` | happy | ✓ |
+| line break (`<br>`) | `line-break` | happy | ✓ |
+| superscript (`<sup>`) | `superscript` | happy | ✓ |
+| subscript (`<sub>`) | `subscript` | happy | ✓ |
+| link with title | `rare-link-with-title` | rare | ✓ |
+| image with title | `rare-image-with-title` | rare | ✓ |
+| ordered list with start | `rare-ordered-list-start` | rare | ✓ |
 
 ### Adversarial
 
 | Scenario | Fixture | Category | Status |
 |----------|---------|----------|--------|
-| unclosed tags | — | adversarial | — |
-| script injection | — | adversarial | — |
-| empty document | — | adversarial | — |
-
+| empty document | `adv-empty` | adversarial | ✓ |
+| unclosed tags | `adv-unclosed-tags` | adversarial | ✓ |
+| script injection | `adv-script-stripped` | adversarial | ✓ |
+| deeply nested elements | `adv-deeply-nested` | adversarial | ✓ |
 ---
 
 ## org

@@ -1,0 +1,7 @@
+{
+  "description": "ol with start attribute sets the start prop on the list node",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": true, "start": 5 } }
+  ]
+}

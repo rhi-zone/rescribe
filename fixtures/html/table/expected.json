@@ -1,0 +1,12 @@
+{
+  "description": "table with thead/tbody: produces table_head and table_body with rows and cells",
+  "assertions": [
+    { "path": "/0",       "kind": "table" },
+    { "path": "/0/0",     "kind": "table_head" },
+    { "path": "/0/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0/0", "kind": "table_header" },
+    { "path": "/0/1",     "kind": "table_body" },
+    { "path": "/0/1/0",   "kind": "table_row" },
+    { "path": "/0/1/0/0", "kind": "table_cell" }
+  ]
+}

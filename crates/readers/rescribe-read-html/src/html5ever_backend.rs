@@ -272,7 +272,11 @@ fn convert_element(
 
         "code" => {
             let content = extract_text_content(&children);
-            Node::new(node::CODE).prop(prop::CONTENT, content)
+            let mut code = Node::new(node::CODE).prop(prop::CONTENT, content);
+            if let Some(class) = get_attr(attrs, "class") {
+                code = code.prop(prop::CLASSES, class);
+            }
+            code
         }
 
         "a" => {

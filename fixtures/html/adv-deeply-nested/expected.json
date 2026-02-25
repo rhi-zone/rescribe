@@ -1,0 +1,7 @@
+{
+  "description": "Deeply nested elements are handled without stack overflow",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "div" }
+  ]
+}

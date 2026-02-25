@@ -1,0 +1,7 @@
+{
+  "description": "script element is silently dropped; only safe content remains",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Empty HTML input: html5ever adds html/head/body skeleton; transparent wrappers yield 0 content children",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 0 }
+  ]
+}

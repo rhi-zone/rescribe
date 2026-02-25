@@ -1,0 +1,8 @@
+{
+  "description": "inline code element produces a code node with content prop and no children",
+  "assertions": [
+    { "path": "/0/0", "kind": "text",   "props": { "content": "Use " } },
+    { "path": "/0/1", "kind": "code",   "props": { "content": "hello" }, "children_count": 0 },
+    { "path": "/0/2", "kind": "text",   "props": { "content": " here" } }
+  ]
+}

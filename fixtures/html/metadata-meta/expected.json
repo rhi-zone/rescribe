@@ -1,0 +1,7 @@
+{
+  "description": "meta name/content pairs become doc.metadata entries",
+  "metadata": { "author": "Jane Doe", "description": "A test page" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "description": "img with title attribute sets the title prop",
+  "category": "rare",
+  "assertions": [
+    {
+      "path": "/0/0",
+      "kind": "image",
+      "props": { "url": "img.png", "alt": "logo", "title": "Logo Image" },
+      "children_count": 0
+    }
+  ]
+}

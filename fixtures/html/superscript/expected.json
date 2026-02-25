@@ -1,0 +1,8 @@
+{
+  "description": "sup element produces a superscript node",
+  "assertions": [
+    { "path": "/0/0",   "kind": "text",        "props": { "content": "x" } },
+    { "path": "/0/1",   "kind": "superscript" },
+    { "path": "/0/1/0", "kind": "text",        "props": { "content": "2" } }
+  ]
+}

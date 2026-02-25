@@ -1,0 +1,6 @@
+{
+  "description": "h5 element becomes a heading node with level 5",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 5 } }
+  ]
+}

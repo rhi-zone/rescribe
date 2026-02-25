@@ -1,0 +1,11 @@
+{
+  "description": "pre>code with language class sets code_block language prop; content is in props not children",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "code_block",
+      "props": { "language": "python", "content": "print(\"hello\")" },
+      "children_count": 0
+    }
+  ]
+}
