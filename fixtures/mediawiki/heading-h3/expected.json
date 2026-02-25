@@ -1,0 +1,10 @@
+{
+  "description": "Level 2 and level 3 headings",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Chapter" } },
+    { "path": "/1", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Section" } }
+  ]
+}

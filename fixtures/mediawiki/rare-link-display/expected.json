@@ -1,0 +1,9 @@
+{
+  "description": "Internal link with custom display text via pipe",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "link", "props": { "url": "Main Page" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "the main page" } }
+  ]
+}

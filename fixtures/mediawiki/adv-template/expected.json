@@ -1,0 +1,7 @@
+{
+  "description": "Template syntax falls through to paragraph as raw text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

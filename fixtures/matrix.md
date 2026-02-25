@@ -320,14 +320,51 @@ Reader: handwritten LaTeX parser (default feature). `\[...\]` and `$$...$$` disp
 
 ## mediawiki
 
+Reader: custom hand-rolled MediaWiki parser. Headings start at level 2 (==). List items wrap content in a paragraph node. Tables are not implemented.
+
+### Block constructs
+
 | Construct | Fixture | Category | Status |
 |-----------|---------|----------|--------|
-| paragraph | — | happy | — |
-| heading (== style) | — | happy | — |
-| bold / italic | — | happy | — |
-| link / external link | — | happy | — |
-| unordered / ordered list | — | happy | — |
-| table | — | happy | — |
+| paragraph | `paragraph` | happy | ✓ |
+| heading level 2 (==) | `heading` | happy | ✓ |
+| heading level 3 (===) | `heading-h3` | happy | ✓ |
+| unordered list | `list-unordered` | happy | ✓ |
+| ordered list | `list-ordered` | happy | ✓ |
+| code block (space-indented) | `code-block` | happy | ✓ |
+| horizontal rule | `horizontal-rule` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (''') | `bold` | happy | ✓ |
+| italic ('') | `italic` | happy | ✓ |
+| internal link | `link-internal` | happy | ✓ |
+| external link | `link-external` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| internal link with display text | `rare-link-display` | rare | ✓ |
+| heading level 4 (====) | `rare-heading-deep` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+| template syntax falls through | `adv-template` | adversarial | ✓ |
+
+### Not yet covered
+
+| Construct | Notes |
+|-----------|-------|
+| table ({&#124; ... &#124;}) | Not implemented in reader |
+| image (&#91;&#91;File:...&#93;&#93;) | Treated as internal link |
+| template ({{...}}) | Falls through as raw text |
+| categories | Not extracted as metadata |
 
 ---
 

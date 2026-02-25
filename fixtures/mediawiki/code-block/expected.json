@@ -1,0 +1,7 @@
+{
+  "description": "Space-indented code block",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "hello world" } }
+  ]
+}
