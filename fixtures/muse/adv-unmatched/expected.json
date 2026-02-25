@@ -1,0 +1,3 @@
+{ "description": "Unmatched bold delimiter treated as plain text", "category": "adv", "assertions": [
+  { "path": "/0", "kind": "paragraph" }
+]}

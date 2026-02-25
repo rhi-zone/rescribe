@@ -1,0 +1,3 @@
+{ "description": "Blockquote via quote tags", "category": "rare", "assertions": [
+  { "path": "/0", "kind": "blockquote" }
+]}

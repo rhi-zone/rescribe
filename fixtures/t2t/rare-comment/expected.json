@@ -1,0 +1,4 @@
+{ "description": "Comment lines starting with percent are skipped", "category": "rare", "assertions": [
+  { "path": "/", "kind": "document" },
+  { "path": "/0", "kind": "paragraph" }
+]}

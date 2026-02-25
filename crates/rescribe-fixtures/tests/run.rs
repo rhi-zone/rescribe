@@ -86,3 +86,53 @@ fn org() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn creole() {
+    run_format_fixtures(&fixtures_root(), "creole", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_creole::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn djot() {
+    run_format_fixtures(&fixtures_root(), "djot", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_djot::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn textile() {
+    run_format_fixtures(&fixtures_root(), "textile", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_textile::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn muse() {
+    run_format_fixtures(&fixtures_root(), "muse", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_muse::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn t2t() {
+    run_format_fixtures(&fixtures_root(), "t2t", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_t2t::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

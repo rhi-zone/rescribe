@@ -1,0 +1,8 @@
+{
+  "description": "Unordered bullet list",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 3 },
+    { "path": "/0/0", "kind": "list_item" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Empty document produces empty content",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document", "children_count": 0 }
+  ]
+}

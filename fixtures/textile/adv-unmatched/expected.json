@@ -1,0 +1,7 @@
+{
+  "description": "Unmatched inline markup treated as literal text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

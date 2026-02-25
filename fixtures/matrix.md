@@ -421,6 +421,209 @@ Reader: custom hand-rolled AsciiDoc parser (~1,290 lines). List items have inlin
 
 ---
 
+## creole
+
+Reader: custom hand-rolled Creole parser. List items wrap content in a paragraph node.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (=) | `heading` | happy | ✓ |
+| heading h2 (==) | `heading-h2` | happy | ✓ |
+| unordered list (*) | `list-unordered` | happy | ✓ |
+| ordered list (#) | `list-ordered` | happy | ✓ |
+| nowiki code block ({{{) | `code-block` | happy | ✓ |
+| horizontal rule (----) | `horizontal-rule` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (**) | `bold` | happy | ✓ |
+| italic (//) | `italic` | happy | ✓ |
+| link ([[url]]) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| inline code ({{{...}}}) | `rare-code-inline` | rare | ✓ |
+| image ([[Image:...]]) | `rare-image` | rare | ✓ |
+| bare URL | `rare-link-bare` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## djot
+
+Reader: jotdown crate. In djot, `*text*` = strong, `_text_` = emphasis, `{-text-}` = strikeout. Code block content includes trailing newline.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 | `heading` | happy | ✓ |
+| heading h2 | `heading-h2` | happy | ✓ |
+| unordered list | `list-unordered` | happy | ✓ |
+| ordered list | `list-ordered` | happy | ✓ |
+| fenced code (no lang) | `code-block` | happy | ✓ |
+| fenced code (with lang) | `code-block-lang` | happy | ✓ |
+| horizontal rule | `horizontal-rule` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| strong (*) | `bold` | happy | ✓ |
+| emphasis (_) | `italic` | happy | ✓ |
+| inline code (`) | `code-inline` | happy | ✓ |
+| link | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| blockquote | `rare-blockquote` | rare | ✓ |
+| strikeout ({-text-}) | `rare-strikeout` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## textile
+
+Reader: custom hand-rolled Textile parser.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (h1.) | `heading` | happy | ✓ |
+| heading h2 (h2.) | `heading-h2` | happy | ✓ |
+| unordered list (- item) | `list-unordered` | happy | ✓ |
+| ordered list (# item) | `list-ordered` | happy | ✓ |
+| code block (bc.) | `code-block` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (**) | `bold` | happy | ✓ |
+| italic (__) | `italic` | happy | ✓ |
+| inline code (@) | `code-inline` | happy | ✓ |
+| link | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| blockquote (bq.) | `rare-blockquote` | rare | ✓ |
+| strikeout (-) | `rare-strikeout` | rare | ✓ |
+| underline (+) | `rare-underline` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+| unmatched markup | `adv-unmatched` | adversarial | ✓ |
+
+---
+
+## muse
+
+Reader: custom hand-rolled Muse (Emacs Muse) parser.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (*) | `heading` | happy | ✓ |
+| heading h2 (**) | `heading-h2` | happy | ✓ |
+| unordered list (-) | `list-unordered` | happy | ✓ |
+| ordered list (1.) | `list-ordered` | happy | ✓ |
+| code block | `code-block` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold | `bold` | happy | ✓ |
+| italic | `italic` | happy | ✓ |
+| inline code (=) | `code-inline` | happy | ✓ |
+| link | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| blockquote | `rare-blockquote` | rare | ✓ |
+| bare URL link | `rare-link-bare` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+| unmatched markup | `adv-unmatched` | adversarial | ✓ |
+
+---
+
+## t2t
+
+Reader: custom hand-rolled txt2tags parser.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (=) | `heading` | happy | ✓ |
+| heading h2 (==) | `heading-h2` | happy | ✓ |
+| unordered list (-) | `list-unordered` | happy | ✓ |
+| ordered list (+) | `list-ordered` | happy | ✓ |
+| verbatim code block (```) | `code-block` | happy | ✓ |
+| horizontal rule (===) | `horizontal-rule` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (**) | `bold` | happy | ✓ |
+| italic (//) | `italic` | happy | ✓ |
+| link | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| inline code (`` ` ``) | `rare-code-inline` | rare | ✓ |
+| comment (%) | `rare-comment` | rare | ✓ |
+| underline (__) | `rare-underline` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+| unknown macro/command | `adv-unknown` | adversarial | ✓ |
+
+---
+
 ## Formats pending initial fixture authoring
 
 The following formats have readers but no fixtures yet. They should be
@@ -436,6 +639,6 @@ library-backed formats (docx, epub, pdf, …).
 | html | ✓ complete | 5 |
 | asciidoc | ✓ fixtures done | 6 |
 | typst | ~5% coverage | 7 |
-| all wiki formats | ✓ complete | 8 |
-| textile, muse, t2t, … | ✓ complete | 9 |
+| creole, djot | ✓ fixtures done | 8 |
+| textile, muse, t2t | ✓ fixtures done | 9 |
 | docx, epub, pdf, … | library-backed | 10 |

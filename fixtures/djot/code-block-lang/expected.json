@@ -1,0 +1,7 @@
+{
+  "description": "Fenced code block with language tag",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "python", "content": "print(\"hello\")\n" } }
+  ]
+}

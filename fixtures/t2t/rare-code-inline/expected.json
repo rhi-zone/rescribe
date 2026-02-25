@@ -1,0 +1,4 @@
+{ "description": "Inline code via double backtick delimiters", "category": "rare", "assertions": [
+  { "path": "/0", "kind": "paragraph" },
+  { "path": "/0/1", "kind": "code", "props": { "content": "print" } }
+]}

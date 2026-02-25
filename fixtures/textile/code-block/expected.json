@@ -1,0 +1,7 @@
+{
+  "description": "Code block via bc. prefix",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "hello world" } }
+  ]
+}

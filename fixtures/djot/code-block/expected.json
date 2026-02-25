@@ -1,0 +1,7 @@
+{
+  "description": "Fenced code block without language",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "hello world\n" } }
+  ]
+}

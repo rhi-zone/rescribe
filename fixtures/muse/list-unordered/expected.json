@@ -1,0 +1,8 @@
+{ "description": "Unordered bullet list with space-dash-space markers", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 3 },
+  { "path": "/0/0", "kind": "list_item" },
+  { "path": "/0/0/0", "kind": "paragraph" },
+  { "path": "/0/0/0/0", "kind": "text", "props": { "content": "First item" } },
+  { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Second item" } },
+  { "path": "/0/2/0/0", "kind": "text", "props": { "content": "Third item" } }
+]}
