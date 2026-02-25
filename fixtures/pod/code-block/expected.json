@@ -1,0 +1,6 @@
+{
+  "description": "Indented verbatim block becomes a code_block node; leading indent is stripped and content is trim_end trimmed",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "code here" } }
+  ]
+}

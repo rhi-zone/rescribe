@@ -1,0 +1,10 @@
+{
+  "description": "\\fB...\\fR inline font escape produces a strong node embedded in a paragraph",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "text", "props": { "content": "This is " } },
+    { "path": "/0/1",   "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "bold" } },
+    { "path": "/0/2",   "kind": "text", "props": { "content": " inline text." } }
+  ]
+}

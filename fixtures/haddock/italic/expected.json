@@ -1,0 +1,8 @@
+{
+  "description": "/text/ syntax produces an emphasis node with inline children",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "emphasis" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "italic" } }
+  ]
+}

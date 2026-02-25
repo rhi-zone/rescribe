@@ -1,0 +1,7 @@
+{
+  "description": "'ident' syntax produces a code node with the identifier as content",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "code", "props": { "content": "ident" } }
+  ]
+}

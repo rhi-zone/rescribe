@@ -1,0 +1,8 @@
+{
+  "description": "{quote}...{quote} becomes a blockquote node with paragraph children",
+  "assertions": [
+    { "path": "/0",     "kind": "blockquote" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "This is quoted text." } }
+  ]
+}

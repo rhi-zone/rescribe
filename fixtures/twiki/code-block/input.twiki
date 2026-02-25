@@ -1,0 +1,5 @@
+<verbatim>
+fn main() {
+    println!("hello");
+}
+</verbatim>

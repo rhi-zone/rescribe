@@ -1,0 +1,11 @@
+{
+  "description": "{code}...{code} becomes a code_block node with content prop",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "code_block",
+      "props": { "content": "hello world" },
+      "children_count": 0
+    }
+  ]
+}

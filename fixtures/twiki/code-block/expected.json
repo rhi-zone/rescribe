@@ -1,0 +1,8 @@
+{
+  "description": "Code block with <verbatim>...</verbatim> tags",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block" },
+    { "path": "/0", "props": { "content": "fn main() {\n    println!(\"hello\");\n}" } }
+  ]
+}

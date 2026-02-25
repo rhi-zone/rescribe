@@ -1,0 +1,6 @@
+{
+  "description": "Empty input produces an empty document with no children",
+  "assertions": [
+    { "path": "/", "children_count": 0 }
+  ]
+}

@@ -1,0 +1,1 @@
+This is \fBbold\fR inline text.

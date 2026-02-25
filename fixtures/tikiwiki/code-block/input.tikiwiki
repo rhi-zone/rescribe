@@ -1,0 +1,5 @@
+{CODE()}
+fn main() {
+    println!("hello");
+}
+{CODE}

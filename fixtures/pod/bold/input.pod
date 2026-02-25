@@ -1,0 +1,5 @@
+=pod
+
+This is B<bold text> here.
+
+=cut

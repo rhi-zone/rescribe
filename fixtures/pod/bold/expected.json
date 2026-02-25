@@ -1,0 +1,8 @@
+{
+  "description": "B<text> formatting code produces a strong node inside a paragraph",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "bold text" } }
+  ]
+}

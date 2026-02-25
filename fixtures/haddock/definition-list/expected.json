@@ -1,0 +1,11 @@
+{
+  "description": "[term] description syntax produces a definition_list with term and desc children",
+  "assertions": [
+    { "path": "/0",       "kind": "definition_list" },
+    { "path": "/0/0",     "kind": "definition_term" },
+    { "path": "/0/0/0",   "kind": "text", "props": { "content": "term" } },
+    { "path": "/0/1",     "kind": "definition_desc" },
+    { "path": "/0/1/0",   "kind": "paragraph" },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "A description of the term." } }
+  ]
+}

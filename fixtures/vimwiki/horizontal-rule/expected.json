@@ -1,0 +1,7 @@
+{
+  "description": "Horizontal rule from four dashes",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "horizontal_rule" }
+  ]
+}

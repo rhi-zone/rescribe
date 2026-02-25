@@ -1,0 +1,5 @@
+=pod
+
+Use C<my $var> here.
+
+=cut

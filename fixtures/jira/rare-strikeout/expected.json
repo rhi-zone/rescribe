@@ -1,0 +1,8 @@
+{
+  "description": "-text- syntax produces a strikeout node inline",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "strikeout" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "strikeout" } }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Strikethrough inline text with double tildes",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "strikeout" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "strikeout" } }
+  ]
+}

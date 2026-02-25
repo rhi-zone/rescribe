@@ -1,0 +1,5 @@
+=pod
+
+See L<https://example.com> for details.
+
+=cut

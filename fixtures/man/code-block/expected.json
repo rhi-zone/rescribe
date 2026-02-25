@@ -1,0 +1,6 @@
+{
+  "description": ".nf/.fi block produces a code_block node with preformatted content",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "code here" } }
+  ]
+}

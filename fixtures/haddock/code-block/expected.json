@@ -1,0 +1,11 @@
+{
+  "description": "Bird-track lines starting with '> ' become a code_block with trimmed content",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "code_block",
+      "props": { "content": "hello world\nsecond line" },
+      "children_count": 0
+    }
+  ]
+}

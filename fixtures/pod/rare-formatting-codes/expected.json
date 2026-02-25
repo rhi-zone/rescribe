@@ -1,0 +1,9 @@
+{
+  "description": "F<filename> formatting code produces an emphasis node (filename rendered as italic)",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "emphasis" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "filename.txt" } }
+  ]
+}

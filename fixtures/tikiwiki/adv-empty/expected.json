@@ -1,0 +1,7 @@
+{
+  "description": "Empty file produces document with no children",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "children_count": 0 }
+  ]
+}

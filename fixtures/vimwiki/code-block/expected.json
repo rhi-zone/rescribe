@@ -1,0 +1,7 @@
+{
+  "description": "Preformatted code block with triple braces",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "code here" } }
+  ]
+}

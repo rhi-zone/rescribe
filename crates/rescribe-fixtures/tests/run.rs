@@ -136,3 +136,83 @@ fn t2t() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn tikiwiki() {
+    run_format_fixtures(&fixtures_root(), "tikiwiki", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_tikiwiki::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn twiki() {
+    run_format_fixtures(&fixtures_root(), "twiki", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_twiki::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn vimwiki() {
+    run_format_fixtures(&fixtures_root(), "vimwiki", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_vimwiki::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn dokuwiki() {
+    run_format_fixtures(&fixtures_root(), "dokuwiki", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_dokuwiki::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn jira() {
+    run_format_fixtures(&fixtures_root(), "jira", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_jira::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn haddock() {
+    run_format_fixtures(&fixtures_root(), "haddock", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_haddock::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn pod() {
+    run_format_fixtures(&fixtures_root(), "pod", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_pod::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn man() {
+    run_format_fixtures(&fixtures_root(), "man", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_man::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

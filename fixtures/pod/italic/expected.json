@@ -1,0 +1,8 @@
+{
+  "description": "I<text> formatting code produces an emphasis node inside a paragraph",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "emphasis" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "italic text" } }
+  ]
+}

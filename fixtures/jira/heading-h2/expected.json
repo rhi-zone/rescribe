@@ -1,0 +1,7 @@
+{
+  "description": "h2. syntax becomes a heading node with level 2",
+  "assertions": [
+    { "path": "/0",   "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Hello World" } }
+  ]
+}

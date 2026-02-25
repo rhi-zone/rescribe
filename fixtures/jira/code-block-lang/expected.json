@@ -1,0 +1,11 @@
+{
+  "description": "{code:python}...{code} sets both language and content props",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "code_block",
+      "props": { "language": "python", "content": "print(\"hello\")" },
+      "children_count": 0
+    }
+  ]
+}

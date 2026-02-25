@@ -1,0 +1,5 @@
+=pod
+
+This is I<italic text> here.
+
+=cut

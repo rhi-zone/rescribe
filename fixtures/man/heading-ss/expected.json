@@ -1,0 +1,7 @@
+{
+  "description": ".SS macro produces a heading node at level 3",
+  "assertions": [
+    { "path": "/0",   "kind": "heading", "props": { "level": 3 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Overview" } }
+  ]
+}

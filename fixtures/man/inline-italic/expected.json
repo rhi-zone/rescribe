@@ -1,0 +1,10 @@
+{
+  "description": "\\fI...\\fR inline font escape produces an emphasis node embedded in a paragraph",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "text", "props": { "content": "This is " } },
+    { "path": "/0/1",   "kind": "emphasis" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "italic" } },
+    { "path": "/0/2",   "kind": "text", "props": { "content": " inline text." } }
+  ]
+}

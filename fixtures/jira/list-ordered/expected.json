@@ -1,0 +1,9 @@
+{
+  "description": "Ordered list items with # become list_item > paragraph > text",
+  "assertions": [
+    { "path": "/0",       "kind": "list", "props": { "ordered": true }, "children_count": 3 },
+    { "path": "/0/0",     "kind": "list_item" },
+    { "path": "/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "alpha" } }
+  ]
+}

@@ -1,0 +1,5 @@
+=pod
+
+See F<filename.txt> for more.
+
+=cut

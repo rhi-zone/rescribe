@@ -1,0 +1,10 @@
+{
+  "description": ".BR macro alternates bold and roman: first arg is strong, second is plain text",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph", "children_count": 2 },
+    { "path": "/0/0",   "kind": "strong" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "bold" } },
+    { "path": "/0/1",   "kind": "text", "props": { "content": "roman" } }
+  ]
+}

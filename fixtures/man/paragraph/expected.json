@@ -1,0 +1,7 @@
+{
+  "description": ".PP macro followed by text produces a paragraph node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Hello world." } }
+  ]
+}

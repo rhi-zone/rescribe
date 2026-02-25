@@ -1,0 +1,7 @@
+{
+  "description": ".SH macro produces a heading node at level 2",
+  "assertions": [
+    { "path": "/0",   "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "INTRODUCTION" } }
+  ]
+}

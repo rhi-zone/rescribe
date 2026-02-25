@@ -1,0 +1,8 @@
+{
+  "description": "L<url> formatting code produces a link node with url prop",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "https://example.com" } }
+  ]
+}

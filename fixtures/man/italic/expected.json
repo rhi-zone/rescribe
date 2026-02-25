@@ -1,0 +1,8 @@
+{
+  "description": ".I macro produces a paragraph containing an emphasis node",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "emphasis" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Italic text" } }
+  ]
+}

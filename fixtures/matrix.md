@@ -624,21 +624,351 @@ Reader: custom hand-rolled txt2tags parser.
 
 ---
 
+## tikiwiki
+
+Reader: custom hand-rolled TikiWiki parser. Headings use `!` prefix (count = level). List items wrap in paragraph. Bold: `__text__`, italic: `''text''`.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (!) | `heading` | happy | ✓ |
+| heading h2 (!!) | `heading-h2` | happy | ✓ |
+| unordered list (*) | `list-unordered` | happy | ✓ |
+| ordered list (#) | `list-ordered` | happy | ✓ |
+| code block ({CODE()}) | `code-block` | happy | ✓ |
+| horizontal rule (---) | `horizontal-rule` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (__) | `bold` | happy | ✓ |
+| italic ('') | `italic` | happy | ✓ |
+| link ([url\|label]) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| underline (===) | `rare-underline` | rare | ✓ |
+| inline code (-+) | `rare-code-inline` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## twiki
+
+Reader: custom hand-rolled TWiki parser. Headings: `---+` = h1. Lists need 3-space prefix. `<verbatim>` for code blocks.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (---+) | `heading` | happy | ✓ |
+| heading h2 (---++) | `heading-h2` | happy | ✓ |
+| unordered list (   * item) | `list-unordered` | happy | ✓ |
+| ordered list (   1. item) | `list-ordered` | happy | ✓ |
+| verbatim code block | `code-block` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (*text*) | `bold` | happy | ✓ |
+| italic (_text_) | `italic` | happy | ✓ |
+| inline code (=text=) | `code-inline` | happy | ✓ |
+| link ([[url][label]]) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| bold-italic (__text__) → strong > emphasis | `rare-bold-italic` | rare | ✓ |
+| bold-fixed (==text==) → strong > code | `rare-bold-fixed` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## vimwiki
+
+Reader: custom hand-rolled VimWiki parser. Headings: `= Title =` = h1. Code blocks: `{{{ ... }}}`. List items wrap in paragraph.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (= =) | `heading` | happy | ✓ |
+| heading h2 (== ==) | `heading-h2` | happy | ✓ |
+| unordered list (- item) | `list-unordered` | happy | ✓ |
+| ordered list (1. item) | `list-ordered` | happy | ✓ |
+| code block ({{{...}}}) | `code-block` | happy | ✓ |
+| horizontal rule (----) | `horizontal-rule` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (*text*) | `bold` | happy | ✓ |
+| italic (_text_) | `italic` | happy | ✓ |
+| link ([[url\|desc]]) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| strikeout (~~text~~) | `rare-strikeout` | rare | ✓ |
+| image ({{url\|alt}}) | `rare-image` | rare | ✓ |
+| inline code (`code`) | `rare-code-inline` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## dokuwiki
+
+Reader: custom hand-rolled DokuWiki parser. **Headings inverted**: 6 `=` signs = level 1. Ordered lists use `-`, unordered use `*` (opposite convention).
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (====== ======) | `heading` | happy | ✓ |
+| heading h2 (===== =====) | `heading-h2` | happy | ✓ |
+| unordered list (  * item) | `list-unordered` | happy | ✓ |
+| ordered list (  - item) | `list-ordered` | happy | ✓ |
+| code block (<code>) | `code-block` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (**text**) | `bold` | happy | ✓ |
+| italic (//text//) | `italic` | happy | ✓ |
+| underline (__text__) | `underline` | happy | ✓ |
+| link ([[url\|text]]) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| monospace (''text'') | `rare-code-inline` | rare | ✓ |
+| image ({{url\|alt}}) | `rare-image` | rare | ✓ |
+| blockquote (> prefix) | `rare-blockquote` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## jira
+
+Reader: custom hand-rolled Jira wiki markup parser. Headings: `h1. Title`. Code blocks: `{code:lang}...{code}`.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 | `heading` | happy | ✓ |
+| heading h2 | `heading-h2` | happy | ✓ |
+| unordered list (* item) | `list-unordered` | happy | ✓ |
+| ordered list (# item) | `list-ordered` | happy | ✓ |
+| code block ({code}) | `code-block` | happy | ✓ |
+| code block with language | `code-block-lang` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (*text*) | `bold` | happy | ✓ |
+| italic (_text_) | `italic` | happy | ✓ |
+| link ([label\|url]) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| blockquote ({quote}) | `rare-blockquote` | rare | ✓ |
+| strikeout (-text-) | `rare-strikeout` | rare | ✓ |
+| monospace ({{text}}) | `rare-code-inline` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## haddock
+
+Reader: custom hand-rolled Haddock parser. Code blocks use bird tracks (`> ` prefix). Content is trim_end() trimmed (no trailing newline).
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (= =) | `heading` | happy | ✓ |
+| heading h2 (== ==) | `heading-h2` | happy | ✓ |
+| unordered list (* item) | `list-unordered` | happy | ✓ |
+| ordered list ((1) item) | `list-ordered` | happy | ✓ |
+| code block (> bird tracks) | `code-block` | happy | ✓ |
+| definition list ([term] desc) | `definition-list` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (__text__) | `bold` | happy | ✓ |
+| italic (/text/) | `italic` | happy | ✓ |
+| inline code (@text@) | `code-inline` | happy | ✓ |
+| link ("text"<url>) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| identifier ref ('ident') | `rare-identifier` | rare | ✓ |
+| bare URL link (<url>) | `rare-link-bare` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## pod
+
+Reader: custom hand-rolled POD parser. Requires `=pod` or `=head` to activate, `=cut` to deactivate. Verbatim blocks trimmed with trim_end().
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (=head1) | `heading` | happy | ✓ |
+| heading h2 (=head2) | `heading-h2` | happy | ✓ |
+| unordered list (=item *) | `list-unordered` | happy | ✓ |
+| ordered list (=item 1.) | `list-ordered` | happy | ✓ |
+| verbatim code block (indented) | `code-block` | happy | ✓ |
+
+### Inline formatting
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (B<text>) | `bold` | happy | ✓ |
+| italic (I<text>) | `italic` | happy | ✓ |
+| code (C<text>) | `code-inline` | happy | ✓ |
+| link (L<url>) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| file/path (F<text>) → emphasis | `rare-formatting-codes` | rare | ✓ |
+| definition item (=item Term) | `rare-definition-list` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty file (no =pod) | `adv-empty` | adversarial | ✓ |
+
+---
+
+## man
+
+Reader: custom hand-rolled groff/troff man page parser. Macro-based format. `.SH` = h2, `.SS` = h3. Font escapes `\fB`, `\fI` for inline styling.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph (.PP) | `paragraph` | happy | ✓ |
+| section heading (.SH) | `heading` | happy | ✓ |
+| subsection heading (.SS) | `heading-ss` | happy | ✓ |
+| preformatted block (.nf/.fi) | `code-block` | happy | ✓ |
+| definition list (.TP) | `definition-list` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold macro (.B) | `bold` | happy | ✓ |
+| italic macro (.I) | `italic` | happy | ✓ |
+| inline bold (\fB..\fR) | `inline-bold` | happy | ✓ |
+| inline italic (\fI..\fR) | `inline-italic` | happy | ✓ |
+| link (.URL) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| alternating bold-roman (.BR) | `rare-alternating` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
 ## Formats pending initial fixture authoring
 
-The following formats have readers but no fixtures yet. They should be
-addressed in priority order: wiki formats, textile, muse, t2t, then
-library-backed formats (docx, epub, pdf, …).
+The following formats have readers but no fixtures yet.
 
 | Format | Reader status | Priority |
 |--------|--------------|----------|
-| org | ✓ fixtures done | 1 |
-| rst | ✓ fixtures done | 2 |
-| latex | ✓ fixtures done | 3 |
-| mediawiki | ✓ fixtures done | 4 |
-| html | ✓ complete | 5 |
-| asciidoc | ✓ fixtures done | 6 |
 | typst | ~5% coverage | 7 |
-| creole, djot | ✓ fixtures done | 8 |
-| textile, muse, t2t | ✓ fixtures done | 9 |
 | docx, epub, pdf, … | library-backed | 10 |
+
+## Completed formats
+
+| Format | Fixtures | Notes |
+|--------|----------|-------|
+| markdown | ✓ | CommonMark + GFM |
+| html | ✓ | html5ever |
+| org | ✓ | hand-rolled |
+| rst | ✓ | hand-rolled |
+| latex | ✓ | hand-rolled |
+| mediawiki | ✓ | hand-rolled |
+| asciidoc | ✓ | hand-rolled |
+| creole | ✓ | hand-rolled |
+| djot | ✓ | jotdown crate |
+| textile | ✓ | hand-rolled |
+| muse | ✓ | hand-rolled |
+| t2t | ✓ | hand-rolled |
+| tikiwiki | ✓ | hand-rolled |
+| twiki | ✓ | hand-rolled |
+| vimwiki | ✓ | hand-rolled |
+| dokuwiki | ✓ | hand-rolled |
+| jira | ✓ | hand-rolled |
+| haddock | ✓ | hand-rolled |
+| pod | ✓ | hand-rolled |
+| man | ✓ | hand-rolled |

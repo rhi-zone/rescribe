@@ -1,0 +1,10 @@
+{
+  "description": "Inline code with =text= syntax",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Run " } },
+    { "path": "/0/1", "kind": "code", "props": { "content": "code" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " here." } }
+  ]
+}
