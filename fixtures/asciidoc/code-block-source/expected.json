@@ -1,0 +1,7 @@
+{
+  "description": "Source block with language annotation",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "python", "content": "print(\"hello\")" } }
+  ]
+}

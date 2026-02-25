@@ -1,0 +1,9 @@
+{
+  "description": "Admonition block via [NOTE] attribute",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "admonition note" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "This is an important note." } }
+  ]
+}

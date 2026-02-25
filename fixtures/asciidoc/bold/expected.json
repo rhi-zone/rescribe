@@ -1,0 +1,9 @@
+{
+  "description": "Bold text via single asterisks",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "bold" } }
+  ]
+}

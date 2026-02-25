@@ -1,0 +1,7 @@
+{
+  "description": "Unknown block attribute emits warning and parses following block normally",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

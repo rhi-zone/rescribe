@@ -368,20 +368,73 @@ Reader: custom hand-rolled MediaWiki parser. Headings start at level 2 (==). Lis
 
 ---
 
+## asciidoc
+
+Reader: custom hand-rolled AsciiDoc parser (~1,290 lines). List items have inline children directly (no paragraph wrapper).
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (=) | `heading` | happy | ✓ |
+| heading h2 (==) | `heading-h2` | happy | ✓ |
+| unordered list (*) | `list-unordered` | happy | ✓ |
+| ordered list (.) | `list-ordered` | happy | ✓ |
+| listing code block (----) | `code-block` | happy | ✓ |
+| source block with language | `code-block-source` | happy | ✓ |
+| horizontal rule (''') | `horizontal-rule` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (*) | `bold` | happy | ✓ |
+| italic (_) | `italic` | happy | ✓ |
+| inline code (`) | `code-inline` | happy | ✓ |
+| URL link | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| quote block (____) | `rare-blockquote` | rare | ✓ |
+| description list (::) | `rare-description-list` | rare | ✓ |
+| link macro | `rare-link-macro` | rare | ✓ |
+| admonition ([NOTE]) | `rare-admonition` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+| unknown block attribute | `adv-unknown-attr` | adversarial | ✓ |
+
+### Not yet covered
+
+| Construct | Notes |
+|-----------|-------|
+| table (|===) | Not implemented in reader |
+| image block (image::) | figure/image not yet tested |
+| include directive | Not implemented |
+| highlight (#) | span with class="highlight" |
+
+---
+
 ## Formats pending initial fixture authoring
 
 The following formats have readers but no fixtures yet. They should be
-addressed in priority order: org, rst, latex, mediawiki, html (above is
-partially done), then the remaining ~45 formats.
+addressed in priority order: wiki formats, textile, muse, t2t, then
+library-backed formats (docx, epub, pdf, …).
 
 | Format | Reader status | Priority |
 |--------|--------------|----------|
-| org | ✓ complete | 1 |
-| rst | medium risk | 2 |
-| latex | ✓ complete | 3 |
-| mediawiki | ✓ complete | 4 |
+| org | ✓ fixtures done | 1 |
+| rst | ✓ fixtures done | 2 |
+| latex | ✓ fixtures done | 3 |
+| mediawiki | ✓ fixtures done | 4 |
 | html | ✓ complete | 5 |
-| asciidoc | low-medium risk | 6 |
+| asciidoc | ✓ fixtures done | 6 |
 | typst | ~5% coverage | 7 |
 | all wiki formats | ✓ complete | 8 |
 | textile, muse, t2t, … | ✓ complete | 9 |
