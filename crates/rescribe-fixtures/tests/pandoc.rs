@@ -16,7 +16,10 @@ use rescribe_fixtures::pandoc_harness::{
     self, CorpusEntry, RunResult, corpus_dir, find_pandoc, run_entry,
 };
 
-fn run_formats(entries: &[CorpusEntry], parse: impl Fn(&str, &[u8]) -> Result<Document, String>) {
+fn run_formats(
+    entries: &[CorpusEntry],
+    parse: impl Fn(&str, &[u8]) -> Result<Document, String> + Copy + Send + 'static,
+) {
     let Some(corpus) = corpus_dir() else {
         eprintln!("SKIP: ~/git/pandoc/test/ not found");
         return;
@@ -29,8 +32,10 @@ fn run_formats(entries: &[CorpusEntry], parse: impl Fn(&str, &[u8]) -> Result<Do
     let results: Vec<RunResult> = entries
         .iter()
         .map(|e| {
-            run_entry(e, &corpus, pandoc.as_deref(), |bytes| {
-                parse(e.format, bytes)
+            eprintln!("testing {}/{}", e.format, e.filename);
+            let fmt = e.format;
+            run_entry(e, &corpus, pandoc.as_deref(), move |bytes| {
+                parse(fmt, bytes)
             })
         })
         .collect();

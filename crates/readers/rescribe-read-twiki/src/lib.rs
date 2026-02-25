@@ -80,7 +80,9 @@ pub fn parse_with_options(
             let text = para_lines.join(" ");
             result.push(Node::new(node::PARAGRAPH).children(parse_inline(&text)));
         }
-        i = end;
+        // Ensure progress even when collect_paragraph returns without consuming anything
+        // (e.g. definition-list lines "   $ item:" that don't match list syntax).
+        i = end.max(i + 1);
     }
 
     let document = Document {

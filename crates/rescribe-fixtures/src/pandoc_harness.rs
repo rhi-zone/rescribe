@@ -23,6 +23,10 @@ use rescribe_core::{Document, Node};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::time::Duration;
+
+const PARSE_TIMEOUT: Duration = Duration::from_secs(10);
 
 // ---------------------------------------------------------------------------
 // Discovery
@@ -274,7 +278,7 @@ pub const CORPUS: &[CorpusEntry] = &[
     CorpusEntry {
         format: "fb2",
         pandoc_from: "fb2",
-        filename: "fb2/pb_brief.fb2",
+        filename: "fb2/basic.fb2",
     },
 ];
 
@@ -311,12 +315,13 @@ impl RunResult {
 /// Run a single corpus entry.
 ///
 /// `parse_fn` receives the raw file bytes and must return a `Document` or
-/// an error string.  Panics from the parser propagate normally (they are bugs).
+/// an error string.  A timeout of 10 s is applied; if parsing exceeds it the
+/// entry is recorded as a FAIL with a timeout message.
 pub fn run_entry(
     entry: &CorpusEntry,
     corpus: &Path,
     pandoc: Option<&Path>,
-    parse_fn: impl Fn(&[u8]) -> Result<Document, String>,
+    parse_fn: impl Fn(&[u8]) -> Result<Document, String> + Send + 'static,
 ) -> RunResult {
     let file = corpus.join(entry.filename);
 
@@ -335,8 +340,23 @@ pub fn run_entry(
         }
     };
 
-    // Parse with rescribe.
-    let (parse_ok, parse_error, our_doc) = match parse_fn(&input) {
+    // Parse with rescribe — spawn in a thread so we can apply a timeout.
+    let (tx, rx) = mpsc::channel();
+    let input_clone = input.clone();
+    std::thread::spawn(move || {
+        let result = parse_fn(&input_clone);
+        let _ = tx.send(result);
+    });
+    let parse_result = match rx.recv_timeout(PARSE_TIMEOUT) {
+        Ok(r) => r,
+        Err(RecvTimeoutError::Timeout) => Err(format!(
+            "parse timeout (>{:.0}s) — likely infinite loop",
+            PARSE_TIMEOUT.as_secs_f32()
+        )),
+        Err(RecvTimeoutError::Disconnected) => Err("parser crashed (panic in thread)".to_string()),
+    };
+
+    let (parse_ok, parse_error, our_doc) = match parse_result {
         Ok(doc) => (true, None, Some(doc)),
         Err(e) => (false, Some(e), None),
     };

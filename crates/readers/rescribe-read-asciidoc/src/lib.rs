@@ -899,6 +899,7 @@ impl<'a> Parser<'a> {
             }
 
             // Regular text
+            let pos_before = pos;
             let mut text = String::new();
             while pos < chars.len() {
                 let c = chars[pos];
@@ -931,6 +932,11 @@ impl<'a> Parser<'a> {
 
             if !text.is_empty() {
                 nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, text));
+            } else if pos == pos_before {
+                // No markup matched and the text loop didn't advance — consume the
+                // current character literally to guarantee forward progress.
+                nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, chars[pos].to_string()));
+                pos += 1;
             }
         }
 

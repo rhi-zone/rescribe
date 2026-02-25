@@ -117,6 +117,11 @@ impl<'a> Parser<'a> {
             return None;
         }
 
+        // Guard against degenerate input like a lone "=" (level + trailing > len).
+        if level + trailing > trimmed.len() {
+            return None;
+        }
+
         // Extract content
         let content = &trimmed[level..trimmed.len() - trailing].trim();
         if content.is_empty() {

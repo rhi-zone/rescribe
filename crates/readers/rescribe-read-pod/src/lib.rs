@@ -185,6 +185,18 @@ impl<'a> Parser<'a> {
                         continue;
                     }
 
+                    // Handle nested =over list inside an item.
+                    if inner_line.starts_with("=over") {
+                        item_nodes.push(self.parse_list());
+                        continue;
+                    }
+
+                    // Other POD commands (=cut, =pod, =begin, =end, =for, etc.) — skip.
+                    if inner_line.starts_with('=') {
+                        self.pos += 1;
+                        continue;
+                    }
+
                     if inner_line.starts_with(' ') || inner_line.starts_with('\t') {
                         item_nodes.push(self.parse_verbatim());
                     } else {
