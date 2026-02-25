@@ -1,70 +1,86 @@
 # Introduction
 
-**rescribe** is a universal document conversion library, inspired by Pandoc but designed to address its limitations.
+**rescribe** is a universal document conversion library and CLI for Rust,
+inspired by Pandoc but designed around a fundamentally different IR.
 
-## Why rescribe?
+## The problem with Pandoc's IR
 
-Document conversion is a common need: Markdown to PDF, DOCX to HTML, etc. Current solutions make tradeoffs that lose information or limit interoperability.
+Pandoc is the de facto standard for document conversion and is excellent at
+what it does. But its architecture has a hard ceiling:
 
-### The Problem with Pandoc
+**The AST is a closed enum.** Every format gets flattened into a fixed set of
+`Block` and `Inline` variants. Anything that doesn't fit — DOCX paragraph
+styles, HTML `data-*` attributes, LaTeX environments, Typst functions — is
+either approximated or silently dropped. You can't know what was lost, and you
+can't extend the AST without forking Pandoc.
 
-Pandoc is the de facto standard for document conversion, but it has fundamental limitations:
+**Conversion is silent.** Pandoc does its best and gives you output. When it
+drops a table feature or loses a cross-reference, you find out by inspecting
+the result. There is no programmatic signal.
 
-| Issue | Description |
-|-------|-------------|
-| **Lossy by design** | AST is "least common denominator" - format-specific features lost on parse |
-| **No layout layer** | AST is purely semantic - no page breaks, columns, positioning |
-| **Poor roundtrip fidelity** | A→B→A loses information (DOCX styles, HTML classes, LaTeX macros) |
-| **References-only media** | Images are paths, not embedded - no unified resource handling |
-| **Fixed schema** | Adding element types requires changing Pandoc itself |
+**It's not a library.** Pandoc is a Haskell binary. You can invoke it as a
+subprocess or use its Haskell API, but you cannot embed it in a Rust
+application, compile it to WASM, or use it via FFI.
 
-### rescribe's Approach
+## rescribe's approach
 
-1. **Property bags over fixed schemas** - Elements carry extensible properties, not fixed fields
-2. **Layered representation** - Separate semantic, style, and layout concerns
-3. **Fidelity tracking** - Know what was lost, warn about it
-4. **Embedded resources** - First-class handling of images, fonts, data
-5. **Roundtrip-friendly** - Preserve source format info for better reconstruction
+rescribe represents documents using an **open IR**:
 
-## Quick Example
+- **Open node kinds** — node kinds are plain strings, not an enum. Format-specific
+  constructs (`html:div`, `docx:style`, `latex:env`) survive the round-trip
+  instead of being dropped. New node kinds don't require library changes.
+- **Property bags** — nodes carry arbitrary key-value properties. Metadata
+  that doesn't fit a fixed schema isn't thrown away.
+- **Fidelity tracking** — every parse and emit returns a `ConversionResult`
+  carrying structured warnings about what couldn't be represented. You know
+  exactly what was lost.
+- **Embedded resources** — images, fonts, and binary data are first-class
+  `Resource` objects, not external file references.
+- **Rust library** — embeddable in any Rust application, compilable to WASM,
+  usable via FFI. No subprocess, no Haskell runtime.
+
+## vs Pandoc
+
+| | Pandoc | rescribe |
+|---|---|---|
+| AST | Closed Haskell enum | Open string-keyed nodes |
+| Format-specific data | Dropped or approximated | Preserved in property bags |
+| Conversion warnings | None | Structured fidelity tracking |
+| Extensibility | Fork required | New node kinds, no fork |
+| Embedding | Subprocess only | Native Rust library |
+| Maturity | 15+ years, battle-tested | Early development |
+| CLI | Excellent | Present, improving |
+
+The honest take: **Pandoc is more mature today.** For simple one-off
+conversions from the command line, it will serve you well. rescribe's
+advantages compound when you're *building an application* that processes
+documents — where you need to embed the library, inspect fidelity, handle
+custom node types, or process the IR programmatically. As rescribe matures,
+the CLI should be better too: faster (Rust vs Haskell startup), more faithful
+(open IR loses less), and with explicit fidelity reporting.
+
+## Format coverage
+
+See [format-tiers.md](./format-tiers.md) for how formats are classified. In
+short:
+
+- **Tier 1** (full roundtrip guarantee): Markdown, HTML, Org, RST, DOCX, EPUB,
+  and most markup formats
+- **Tier 2** (write-primary, partial read): Typst, LaTeX — document programming
+  languages where the reader extracts static content only
+- **Tier 3** (extract-only): PDF, XLSX, bibliographic formats
+
+## Quick start
 
 ```rust
-use rescribe::{Document, Parser, Emitter};
-use rescribe_markdown::MarkdownParser;
-use rescribe_html::HtmlEmitter;
+use rescribe_read_markdown::parse;
+use rescribe_write_html::emit;
 
-let parser = MarkdownParser::new();
-let emitter = HtmlEmitter::new();
+let result = parse("# Hello\n\nWorld")?;
 
-// Parse markdown to IR
-let result = parser.parse(markdown_bytes, &ParseOptions::default())?;
-
-// Check for fidelity warnings
 for warning in &result.warnings {
-    eprintln!("Warning: {}", warning.message);
+    eprintln!("fidelity: {}", warning.message);
 }
 
-// Emit to HTML
-let output = emitter.emit(&result.value, &EmitOptions::default())?;
+let html = emit(&result.value)?;
 ```
-
-## Project Status
-
-rescribe is in early development. The core IR types are being stabilized.
-
-### Planned Format Support
-
-**Tier 1: Pure Rust**
-- Markdown (CommonMark, GFM)
-- HTML
-- Plain text
-- JSON (serialized IR)
-
-**Tier 2: Pure Rust (complex)**
-- PDF (emit via typst/printpdf)
-- EPUB
-- LaTeX
-
-**Tier 3: External tools**
-- DOCX, XLSX, PPTX (via LibreOffice)
-- ODT, ODS, ODP
