@@ -1,0 +1,8 @@
+{
+  "description": "Inline math with dollar signs",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "math_inline", "props": { "math:source": "x + y" } }
+  ]
+}

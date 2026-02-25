@@ -38,6 +38,16 @@ fn html() {
 }
 
 #[test]
+fn latex() {
+    run_format_fixtures(&fixtures_root(), "latex", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_latex::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
 fn rst() {
     run_format_fixtures(&fixtures_root(), "rst", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;

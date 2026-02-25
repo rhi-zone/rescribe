@@ -1,0 +1,8 @@
+{
+  "description": "Full document with preamble; only body content is parsed",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Hello, world." } }
+  ]
+}

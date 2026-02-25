@@ -264,16 +264,57 @@ Reader: custom hand-rolled RST parser. Heading levels are inferred dynamically f
 
 ## latex
 
+Reader: handwritten LaTeX parser (default feature). `\[...\]` and `$$...$$` display math is parsed inline (wrapped in a paragraph). List items have a leading space before content.
+
+### Block constructs
+
 | Construct | Fixture | Category | Status |
 |-----------|---------|----------|--------|
-| section | — | happy | — |
-| paragraph | — | happy | — |
-| itemize | — | happy | — |
-| enumerate | — | happy | — |
-| verbatim / lstlisting | — | happy | — |
-| bold / italic / underline | — | happy | — |
-| math inline | — | happy | — |
-| table (tabular) | — | happy | — |
+| paragraph | `paragraph` | happy | ✓ |
+| section heading h1 | `heading` | happy | ✓ |
+| section heading h2 | `heading-h2` | happy | ✓ |
+| itemize list | `list-unordered` | happy | ✓ |
+| enumerate list | `list-ordered` | happy | ✓ |
+| verbatim code block | `code-block` | happy | ✓ |
+| tabular table | `table` | happy | ✓ |
+| display math (\[...\]) | `math-display` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (\textbf) | `bold` | happy | ✓ |
+| italic (\textit) | `italic` | happy | ✓ |
+| underline (\underline) | `underline` | happy | ✓ |
+| inline math ($...$) | `math-inline` | happy | ✓ |
+| link (\href) | `link` | happy | ✓ |
+| inline code (\texttt) | `code-inline` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| lstlisting code block | `rare-lstlisting` | rare | ✓ |
+| \url command | `rare-url` | rare | ✓ |
+| \emph command | `rare-emph` | rare | ✓ |
+| document with preamble | `rare-preamble` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+| unknown environment | `adv-unknown-env` | adversarial | ✓ |
+
+### Not yet covered
+
+| Construct | Notes |
+|-----------|-------|
+| \subsubsection heading | level 3 |
+| figure / \includegraphics | figure environment |
+| \begin{equation} math | display math in environment |
+| strikeout (\sout) | requires ulem package |
+| footnote (\footnote) | not implemented in reader |
 
 ---
 

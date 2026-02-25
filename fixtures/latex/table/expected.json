@@ -1,0 +1,10 @@
+{
+  "description": "Simple tabular table with two rows and three cells",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row", "children_count": 3 },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/1", "kind": "table_row", "children_count": 3 }
+  ]
+}

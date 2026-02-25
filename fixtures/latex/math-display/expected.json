@@ -1,0 +1,8 @@
+{
+  "description": "Display math via \\[...\\] is parsed inline inside a paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "math_display", "props": { "math:source": "x + y" } }
+  ]
+}
