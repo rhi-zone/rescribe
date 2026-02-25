@@ -1,0 +1,7 @@
+{
+  "description": "Synopsis line with equals prefix",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "synopsis" } }
+  ]
+}

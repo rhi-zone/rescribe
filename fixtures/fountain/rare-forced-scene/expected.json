@@ -1,0 +1,7 @@
+{
+  "description": "Forced scene heading with dot prefix",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2, "fountain:type": "scene_heading" } }
+  ]
+}

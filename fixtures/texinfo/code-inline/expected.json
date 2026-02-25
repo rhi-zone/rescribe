@@ -1,0 +1,8 @@
+{
+  "description": "@code{} produces a code node with content prop inside a paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "code", "props": { "content": "printf" }, "children_count": 0 }
+  ]
+}

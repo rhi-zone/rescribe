@@ -1,0 +1,12 @@
+{
+  "description": "Unordered list with dash markers; list_item children are paragraph-wrapped",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 3 },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "alpha" } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "beta" } },
+    { "path": "/0/2/0/0", "kind": "text", "props": { "content": "gamma" } }
+  ]
+}

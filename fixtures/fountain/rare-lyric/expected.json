@@ -1,0 +1,7 @@
+{
+  "description": "Lyric line with tilde prefix",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "lyric" } }
+  ]
+}

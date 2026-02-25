@@ -1,0 +1,8 @@
+{
+  "description": "Horizontal rule",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "horizontal_rule" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "@section produces a heading node with level 2",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Overview" } }
+  ]
+}

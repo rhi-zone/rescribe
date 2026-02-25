@@ -1,0 +1,9 @@
+{
+  "description": "Level-2 heading (5 equals signs)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Title" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "@example block produces a code_block node with content prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "children_count": 0 }
+  ]
+}

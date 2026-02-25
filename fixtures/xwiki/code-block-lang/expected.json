@@ -1,0 +1,8 @@
+{
+  "description": "Code block with language attribute",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "code_block", "props": { "content": "print(\"hello\")", "language": "python" } }
+  ]
+}

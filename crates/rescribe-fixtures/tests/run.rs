@@ -216,3 +216,73 @@ fn man() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn xwiki() {
+    run_format_fixtures(&fixtures_root(), "xwiki", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_xwiki::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn zimwiki() {
+    run_format_fixtures(&fixtures_root(), "zimwiki", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_zimwiki::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn bbcode() {
+    run_format_fixtures(&fixtures_root(), "bbcode", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_bbcode::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn texinfo() {
+    run_format_fixtures(&fixtures_root(), "texinfo", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_texinfo::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn markua() {
+    run_format_fixtures(&fixtures_root(), "markua", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_markua::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn fountain() {
+    run_format_fixtures(&fixtures_root(), "fountain", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_fountain::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn ansi() {
+    run_format_fixtures(&fixtures_root(), "ansi", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_ansi::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

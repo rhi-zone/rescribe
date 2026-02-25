@@ -1,0 +1,8 @@
+{
+  "description": "Transition (CUT TO:) produces paragraph with transition type",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "transition" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "CUT TO:" } }
+  ]
+}

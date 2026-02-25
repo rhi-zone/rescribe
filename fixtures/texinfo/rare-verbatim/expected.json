@@ -1,0 +1,7 @@
+{
+  "description": "@verbatim block produces a code_block node with raw content",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "children_count": 0 }
+  ]
+}

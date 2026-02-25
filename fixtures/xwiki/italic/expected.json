@@ -1,0 +1,10 @@
+{
+  "description": "Italic inline text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "emphasis" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "italic text" } }
+  ]
+}

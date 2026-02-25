@@ -1,0 +1,9 @@
+{
+  "description": "Italic text via ANSI code 3",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "emphasis" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Hello" } }
+  ]
+}

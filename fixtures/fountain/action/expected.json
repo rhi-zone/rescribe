@@ -1,0 +1,8 @@
+{
+  "description": "Action paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "action" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "A man walks into a room." } }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "description": "Fenced code block with language tag sets language and content props; content is trim_end trimmed",
+  "category": "happy",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "code_block",
+      "props": { "language": "python", "content": "print(\"hi\")" },
+      "children_count": 0
+    }
+  ]
+}

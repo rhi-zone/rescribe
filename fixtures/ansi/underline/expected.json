@@ -1,0 +1,9 @@
+{
+  "description": "Underline text via ANSI code 4",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "underline" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Hello" } }
+  ]
+}

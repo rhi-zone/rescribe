@@ -1,0 +1,10 @@
+{
+  "description": "Strikethrough inline text via ~~ delimiters",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "strikeout" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "strikeout text" } }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Inline monospace via double single-quote delimiters",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "code", "props": { "content": "monospace" } }
+  ]
+}

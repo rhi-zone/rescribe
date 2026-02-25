@@ -1,0 +1,9 @@
+{
+  "description": "Blockquote prefix produces a blockquote node wrapping a paragraph",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "quoted text" } }
+  ]
+}

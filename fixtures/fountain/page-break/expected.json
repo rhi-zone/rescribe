@@ -1,0 +1,7 @@
+{
+  "description": "Page break marker produces a horizontal rule",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "horizontal_rule" }
+  ]
+}

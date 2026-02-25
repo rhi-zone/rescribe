@@ -1,0 +1,9 @@
+{
+  "description": "@emph{} produces an emphasis node inside a paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "emphasis" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "italic" } }
+  ]
+}

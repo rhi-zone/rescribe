@@ -939,6 +939,261 @@ Reader: custom hand-rolled groff/troff man page parser. Macro-based format. `.SH
 
 ---
 
+## xwiki
+
+Reader: custom hand-rolled XWiki parser. Bold: `**text**`, italic: `//text//`, monospace: `##text##`. Code blocks via `{{code}}...{{/code}}` (content trimmed). Link: `[[label>>url]]`.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (= =) | `heading` | happy | ✓ |
+| heading h2 (== ==) | `heading-h2` | happy | ✓ |
+| unordered list (* item) | `list-unordered` | happy | ✓ |
+| ordered list (1. item) | `list-ordered` | happy | ✓ |
+| code block ({{code}}) | `code-block` | happy | ✓ |
+| code block with language | `code-block-lang` | happy | ✓ |
+| horizontal rule (----) | `horizontal-rule` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (**text**) | `bold` | happy | ✓ |
+| italic (//text//) | `italic` | happy | ✓ |
+| link ([[label>>url]]) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| monospace (##text##) | `rare-monospace` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## zimwiki
+
+Reader: custom hand-rolled ZimWiki parser. **Headings inverted**: 6 `=` = level 1. Code blocks via `'''...'''` (trimmed).
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (====== ======) | `heading` | happy | ✓ |
+| heading h2 (===== =====) | `heading-h2` | happy | ✓ |
+| unordered list (* item) | `list-unordered` | happy | ✓ |
+| ordered list (1. item) | `list-ordered` | happy | ✓ |
+| code block (''' fence) | `code-block` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (**text**) | `bold` | happy | ✓ |
+| italic (//text//) | `italic` | happy | ✓ |
+| link ([[url\|label]]) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| strikeout (~~text~~) | `rare-strikeout` | rare | ✓ |
+| monospace (''text'') | `rare-monospace` | rare | ✓ |
+| image ({{url}}) | `rare-image` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## bbcode
+
+Reader: custom hand-rolled BBCode parser. **No headings**. Tags are case-insensitive. Lists use `[list][*]item[/list]`.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| unordered list ([list]) | `list-unordered` | happy | ✓ |
+| ordered list ([list=1]) | `list-ordered` | happy | ✓ |
+| code block ([code]) | `code-block` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold ([b]) | `bold` | happy | ✓ |
+| italic ([i]) | `italic` | happy | ✓ |
+| underline ([u]) | `underline` | happy | ✓ |
+| link ([url=url]label) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| blockquote ([quote]) | `rare-blockquote` | rare | ✓ |
+| strikeout ([s]) | `rare-strikeout` | rare | ✓ |
+| color span ([color=red]) | `rare-code-inline` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## texinfo
+
+Reader: custom hand-rolled Texinfo parser. `@chapter` = h1, `@section` = h2. **List items directly contain inline nodes** (no paragraph wrapper).
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| chapter heading (@chapter) | `heading` | happy | ✓ |
+| section heading (@section) | `heading-h2` | happy | ✓ |
+| itemize list (@itemize) | `list-unordered` | happy | ✓ |
+| enumerate list (@enumerate) | `list-ordered` | happy | ✓ |
+| example block (@example) | `code-block` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (@strong) | `bold` | happy | ✓ |
+| italic (@emph) | `italic` | happy | ✓ |
+| code (@code) | `code-inline` | happy | ✓ |
+| link (@uref) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| blockquote (@quotation) | `rare-blockquote` | rare | ✓ |
+| verbatim block (@verbatim) | `rare-verbatim` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## markua
+
+Reader: custom hand-rolled Markua (Leanpub Markdown) parser. Similar to Markdown. List items wrap in paragraph. Code block content trim_end() trimmed. Special blocks: `A>` aside, `W>` warning, etc.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (#) | `heading` | happy | ✓ |
+| heading h2 (##) | `heading-h2` | happy | ✓ |
+| unordered list (- item) | `list-unordered` | happy | ✓ |
+| ordered list (1. item) | `list-ordered` | happy | ✓ |
+| fenced code block | `code-block` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (**text**) | `bold` | happy | ✓ |
+| italic (*text*) | `italic` | happy | ✓ |
+| inline code (`text`) | `code-inline` | happy | ✓ |
+| link ([text](url)) | `link` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| blockquote (> text) | `rare-blockquote` | rare | ✓ |
+| special aside block (A>) | `rare-special-block` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## fountain
+
+Reader: custom hand-rolled Fountain screenplay parser. All elements have `fountain:type` property. No lists or code blocks. Scene headings are `INT./EXT.` lines.
+
+### Screenplay elements
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| action paragraph | `action` | happy | ✓ |
+| scene heading (INT./EXT.) | `scene-heading` | happy | ✓ |
+| section heading (#) | `section-heading` | happy | ✓ |
+| dialogue block (character + dialogue) | `dialogue` | happy | ✓ |
+| transition (CUT TO:) | `transition` | happy | ✓ |
+| dialogue with parenthetical | `parenthetical-in-dialogue` | happy | ✓ |
+| page break (===) | `page-break` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| forced scene heading (.prefix) | `rare-forced-scene` | rare | ✓ |
+| lyric line (~prefix) | `rare-lyric` | rare | ✓ |
+| synopsis line (= prefix) | `rare-synopsis` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## ansi
+
+Reader: custom hand-rolled ANSI escape code parser. **No headings, lists, or code blocks** — only paragraphs with inline styling. ESC[1m = bold, ESC[3m = italic, ESC[4m = underline, ESC[9m = strikeout, ESC[0m = reset.
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| plain text paragraph | `paragraph` | happy | ✓ |
+| bold (ESC[1m) | `bold` | happy | ✓ |
+| italic (ESC[3m) | `italic` | happy | ✓ |
+| underline (ESC[4m) | `underline` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| strikeout (ESC[9m) | `rare-strikeout` | rare | ✓ |
+| nested bold+italic | `rare-bold-italic` | rare | ✓ |
+| styled text within plain text | `rare-inline-in-text` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
 ## Formats pending initial fixture authoring
 
 The following formats have readers but no fixtures yet.
@@ -972,3 +1227,10 @@ The following formats have readers but no fixtures yet.
 | haddock | ✓ | hand-rolled |
 | pod | ✓ | hand-rolled |
 | man | ✓ | hand-rolled |
+| xwiki | ✓ | hand-rolled |
+| zimwiki | ✓ | hand-rolled |
+| bbcode | ✓ | hand-rolled |
+| texinfo | ✓ | hand-rolled |
+| markua | ✓ | hand-rolled |
+| fountain | ✓ | hand-rolled |
+| ansi | ✓ | hand-rolled |

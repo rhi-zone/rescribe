@@ -42,3 +42,10 @@ rescribe-read-jats = { workspace = true }
 rescribe-read-dokuwiki = { workspace = true }
 rescribe-read-muse = { workspace = true }
 rescribe-read-fb2 = { workspace = true }
+rescribe-read-xwiki = { workspace = true }
+rescribe-read-zimwiki = { workspace = true }
+rescribe-read-bbcode = { workspace = true }
+rescribe-read-texinfo = { workspace = true }
+rescribe-read-markua = { workspace = true }
+rescribe-read-fountain = { workspace = true }
+rescribe-read-ansi = { workspace = true }

@@ -1,0 +1,8 @@
+{
+  "description": "Multiline code block; content check omitted due to implementation-defined newline handling",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "code_block" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Plain text paragraph becomes a paragraph node with a text child",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Hello world" } }
+  ]
+}

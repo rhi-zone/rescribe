@@ -1,0 +1,9 @@
+{
+  "description": "Color span tag produces a span node",
+  "category": "rare",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span" }
+  ]
+}
