@@ -9,84 +9,323 @@ keywords = ["document", "conversion", "pandoc", "markdown", "html"]
 categories = ["text-processing", "parser-implementations"]
 
 [features]
-default = ["std", "markdown", "html"]
+default = ["std", "format-markdown", "format-html"]
 
-# Node definition crates
+# Node definition crates (not language features — no format- prefix)
 std = ["dep:rescribe-std"]
 math = ["dep:rescribe-math"]
 
-# Format support
-markdown = ["dep:rescribe-read-markdown", "dep:rescribe-write-markdown"]
-html = ["dep:rescribe-read-html", "dep:rescribe-write-html"]
-latex = ["dep:rescribe-read-latex", "dep:rescribe-write-latex"]
-org = ["dep:rescribe-read-org", "dep:rescribe-write-org"]
-plaintext = ["dep:rescribe-write-plaintext"]
-pdf = ["dep:rescribe-read-pdf"]
-docx = ["dep:rescribe-read-docx", "dep:rescribe-write-docx"]
-ipynb = ["dep:rescribe-read-ipynb", "dep:rescribe-write-ipynb"]
-xlsx = ["dep:rescribe-read-xlsx", "dep:rescribe-write-xlsx"]
-epub = ["dep:rescribe-read-epub", "dep:rescribe-write-epub"]
-djot = ["dep:rescribe-read-djot", "dep:rescribe-write-djot"]
-opml = ["dep:rescribe-read-opml", "dep:rescribe-write-opml"]
-mediawiki = ["dep:rescribe-read-mediawiki", "dep:rescribe-write-mediawiki"]
-bibtex = ["dep:rescribe-read-bibtex", "dep:rescribe-write-bibtex"]
-csl-json = ["dep:rescribe-read-csl-json", "dep:rescribe-write-csl-json"]
-docbook = ["dep:rescribe-read-docbook", "dep:rescribe-write-docbook"]
-rst = ["dep:rescribe-read-rst", "dep:rescribe-write-rst"]
-asciidoc = ["dep:rescribe-read-asciidoc", "dep:rescribe-write-asciidoc"]
-typst = ["dep:rescribe-read-typst", "dep:rescribe-write-typst"]
-ansi = ["dep:rescribe-write-ansi"]
-dokuwiki = ["dep:rescribe-read-dokuwiki", "dep:rescribe-write-dokuwiki"]
-jats = ["dep:rescribe-read-jats", "dep:rescribe-write-jats"]
-tei = ["dep:rescribe-read-tei", "dep:rescribe-write-tei"]
-man = ["dep:rescribe-read-man", "dep:rescribe-write-man"]
-jira = ["dep:rescribe-read-jira", "dep:rescribe-write-jira"]
-creole = ["dep:rescribe-read-creole", "dep:rescribe-write-creole"]
-textile = ["dep:rescribe-read-textile", "dep:rescribe-write-textile"]
-haddock = ["dep:rescribe-read-haddock", "dep:rescribe-write-haddock"]
-muse = ["dep:rescribe-read-muse", "dep:rescribe-write-muse"]
-t2t = ["dep:rescribe-read-t2t", "dep:rescribe-write-t2t"]
-rtf = ["dep:rescribe-read-rtf", "dep:rescribe-write-rtf"]
-vimwiki = ["dep:rescribe-read-vimwiki", "dep:rescribe-write-vimwiki"]
-zimwiki = ["dep:rescribe-read-zimwiki", "dep:rescribe-write-zimwiki"]
-pod = ["dep:rescribe-read-pod", "dep:rescribe-write-pod"]
-markua = ["dep:rescribe-read-markua", "dep:rescribe-write-markua"]
-fb2 = ["dep:rescribe-read-fb2", "dep:rescribe-write-fb2"]
-texinfo = ["dep:rescribe-read-texinfo", "dep:rescribe-write-texinfo"]
-tikiwiki = ["dep:rescribe-read-tikiwiki", "dep:rescribe-write-tikiwiki"]
-twiki = ["dep:rescribe-read-twiki", "dep:rescribe-write-twiki"]
-xwiki = ["dep:rescribe-read-xwiki", "dep:rescribe-write-xwiki"]
-revealjs = ["dep:rescribe-write-revealjs"]
-slidy = ["dep:rescribe-write-slidy"]
-s5 = ["dep:rescribe-write-s5"]
-dzslides = ["dep:rescribe-write-dzslides"]
-bbcode = ["dep:rescribe-read-bbcode", "dep:rescribe-write-bbcode"]
-ansi-read = ["dep:rescribe-read-ansi"]
-beamer = ["dep:rescribe-write-beamer"]
-csv = ["dep:rescribe-read-csv", "dep:rescribe-write-csv"]
-context = ["dep:rescribe-write-context"]
-ms = ["dep:rescribe-write-ms"]
-chunkedhtml = ["dep:rescribe-write-chunkedhtml"]
-tsv = ["dep:rescribe-read-tsv", "dep:rescribe-write-tsv"]
-icml = ["dep:rescribe-write-icml"]
-slideous = ["dep:rescribe-write-slideous"]
-odt = ["dep:rescribe-read-odt", "dep:rescribe-write-odt"]
-native = ["dep:rescribe-read-native", "dep:rescribe-write-native"]
-pptx = ["dep:rescribe-read-pptx", "dep:rescribe-write-pptx"]
-commonmark = ["dep:rescribe-read-commonmark", "dep:rescribe-write-commonmark"]
-gfm = ["dep:rescribe-read-gfm", "dep:rescribe-write-gfm"]
-ris = ["dep:rescribe-read-ris", "dep:rescribe-write-ris"]
-endnotexml = ["dep:rescribe-read-endnotexml", "dep:rescribe-write-endnotexml"]
-biblatex = ["dep:rescribe-read-biblatex", "dep:rescribe-write-biblatex"]
-markdown-strict = ["dep:rescribe-read-markdown-strict", "dep:rescribe-write-markdown-strict"]
-multimarkdown = ["dep:rescribe-read-multimarkdown", "dep:rescribe-write-multimarkdown"]
-fountain = ["dep:rescribe-read-fountain", "dep:rescribe-write-fountain"]
+# Granular read/write features, one per format.
+# Use format-{fmt} to enable both directions at once.
+read-ansi = ["dep:rescribe-read-ansi"]
+write-ansi = ["dep:rescribe-write-ansi"]
+format-ansi = ["read-ansi", "write-ansi"]
 
-# All formats
-pandoc-json = ["dep:rescribe-read-pandoc-json", "dep:rescribe-write-pandoc-json"]
+read-asciidoc = ["dep:rescribe-read-asciidoc"]
+write-asciidoc = ["dep:rescribe-write-asciidoc"]
+format-asciidoc = ["read-asciidoc", "write-asciidoc"]
 
-# All formats
-all = ["std", "math", "markdown", "html", "latex", "org", "plaintext", "pdf", "docx", "ipynb", "xlsx", "epub", "djot", "opml", "mediawiki", "bibtex", "csl-json", "docbook", "rst", "asciidoc", "typst", "ansi", "dokuwiki", "jats", "tei", "man", "jira", "creole", "textile", "haddock", "muse", "t2t", "rtf", "vimwiki", "zimwiki", "pod", "markua", "fb2", "texinfo", "tikiwiki", "twiki", "xwiki", "revealjs", "slidy", "s5", "dzslides", "bbcode", "ansi-read", "beamer", "csv", "context", "ms", "chunkedhtml", "tsv", "icml", "slideous", "odt", "native", "pptx", "commonmark", "gfm", "ris", "endnotexml", "biblatex", "markdown-strict", "multimarkdown", "fountain", "pandoc-json"]
+read-bbcode = ["dep:rescribe-read-bbcode"]
+write-bbcode = ["dep:rescribe-write-bbcode"]
+format-bbcode = ["read-bbcode", "write-bbcode"]
+
+read-biblatex = ["dep:rescribe-read-biblatex"]
+write-biblatex = ["dep:rescribe-write-biblatex"]
+format-biblatex = ["read-biblatex", "write-biblatex"]
+
+read-bibtex = ["dep:rescribe-read-bibtex"]
+write-bibtex = ["dep:rescribe-write-bibtex"]
+format-bibtex = ["read-bibtex", "write-bibtex"]
+
+write-beamer = ["dep:rescribe-write-beamer"]
+format-beamer = ["write-beamer"]
+
+write-chunkedhtml = ["dep:rescribe-write-chunkedhtml"]
+format-chunkedhtml = ["write-chunkedhtml"]
+
+read-commonmark = ["dep:rescribe-read-commonmark"]
+write-commonmark = ["dep:rescribe-write-commonmark"]
+format-commonmark = ["read-commonmark", "write-commonmark"]
+
+write-context = ["dep:rescribe-write-context"]
+format-context = ["write-context"]
+
+read-creole = ["dep:rescribe-read-creole"]
+write-creole = ["dep:rescribe-write-creole"]
+format-creole = ["read-creole", "write-creole"]
+
+read-csl-json = ["dep:rescribe-read-csl-json"]
+write-csl-json = ["dep:rescribe-write-csl-json"]
+format-csl-json = ["read-csl-json", "write-csl-json"]
+
+read-csv = ["dep:rescribe-read-csv"]
+write-csv = ["dep:rescribe-write-csv"]
+format-csv = ["read-csv", "write-csv"]
+
+read-djot = ["dep:rescribe-read-djot"]
+write-djot = ["dep:rescribe-write-djot"]
+format-djot = ["read-djot", "write-djot"]
+
+read-docbook = ["dep:rescribe-read-docbook"]
+write-docbook = ["dep:rescribe-write-docbook"]
+format-docbook = ["read-docbook", "write-docbook"]
+
+read-docx = ["dep:rescribe-read-docx"]
+write-docx = ["dep:rescribe-write-docx"]
+format-docx = ["read-docx", "write-docx"]
+
+read-dokuwiki = ["dep:rescribe-read-dokuwiki"]
+write-dokuwiki = ["dep:rescribe-write-dokuwiki"]
+format-dokuwiki = ["read-dokuwiki", "write-dokuwiki"]
+
+write-dzslides = ["dep:rescribe-write-dzslides"]
+format-dzslides = ["write-dzslides"]
+
+read-endnotexml = ["dep:rescribe-read-endnotexml"]
+write-endnotexml = ["dep:rescribe-write-endnotexml"]
+format-endnotexml = ["read-endnotexml", "write-endnotexml"]
+
+read-epub = ["dep:rescribe-read-epub"]
+write-epub = ["dep:rescribe-write-epub"]
+format-epub = ["read-epub", "write-epub"]
+
+read-fb2 = ["dep:rescribe-read-fb2"]
+write-fb2 = ["dep:rescribe-write-fb2"]
+format-fb2 = ["read-fb2", "write-fb2"]
+
+read-fountain = ["dep:rescribe-read-fountain"]
+write-fountain = ["dep:rescribe-write-fountain"]
+format-fountain = ["read-fountain", "write-fountain"]
+
+read-gfm = ["dep:rescribe-read-gfm"]
+write-gfm = ["dep:rescribe-write-gfm"]
+format-gfm = ["read-gfm", "write-gfm"]
+
+read-haddock = ["dep:rescribe-read-haddock"]
+write-haddock = ["dep:rescribe-write-haddock"]
+format-haddock = ["read-haddock", "write-haddock"]
+
+read-html = ["dep:rescribe-read-html"]
+write-html = ["dep:rescribe-write-html"]
+format-html = ["read-html", "write-html"]
+
+write-icml = ["dep:rescribe-write-icml"]
+format-icml = ["write-icml"]
+
+read-ipynb = ["dep:rescribe-read-ipynb"]
+write-ipynb = ["dep:rescribe-write-ipynb"]
+format-ipynb = ["read-ipynb", "write-ipynb"]
+
+read-jats = ["dep:rescribe-read-jats"]
+write-jats = ["dep:rescribe-write-jats"]
+format-jats = ["read-jats", "write-jats"]
+
+read-jira = ["dep:rescribe-read-jira"]
+write-jira = ["dep:rescribe-write-jira"]
+format-jira = ["read-jira", "write-jira"]
+
+read-latex = ["dep:rescribe-read-latex"]
+write-latex = ["dep:rescribe-write-latex"]
+format-latex = ["read-latex", "write-latex"]
+
+read-man = ["dep:rescribe-read-man"]
+write-man = ["dep:rescribe-write-man"]
+format-man = ["read-man", "write-man"]
+
+read-markdown = ["dep:rescribe-read-markdown"]
+write-markdown = ["dep:rescribe-write-markdown"]
+format-markdown = ["read-markdown", "write-markdown"]
+
+read-markdown-strict = ["dep:rescribe-read-markdown-strict"]
+write-markdown-strict = ["dep:rescribe-write-markdown-strict"]
+format-markdown-strict = ["read-markdown-strict", "write-markdown-strict"]
+
+read-markua = ["dep:rescribe-read-markua"]
+write-markua = ["dep:rescribe-write-markua"]
+format-markua = ["read-markua", "write-markua"]
+
+read-mediawiki = ["dep:rescribe-read-mediawiki"]
+write-mediawiki = ["dep:rescribe-write-mediawiki"]
+format-mediawiki = ["read-mediawiki", "write-mediawiki"]
+
+write-ms = ["dep:rescribe-write-ms"]
+format-ms = ["write-ms"]
+
+read-multimarkdown = ["dep:rescribe-read-multimarkdown"]
+write-multimarkdown = ["dep:rescribe-write-multimarkdown"]
+format-multimarkdown = ["read-multimarkdown", "write-multimarkdown"]
+
+read-muse = ["dep:rescribe-read-muse"]
+write-muse = ["dep:rescribe-write-muse"]
+format-muse = ["read-muse", "write-muse"]
+
+read-native = ["dep:rescribe-read-native"]
+write-native = ["dep:rescribe-write-native"]
+format-native = ["read-native", "write-native"]
+
+read-odt = ["dep:rescribe-read-odt"]
+write-odt = ["dep:rescribe-write-odt"]
+format-odt = ["read-odt", "write-odt"]
+
+read-opml = ["dep:rescribe-read-opml"]
+write-opml = ["dep:rescribe-write-opml"]
+format-opml = ["read-opml", "write-opml"]
+
+read-org = ["dep:rescribe-read-org"]
+write-org = ["dep:rescribe-write-org"]
+format-org = ["read-org", "write-org"]
+
+read-pandoc-json = ["dep:rescribe-read-pandoc-json"]
+write-pandoc-json = ["dep:rescribe-write-pandoc-json"]
+format-pandoc-json = ["read-pandoc-json", "write-pandoc-json"]
+
+read-pdf = ["dep:rescribe-read-pdf"]
+format-pdf = ["read-pdf"]
+
+write-plaintext = ["dep:rescribe-write-plaintext"]
+format-plaintext = ["write-plaintext"]
+
+read-pod = ["dep:rescribe-read-pod"]
+write-pod = ["dep:rescribe-write-pod"]
+format-pod = ["read-pod", "write-pod"]
+
+read-pptx = ["dep:rescribe-read-pptx"]
+write-pptx = ["dep:rescribe-write-pptx"]
+format-pptx = ["read-pptx", "write-pptx"]
+
+write-revealjs = ["dep:rescribe-write-revealjs"]
+format-revealjs = ["write-revealjs"]
+
+read-ris = ["dep:rescribe-read-ris"]
+write-ris = ["dep:rescribe-write-ris"]
+format-ris = ["read-ris", "write-ris"]
+
+read-rst = ["dep:rescribe-read-rst"]
+write-rst = ["dep:rescribe-write-rst"]
+format-rst = ["read-rst", "write-rst"]
+
+read-rtf = ["dep:rescribe-read-rtf"]
+write-rtf = ["dep:rescribe-write-rtf"]
+format-rtf = ["read-rtf", "write-rtf"]
+
+write-s5 = ["dep:rescribe-write-s5"]
+format-s5 = ["write-s5"]
+
+write-slidy = ["dep:rescribe-write-slidy"]
+format-slidy = ["write-slidy"]
+
+write-slideous = ["dep:rescribe-write-slideous"]
+format-slideous = ["write-slideous"]
+
+read-t2t = ["dep:rescribe-read-t2t"]
+write-t2t = ["dep:rescribe-write-t2t"]
+format-t2t = ["read-t2t", "write-t2t"]
+
+read-tei = ["dep:rescribe-read-tei"]
+write-tei = ["dep:rescribe-write-tei"]
+format-tei = ["read-tei", "write-tei"]
+
+read-texinfo = ["dep:rescribe-read-texinfo"]
+write-texinfo = ["dep:rescribe-write-texinfo"]
+format-texinfo = ["read-texinfo", "write-texinfo"]
+
+read-textile = ["dep:rescribe-read-textile"]
+write-textile = ["dep:rescribe-write-textile"]
+format-textile = ["read-textile", "write-textile"]
+
+read-tikiwiki = ["dep:rescribe-read-tikiwiki"]
+write-tikiwiki = ["dep:rescribe-write-tikiwiki"]
+format-tikiwiki = ["read-tikiwiki", "write-tikiwiki"]
+
+read-tsv = ["dep:rescribe-read-tsv"]
+write-tsv = ["dep:rescribe-write-tsv"]
+format-tsv = ["read-tsv", "write-tsv"]
+
+read-twiki = ["dep:rescribe-read-twiki"]
+write-twiki = ["dep:rescribe-write-twiki"]
+format-twiki = ["read-twiki", "write-twiki"]
+
+read-typst = ["dep:rescribe-read-typst"]
+write-typst = ["dep:rescribe-write-typst"]
+format-typst = ["read-typst", "write-typst"]
+
+read-vimwiki = ["dep:rescribe-read-vimwiki"]
+write-vimwiki = ["dep:rescribe-write-vimwiki"]
+format-vimwiki = ["read-vimwiki", "write-vimwiki"]
+
+read-xlsx = ["dep:rescribe-read-xlsx"]
+write-xlsx = ["dep:rescribe-write-xlsx"]
+format-xlsx = ["read-xlsx", "write-xlsx"]
+
+read-xwiki = ["dep:rescribe-read-xwiki"]
+write-xwiki = ["dep:rescribe-write-xwiki"]
+format-xwiki = ["read-xwiki", "write-xwiki"]
+
+read-zimwiki = ["dep:rescribe-read-zimwiki"]
+write-zimwiki = ["dep:rescribe-write-zimwiki"]
+format-zimwiki = ["read-zimwiki", "write-zimwiki"]
+
+# Format groups — non-disjoint; a format may appear in multiple groups.
+# `all` is defined as the union of all groups, so coverage is self-verifying.
+
+# Lightweight human-written markup languages.
+formats-markup = [
+    "format-asciidoc", "format-commonmark", "format-djot", "format-fountain",
+    "format-gfm", "format-man", "format-markdown", "format-markdown-strict",
+    "format-markua", "format-multimarkdown", "format-muse", "format-org",
+    "format-pod", "format-rst", "format-t2t", "format-textile",
+]
+
+# Wiki and community markup dialects.
+formats-wiki = [
+    "format-bbcode", "format-creole", "format-dokuwiki", "format-haddock",
+    "format-jira", "format-mediawiki", "format-muse", "format-tikiwiki",
+    "format-twiki", "format-vimwiki", "format-xwiki", "format-zimwiki",
+]
+
+# Rich/structured document formats (office, XML, binary).
+formats-document = [
+    "format-docbook", "format-docx", "format-epub", "format-fb2",
+    "format-html", "format-ipynb", "format-jats", "format-odt",
+    "format-opml", "format-pdf", "format-rtf", "format-tei",
+]
+
+# Tabular / spreadsheet formats.
+formats-spreadsheet = [
+    "format-csv", "format-tsv", "format-xlsx",
+]
+
+# Presentation / slideshow formats.
+formats-presentation = [
+    "format-beamer", "format-dzslides", "format-pptx", "format-revealjs",
+    "format-s5", "format-slidy", "format-slideous",
+]
+
+# Typesetting and publishing formats.
+formats-typesetting = [
+    "format-beamer", "format-context", "format-icml", "format-latex",
+    "format-ms", "format-texinfo", "format-typst",
+]
+
+# Bibliographic reference formats.
+formats-bibliography = [
+    "format-biblatex", "format-bibtex", "format-csl-json",
+    "format-endnotexml", "format-ris",
+]
+
+# Formats that don't fit neatly into the above groups.
+formats-other = [
+    "format-ansi", "format-chunkedhtml", "format-native",
+    "format-pandoc-json", "format-plaintext",
+]
+
+# All formats — union of all group features.
+all = [
+    "std", "math",
+    "formats-markup", "formats-wiki", "formats-document",
+    "formats-spreadsheet", "formats-presentation", "formats-typesetting",
+    "formats-bibliography", "formats-other",
+]
 
 [dependencies]
 # Core is always included

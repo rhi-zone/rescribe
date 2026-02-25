@@ -865,7 +865,7 @@ fn parse_text(input: &str, fmt: &str) -> Result<Document, Box<dyn std::error::Er
             Ok(res.value)
         }
         "native" => r!(native),
-        "ansi" => r!(ansi_read),
+        "ansi" => r!(ansi),
         "rtf" => r!(rtf),
         _ => Err(format!("no text reader for {fmt:?}").into()),
     }
