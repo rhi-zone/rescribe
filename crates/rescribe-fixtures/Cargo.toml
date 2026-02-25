@@ -58,3 +58,5 @@ rescribe-read-opml = { workspace = true }
 rescribe-read-ris = { workspace = true }
 rescribe-read-bibtex = { workspace = true }
 rescribe-read-biblatex = { workspace = true }
+rescribe-read-endnotexml = { workspace = true }
+rescribe-read-tei = { workspace = true }

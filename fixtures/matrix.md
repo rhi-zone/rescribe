@@ -1472,3 +1472,98 @@ Reader: serde_json based Jupyter Notebook parser. Markdown cells delegate to the
 | source as array of strings | `rare-source-array` | rare | ✓ |
 | cell with output stream | `rare-output-stream` | rare | ✓ |
 | empty notebook | `adv-empty` | adversarial | ✓ |
+
+---
+
+## typst
+
+Reader: typst crate. Paragraphs are buffered from inline elements. Whitespace-only paragraphs are dropped. Adjacent list items are merged into a single list node.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 (=) | `heading` | happy | ✓ |
+| heading h2 (==) | `heading-h2` | happy | ✓ |
+| unordered list (- item) | `list-unordered` | happy | ✓ |
+| ordered list (+ item) | `list-ordered` | happy | ✓ |
+| fenced code block | `code-block` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (*text*) | `bold` | happy | ✓ |
+| italic (_text_) | `italic` | happy | ✓ |
+| code inline (`text`) | `code-inline` | happy | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## jats
+
+Reader: quick-xml based JATS (Journal Article Tag Suite) parser. `<article>` → div. `<body>`, `<front>`, `<back>` pass through. Heading level inferred from parent element.
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph (`<p>`) | `paragraph` | happy | ✓ |
+| section heading (`<title>` in `<sec>`) | `heading` | happy | ✓ |
+| unordered list (list-type="bullet") | `list-unordered` | happy | ✓ |
+| ordered list (list-type="order") | `list-ordered` | happy | ✓ |
+| code block (`<preformat>`) | `code-block` | happy | ✓ |
+| emphasis (`<italic>`) | `emphasis` | happy | ✓ |
+| strong (`<bold>`) | `strong` | happy | ✓ |
+| link (`<ext-link>`) | `link` | happy | ✓ |
+| empty document | `adv-empty` | adversarial | ✓ |
+
+---
+
+## endnotexml
+
+Reader: quick-xml based EndNote XML parser. Produces `definition_list > endnote:entry > [definition_term, definition_desc]`. `endnote:type` stores the raw numeric type code from the XML (17 = Journal Article, 6 = Book, etc.).
+
+### Constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| journal article (ref-type 17) | `article` | happy | ✓ |
+| book (ref-type 6) | `book` | happy | ✓ |
+| entry with URL | `with-url` | rare | ✓ |
+| empty input | `adv-empty` | adversarial | ✓ |
+
+---
+
+## tei
+
+Reader: quick-xml based TEI (Text Encoding Initiative) parser. `<TEI>`, `<text>`, `<body>` pass through. Heading level from parent div depth (div1 → 1, div2 → 2). `<hi rend="bold">` → strong, `<hi rend="italic">` → emphasis.
+
+### Block constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| paragraph (`<p>`) | `paragraph` | happy | ✓ |
+| div1 with head → div + heading(level=1) | `heading` | happy | ✓ |
+| div2 with head → div + heading(level=2) | `heading-h2` | happy | ✓ |
+| unordered list (`<list>`) | `list-unordered` | happy | ✓ |
+
+### Inline constructs
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| bold (`<hi rend="bold">`) | `strong` | happy | ✓ |
+| italic (`<hi rend="italic">`) | `emphasis` | happy | ✓ |
+| link (`<ref target="url">`) | `link` | happy | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty body | `adv-empty` | adversarial | ✓ |

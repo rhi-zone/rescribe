@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Book">6</ref-type>
+      <contributors>
+        <authors>
+          <author>Jones, Bob</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>My Book</title>
+      </titles>
+      <dates>
+        <year>2018</year>
+      </dates>
+      <publisher>Academic Press</publisher>
+    </record>
+  </records>
+</xml>

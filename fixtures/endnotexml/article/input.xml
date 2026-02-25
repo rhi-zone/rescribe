@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Journal Article">17</ref-type>
+      <contributors>
+        <authors>
+          <author>Smith, John</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>A Great Paper</title>
+        <secondary-title>Nature</secondary-title>
+      </titles>
+      <dates>
+        <year>2020</year>
+      </dates>
+      <volume>42</volume>
+      <pages>1-10</pages>
+    </record>
+  </records>
+</xml>

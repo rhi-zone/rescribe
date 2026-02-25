@@ -1,0 +1,11 @@
+{
+  "description": "A JATS ext-link element becomes a link node with the url property set, wrapping a text node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",        "kind": "document" },
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/0",   "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Example" } }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "Book record produces endnote:entry with type=book and key jones2018",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "endnote:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "jones2018" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "endnote:type": "6", "endnote:key": "jones2018" } }
+  ]
+}

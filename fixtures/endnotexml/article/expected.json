@@ -1,0 +1,11 @@
+{
+  "description": "Journal article record produces definition_list > endnote:entry with term and desc",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "endnote:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "smith2020" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "endnote:type": "17", "endnote:key": "smith2020" } }
+  ]
+}

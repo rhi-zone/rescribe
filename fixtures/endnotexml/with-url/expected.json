@@ -1,0 +1,11 @@
+{
+  "description": "Journal article with URL field produces entry with endnote:type=article",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "endnote:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "brown2022" } },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "endnote:type": "17", "endnote:key": "brown2022" } }
+  ]
+}

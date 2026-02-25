@@ -1,0 +1,13 @@
+{
+  "description": "A sec element with a title produces a div containing a heading(level=2) and a paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",       "kind": "document" },
+    { "path": "/0",      "kind": "div" },
+    { "path": "/0/0",    "kind": "div" },
+    { "path": "/0/0/0",  "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0/0/0","kind": "text", "props": { "content": "Section Title" } },
+    { "path": "/0/0/1",  "kind": "paragraph" },
+    { "path": "/0/0/1/0","kind": "text", "props": { "content": "Content" } }
+  ]
+}

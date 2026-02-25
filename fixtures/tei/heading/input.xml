@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <div1>
+        <head>Main Title</head>
+        <p>Content here.</p>
+      </div1>
+    </body>
+  </text>
+</TEI>

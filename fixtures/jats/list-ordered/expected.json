@@ -1,0 +1,15 @@
+{
+  "description": "A JATS list with list-type=order produces an ordered list with two list_item children",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",         "kind": "document" },
+    { "path": "/0",        "kind": "div" },
+    { "path": "/0/0",      "kind": "list", "props": { "ordered": true } },
+    { "path": "/0/0/0",    "kind": "list_item" },
+    { "path": "/0/0/0/0",  "kind": "paragraph" },
+    { "path": "/0/0/0/0/0","kind": "text", "props": { "content": "First item" } },
+    { "path": "/0/0/1",    "kind": "list_item" },
+    { "path": "/0/0/1/0",  "kind": "paragraph" },
+    { "path": "/0/0/1/0/0","kind": "text", "props": { "content": "Second item" } }
+  ]
+}

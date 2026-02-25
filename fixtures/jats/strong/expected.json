@@ -1,0 +1,11 @@
+{
+  "description": "A JATS bold element inside a paragraph becomes a strong node wrapping a text node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",        "kind": "document" },
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/0",   "kind": "strong" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "bold text" } }
+  ]
+}

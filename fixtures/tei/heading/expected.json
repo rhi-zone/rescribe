@@ -1,0 +1,10 @@
+{
+  "description": "div1 with head produces div > heading(level=1) > text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    { "path": "/0/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Main Title" } },
+    { "path": "/0/1", "kind": "paragraph" }
+  ]
+}

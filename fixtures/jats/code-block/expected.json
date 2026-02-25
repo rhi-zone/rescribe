@@ -1,0 +1,9 @@
+{
+  "description": "A JATS preformat element becomes a code_block node with the content property set",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",    "kind": "document" },
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "code_block", "props": { "content": "code here" } }
+  ]
+}

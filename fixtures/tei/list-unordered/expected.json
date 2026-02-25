@@ -1,0 +1,9 @@
+{
+  "description": "list element without rend produces list(ordered=false) with list_item children",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 2 },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}

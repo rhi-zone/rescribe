@@ -1,0 +1,8 @@
+{
+  "description": "Fenced code block",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "code_block", "props": { "content": "hello world" } }
+  ]
+}

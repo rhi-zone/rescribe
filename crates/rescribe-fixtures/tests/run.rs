@@ -405,3 +405,43 @@ fn biblatex() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn typst() {
+    run_format_fixtures(&fixtures_root(), "typst", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_typst::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn jats() {
+    run_format_fixtures(&fixtures_root(), "jats", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_jats::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn endnote_xml() {
+    run_format_fixtures(&fixtures_root(), "endnotexml", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_endnotexml::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn tei() {
+    run_format_fixtures(&fixtures_root(), "tei", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_tei::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
