@@ -3,6 +3,21 @@
 **rescribe** is a universal document conversion library and CLI for Rust,
 inspired by Pandoc but designed around a fundamentally different IR.
 
+## Use cases
+
+**Document conversion** — convert between formats with explicit fidelity
+reporting. `rescribe convert input.docx output.md` tells you exactly what was
+lost; Pandoc doesn't.
+
+**Document processing** — use rescribe as a library to query, filter, and
+transform documents programmatically. Extract all code blocks tagged `python`
+from an EPUB. Merge documents and rewrite cross-references. Shift all heading
+levels. Replace image URLs matching a pattern. This is the space Pandoc's
+filter system gestures at but never fully inhabits — rescribe's IR is a native
+Rust tree you manipulate directly, not JSON piped through an external process.
+
+Both use cases are first-class. The CLI and the library are the same thing.
+
 ## The problem with Pandoc's IR
 
 Pandoc is the de facto standard for document conversion and is excellent at
