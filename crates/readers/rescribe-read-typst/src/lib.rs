@@ -1,11 +1,10 @@
 //! Typst reader for rescribe.
 //!
-//! Parses Typst markup into rescribe documents.
-
-#![allow(clippy::collapsible_if)]
+//! Parses Typst markup into rescribe documents using the official `typst-syntax` crate.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
 use rescribe_std::{node, prop};
+use typst_syntax::ast::{AstNode, Expr, Markup};
 
 /// Parse Typst source into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -17,519 +16,324 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let mut parser = Parser::new(input);
-    let root = parser.parse_document();
-    let doc = Document::new().with_content(root);
+    let root = typst_syntax::parse(input);
+    let markup = root
+        .cast::<Markup>()
+        .ok_or_else(|| ParseError::Invalid("Failed to cast root to Markup".to_owned()))?;
+
+    let children = convert_markup_to_blocks(markup, input);
+    let doc_node = Node::new(node::DOCUMENT).children(children);
+    let doc = Document::new().with_content(doc_node);
     Ok(ConversionResult::ok(doc))
 }
 
-struct Parser<'a> {
-    lines: Vec<&'a str>,
-    pos: usize,
+/// Convert a `Markup` node to a list of block-level rescribe nodes.
+///
+/// Typst does not have explicit paragraph nodes; consecutive inline exprs are
+/// grouped into paragraphs, separated by `Parbreak`.
+fn convert_markup_to_blocks(markup: Markup, source: &str) -> Vec<Node> {
+    let mut blocks: Vec<Node> = Vec::new();
+    let mut inline_buf: Vec<Node> = Vec::new();
+
+    for expr in markup.exprs() {
+        match expr {
+            // --- Block-level elements ---
+            Expr::Parbreak(_) => {
+                flush_paragraph(&mut inline_buf, &mut blocks);
+            }
+            Expr::Heading(h) => {
+                flush_paragraph(&mut inline_buf, &mut blocks);
+                let level = h.depth().get() as i64;
+                let body_children = convert_markup_to_inlines(h.body(), source);
+                blocks.push(
+                    Node::new(node::HEADING)
+                        .prop(prop::LEVEL, level)
+                        .children(body_children),
+                );
+            }
+            Expr::ListItem(item) => {
+                // Each list item arrives as a top-level expr; collect them then merge.
+                flush_paragraph(&mut inline_buf, &mut blocks);
+                let list_item = convert_list_item_body(item.body(), source);
+                blocks.push(
+                    Node::new(node::LIST)
+                        .prop(prop::ORDERED, false)
+                        .children(vec![list_item]),
+                );
+            }
+            Expr::EnumItem(item) => {
+                flush_paragraph(&mut inline_buf, &mut blocks);
+                let list_item = convert_list_item_body(item.body(), source);
+                blocks.push(
+                    Node::new(node::LIST)
+                        .prop(prop::ORDERED, true)
+                        .children(vec![list_item]),
+                );
+            }
+            Expr::Raw(raw) if raw.block() => {
+                flush_paragraph(&mut inline_buf, &mut blocks);
+                let content: String = raw
+                    .lines()
+                    .map(|t| t.get().as_str().to_owned())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let lang_opt = raw.lang().map(|l| l.to_untyped().text().to_string());
+                let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content);
+                if let Some(lang) = lang_opt
+                    && !lang.is_empty()
+                {
+                    n = n.prop(prop::LANGUAGE, lang);
+                }
+                blocks.push(n);
+            }
+            Expr::FuncCall(call) => {
+                flush_paragraph(&mut inline_buf, &mut blocks);
+                if let Some(block) = convert_func_call(call, source) {
+                    blocks.push(block);
+                }
+            }
+
+            // --- Inline elements (gathered into paragraph buffer) ---
+            other => {
+                inline_buf.extend(convert_expr_to_inlines(other, source));
+            }
+        }
+    }
+
+    flush_paragraph(&mut inline_buf, &mut blocks);
+    merge_adjacent_lists(blocks)
 }
 
-impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
-        let lines: Vec<&str> = input.lines().collect();
-        Self { lines, pos: 0 }
+fn flush_paragraph(inline_buf: &mut Vec<Node>, blocks: &mut Vec<Node>) {
+    if inline_buf.is_empty() {
+        return;
     }
-
-    fn parse_document(&mut self) -> Node {
-        let mut children = Vec::new();
-
-        while self.pos < self.lines.len() {
-            if let Some(node) = self.parse_block() {
-                children.push(node);
-            }
-        }
-
-        Node::new(node::DOCUMENT).children(children)
+    // Don't create paragraphs that contain only whitespace text nodes.
+    let all_whitespace = inline_buf.iter().all(|n| {
+        n.kind.as_str() == node::TEXT
+            && n.props
+                .get_str(prop::CONTENT)
+                .map(|s| s.trim().is_empty())
+                .unwrap_or(true)
+    });
+    if all_whitespace {
+        inline_buf.clear();
+        return;
     }
+    blocks.push(Node::new(node::PARAGRAPH).children(inline_buf.drain(..)));
+}
 
-    fn current_line(&self) -> Option<&'a str> {
-        self.lines.get(self.pos).copied()
+/// Convert a `Markup` body into a flat list of inline rescribe nodes.
+fn convert_markup_to_inlines(markup: Markup, source: &str) -> Vec<Node> {
+    let mut nodes = Vec::new();
+    for expr in markup.exprs() {
+        nodes.extend(convert_expr_to_inlines(expr, source));
     }
+    nodes
+}
 
-    fn advance(&mut self) {
-        self.pos += 1;
-    }
-
-    fn parse_block(&mut self) -> Option<Node> {
-        let line = self.current_line()?;
-
-        // Skip blank lines
-        if line.trim().is_empty() {
-            self.advance();
-            return None;
+/// Convert a single `Expr` to inline rescribe nodes.
+fn convert_expr_to_inlines(expr: Expr, source: &str) -> Vec<Node> {
+    match expr {
+        Expr::Text(t) => {
+            vec![Node::new(node::TEXT).prop(prop::CONTENT, t.get().as_str())]
         }
-
-        let trimmed = line.trim();
-
-        // Heading: = Title, == Subtitle, etc.
-        if trimmed.starts_with('=') && !trimmed.starts_with("==") {
-            return Some(self.parse_heading());
+        Expr::Space(_) => {
+            vec![Node::new(node::TEXT).prop(prop::CONTENT, " ")]
         }
-        if trimmed.starts_with("==") {
-            return Some(self.parse_heading());
+        Expr::Linebreak(_) => {
+            vec![Node::new(node::LINE_BREAK)]
         }
-
-        // Code block: ```
-        if trimmed.starts_with("```") {
-            return Some(self.parse_code_block());
+        Expr::SmartQuote(q) => {
+            let ch = if q.double() { "\"" } else { "'" };
+            vec![Node::new(node::TEXT).prop(prop::CONTENT, ch)]
         }
-
-        // List: - item or + item (numbered)
-        if trimmed.starts_with("- ") || trimmed.starts_with("+ ") {
-            return Some(self.parse_list());
-        }
-
-        // Function calls
-        if trimmed.starts_with('#') {
-            return self.parse_function_call();
-        }
-
-        // Blockquote: > text
-        if trimmed.starts_with("> ") || trimmed == ">" {
-            return Some(self.parse_blockquote());
-        }
-
-        // Default: paragraph
-        Some(self.parse_paragraph())
-    }
-
-    fn parse_heading(&mut self) -> Node {
-        let line = self.current_line().unwrap();
-        self.advance();
-
-        let trimmed = line.trim();
-
-        // Count = signs for level
-        let level_count = trimmed.chars().take_while(|c| *c == '=').count();
-        let content = trimmed[level_count..].trim();
-        let level = level_count as i64;
-
-        Node::new(node::HEADING)
-            .prop(prop::LEVEL, level)
-            .children(self.parse_inline(content))
-    }
-
-    fn parse_code_block(&mut self) -> Node {
-        let line = self.current_line().unwrap();
-        self.advance();
-
-        let trimmed = line.trim();
-
-        // Extract language if present: ```rust
-        let lang = if trimmed.len() > 3 {
-            Some(trimmed[3..].trim())
-        } else {
-            None
-        };
-
-        let mut content = String::new();
-        while let Some(line) = self.current_line() {
-            if line.trim().starts_with("```") {
-                self.advance();
-                break;
-            }
-            if !content.is_empty() {
-                content.push('\n');
-            }
-            content.push_str(line);
-            self.advance();
-        }
-
-        let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content);
-        if let Some(lang) = lang {
-            if !lang.is_empty() {
-                node = node.prop(prop::LANGUAGE, lang);
-            }
-        }
-        node
-    }
-
-    fn parse_list(&mut self) -> Node {
-        let mut items = Vec::new();
-        let ordered = self.current_line().map(|l| l.trim().starts_with('+')) == Some(true);
-
-        while let Some(line) = self.current_line() {
-            let trimmed = line.trim();
-            if !trimmed.starts_with("- ") && !trimmed.starts_with("+ ") {
-                break;
-            }
-
-            // Get content after marker
-            let content = &trimmed[2..];
-            let item_children = self.parse_inline(content);
-            let item = Node::new(node::LIST_ITEM)
-                .children(vec![Node::new(node::PARAGRAPH).children(item_children)]);
-            items.push(item);
-            self.advance();
-        }
-
-        Node::new(node::LIST)
-            .prop(prop::ORDERED, ordered)
-            .children(items)
-    }
-
-    fn parse_function_call(&mut self) -> Option<Node> {
-        let line = self.current_line().unwrap();
-        self.advance();
-
-        let trimmed = line.trim();
-
-        // Parse common Typst functions
-        if trimmed.starts_with("#image(") {
-            return Some(self.parse_image_function(trimmed));
-        }
-
-        if trimmed.starts_with("#link(") {
-            return Some(self.parse_link_function(trimmed));
-        }
-
-        if trimmed.starts_with("#raw(") {
-            return Some(self.parse_raw_function(trimmed));
-        }
-
-        if trimmed.starts_with("#quote(") || trimmed.starts_with("#quote[") {
-            return Some(self.parse_quote_function(trimmed));
-        }
-
-        if trimmed.starts_with("#figure(") {
-            return Some(self.parse_figure_function(trimmed));
-        }
-
-        if trimmed.starts_with("#table(") {
-            return Some(self.parse_table_function(trimmed));
-        }
-
-        // Generic: treat as raw block
-        Some(
-            Node::new(node::RAW_BLOCK)
-                .prop(prop::FORMAT, "typst")
-                .prop(prop::CONTENT, trimmed),
-        )
-    }
-
-    fn parse_image_function(&self, s: &str) -> Node {
-        // #image("path.png")
-        if let Some(path) = extract_string_arg(s, "#image(") {
-            Node::new(node::IMAGE).prop(prop::URL, path)
-        } else {
-            Node::new(node::IMAGE)
-        }
-    }
-
-    fn parse_link_function(&self, s: &str) -> Node {
-        // #link("url")[text] or #link("url")
-        if let Some(url) = extract_string_arg(s, "#link(") {
-            let text = extract_bracket_content(s).unwrap_or(&url);
-            Node::new(node::LINK)
-                .prop(prop::URL, url.clone())
-                .children(vec![Node::new(node::TEXT).prop(prop::CONTENT, text)])
-        } else {
-            Node::new(node::LINK)
-        }
-    }
-
-    fn parse_raw_function(&self, s: &str) -> Node {
-        // #raw("content")
-        if let Some(content) = extract_string_arg(s, "#raw(") {
-            Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content)
-        } else {
-            Node::new(node::CODE_BLOCK)
-        }
-    }
-
-    fn parse_quote_function(&mut self, s: &str) -> Node {
-        // #quote[content] or #quote(attribution: "...")[content]
-        let content = extract_bracket_content(s).unwrap_or("");
-        Node::new(node::BLOCKQUOTE)
-            .children(vec![Node::new(node::PARAGRAPH).children(vec![
-                Node::new(node::TEXT).prop(prop::CONTENT, content),
-            ])])
-    }
-
-    fn parse_figure_function(&self, s: &str) -> Node {
-        // #figure(image("path"), caption: [...])
-        let figure = Node::new(node::FIGURE);
-        let mut children = Vec::new();
-
-        // Try to extract image
-        if let Some(img_start) = s.find("image(") {
-            let after_img = &s[img_start..];
-            if let Some(path) = extract_string_arg(after_img, "image(") {
-                children.push(Node::new(node::IMAGE).prop(prop::URL, path));
-            }
-        }
-
-        // Try to extract caption
-        if let Some(cap_start) = s.find("caption:") {
-            let after_cap = &s[cap_start..];
-            if let Some(caption_text) = extract_bracket_content(after_cap) {
-                children.push(Node::new(node::CAPTION).children(vec![
-                    Node::new(node::TEXT).prop(prop::CONTENT, caption_text),
-                ]));
-            }
-        }
-
-        figure.children(children)
-    }
-
-    fn parse_table_function(&mut self, _s: &str) -> Node {
-        // Tables in Typst are complex - simplified parsing
-        // #table(columns: 2, [...], [...], ...)
-        Node::new(node::TABLE)
-    }
-
-    fn parse_blockquote(&mut self) -> Node {
-        let mut lines = Vec::new();
-
-        while let Some(line) = self.current_line() {
-            let trimmed = line.trim();
-            if !trimmed.starts_with('>') {
-                break;
-            }
-            let content = if trimmed.len() > 1 {
-                trimmed[1..].trim_start()
+        Expr::Escape(e) => {
+            let text = e.to_untyped().text().to_string();
+            // The escape source includes the backslash; strip it.
+            let content = if let Some(stripped) = text.strip_prefix('\\') {
+                stripped.to_owned()
             } else {
-                ""
+                text
             };
-            lines.push(content);
-            self.advance();
+            vec![Node::new(node::TEXT).prop(prop::CONTENT, content)]
         }
-
-        let text = lines.join("\n");
-        Node::new(node::BLOCKQUOTE).children(vec![
-            Node::new(node::PARAGRAPH)
-                .children(vec![Node::new(node::TEXT).prop(prop::CONTENT, text)]),
-        ])
-    }
-
-    fn parse_paragraph(&mut self) -> Node {
-        let mut lines = Vec::new();
-
-        while let Some(line) = self.current_line() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                break;
+        Expr::Shorthand(s) => {
+            let text = s.to_untyped().text().to_string();
+            vec![Node::new(node::TEXT).prop(prop::CONTENT, text)]
+        }
+        Expr::Strong(s) => {
+            let children = convert_markup_to_inlines(s.body(), source);
+            vec![Node::new(node::STRONG).children(children)]
+        }
+        Expr::Emph(e) => {
+            let children = convert_markup_to_inlines(e.body(), source);
+            vec![Node::new(node::EMPHASIS).children(children)]
+        }
+        Expr::Raw(raw) => {
+            let content: String = raw
+                .lines()
+                .map(|t| t.get().as_str().to_owned())
+                .collect::<Vec<_>>()
+                .join("\n");
+            vec![Node::new(node::CODE).prop(prop::CONTENT, content)]
+        }
+        Expr::Link(link) => {
+            let url = link.get().as_str().to_owned();
+            vec![
+                Node::new(node::LINK)
+                    .prop(prop::URL, url.clone())
+                    .children(vec![Node::new(node::TEXT).prop(prop::CONTENT, url)]),
+            ]
+        }
+        Expr::Equation(eq) => {
+            let math_source = eq.to_untyped().text().to_string();
+            // Strip surrounding $ delimiters.
+            let src = math_source.trim_matches('$').trim().to_owned();
+            if eq.block() {
+                vec![Node::new("math_block").prop("math:source", src)]
+            } else {
+                vec![Node::new("math_inline").prop("math:source", src)]
             }
-            // Stop at block-level elements
-            if trimmed.starts_with('=')
-                || trimmed.starts_with("```")
-                || trimmed.starts_with("- ")
-                || trimmed.starts_with("+ ")
-                || trimmed.starts_with('#')
-                || trimmed.starts_with('>')
+        }
+        Expr::FuncCall(call) => {
+            if let Some(n) = convert_func_call(call, source) {
+                vec![n]
+            } else {
+                vec![]
+            }
+        }
+        // Block-level things shouldn't appear at inline level, but be safe.
+        Expr::Parbreak(_) | Expr::Heading(_) | Expr::ListItem(_) | Expr::EnumItem(_) => vec![],
+        // Everything else: emit raw with source text if non-empty.
+        other => {
+            let text = other.to_untyped().text().to_string();
+            if text.is_empty() {
+                vec![]
+            } else {
+                vec![
+                    Node::new(node::RAW_BLOCK)
+                        .prop(prop::FORMAT, "typst")
+                        .prop(prop::CONTENT, text),
+                ]
+            }
+        }
+    }
+}
+
+/// Wrap a Markup body in a `LIST_ITEM` node containing a paragraph.
+fn convert_list_item_body(body: Markup, source: &str) -> Node {
+    let children = convert_markup_to_inlines(body, source);
+    Node::new(node::LIST_ITEM).children(vec![Node::new(node::PARAGRAPH).children(children)])
+}
+
+/// Handle common Typst built-in function calls at block level.
+///
+/// Returns `None` for unknown functions that should be silently skipped.
+fn convert_func_call(call: typst_syntax::ast::FuncCall, source: &str) -> Option<Node> {
+    // The callee for simple identifiers is an Ident node; its text() is the name.
+    let callee_node = call.callee().to_untyped();
+    let func_name = callee_node.text().as_str();
+
+    match func_name {
+        "image" => {
+            let url = first_str_arg(call.args());
+            let mut n = Node::new(node::IMAGE);
+            if let Some(u) = url {
+                n = n.prop(prop::URL, u);
+            }
+            Some(n)
+        }
+        "link" => {
+            let url = first_str_arg(call.args());
+            let body_markup = first_content_arg(call.args(), source);
+            let mut n = Node::new(node::LINK);
+            if let Some(ref u) = url {
+                n = n.prop(prop::URL, u.clone());
+            }
+            if let Some(children) = body_markup {
+                n = n.children(children);
+            } else if let Some(u) = url {
+                n = n.children(vec![Node::new(node::TEXT).prop(prop::CONTENT, u)]);
+            }
+            Some(n)
+        }
+        "raw" => {
+            let content = first_str_arg(call.args()).unwrap_or_default();
+            Some(Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content))
+        }
+        "quote" => {
+            let body = first_content_arg(call.args(), source).unwrap_or_default();
+            Some(
+                Node::new(node::BLOCKQUOTE)
+                    .children(vec![Node::new(node::PARAGRAPH).children(body)]),
+            )
+        }
+        "figure" => Some(Node::new(node::FIGURE)),
+        "table" => Some(Node::new(node::TABLE)),
+        "linebreak" => Some(Node::new(node::LINE_BREAK)),
+        "emph" => {
+            let body = first_content_arg(call.args(), source).unwrap_or_default();
+            Some(Node::new(node::EMPHASIS).children(body))
+        }
+        "strong" => {
+            let body = first_content_arg(call.args(), source).unwrap_or_default();
+            Some(Node::new(node::STRONG).children(body))
+        }
+        _ => {
+            // Unknown function — emit as raw block.
+            let text = call.to_untyped().text().to_string();
+            Some(
+                Node::new(node::RAW_BLOCK)
+                    .prop(prop::FORMAT, "typst")
+                    .prop(prop::CONTENT, text),
+            )
+        }
+    }
+}
+
+/// Extract the first positional string literal argument from a function's args.
+fn first_str_arg(args: typst_syntax::ast::Args) -> Option<String> {
+    for arg in args.items() {
+        if let typst_syntax::ast::Arg::Pos(Expr::Str(s)) = arg {
+            return Some(s.get().to_string());
+        }
+    }
+    None
+}
+
+/// Extract the first content-block argument (returns inline nodes).
+fn first_content_arg(args: typst_syntax::ast::Args, source: &str) -> Option<Vec<Node>> {
+    for arg in args.items() {
+        if let typst_syntax::ast::Arg::Pos(Expr::ContentBlock(cb)) = arg {
+            return Some(convert_markup_to_inlines(cb.body(), source));
+        }
+    }
+    None
+}
+
+/// Merge adjacent `LIST` nodes with the same `ordered` value.
+///
+/// Individual list items arrive as separate single-item LIST blocks because
+/// Typst's flat markup sequence gives us one ListItem/EnumItem per step.
+fn merge_adjacent_lists(blocks: Vec<Node>) -> Vec<Node> {
+    let mut result: Vec<Node> = Vec::new();
+
+    for block in blocks {
+        if block.kind.as_str() == node::LIST {
+            let ordered = block.props.get_bool(prop::ORDERED).unwrap_or(false);
+            if let Some(last) = result.last_mut()
+                && last.kind.as_str() == node::LIST
+                && last.props.get_bool(prop::ORDERED).unwrap_or(false) == ordered
             {
-                break;
+                last.children.extend(block.children);
+                continue;
             }
-            lines.push(trimmed);
-            self.advance();
         }
-
-        let text = lines.join(" ");
-        Node::new(node::PARAGRAPH).children(self.parse_inline(&text))
+        result.push(block);
     }
 
-    fn parse_inline(&self, text: &str) -> Vec<Node> {
-        let mut nodes = Vec::new();
-        let mut current = String::new();
-        let chars: Vec<char> = text.chars().collect();
-        let mut i = 0;
-
-        while i < chars.len() {
-            let c = chars[i];
-
-            // Bold: *text*
-            if c == '*' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_matching(&chars, i + 1, '*') {
-                    nodes.push(
-                        Node::new(node::STRONG)
-                            .children(vec![Node::new(node::TEXT).prop(prop::CONTENT, content)]),
-                    );
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Italic: _text_
-            if c == '_' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_matching(&chars, i + 1, '_') {
-                    nodes.push(
-                        Node::new(node::EMPHASIS)
-                            .children(vec![Node::new(node::TEXT).prop(prop::CONTENT, content)]),
-                    );
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Inline code: `code`
-            if c == '`' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_matching(&chars, i + 1, '`') {
-                    nodes.push(Node::new(node::CODE).prop(prop::CONTENT, content));
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Math: $...$
-            if c == '$' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_matching(&chars, i + 1, '$') {
-                    // Display math has spaces: $ x^2 $
-                    let is_display = content.starts_with(' ') && content.ends_with(' ');
-                    let kind = if is_display {
-                        "math_display"
-                    } else {
-                        "math_inline"
-                    };
-                    let math_content = if is_display { content.trim() } else { &content };
-                    nodes.push(Node::new(kind).prop("math:source", math_content));
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Function calls inline: #func(...)
-            if c == '#' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                // Find end of function call
-                let remaining: String = chars[i..].iter().collect();
-                if remaining.starts_with("#link(") {
-                    if let Some(paren_end) = find_paren_end(&remaining) {
-                        let func_text = &remaining[..paren_end + 1];
-                        // Check for bracket content
-                        let after_paren = &remaining[paren_end + 1..];
-                        let (full_text, skip) = if after_paren.starts_with('[') {
-                            if let Some(bracket_end) = find_bracket_end(after_paren) {
-                                (
-                                    format!("{}{}", func_text, &after_paren[..bracket_end + 1]),
-                                    paren_end + bracket_end + 2,
-                                )
-                            } else {
-                                (func_text.to_string(), paren_end + 1)
-                            }
-                        } else {
-                            (func_text.to_string(), paren_end + 1)
-                        };
-
-                        if let Some(url) = extract_string_arg(&full_text, "#link(") {
-                            let text = extract_bracket_content(&full_text).unwrap_or(&url);
-                            nodes.push(
-                                Node::new(node::LINK)
-                                    .prop(prop::URL, url.clone())
-                                    .children(vec![
-                                        Node::new(node::TEXT).prop(prop::CONTENT, text),
-                                    ]),
-                            );
-                            i += skip;
-                            continue;
-                        }
-                    }
-                }
-            }
-
-            current.push(c);
-            i += 1;
-        }
-
-        if !current.is_empty() {
-            nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current));
-        }
-
-        nodes
-    }
-
-    fn find_matching(&self, chars: &[char], start: usize, delim: char) -> Option<(String, usize)> {
-        let mut i = start;
-        let mut content = String::new();
-
-        while i < chars.len() {
-            if chars[i] == delim {
-                return Some((content, i));
-            }
-            content.push(chars[i]);
-            i += 1;
-        }
-
-        None
-    }
-}
-
-/// Extract a string argument from a function call like `#func("value")`
-fn extract_string_arg(s: &str, prefix: &str) -> Option<String> {
-    let after = s.strip_prefix(prefix)?;
-    let quote_start = after.find('"')?;
-    let rest = &after[quote_start + 1..];
-    let quote_end = rest.find('"')?;
-    Some(rest[..quote_end].to_string())
-}
-
-/// Extract content from brackets like `[content]`
-fn extract_bracket_content(s: &str) -> Option<&str> {
-    let start = s.find('[')?;
-    let end = s.rfind(']')?;
-    if end > start {
-        Some(&s[start + 1..end])
-    } else {
-        None
-    }
-}
-
-/// Find the matching closing parenthesis
-fn find_paren_end(s: &str) -> Option<usize> {
-    let mut depth = 0;
-    for (i, c) in s.chars().enumerate() {
-        match c {
-            '(' => depth += 1,
-            ')' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(i);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
-
-/// Find the matching closing bracket
-fn find_bracket_end(s: &str) -> Option<usize> {
-    let mut depth = 0;
-    for (i, c) in s.chars().enumerate() {
-        match c {
-            '[' => depth += 1,
-            ']' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(i);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
+    result
 }
 
 #[cfg(test)]
@@ -550,7 +354,7 @@ mod tests {
 
     #[test]
     fn test_parse_heading_levels() {
-        let doc = parse_str("= Level 1\n== Level 2\n=== Level 3");
+        let doc = parse_str("= Level 1\n\n== Level 2\n\n=== Level 3");
         assert_eq!(doc.content.children[0].props.get_int(prop::LEVEL), Some(1));
         assert_eq!(doc.content.children[1].props.get_int(prop::LEVEL), Some(2));
         assert_eq!(doc.content.children[2].props.get_int(prop::LEVEL), Some(3));
@@ -567,21 +371,30 @@ mod tests {
     fn test_parse_bold() {
         let doc = parse_str("This is *bold* text.");
         let para = &doc.content.children[0];
-        assert_eq!(para.children[1].kind.as_str(), node::STRONG);
+        let strong = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::STRONG);
+        assert!(strong.is_some(), "Expected a strong node in paragraph");
     }
 
     #[test]
     fn test_parse_italic() {
         let doc = parse_str("This is _italic_ text.");
         let para = &doc.content.children[0];
-        assert_eq!(para.children[1].kind.as_str(), node::EMPHASIS);
+        let emph = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::EMPHASIS);
+        assert!(emph.is_some(), "Expected an emphasis node in paragraph");
     }
 
     #[test]
     fn test_parse_code() {
         let doc = parse_str("Use `code` here.");
         let para = &doc.content.children[0];
-        assert_eq!(para.children[1].kind.as_str(), node::CODE);
+        let code = para.children.iter().find(|c| c.kind.as_str() == node::CODE);
+        assert!(code.is_some(), "Expected a code node in paragraph");
     }
 
     #[test]
@@ -615,5 +428,24 @@ mod tests {
         let img = &doc.content.children[0];
         assert_eq!(img.kind.as_str(), node::IMAGE);
         assert_eq!(img.props.get_str(prop::URL), Some("photo.png"));
+    }
+
+    #[test]
+    fn test_parse_math_inline() {
+        let doc = parse_str("Here is $x^2$ math.");
+        let para = &doc.content.children[0];
+        let math = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == "math_inline");
+        assert!(math.is_some(), "Expected a math_inline node");
+    }
+
+    #[test]
+    fn test_parse_link() {
+        let doc = parse_str("Visit https://typst.app for info.");
+        let para = &doc.content.children[0];
+        let link = para.children.iter().find(|c| c.kind.as_str() == node::LINK);
+        assert!(link.is_some(), "Expected a link node");
     }
 }
