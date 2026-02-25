@@ -146,28 +146,65 @@ Readers: html5ever; handles block/inline classification, data-URI embedding, met
 
 ## org
 
+Reader: custom hand-rolled org-mode parser.
+
 ### Block constructs
 
 | Construct | Fixture | Category | Status |
 |-----------|---------|----------|--------|
-| paragraph | — | happy | — |
-| heading (levels 1–3) | — | happy | — |
-| source block | — | happy | — |
-| quote block | — | happy | — |
-| unordered list | — | happy | — |
-| ordered list | — | happy | — |
-| table | — | happy | — |
-| horizontal rule | — | happy | — |
+| paragraph | `paragraph` | happy | ✓ |
+| heading h1 | `heading-h1` | happy | ✓ |
+| heading h2 | `heading-h2` | happy | ✓ |
+| heading h3 | `heading-h3` | happy | ✓ |
+| source block | `code-block` | happy | ✓ |
+| source block (no lang) | `code-block-no-lang` | happy | ✓ |
+| quote block | `blockquote` | happy | ✓ |
+| unordered list | `list-unordered` | happy | ✓ |
+| ordered list | `list-ordered` | happy | ✓ |
+| horizontal rule | `horizontal-rule` | happy | ✓ |
 
 ### Inline constructs
 
 | Construct | Fixture | Category | Status |
 |-----------|---------|----------|--------|
-| bold | — | happy | — |
-| italic | — | happy | — |
-| code | — | happy | — |
-| strikethrough | — | happy | — |
-| link | — | happy | — |
+| bold | `strong` | happy | ✓ |
+| italic | `emphasis` | happy | ✓ |
+| underline | `underline` | happy | ✓ |
+| strikethrough | `strikeout` | happy | ✓ |
+| code | `code-inline` | happy | ✓ |
+| link (with desc) | `link` | happy | ✓ |
+| link (bare URL) | `link-bare` | happy | ✓ |
+
+### Metadata
+
+| Construct | Fixture | Category | Status |
+|-----------|---------|----------|--------|
+| #+TITLE / #+AUTHOR | `metadata` | happy | ✓ |
+
+### Rare
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| heading with TODO keyword | `rare-heading-todo` | rare | ✓ |
+| verbatim inline (= delimiters) | `rare-code-inline-equals` | rare | ✓ |
+| nested markup | `rare-nested-markup` | rare | ✓ |
+
+### Adversarial
+
+| Scenario | Fixture | Category | Status |
+|----------|---------|----------|--------|
+| empty document | `adv-empty` | adversarial | ✓ |
+| unmatched markup | `adv-unmatched-markup` | adversarial | ✓ |
+| unknown block type | `adv-unknown-block` | adversarial | ✓ |
+
+### Not yet covered
+
+| Construct | Notes |
+|-----------|-------|
+| table | org-mode tables not yet implemented in reader |
+| drawer / property drawer | `:PROPERTIES:` blocks |
+| footnote | `[fn:1]` style |
+| tags on headings | `:tag1:tag2:` suffix |
 
 ---
 

@@ -1,0 +1,6 @@
+{
+  "description": "Five or more hyphens produce a horizontal_rule node with no children",
+  "assertions": [
+    { "path": "/0", "kind": "horizontal_rule", "children_count": 0 }
+  ]
+}

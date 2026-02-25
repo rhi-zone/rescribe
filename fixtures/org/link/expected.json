@@ -1,0 +1,7 @@
+{
+  "description": "Org link with description: link node with url prop and text child",
+  "assertions": [
+    { "path": "/0/0",   "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "visit" } }
+  ]
+}

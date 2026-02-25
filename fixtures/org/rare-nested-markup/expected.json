@@ -1,0 +1,8 @@
+{
+  "description": "Nested markup: bold inside italic produces emphasis containing strong",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0/0",   "kind": "emphasis" },
+    { "path": "/0/0/1", "kind": "strong" }
+  ]
+}

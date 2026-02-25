@@ -1,0 +1,8 @@
+{
+  "description": "Numbered list items produce ordered list",
+  "assertions": [
+    { "path": "/0",   "kind": "list", "props": { "ordered": true }, "children_count": 2 },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Unmatched markup delimiter treated as literal text; must not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,5 @@
+#+BEGIN_CUSTOM
+some content
+#+END_CUSTOM
+
+Regular paragraph.

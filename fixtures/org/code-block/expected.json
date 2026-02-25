@@ -1,0 +1,6 @@
+{
+  "description": "BEGIN_SRC block with language produces code_block with language prop; no children",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "rust" }, "children_count": 0 }
+  ]
+}

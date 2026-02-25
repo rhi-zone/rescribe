@@ -1,0 +1,7 @@
+{
+  "description": "Equals-delimited verbatim also produces code node (same as tilde)",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0/1", "kind": "code", "props": { "content": "verbatim" }, "children_count": 0 }
+  ]
+}

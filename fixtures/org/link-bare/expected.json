@@ -1,0 +1,7 @@
+{
+  "description": "Bare org link without description uses URL as text child content",
+  "assertions": [
+    { "path": "/0/0",   "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "https://example.com" } }
+  ]
+}

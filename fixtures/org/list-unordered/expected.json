@@ -1,0 +1,8 @@
+{
+  "description": "Dash-prefixed list items produce unordered list; list_item children are inline (no paragraph)",
+  "assertions": [
+    { "path": "/0",     "kind": "list", "props": { "ordered": false }, "children_count": 3 },
+    { "path": "/0/0",   "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "alpha" } }
+  ]
+}

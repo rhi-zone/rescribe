@@ -1,0 +1,7 @@
+{
+  "description": "#+KEY: value lines become document metadata entries (keys lowercased)",
+  "metadata": { "title": "My Document", "author": "Jane Doe" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

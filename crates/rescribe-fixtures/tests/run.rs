@@ -36,3 +36,13 @@ fn html() {
             .map_err(|e| e.to_string())
     });
 }
+
+#[test]
+fn org() {
+    run_format_fixtures(&fixtures_root(), "org", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_org::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}

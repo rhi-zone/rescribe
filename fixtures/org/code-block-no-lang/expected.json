@@ -1,0 +1,6 @@
+{
+  "description": "BEGIN_EXAMPLE block produces code_block with no language prop",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": null }, "children_count": 0 }
+  ]
+}
