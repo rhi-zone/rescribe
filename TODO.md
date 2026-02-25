@@ -35,16 +35,25 @@ Fixtures are GPL so they never enter the repo — tests skip gracefully if the p
 - [x] Single ignored test `all_formats` covering 25 formats
 - [x] Pandoc added to `flake.nix` dev shell
 
+**Done (2026-02-25):**
+- [x] Identify the hanging parser — eprintln progress + 10 s timeout thread in `run_entry`
+- [x] Add per-format timeout (10 s, distinguish timeout vs panic via channel errors)
+- [x] Run with pandoc in PATH — **25/25 parsers OK, 20/25 at ≥90% coverage, ~2 s runtime**
+- [x] Fix all hanging/crashing parsers:
+  - twiki: `end.max(i+1)` guard against definition-list stall
+  - vimwiki: bounds check before heading slice (was panic on bare `=`)
+  - pod: handle `=over` / `=...` inside list-item content loop
+  - rst/asciidoc: inline parser fallback advance on unmatched markup chars
+- [x] Fix fb2 corpus path (`pb_brief.fb2` → `basic.fb2`)
+
 **Remaining:**
-- [ ] **Identify the hanging parser** — add `eprintln!("testing {}/{}", e.format, e.filename)`
-  before each `run_entry()` call in `tests/pandoc.rs`, then re-run to see which format hangs
-- [ ] **Add per-format timeout** — spawn parse in a thread in `run_entry`, join with a 10s
-  timeout, emit a FAIL result instead of blocking the whole suite
-- [ ] **Run with pandoc in PATH** — enter `nix develop`, run
-  `cargo test -p rescribe-fixtures -- --ignored --nocapture` to get real coverage numbers
-- [ ] **Fix the hanging parser** — once identified, fix the reader or add an input size guard
 - [ ] **Expand corpus entries** — some formats have weak test files (e.g. `org-select-tags.org`
   is a narrow org-mode test); add more entries per format once the suite is green
+- [ ] **Improve low-coverage parsers** — twiki 79% (definition lists dropped), haddock 88%,
+  pod 87%; investigate and fix the missing constructs
+- [ ] **Typst coverage** — only 5% (ref=552 ours=36); the typst reader is very incomplete
+- [ ] **AsciiDoc coverage** — pandoc can't read asciidoc (`--from asciidoc` unsupported), so
+  oracle comparison is unavailable; consider alternative reference (asciidoctor)
 
 ## Priority 3: Owned fixture suite (MIT-licensed, lives in repo, runs in CI)
 
