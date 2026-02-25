@@ -9,14 +9,16 @@ inspired by Pandoc but designed around a fundamentally different IR.
 reporting. `rescribe convert input.docx output.md` tells you exactly what was
 lost; Pandoc doesn't.
 
-**Document processing** — use rescribe as a library to query, filter, and
-transform documents programmatically. Extract all code blocks tagged `python`
-from an EPUB. Merge documents and rewrite cross-references. Shift all heading
-levels. Replace image URLs matching a pattern. This is the space Pandoc's
-filter system gestures at but never fully inhabits — rescribe's IR is a native
-Rust tree you manipulate directly, not JSON piped through an external process.
+**Document processing** — use rescribe as a library or CLI to query, filter,
+and transform documents programmatically. Extract all code blocks tagged
+`python` from an EPUB. Merge documents and rewrite cross-references. Shift all
+heading levels. Replace image URLs matching a pattern. This is the space
+Pandoc's filter system gestures at but never fully inhabits — rescribe's IR is
+a native Rust tree you manipulate directly, not JSON piped through an external
+process.
 
-Both use cases are first-class. The CLI and the library are the same thing.
+Both use cases are first-class. The library is the core; the CLI is one
+consumer of it, same as any downstream application.
 
 ## The problem with Pandoc's IR
 
@@ -84,6 +86,28 @@ short:
 - **Tier 2** (write-primary, partial read): Typst, LaTeX — document programming
   languages where the reader extracts static content only
 - **Tier 3** (extract-only): PDF, XLSX, bibliographic formats
+
+## Scope and non-goals
+
+rescribe operates at the **document IR layer**. An operation is in scope if it
+can be expressed as: parse → transform IR → emit. If it requires working below
+that layer, it belongs in a different tool.
+
+**In scope:**
+- Converting documents between formats
+- Querying and transforming document content via the IR
+- Merging, splitting, or restructuring documents as IR trees
+- Tracking fidelity losses across format boundaries
+
+**Out of scope:**
+- Layout-preserving PDF manipulation (page stitching, watermarking, font
+  subsetting) — these operate on PDF binary structure below the IR
+- Image processing, video, audio
+- Spreadsheet computation (XLSX cells are extracted as data; formulas are not
+  evaluated)
+- Full execution of document programming languages (Typst scripting, LaTeX
+  macros) — the IR captures static authored content only; see
+  [format-tiers.md](./format-tiers.md)
 
 ## Quick start
 
