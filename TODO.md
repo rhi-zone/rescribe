@@ -106,3 +106,6 @@ Low priority formats that could be added later if there's demand:
 - [ ] Notion export format
 - [ ] Roam Research export
 - [ ] Logseq export
+- [ ] MOBI / Mobipocket reader (KF7 — public spec, large existing corpus, deprecated for new content)
+- [ ] AZW3 reader/writer (KF8 — EPUB3 content in Mobipocket container, well reverse-engineered)
+- [ ] KFX reader (Kindle Format 10 — proprietary Ion-based binary, no public spec; blocked on ecosystem)
