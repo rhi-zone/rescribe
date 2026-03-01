@@ -111,14 +111,6 @@ Need `-fmt` suffix: rst, org, rtf, textile, mediawiki, muse, fountain, bbcode, p
 haddock, ansi, man, vimwiki, jira, fb2, opml, tsv, tei, typst (already `typst-syntax`),
 djot (already `jotdown`), latex
 
-### Migration order (suggested)
-
-1. `rtf-fmt` — highest risk, most isolated logic, good proving ground
-2. `rst-fmt` — large parser, complex spec, highest correctness benefit
-3. `asciidoc` — similar to RST
-4. `org-fmt` — already partially modular (handwritten.rs), 3-Harness reader
-5. Remaining formats incrementally
-
 ### What each standalone crate exposes
 
 - **Parser**: takes raw bytes/str → returns owned AST (no rescribe types)
@@ -127,9 +119,36 @@ djot (already `jotdown`), latex
 
 ---
 
-## Milestones
+## Strategy: Verticals, not sweeps
 
-### M1: Fixture CI — all formats at ≥2-Fixtures, running in CI ✓
+The primary development model is **vertical slices**, not horizontal sweeps.
+
+For each format in priority order:
+1. Build the standalone library (`formats/{name}/`) — parser + builder API, publishable independently
+2. Thin rescribe adapter (`rescribe-read-{fmt}`, `rescribe-write-{fmt}`)
+3. Owned fixture suite (2-Fixtures)
+4. Pandoc/oracle harness (3-Harness)
+5. Fuzz targets (4-Fuzz)
+6. Production sign-off (5-Production)
+
+**Why verticals:** rescribe's goal is to *be* the Rust format ecosystem for formats
+that currently lack good libraries. Each vertical produces a publishable, standalone
+crate that fills a real ecosystem gap — the rescribe adapter is almost incidental.
+Horizontal sweeps (all formats to stage N, then loop) delay shipping anything useful
+and accumulate half-finished work across many formats simultaneously.
+
+The format tiers below determine priority order within this model.
+
+### Vertical priority order (Tier A)
+
+1. `rtf-fmt` — highest risk, most isolated, no viable crate exists
+2. `rst-fmt` — large parser, complex spec, `docutils` is the reference
+3. `asciidoc` — similar scope; `asciidoctor` as oracle
+4. `org-fmt` — reader at 3-Harness; writer needs work; partially modular already
+5. `djot-fmt` — jotdown has confirmed bugs; djot spec is clean and small
+6. Remaining Tier A formats (epub, odt, azw3) as bandwidth allows
+
+### Milestone: M1 ✓
 
 - [x] Write fixture runner (`rescribe-fixtures`, `tests/run.rs`)
 - [x] Hook fixture runner into CI (`cargo test --all-targets`)
@@ -137,49 +156,31 @@ djot (already `jotdown`), latex
 - [x] Presentation writers (Tier D): writer fixture infrastructure + one fixture each
 - [x] Fixture spec v1.2: writer fixture format documented
 
-**Done when:** CI is green, every format has at least one passing fixture.
+### Milestone: M2 — Tier A verticals complete
 
-### M2: Tier A correct — all Tier A formats at ≥3-Harness
+Each Tier A format at 5-Production with a published standalone crate.
 
-- [ ] Improve low-coverage parsers: twiki 79%, haddock 88%, pod 87%
-- [ ] Typst reader: currently at 5% — needs significant work before harness is meaningful
-- [ ] AsciiDoc: Pandoc oracle unavailable; set up asciidoctor as alternate reference
-- [ ] Expand Pandoc harness corpus entries (some formats have narrow test files)
-- [ ] AZW3 reader/writer: implement (boko as reference, MIT attribution)
+- [ ] `rtf-fmt` vertical
+- [ ] `rst-fmt` vertical
+- [ ] `asciidoc` vertical
+- [ ] `org-fmt` vertical
+- [ ] `djot-fmt` vertical
+- [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
+- [ ] HTML (html5ever backed; same)
+- [ ] DOCX, PPTX, XLSX (ooxml-* backed; same)
+- [ ] EPUB (epub/epub-builder backed; same)
+- [ ] ODT writer (no library; treat as a vertical)
+- [ ] AZW3 reader/writer (boko as reference, MIT attribution)
+- [ ] PDF reader (pdf-extract backed; already at 4)
 
-**Done when:** All Tier A formats at 3-Harness (or equivalent for harness-N/A formats).
+### Milestone: M3 — Tier B/C verticals
 
-### M3: Tier A hardened — all Tier A formats at 4-Fuzz
+Tier B formats at 3-Harness or 2-Fixtures (where harness is N/A), each with a
+standalone library where the ecosystem gap justifies it.
 
-Existing fuzz targets: html (reader + roundtrip), markdown (reader + roundtrip),
-latex (reader), org (reader), pandoc-json (reader), pdf (reader).
-
-- [ ] Add fuzz targets for remaining Tier A formats: epub, docx, odt, pptx, xlsx, rst,
-  asciidoc, djot, azw3
-- [ ] Run all fuzz targets for meaningful duration (hours, not seconds)
-- [ ] Fix all panics/crashes found
-
-**Done when:** All Tier A formats at 4-Fuzz.
-
-### M4: Tier B correct — all Tier B formats at ≥3-Harness / 2-Fixtures
-
-- [ ] RTF: evaluate `rtf-parser` crate; replace hand-rolled impl if viable
-- [ ] ODT writer: validate via LibreOffice headless in CI
-- [ ] MOBI reader: implement (boko as reference, MIT attribution)
-- [ ] KFX reader/writer: implement (Ion spec + boko as reference for schema layer)
-- [ ] Remaining Tier B formats: audit and bring to 3-Harness or 2-Fixtures
-
-**Done when:** All Tier B formats at their target stage.
-
-### M5: Tier A at 5-Production
-
-Final production pass for Tier A formats.
-
-- [ ] Audit each Tier A format for known gaps and edge cases
-- [ ] Ensure fidelity warnings fire correctly for all lossy conversions
-- [ ] Roundtrip fixture coverage: input → parse → emit → parse → IR == IR
-
-**Done when:** All Tier A formats at 5-Production.
+- [ ] MOBI reader (boko as reference)
+- [ ] KFX reader/writer (Ion spec + boko)
+- [ ] Remaining Tier B/C formats: audit and bring to target stage
 
 ---
 
