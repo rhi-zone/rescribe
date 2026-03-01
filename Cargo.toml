@@ -98,6 +98,7 @@ zimwiki = { path = "crates/formats/zimwiki" }
 pod-fmt = { path = "crates/formats/pod-fmt" }
 haddock-fmt = { path = "crates/formats/haddock-fmt" }
 creole = { path = "crates/formats/creole" }
+csv-fmt = { path = "crates/formats/csv-fmt" }
 man-fmt = { path = "crates/formats/man-fmt" }
 mediawiki-fmt = { path = "crates/formats/mediawiki-fmt" }
 fountain-fmt = { path = "crates/formats/fountain-fmt" }

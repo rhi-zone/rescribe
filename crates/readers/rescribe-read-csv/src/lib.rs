@@ -15,24 +15,22 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
+    let csv_doc = csv_fmt::parse(input)
+        .map_err(|e| ParseError::Invalid(format!("CSV parse error: {}", e)))?;
+
     let mut rows = Vec::new();
     let mut is_header = true;
 
-    for line in input.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        let cells = parse_csv_line(line);
-        let cell_nodes: Vec<Node> = cells
-            .into_iter()
+    for row in &csv_doc.rows {
+        let cell_nodes: Vec<Node> = row
+            .iter()
             .map(|cell| {
                 let node_kind = if is_header {
                     node::TABLE_HEADER
                 } else {
                     node::TABLE_CELL
                 };
-                Node::new(node_kind).child(Node::new(node::TEXT).prop(prop::CONTENT, cell))
+                Node::new(node_kind).child(Node::new(node::TEXT).prop(prop::CONTENT, cell.as_str()))
             })
             .collect();
 
@@ -50,40 +48,6 @@ pub fn parse_with_options(
     };
 
     Ok(ConversionResult::ok(document))
-}
-
-fn parse_csv_line(line: &str) -> Vec<String> {
-    let mut cells = Vec::new();
-    let mut current = String::new();
-    let mut in_quotes = false;
-    let mut chars = line.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        match c {
-            '"' if in_quotes => {
-                // Check for escaped quote
-                if chars.peek() == Some(&'"') {
-                    current.push('"');
-                    chars.next();
-                } else {
-                    in_quotes = false;
-                }
-            }
-            '"' if !in_quotes => {
-                in_quotes = true;
-            }
-            ',' if !in_quotes => {
-                cells.push(current.trim().to_string());
-                current.clear();
-            }
-            _ => {
-                current.push(c);
-            }
-        }
-    }
-
-    cells.push(current.trim().to_string());
-    cells
 }
 
 #[cfg(test)]
@@ -109,14 +73,5 @@ mod tests {
     fn test_parse_escaped_quotes() {
         let result = parse("a,b\n\"say \"\"hello\"\"\",test").unwrap();
         assert_eq!(result.value.content.children.len(), 1);
-    }
-
-    #[test]
-    fn test_csv_line_parsing() {
-        let cells = parse_csv_line("a,b,c");
-        assert_eq!(cells, vec!["a", "b", "c"]);
-
-        let cells = parse_csv_line("\"hello, world\",test");
-        assert_eq!(cells, vec!["hello, world", "test"]);
     }
 }

@@ -9,3 +9,4 @@ description = "CSV reader for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
+csv-fmt = { workspace = true }

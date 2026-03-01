@@ -15,14 +15,14 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut output = String::new();
-
     // Find first table in document
     if let Some(table) = find_table(&doc.content) {
-        emit_table(table, &mut output);
+        let csv_doc = document_to_csv_doc(table);
+        let output = csv_fmt::build(&csv_doc);
+        Ok(ConversionResult::ok(output.into_bytes()))
+    } else {
+        Ok(ConversionResult::ok(Vec::new()))
     }
-
-    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
 fn find_table(node: &Node) -> Option<&Node> {
@@ -37,21 +37,15 @@ fn find_table(node: &Node) -> Option<&Node> {
     None
 }
 
-fn emit_table(table: &Node, output: &mut String) {
+fn document_to_csv_doc(table: &Node) -> csv_fmt::CsvDoc {
+    let mut rows = Vec::new();
     for row in &table.children {
         if row.kind.as_str() == node::TABLE_ROW {
-            let cells: Vec<String> = row
-                .children
-                .iter()
-                .map(|cell| {
-                    let text = get_text_content(cell);
-                    escape_csv_field(&text)
-                })
-                .collect();
-            output.push_str(&cells.join(","));
-            output.push('\n');
+            let cells: Vec<String> = row.children.iter().map(get_text_content).collect();
+            rows.push(cells);
         }
     }
+    csv_fmt::CsvDoc { rows }
 }
 
 fn get_text_content(node: &Node) -> String {
@@ -68,15 +62,6 @@ fn collect_text(node: &Node, output: &mut String) {
     }
     for child in &node.children {
         collect_text(child, output);
-    }
-}
-
-fn escape_csv_field(field: &str) -> String {
-    if field.contains(',') || field.contains('"') || field.contains('\n') {
-        let escaped = field.replace('"', "\"\"");
-        format!("\"{}\"", escaped)
-    } else {
-        field.to_string()
     }
 }
 
@@ -123,12 +108,5 @@ mod tests {
         let output = emit_str(&doc);
         assert!(output.contains("A,B"));
         assert!(output.contains("1,2"));
-    }
-
-    #[test]
-    fn test_escape_csv() {
-        assert_eq!(escape_csv_field("hello"), "hello");
-        assert_eq!(escape_csv_field("hello, world"), "\"hello, world\"");
-        assert_eq!(escape_csv_field("say \"hi\""), "\"say \"\"hi\"\"\"");
     }
 }
