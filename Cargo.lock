@@ -2228,6 +2228,7 @@ name = "rescribe-write-djot"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+ "rescribe-read-djot",
  "rescribe-std",
 ]
 

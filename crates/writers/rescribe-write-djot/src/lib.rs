@@ -303,6 +303,24 @@ fn escape_text(s: &str) -> String {
     out
 }
 
+/// Choose backtick delimiter for an inline code span.
+///
+/// Uses the smallest N such that no run of N backticks appears in `content`,
+/// preventing the delimiter from being misread as part of the content.
+fn code_span_delimiters(content: &str) -> String {
+    let mut max_run = 0usize;
+    let mut run = 0usize;
+    for ch in content.chars() {
+        if ch == '`' {
+            run += 1;
+            max_run = max_run.max(run);
+        } else {
+            run = 0;
+        }
+    }
+    "`".repeat(max_run + 1)
+}
+
 fn emit_inline(node: &Node, ctx: &mut EmitContext) {
     match node.kind.as_str() {
         node::TEXT => {
@@ -343,16 +361,10 @@ fn emit_inline(node: &Node, ctx: &mut EmitContext) {
         }
         node::CODE => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("");
-            // Use backticks, escaping if necessary
-            if content.contains('`') {
-                ctx.write("``");
-                ctx.write(content);
-                ctx.write("``");
-            } else {
-                ctx.write("`");
-                ctx.write(content);
-                ctx.write("`");
-            }
+            let delim = code_span_delimiters(content);
+            ctx.write(&delim);
+            ctx.write(content);
+            ctx.write(&delim);
         }
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("");
@@ -524,5 +536,65 @@ mod tests {
         assert!(output.contains("```rust"));
         assert!(output.contains("fn main() {}"));
         assert!(output.contains("```\n"));
+    }
+}
+
+/// Roundtrip regression tests for fuzz-found crashes.
+#[cfg(test)]
+mod roundtrip_tests {
+    use super::emit;
+    use rescribe_read_djot::parse;
+
+    fn roundtrip_text_preserved(input: &str) {
+        fn extract_text(node: &rescribe_core::Node) -> String {
+            use rescribe_std::{node, prop};
+            let mut t = String::new();
+            if node.kind.as_str() == node::TEXT
+                && let Some(c) = node.props.get_str(prop::CONTENT)
+            {
+                t.push_str(c);
+            }
+            for ch in &node.children {
+                t.push_str(&extract_text(ch));
+            }
+            t
+        }
+        let doc1 = parse(input).unwrap().value;
+        let out = emit(&doc1).unwrap();
+        let s = String::from_utf8(out.value).unwrap();
+        let doc2 = parse(&s).unwrap().value;
+        let t1: String = extract_text(&doc1.content)
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let t2: String = extract_text(&doc2.content)
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert_eq!(
+            t1, t2,
+            "roundtrip text mismatch for {input:?}: {t1:?} -> {t2:?}"
+        );
+    }
+
+    // Empty list item: trailing space on "- " was stripped by trim_end(),
+    // making "-" be read back as plain text instead of a list marker.
+    #[test]
+    fn empty_list_item() {
+        roundtrip_text_preserved("\n:\n+");
+    }
+
+    // Escaped colon: \: → text ":" → writer emitted bare ":", which djot
+    // re-reads as a definition-list marker.
+    #[test]
+    fn escaped_colon() {
+        roundtrip_text_preserved("\\:");
+    }
+
+    // Code span with internal backtick run: content "-``)" was wrapped in
+    // "``...``" but the internal "``" broke the delimiter.
+    #[test]
+    fn code_span_internal_backtick_run() {
+        roundtrip_text_preserved("`-``)");
     }
 }
