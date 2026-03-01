@@ -106,6 +106,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "asciidoc"
+version = "0.1.0"
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1014,6 +1018,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "org-fmt"
+version = "0.1.0"
+
+[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1544,6 +1552,7 @@ dependencies = [
 name = "rescribe-read-asciidoc"
 version = "0.1.0"
 dependencies = [
+ "asciidoc",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1848,6 +1857,7 @@ dependencies = [
 name = "rescribe-read-org"
 version = "0.1.0"
 dependencies = [
+ "org-fmt",
  "rescribe-core",
  "rescribe-std",
  "rescribe-write-org",
@@ -1903,6 +1913,7 @@ version = "0.1.0"
 dependencies = [
  "rescribe-core",
  "rescribe-std",
+ "rst-fmt",
 ]
 
 [[package]]
@@ -2040,6 +2051,7 @@ dependencies = [
 name = "rescribe-write-asciidoc"
 version = "0.1.0"
 dependencies = [
+ "asciidoc",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -2369,6 +2381,7 @@ dependencies = [
 name = "rescribe-write-org"
 version = "0.1.0"
 dependencies = [
+ "org-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -2431,6 +2444,7 @@ version = "0.1.0"
 dependencies = [
  "rescribe-core",
  "rescribe-std",
+ "rst-fmt",
 ]
 
 [[package]]
@@ -2569,6 +2583,10 @@ name = "roman-numerals-rs"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c85cd47a33a4510b1424fe796498e174c6a9cf94e606460ef022a19f3e4ff85e"
+
+[[package]]
+name = "rst-fmt"
+version = "0.1.0"
 
 [[package]]
 name = "rtf-fmt"

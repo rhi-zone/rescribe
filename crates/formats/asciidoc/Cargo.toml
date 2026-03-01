@@ -1,0 +1,7 @@
+[package]
+name = "asciidoc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "AsciiDoc parser, AST, and builder — no rescribe dependency"

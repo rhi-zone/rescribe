@@ -2,13 +2,14 @@
 //!
 //! Parses Org-mode source into rescribe's document IR.
 //!
-//! Currently uses a handwritten parser. Tree-sitter support is pending
-//! an update to tree-sitter-org for tree-sitter 0.26 compatibility.
+//! Delegates all parsing to `org-fmt`, then maps the `OrgDoc` AST into
+//! rescribe `Node`/`Document` types.
 
-use rescribe_core::{ConversionResult, Document, ParseError, ParseOptions};
-
-#[cfg(feature = "handwritten")]
-mod handwritten;
+use org_fmt::{Block, Inline, ListItem, ListItemContent, OrgDoc, TableRow};
+use rescribe_core::{
+    ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Severity, WarningKind,
+};
+use rescribe_std::{Node, node, prop};
 
 /// Parse Org-mode text into a rescribe Document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -16,24 +17,229 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
 }
 
 /// Parse Org-mode with custom options.
-#[cfg(feature = "handwritten")]
 pub fn parse_with_options(
     input: &str,
-    options: &ParseOptions,
+    _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    handwritten::parse_with_options(input, options)
+    let result = org_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+
+    let mut warnings: Vec<FidelityWarning> = result
+        .warnings
+        .iter()
+        .map(|w| {
+            FidelityWarning::new(
+                Severity::Minor,
+                WarningKind::UnsupportedNode(w.kind.clone()),
+                w.message.clone(),
+            )
+        })
+        .collect();
+
+    let (children, mut more_warnings) = convert_doc(&result.doc);
+    warnings.append(&mut more_warnings);
+
+    let mut metadata = rescribe_core::Properties::new();
+    for (key, value) in &result.doc.metadata {
+        metadata.set(key, value.clone());
+    }
+
+    let root = Node::new(node::DOCUMENT).children(children);
+    let doc = Document::new().with_content(root).with_metadata(metadata);
+
+    Ok(ConversionResult::with_warnings(doc, warnings))
 }
 
-/// Parse using specifically the handwritten backend.
-#[cfg(feature = "handwritten")]
-pub mod backend_handwritten {
-    pub use crate::handwritten::{parse, parse_with_options};
+fn convert_doc(org_doc: &OrgDoc) -> (Vec<Node>, Vec<FidelityWarning>) {
+    let mut warnings = Vec::new();
+    let mut nodes = Vec::new();
+    for block in &org_doc.blocks {
+        match convert_block(block) {
+            Ok(Some(n)) => nodes.push(n),
+            Ok(None) => {}
+            Err(w) => warnings.push(w),
+        }
+    }
+    (nodes, warnings)
+}
+
+fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
+    let node = match block {
+        Block::Paragraph { inlines } => {
+            Node::new(node::PARAGRAPH).children(convert_inlines(inlines))
+        }
+
+        Block::Heading { level, inlines } => Node::new(node::HEADING)
+            .prop(prop::LEVEL, *level as i64)
+            .children(convert_inlines(inlines)),
+
+        Block::CodeBlock { language, content } => {
+            let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
+            if let Some(lang) = language {
+                n = n.prop(prop::LANGUAGE, lang.clone());
+            }
+            n
+        }
+
+        Block::Blockquote { children } => {
+            let child_nodes: Vec<Node> = children
+                .iter()
+                .filter_map(|b| convert_block(b).ok().flatten())
+                .collect();
+            Node::new(node::BLOCKQUOTE).children(child_nodes)
+        }
+
+        Block::List { ordered, items } => {
+            let item_nodes: Vec<Node> = items.iter().map(convert_list_item).collect();
+            Node::new(node::LIST)
+                .prop(prop::ORDERED, *ordered)
+                .children(item_nodes)
+        }
+
+        Block::Table { rows } => convert_table(rows),
+
+        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+
+        Block::DefinitionList { items } => {
+            let mut children = Vec::new();
+            for item in items {
+                children
+                    .push(Node::new(node::DEFINITION_TERM).children(convert_inlines(&item.term)));
+                children.push(Node::new(node::DEFINITION_DESC).children(vec![
+                    Node::new(node::PARAGRAPH).children(convert_inlines(&item.desc)),
+                ]));
+            }
+            Node::new(node::DEFINITION_LIST).children(children)
+        }
+
+        Block::Div { inlines } => Node::new(node::DIV).children(convert_inlines(inlines)),
+
+        Block::RawBlock { format, content } => Node::new(node::RAW_BLOCK)
+            .prop(prop::FORMAT, format.clone())
+            .prop(prop::CONTENT, content.clone()),
+
+        Block::Figure { children } => {
+            let child_nodes: Vec<Node> = children
+                .iter()
+                .filter_map(|b| convert_block(b).ok().flatten())
+                .collect();
+            Node::new(node::FIGURE).children(child_nodes)
+        }
+
+        Block::Caption { inlines } => Node::new(node::CAPTION).children(convert_inlines(inlines)),
+
+        Block::Unknown { kind } => {
+            return Err(FidelityWarning::new(
+                Severity::Minor,
+                WarningKind::UnsupportedNode(kind.clone()),
+                format!("Unknown org block: {}", kind),
+            ));
+        }
+    };
+    Ok(Some(node))
+}
+
+fn convert_list_item(item: &ListItem) -> Node {
+    let mut children = Vec::new();
+    for content in &item.children {
+        match content {
+            ListItemContent::Inline(inlines) => {
+                children.push(Node::new(node::PARAGRAPH).children(convert_inlines(inlines)));
+            }
+            ListItemContent::Block(block) => {
+                if let Ok(Some(n)) = convert_block(block) {
+                    children.push(n);
+                }
+            }
+        }
+    }
+    // If we ended up with just one paragraph and it's what the parser produced,
+    // unwrap it so list items have inline children directly (matching original behavior)
+    if children.len() == 1 && children[0].kind.as_str() == node::PARAGRAPH {
+        let para = children.remove(0);
+        Node::new(node::LIST_ITEM).children(para.children)
+    } else {
+        Node::new(node::LIST_ITEM).children(children)
+    }
+}
+
+fn convert_table(rows: &[TableRow]) -> Node {
+    // For now, flatten all rows into a simple table with table_row + table_cell children
+    let row_nodes: Vec<Node> = rows
+        .iter()
+        .map(|row| {
+            let cell_kind = if row.is_header {
+                node::TABLE_HEADER
+            } else {
+                node::TABLE_CELL
+            };
+            let cells: Vec<Node> = row
+                .cells
+                .iter()
+                .map(|cell| Node::new(cell_kind).children(convert_inlines(cell)))
+                .collect();
+            Node::new(node::TABLE_ROW).children(cells)
+        })
+        .collect();
+    Node::new(node::TABLE).children(row_nodes)
+}
+
+fn convert_inlines(inlines: &[Inline]) -> Vec<Node> {
+    inlines.iter().map(convert_inline).collect()
+}
+
+fn convert_inline(inline: &Inline) -> Node {
+    match inline {
+        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+
+        Inline::Bold(children) => Node::new(node::STRONG).children(convert_inlines(children)),
+
+        Inline::Italic(children) => Node::new(node::EMPHASIS).children(convert_inlines(children)),
+
+        Inline::Underline(children) => {
+            Node::new(node::UNDERLINE).children(convert_inlines(children))
+        }
+
+        Inline::Strikethrough(children) => {
+            Node::new(node::STRIKEOUT).children(convert_inlines(children))
+        }
+
+        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+
+        Inline::Link { url, children } => Node::new(node::LINK)
+            .prop(prop::URL, url.clone())
+            .children(convert_inlines(children)),
+
+        Inline::Image { url } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
+
+        Inline::LineBreak => Node::new(node::LINE_BREAK),
+
+        Inline::SoftBreak => Node::new(node::SOFT_BREAK),
+
+        Inline::Superscript(children) => {
+            Node::new(node::SUPERSCRIPT).children(convert_inlines(children))
+        }
+
+        Inline::Subscript(children) => {
+            Node::new(node::SUBSCRIPT).children(convert_inlines(children))
+        }
+
+        Inline::FootnoteRef { label } => {
+            Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, label.clone())
+        }
+
+        Inline::FootnoteDefinition { label, children } => Node::new(node::FOOTNOTE_DEF)
+            .prop(prop::LABEL, label.clone())
+            .children(convert_inlines(children)),
+
+        Inline::MathInline { source } => {
+            Node::new("math_inline").prop("math:source", source.clone())
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rescribe_std::{Node, node, prop};
 
     fn root_children(doc: &Document) -> &[Node] {
         &doc.content.children
@@ -111,7 +317,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "handwritten")]
     fn test_parse_metadata() {
         let input = "#+TITLE: My Document\n#+AUTHOR: Jane Doe\n\nContent here.";
         let result = parse(input).unwrap();

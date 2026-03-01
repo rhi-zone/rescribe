@@ -84,6 +84,9 @@ rescribe-write-muse = { path = "crates/writers/rescribe-write-muse" }
 rescribe-read-t2t = { path = "crates/readers/rescribe-read-t2t" }
 rescribe-write-t2t = { path = "crates/writers/rescribe-write-t2t" }
 rtf-fmt = { path = "crates/formats/rtf-fmt" }
+rst-fmt = { path = "crates/formats/rst-fmt" }
+asciidoc = { path = "crates/formats/asciidoc" }
+org-fmt = { path = "crates/formats/org-fmt" }
 rescribe-read-rtf = { path = "crates/readers/rescribe-read-rtf" }
 rescribe-write-rtf = { path = "crates/writers/rescribe-write-rtf" }
 rescribe-read-vimwiki = { path = "crates/readers/rescribe-read-vimwiki" }

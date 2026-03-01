@@ -9,3 +9,4 @@ description = "reStructuredText reader for rescribe"
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+rst-fmt.workspace = true

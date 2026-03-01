@@ -1,12 +1,14 @@
 //! reStructuredText writer for rescribe.
 //!
-//! Emits documents as RST source.
+//! Thin adapter over [`rst_fmt`]: maps the rescribe document model to
+//! the `rst_fmt` AST, then builds RST output.
 
 use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
     WarningKind,
 };
 use rescribe_std::{node, prop};
+use rst_fmt::{Block, DefinitionItem, Inline, RstDoc, TableRow};
 
 /// Emit a document as RST.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -18,519 +20,335 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
-
-    emit_nodes(&doc.content.children, &mut ctx);
-
+    let mut warnings = Vec::new();
+    let rst = doc_to_rst(doc, &mut warnings);
+    let output = rst_fmt::build(&rst);
     Ok(ConversionResult::with_warnings(
-        ctx.output.into_bytes(),
-        ctx.warnings,
+        output.into_bytes(),
+        warnings,
     ))
 }
 
-/// Emit context for tracking state during emission.
-struct EmitContext {
-    output: String,
-    warnings: Vec<FidelityWarning>,
-    list_depth: usize,
-}
-
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-            warnings: Vec::new(),
-            list_depth: 0,
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-
-    fn write_indent(&mut self) {
-        for _ in 0..self.list_depth {
-            self.write("   ");
-        }
+fn doc_to_rst(doc: &Document, warnings: &mut Vec<FidelityWarning>) -> RstDoc {
+    RstDoc {
+        blocks: nodes_to_blocks(&doc.content.children, warnings),
     }
 }
 
-/// Emit a sequence of nodes.
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
+fn nodes_to_blocks(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<Block> {
+    nodes
+        .iter()
+        .flat_map(|n| node_to_blocks(n, warnings))
+        .collect()
 }
 
-/// Emit a single node.
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn node_to_blocks(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block> {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => nodes_to_blocks(&node.children, warnings),
 
-        node::PARAGRAPH => {
-            emit_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+        node::PARAGRAPH => vec![Block::Paragraph {
+            inlines: nodes_to_inlines(&node.children, warnings),
+        }],
+
+        node::HEADING => {
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
+            vec![Block::Heading {
+                level,
+                inlines: nodes_to_inlines(&node.children, warnings),
+            }]
         }
 
-        node::HEADING => emit_heading(node, ctx),
-        node::CODE_BLOCK => emit_code_block(node, ctx),
-        node::BLOCKQUOTE => emit_blockquote(node, ctx),
-        node::LIST => emit_list(node, ctx),
-        node::LIST_ITEM => emit_list_item(node, ctx),
-        node::TABLE => emit_table(node, ctx),
-        node::FIGURE => emit_figure(node, ctx),
-        node::HORIZONTAL_RULE => {
-            ctx.write("----\n\n");
+        node::CODE_BLOCK => {
+            let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            vec![Block::CodeBlock { language, content }]
         }
 
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
+        node::BLOCKQUOTE => vec![Block::Blockquote {
+            children: nodes_to_blocks(&node.children, warnings),
+        }],
+
+        node::LIST => {
+            let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
+            let items: Vec<Vec<Block>> = node
+                .children
+                .iter()
+                .filter(|c| c.kind.as_str() == node::LIST_ITEM)
+                .map(|item| nodes_to_blocks(&item.children, warnings))
+                .collect();
+            vec![Block::List { ordered, items }]
+        }
+
+        node::LIST_ITEM => nodes_to_blocks(&node.children, warnings),
+
+        node::DEFINITION_LIST => {
+            let items = definition_list_to_items(&node.children, warnings);
+            vec![Block::DefinitionList { items }]
+        }
+
+        node::FIGURE => {
+            let img = node
+                .children
+                .iter()
+                .find(|c| c.kind.as_str() == node::IMAGE);
+            if let Some(img_node) = img {
+                let url = img_node.props.get_str(prop::URL).unwrap_or("").to_string();
+                let alt = img_node.props.get_str(prop::ALT).map(|s| s.to_string());
+                let caption_node = node
+                    .children
+                    .iter()
+                    .find(|c| c.kind.as_str() == node::CAPTION);
+                let caption = caption_node.map(|cap| nodes_to_inlines(&cap.children, warnings));
+                vec![Block::Figure { url, alt, caption }]
+            } else {
+                vec![]
+            }
+        }
+
+        node::IMAGE => {
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
+            let title = node.props.get_str(prop::TITLE).map(|s| s.to_string());
+            vec![Block::Image { url, alt, title }]
+        }
+
+        node::TABLE => {
+            let rows = collect_table_rows(node, warnings);
+            vec![Block::Table { rows }]
+        }
+
+        node::HORIZONTAL_RULE => vec![Block::HorizontalRule],
+
+        node::DIV | node::SPAN => nodes_to_blocks(&node.children, warnings),
 
         node::RAW_BLOCK | node::RAW_INLINE => {
-            let format = node.props.get_str(prop::FORMAT).unwrap_or("");
-            if format == "rst"
-                && let Some(content) = node.props.get_str(prop::CONTENT)
-            {
-                ctx.write(content);
-            }
+            let format = node.props.get_str(prop::FORMAT).unwrap_or("").to_string();
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            vec![Block::RawBlock { format, content }]
         }
 
-        node::DEFINITION_LIST => emit_definition_list(node, ctx),
-        node::DEFINITION_TERM => emit_definition_term(node, ctx),
-        node::DEFINITION_DESC => emit_definition_desc(node, ctx),
-
-        // Inline elements
-        node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
+        node::DEFINITION_TERM | node::DEFINITION_DESC => {
+            // These are handled inside DEFINITION_LIST
+            vec![]
         }
 
-        node::EMPHASIS => {
-            ctx.write("*");
-            emit_nodes(&node.children, ctx);
-            ctx.write("*");
-        }
-
-        node::STRONG => {
-            ctx.write("**");
-            emit_nodes(&node.children, ctx);
-            ctx.write("**");
-        }
-
-        node::STRIKEOUT => {
-            // RST doesn't have native strikethrough, use role
-            ctx.write(":strike:`");
-            emit_nodes(&node.children, ctx);
-            ctx.write("`");
-        }
-
-        node::UNDERLINE => {
-            // RST doesn't have native underline, use role
-            ctx.write(":underline:`");
-            emit_nodes(&node.children, ctx);
-            ctx.write("`");
-        }
-
-        node::SUBSCRIPT => {
-            ctx.write(":sub:`");
-            emit_nodes(&node.children, ctx);
-            ctx.write("`");
-        }
-
-        node::SUPERSCRIPT => {
-            ctx.write(":sup:`");
-            emit_nodes(&node.children, ctx);
-            ctx.write("`");
-        }
-
-        node::CODE => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write("``");
-                ctx.write(content);
-                ctx.write("``");
-            }
-        }
-
-        node::LINK => emit_link(node, ctx),
-        node::IMAGE => emit_image(node, ctx),
-        node::LINE_BREAK => ctx.write("\n"),
-        node::SOFT_BREAK => ctx.write("\n"),
-
-        node::FOOTNOTE_REF => emit_footnote_ref(node, ctx),
-        node::FOOTNOTE_DEF => emit_footnote_def(node, ctx),
-
-        node::SMALL_CAPS => {
-            ctx.write(":sc:`");
-            emit_nodes(&node.children, ctx);
-            ctx.write("`");
-        }
-
-        node::QUOTED => {
-            let quote_type = node.props.get_str(prop::QUOTE_TYPE).unwrap_or("double");
-            if quote_type == "single" {
-                ctx.write("'");
-                emit_nodes(&node.children, ctx);
-                ctx.write("'");
-            } else {
-                ctx.write("\"");
-                emit_nodes(&node.children, ctx);
-                ctx.write("\"");
-            }
-        }
-
-        "math_inline" => {
-            if let Some(source) = node.props.get_str("math:source") {
-                ctx.write(":math:`");
-                ctx.write(source);
-                ctx.write("`");
-            }
+        node::FOOTNOTE_DEF => {
+            let label = node.props.get_str(prop::LABEL).unwrap_or("").to_string();
+            let inlines = nodes_to_inlines(&node.children, warnings);
+            vec![Block::FootnoteDef { label, inlines }]
         }
 
         "math_display" => {
-            if let Some(source) = node.props.get_str("math:source") {
-                ctx.write(".. math::\n\n   ");
-                ctx.write(&source.replace('\n', "\n   "));
-                ctx.write("\n\n");
-            }
+            let source = node.props.get_str("math:source").unwrap_or("").to_string();
+            vec![Block::MathDisplay { source }]
         }
 
-        "admonition" => emit_admonition(node, ctx),
+        "admonition" => {
+            let admonition_type = node
+                .props
+                .get_str("admonition_type")
+                .unwrap_or("note")
+                .to_lowercase();
+            let children = nodes_to_blocks(&node.children, warnings);
+            vec![Block::Admonition {
+                admonition_type,
+                children,
+            }]
+        }
+
+        // Inline nodes at block level: wrap in a paragraph
+        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
+            vec![Block::Paragraph {
+                inlines: nodes_to_inlines(std::slice::from_ref(node), warnings),
+            }]
+        }
 
         _ => {
-            ctx.warnings.push(FidelityWarning::new(
+            warnings.push(FidelityWarning::new(
                 Severity::Minor,
                 WarningKind::UnsupportedNode(node.kind.as_str().to_string()),
                 format!("Unknown node type for RST: {}", node.kind.as_str()),
             ));
-            emit_nodes(&node.children, ctx);
+            nodes_to_blocks(&node.children, warnings)
         }
     }
 }
 
-/// Emit a heading with appropriate underline character.
-fn emit_heading(node: &Node, ctx: &mut EmitContext) {
-    let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
-
-    // Collect heading text
-    let mut text = String::new();
-    collect_text(&node.children, &mut text);
-
-    let underline_char = match level {
-        1 => '=',
-        2 => '-',
-        3 => '~',
-        4 => '^',
-        5 => '"',
-        _ => '\'',
-    };
-
-    // For level 1, add overline
-    if level == 1 {
-        let line: String = std::iter::repeat_n(underline_char, text.len()).collect();
-        ctx.write(&line);
-        ctx.write("\n");
-    }
-
-    emit_nodes(&node.children, ctx);
-    ctx.write("\n");
-
-    let line: String = std::iter::repeat_n(underline_char, text.len()).collect();
-    ctx.write(&line);
-    ctx.write("\n\n");
-}
-
-/// Collect plain text from nodes for length calculation.
-fn collect_text(nodes: &[Node], out: &mut String) {
-    for node in nodes {
-        if let Some(content) = node.props.get_str(prop::CONTENT) {
-            out.push_str(content);
+fn definition_list_to_items(
+    nodes: &[Node],
+    warnings: &mut Vec<FidelityWarning>,
+) -> Vec<DefinitionItem> {
+    let mut items = Vec::new();
+    let mut i = 0;
+    while i < nodes.len() {
+        if nodes[i].kind.as_str() == node::DEFINITION_TERM {
+            let term = nodes_to_inlines(&nodes[i].children, warnings);
+            let desc = if i + 1 < nodes.len() && nodes[i + 1].kind.as_str() == node::DEFINITION_DESC
+            {
+                let d = nodes_to_inlines(&nodes[i + 1].children, warnings);
+                i += 1;
+                d
+            } else {
+                vec![]
+            };
+            items.push(DefinitionItem { term, desc });
         }
-        collect_text(&node.children, out);
+        i += 1;
     }
+    items
 }
 
-/// Emit a code block.
-fn emit_code_block(node: &Node, ctx: &mut EmitContext) {
-    let lang = node.props.get_str(prop::LANGUAGE);
-
-    if let Some(lang) = lang {
-        ctx.write(".. code-block:: ");
-        ctx.write(lang);
-        ctx.write("\n\n");
-    } else {
-        ctx.write("::\n\n");
-    }
-
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        for line in content.lines() {
-            ctx.write("   ");
-            ctx.write(line);
-            ctx.write("\n");
-        }
-    }
-    ctx.write("\n");
-}
-
-/// Emit a blockquote.
-fn emit_blockquote(node: &Node, ctx: &mut EmitContext) {
-    // Blockquotes in RST are indented
-    let mut inner = EmitContext::new();
-    emit_nodes(&node.children, &mut inner);
-
-    for line in inner.output.lines() {
-        ctx.write("   ");
-        ctx.write(line);
-        ctx.write("\n");
-    }
-    ctx.write("\n");
-    ctx.warnings.extend(inner.warnings);
-}
-
-/// Emit a list.
-fn emit_list(node: &Node, ctx: &mut EmitContext) {
-    ctx.list_depth += 1;
-    emit_nodes(&node.children, ctx);
-    ctx.list_depth -= 1;
-    ctx.write("\n");
-}
-
-/// Emit a list item.
-fn emit_list_item(node: &Node, ctx: &mut EmitContext) {
-    // Check if parent list is ordered
-    let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-
-    if ordered {
-        ctx.write("#. ");
-    } else {
-        ctx.write("- ");
-    }
-
-    // Emit children
-    let mut first = true;
-    for child in &node.children {
-        if child.kind.as_str() == node::PARAGRAPH {
-            if !first {
-                ctx.write_indent();
-                ctx.write("   ");
-            }
-            emit_nodes(&child.children, ctx);
-            ctx.write("\n");
-        } else if child.kind.as_str() == node::LIST {
-            ctx.write("\n");
-            ctx.write_indent();
-            emit_node(child, ctx);
-        } else {
-            emit_node(child, ctx);
-        }
-        first = false;
-    }
-}
-
-/// Emit a table using simple RST table format.
-fn emit_table(node: &Node, ctx: &mut EmitContext) {
-    // Collect all rows first to calculate column widths
-    let rows = collect_table_rows(node);
-    if rows.is_empty() {
-        return;
-    }
-
-    let col_widths = calculate_column_widths(&rows);
-
-    // Top border
-    emit_table_border(&col_widths, ctx);
-
-    // Emit rows
-    let mut is_header = true;
-    for row in &rows {
-        ctx.write("|");
-        for (i, cell) in row.iter().enumerate() {
-            let width = col_widths.get(i).copied().unwrap_or(1);
-            ctx.write(" ");
-            ctx.write(cell);
-            for _ in cell.len()..width {
-                ctx.write(" ");
-            }
-            ctx.write(" |");
-        }
-        ctx.write("\n");
-
-        // Header separator
-        if is_header && rows.len() > 1 {
-            emit_table_border(&col_widths, ctx);
-            is_header = false;
-        }
-    }
-
-    // Bottom border
-    emit_table_border(&col_widths, ctx);
-    ctx.write("\n");
-}
-
-fn emit_table_border(widths: &[usize], ctx: &mut EmitContext) {
-    ctx.write("+");
-    for w in widths {
-        for _ in 0..(*w + 2) {
-            ctx.write("-");
-        }
-        ctx.write("+");
-    }
-    ctx.write("\n");
-}
-
-fn collect_table_rows(node: &Node) -> Vec<Vec<String>> {
+fn collect_table_rows(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<TableRow> {
     let mut rows = Vec::new();
-    collect_table_rows_inner(&node.children, &mut rows);
+    collect_table_rows_inner(&node.children, &mut rows, warnings);
     rows
 }
 
-fn collect_table_rows_inner(nodes: &[Node], rows: &mut Vec<Vec<String>>) {
-    for node in nodes {
-        match node.kind.as_str() {
+fn collect_table_rows_inner(
+    nodes: &[Node],
+    rows: &mut Vec<TableRow>,
+    warnings: &mut Vec<FidelityWarning>,
+) {
+    for n in nodes {
+        match n.kind.as_str() {
             node::TABLE_HEAD | node::TABLE_BODY | node::TABLE_FOOT => {
-                collect_table_rows_inner(&node.children, rows);
+                collect_table_rows_inner(&n.children, rows, warnings);
             }
             node::TABLE_ROW => {
-                let mut row = Vec::new();
-                for cell in &node.children {
-                    let mut text = String::new();
-                    collect_text(&cell.children, &mut text);
-                    row.push(text);
-                }
-                rows.push(row);
+                let cells: Vec<Vec<Inline>> = n
+                    .children
+                    .iter()
+                    .map(|cell| nodes_to_inlines(&cell.children, warnings))
+                    .collect();
+                rows.push(TableRow {
+                    cells,
+                    is_header: false,
+                });
+            }
+            node::TABLE_HEADER => {
+                let cells: Vec<Vec<Inline>> = n
+                    .children
+                    .iter()
+                    .map(|cell| nodes_to_inlines(&cell.children, warnings))
+                    .collect();
+                rows.push(TableRow {
+                    cells,
+                    is_header: true,
+                });
             }
             _ => {}
         }
     }
 }
 
-fn calculate_column_widths(rows: &[Vec<String>]) -> Vec<usize> {
-    let num_cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
-    let mut widths = vec![1; num_cols];
+fn nodes_to_inlines(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<Inline> {
+    nodes.iter().map(|n| node_to_inline(n, warnings)).collect()
+}
 
-    for row in rows {
-        for (i, cell) in row.iter().enumerate() {
-            if cell.len() > widths[i] {
-                widths[i] = cell.len();
+fn node_to_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Inline {
+    match node.kind.as_str() {
+        node::TEXT => {
+            let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Text(s)
+        }
+
+        node::EMPHASIS => Inline::Emphasis(nodes_to_inlines(&node.children, warnings)),
+
+        node::STRONG => Inline::Strong(nodes_to_inlines(&node.children, warnings)),
+
+        node::STRIKEOUT => Inline::Strikeout(nodes_to_inlines(&node.children, warnings)),
+
+        node::UNDERLINE => Inline::Underline(nodes_to_inlines(&node.children, warnings)),
+
+        node::SUBSCRIPT => Inline::Subscript(nodes_to_inlines(&node.children, warnings)),
+
+        node::SUPERSCRIPT => Inline::Superscript(nodes_to_inlines(&node.children, warnings)),
+
+        node::CODE => {
+            let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Code(s)
+        }
+
+        node::LINK => {
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            Inline::Link {
+                url,
+                children: nodes_to_inlines(&node.children, warnings),
+            }
+        }
+
+        node::IMAGE => {
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let alt = node.props.get_str(prop::ALT).unwrap_or("").to_string();
+            Inline::Image { url, alt }
+        }
+
+        node::LINE_BREAK => Inline::LineBreak,
+
+        node::SOFT_BREAK => Inline::SoftBreak,
+
+        node::FOOTNOTE_REF => {
+            let label = node.props.get_str(prop::LABEL).unwrap_or("").to_string();
+            Inline::FootnoteRef { label }
+        }
+
+        node::FOOTNOTE_DEF => {
+            let label = node.props.get_str(prop::LABEL).unwrap_or("").to_string();
+            Inline::FootnoteDef {
+                label,
+                children: nodes_to_inlines(&node.children, warnings),
+            }
+        }
+
+        node::SMALL_CAPS => Inline::SmallCaps(nodes_to_inlines(&node.children, warnings)),
+
+        node::QUOTED => {
+            let quote_type = node
+                .props
+                .get_str(prop::QUOTE_TYPE)
+                .unwrap_or("double")
+                .to_string();
+            Inline::Quoted {
+                quote_type,
+                children: nodes_to_inlines(&node.children, warnings),
+            }
+        }
+
+        node::SPAN => {
+            let role = node.props.get_str("rst:role").unwrap_or("span").to_string();
+            Inline::RstSpan {
+                role,
+                children: nodes_to_inlines(&node.children, warnings),
+            }
+        }
+
+        node::RAW_INLINE => {
+            let format = node.props.get_str(prop::FORMAT).unwrap_or("");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("");
+            if format == "rst" {
+                Inline::Text(content.to_string())
+            } else {
+                Inline::Text(String::new())
+            }
+        }
+
+        "math_inline" => {
+            let source = node.props.get_str("math:source").unwrap_or("").to_string();
+            Inline::MathInline { source }
+        }
+
+        _ => {
+            // Unknown inline: recurse into children
+            let children = nodes_to_inlines(&node.children, warnings);
+            if children.is_empty() {
+                Inline::Text(String::new())
+            } else if children.len() == 1 {
+                children.into_iter().next().unwrap()
+            } else {
+                Inline::Strong(children)
             }
         }
     }
-    widths
-}
-
-/// Emit a figure.
-fn emit_figure(node: &Node, ctx: &mut EmitContext) {
-    // Look for image child
-    for child in &node.children {
-        if child.kind.as_str() == node::IMAGE {
-            if let Some(url) = child.props.get_str(prop::URL) {
-                ctx.write(".. figure:: ");
-                ctx.write(url);
-                ctx.write("\n");
-
-                if let Some(alt) = child.props.get_str(prop::ALT) {
-                    ctx.write("   :alt: ");
-                    ctx.write(alt);
-                    ctx.write("\n");
-                }
-            }
-        } else if child.kind.as_str() == node::CAPTION {
-            ctx.write("\n   ");
-            emit_nodes(&child.children, ctx);
-            ctx.write("\n");
-        }
-    }
-    ctx.write("\n");
-}
-
-/// Emit a definition list.
-fn emit_definition_list(node: &Node, ctx: &mut EmitContext) {
-    emit_nodes(&node.children, ctx);
-}
-
-/// Emit a definition term.
-fn emit_definition_term(node: &Node, ctx: &mut EmitContext) {
-    emit_nodes(&node.children, ctx);
-    ctx.write("\n");
-}
-
-/// Emit a definition description.
-fn emit_definition_desc(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("   ");
-    emit_nodes(&node.children, ctx);
-    ctx.write("\n\n");
-}
-
-/// Emit a link.
-fn emit_link(node: &Node, ctx: &mut EmitContext) {
-    if let Some(url) = node.props.get_str(prop::URL) {
-        ctx.write("`");
-        emit_nodes(&node.children, ctx);
-        ctx.write(" <");
-        ctx.write(url);
-        ctx.write(">`_");
-    } else {
-        emit_nodes(&node.children, ctx);
-    }
-}
-
-/// Emit an image.
-fn emit_image(node: &Node, ctx: &mut EmitContext) {
-    if let Some(url) = node.props.get_str(prop::URL) {
-        ctx.write(".. image:: ");
-        ctx.write(url);
-        ctx.write("\n");
-
-        if let Some(alt) = node.props.get_str(prop::ALT) {
-            ctx.write("   :alt: ");
-            ctx.write(alt);
-            ctx.write("\n");
-        }
-        ctx.write("\n");
-    }
-}
-
-/// Emit a footnote reference.
-fn emit_footnote_ref(node: &Node, ctx: &mut EmitContext) {
-    if let Some(label) = node.props.get_str(prop::LABEL) {
-        ctx.write("[");
-        ctx.write(label);
-        ctx.write("]_");
-    }
-}
-
-/// Emit a footnote definition.
-fn emit_footnote_def(node: &Node, ctx: &mut EmitContext) {
-    if let Some(label) = node.props.get_str(prop::LABEL) {
-        ctx.write(".. [");
-        ctx.write(label);
-        ctx.write("] ");
-        emit_nodes(&node.children, ctx);
-        ctx.write("\n");
-    }
-}
-
-/// Emit an admonition.
-fn emit_admonition(node: &Node, ctx: &mut EmitContext) {
-    let adm_type = node
-        .props
-        .get_str("admonition_type")
-        .unwrap_or("note")
-        .to_lowercase();
-
-    ctx.write(".. ");
-    ctx.write(&adm_type);
-    ctx.write("::\n\n");
-
-    let mut inner = EmitContext::new();
-    emit_nodes(&node.children, &mut inner);
-
-    for line in inner.output.lines() {
-        ctx.write("   ");
-        ctx.write(line);
-        ctx.write("\n");
-    }
-    ctx.write("\n");
-    ctx.warnings.extend(inner.warnings);
 }
 
 #[cfg(test)]

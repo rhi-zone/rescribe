@@ -9,3 +9,4 @@ description = "Org-mode writer for rescribe"
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+org-fmt.workspace = true
