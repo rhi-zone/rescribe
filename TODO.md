@@ -1,4 +1,10 @@
-# Rescribe Backlog
+# Rescribe Roadmap
+
+Per-format status is tracked in `docs/format-audit.md` using the maturity pipeline
+(0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
+This file describes milestones, format tiers, and cross-cutting work.
+
+---
 
 ## Completed
 
@@ -9,90 +15,115 @@
 - [x] Transforms crate (ShiftHeadings, StripEmpty, MergeText, etc.)
 - [x] Pandoc JSON compatibility layer
 - [x] DOCX reader/writer (via `ooxml-wml`)
-- [x] PDF reader (text extraction)
+- [x] PDF reader (text extraction via `pdf-extract`)
 - [x] PPTX reader/writer (migrated to `ooxml-pml`)
 - [x] XLSX reader/writer (via `ooxml-sml`)
 - [x] 54 readers, 64 writers — comprehensive format coverage
+- [x] Pandoc harness — 25/25 parsers, 20/25 at ≥90% coverage
 
-## Priority 1: Replace RTF with a library
+---
 
-RTF is the highest-risk handwritten impl — complex group nesting, hex escaping, codepage
-handling, binary blobs. The `rtf-parser` crate on crates.io is a candidate.
+## Format Tiers
 
-- [ ] Evaluate `rtf-parser` (and alternatives) for feature completeness
-- [ ] Replace `rescribe-read-rtf` with library-backed impl
-- [ ] Replace `rescribe-write-rtf` with library-backed impl (harder — fewer RTF writers exist)
-- [ ] Add fixture tests for RTF round-trip
+Tiers determine how much investment a format gets. Higher tiers reach production first;
+lower tiers get fixtures and correctness but not necessarily fuzz hardening.
 
-## Priority 2: Local Pandoc fixture harness
+### Tier A — Production priority
 
-Use the Pandoc test corpus at `~/git/pandoc/test/` as a local correctness oracle.
-Fixtures are GPL so they never enter the repo — tests skip gracefully if the path is absent.
+The formats people actually use for document authoring and conversion.
+Target: **5-Production**.
 
-**Done:**
-- [x] Harness in `crates/rescribe-fixtures/src/pandoc_harness.rs` — discovers corpus, runs
-  pandoc as oracle, computes word-coverage, prints report
-- [x] Single ignored test `all_formats` covering 25 formats
-- [x] Pandoc added to `flake.nix` dev shell
+Markdown family (commonmark, gfm, markdown, markdown-strict, multimarkdown), HTML,
+DOCX, EPUB, AZW3, Org, RST, AsciiDoc, LaTeX, Djot, ODT, PPTX, XLSX, PDF
 
-**Done (2026-02-25):**
-- [x] Identify the hanging parser — eprintln progress + 10 s timeout thread in `run_entry`
-- [x] Add per-format timeout (10 s, distinguish timeout vs panic via channel errors)
-- [x] Run with pandoc in PATH — **25/25 parsers OK, 20/25 at ≥90% coverage, ~2 s runtime**
-- [x] Fix all hanging/crashing parsers:
-  - twiki: `end.max(i+1)` guard against definition-list stall
-  - vimwiki: bounds check before heading slice (was panic on bare `=`)
-  - pod: handle `=over` / `=...` inside list-item content loop
-  - rst/asciidoc: inline parser fallback advance on unmatched markup chars
-- [x] Fix fb2 corpus path (`pb_brief.fb2` → `basic.fb2`)
+### Tier B — Correctness, not urgent
 
-**Remaining:**
-- [ ] **Expand corpus entries** — some formats have weak test files (e.g. `org-select-tags.org`
-  is a narrow org-mode test); add more entries per format once the suite is green
-- [ ] **Improve low-coverage parsers** — twiki 79% (definition lists dropped), haddock 88%,
-  pod 87%; investigate and fix the missing constructs
-- [ ] **Typst coverage** — only 5% (ref=552 ours=36); the typst reader is very incomplete
-- [ ] **AsciiDoc coverage** — pandoc can't read asciidoc (`--from asciidoc` unsupported), so
-  oracle comparison is unavailable; consider alternative reference (asciidoctor)
+Formats with real use cases but lower conversion frequency.
+Target: **3-Harness** (or 2-Fixtures where harness is N/A), fuzz as bandwidth allows.
 
-## Priority 3: Owned fixture suite (MIT-licensed, lives in repo, runs in CI)
+Typst, MediaWiki, DocBook, JATS, TEI, FB2, RTF, Man,
+BibTeX, BibLaTeX, CSL-JSON, RIS, EndNote XML,
+CSV, TSV, OPML, iPynb, Pandoc JSON, Native,
+MOBI, KFX
 
-Complement the local Pandoc harness with our own golden files. Use Pandoc failures as
-inspiration for what cases to cover, then write clean fixtures we can commit.
+### Tier C — Best-effort
 
-- [ ] Create `tests/fixtures/` directory structure (`{format}/input.{ext}`, `expected.json`)
-- [ ] Write fixture runner that parses input, serializes to rescribe JSON, diffs vs expected
-- [ ] Author fixtures for: markdown, html, org, rst, mediawiki (start small, grow with bugs)
-- [ ] Add fixture tests to CI
+Niche formats; fixtures are sufficient, no production guarantee.
+Target: **2-Fixtures**.
 
-## Priority 4: ODT writer correctness
+Creole, DokuWiki, VimWiki, ZimWiki, XWiki, TWiki, TikiWiki, Jira,
+BBCode, ANSI, Fountain, Haddock, Muse, t2t, Markua, Texinfo, POD
 
-ODT writer generates ODF zip by hand (404 lines, no schema library). No ODT equivalent
-of `ooxml-pml` exists, so the path here is testing rather than library replacement.
+### Tier D — Output-only, low investment
 
-- [ ] Run ODT output through LibreOffice (`libreoffice --headless --convert-to pdf`) in CI
-  to catch malformed XML that Office apps reject
-- [ ] Add roundtrip fixture tests (write ODT → re-read → compare node tree)
+Write-only presentation formats. Correctness is hard to verify programmatically.
+Target: **2-Fixtures** (round-trip not required).
 
-## Priority 5: RST and AsciiDoc reader correctness
+Beamer, reveal.js, Slidy, S5, DZSlides, Slideous, ConTeXt, ms, ICML,
+Chunked HTML, Plaintext
 
-Both are large handwritten parsers (1,263 and 1,290 lines respectively) with tricky specs.
+---
 
-- [ ] Run RST reader against Pandoc fixture harness (Priority 2), catalogue failures
-- [ ] Run AsciiDoc reader against sample docs, catalogue failures
-- [ ] Fix failures in priority order
+## Milestones
 
-## Priority 6: Fuzz testing
+### M1: Fixture CI — all formats at ≥2-Fixtures, running in CI
 
-Prevent crashes/panics on malformed input for all formats.
+The owned fixture suite (`fixtures/`) exists but does not yet run in CI.
 
-- [ ] Audit which formats already have fuzz targets in `fuzz/`
-- [ ] Add fuzz targets for formats that parse binary or complex structured data (RTF, ODT, EPUB)
-- [ ] Run fuzzer against all handwritten text parsers for at least a few hours
+- [ ] Write fixture runner: parse input, serialize to rescribe JSON, diff vs expected
+- [ ] Hook fixture runner into CI
+- [ ] Fill gaps: any format still at 0-Stub or 1-Partial gets minimum fixture coverage
+- [ ] Presentation writers (Tier D): author at least one fixture each
 
-## Someday/Maybe: Niche Formats
+**Done when:** CI is green, every format has at least one passing fixture.
 
-Low priority formats that could be added later if there's demand:
+### M2: Tier A correct — all Tier A formats at ≥3-Harness
+
+- [ ] Improve low-coverage parsers: twiki 79%, haddock 88%, pod 87%
+- [ ] Typst reader: currently at 5% — needs significant work before harness is meaningful
+- [ ] AsciiDoc: Pandoc oracle unavailable; set up asciidoctor as alternate reference
+- [ ] Expand Pandoc harness corpus entries (some formats have narrow test files)
+- [ ] AZW3 reader/writer: implement (boko as reference, MIT attribution)
+
+**Done when:** All Tier A formats at 3-Harness (or equivalent for harness-N/A formats).
+
+### M3: Tier A hardened — all Tier A formats at 4-Fuzz
+
+Existing fuzz targets: html (reader + roundtrip), markdown (reader + roundtrip),
+latex (reader), org (reader), pandoc-json (reader), pdf (reader).
+
+- [ ] Add fuzz targets for remaining Tier A formats: epub, docx, odt, pptx, xlsx, rst,
+  asciidoc, djot, azw3
+- [ ] Run all fuzz targets for meaningful duration (hours, not seconds)
+- [ ] Fix all panics/crashes found
+
+**Done when:** All Tier A formats at 4-Fuzz.
+
+### M4: Tier B correct — all Tier B formats at ≥3-Harness / 2-Fixtures
+
+- [ ] RTF: evaluate `rtf-parser` crate; replace hand-rolled impl if viable
+- [ ] ODT writer: validate via LibreOffice headless in CI
+- [ ] MOBI reader: implement (boko as reference, MIT attribution)
+- [ ] KFX reader/writer: implement (Ion spec + boko as reference for schema layer)
+- [ ] Remaining Tier B formats: audit and bring to 3-Harness or 2-Fixtures
+
+**Done when:** All Tier B formats at their target stage.
+
+### M5: Tier A at 5-Production
+
+Final production pass for Tier A formats.
+
+- [ ] Audit each Tier A format for known gaps and edge cases
+- [ ] Ensure fidelity warnings fire correctly for all lossy conversions
+- [ ] Roundtrip fixture coverage: input → parse → emit → parse → IR == IR
+
+**Done when:** All Tier A formats at 5-Production.
+
+---
+
+## Someday/Maybe
+
+Low priority; add if there's demand.
 
 - [ ] Gemtext (Gemini protocol markup)
 - [ ] Mermaid (diagram markup)
@@ -100,14 +131,9 @@ Low priority formats that could be added later if there's demand:
 - [ ] GraphViz DOT (graph descriptions)
 - [ ] PHP Markdown Extra
 - [ ] Setext (original lightweight markup)
-- [ ] troff/nroff variants
+- [ ] troff/nroff variants beyond man
 - [ ] DITA (technical documentation)
 - [ ] Confluence wiki markup
 - [ ] Notion export format
 - [ ] Roam Research export
 - [ ] Logseq export
-- [ ] MOBI / Mobipocket reader (KF7 — public spec, large existing corpus; boko is reference impl)
-- [ ] AZW3 reader/writer (KF8 — EPUB3 content in Mobipocket container; boko is reference impl)
-- [ ] KFX reader/writer (Kindle Format 10 — Ion binary layer has public spec at amazon-ion.github.io;
-  KFX schema layer is reverse-engineered with boko as reference; ion-rs not suitable yet so Ion
-  parser would be hand-rolled against spec, same as RST/AsciiDoc)
