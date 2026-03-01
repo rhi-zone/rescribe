@@ -84,7 +84,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | pptx | 3† | 3† | ooxml-pml | fuzz | fuzz |
 | xlsx | 3† | 3† | ooxml-sml | fuzz | fuzz |
 | pdf | 4† | – | pdf-extract | production | – |
-| rtf | 3 | 2 | rtf-fmt (standalone) | fuzz | harness |
+| rtf | 4 | 2 | rtf-fmt (standalone) | production | harness |
 | mobi | – | – | – (planned) | – | – |
 | azw3 | – | – | – (planned) | – | – |
 | kfx | – | – | – (planned) | – | – |
@@ -148,10 +148,14 @@ These formats have no reader; stage 3 (harness) is not applicable.
   `parse(input) -> (RtfDoc, Vec<Diagnostic>)`, `emit(ast) -> String`, `events()` pull iterator
 - Group-state stack bug fixed (formatting now scopes correctly to `{...}` groups)
 - Windows-1252 codepage decoding added
-- Fuzz targets written and compiling; ready to run
-- Rescribe reader promoted to 3 (fixture suite: paragraph, heading, bold, italic, underline,
+- Reader promoted to 4-Fuzz (2026-03-02): 3 fuzz bugs found and fixed, both fuzz
+  targets pass clean (reader: 4.3M execs, roundtrip: 2.2M execs, no crashes)
+  - Fixed: `\'XX` hex escape used byte-level slice that panicked on multibyte UTF-8 boundaries
+  - Fixed: `}` group close split adjacent Text nodes; merge_text_inlines() normalises output
+  - Fixed: `\r`/`\n` in Text content emitted as bare chars (stripped on re-parse); now `\'0d`/`\'0a`
+- Rescribe reader at 4-Fuzz (fixture suite: paragraph, heading, bold, italic, underline,
   strikethrough, superscript, subscript, special_chars, multiple_paragraphs + adversarial)
-- Next: run fuzz targets, then writer fixtures + writer harness
+- Next: writer fixtures + writer harness, then production sign-off
 
 ### ODT writer — medium risk
 - 404 lines building ODF zip by hand (no schema library)
