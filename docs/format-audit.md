@@ -85,6 +85,9 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | xlsx | 3† | 3† | ooxml-sml | fuzz | fuzz |
 | pdf | 4† | – | pdf-extract | production | – |
 | rtf | 2 | 2 | hand (⚠ high risk) | harness | harness |
+| mobi | – | – | – (planned) | – | – |
+| azw3 | – | – | – (planned) | – | – |
+| kfx | – | – | – (planned) | – | – |
 
 ### HTML and structured XML
 
@@ -160,6 +163,13 @@ These formats have no reader; stage 3 (harness) is not applicable.
 - 1,290 lines, handwritten
 - `asciidoc-rs` exists on crates.io but is immature
 - Pandoc oracle unavailable; asciidoctor is the alternate reference
+
+### KFX / AZW3 / MOBI — planned, not yet started
+- KFX uses Amazon Ion binary format (public spec: amazon-ion.github.io); Ion layer would be
+  hand-rolled against spec (ion-rs has ~1 year of unreleased commits, not suitable as dep)
+- KFX schema/structure layer is reverse-engineered; boko (MIT) is the reference implementation
+- AZW3 (KF8) is EPUB3 content in a Mobipocket container; tractable with boko as reference
+- MOBI (KF7) is PalmDOC/HuffCDIC; read-only target, boko as reference
 
 ### Typst reader — currently incomplete
 - Pandoc harness at ~5% word coverage (ref=552 words, ours=36)

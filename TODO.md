@@ -106,6 +106,8 @@ Low priority formats that could be added later if there's demand:
 - [ ] Notion export format
 - [ ] Roam Research export
 - [ ] Logseq export
-- [ ] MOBI / Mobipocket reader (KF7 — public spec, large existing corpus, deprecated for new content)
-- [ ] AZW3 reader/writer (KF8 — EPUB3 content in Mobipocket container, well reverse-engineered)
-- [ ] KFX reader (Kindle Format 10 — proprietary Ion-based binary, no public spec; blocked on ecosystem)
+- [ ] MOBI / Mobipocket reader (KF7 — public spec, large existing corpus; boko is reference impl)
+- [ ] AZW3 reader/writer (KF8 — EPUB3 content in Mobipocket container; boko is reference impl)
+- [ ] KFX reader/writer (Kindle Format 10 — Ion binary layer has public spec at amazon-ion.github.io;
+  KFX schema layer is reverse-engineered with boko as reference; ion-rs not suitable yet so Ion
+  parser would be hand-rolled against spec, same as RST/AsciiDoc)
