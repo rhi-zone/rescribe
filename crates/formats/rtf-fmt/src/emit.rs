@@ -40,7 +40,11 @@ impl Ctx {
                 '{' => self.push("\\{"),
                 '}' => self.push("\\}"),
                 '\t' => self.push("\\tab "),
-                '\n' => self.push("\\line "),
+                // Emit newline/CR as hex escapes so they survive a parse round-trip.
+                // Bare \n/\r in RTF source are silently stripped by the parser;
+                // \'0a/\'0d are decoded back to the original character.
+                '\n' => self.push("\\'0a"),
+                '\r' => self.push("\\'0d"),
                 '\u{00A0}' => self.push("\\~"),
                 '\u{2002}' => self.push("\\enspace "),
                 '\u{2003}' => self.push("\\emspace "),
@@ -316,6 +320,18 @@ mod tests {
         let emitted = emit(&doc1);
         let (doc2, _) = parse(&emitted);
         assert_eq!(doc1.strip_spans(), doc2.strip_spans());
+    }
+
+    /// Regression: `\'0d` (hex CR) parsed to Text{"\r"}, which was emitted as
+    /// a literal `\r` (stripped on re-parse → empty AST).  Now emitted as
+    /// `\'0d` so it survives the round-trip.
+    #[test]
+    fn test_roundtrip_hex_cr() {
+        let input = "\\'0d";
+        let (ast1, _) = parse(input);
+        let emitted = emit(&ast1);
+        let (ast2, _) = parse(&emitted);
+        assert_eq!(ast1.strip_spans(), ast2.strip_spans());
     }
 
     #[test]

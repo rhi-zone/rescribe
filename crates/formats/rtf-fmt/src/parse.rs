@@ -94,16 +94,28 @@ impl<'a> Parser<'a> {
                             &mut para_start,
                         );
                     } else if next == '\'' {
-                        // \'XX hex-encoded byte (Windows-1252)
+                        // \'XX hex-encoded byte (Windows-1252).
+                        // Read two chars via current_char()/advance() to stay
+                        // on UTF-8 character boundaries (byte slicing panics).
                         self.advance(); // skip '\''
-                        if self.pos + 2 <= self.input.len() {
-                            let hex = &self.input[self.pos..self.pos + 2];
-                            if let Ok(code) = u8::from_str_radix(hex, 16) {
-                                // Treat as Windows-1252 if in non-ASCII range
-                                let decoded = windows1252_to_char(code);
-                                current_text.push(decoded);
+                        let hi = self.current_char();
+                        if hi.is_some() {
+                            self.advance();
+                        }
+                        let lo = self.current_char();
+                        if lo.is_some() {
+                            self.advance();
+                        }
+                        if let (Some(h), Some(l)) = (hi, lo)
+                            && h.is_ascii_hexdigit()
+                            && l.is_ascii_hexdigit()
+                        {
+                            let code =
+                                (h.to_digit(16).unwrap() * 16 + l.to_digit(16).unwrap()) as u8;
+                            if current_text.is_empty() {
+                                text_start = self.pos;
                             }
-                            self.pos += 2;
+                            current_text.push(windows1252_to_char(code));
                         }
                     } else {
                         // Control symbol
@@ -166,12 +178,24 @@ impl<'a> Parser<'a> {
         }
         if !current_para.is_empty() {
             paragraphs.push(Block::Paragraph {
-                inlines: current_para,
+                inlines: merge_text_inlines(current_para),
                 span: Span::new(para_start, self.pos),
             });
         }
 
+        // Normalize: merge adjacent Text nodes in every paragraph so that
+        // round-trip (parse → emit → parse) yields a structurally identical
+        // AST regardless of how text happened to be flushed during parsing.
         paragraphs
+            .into_iter()
+            .map(|b| match b {
+                Block::Paragraph { inlines, span } => Block::Paragraph {
+                    inlines: merge_text_inlines(inlines),
+                    span,
+                },
+                other => other,
+            })
+            .collect()
     }
 
     /// Skip past the `\rtf1` header word so we start processing at the
@@ -314,7 +338,7 @@ impl<'a> Parser<'a> {
                 }
                 if !current_para.is_empty() {
                     paragraphs.push(Block::Paragraph {
-                        inlines: std::mem::take(current_para),
+                        inlines: merge_text_inlines(std::mem::take(current_para)),
                         span: Span::new(*para_start, self.pos),
                     });
                 }
@@ -515,6 +539,58 @@ fn make_inline(text: &str, state: &TextState, span: Span) -> Inline {
     inline
 }
 
+/// Merge consecutive `Inline::Text` nodes into a single node.
+///
+/// This normalises the inline list so that round-tripping (parse → emit →
+/// parse) yields a structurally identical AST.  Without this, a `}` that
+/// closes a group flushes a Text node and the next characters start a new one;
+/// the emitter merges them back into a single token, so re-parsing produces
+/// one node where the original had two.
+fn merge_text_inlines(inlines: Vec<Inline>) -> Vec<Inline> {
+    let mut out: Vec<Inline> = Vec::with_capacity(inlines.len());
+    for inline in inlines {
+        // Recursively normalise children of container nodes.
+        let inline = match inline {
+            Inline::Bold { children, span } => Inline::Bold {
+                children: merge_text_inlines(children),
+                span,
+            },
+            Inline::Italic { children, span } => Inline::Italic {
+                children: merge_text_inlines(children),
+                span,
+            },
+            Inline::Underline { children, span } => Inline::Underline {
+                children: merge_text_inlines(children),
+                span,
+            },
+            Inline::Strikethrough { children, span } => Inline::Strikethrough {
+                children: merge_text_inlines(children),
+                span,
+            },
+            Inline::Superscript { children, span } => Inline::Superscript {
+                children: merge_text_inlines(children),
+                span,
+            },
+            Inline::Subscript { children, span } => Inline::Subscript {
+                children: merge_text_inlines(children),
+                span,
+            },
+            other => other,
+        };
+        // Merge adjacent Text nodes.
+        if let Inline::Text { text: new_text, .. } = &inline
+            && let Some(Inline::Text {
+                text: prev_text, ..
+            }) = out.last_mut()
+        {
+            prev_text.push_str(new_text);
+            continue;
+        }
+        out.push(inline);
+    }
+    out
+}
+
 /// Decode a Windows-1252 byte to a Unicode char.
 ///
 /// For bytes 0x00–0x7F it is identical to ASCII.  The range 0x80–0x9F is
@@ -637,6 +713,28 @@ mod tests {
             panic!("expected paragraph");
         };
         assert_ne!(*span, Span::NONE);
+    }
+
+    /// Regression: `\'XX` where XX spans a multi-byte UTF-8 char boundary
+    /// used to panic with a byte-level slice.
+    #[test]
+    fn test_hex_escape_multibyte_boundary() {
+        // bytes: \ ' p 0xD9 0x9B \  — the hex digits are 'p' + non-ASCII byte
+        let s = "\\'p\u{066B}\\";
+        let (doc, _) = parse(s); // must not panic
+        // 'p' is not a valid hex digit pair so no char is emitted; that's fine
+        let _ = doc;
+    }
+
+    /// Regression: raw `\t}\t` caused a roundtrip assertion failure because
+    /// the `}` flushed a Text node and the re-parse merged the two tabs.
+    #[test]
+    fn test_roundtrip_tab_group_close() {
+        let s = "\t}\t";
+        let (ast1, _) = parse(s);
+        let emitted = crate::emit::emit(&ast1);
+        let (ast2, _) = parse(&emitted);
+        assert_eq!(ast1.strip_spans(), ast2.strip_spans());
     }
 
     fn collect_text(inlines: &[Inline]) -> String {
