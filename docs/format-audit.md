@@ -84,7 +84,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | pptx | 3† | 3† | ooxml-pml | fuzz | fuzz |
 | xlsx | 3† | 3† | ooxml-sml | fuzz | fuzz |
 | pdf | 4† | – | pdf-extract | production | – |
-| rtf | 4 | 3 | rtf-fmt (standalone) | production | fuzz |
+| rtf | 4 | 4 | rtf-fmt (standalone) | production | production |
 | mobi | – | – | – (planned) | – | – |
 | azw3 | – | – | – (planned) | – | – |
 | kfx | – | – | – (planned) | – | – |
@@ -159,7 +159,9 @@ These formats have no reader; stage 3 (harness) is not applicable.
   block constructs (paragraph, heading, strong, emphasis, underline, strikeout,
   code-inline, code-block, link, list-unordered, list-ordered, blockquote,
   horizontal-rule, superscript, subscript); all passing in CI
-- Next: writer fuzz target, then production sign-off for both
+- Writer promoted to 4-Fuzz (2026-03-02): fuzz_rtf_writer (read→write pipeline,
+  2.8M execs, no crashes); both reader and writer at 4-Fuzz
+- Next: production sign-off (validate against real-world RTF files)
 
 ### ODT writer — medium risk
 - 404 lines building ODF zip by hand (no schema library)

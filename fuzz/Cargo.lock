@@ -696,10 +696,12 @@ dependencies = [
  "rescribe-read-org",
  "rescribe-read-pandoc-json",
  "rescribe-read-pdf",
+ "rescribe-read-rtf",
  "rescribe-std",
  "rescribe-write-djot",
  "rescribe-write-html",
  "rescribe-write-markdown",
+ "rescribe-write-rtf",
  "rtf-fmt",
 ]
 
@@ -770,6 +772,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-read-rtf"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "rtf-fmt",
+]
+
+[[package]]
 name = "rescribe-std"
 version = "0.1.0"
 dependencies = [
@@ -798,6 +809,15 @@ version = "0.1.0"
 dependencies = [
  "rescribe-core",
  "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-rtf"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "rtf-fmt",
 ]
 
 [[package]]
