@@ -1,0 +1,11 @@
+{
+  "description": "RTF document with bold inline text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "strong" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "bold text" } },
+    { "path": "/0/1", "kind": "text", "props": { "content": " normal text" } }
+  ]
+}

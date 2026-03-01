@@ -1,0 +1,7 @@
+{
+  "description": "Empty input must not panic and returns an empty document",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document", "children_count": 0 }
+  ]
+}

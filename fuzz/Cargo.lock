@@ -700,6 +700,7 @@ dependencies = [
  "rescribe-write-djot",
  "rescribe-write-html",
  "rescribe-write-markdown",
+ "rtf-fmt",
 ]
 
 [[package]]
@@ -798,6 +799,10 @@ dependencies = [
  "rescribe-core",
  "rescribe-std",
 ]
+
+[[package]]
+name = "rtf-fmt"
+version = "0.1.0"
 
 [[package]]
 name = "ryu"

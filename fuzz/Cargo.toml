@@ -41,6 +41,9 @@ path = "../crates/readers/rescribe-read-djot"
 [dependencies.rescribe-write-djot]
 path = "../crates/writers/rescribe-write-djot"
 
+[dependencies.rtf-fmt]
+path = "../crates/formats/rtf-fmt"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -113,6 +116,20 @@ bench = false
 [[bin]]
 name = "fuzz_djot_roundtrip"
 path = "fuzz_targets/djot_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_rtf_reader"
+path = "fuzz_targets/rtf_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_rtf_roundtrip"
+path = "fuzz_targets/rtf_roundtrip.rs"
 test = false
 doc = false
 bench = false

@@ -84,7 +84,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | pptx | 3† | 3† | ooxml-pml | fuzz | fuzz |
 | xlsx | 3† | 3† | ooxml-sml | fuzz | fuzz |
 | pdf | 4† | – | pdf-extract | production | – |
-| rtf | 2 | 2 | hand (⚠ high risk) | harness | harness |
+| rtf | 3 | 2 | rtf-fmt (standalone) | fuzz | harness |
 | mobi | – | – | – (planned) | – | – |
 | azw3 | – | – | – (planned) | – | – |
 | kfx | – | – | – (planned) | – | – |
@@ -142,11 +142,16 @@ These formats have no reader; stage 3 (harness) is not applicable.
 
 ## Risk areas
 
-### RTF — high risk
-- 454-line reader, 385-line writer, zero library backing
-- RTF is genuinely complex: group nesting, hex escaping, codepage handling, binary data blobs
-- `rtf-parser` on crates.io is a candidate replacement for the reader
-- See Priority 1 in TODO.md
+### RTF — on track
+
+- Promoted to standalone `rtf-fmt` library (2026-03-02): proper AST with source spans,
+  `parse(input) -> (RtfDoc, Vec<Diagnostic>)`, `emit(ast) -> String`, `events()` pull iterator
+- Group-state stack bug fixed (formatting now scopes correctly to `{...}` groups)
+- Windows-1252 codepage decoding added
+- Fuzz targets written and compiling; ready to run
+- Rescribe reader promoted to 3 (fixture suite: paragraph, heading, bold, italic, underline,
+  strikethrough, superscript, subscript, special_chars, multiple_paragraphs + adversarial)
+- Next: run fuzz targets for 1h+, then writer fixtures + writer harness
 
 ### ODT writer — medium risk
 - 404 lines building ODF zip by hand (no schema library)

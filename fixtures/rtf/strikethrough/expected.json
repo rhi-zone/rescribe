@@ -1,0 +1,10 @@
+{
+  "description": "RTF document with strikethrough inline text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "strikeout" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "struck text" } }
+  ]
+}

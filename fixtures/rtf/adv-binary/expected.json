@@ -1,0 +1,5 @@
+{
+  "description": "Non-RTF plain text must not panic and produces whatever the parser can infer",
+  "category": "adversarial",
+  "assertions": []
+}

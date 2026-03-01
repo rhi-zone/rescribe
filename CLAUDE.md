@@ -94,13 +94,28 @@ When adding fixtures, always think: "would a correct alternative implementation 
 - Format-specific kinds: `{format}:{name}` (`html:div`)
 - Properties: lowercase, colons for namespacing
 
+## Vertical completion checklist
+
+Each standalone format crate (`crates/formats/{name}/`) must satisfy all of:
+- `Ast` type with `Span` on every node
+- `parse(input) -> (Ast, Vec<Diagnostic>)` — infallible
+- `events(input) -> impl Iterator<Item = Event>` — pull tokenizer
+- `emit(ast) -> String` — round-trip guarantee
+- No-panic fuzz gate: arbitrary bytes must not panic (run 1h+)
+- Round-trip fuzz: `parse(emit(parse(s).0)).0.strip_spans() == parse(s).0.strip_spans()` (run 1h+)
+- Thin rescribe adapter ≤300 lines each side
+- Rescribe fixture suite at 3-Harness
+
+See `docs/format-library-design.md` for the full spec.
+**A vertical is not done until both fuzz targets have run clean for 1h+.**
+
 ## Marathon Mode
 
 When working autonomously:
 1. Work through todo list systematically
-2. Test against Pandoc fixtures after each format implementation
+2. For each format vertical: fixtures → harness → fuzz → commit
 3. Commit working increments (don't batch too much)
-4. Progress from simple formats to complex: markdown → HTML → others
+4. Progress in vertical priority order (see TODO.md)
 5. Keep this file updated with architecture changes
 6. Don't stop early - continue until blocked or todo list exhausted
 

@@ -133,8 +133,13 @@ For each format in priority order:
 2. Thin rescribe adapter (`rescribe-read-{fmt}`, `rescribe-write-{fmt}`)
 3. Owned fixture suite (2-Fixtures)
 4. Pandoc/oracle harness (3-Harness)
-5. Fuzz targets (4-Fuzz)
+5. Fuzz targets (4-Fuzz): **both** no-panic gate **and** round-trip property, run 1h+ each
 6. Production sign-off (5-Production)
+
+**A vertical is not done until step 5 passes.** Fixtures + harness without fuzz is only
+3-Harness. The round-trip fuzz harness is mandatory for standalone library verticals
+because it's the only way to catch emitter bugs at scale. See
+`docs/format-library-design.md` for the full per-vertical checklist.
 
 **Why verticals:** rescribe's goal is to *be* the Rust format ecosystem for formats
 that currently lack good libraries. Each vertical produces a publishable, standalone

@@ -1,11 +1,11 @@
 //! RTF (Rich Text Format) writer for rescribe.
 //!
 //! Thin adapter over [`rtf_fmt`]: maps the rescribe document model to
-//! the `rtf_fmt` AST, then builds RTF output.
+//! the `rtf_fmt` AST, then emits RTF output.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use rtf_fmt::{Block, Inline, RtfDoc, TableRow};
+use rtf_fmt::{Block, Inline, RtfDoc, Span, TableRow};
 
 /// Emit a document as RTF.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -18,13 +18,14 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let rtf = doc_to_rtf(doc);
-    let output = rtf_fmt::build(&rtf);
+    let output = rtf_fmt::emit(&rtf);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
 
 fn doc_to_rtf(doc: &Document) -> RtfDoc {
     RtfDoc {
         blocks: nodes_to_blocks(&doc.content.children),
+        span: Span::NONE,
     }
 }
 
@@ -42,20 +43,26 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
             vec![Block::Heading {
                 level,
                 inlines: nodes_to_inlines(&node.children),
+                span: Span::NONE,
             }]
         }
 
         node::PARAGRAPH => vec![Block::Paragraph {
             inlines: nodes_to_inlines(&node.children),
+            span: Span::NONE,
         }],
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            vec![Block::CodeBlock { content }]
+            vec![Block::CodeBlock {
+                content,
+                span: Span::NONE,
+            }]
         }
 
         node::BLOCKQUOTE => vec![Block::Blockquote {
             children: nodes_to_blocks(&node.children),
+            span: Span::NONE,
         }],
 
         node::LIST => {
@@ -66,7 +73,11 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                 .filter(|c| c.kind.as_str() == node::LIST_ITEM)
                 .map(|item| nodes_to_blocks(&item.children))
                 .collect();
-            vec![Block::List { ordered, items }]
+            vec![Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            }]
         }
 
         node::LIST_ITEM => nodes_to_blocks(&node.children),
@@ -84,12 +95,16 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                         .iter()
                         .map(|cell| nodes_to_inlines(&cell.children))
                         .collect(),
+                    span: Span::NONE,
                 })
                 .collect();
-            vec![Block::Table { rows }]
+            vec![Block::Table {
+                rows,
+                span: Span::NONE,
+            }]
         }
 
-        node::HORIZONTAL_RULE => vec![Block::HorizontalRule],
+        node::HORIZONTAL_RULE => vec![Block::HorizontalRule { span: Span::NONE }],
 
         node::DIV | node::SPAN | node::FIGURE => nodes_to_blocks(&node.children),
 
@@ -97,6 +112,7 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
         node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
             vec![Block::Paragraph {
                 inlines: nodes_to_inlines(std::slice::from_ref(node)),
+                span: Span::NONE,
             }]
         }
 
@@ -111,33 +127,39 @@ fn nodes_to_inlines(nodes: &[Node]) -> Vec<Inline> {
 fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Text(s)
+            let text = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Text {
+                text,
+                span: Span::NONE,
+            }
         }
 
-        node::STRONG => Inline::Bold(nodes_to_inlines(&node.children)),
+        node::STRONG => Inline::Bold {
+            children: nodes_to_inlines(&node.children),
+            span: Span::NONE,
+        },
 
-        node::EMPHASIS => Inline::Italic(nodes_to_inlines(&node.children)),
+        node::EMPHASIS => Inline::Italic {
+            children: nodes_to_inlines(&node.children),
+            span: Span::NONE,
+        },
 
-        node::UNDERLINE => Inline::Underline(nodes_to_inlines(&node.children)),
+        node::UNDERLINE => Inline::Underline {
+            children: nodes_to_inlines(&node.children),
+            span: Span::NONE,
+        },
 
-        node::STRIKEOUT => Inline::Strikethrough(nodes_to_inlines(&node.children)),
+        node::STRIKEOUT => Inline::Strikethrough {
+            children: nodes_to_inlines(&node.children),
+            span: Span::NONE,
+        },
 
         node::CODE => {
-            let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            let mut children = nodes_to_inlines(&node.children);
-            if !s.is_empty() {
-                children.insert(0, Inline::Text(s));
+            let text = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Code {
+                text,
+                span: Span::NONE,
             }
-            Inline::Code(
-                children
-                    .iter()
-                    .map(|i| match i {
-                        Inline::Text(t) => t.clone(),
-                        _ => String::new(),
-                    })
-                    .collect(),
-            )
         }
 
         node::LINK => {
@@ -145,33 +167,48 @@ fn node_to_inline(node: &Node) -> Inline {
             Inline::Link {
                 url,
                 children: nodes_to_inlines(&node.children),
+                span: Span::NONE,
             }
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let alt = node.props.get_str(prop::ALT).unwrap_or("").to_string();
-            Inline::Image { url, alt }
+            Inline::Image {
+                url,
+                alt,
+                span: Span::NONE,
+            }
         }
 
-        node::LINE_BREAK => Inline::LineBreak,
+        node::LINE_BREAK => Inline::LineBreak { span: Span::NONE },
 
-        node::SOFT_BREAK => Inline::SoftBreak,
+        node::SOFT_BREAK => Inline::SoftBreak { span: Span::NONE },
 
-        node::SUPERSCRIPT => Inline::Superscript(nodes_to_inlines(&node.children)),
+        node::SUPERSCRIPT => Inline::Superscript {
+            children: nodes_to_inlines(&node.children),
+            span: Span::NONE,
+        },
 
-        node::SUBSCRIPT => Inline::Subscript(nodes_to_inlines(&node.children)),
+        node::SUBSCRIPT => Inline::Subscript {
+            children: nodes_to_inlines(&node.children),
+            span: Span::NONE,
+        },
 
         _ => {
-            // Unknown inline: recurse into children, or emit empty text
             let children = nodes_to_inlines(&node.children);
             if children.is_empty() {
-                Inline::Text(String::new())
+                Inline::Text {
+                    text: String::new(),
+                    span: Span::NONE,
+                }
             } else if children.len() == 1 {
                 children.into_iter().next().unwrap()
             } else {
-                // Wrap in a span-like bold to group — best effort
-                Inline::Bold(children)
+                Inline::Bold {
+                    children,
+                    span: Span::NONE,
+                }
             }
         }
     }

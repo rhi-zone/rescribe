@@ -17,7 +17,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let rtf = rtf_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (rtf, _diagnostics) = rtf_fmt::parse(input);
     let nodes = doc_to_nodes(&rtf);
     let root = Node::new(node::DOCUMENT).children(nodes);
     let doc = Document::new().with_content(root);
@@ -30,23 +30,23 @@ fn doc_to_nodes(rtf: &RtfDoc) -> Vec<Node> {
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))
         }
 
-        Block::Heading { level, inlines } => Node::new(node::HEADING)
+        Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .children(inlines_to_nodes(inlines)),
 
-        Block::CodeBlock { content } => {
+        Block::CodeBlock { content, .. } => {
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
         }
 
-        Block::Blockquote { children } => {
+        Block::Blockquote { children, .. } => {
             Node::new(node::BLOCKQUOTE).children(children.iter().map(block_to_node))
         }
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_blocks| {
@@ -58,7 +58,7 @@ fn block_to_node(block: &Block) -> Node {
                 .children(list_items)
         }
 
-        Block::Table { rows } => {
+        Block::Table { rows, .. } => {
             let row_nodes: Vec<Node> = rows
                 .iter()
                 .map(|row| {
@@ -73,7 +73,7 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::TABLE).children(row_nodes)
         }
 
-        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
@@ -83,39 +83,43 @@ fn inlines_to_nodes(inlines: &[Inline]) -> Vec<Node> {
 
 fn inline_to_node(inline: &Inline) -> Node {
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Text { text, .. } => Node::new(node::TEXT).prop(prop::CONTENT, text.clone()),
 
-        Inline::Bold(children) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
+        Inline::Bold { children, .. } => {
+            Node::new(node::STRONG).children(inlines_to_nodes(children))
+        }
 
-        Inline::Italic(children) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
+        Inline::Italic { children, .. } => {
+            Node::new(node::EMPHASIS).children(inlines_to_nodes(children))
+        }
 
-        Inline::Underline(children) => {
+        Inline::Underline { children, .. } => {
             Node::new(node::UNDERLINE).children(inlines_to_nodes(children))
         }
 
-        Inline::Strikethrough(children) => {
+        Inline::Strikethrough { children, .. } => {
             Node::new(node::STRIKEOUT).children(inlines_to_nodes(children))
         }
 
-        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        Inline::Code { text, .. } => Node::new(node::CODE).prop(prop::CONTENT, text.clone()),
 
-        Inline::Link { url, children } => Node::new(node::LINK)
+        Inline::Link { url, children, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .children(inlines_to_nodes(children)),
 
-        Inline::Image { url, alt } => Node::new(node::IMAGE)
+        Inline::Image { url, alt, .. } => Node::new(node::IMAGE)
             .prop(prop::URL, url.clone())
             .prop(prop::ALT, alt.clone()),
 
-        Inline::LineBreak => Node::new(node::LINE_BREAK),
+        Inline::LineBreak { .. } => Node::new(node::LINE_BREAK),
 
-        Inline::SoftBreak => Node::new(node::SOFT_BREAK),
+        Inline::SoftBreak { .. } => Node::new(node::SOFT_BREAK),
 
-        Inline::Superscript(children) => {
+        Inline::Superscript { children, .. } => {
             Node::new(node::SUPERSCRIPT).children(inlines_to_nodes(children))
         }
 
-        Inline::Subscript(children) => {
+        Inline::Subscript { children, .. } => {
             Node::new(node::SUBSCRIPT).children(inlines_to_nodes(children))
         }
     }
@@ -138,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_parse_bold() {
-        let doc = parse_str(r"{\rtf1 \b bold text\b0  normal\par}");
+        let doc = parse_str(r"{\rtf1 \b bold text\b0 normal\par}");
         let para = &doc.content.children[0];
         assert!(
             para.children

@@ -1,0 +1,13 @@
+{
+  "description": "RTF document with three paragraphs",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "First paragraph." } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Second paragraph." } },
+    { "path": "/2", "kind": "paragraph" },
+    { "path": "/2/0", "kind": "text", "props": { "content": "Third paragraph." } }
+  ]
+}

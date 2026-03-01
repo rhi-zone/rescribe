@@ -1,0 +1,5 @@
+{
+  "description": "Truncated RTF (no closing brace, no \\par) must not panic",
+  "category": "adversarial",
+  "assertions": []
+}
