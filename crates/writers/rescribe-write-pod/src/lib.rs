@@ -15,247 +15,154 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
+    let blocks = doc
+        .content
+        .children
+        .iter()
+        .map(convert_node_to_block)
+        .collect();
+    let pod_doc = pod_fmt::PodDoc { blocks };
+    let output = pod_fmt::build(&pod_doc);
 
-    ctx.write("=pod\n\n");
-    emit_nodes(&doc.content.children, &mut ctx);
-    ctx.write("=cut\n");
-
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-struct EmitContext {
-    output: String,
-}
-
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-}
-
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_node_to_block(node: &Node) -> pod_fmt::Block {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
-
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).clamp(1, 6);
-            ctx.write(&format!("=head{} ", level));
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).clamp(1, 6) as u32;
+            let inlines = node.children.iter().map(convert_node_to_inline).collect();
+            pod_fmt::Block::Heading { level, inlines }
         }
 
         node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let inlines = node.children.iter().map(convert_node_to_inline).collect();
+            pod_fmt::Block::Paragraph { inlines }
         }
 
         node::CODE_BLOCK => {
-            // Verbatim paragraphs need 4-space indentation
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                for line in content.lines() {
-                    ctx.write("    ");
-                    ctx.write(line);
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("\n");
-        }
-
-        node::BLOCKQUOTE => {
-            // POD doesn't have native blockquote, use indentation
-            for child in &node.children {
-                emit_node(child, ctx);
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            pod_fmt::Block::CodeBlock { content }
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            ctx.write("=over 4\n\n");
-
-            let mut num = 1;
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    if ordered {
-                        ctx.write(&format!("=item {}. ", num));
-                        num += 1;
-                    } else {
-                        ctx.write("=item * ");
-                    }
-
-                    // Emit first paragraph inline with =item
-                    let mut first = true;
-                    for item_child in &child.children {
-                        if first && item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, ctx);
-                            ctx.write("\n\n");
-                            first = false;
-                        } else {
-                            emit_node(item_child, ctx);
-                        }
-                    }
-                }
-            }
-
-            ctx.write("=back\n\n");
+            let items = node
+                .children
+                .iter()
+                .filter(|n| n.kind.as_str() == node::LIST_ITEM)
+                .map(|item_node| {
+                    item_node
+                        .children
+                        .iter()
+                        .map(convert_node_to_block)
+                        .collect()
+                })
+                .collect();
+            pod_fmt::Block::List { ordered, items }
         }
 
-        node::LIST_ITEM => {
-            emit_nodes(&node.children, ctx);
-        }
-
-        node::HORIZONTAL_RULE => {
-            // POD doesn't have native horizontal rule
-            ctx.write("\n");
+        node::BLOCKQUOTE => {
+            // POD doesn't have native blockquote; output as paragraph with children
+            let inlines = node.children.iter().map(convert_node_to_inline).collect();
+            pod_fmt::Block::Paragraph { inlines }
         }
 
         node::TABLE => {
-            // POD doesn't have native tables, render as verbatim
-            ctx.write("    ");
-            for row in &node.children {
-                if row.kind.as_str() == node::TABLE_ROW {
-                    for (i, cell) in row.children.iter().enumerate() {
-                        if i > 0 {
-                            ctx.write(" | ");
-                        }
-                        let mut cell_text = String::new();
-                        collect_text(&cell.children, &mut cell_text);
-                        ctx.write(&cell_text);
-                    }
-                    ctx.write("\n    ");
-                }
+            // POD doesn't have native tables; render as paragraph placeholder
+            pod_fmt::Block::Paragraph {
+                inlines: vec![pod_fmt::Inline::Text(
+                    "[Table not supported in POD]".to_string(),
+                )],
             }
-            ctx.write("\n");
         }
-
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
-
-        node::FIGURE => emit_nodes(&node.children, ctx),
 
         // Inline nodes at block level
         node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            emit_inline_node(node, ctx);
-            ctx.write("\n\n");
+            let inlines = vec![convert_node_to_inline(node)];
+            pod_fmt::Block::Paragraph { inlines }
         }
 
-        _ => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => {
+            // Document nodes get skipped; children become blocks
+            pod_fmt::Block::Paragraph { inlines: vec![] }
+        }
+
+        _ => {
+            // Default: collect text from children
+            let inlines = node.children.iter().map(convert_node_to_inline).collect();
+            pod_fmt::Block::Paragraph { inlines }
+        }
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_inline_node(node, ctx);
-    }
-}
-
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_node_to_inline(node: &Node) -> pod_fmt::Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                // Escape < and > in plain text
-                let escaped = content.replace('<', "E<lt>").replace('>', "E<gt>");
-                ctx.write(&escaped);
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            pod_fmt::Inline::Text(content)
         }
 
         node::STRONG => {
-            ctx.write("B<");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write(">");
+            let children = node.children.iter().map(convert_node_to_inline).collect();
+            pod_fmt::Inline::Bold(children)
         }
 
         node::EMPHASIS => {
-            ctx.write("I<");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write(">");
+            let children = node.children.iter().map(convert_node_to_inline).collect();
+            pod_fmt::Inline::Italic(children)
         }
 
         node::UNDERLINE => {
-            ctx.write("U<");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write(">");
-        }
-
-        node::STRIKEOUT => {
-            // POD doesn't have strikethrough
-            emit_inline_nodes(&node.children, ctx);
+            let children = node.children.iter().map(convert_node_to_inline).collect();
+            pod_fmt::Inline::Underline(children)
         }
 
         node::CODE => {
-            let content = node.props.get_str(prop::CONTENT).unwrap_or("");
-            // Use double brackets if content contains > or <
-            if content.contains('>') || content.contains('<') {
-                ctx.write("C<< ");
-                ctx.write(content);
-                ctx.write(" >>");
-            } else {
-                ctx.write("C<");
-                ctx.write(content);
-                ctx.write(">");
-            }
-            // Handle any children
-            if !node.children.is_empty() {
-                emit_inline_nodes(&node.children, ctx);
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            pod_fmt::Inline::Code(content)
         }
 
         node::LINK => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                // Check if we have label text
-                let mut label_text = String::new();
-                collect_text(&node.children, &mut label_text);
-
-                if label_text.is_empty() || label_text == url {
-                    ctx.write("L<");
-                    ctx.write(url);
-                    ctx.write(">");
-                } else {
-                    ctx.write("L<");
-                    ctx.write(&label_text);
-                    ctx.write("|");
-                    ctx.write(url);
-                    ctx.write(">");
-                }
-            } else {
-                emit_inline_nodes(&node.children, ctx);
-            }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let mut label = String::new();
+            collect_text(&node.children, &mut label);
+            pod_fmt::Inline::Link { url, label }
         }
 
-        node::IMAGE => {
-            // POD doesn't support images
-            if let Some(alt) = node.props.get_str(prop::ALT) {
-                ctx.write("[Image: ");
-                ctx.write(alt);
-                ctx.write("]");
+        node::STRIKEOUT => {
+            // POD doesn't support strikethrough; render as text
+            let children: Vec<pod_fmt::Inline> =
+                node.children.iter().map(convert_node_to_inline).collect();
+            if children.is_empty() {
+                pod_fmt::Inline::Text(String::new())
+            } else {
+                children.into_iter().next().unwrap()
             }
         }
 
         node::SUBSCRIPT | node::SUPERSCRIPT => {
-            // POD doesn't support sub/superscript
-            emit_inline_nodes(&node.children, ctx);
+            // POD doesn't support sub/superscript; collect text
+            let mut text = String::new();
+            collect_text(&node.children, &mut text);
+            pod_fmt::Inline::Text(text)
         }
 
-        node::LINE_BREAK => {
-            ctx.write("\n");
+        node::LINE_BREAK => pod_fmt::Inline::Text("\n".to_string()),
+
+        node::SOFT_BREAK => pod_fmt::Inline::Text(" ".to_string()),
+
+        node::IMAGE => {
+            let alt = node.props.get_str(prop::ALT).unwrap_or("").to_string();
+            pod_fmt::Inline::Text(format!("[Image: {}]", alt))
         }
 
-        node::SOFT_BREAK => {
-            ctx.write(" ");
+        _ => {
+            // Default: collect text from children
+            let mut text = String::new();
+            collect_text(&node.children, &mut text);
+            pod_fmt::Inline::Text(text)
         }
-
-        _ => emit_inline_nodes(&node.children, ctx),
     }
 }
 

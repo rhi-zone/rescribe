@@ -15,227 +15,194 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
+    let blocks = convert_nodes(&doc.content.children);
+    let haddock_doc = haddock_fmt::HaddockDoc { blocks };
+    let output = haddock_fmt::build(&haddock_doc);
 
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-struct EmitContext {
-    output: String,
+fn convert_nodes(nodes: &[Node]) -> Vec<haddock_fmt::Block> {
+    nodes.iter().map(convert_node).collect()
 }
 
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-}
-
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_node(node: &Node) -> haddock_fmt::Block {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => {
+            let blocks: Vec<_> = node.children.iter().map(convert_node).collect();
+            if blocks.is_empty() {
+                haddock_fmt::Block::Paragraph { inlines: vec![] }
+            } else {
+                blocks.into_iter().next().unwrap()
+            }
+        }
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(6) as usize;
-            for _ in 0..level {
-                ctx.write("=");
-            }
-            ctx.write(" ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(6) as u8;
+            let inlines = convert_inlines(&node.children);
+            haddock_fmt::Block::Heading { level, inlines }
         }
 
         node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let inlines = convert_inlines(&node.children);
+            haddock_fmt::Block::Paragraph { inlines }
         }
 
         node::CODE_BLOCK => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                for line in content.lines() {
-                    ctx.write("> ");
-                    ctx.write(line);
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("\n");
-        }
-
-        node::BLOCKQUOTE => {
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("\n");
-                } else {
-                    emit_node(child, ctx);
-                }
-            }
-            ctx.write("\n");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            haddock_fmt::Block::CodeBlock { content }
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let mut num = 1;
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    if ordered {
-                        ctx.write(&format!("({}) ", num));
-                        num += 1;
-                    } else {
-                        ctx.write("* ");
+            let items: Vec<Vec<haddock_fmt::Inline>> = node
+                .children
+                .iter()
+                .filter(|child| child.kind.as_str() == node::LIST_ITEM)
+                .map(|item| {
+                    let mut inlines = Vec::new();
+                    for item_child in &item.children {
+                        inlines.extend(convert_inlines(&item_child.children));
                     }
+                    inlines
+                })
+                .collect();
 
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, ctx);
-                        } else {
-                            emit_node(item_child, ctx);
-                        }
-                    }
-                    ctx.write("\n");
-                }
+            if ordered {
+                haddock_fmt::Block::OrderedList { items }
+            } else {
+                haddock_fmt::Block::UnorderedList { items }
             }
-            ctx.write("\n");
-        }
-
-        node::LIST_ITEM => {
-            emit_nodes(&node.children, ctx);
         }
 
         node::DEFINITION_LIST => {
+            let mut items = Vec::new();
             let mut i = 0;
             while i < node.children.len() {
-                let child = &node.children[i];
-                if child.kind.as_str() == node::DEFINITION_TERM {
-                    ctx.write("[");
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("] ");
-
-                    // Look for following description
-                    if i + 1 < node.children.len() {
-                        let next = &node.children[i + 1];
-                        if next.kind.as_str() == node::DEFINITION_DESC {
-                            for desc_child in &next.children {
-                                if desc_child.kind.as_str() == node::PARAGRAPH {
-                                    emit_inline_nodes(&desc_child.children, ctx);
-                                } else {
-                                    emit_node(desc_child, ctx);
-                                }
-                            }
-                            i += 1;
+                if node.children[i].kind.as_str() == node::DEFINITION_TERM {
+                    let term_inlines = convert_inlines(&node.children[i].children);
+                    let desc_inlines = if i + 1 < node.children.len()
+                        && node.children[i + 1].kind.as_str() == node::DEFINITION_DESC
+                    {
+                        let desc_node = &node.children[i + 1];
+                        let mut inlines = Vec::new();
+                        for desc_child in &desc_node.children {
+                            inlines.extend(convert_inlines(&desc_child.children));
                         }
+                        inlines
+                    } else {
+                        Vec::new()
+                    };
+                    items.push((term_inlines, desc_inlines));
+                    if i + 1 < node.children.len()
+                        && node.children[i + 1].kind.as_str() == node::DEFINITION_DESC
+                    {
+                        i += 2;
+                    } else {
+                        i += 1;
                     }
-                    ctx.write("\n");
+                } else {
+                    i += 1;
                 }
-                i += 1;
             }
-            ctx.write("\n");
+            haddock_fmt::Block::DefinitionList { items }
         }
 
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
-
-        node::FIGURE => emit_nodes(&node.children, ctx),
-
-        // Inline nodes at block level
-        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            emit_inline_node(node, ctx);
-            ctx.write("\n\n");
+        node::DIV | node::SPAN => {
+            let blocks = convert_nodes(&node.children);
+            if let Some(first) = blocks.first() {
+                first.clone()
+            } else {
+                haddock_fmt::Block::Paragraph { inlines: vec![] }
+            }
         }
 
-        _ => emit_nodes(&node.children, ctx),
+        node::FIGURE => {
+            let blocks = convert_nodes(&node.children);
+            if let Some(first) = blocks.first() {
+                first.clone()
+            } else {
+                haddock_fmt::Block::Paragraph { inlines: vec![] }
+            }
+        }
+
+        _ => {
+            let blocks = convert_nodes(&node.children);
+            if let Some(first) = blocks.first() {
+                first.clone()
+            } else {
+                haddock_fmt::Block::Paragraph { inlines: vec![] }
+            }
+        }
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_inline_node(node, ctx);
-    }
+fn convert_inlines(nodes: &[Node]) -> Vec<haddock_fmt::Inline> {
+    nodes.iter().map(convert_inline).collect()
 }
 
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_inline(node: &Node) -> haddock_fmt::Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
-        }
-
-        node::STRONG => {
-            ctx.write("__");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("__");
-        }
-
-        node::EMPHASIS => {
-            ctx.write("/");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("/");
-        }
-
-        node::STRIKEOUT | node::UNDERLINE => {
-            // Haddock doesn't support these, emit as-is
-            emit_inline_nodes(&node.children, ctx);
-        }
-
-        node::SUPERSCRIPT | node::SUBSCRIPT => {
-            // Haddock doesn't support these
-            emit_inline_nodes(&node.children, ctx);
+            let text = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            haddock_fmt::Inline::Text(text)
         }
 
         node::CODE => {
-            ctx.write("@");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("@");
+            let text = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            haddock_fmt::Inline::Code(text)
+        }
+
+        node::STRONG => {
+            let children = convert_inlines(&node.children);
+            haddock_fmt::Inline::Strong(children)
+        }
+
+        node::EMPHASIS => {
+            let children = convert_inlines(&node.children);
+            haddock_fmt::Inline::Emphasis(children)
         }
 
         node::LINK => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("\"");
-                emit_inline_nodes(&node.children, ctx);
-                ctx.write("\"<");
-                ctx.write(url);
-                ctx.write(">");
-            } else {
-                emit_inline_nodes(&node.children, ctx);
-            }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let text = extract_text(&node.children);
+            haddock_fmt::Inline::Link { url, text }
         }
 
         node::IMAGE => {
-            // Haddock uses HTML for images, use URL link
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("<");
-                ctx.write(url);
-                ctx.write(">");
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            haddock_fmt::Inline::Link {
+                url: url.clone(),
+                text: url,
             }
         }
 
-        node::LINE_BREAK => {
-            ctx.write("\n");
+        _ => {
+            let children = convert_inlines(&node.children);
+            if !children.is_empty() {
+                children.into_iter().next().unwrap()
+            } else {
+                haddock_fmt::Inline::Text(String::new())
+            }
         }
-
-        node::SOFT_BREAK => {
-            ctx.write(" ");
-        }
-
-        _ => emit_inline_nodes(&node.children, ctx),
     }
+}
+
+fn extract_text(nodes: &[Node]) -> String {
+    let mut text = String::new();
+    for node in nodes {
+        match node.kind.as_str() {
+            node::TEXT => {
+                if let Some(content) = node.props.get_str(prop::CONTENT) {
+                    text.push_str(content);
+                }
+            }
+            _ => {
+                text.push_str(&extract_text(&node.children));
+            }
+        }
+    }
+    text
 }
 
 #[cfg(test)]

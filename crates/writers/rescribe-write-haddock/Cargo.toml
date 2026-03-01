@@ -9,3 +9,4 @@ description = "Haddock markup writer for rescribe"
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+haddock-fmt.workspace = true

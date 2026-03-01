@@ -15,18 +15,15 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
+    let doc = tsv_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+
     let mut table = Node::new(node::TABLE);
     let mut is_first_row = true;
 
-    for line in input.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-
+    for row_fields in &doc.rows {
         let mut row = Node::new(node::TABLE_ROW);
-        let fields = parse_tsv_line(line);
 
-        for field in fields {
+        for field in row_fields {
             let cell_kind = if is_first_row {
                 node::TABLE_HEADER
             } else {
@@ -49,42 +46,6 @@ pub fn parse_with_options(
     };
 
     Ok(ConversionResult::ok(doc))
-}
-
-fn parse_tsv_line(line: &str) -> Vec<String> {
-    // TSV is simpler than CSV - just split on tabs
-    // Quoted fields can contain tabs and newlines
-    let mut fields = Vec::new();
-    let mut current_field = String::new();
-    let mut in_quotes = false;
-    let mut chars = line.chars().peekable();
-
-    while let Some(c) = chars.next() {
-        match c {
-            '"' if !in_quotes => {
-                in_quotes = true;
-            }
-            '"' if in_quotes => {
-                // Check for escaped quote
-                if chars.peek() == Some(&'"') {
-                    current_field.push('"');
-                    chars.next();
-                } else {
-                    in_quotes = false;
-                }
-            }
-            '\t' if !in_quotes => {
-                fields.push(current_field);
-                current_field = String::new();
-            }
-            _ => {
-                current_field.push(c);
-            }
-        }
-    }
-
-    fields.push(current_field);
-    fields
 }
 
 #[cfg(test)]
@@ -111,11 +72,5 @@ mod tests {
         let table = &doc.content.children[0];
         let data_row = &table.children[1];
         assert_eq!(data_row.children.len(), 2);
-    }
-
-    #[test]
-    fn test_parse_tsv_line() {
-        assert_eq!(parse_tsv_line("a\tb\tc"), vec!["a", "b", "c"]);
-        assert_eq!(parse_tsv_line("\"a\tb\"\tc"), vec!["a\tb", "c"]);
     }
 }

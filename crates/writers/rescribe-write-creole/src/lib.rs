@@ -1,6 +1,7 @@
 //! Creole wiki markup writer for rescribe.
 //!
-//! Emits documents as Creole wiki markup.
+//! Thin adapter translating rescribe documents
+//! to the format-independent `creole` crate, then to Creole markup.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
@@ -15,254 +16,145 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
-
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
+    let blocks = convert_nodes(&doc.content.children);
+    let creole_doc = creole::CreoleDoc { blocks };
+    let output = creole::build(&creole_doc);
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-struct EmitContext {
-    output: String,
-    list_depth: usize,
+fn convert_nodes(nodes: &[Node]) -> Vec<creole::Block> {
+    nodes.iter().map(convert_node).collect()
 }
 
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-            list_depth: 0,
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-}
-
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_node(node: &Node) -> creole::Block {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => {
+            // Shouldn't happen in well-formed rescribe tree, but handle it
+            let children = convert_nodes(&node.children);
+            // Return the first block or an empty paragraph
+            children
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| creole::Block::Paragraph { inlines: vec![] })
+        }
+
+        node::PARAGRAPH => creole::Block::Paragraph {
+            inlines: convert_inlines(&node.children),
+        },
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(6) as usize;
-            for _ in 0..level {
-                ctx.write("=");
+            let level = (node.props.get_int(prop::LEVEL).unwrap_or(1).clamp(1, 6)) as u8;
+            creole::Block::Heading {
+                level,
+                inlines: convert_inlines(&node.children),
             }
-            ctx.write(" ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write(" ");
-            for _ in 0..level {
-                ctx.write("=");
-            }
-            ctx.write("\n\n");
-        }
-
-        node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
         }
 
         node::CODE_BLOCK => {
-            ctx.write("{{{\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-                if !content.ends_with('\n') {
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("}}}\n\n");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            creole::Block::CodeBlock { content }
         }
 
-        node::BLOCKQUOTE => {
-            // Creole doesn't have blockquote syntax, use indentation
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    ctx.write("> ");
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("\n");
-                } else {
-                    emit_node(child, ctx);
-                }
-            }
-            ctx.write("\n");
-        }
+        node::BLOCKQUOTE => creole::Block::Blockquote {
+            children: convert_nodes(&node.children),
+        },
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let marker = if ordered { "#" } else { "*" };
-            ctx.list_depth += 1;
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    for _ in 0..ctx.list_depth {
-                        ctx.write(marker);
-                    }
-                    ctx.write(" ");
-
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, ctx);
-                        } else if item_child.kind.as_str() == node::LIST {
-                            ctx.write("\n");
-                            emit_node(item_child, ctx);
-                            continue;
-                        } else {
-                            emit_node(item_child, ctx);
-                        }
-                    }
-                    ctx.write("\n");
-                }
-            }
-
-            ctx.list_depth -= 1;
-            if ctx.list_depth == 0 {
-                ctx.write("\n");
-            }
-        }
-
-        node::LIST_ITEM => {
-            emit_nodes(&node.children, ctx);
+            let items: Vec<Vec<creole::Block>> = node
+                .children
+                .iter()
+                .filter(|child| child.kind.as_str() == node::LIST_ITEM)
+                .map(|item| convert_nodes(&item.children))
+                .collect();
+            creole::Block::List { ordered, items }
         }
 
         node::TABLE => {
-            for child in &node.children {
-                emit_table_element(child, ctx);
-            }
-            ctx.write("\n");
+            let rows: Vec<creole::TableRow> = node
+                .children
+                .iter()
+                .filter(|child| child.kind.as_str() == node::TABLE_ROW)
+                .map(|row| creole::TableRow {
+                    cells: row
+                        .children
+                        .iter()
+                        .map(|cell| creole::TableCell {
+                            is_header: cell.kind.as_str() == node::TABLE_HEADER,
+                            inlines: convert_inlines(&cell.children),
+                        })
+                        .collect(),
+                })
+                .collect();
+            creole::Block::Table { rows }
         }
 
-        node::HORIZONTAL_RULE => {
-            ctx.write("----\n\n");
-        }
+        node::HORIZONTAL_RULE => creole::Block::HorizontalRule,
 
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
-
-        node::FIGURE => emit_nodes(&node.children, ctx),
-
-        // Inline nodes at block level
-        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            emit_inline_node(node, ctx);
-            ctx.write("\n\n");
-        }
-
-        _ => emit_nodes(&node.children, ctx),
+        // Handle other nodes by recursing on children
+        _ => creole::Block::Paragraph {
+            inlines: convert_inlines(&node.children),
+        },
     }
 }
 
-fn emit_table_element(node: &Node, ctx: &mut EmitContext) {
-    match node.kind.as_str() {
-        node::TABLE_HEAD | node::TABLE_BODY | node::TABLE_FOOT => {
-            for child in &node.children {
-                emit_table_element(child, ctx);
-            }
-        }
-        node::TABLE_ROW => {
-            for cell in &node.children {
-                if cell.kind.as_str() == node::TABLE_HEADER {
-                    ctx.write("|=");
-                } else {
-                    ctx.write("|");
-                }
-                emit_inline_nodes(&cell.children, ctx);
-            }
-            ctx.write("|\n");
-        }
-        _ => {}
-    }
+fn convert_inlines(nodes: &[Node]) -> Vec<creole::Inline> {
+    nodes.iter().map(convert_inline).collect()
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_inline_node(node, ctx);
-    }
-}
-
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_inline(node: &Node) -> creole::Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            creole::Inline::Text(content)
         }
 
-        node::STRONG => {
-            ctx.write("**");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("**");
-        }
+        node::STRONG => creole::Inline::Bold(convert_inlines(&node.children)),
 
-        node::EMPHASIS => {
-            ctx.write("//");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("//");
-        }
-
-        node::STRIKEOUT => {
-            // Creole doesn't have strikeout, emit as-is
-            emit_inline_nodes(&node.children, ctx);
-        }
-
-        node::UNDERLINE => {
-            // Creole doesn't have underline, emit as-is
-            emit_inline_nodes(&node.children, ctx);
-        }
-
-        node::SUPERSCRIPT | node::SUBSCRIPT => {
-            // Creole doesn't have super/subscript
-            emit_inline_nodes(&node.children, ctx);
-        }
+        node::EMPHASIS => creole::Inline::Italic(convert_inlines(&node.children)),
 
         node::CODE => {
-            ctx.write("{{{");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}}}");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            creole::Inline::Code(content)
         }
 
         node::LINK => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("[[");
-                ctx.write(url);
-                if !node.children.is_empty() {
-                    ctx.write("|");
-                    emit_inline_nodes(&node.children, ctx);
-                }
-                ctx.write("]]");
-            } else {
-                emit_inline_nodes(&node.children, ctx);
-            }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let children = convert_inlines(&node.children);
+            creole::Inline::Link { url, children }
         }
 
         node::IMAGE => {
-            ctx.write("{{");
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write(url);
-                if let Some(alt) = node.props.get_str(prop::ALT) {
-                    ctx.write("|");
-                    ctx.write(alt);
-                }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
+            creole::Inline::Image { url, alt }
+        }
+
+        node::LINE_BREAK => creole::Inline::LineBreak,
+
+        // Creole doesn't have strikethrough, underline, superscript, subscript
+        // Just emit the children instead
+        node::STRIKEOUT | node::UNDERLINE | node::SUPERSCRIPT | node::SUBSCRIPT => {
+            // Wrap multiple inlines in a text node if they're all text
+            let children = convert_inlines(&node.children);
+            if children.len() == 1 {
+                children.into_iter().next().unwrap()
+            } else {
+                creole::Inline::Text(format!("{:?}", children))
             }
-            ctx.write("}}");
         }
 
-        node::LINE_BREAK => {
-            ctx.write("\\\\");
+        // Fallback: recurse
+        _ => {
+            let children = convert_inlines(&node.children);
+            if children.is_empty() {
+                creole::Inline::Text(String::new())
+            } else if children.len() == 1 {
+                children.into_iter().next().unwrap()
+            } else {
+                creole::Inline::Text(format!("{:?}", children))
+            }
         }
-
-        node::SOFT_BREAK => {
-            ctx.write(" ");
-        }
-
-        _ => emit_inline_nodes(&node.children, ctx),
     }
 }
 

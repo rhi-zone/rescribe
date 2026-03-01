@@ -9,3 +9,4 @@ description = "ZimWiki writer for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
+zimwiki = { workspace = true }

@@ -1,9 +1,11 @@
 //! txt2tags (t2t) reader for rescribe.
 //!
-//! Parses txt2tags markup into the rescribe document model.
+//! Thin adapter that uses the `t2t` crate to parse txt2tags markup
+//! into the rescribe document model.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
 use rescribe_std::{node, prop};
+use t2t::{Block, Inline};
 
 /// Parse txt2tags markup.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -15,8 +17,12 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let mut parser = Parser::new(input);
-    let nodes = parser.parse();
+    let t2t_doc = t2t::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+
+    let mut nodes = Vec::new();
+    for block in &t2t_doc.blocks {
+        nodes.push(block_to_node(block));
+    }
 
     let root = Node::new(node::DOCUMENT).children(nodes);
     let doc = Document::new().with_content(root);
@@ -24,526 +30,124 @@ pub fn parse_with_options(
     Ok(ConversionResult::ok(doc))
 }
 
-struct Parser<'a> {
-    lines: Vec<&'a str>,
-    pos: usize,
-}
-
-impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
-        Self {
-            lines: input.lines().collect(),
-            pos: 0,
-        }
-    }
-
-    fn parse(&mut self) -> Vec<Node> {
-        let mut nodes = Vec::new();
-
-        while self.pos < self.lines.len() {
-            let line = self.lines[self.pos];
-
-            // Skip empty lines
-            if line.trim().is_empty() {
-                self.pos += 1;
-                continue;
-            }
-
-            // Comment (% at start of line)
-            if line.starts_with('%') {
-                self.pos += 1;
-                continue;
-            }
-
-            // Verbatim block (```)
-            if line.trim() == "```" {
-                nodes.push(self.parse_verbatim_block());
-                continue;
-            }
-
-            // Raw block (""")
-            if line.trim() == "\"\"\"" {
-                nodes.push(self.parse_raw_block());
-                continue;
-            }
-
-            // Heading = Title = or + Title +
-            if let Some(node) = self.try_parse_heading(line) {
-                nodes.push(node);
-                self.pos += 1;
-                continue;
-            }
-
-            // Horizontal rule (20+ dashes, equals, or underscores)
-            if is_horizontal_rule(line) {
-                nodes.push(Node::new(node::HORIZONTAL_RULE));
-                self.pos += 1;
-                continue;
-            }
-
-            // Quote (lines starting with TAB)
-            if line.starts_with('\t') {
-                nodes.push(self.parse_quote());
-                continue;
-            }
-
-            // Unordered list (- item)
-            if line.trim_start().starts_with("- ") {
-                nodes.push(self.parse_list(false));
-                continue;
-            }
-
-            // Ordered list (+ item)
-            if line.trim_start().starts_with("+ ") {
-                nodes.push(self.parse_list(true));
-                continue;
-            }
-
-            // Table (| cell |)
-            if line.trim_start().starts_with('|') {
-                nodes.push(self.parse_table());
-                continue;
-            }
-
-            // Regular paragraph
-            nodes.push(self.parse_paragraph());
+fn block_to_node(block: &Block) -> Node {
+    match block {
+        Block::Paragraph { inlines } => {
+            let children: Vec<Node> = inlines.iter().map(inline_to_node).collect();
+            Node::new(node::PARAGRAPH).children(children)
         }
 
-        nodes
-    }
+        Block::Heading {
+            level,
+            numbered,
+            inlines,
+        } => {
+            let children: Vec<Node> = inlines.iter().map(inline_to_node).collect();
+            let mut heading = Node::new(node::HEADING)
+                .prop(prop::LEVEL, *level as i64)
+                .children(children);
 
-    fn try_parse_heading(&self, line: &str) -> Option<Node> {
-        let trimmed = line.trim();
+            if *numbered {
+                heading = heading.prop("numbered", true);
+            }
 
-        // Check for = or + delimited headings
-        for (marker, numbered) in [('=', false), ('+', true)] {
-            let level = trimmed.chars().take_while(|&c| c == marker).count();
-            if level > 0 && level <= 5 {
-                let end_marker_count = trimmed.chars().rev().take_while(|&c| c == marker).count();
-                if end_marker_count >= level {
-                    // Extract content between markers
-                    let content_start = level;
-                    let content_end = trimmed.len() - end_marker_count;
-                    if content_start < content_end {
-                        let content = trimmed[content_start..content_end].trim();
-                        // Check for label [label-name]
-                        let (text, _label) = if let Some(bracket_pos) = content.rfind('[') {
-                            if content.ends_with(']') {
-                                (
-                                    content[..bracket_pos].trim(),
-                                    Some(&content[bracket_pos + 1..content.len() - 1]),
-                                )
+            heading
+        }
+
+        Block::CodeBlock { content } => {
+            Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
+        }
+
+        Block::RawBlock { content } => {
+            Node::new(node::RAW_BLOCK).prop(prop::CONTENT, content.clone())
+        }
+
+        Block::Blockquote { children } => {
+            let para_children: Vec<Node> = children.iter().map(block_to_node).collect();
+            Node::new(node::BLOCKQUOTE).children(para_children)
+        }
+
+        Block::List { ordered, items } => {
+            let list_items: Vec<Node> = items
+                .iter()
+                .map(|item_blocks| {
+                    let item_children: Vec<Node> = item_blocks.iter().map(block_to_node).collect();
+                    Node::new(node::LIST_ITEM).children(item_children)
+                })
+                .collect();
+
+            Node::new(node::LIST)
+                .prop(prop::ORDERED, *ordered)
+                .children(list_items)
+        }
+
+        Block::Table { rows } => {
+            let table_rows: Vec<Node> = rows
+                .iter()
+                .map(|row| {
+                    let cells: Vec<Node> = row
+                        .cells
+                        .iter()
+                        .map(|cell_inlines| {
+                            let children: Vec<Node> =
+                                cell_inlines.iter().map(inline_to_node).collect();
+                            if row.is_header {
+                                Node::new(node::TABLE_HEADER).children(children)
                             } else {
-                                (content, None)
+                                Node::new(node::TABLE_CELL).children(children)
                             }
-                        } else {
-                            (content, None)
-                        };
+                        })
+                        .collect();
+                    Node::new(node::TABLE_ROW).children(cells)
+                })
+                .collect();
 
-                        let inline_nodes = parse_inline(text);
-                        let mut heading = Node::new(node::HEADING)
-                            .prop(prop::LEVEL, level as i64)
-                            .children(inline_nodes);
-
-                        if numbered {
-                            heading = heading.prop("numbered", true);
-                        }
-
-                        return Some(heading);
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    fn parse_verbatim_block(&mut self) -> Node {
-        let mut content = String::new();
-        self.pos += 1; // Skip opening ```
-
-        while self.pos < self.lines.len() {
-            let line = self.lines[self.pos];
-            if line.trim() == "```" {
-                self.pos += 1;
-                break;
-            }
-            if !content.is_empty() {
-                content.push('\n');
-            }
-            content.push_str(line);
-            self.pos += 1;
+            Node::new(node::TABLE).children(table_rows)
         }
 
-        Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content)
-    }
-
-    fn parse_raw_block(&mut self) -> Node {
-        let mut content = String::new();
-        self.pos += 1; // Skip opening """
-
-        while self.pos < self.lines.len() {
-            let line = self.lines[self.pos];
-            if line.trim() == "\"\"\"" {
-                self.pos += 1;
-                break;
-            }
-            if !content.is_empty() {
-                content.push('\n');
-            }
-            content.push_str(line);
-            self.pos += 1;
-        }
-
-        Node::new(node::RAW_BLOCK).prop(prop::CONTENT, content)
-    }
-
-    fn parse_quote(&mut self) -> Node {
-        let mut content = String::new();
-
-        while self.pos < self.lines.len() {
-            let line = self.lines[self.pos];
-            if !line.starts_with('\t') {
-                break;
-            }
-            if !content.is_empty() {
-                content.push(' ');
-            }
-            content.push_str(line[1..].trim());
-            self.pos += 1;
-        }
-
-        let inline_nodes = parse_inline(&content);
-        Node::new(node::BLOCKQUOTE)
-            .children(vec![Node::new(node::PARAGRAPH).children(inline_nodes)])
-    }
-
-    fn parse_list(&mut self, ordered: bool) -> Node {
-        let mut items = Vec::new();
-        let marker = if ordered { "+ " } else { "- " };
-
-        while self.pos < self.lines.len() {
-            let line = self.lines[self.pos];
-            let trimmed = line.trim_start();
-
-            if !trimmed.starts_with(marker) {
-                break;
-            }
-
-            let content = &trimmed[2..];
-            let inline_nodes = parse_inline(content);
-            let para = Node::new(node::PARAGRAPH).children(inline_nodes);
-            items.push(Node::new(node::LIST_ITEM).children(vec![para]));
-            self.pos += 1;
-        }
-
-        Node::new(node::LIST)
-            .prop(prop::ORDERED, ordered)
-            .children(items)
-    }
-
-    fn parse_table(&mut self) -> Node {
-        let mut rows = Vec::new();
-
-        while self.pos < self.lines.len() {
-            let line = self.lines[self.pos];
-            let trimmed = line.trim();
-
-            if !trimmed.starts_with('|') {
-                break;
-            }
-
-            let is_header = trimmed.starts_with("||");
-            let row_content = if is_header {
-                &trimmed[2..]
-            } else {
-                &trimmed[1..]
-            };
-
-            let mut cells = Vec::new();
-            for cell_text in row_content.split('|') {
-                let cell_text = cell_text.trim();
-                if cell_text.is_empty() && cells.is_empty() {
-                    continue; // Skip empty leading cell
-                }
-                if cell_text.is_empty() {
-                    continue; // Skip empty cells
-                }
-                let inline_nodes = parse_inline(cell_text);
-                let cell_node = if is_header {
-                    Node::new(node::TABLE_HEADER).children(inline_nodes)
-                } else {
-                    Node::new(node::TABLE_CELL).children(inline_nodes)
-                };
-                cells.push(cell_node);
-            }
-
-            if !cells.is_empty() {
-                rows.push(Node::new(node::TABLE_ROW).children(cells));
-            }
-            self.pos += 1;
-        }
-
-        Node::new(node::TABLE).children(rows)
-    }
-
-    fn parse_paragraph(&mut self) -> Node {
-        let mut text = String::new();
-
-        while self.pos < self.lines.len() {
-            let line = self.lines[self.pos];
-
-            // End paragraph at empty line or block element
-            if line.trim().is_empty()
-                || line.starts_with('%')
-                || line.trim() == "```"
-                || line.trim() == "\"\"\""
-                || self.try_parse_heading(line).is_some()
-                || is_horizontal_rule(line)
-                || line.starts_with('\t')
-                || line.trim_start().starts_with("- ")
-                || line.trim_start().starts_with("+ ")
-                || line.trim_start().starts_with('|')
-            {
-                break;
-            }
-
-            if !text.is_empty() {
-                text.push(' ');
-            }
-            text.push_str(line.trim());
-            self.pos += 1;
-        }
-
-        let inline_nodes = parse_inline(&text);
-        Node::new(node::PARAGRAPH).children(inline_nodes)
+        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
-fn is_horizontal_rule(line: &str) -> bool {
-    let trimmed = line.trim();
-    if trimmed.len() >= 20 {
-        let first_char = trimmed.chars().next().unwrap_or(' ');
-        if first_char == '-' || first_char == '=' || first_char == '_' {
-            return trimmed.chars().all(|c| c == first_char);
+fn inline_to_node(inline: &Inline) -> Node {
+    match inline {
+        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+
+        Inline::Bold(children) => {
+            let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::STRONG).children(nodes)
         }
+
+        Inline::Italic(children) => {
+            let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::EMPHASIS).children(nodes)
+        }
+
+        Inline::Underline(children) => {
+            let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::UNDERLINE).children(nodes)
+        }
+
+        Inline::Strikethrough(children) => {
+            let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::STRIKEOUT).children(nodes)
+        }
+
+        Inline::Code(content) => Node::new(node::CODE).prop(prop::CONTENT, content.clone()),
+
+        Inline::Link { url, children } => {
+            let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::LINK)
+                .prop(prop::URL, url.clone())
+                .children(nodes)
+        }
+
+        Inline::Image { url } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
+
+        Inline::LineBreak => Node::new(node::LINE_BREAK),
+
+        Inline::SoftBreak => Node::new(node::SOFT_BREAK),
     }
-    false
-}
-
-fn parse_inline(text: &str) -> Vec<Node> {
-    let mut nodes = Vec::new();
-    let mut current = String::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-
-    while i < chars.len() {
-        // Bold **text**
-        if chars[i] == '*'
-            && i + 1 < chars.len()
-            && chars[i + 1] == '*'
-            && let Some((end, content)) = find_double_closing(&chars, i + 2, '*')
-        {
-            if !current.is_empty() {
-                nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                current.clear();
-            }
-            let inner = parse_inline(&content);
-            nodes.push(Node::new(node::STRONG).children(inner));
-            i = end + 2;
-            continue;
-        }
-
-        // Italic //text//
-        if chars[i] == '/'
-            && i + 1 < chars.len()
-            && chars[i + 1] == '/'
-            && let Some((end, content)) = find_double_closing(&chars, i + 2, '/')
-        {
-            if !current.is_empty() {
-                nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                current.clear();
-            }
-            let inner = parse_inline(&content);
-            nodes.push(Node::new(node::EMPHASIS).children(inner));
-            i = end + 2;
-            continue;
-        }
-
-        // Underline __text__
-        if chars[i] == '_'
-            && i + 1 < chars.len()
-            && chars[i + 1] == '_'
-            && let Some((end, content)) = find_double_closing(&chars, i + 2, '_')
-        {
-            if !current.is_empty() {
-                nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                current.clear();
-            }
-            let inner = parse_inline(&content);
-            nodes.push(Node::new(node::UNDERLINE).children(inner));
-            i = end + 2;
-            continue;
-        }
-
-        // Strikethrough --text--
-        if chars[i] == '-'
-            && i + 1 < chars.len()
-            && chars[i + 1] == '-'
-            && let Some((end, content)) = find_double_closing(&chars, i + 2, '-')
-        {
-            if !current.is_empty() {
-                nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                current.clear();
-            }
-            let inner = parse_inline(&content);
-            nodes.push(Node::new(node::STRIKEOUT).children(inner));
-            i = end + 2;
-            continue;
-        }
-
-        // Monospace ``text``
-        if chars[i] == '`'
-            && i + 1 < chars.len()
-            && chars[i + 1] == '`'
-            && let Some((end, content)) = find_double_closing(&chars, i + 2, '`')
-        {
-            if !current.is_empty() {
-                nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                current.clear();
-            }
-            nodes.push(Node::new(node::CODE).prop(prop::CONTENT, content));
-            i = end + 2;
-            continue;
-        }
-
-        // Link [label url] or image [filename.ext]
-        if chars[i] == '['
-            && let Some((end, label, url)) = parse_link_or_image(&chars, i)
-        {
-            if !current.is_empty() {
-                nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                current.clear();
-            }
-            if is_image_url(&url) {
-                nodes.push(Node::new(node::IMAGE).prop(prop::URL, url));
-            } else {
-                let text_node = Node::new(node::TEXT).prop(prop::CONTENT, label);
-                nodes.push(
-                    Node::new(node::LINK)
-                        .prop(prop::URL, url)
-                        .children(vec![text_node]),
-                );
-            }
-            i = end;
-            continue;
-        }
-
-        // Auto-detect URLs
-        if (chars[i] == 'h' || chars[i] == 'H')
-            && let Some((end, url)) = try_parse_url(&chars, i)
-        {
-            if !current.is_empty() {
-                nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                current.clear();
-            }
-            let text_node = Node::new(node::TEXT).prop(prop::CONTENT, url.clone());
-            nodes.push(
-                Node::new(node::LINK)
-                    .prop(prop::URL, url)
-                    .children(vec![text_node]),
-            );
-            i = end;
-            continue;
-        }
-
-        current.push(chars[i]);
-        i += 1;
-    }
-
-    if !current.is_empty() {
-        nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current));
-    }
-
-    nodes
-}
-
-fn find_double_closing(chars: &[char], start: usize, marker: char) -> Option<(usize, String)> {
-    let mut i = start;
-    let mut content = String::new();
-
-    while i + 1 < chars.len() {
-        if chars[i] == marker && chars[i + 1] == marker {
-            return Some((i, content));
-        }
-        content.push(chars[i]);
-        i += 1;
-    }
-    None
-}
-
-fn parse_link_or_image(chars: &[char], start: usize) -> Option<(usize, String, String)> {
-    // [label url] or [filename.ext]
-    if start >= chars.len() || chars[start] != '[' {
-        return None;
-    }
-
-    let mut i = start + 1;
-    let mut content = String::new();
-
-    while i < chars.len() && chars[i] != ']' {
-        content.push(chars[i]);
-        i += 1;
-    }
-
-    if i >= chars.len() {
-        return None;
-    }
-
-    let content = content.trim();
-
-    // Check if it's [label url] format
-    if let Some(space_pos) = content.rfind(' ') {
-        let label = content[..space_pos].trim();
-        let url = content[space_pos + 1..].trim();
-        // Ensure URL looks like a URL
-        if url.contains('.') || url.starts_with('#') || url.starts_with("http") {
-            return Some((i + 1, label.to_string(), url.to_string()));
-        }
-    }
-
-    // Single item - could be URL or image
-    if content.contains('.') {
-        return Some((i + 1, content.to_string(), content.to_string()));
-    }
-
-    None
-}
-
-fn is_image_url(url: &str) -> bool {
-    let lower = url.to_lowercase();
-    lower.ends_with(".png")
-        || lower.ends_with(".jpg")
-        || lower.ends_with(".jpeg")
-        || lower.ends_with(".gif")
-        || lower.ends_with(".svg")
-        || lower.ends_with(".webp")
-}
-
-fn try_parse_url(chars: &[char], start: usize) -> Option<(usize, String)> {
-    let rest: String = chars[start..].iter().collect();
-    if rest.starts_with("http://")
-        || rest.starts_with("https://")
-        || rest.starts_with("HTTP://")
-        || rest.starts_with("HTTPS://")
-    {
-        let mut end = start;
-        while end < chars.len() && !chars[end].is_whitespace() {
-            end += 1;
-        }
-        let url: String = chars[start..end].iter().collect();
-        return Some((end, url));
-    }
-    None
 }
 
 #[cfg(test)]

@@ -1,9 +1,10 @@
 //! TikiWiki writer for rescribe.
 //!
-//! Serializes rescribe's document IR to TikiWiki markup.
+//! Thin adapter converting rescribe's document IR to tikiwiki AST.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
+use tikiwiki::{Block as TwBlock, Inline as TwInline};
 
 /// Emit a document to TikiWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -15,197 +16,198 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut output = String::new();
-    emit_nodes(&doc.content.children, &mut output);
+    let mut blocks = Vec::new();
+    for node in &doc.content.children {
+        if let Some(block) = node_to_block(node) {
+            blocks.push(block);
+        }
+    }
+
+    let tw_doc = tikiwiki::TikiwikiDoc { blocks };
+    let output = tikiwiki::build(&tw_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-fn emit_nodes(nodes: &[Node], output: &mut String) {
-    for node in nodes {
-        emit_node(node, output);
-    }
-}
-
-fn emit_node(node: &Node, output: &mut String) {
+fn node_to_block(node: &Node) -> Option<TwBlock> {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, output),
+        node::DOCUMENT => None,
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as usize;
-            for _ in 0..level.min(6) {
-                output.push('!');
-            }
-            emit_inline_nodes(&node.children, output);
-            output.push('\n');
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
+            let inlines = nodes_to_inlines(&node.children);
+            Some(TwBlock::Heading { level, inlines })
         }
 
         node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, output);
-            output.push_str("\n\n");
+            let inlines = nodes_to_inlines(&node.children);
+            Some(TwBlock::Paragraph { inlines })
         }
 
         node::CODE_BLOCK => {
-            if let Some(lang) = node.props.get_str(prop::LANGUAGE) {
-                output.push_str(&format!("{{CODE(lang={})}}\n", lang));
-            } else {
-                output.push_str("{CODE()}\n");
-            }
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                output.push_str(content);
-                if !content.ends_with('\n') {
-                    output.push('\n');
-                }
-            }
-            output.push_str("{CODE}\n\n");
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .unwrap_or_default()
+                .to_string();
+            let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
+            Some(TwBlock::CodeBlock { content, language })
         }
 
         node::BLOCKQUOTE => {
-            // TikiWiki doesn't have native blockquote - use ^text^
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    output.push('^');
-                    emit_inline_nodes(&child.children, output);
-                    output.push_str("^\n");
-                } else {
-                    emit_node(child, output);
-                }
-            }
-            output.push('\n');
+            let inlines = nodes_to_inlines(&node.children);
+            Some(TwBlock::Blockquote { inlines })
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let marker = if ordered { '#' } else { '*' };
-
+            let mut items = Vec::new();
             for child in &node.children {
                 if child.kind.as_str() == node::LIST_ITEM {
-                    output.push(marker);
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, output);
-                        } else {
-                            emit_inline_node(item_child, output);
-                        }
-                    }
-                    output.push('\n');
+                    let inlines = nodes_to_inlines(&child.children);
+                    items.push(inlines);
                 }
             }
-            output.push('\n');
+            Some(TwBlock::List { ordered, items })
         }
 
         node::TABLE => {
-            for row in &node.children {
-                if row.kind.as_str() == node::TABLE_ROW {
-                    output.push_str("||");
-                    for (i, cell) in row.children.iter().enumerate() {
-                        if i > 0 {
-                            output.push('|');
+            let mut rows = Vec::new();
+            for row_node in &node.children {
+                if row_node.kind.as_str() == node::TABLE_ROW {
+                    let mut cells = Vec::new();
+                    for cell_node in &row_node.children {
+                        if cell_node.kind.as_str() == node::TABLE_CELL {
+                            let inlines = nodes_to_inlines(&cell_node.children);
+                            cells.push(inlines);
                         }
-                        emit_inline_nodes(&cell.children, output);
                     }
-                    output.push_str("||\n");
+                    rows.push(tikiwiki::TableRow { cells });
                 }
             }
-            output.push('\n');
+            Some(TwBlock::Table { rows })
         }
 
-        node::HORIZONTAL_RULE => {
-            output.push_str("---\n\n");
-        }
+        node::HORIZONTAL_RULE => Some(TwBlock::HorizontalRule),
 
         node::DIV | node::SPAN | node::FIGURE => {
-            emit_nodes(&node.children, output);
-        }
-
-        node::IMAGE => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                output.push_str("{img src=\"");
-                output.push_str(url);
-                output.push('"');
-                if let Some(alt) = node.props.get_str(prop::ALT) {
-                    output.push_str(" alt=\"");
-                    output.push_str(alt);
-                    output.push('"');
+            // For containers, extract first block child if any
+            for child in &node.children {
+                if let Some(block) = node_to_block(child) {
+                    return Some(block);
                 }
-                output.push_str("}\n");
             }
+            None
         }
 
-        _ => emit_nodes(&node.children, output),
+        _ => None,
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], output: &mut String) {
-    for node in nodes {
-        emit_inline_node(node, output);
-    }
+fn nodes_to_inlines(nodes: &[Node]) -> Vec<TwInline> {
+    nodes.iter().filter_map(node_to_inline).collect()
 }
 
-fn emit_inline_node(node: &Node, output: &mut String) {
+fn node_to_inline(node: &Node) -> Option<TwInline> {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                output.push_str(content);
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .unwrap_or_default()
+                .to_string();
+            if !content.is_empty() {
+                Some(TwInline::Text(content))
+            } else {
+                None
             }
         }
 
         node::STRONG => {
-            output.push_str("__");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("__");
+            let children = nodes_to_inlines(&node.children);
+            if !children.is_empty() {
+                Some(TwInline::Bold(children))
+            } else {
+                None
+            }
         }
 
         node::EMPHASIS => {
-            output.push_str("''");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("''");
+            let children = nodes_to_inlines(&node.children);
+            if !children.is_empty() {
+                Some(TwInline::Italic(children))
+            } else {
+                None
+            }
         }
 
         node::UNDERLINE => {
-            output.push_str("===");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("===");
+            let children = nodes_to_inlines(&node.children);
+            if !children.is_empty() {
+                Some(TwInline::Underline(children))
+            } else {
+                None
+            }
         }
 
         node::STRIKEOUT => {
-            output.push_str("--");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("--");
+            let children = nodes_to_inlines(&node.children);
+            if !children.is_empty() {
+                Some(TwInline::Strikethrough(children))
+            } else {
+                None
+            }
         }
 
         node::CODE => {
-            output.push_str("-+");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                output.push_str(content);
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .unwrap_or_default()
+                .to_string();
+            if !content.is_empty() {
+                Some(TwInline::Code(content))
+            } else {
+                None
             }
-            emit_inline_nodes(&node.children, output);
-            output.push_str("+-");
         }
 
         node::LINK => {
-            output.push('[');
-            if let Some(url) = node.props.get_str(prop::URL) {
-                output.push_str(url);
-            }
-            if !node.children.is_empty() {
-                output.push('|');
-                emit_inline_nodes(&node.children, output);
-            }
-            output.push(']');
+            let url = node
+                .props
+                .get_str(prop::URL)
+                .unwrap_or_default()
+                .to_string();
+            let children = nodes_to_inlines(&node.children);
+            Some(TwInline::Link { url, children })
         }
 
         node::IMAGE => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                output.push_str("{img src=\"");
-                output.push_str(url);
-                output.push_str("\"}");
-            }
+            let url = node
+                .props
+                .get_str(prop::URL)
+                .unwrap_or_default()
+                .to_string();
+            let alt = node
+                .props
+                .get_str(prop::ALT)
+                .unwrap_or_default()
+                .to_string();
+            Some(TwInline::Image { url, alt })
         }
 
-        node::LINE_BREAK => output.push_str("%%%"),
-        node::SOFT_BREAK => output.push(' '),
+        node::LINE_BREAK => Some(TwInline::LineBreak),
 
-        _ => emit_inline_nodes(&node.children, output),
+        node::SOFT_BREAK => Some(TwInline::Text(" ".to_string())),
+
+        _ => {
+            let children = nodes_to_inlines(&node.children);
+            if !children.is_empty() {
+                // Return first inline from children
+                children.into_iter().next()
+            } else {
+                None
+            }
+        }
     }
 }
 

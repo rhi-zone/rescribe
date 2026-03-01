@@ -1,8 +1,11 @@
 //! Native format writer for rescribe.
 //!
-//! Outputs a human-readable representation of the document AST for debugging.
+//! Thin adapter layer that uses the `native` crate to build
+//! native format strings from rescribe Documents.
 
-use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node, PropValue};
+use native::{NativeNode, NativeResource, NativeValue};
+use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, PropValue};
+use std::collections::BTreeMap;
 
 /// Emit a document to native format.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -14,87 +17,75 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut output = String::new();
-
-    output.push_str("Document {\n");
-
-    // Metadata
-    if !doc.metadata.is_empty() {
-        output.push_str("  metadata: {\n");
-        for (key, value) in doc.metadata.iter() {
-            output.push_str(&format!("    {}: {}\n", key, format_value(value)));
-        }
-        output.push_str("  }\n");
+    let content = convert_node(&doc.content);
+    let mut resources = Vec::new();
+    for (id, resource) in &doc.resources {
+        resources.push(NativeResource {
+            id: id.as_str().to_string(),
+            mime_type: resource.mime_type.clone(),
+            size: resource.data.len(),
+        });
     }
 
-    // Content
-    output.push_str("  content:\n");
-    emit_node(&doc.content, &mut output, 2);
-
-    // Resources
-    if !doc.resources.is_empty() {
-        output.push_str("  resources: [\n");
-        for (id, resource) in &doc.resources {
-            output.push_str(&format!(
-                "    Resource {{ id: {:?}, mime: {:?}, size: {} }}\n",
-                id,
-                resource.mime_type,
-                resource.data.len()
-            ));
-        }
-        output.push_str("  ]\n");
+    let mut metadata = BTreeMap::new();
+    for (key, value) in doc.metadata.iter() {
+        // Convert PropValue to string representation for native metadata
+        let value_str = match value {
+            PropValue::String(s) => s.clone(),
+            PropValue::Int(i) => i.to_string(),
+            PropValue::Float(f) => f.to_string(),
+            PropValue::Bool(b) => b.to_string(),
+            _ => format!("{:?}", value),
+        };
+        metadata.insert(key.clone(), value_str);
     }
 
-    output.push_str("}\n");
+    let native_doc = native::NativeDoc {
+        content,
+        metadata,
+        resources,
+    };
 
+    let output = native::build(&native_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-fn emit_node(node: &Node, output: &mut String, indent: usize) {
-    let indent_str = "  ".repeat(indent);
+/// Convert a rescribe node to a native node.
+fn convert_node(node: &rescribe_core::Node) -> NativeNode {
+    let mut native_node = NativeNode {
+        kind: node.kind.0.clone(),
+        props: BTreeMap::new(),
+        children: Vec::new(),
+    };
 
-    output.push_str(&format!("{}{}(", indent_str, node.kind));
-
-    // Props
-    if !node.props.is_empty() {
-        output.push_str(" {");
-        let props: Vec<String> = node
-            .props
-            .iter()
-            .map(|(k, v)| format!(" {}: {}", k, format_value(v)))
-            .collect();
-        output.push_str(&props.join(","));
-        output.push_str(" }");
+    // Convert properties
+    for (key, value) in node.props.iter() {
+        let native_value = convert_value(value);
+        native_node.props.insert(key.clone(), native_value);
     }
 
-    // Children
-    if node.children.is_empty() {
-        output.push_str(")\n");
-    } else {
-        output.push_str(") [\n");
-        for child in &node.children {
-            emit_node(child, output, indent + 1);
-        }
-        output.push_str(&format!("{}]\n", indent_str));
+    // Convert children
+    for child in &node.children {
+        native_node.children.push(convert_node(child));
     }
+
+    native_node
 }
 
-fn format_value(value: &PropValue) -> String {
+/// Convert a rescribe PropValue to a native value.
+fn convert_value(value: &PropValue) -> NativeValue {
     match value {
-        PropValue::String(s) => format!("{:?}", s),
-        PropValue::Int(i) => format!("{}", i),
-        PropValue::Float(f) => format!("{}", f),
-        PropValue::Bool(b) => format!("{}", b),
-        PropValue::List(items) => {
-            let formatted: Vec<String> = items.iter().map(format_value).collect();
-            format!("[{}]", formatted.join(", "))
-        }
+        PropValue::String(s) => NativeValue::String(s.clone()),
+        PropValue::Int(i) => NativeValue::Int(*i),
+        PropValue::Float(f) => NativeValue::Float(*f),
+        PropValue::Bool(b) => NativeValue::Bool(*b),
+        PropValue::List(items) => NativeValue::List(items.iter().map(convert_value).collect()),
         PropValue::Map(map) => {
-            let formatted: Vec<String> = map
+            let converted: BTreeMap<String, NativeValue> = map
                 .iter()
-                .map(|(k, v)| format!("{}: {}", k, format_value(v)))
+                .map(|(k, v)| (k.clone(), convert_value(v)))
                 .collect();
-            format!("{{{}}}", formatted.join(", "))
+            NativeValue::Map(converted)
         }
     }
 }
@@ -126,12 +117,5 @@ mod tests {
         let doc = doc(|d| d.heading(2, |h| h.text("Level 2")));
         let output = emit_str(&doc);
         assert!(output.contains("level: 2"));
-    }
-
-    #[test]
-    fn test_format_value() {
-        assert_eq!(format_value(&PropValue::String("test".into())), "\"test\"");
-        assert_eq!(format_value(&PropValue::Int(42)), "42");
-        assert_eq!(format_value(&PropValue::Bool(true)), "true");
     }
 }

@@ -1,7 +1,9 @@
 //! DokuWiki writer for rescribe.
 //!
 //! Emits documents as DokuWiki markup.
+//! Thin adapter over the standalone `dokuwiki` crate.
 
+use dokuwiki::{Block as FmtBlock, DokuwikiDoc, Inline as FmtInline, build as fmt_build};
 use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
     WarningKind,
@@ -18,363 +20,233 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
-
-    emit_nodes(&doc.content.children, &mut ctx);
+    let mut warnings = Vec::new();
+    let blocks = convert_nodes(&doc.content.children, &mut warnings);
+    let fmt_doc = DokuwikiDoc { blocks };
+    let output = fmt_build(&fmt_doc);
 
     Ok(ConversionResult::with_warnings(
-        ctx.output.into_bytes(),
-        ctx.warnings,
+        output.into_bytes(),
+        warnings,
     ))
 }
 
-/// Emit context for tracking state during emission.
-struct EmitContext {
-    output: String,
-    warnings: Vec<FidelityWarning>,
-    list_depth: usize,
+fn convert_nodes(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<FmtBlock> {
+    nodes
+        .iter()
+        .filter_map(|n| convert_node(n, warnings))
+        .collect()
 }
 
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-            warnings: Vec::new(),
-            list_depth: 0,
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-}
-
-/// Emit a sequence of nodes.
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-/// Emit a single node.
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_node(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<FmtBlock> {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => {
+            let children = convert_nodes(&node.children, warnings);
+            if children.is_empty() {
+                None
+            } else if children.len() == 1 {
+                Some(children.into_iter().next().unwrap())
+            } else {
+                // Wrap multiple top-level blocks; shouldn't happen but just in case
+                Some(FmtBlock::Paragraph { inlines: vec![] })
+            }
+        }
 
         node::PARAGRAPH => {
-            emit_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let inlines = node
+                .children
+                .iter()
+                .filter_map(|n| convert_inline(n, warnings))
+                .collect();
+            Some(FmtBlock::Paragraph { inlines })
         }
 
-        node::HEADING => emit_heading(node, ctx),
-        node::CODE_BLOCK => emit_code_block(node, ctx),
-        node::BLOCKQUOTE => emit_blockquote(node, ctx),
-        node::LIST => emit_list(node, ctx),
-        node::LIST_ITEM => emit_list_item(node, ctx),
-        node::TABLE => emit_table(node, ctx),
-        node::FIGURE => emit_nodes(&node.children, ctx),
-        node::HORIZONTAL_RULE => {
-            ctx.write("----\n\n");
+        node::HEADING => {
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
+            let inlines = node
+                .children
+                .iter()
+                .filter_map(|n| convert_inline(n, warnings))
+                .collect();
+            Some(FmtBlock::Heading { level, inlines })
         }
 
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
+        node::CODE_BLOCK => {
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
+            Some(FmtBlock::CodeBlock { language, content })
+        }
 
-        node::RAW_BLOCK | node::RAW_INLINE => {
-            let format = node.props.get_str(prop::FORMAT).unwrap_or("");
-            if format == "dokuwiki"
-                && let Some(content) = node.props.get_str(prop::CONTENT)
-            {
-                ctx.write(content);
+        node::BLOCKQUOTE => {
+            let children = convert_nodes(&node.children, warnings);
+            Some(FmtBlock::Blockquote { children })
+        }
+
+        node::LIST => {
+            let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
+            let mut items = Vec::new();
+            for child in &node.children {
+                if child.kind.as_str() == node::LIST_ITEM {
+                    let item_blocks = convert_nodes(&child.children, warnings);
+                    items.push(item_blocks);
+                }
             }
+            Some(FmtBlock::List { ordered, items })
         }
 
-        node::DEFINITION_LIST => emit_nodes(&node.children, ctx),
-        node::DEFINITION_TERM => {
-            ctx.write("  ");
-            emit_nodes(&node.children, ctx);
-        }
-        node::DEFINITION_DESC => {
-            ctx.write(" : ");
-            emit_nodes(&node.children, ctx);
-            ctx.write("\n");
+        node::HORIZONTAL_RULE => Some(FmtBlock::HorizontalRule),
+
+        node::LIST_ITEM
+        | node::TABLE
+        | node::TABLE_ROW
+        | node::TABLE_CELL
+        | node::TABLE_HEAD
+        | node::TABLE_BODY
+        | node::TABLE_FOOT
+        | node::FIGURE
+        | node::DIV
+        | node::SPAN
+        | node::RAW_BLOCK
+        | node::RAW_INLINE
+        | node::DEFINITION_LIST
+        | node::DEFINITION_TERM
+        | node::DEFINITION_DESC => {
+            // Try to preserve content where possible
+            if child_is_simple(&node.children) {
+                let inlines: Vec<FmtInline> = node
+                    .children
+                    .iter()
+                    .filter_map(|n| convert_inline(n, warnings))
+                    .collect();
+                if !inlines.is_empty() {
+                    return Some(FmtBlock::Paragraph { inlines });
+                }
+            }
+            None
         }
 
-        // Inline elements
+        _ => {
+            warnings.push(FidelityWarning::new(
+                Severity::Minor,
+                WarningKind::UnsupportedNode(node.kind.as_str().to_string()),
+                format!(
+                    "Unsupported block type for DokuWiki: {}",
+                    node.kind.as_str()
+                ),
+            ));
+            None
+        }
+    }
+}
+
+fn child_is_simple(children: &[Node]) -> bool {
+    !children.is_empty()
+        && children.iter().all(|n| {
+            matches!(
+                n.kind.as_str(),
+                node::TEXT
+                    | node::EMPHASIS
+                    | node::STRONG
+                    | node::CODE
+                    | node::LINK
+                    | node::IMAGE
+                    | node::LINE_BREAK
+                    | node::SOFT_BREAK
+                    | node::UNDERLINE
+            )
+        })
+}
+
+fn convert_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<FmtInline> {
+    match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Some(FmtInline::Text(content))
         }
 
         node::EMPHASIS => {
-            ctx.write("//");
-            emit_nodes(&node.children, ctx);
-            ctx.write("//");
+            let children = node
+                .children
+                .iter()
+                .filter_map(|n| convert_inline(n, warnings))
+                .collect();
+            Some(FmtInline::Italic(children))
         }
 
         node::STRONG => {
-            ctx.write("**");
-            emit_nodes(&node.children, ctx);
-            ctx.write("**");
-        }
-
-        node::STRIKEOUT => {
-            ctx.write("<del>");
-            emit_nodes(&node.children, ctx);
-            ctx.write("</del>");
+            let children = node
+                .children
+                .iter()
+                .filter_map(|n| convert_inline(n, warnings))
+                .collect();
+            Some(FmtInline::Bold(children))
         }
 
         node::UNDERLINE => {
-            ctx.write("__");
-            emit_nodes(&node.children, ctx);
-            ctx.write("__");
-        }
-
-        node::SUBSCRIPT => {
-            ctx.write("<sub>");
-            emit_nodes(&node.children, ctx);
-            ctx.write("</sub>");
-        }
-
-        node::SUPERSCRIPT => {
-            ctx.write("<sup>");
-            emit_nodes(&node.children, ctx);
-            ctx.write("</sup>");
+            let children = node
+                .children
+                .iter()
+                .filter_map(|n| convert_inline(n, warnings))
+                .collect();
+            Some(FmtInline::Underline(children))
         }
 
         node::CODE => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write("''");
-                ctx.write(content);
-                ctx.write("''");
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Some(FmtInline::Code(content))
         }
 
-        node::LINK => emit_link(node, ctx),
-        node::IMAGE => emit_image(node, ctx),
-        node::LINE_BREAK => ctx.write("\\\\\n"),
-        node::SOFT_BREAK => ctx.write(" "),
-
-        node::FOOTNOTE_REF => emit_footnote_ref(node, ctx),
-        node::FOOTNOTE_DEF => emit_footnote_def(node, ctx),
-
-        node::SMALL_CAPS => {
-            // No native support, just emit text
-            emit_nodes(&node.children, ctx);
+        node::LINK => {
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let children = node
+                .children
+                .iter()
+                .filter_map(|n| convert_inline(n, warnings))
+                .collect();
+            Some(FmtInline::Link { url, children })
         }
 
-        node::QUOTED => {
-            let quote_type = node.props.get_str(prop::QUOTE_TYPE).unwrap_or("double");
-            if quote_type == "single" {
-                ctx.write("'");
-                emit_nodes(&node.children, ctx);
-                ctx.write("'");
+        node::IMAGE => {
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
+            Some(FmtInline::Image { url, alt })
+        }
+
+        node::LINE_BREAK => Some(FmtInline::LineBreak),
+        node::SOFT_BREAK => Some(FmtInline::SoftBreak),
+
+        node::STRIKEOUT
+        | node::SUBSCRIPT
+        | node::SUPERSCRIPT
+        | node::SMALL_CAPS
+        | node::QUOTED
+        | node::FOOTNOTE_REF
+        | node::FOOTNOTE_DEF => {
+            // Fall back to rendering children as text
+            let children: Vec<FmtInline> = node
+                .children
+                .iter()
+                .filter_map(|n| convert_inline(n, warnings))
+                .collect();
+            if children.is_empty() {
+                Some(FmtInline::Text(format!("[{}]", node.kind.as_str())))
             } else {
-                ctx.write("\"");
-                emit_nodes(&node.children, ctx);
-                ctx.write("\"");
-            }
-        }
-
-        "math_inline" => {
-            if let Some(source) = node.props.get_str("math:source") {
-                ctx.write("<math>");
-                ctx.write(source);
-                ctx.write("</math>");
-            }
-        }
-
-        "math_display" => {
-            if let Some(source) = node.props.get_str("math:source") {
-                ctx.write("<math>\n");
-                ctx.write(source);
-                ctx.write("\n</math>\n\n");
+                Some(FmtInline::Bold(children))
             }
         }
 
         _ => {
-            ctx.warnings.push(FidelityWarning::new(
+            warnings.push(FidelityWarning::new(
                 Severity::Minor,
                 WarningKind::UnsupportedNode(node.kind.as_str().to_string()),
-                format!("Unknown node type for DokuWiki: {}", node.kind.as_str()),
+                format!(
+                    "Unsupported inline type for DokuWiki: {}",
+                    node.kind.as_str()
+                ),
             ));
-            emit_nodes(&node.children, ctx);
+            None
         }
     }
-}
-
-/// Emit a heading (DokuWiki uses more = for lower level).
-fn emit_heading(node: &Node, ctx: &mut EmitContext) {
-    let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as usize;
-
-    // DokuWiki: H1 = 6 equals, H2 = 5 equals, etc.
-    let equals_count = 7 - level.min(6);
-
-    for _ in 0..equals_count {
-        ctx.write("=");
-    }
-    ctx.write(" ");
-
-    emit_nodes(&node.children, ctx);
-
-    ctx.write(" ");
-    for _ in 0..equals_count {
-        ctx.write("=");
-    }
-    ctx.write("\n\n");
-}
-
-/// Emit a code block.
-fn emit_code_block(node: &Node, ctx: &mut EmitContext) {
-    let lang = node.props.get_str(prop::LANGUAGE);
-
-    ctx.write("<code");
-    if let Some(lang) = lang {
-        ctx.write(" ");
-        ctx.write(lang);
-    }
-    ctx.write(">\n");
-
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        ctx.write(content);
-        if !content.ends_with('\n') {
-            ctx.write("\n");
-        }
-    }
-    ctx.write("</code>\n\n");
-}
-
-/// Emit a blockquote.
-fn emit_blockquote(node: &Node, ctx: &mut EmitContext) {
-    let mut inner = EmitContext::new();
-    emit_nodes(&node.children, &mut inner);
-
-    for line in inner.output.lines() {
-        ctx.write("> ");
-        ctx.write(line);
-        ctx.write("\n");
-    }
-    ctx.write("\n");
-    ctx.warnings.extend(inner.warnings);
-}
-
-/// Emit a list.
-fn emit_list(node: &Node, ctx: &mut EmitContext) {
-    ctx.list_depth += 1;
-    emit_nodes(&node.children, ctx);
-    ctx.list_depth -= 1;
-    if ctx.list_depth == 0 {
-        ctx.write("\n");
-    }
-}
-
-/// Emit a list item.
-fn emit_list_item(node: &Node, ctx: &mut EmitContext) {
-    let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-
-    // Indentation: 2 spaces per level
-    for _ in 0..ctx.list_depth {
-        ctx.write("  ");
-    }
-
-    if ordered {
-        ctx.write("- ");
-    } else {
-        ctx.write("* ");
-    }
-
-    // Emit children
-    for child in &node.children {
-        if child.kind.as_str() == node::PARAGRAPH {
-            emit_nodes(&child.children, ctx);
-            ctx.write("\n");
-        } else {
-            emit_node(child, ctx);
-        }
-    }
-}
-
-/// Emit a table.
-fn emit_table(node: &Node, ctx: &mut EmitContext) {
-    emit_table_rows(&node.children, ctx, true);
-    ctx.write("\n");
-}
-
-fn emit_table_rows(nodes: &[Node], ctx: &mut EmitContext, is_header: bool) {
-    let mut first_row = is_header;
-    for node in nodes {
-        match node.kind.as_str() {
-            node::TABLE_HEAD => {
-                emit_table_rows(&node.children, ctx, true);
-            }
-            node::TABLE_BODY | node::TABLE_FOOT => {
-                emit_table_rows(&node.children, ctx, false);
-            }
-            node::TABLE_ROW => {
-                if first_row {
-                    ctx.write("^");
-                    for cell in &node.children {
-                        ctx.write(" ");
-                        emit_nodes(&cell.children, ctx);
-                        ctx.write(" ^");
-                    }
-                    first_row = false;
-                } else {
-                    ctx.write("|");
-                    for cell in &node.children {
-                        ctx.write(" ");
-                        emit_nodes(&cell.children, ctx);
-                        ctx.write(" |");
-                    }
-                }
-                ctx.write("\n");
-            }
-            _ => {}
-        }
-    }
-}
-
-/// Emit a link.
-fn emit_link(node: &Node, ctx: &mut EmitContext) {
-    if let Some(url) = node.props.get_str(prop::URL) {
-        ctx.write("[[");
-        ctx.write(url);
-        ctx.write("|");
-        emit_nodes(&node.children, ctx);
-        ctx.write("]]");
-    } else {
-        emit_nodes(&node.children, ctx);
-    }
-}
-
-/// Emit an image.
-fn emit_image(node: &Node, ctx: &mut EmitContext) {
-    if let Some(url) = node.props.get_str(prop::URL) {
-        ctx.write("{{");
-        ctx.write(url);
-        if let Some(alt) = node.props.get_str(prop::ALT) {
-            ctx.write("|");
-            ctx.write(alt);
-        }
-        ctx.write("}}");
-    }
-}
-
-/// Emit a footnote reference.
-fn emit_footnote_ref(node: &Node, ctx: &mut EmitContext) {
-    if let Some(label) = node.props.get_str(prop::LABEL) {
-        ctx.write("((");
-        ctx.write(label);
-        ctx.write("))");
-    }
-}
-
-/// Emit a footnote definition.
-fn emit_footnote_def(node: &Node, ctx: &mut EmitContext) {
-    // DokuWiki uses inline footnotes with ((content))
-    ctx.write("((");
-    emit_nodes(&node.children, ctx);
-    ctx.write("))");
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 //! MediaWiki reader for rescribe.
 //!
 //! Parses MediaWiki markup into rescribe's document IR.
+//! Uses `mediawiki-fmt` crate for format parsing and adapts to rescribe IR.
 //!
 //! # Example
 //!
@@ -11,363 +12,143 @@
 //! let doc = result.value;
 //! ```
 
-use rescribe_core::{ConversionResult, Document, FidelityWarning, Node, ParseError, Properties};
+use mediawiki_fmt::{Block, Inline, parse as parse_mediawiki};
+use rescribe_core::{ConversionResult, Document, Node, ParseError, Properties};
 use rescribe_std::{node, prop};
 
 /// Parse MediaWiki text into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let mut parser = Parser::new(input);
-    parser.parse();
+    let fmt_doc = parse_mediawiki(input).map_err(|e| ParseError::Invalid(e.0))?;
+
+    let children: Vec<Node> = fmt_doc.blocks.iter().map(block_to_node).collect();
 
     let document = Document {
-        content: Node::new(node::DOCUMENT).children(parser.result),
+        content: Node::new(node::DOCUMENT).children(children),
         resources: Default::default(),
         metadata: Properties::new(),
         source: None,
     };
 
-    Ok(ConversionResult::with_warnings(document, parser.warnings))
+    Ok(ConversionResult::with_warnings(document, vec![]))
 }
 
-struct Parser<'a> {
-    #[allow(dead_code)]
-    input: &'a str,
-    result: Vec<Node>,
-    warnings: Vec<FidelityWarning>,
-}
-
-impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
-        Self {
-            input,
-            result: Vec::new(),
-            warnings: Vec::new(),
-        }
-    }
-
-    fn parse(&mut self) {
-        let lines: Vec<&str> = self.input.lines().collect();
-        let mut i = 0;
-
-        while i < lines.len() {
-            let line = lines[i];
-            let trimmed = line.trim();
-
-            if trimmed.is_empty() {
-                i += 1;
-                continue;
-            }
-
-            // Heading
-            if trimmed.starts_with('=')
-                && let Some(heading) = self.parse_heading(trimmed)
-            {
-                self.result.push(heading);
-                i += 1;
-                continue;
-            }
-
-            // List
-            if trimmed.starts_with('*') || trimmed.starts_with('#') {
-                let (list, consumed) = self.parse_list(&lines[i..]);
-                self.result.push(list);
-                i += consumed;
-                continue;
-            }
-
-            // Horizontal rule
-            if trimmed == "----" || trimmed.chars().all(|c| c == '-') && trimmed.len() >= 4 {
-                self.result.push(Node::new(node::HORIZONTAL_RULE));
-                i += 1;
-                continue;
-            }
-
-            // Code block (indented with space)
-            if line.starts_with(' ') {
-                let (block, consumed) = self.parse_code_block(&lines[i..]);
-                self.result.push(block);
-                i += consumed;
-                continue;
-            }
-
-            // Regular paragraph
-            let (para, consumed) = self.parse_paragraph(&lines[i..]);
-            self.result.push(para);
-            i += consumed;
-        }
-    }
-
-    fn parse_heading(&self, line: &str) -> Option<Node> {
-        let trimmed = line.trim();
-
-        // Count leading `=`
-        let level = trimmed.chars().take_while(|&c| c == '=').count();
-        if level == 0 || level > 6 {
-            return None;
+fn block_to_node(block: &Block) -> Node {
+    match block {
+        Block::Paragraph { inlines } => {
+            let children: Vec<Node> = inlines.iter().map(inline_to_node).collect();
+            Node::new(node::PARAGRAPH).children(children)
         }
 
-        // Check for matching trailing `=`
-        let content = trimmed.trim_start_matches('=').trim_end_matches('=').trim();
-
-        let children = self.parse_inline(content);
-        Some(
+        Block::Heading { level, inlines } => {
+            let children: Vec<Node> = inlines.iter().map(inline_to_node).collect();
             Node::new(node::HEADING)
-                .prop(prop::LEVEL, level as i64)
-                .children(children),
-        )
-    }
-
-    fn parse_list(&self, lines: &[&str]) -> (Node, usize) {
-        let mut items: Vec<Node> = Vec::new();
-        let mut consumed = 0;
-        let first_char = lines[0].trim().chars().next().unwrap_or('*');
-        let ordered = first_char == '#';
-
-        for line in lines {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                break;
-            }
-
-            // Check if this is a list item with the same marker
-            let marker = if ordered { '#' } else { '*' };
-            if !trimmed.starts_with(marker) {
-                break;
-            }
-
-            // Count depth
-            let depth = trimmed.chars().take_while(|&c| c == marker).count();
-
-            if depth == 1 {
-                // Top-level item
-                let content = trimmed.trim_start_matches(marker).trim();
-                let children = self.parse_inline(content);
-                let item =
-                    Node::new(node::LIST_ITEM).child(Node::new(node::PARAGRAPH).children(children));
-                items.push(item);
-            } else {
-                // Nested list - for simplicity, treat as flat item with markers stripped
-                let content = trimmed.trim_start_matches(marker).trim();
-                let children = self.parse_inline(content);
-                let item =
-                    Node::new(node::LIST_ITEM).child(Node::new(node::PARAGRAPH).children(children));
-                items.push(item);
-            }
-
-            consumed += 1;
+                .prop(prop::LEVEL, *level as i64)
+                .children(children)
         }
 
-        let list = Node::new(node::LIST)
-            .prop(prop::ORDERED, ordered)
-            .children(items);
-
-        (list, consumed.max(1))
-    }
-
-    fn parse_code_block(&self, lines: &[&str]) -> (Node, usize) {
-        let mut content = String::new();
-        let mut consumed = 0;
-
-        for line in lines {
-            if !line.starts_with(' ') && !line.is_empty() {
-                break;
-            }
-            if !content.is_empty() {
-                content.push('\n');
-            }
-            // Remove one leading space
-            content.push_str(line.strip_prefix(' ').unwrap_or(line));
-            consumed += 1;
+        Block::CodeBlock { content } => {
+            Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
         }
 
-        let block = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content);
-        (block, consumed.max(1))
-    }
-
-    fn parse_paragraph(&self, lines: &[&str]) -> (Node, usize) {
-        let mut text = String::new();
-        let mut consumed = 0;
-
-        for line in lines {
-            let trimmed = line.trim();
-
-            // Stop at empty lines, headings, lists, rules
-            if trimmed.is_empty()
-                || trimmed.starts_with('=')
-                || trimmed.starts_with('*')
-                || trimmed.starts_with('#')
-                || (trimmed.chars().all(|c| c == '-') && trimmed.len() >= 4)
-            {
-                break;
-            }
-
-            if !text.is_empty() {
-                text.push(' ');
-            }
-            text.push_str(trimmed);
-            consumed += 1;
-        }
-
-        let children = self.parse_inline(&text);
-        let para = Node::new(node::PARAGRAPH).children(children);
-        (para, consumed.max(1))
-    }
-
-    #[allow(clippy::only_used_in_recursion)]
-    fn parse_inline(&self, text: &str) -> Vec<Node> {
-        let mut nodes = Vec::new();
-        let mut current_text = String::new();
-        let chars: Vec<char> = text.chars().collect();
-        let mut i = 0;
-
-        while i < chars.len() {
-            // Bold: '''text'''
-            if i + 2 < chars.len()
-                && chars[i] == '\''
-                && chars[i + 1] == '\''
-                && chars[i + 2] == '\''
-            {
-                if !current_text.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current_text.clone()));
-                    current_text.clear();
-                }
-
-                // Find closing '''
-                let start = i + 3;
-                let mut end = start;
-                while end + 2 < chars.len() {
-                    if chars[end] == '\'' && chars[end + 1] == '\'' && chars[end + 2] == '\'' {
-                        break;
-                    }
-                    end += 1;
-                }
-
-                if end + 2 < chars.len() {
-                    let inner: String = chars[start..end].iter().collect();
-                    let inner_nodes = self.parse_inline(&inner);
-                    nodes.push(Node::new(node::STRONG).children(inner_nodes));
-                    i = end + 3;
-                    continue;
-                }
-            }
-
-            // Italic: ''text''
-            if i + 1 < chars.len() && chars[i] == '\'' && chars[i + 1] == '\'' {
-                // Make sure it's not bold
-                if i + 2 < chars.len() && chars[i + 2] == '\'' {
-                    // This is bold, handled above
-                } else {
-                    if !current_text.is_empty() {
-                        nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current_text.clone()));
-                        current_text.clear();
-                    }
-
-                    // Find closing ''
-                    let start = i + 2;
-                    let mut end = start;
-                    while end + 1 < chars.len() {
-                        if chars[end] == '\'' && chars[end + 1] == '\'' {
-                            // Make sure it's not '''
-                            if end + 2 < chars.len() && chars[end + 2] == '\'' {
-                                end += 1;
-                                continue;
+        Block::List { ordered, items } => {
+            let children: Vec<Node> = items
+                .iter()
+                .map(|item_blocks| {
+                    let para_children: Vec<Node> = item_blocks
+                        .iter()
+                        .flat_map(|block| {
+                            if let Block::Paragraph { inlines } = block {
+                                inlines.iter().map(inline_to_node).collect::<Vec<_>>()
+                            } else {
+                                vec![block_to_node(block)]
                             }
-                            break;
-                        }
-                        end += 1;
-                    }
+                        })
+                        .collect();
 
-                    if end + 1 < chars.len() {
-                        let inner: String = chars[start..end].iter().collect();
-                        let inner_nodes = self.parse_inline(&inner);
-                        nodes.push(Node::new(node::EMPHASIS).children(inner_nodes));
-                        i = end + 2;
-                        continue;
-                    }
-                }
-            }
+                    Node::new(node::LIST_ITEM)
+                        .child(Node::new(node::PARAGRAPH).children(para_children))
+                })
+                .collect();
 
-            // Internal link: [[Title]] or [[Title|text]]
-            if i + 1 < chars.len() && chars[i] == '[' && chars[i + 1] == '[' {
-                if !current_text.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current_text.clone()));
-                    current_text.clear();
-                }
-
-                // Find closing ]]
-                let start = i + 2;
-                let mut end = start;
-                while end + 1 < chars.len() {
-                    if chars[end] == ']' && chars[end + 1] == ']' {
-                        break;
-                    }
-                    end += 1;
-                }
-
-                if end + 1 < chars.len() {
-                    let inner: String = chars[start..end].iter().collect();
-                    let (url, text) = if let Some(pipe_pos) = inner.find('|') {
-                        let url = &inner[..pipe_pos];
-                        let text = &inner[pipe_pos + 1..];
-                        (url.to_string(), text.to_string())
-                    } else {
-                        (inner.clone(), inner)
-                    };
-
-                    nodes.push(
-                        Node::new(node::LINK)
-                            .prop(prop::URL, url)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, text)),
-                    );
-                    i = end + 2;
-                    continue;
-                }
-            }
-
-            // External link: [url text]
-            if chars[i] == '[' && (i + 1 >= chars.len() || chars[i + 1] != '[') {
-                if !current_text.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current_text.clone()));
-                    current_text.clear();
-                }
-
-                // Find closing ]
-                let start = i + 1;
-                let mut end = start;
-                while end < chars.len() && chars[end] != ']' {
-                    end += 1;
-                }
-
-                if end < chars.len() {
-                    let inner: String = chars[start..end].iter().collect();
-                    let parts: Vec<&str> = inner.splitn(2, ' ').collect();
-                    let url = parts[0].to_string();
-                    let text = if parts.len() > 1 {
-                        parts[1].to_string()
-                    } else {
-                        url.clone()
-                    };
-
-                    nodes.push(
-                        Node::new(node::LINK)
-                            .prop(prop::URL, url)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, text)),
-                    );
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Regular character
-            current_text.push(chars[i]);
-            i += 1;
+            Node::new(node::LIST)
+                .prop(prop::ORDERED, *ordered)
+                .children(children)
         }
 
-        if !current_text.is_empty() {
-            nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current_text));
+        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+
+        Block::Table { rows } => {
+            let children: Vec<Node> = rows
+                .iter()
+                .map(|row| {
+                    let cells: Vec<Node> = row
+                        .cells
+                        .iter()
+                        .map(|cell| {
+                            let kind = if cell.is_header {
+                                node::TABLE_HEADER
+                            } else {
+                                node::TABLE_CELL
+                            };
+                            let children: Vec<Node> =
+                                cell.inlines.iter().map(inline_to_node).collect();
+                            Node::new(kind).children(children)
+                        })
+                        .collect();
+                    Node::new(node::TABLE_ROW).children(cells)
+                })
+                .collect();
+
+            Node::new(node::TABLE).children(children)
+        }
+    }
+}
+
+fn inline_to_node(inline: &Inline) -> Node {
+    match inline {
+        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+
+        Inline::Bold(children) => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::STRONG).children(child_nodes)
         }
 
-        nodes
+        Inline::Italic(children) => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::EMPHASIS).children(child_nodes)
+        }
+
+        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+
+        Inline::Link { url, text } => Node::new(node::LINK)
+            .prop(prop::URL, url.clone())
+            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
+
+        Inline::Image { url, alt } => Node::new(node::IMAGE)
+            .prop(prop::URL, url.clone())
+            .prop(prop::ALT, alt.clone()),
+
+        Inline::LineBreak => Node::new(node::LINE_BREAK),
+
+        Inline::Strikeout(children) => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::STRIKEOUT).children(child_nodes)
+        }
+
+        Inline::Underline(children) => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::UNDERLINE).children(child_nodes)
+        }
+
+        Inline::Subscript(children) => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::SUBSCRIPT).children(child_nodes)
+        }
+
+        Inline::Superscript(children) => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::SUPERSCRIPT).children(child_nodes)
+        }
     }
 }
 

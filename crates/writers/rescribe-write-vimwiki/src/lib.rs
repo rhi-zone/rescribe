@@ -1,9 +1,11 @@
 //! VimWiki writer for rescribe.
 //!
 //! Emits documents as VimWiki markup.
+//! Thin adapter over `vimwiki-fmt` crate.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
+use vimwiki_fmt::*;
 
 /// Emit a document as VimWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -15,241 +17,174 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
+    let blocks = doc.content.children.iter().map(node_to_block).collect();
+    let vimwiki_doc = VimwikiDoc { blocks };
+    let output = vimwiki_fmt::build(&vimwiki_doc);
 
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-struct EmitContext {
-    output: String,
-}
-
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-}
-
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn node_to_block(node: &Node) -> Block {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::PARAGRAPH => {
+            let inlines = node.children.iter().map(node_to_inline).collect();
+            Block::Paragraph { inlines }
+        }
 
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(6) as usize;
-            let marker: String = "=".repeat(level);
-            ctx.write(&marker);
-            ctx.write(" ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write(" ");
-            ctx.write(&marker);
-            ctx.write("\n\n");
-        }
-
-        node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let inlines = node.children.iter().map(node_to_inline).collect();
+            Block::Heading { level, inlines }
         }
 
         node::CODE_BLOCK => {
-            ctx.write("{{{");
-            if let Some(lang) = node.props.get_str(prop::LANGUAGE) {
-                ctx.write(lang);
-            }
-            ctx.write("\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-                if !content.ends_with('\n') {
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("}}}\n\n");
+            let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            Block::CodeBlock { language, content }
         }
 
         node::BLOCKQUOTE => {
+            let mut inlines = Vec::new();
             for child in &node.children {
                 if child.kind.as_str() == node::PARAGRAPH {
-                    ctx.write("> ");
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("\n");
-                } else {
-                    emit_node(child, ctx);
+                    inlines.extend(child.children.iter().map(node_to_inline));
                 }
             }
-            ctx.write("\n");
+            Block::Blockquote { inlines }
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let mut num = 1;
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    if ordered {
-                        ctx.write(&format!("{}. ", num));
-                        num += 1;
-                    } else {
-                        ctx.write("* ");
-                    }
-
-                    // Check for checkbox
-                    if let Some(checked) = child.props.get_bool("checked") {
-                        if checked {
-                            ctx.write("[X] ");
-                        } else {
-                            ctx.write("[ ] ");
+            let items = node
+                .children
+                .iter()
+                .filter(|n| n.kind.as_str() == node::LIST_ITEM)
+                .map(|item_node| {
+                    let checked = item_node.props.get_bool("checked");
+                    let mut inlines = Vec::new();
+                    for child in &item_node.children {
+                        if child.kind.as_str() == node::PARAGRAPH {
+                            inlines.extend(child.children.iter().map(node_to_inline));
                         }
                     }
+                    ListItem { checked, inlines }
+                })
+                .collect();
 
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, ctx);
-                        } else {
-                            emit_node(item_child, ctx);
-                        }
-                    }
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("\n");
-        }
-
-        node::LIST_ITEM => {
-            emit_nodes(&node.children, ctx);
+            Block::List { ordered, items }
         }
 
         node::TABLE => {
-            for row in &node.children {
-                if row.kind.as_str() == node::TABLE_ROW {
-                    ctx.write("|");
-                    for cell in &row.children {
-                        ctx.write(" ");
-                        emit_inline_nodes(&cell.children, ctx);
-                        ctx.write(" |");
-                    }
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("\n");
+            let rows = node
+                .children
+                .iter()
+                .filter(|n| n.kind.as_str() == node::TABLE_ROW)
+                .map(|row_node| {
+                    let cells = row_node
+                        .children
+                        .iter()
+                        .filter(|n| n.kind.as_str() == node::TABLE_CELL)
+                        .map(|cell_node| cell_node.children.iter().map(node_to_inline).collect())
+                        .collect();
+                    TableRow { cells }
+                })
+                .collect();
+
+            Block::Table { rows }
         }
 
-        node::HORIZONTAL_RULE => {
-            ctx.write("----\n\n");
+        node::HORIZONTAL_RULE => Block::HorizontalRule,
+
+        // Fallback for unhandled block types
+        _ => {
+            let inlines = node.children.iter().map(node_to_inline).collect();
+            Block::Paragraph { inlines }
         }
-
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
-
-        node::FIGURE => emit_nodes(&node.children, ctx),
-
-        // Inline nodes at block level
-        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            emit_inline_node(node, ctx);
-            ctx.write("\n\n");
-        }
-
-        _ => emit_nodes(&node.children, ctx),
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_inline_node(node, ctx);
-    }
-}
-
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            Inline::Text(content)
         }
 
         node::STRONG => {
-            ctx.write("*");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("*");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Bold(children)
         }
 
         node::EMPHASIS => {
-            ctx.write("_");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("_");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Italic(children)
         }
 
         node::STRIKEOUT => {
-            ctx.write("~~");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("~~");
-        }
-
-        node::UNDERLINE => {
-            // VimWiki doesn't have underline, emit as-is
-            emit_inline_nodes(&node.children, ctx);
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Strikethrough(children)
         }
 
         node::CODE => {
-            ctx.write("`");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("`");
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            Inline::Code(content)
         }
 
         node::LINK => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("[[");
-                ctx.write(url);
-                if !node.children.is_empty() {
-                    ctx.write("|");
-                    emit_inline_nodes(&node.children, ctx);
-                }
-                ctx.write("]]");
+            let url = node
+                .props
+                .get_str(prop::URL)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let label = if node.children.is_empty() {
+                url.clone()
             } else {
-                emit_inline_nodes(&node.children, ctx);
-            }
+                node.children
+                    .iter()
+                    .filter_map(|n| {
+                        if n.kind.as_str() == node::TEXT {
+                            n.props.get_str(prop::CONTENT).map(|s| s.to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<String>()
+            };
+            Inline::Link { url, label }
         }
 
         node::IMAGE => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("{{");
-                ctx.write(url);
-                if let Some(alt) = node.props.get_str(prop::ALT) {
-                    ctx.write("|");
-                    ctx.write(alt);
-                }
-                ctx.write("}}");
+            let url = node
+                .props
+                .get_str(prop::URL)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
+            Inline::Image { url, alt }
+        }
+
+        // Fallback for inline nodes: wrap in text or return text representation
+        _ => {
+            let children: Vec<Inline> = node.children.iter().map(node_to_inline).collect();
+            if children.is_empty() {
+                Inline::Text(String::new())
+            } else {
+                // Wrap unhandled inline types
+                Inline::Text(format!("[{}]", node.kind))
             }
         }
-
-        node::LINE_BREAK => {
-            ctx.write("\n");
-        }
-
-        node::SOFT_BREAK => {
-            ctx.write(" ");
-        }
-
-        node::SUPERSCRIPT | node::SUBSCRIPT => {
-            // VimWiki doesn't support these
-            emit_inline_nodes(&node.children, ctx);
-        }
-
-        _ => emit_inline_nodes(&node.children, ctx),
     }
 }
 

@@ -15,14 +15,24 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut output = String::new();
-
     // Find first table in document
     if let Some(table) = find_table(&doc.content) {
-        emit_table(table, &mut output);
-    }
+        // Convert rescribe nodes to TsvDoc
+        let mut rows = Vec::new();
+        for row in &table.children {
+            if row.kind.as_str() == node::TABLE_ROW {
+                let cells: Vec<String> = row.children.iter().map(get_text_content).collect();
+                rows.push(cells);
+            }
+        }
 
-    Ok(ConversionResult::ok(output.into_bytes()))
+        let tsv_doc = tsv_fmt::TsvDoc { rows };
+        let output = tsv_fmt::build(&tsv_doc);
+        Ok(ConversionResult::ok(output.into_bytes()))
+    } else {
+        // No table found; return empty TSV
+        Ok(ConversionResult::ok(Vec::new()))
+    }
 }
 
 fn find_table(node: &Node) -> Option<&Node> {
@@ -35,23 +45,6 @@ fn find_table(node: &Node) -> Option<&Node> {
         }
     }
     None
-}
-
-fn emit_table(table: &Node, output: &mut String) {
-    for row in &table.children {
-        if row.kind.as_str() == node::TABLE_ROW {
-            let cells: Vec<String> = row
-                .children
-                .iter()
-                .map(|cell| {
-                    let text = get_text_content(cell);
-                    escape_tsv_field(&text)
-                })
-                .collect();
-            output.push_str(&cells.join("\t"));
-            output.push('\n');
-        }
-    }
 }
 
 fn get_text_content(node: &Node) -> String {
@@ -68,16 +61,6 @@ fn collect_text(node: &Node, output: &mut String) {
     }
     for child in &node.children {
         collect_text(child, output);
-    }
-}
-
-fn escape_tsv_field(field: &str) -> String {
-    // TSV escaping: if field contains tab, newline, or quote, wrap in quotes
-    if field.contains('\t') || field.contains('"') || field.contains('\n') {
-        let escaped = field.replace('"', "\"\"");
-        format!("\"{}\"", escaped)
-    } else {
-        field.to_string()
     }
 }
 
@@ -124,12 +107,5 @@ mod tests {
         let output = emit_str(&doc);
         assert!(output.contains("A\tB"));
         assert!(output.contains("1\t2"));
-    }
-
-    #[test]
-    fn test_escape_tsv() {
-        assert_eq!(escape_tsv_field("hello"), "hello");
-        assert_eq!(escape_tsv_field("hello\tworld"), "\"hello\tworld\"");
-        assert_eq!(escape_tsv_field("say \"hi\""), "\"say \"\"hi\"\"\"");
     }
 }

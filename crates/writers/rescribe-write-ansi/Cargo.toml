@@ -7,5 +7,6 @@ repository.workspace = true
 description = "ANSI terminal writer for rescribe"
 
 [dependencies]
-rescribe-core.workspace = true
-rescribe-std.workspace = true
+ansi-fmt = { workspace = true }
+rescribe-core = { workspace = true }
+rescribe-std = { workspace = true }

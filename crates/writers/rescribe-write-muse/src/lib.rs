@@ -15,228 +15,181 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
+    // Convert rescribe nodes to muse blocks
+    let blocks = convert_nodes_to_blocks(&doc.content.children);
 
-    emit_nodes(&doc.content.children, &mut ctx);
+    // Build using the format-specific crate
+    let muse_doc = muse_fmt::MuseDoc { blocks };
+    let output = muse_fmt::build(&muse_doc);
 
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-struct EmitContext {
-    output: String,
+fn convert_nodes_to_blocks(nodes: &[Node]) -> Vec<muse_fmt::Block> {
+    nodes.iter().map(convert_node_to_block).collect()
 }
 
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-}
-
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_node_to_block(node: &Node) -> muse_fmt::Block {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => {
+            // Flatten document, just process children
+            // This shouldn't normally happen at top level
+            let children: Vec<muse_fmt::Block> =
+                node.children.iter().map(convert_node_to_block).collect();
+            // Return first block or empty paragraph
+            children
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| muse_fmt::Block::Paragraph { inlines: vec![] })
+        }
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(5) as usize;
-            for _ in 0..level {
-                ctx.write("*");
-            }
-            ctx.write(" ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(5) as u8;
+            let inlines = convert_nodes_to_inlines(&node.children);
+            muse_fmt::Block::Heading { level, inlines }
         }
 
         node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let inlines = convert_nodes_to_inlines(&node.children);
+            muse_fmt::Block::Paragraph { inlines }
         }
 
         node::CODE_BLOCK => {
-            ctx.write("<example>\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-                if !content.ends_with('\n') {
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("</example>\n\n");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            muse_fmt::Block::CodeBlock { content }
         }
 
         node::BLOCKQUOTE => {
-            ctx.write("<quote>\n");
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("\n");
-                } else {
-                    emit_node(child, ctx);
-                }
-            }
-            ctx.write("</quote>\n\n");
+            let children = convert_nodes_to_blocks(&node.children);
+            muse_fmt::Block::Blockquote { children }
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let mut num = 1;
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    if ordered {
-                        ctx.write(&format!(" {}. ", num));
-                        num += 1;
-                    } else {
-                        ctx.write(" - ");
-                    }
-
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, ctx);
-                        } else {
-                            emit_node(item_child, ctx);
-                        }
-                    }
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("\n");
-        }
-
-        node::LIST_ITEM => {
-            emit_nodes(&node.children, ctx);
+            let items: Vec<Vec<muse_fmt::Block>> = node
+                .children
+                .iter()
+                .filter(|n| n.kind.as_str() == node::LIST_ITEM)
+                .map(|n| convert_nodes_to_blocks(&n.children))
+                .collect();
+            muse_fmt::Block::List { ordered, items }
         }
 
         node::DEFINITION_LIST => {
+            let mut items = Vec::new();
             let mut i = 0;
             while i < node.children.len() {
-                let child = &node.children[i];
-                if child.kind.as_str() == node::DEFINITION_TERM {
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write(" :: ");
-
-                    if i + 1 < node.children.len() {
-                        let next = &node.children[i + 1];
-                        if next.kind.as_str() == node::DEFINITION_DESC {
-                            for desc_child in &next.children {
-                                if desc_child.kind.as_str() == node::PARAGRAPH {
-                                    emit_inline_nodes(&desc_child.children, ctx);
-                                } else {
-                                    emit_node(desc_child, ctx);
-                                }
-                            }
-                            i += 1;
-                        }
+                if node.children[i].kind.as_str() == node::DEFINITION_TERM {
+                    let term_inlines = convert_nodes_to_inlines(&node.children[i].children);
+                    let mut desc_blocks = Vec::new();
+                    if i + 1 < node.children.len()
+                        && node.children[i + 1].kind.as_str() == node::DEFINITION_DESC
+                    {
+                        desc_blocks = convert_nodes_to_blocks(&node.children[i + 1].children);
+                        i += 1;
                     }
-                    ctx.write("\n");
+                    items.push((term_inlines, desc_blocks));
                 }
                 i += 1;
             }
-            ctx.write("\n");
+            muse_fmt::Block::DefinitionList { items }
         }
 
-        node::HORIZONTAL_RULE => {
-            ctx.write("----\n\n");
+        node::HORIZONTAL_RULE => muse_fmt::Block::HorizontalRule,
+
+        node::DIV | node::SPAN | node::FIGURE => {
+            // Containers that pass through to their children
+            let children = convert_nodes_to_blocks(&node.children);
+            // Return first block or empty paragraph
+            children
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| muse_fmt::Block::Paragraph { inlines: vec![] })
         }
 
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
-
-        node::FIGURE => emit_nodes(&node.children, ctx),
-
-        // Inline nodes at block level
+        // Inline nodes at block level (shouldn't happen, but handle them)
         node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            emit_inline_node(node, ctx);
-            ctx.write("\n\n");
+            let inlines = vec![convert_node_to_inline(node)];
+            muse_fmt::Block::Paragraph { inlines }
         }
 
-        _ => emit_nodes(&node.children, ctx),
+        _ => {
+            // Unknown block type, process children
+            let children = convert_nodes_to_blocks(&node.children);
+            children
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| muse_fmt::Block::Paragraph { inlines: vec![] })
+        }
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_inline_node(node, ctx);
-    }
+fn convert_nodes_to_inlines(nodes: &[Node]) -> Vec<muse_fmt::Inline> {
+    nodes.iter().map(convert_node_to_inline).collect()
 }
 
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_node_to_inline(node: &Node) -> muse_fmt::Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            muse_fmt::Inline::Text(content)
         }
 
         node::STRONG => {
-            ctx.write("**");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("**");
+            let children = convert_nodes_to_inlines(&node.children);
+            muse_fmt::Inline::Bold(children)
         }
 
         node::EMPHASIS => {
-            ctx.write("*");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("*");
-        }
-
-        node::STRIKEOUT | node::UNDERLINE => {
-            // Muse doesn't support these, emit as-is
-            emit_inline_nodes(&node.children, ctx);
-        }
-
-        node::SUPERSCRIPT | node::SUBSCRIPT => {
-            // Muse doesn't support these
-            emit_inline_nodes(&node.children, ctx);
+            let children = convert_nodes_to_inlines(&node.children);
+            muse_fmt::Inline::Italic(children)
         }
 
         node::CODE => {
-            ctx.write("=");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("=");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            muse_fmt::Inline::Code(content)
         }
 
         node::LINK => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("[[");
-                ctx.write(url);
-                ctx.write("][");
-                emit_inline_nodes(&node.children, ctx);
-                ctx.write("]]");
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let children = convert_nodes_to_inlines(&node.children);
+            muse_fmt::Inline::Link { url, children }
+        }
+
+        node::STRIKEOUT | node::UNDERLINE | node::SUBSCRIPT | node::SUPERSCRIPT => {
+            // Muse doesn't support these, emit children as-is
+            let children = convert_nodes_to_inlines(&node.children);
+            if children.is_empty() {
+                muse_fmt::Inline::Text(String::new())
             } else {
-                emit_inline_nodes(&node.children, ctx);
+                children.into_iter().next().unwrap()
             }
         }
 
         node::IMAGE => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("[[");
-                ctx.write(url);
-                ctx.write("]]");
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            muse_fmt::Inline::Link {
+                url,
+                children: vec![],
             }
         }
 
         node::LINE_BREAK => {
-            ctx.write("\n");
+            // Muse doesn't support line breaks in the AST, convert to text
+            muse_fmt::Inline::Text("\n".to_string())
         }
 
-        node::SOFT_BREAK => {
-            ctx.write(" ");
-        }
+        node::SOFT_BREAK => muse_fmt::Inline::Text(" ".to_string()),
 
-        _ => emit_inline_nodes(&node.children, ctx),
+        _ => {
+            // Unknown inline type, process children
+            let children = convert_nodes_to_inlines(&node.children);
+            if children.is_empty() {
+                muse_fmt::Inline::Text(String::new())
+            } else {
+                children.into_iter().next().unwrap()
+            }
+        }
     }
 }
 

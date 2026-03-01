@@ -21,6 +21,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
+use texinfo::{Block, Inline, TexinfoDoc};
 
 /// Emit a document to Texinfo format.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -32,354 +33,161 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
+    let mut blocks = Vec::new();
 
-    // Write header
-    ctx.write("\\input texinfo\n");
-    ctx.write("@setfilename output.info\n");
-
-    // Write title if present
-    if let Some(title) = doc.metadata.get_str("title") {
-        ctx.write("@settitle ");
-        ctx.write(title);
-        ctx.write("\n");
-    }
-
-    ctx.write("\n@node Top\n");
-
-    if let Some(title) = doc.metadata.get_str("title") {
-        ctx.write("@top ");
-        ctx.write(title);
-        ctx.write("\n\n");
-    }
-
-    // Write content
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    // Write footer
-    ctx.write("\n@bye\n");
-
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
-}
-
-struct EmitContext {
-    output: String,
-}
-
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
+    for child in &doc.content.children {
+        if let Some(block) = node_to_block(child) {
+            blocks.push(block);
         }
     }
 
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
+    let title = doc.metadata.get_str("title").map(|s| s.to_string());
+
+    let texinfo_doc = TexinfoDoc { title, blocks };
+    let output = texinfo::build(&texinfo_doc);
+
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn node_to_block(node: &Node) -> Option<Block> {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
-
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
-            let command = match level {
-                1 => "@chapter",
-                2 => "@section",
-                3 => "@subsection",
-                4 => "@subsubsection",
-                _ => "@subsubsection",
-            };
-
-            ctx.write(command);
-            ctx.write(" ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
+            let inlines = node.children.iter().map(node_to_inline).collect();
+            Some(Block::Heading { level, inlines })
         }
 
         node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let inlines = node.children.iter().map(node_to_inline).collect();
+            Some(Block::Paragraph { inlines })
         }
 
         node::CODE_BLOCK => {
-            ctx.write("@example\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-                if !content.ends_with('\n') {
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("@end example\n\n");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Some(Block::CodeBlock { content })
         }
 
         node::BLOCKQUOTE => {
-            ctx.write("@quotation\n");
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("\n");
-                } else {
-                    emit_node(child, ctx);
-                }
-            }
-            ctx.write("@end quotation\n\n");
+            let children = node.children.iter().filter_map(node_to_block).collect();
+            Some(Block::Blockquote { children })
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            if ordered {
-                ctx.write("@enumerate\n");
-            } else {
-                ctx.write("@itemize @bullet\n");
-            }
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    ctx.write("@item ");
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, ctx);
+            let items = node
+                .children
+                .iter()
+                .filter_map(|child| {
+                    if child.kind.as_str() == node::LIST_ITEM {
+                        // Extract inlines from the list item
+                        // If the item contains paragraphs, extract inlines from those
+                        let inlines = if child.children.len() == 1
+                            && child.children[0].kind.as_str() == node::PARAGRAPH
+                        {
+                            child.children[0]
+                                .children
+                                .iter()
+                                .map(node_to_inline)
+                                .collect()
                         } else {
-                            emit_inline_node(item_child, ctx);
-                        }
+                            child.children.iter().map(node_to_inline).collect()
+                        };
+                        Some(inlines)
+                    } else {
+                        None
                     }
-                    ctx.write("\n");
-                }
-            }
-
-            if ordered {
-                ctx.write("@end enumerate\n\n");
-            } else {
-                ctx.write("@end itemize\n\n");
-            }
-        }
-
-        node::LIST_ITEM => {
-            emit_nodes(&node.children, ctx);
+                })
+                .collect();
+            Some(Block::List { ordered, items })
         }
 
         node::DEFINITION_LIST => {
-            ctx.write("@table @asis\n");
-
+            let mut items = Vec::new();
             let mut i = 0;
             while i < node.children.len() {
                 let child = &node.children[i];
-
                 if child.kind.as_str() == node::DEFINITION_TERM {
-                    ctx.write("@item ");
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("\n");
-                } else if child.kind.as_str() == node::DEFINITION_DESC {
-                    for desc_child in &child.children {
-                        if desc_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&desc_child.children, ctx);
-                            ctx.write("\n");
-                        } else {
-                            emit_node(desc_child, ctx);
+                    let term = child.children.iter().map(node_to_inline).collect();
+                    let mut desc_blocks = Vec::new();
+
+                    if i + 1 < node.children.len() {
+                        let next = &node.children[i + 1];
+                        if next.kind.as_str() == node::DEFINITION_DESC {
+                            desc_blocks = next.children.iter().filter_map(node_to_block).collect();
+                            i += 1;
                         }
                     }
-                }
 
+                    items.push((term, desc_blocks));
+                }
                 i += 1;
             }
-
-            ctx.write("@end table\n\n");
+            Some(Block::DefinitionList { items })
         }
 
-        node::TABLE => {
-            ctx.write("@multitable @columnfractions");
-            // Estimate column count from first row
-            if let Some(first_row) = node.children.first() {
-                let col_count = first_row.children.len();
-                if col_count > 0 {
-                    let frac = 1.0 / col_count as f64;
-                    for _ in 0..col_count {
-                        ctx.write(&format!(" {:.2}", frac));
-                    }
-                }
-            }
-            ctx.write("\n");
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
 
-            for (row_idx, row) in node.children.iter().enumerate() {
-                if row.kind.as_str() == node::TABLE_ROW {
-                    if row_idx == 0 {
-                        // Header row
-                        ctx.write("@headitem ");
-                    } else {
-                        ctx.write("@item ");
-                    }
-
-                    for (cell_idx, cell) in row.children.iter().enumerate() {
-                        if cell_idx > 0 {
-                            ctx.write(" @tab ");
-                        }
-                        emit_inline_nodes(&cell.children, ctx);
-                    }
-                    ctx.write("\n");
-                }
-            }
-
-            ctx.write("@end multitable\n\n");
-        }
-
-        node::HORIZONTAL_RULE => {
-            ctx.write("\n@sp 1\n@noindent\n@center * * *\n@sp 1\n\n");
-        }
-
-        node::DIV | node::SPAN | node::FIGURE => {
-            emit_nodes(&node.children, ctx);
-        }
-
-        node::IMAGE => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                // Remove extension for texinfo
-                let base = url.rsplit_once('.').map(|(b, _)| b).unwrap_or(url);
-                ctx.write("@image{");
-                ctx.write(base);
-                ctx.write("}\n\n");
+        node::DOCUMENT => {
+            let children: Vec<_> = node.children.iter().filter_map(node_to_block).collect();
+            if children.len() == 1 {
+                children.into_iter().next()
+            } else {
+                None
             }
         }
 
-        // Inline nodes at block level
-        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            emit_inline_node(node, ctx);
-            ctx.write("\n\n");
-        }
-
-        _ => emit_nodes(&node.children, ctx),
+        _ => None,
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_inline_node(node, ctx);
-    }
-}
-
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                // Escape special characters
-                for c in content.chars() {
-                    match c {
-                        '@' => ctx.write("@@"),
-                        '{' => ctx.write("@{"),
-                        '}' => ctx.write("@}"),
-                        _ => ctx.output.push(c),
-                    }
-                }
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Text(content)
         }
 
         node::STRONG => {
-            ctx.write("@strong{");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Strong(children)
         }
 
         node::EMPHASIS => {
-            ctx.write("@emph{");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Emphasis(children)
         }
 
         node::CODE => {
-            ctx.write("@code{");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                // Escape special characters in code
-                for c in content.chars() {
-                    match c {
-                        '@' => ctx.write("@@"),
-                        '{' => ctx.write("@{"),
-                        '}' => ctx.write("@}"),
-                        _ => ctx.output.push(c),
-                    }
-                }
-            }
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Code(content)
         }
 
         node::LINK => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                if url.starts_with("mailto:") {
-                    let email = url.strip_prefix("mailto:").unwrap_or(url);
-                    ctx.write("@email{");
-                    ctx.write(email);
-                    if !node.children.is_empty() {
-                        ctx.write(", ");
-                        emit_inline_nodes(&node.children, ctx);
-                    }
-                    ctx.write("}");
-                } else if url.starts_with('#') {
-                    // Internal reference
-                    let node_name = url.strip_prefix('#').unwrap_or(url);
-                    ctx.write("@ref{");
-                    ctx.write(node_name);
-                    ctx.write("}");
-                } else {
-                    ctx.write("@uref{");
-                    ctx.write(url);
-                    if !node.children.is_empty() {
-                        ctx.write(", ");
-                        emit_inline_nodes(&node.children, ctx);
-                    }
-                    ctx.write("}");
-                }
-            } else {
-                emit_inline_nodes(&node.children, ctx);
-            }
-        }
-
-        node::SUBSCRIPT => {
-            ctx.write("@sub{");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Link { url, children }
         }
 
         node::SUPERSCRIPT => {
-            ctx.write("@sup{");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Superscript(children)
         }
 
-        node::STRIKEOUT => {
-            // Texinfo doesn't have strikeout, use emphasis as fallback
-            ctx.write("@emph{");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
+        node::SUBSCRIPT => {
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Subscript(children)
         }
 
-        node::LINE_BREAK => {
-            ctx.write("@*\n");
-        }
+        node::LINE_BREAK => Inline::LineBreak,
 
-        node::SOFT_BREAK => {
-            ctx.write(" ");
-        }
+        node::SOFT_BREAK => Inline::SoftBreak,
 
         node::FOOTNOTE_DEF => {
-            ctx.write("@footnote{");
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    emit_inline_nodes(&child.children, ctx);
-                } else {
-                    emit_inline_node(child, ctx);
-                }
-            }
-            ctx.write("}");
+            let content = node.children.iter().map(node_to_inline).collect();
+            Inline::FootnoteDef { content }
         }
 
-        _ => emit_inline_nodes(&node.children, ctx),
+        _ => Inline::Text(String::new()),
     }
 }
 

@@ -9,3 +9,4 @@ description = "VimWiki reader for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
+vimwiki-fmt = { workspace = true }

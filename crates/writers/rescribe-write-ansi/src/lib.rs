@@ -1,31 +1,12 @@
 //! ANSI terminal writer for rescribe.
 //!
-//! Emits documents with ANSI escape codes for terminal display.
-//! Supports bold, italic, underline, colors, and basic structure.
+//! Thin adapter converting rescribe's document IR to ansi-fmt's AST.
 
 use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
     WarningKind,
 };
 use rescribe_std::{node, prop};
-
-// ANSI escape codes
-const RESET: &str = "\x1b[0m";
-const BOLD: &str = "\x1b[1m";
-const DIM: &str = "\x1b[2m";
-const ITALIC: &str = "\x1b[3m";
-const UNDERLINE: &str = "\x1b[4m";
-const STRIKETHROUGH: &str = "\x1b[9m";
-
-// Colors
-const GREEN: &str = "\x1b[32m";
-const YELLOW: &str = "\x1b[33m";
-const BLUE: &str = "\x1b[34m";
-const MAGENTA: &str = "\x1b[35m";
-const CYAN: &str = "\x1b[36m";
-
-// Background colors
-const BG_BLACK: &str = "\x1b[40m";
 
 /// Emit a document as ANSI-formatted text.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -37,506 +18,543 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
+    let mut ctx = ConvertContext::new();
 
-    emit_nodes(&doc.content.children, &mut ctx);
+    let blocks = doc
+        .content
+        .children
+        .iter()
+        .map(|n| node_to_ansi_block(n, &mut ctx))
+        .collect();
+    let ansi_doc = ansi_fmt::AnsiDoc { blocks };
+
+    let output = ansi_fmt::build(&ansi_doc);
 
     Ok(ConversionResult::with_warnings(
-        ctx.output.into_bytes(),
+        output.into_bytes(),
         ctx.warnings,
     ))
 }
 
-/// Emit context for tracking state during emission.
-struct EmitContext {
-    output: String,
+struct ConvertContext {
     warnings: Vec<FidelityWarning>,
-    list_depth: usize,
-    in_code_block: bool,
 }
 
-impl EmitContext {
+impl ConvertContext {
     fn new() -> Self {
         Self {
-            output: String::new(),
             warnings: Vec::new(),
-            list_depth: 0,
-            in_code_block: false,
         }
     }
 
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-
-    fn write_indent(&mut self) {
-        for _ in 0..self.list_depth {
-            self.write("  ");
-        }
+    fn warn(&mut self, kind: WarningKind, msg: impl Into<String>) {
+        self.warnings
+            .push(FidelityWarning::new(Severity::Minor, kind, msg.into()));
     }
 }
 
-/// Emit a sequence of nodes.
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-/// Emit a single node.
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => {
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_block(n, ctx))
+                .collect::<Vec<_>>();
+            if children.len() == 1 {
+                children[0].clone()
+            } else {
+                ansi_fmt::Block::Div { children }
+            }
+        }
 
         node::PARAGRAPH => {
-            emit_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let inlines = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Block::Paragraph { inlines }
         }
 
-        node::HEADING => emit_heading(node, ctx),
-        node::CODE_BLOCK => emit_code_block(node, ctx),
-        node::BLOCKQUOTE => emit_blockquote(node, ctx),
-        node::LIST => emit_list(node, ctx),
-        node::LIST_ITEM => emit_list_item(node, ctx),
-        node::TABLE => emit_table(node, ctx),
-        node::FIGURE => emit_nodes(&node.children, ctx),
-        node::HORIZONTAL_RULE => {
-            ctx.write(DIM);
-            ctx.write("────────────────────────────────────────");
-            ctx.write(RESET);
-            ctx.write("\n\n");
+        node::HEADING => {
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
+            let inlines = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Block::Heading { level, inlines }
         }
 
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
-
-        node::RAW_BLOCK | node::RAW_INLINE => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
+        node::CODE_BLOCK => {
+            let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            ansi_fmt::Block::CodeBlock { language, content }
         }
 
-        node::DEFINITION_LIST => emit_definition_list(node, ctx),
-        node::DEFINITION_TERM => emit_definition_term(node, ctx),
-        node::DEFINITION_DESC => emit_definition_desc(node, ctx),
+        node::BLOCKQUOTE => {
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_block(n, ctx))
+                .collect();
+            ansi_fmt::Block::Blockquote { children }
+        }
 
-        // Inline elements
+        node::LIST => {
+            let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
+            let items = node
+                .children
+                .iter()
+                .filter(|n| n.kind.as_str() == node::LIST_ITEM)
+                .map(|n| {
+                    n.children
+                        .iter()
+                        .map(|c| node_to_ansi_block(c, ctx))
+                        .collect()
+                })
+                .collect();
+            ansi_fmt::Block::List { ordered, items }
+        }
+
+        node::LIST_ITEM => {
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_block(n, ctx))
+                .collect();
+            ansi_fmt::Block::ListItem { children }
+        }
+
+        node::TABLE => {
+            let rows: Vec<ansi_fmt::TableRow> = node
+                .children
+                .iter()
+                .filter_map(|n| {
+                    if n.kind.as_str() == node::TABLE_ROW {
+                        match node_to_table_row(n, ctx) {
+                            ansi_fmt::Block::TableRow { cells } => {
+                                Some(ansi_fmt::TableRow { cells })
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            ansi_fmt::Block::Table { rows }
+        }
+
+        node::TABLE_ROW => node_to_table_row(node, ctx),
+
+        node::TABLE_CELL | node::TABLE_HEADER => {
+            let inlines = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Block::TableCell { inlines }
+        }
+
+        node::TABLE_HEAD => {
+            let cells = node
+                .children
+                .iter()
+                .filter_map(|n| {
+                    if n.kind.as_str() == node::TABLE_CELL {
+                        Some(ansi_fmt::TableCell {
+                            inlines: n
+                                .children
+                                .iter()
+                                .map(|c| node_to_ansi_inline(c, ctx))
+                                .collect(),
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            ansi_fmt::Block::TableHeader { cells }
+        }
+
+        node::TABLE_BODY => {
+            let rows: Vec<ansi_fmt::TableRow> = node
+                .children
+                .iter()
+                .filter_map(|n| {
+                    if n.kind.as_str() == node::TABLE_ROW {
+                        match node_to_table_row(n, ctx) {
+                            ansi_fmt::Block::TableRow { cells } => {
+                                Some(ansi_fmt::TableRow { cells })
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            ansi_fmt::Block::TableBody { rows }
+        }
+
+        node::TABLE_FOOT => {
+            let rows: Vec<ansi_fmt::TableRow> = node
+                .children
+                .iter()
+                .filter_map(|n| {
+                    if n.kind.as_str() == node::TABLE_ROW {
+                        match node_to_table_row(n, ctx) {
+                            ansi_fmt::Block::TableRow { cells } => {
+                                Some(ansi_fmt::TableRow { cells })
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            ansi_fmt::Block::TableFoot { rows }
+        }
+
+        node::HORIZONTAL_RULE => ansi_fmt::Block::HorizontalRule,
+
+        node::DIV => {
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_block(n, ctx))
+                .collect();
+            ansi_fmt::Block::Div { children }
+        }
+
+        node::SPAN => {
+            let inlines = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Block::Span { inlines }
+        }
+
+        node::RAW_BLOCK => {
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            ansi_fmt::Block::RawBlock { content }
+        }
+
+        node::RAW_INLINE => {
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            ansi_fmt::Block::RawInline { content }
+        }
+
+        node::DEFINITION_LIST => {
+            let items = collect_definition_items(&node.children, ctx);
+            ansi_fmt::Block::DefinitionList { items }
+        }
+
+        node::DEFINITION_TERM => {
+            let inlines = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Block::DefinitionTerm { inlines }
+        }
+
+        node::DEFINITION_DESC => {
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_block(n, ctx))
+                .collect();
+            ansi_fmt::Block::DefinitionDesc { children }
+        }
+
+        node::FIGURE => {
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_block(n, ctx))
+                .collect();
+            ansi_fmt::Block::Figure { children }
+        }
+
+        _ => {
+            ctx.warn(
+                WarningKind::UnsupportedNode(node.kind.as_str().to_string()),
+                format!("Unknown node type for ANSI: {}", node.kind.as_str()),
+            );
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_block(n, ctx))
+                .collect();
+            ansi_fmt::Block::Div { children }
+        }
+    }
+}
+
+fn node_to_table_row(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block {
+    let cells = node
+        .children
+        .iter()
+        .filter(|n| {
+            let k = n.kind.as_str();
+            k == node::TABLE_CELL || k == node::TABLE_HEADER
+        })
+        .map(|n| ansi_fmt::TableCell {
+            inlines: n
+                .children
+                .iter()
+                .map(|c| node_to_ansi_inline(c, ctx))
+                .collect(),
+        })
+        .collect();
+
+    ansi_fmt::Block::TableRow { cells }
+}
+
+fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inline {
+    match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            ansi_fmt::Inline::Text(content)
         }
 
         node::EMPHASIS => {
-            ctx.write(ITALIC);
-            emit_nodes(&node.children, ctx);
-            ctx.write(RESET);
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Inline::Italic(children)
         }
 
         node::STRONG => {
-            ctx.write(BOLD);
-            emit_nodes(&node.children, ctx);
-            ctx.write(RESET);
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Inline::Bold(children)
         }
 
         node::STRIKEOUT => {
-            ctx.write(STRIKETHROUGH);
-            emit_nodes(&node.children, ctx);
-            ctx.write(RESET);
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Inline::Strikethrough(children)
         }
 
         node::UNDERLINE => {
-            ctx.write(UNDERLINE);
-            emit_nodes(&node.children, ctx);
-            ctx.write(RESET);
-        }
-
-        node::SUBSCRIPT => {
-            // Terminals don't support subscript, use dimmed
-            ctx.write(DIM);
-            emit_nodes(&node.children, ctx);
-            ctx.write(RESET);
-        }
-
-        node::SUPERSCRIPT => {
-            // Terminals don't support superscript, use dimmed
-            ctx.write(DIM);
-            emit_nodes(&node.children, ctx);
-            ctx.write(RESET);
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Inline::Underline(children)
         }
 
         node::CODE => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                if !ctx.in_code_block {
-                    ctx.write(BG_BLACK);
-                    ctx.write(CYAN);
-                }
-                ctx.write(content);
-                if !ctx.in_code_block {
-                    ctx.write(RESET);
-                }
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            ansi_fmt::Inline::Text(content)
+        }
+
+        node::LINE_BREAK => ansi_fmt::Inline::Text("\n".to_string()),
+
+        node::SOFT_BREAK => ansi_fmt::Inline::Text(" ".to_string()),
+
+        node::LINK => {
+            let url = node
+                .props
+                .get_str(prop::URL)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let mut children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect::<Vec<_>>();
+
+            if !url.is_empty() {
+                children.push(ansi_fmt::Inline::Text(format!(" ({})", url)));
+            }
+
+            if children.is_empty() {
+                ansi_fmt::Inline::Text(url)
+            } else if children.len() == 1 {
+                children.pop().unwrap()
+            } else {
+                ansi_fmt::Inline::Text(format!("{} ({})", collect_inline_text(&children), url))
             }
         }
 
-        node::LINK => emit_link(node, ctx),
-        node::IMAGE => emit_image(node, ctx),
-        node::LINE_BREAK => ctx.write("\n"),
-        node::SOFT_BREAK => ctx.write(" "),
+        node::IMAGE => {
+            let alt = node
+                .props
+                .get_str(prop::ALT)
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "Image".to_string());
+            ansi_fmt::Inline::Text(format!("[{}]", alt))
+        }
 
-        node::FOOTNOTE_REF => emit_footnote_ref(node, ctx),
-        node::FOOTNOTE_DEF => emit_footnote_def(node, ctx),
+        node::SUBSCRIPT | node::SUPERSCRIPT => {
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Inline::Italic(children)
+        }
 
         node::SMALL_CAPS => {
-            // Convert to uppercase as approximation
-            let mut upper = String::new();
-            for child in &node.children {
-                if let Some(content) = child.props.get_str(prop::CONTENT) {
-                    upper.push_str(&content.to_uppercase());
-                }
-            }
-            ctx.write(&upper);
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Inline::Bold(children)
         }
 
         node::QUOTED => {
             let quote_type = node.props.get_str(prop::QUOTE_TYPE).unwrap_or("double");
-            if quote_type == "single" {
-                ctx.write("'");
-                emit_nodes(&node.children, ctx);
-                ctx.write("'");
+            let (left, right) = if quote_type == "single" {
+                ("'", "'")
             } else {
-                ctx.write("\u{201C}"); // "
-                emit_nodes(&node.children, ctx);
-                ctx.write("\u{201D}"); // "
-            }
+                ("\u{201C}", "\u{201D}")
+            };
+
+            let inner = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect::<Vec<_>>();
+
+            let mut result = vec![ansi_fmt::Inline::Text(left.to_string())];
+            result.extend(inner);
+            result.push(ansi_fmt::Inline::Text(right.to_string()));
+            ansi_fmt::Inline::Text(collect_inline_text(&result))
+        }
+
+        node::FOOTNOTE_REF => {
+            let label = node
+                .props
+                .get_str(prop::LABEL)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            ansi_fmt::Inline::Text(format!("[{}]", label))
+        }
+
+        node::FOOTNOTE_DEF => {
+            let label = node
+                .props
+                .get_str(prop::LABEL)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect::<Vec<_>>();
+            let text = collect_inline_text(&children);
+            ansi_fmt::Inline::Text(format!("[{}] {}", label, text))
         }
 
         "math_inline" | "math_display" => {
-            if let Some(source) = node.props.get_str("math:source") {
-                ctx.write(MAGENTA);
-                ctx.write(source);
-                ctx.write(RESET);
-            }
+            let source = node
+                .props
+                .get_str("math:source")
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            ansi_fmt::Inline::Text(source)
         }
 
         _ => {
-            ctx.warnings.push(FidelityWarning::new(
-                Severity::Minor,
+            ctx.warn(
                 WarningKind::UnsupportedNode(node.kind.as_str().to_string()),
-                format!("Unknown node type for ANSI: {}", node.kind.as_str()),
-            ));
-            emit_nodes(&node.children, ctx);
+                format!("Unknown inline node type for ANSI: {}", node.kind.as_str()),
+            );
+            let children = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
+            ansi_fmt::Inline::Italic(children)
         }
     }
 }
 
-/// Emit a heading with color and style.
-fn emit_heading(node: &Node, ctx: &mut EmitContext) {
-    let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
+fn collect_definition_items(
+    nodes: &[Node],
+    ctx: &mut ConvertContext,
+) -> Vec<ansi_fmt::DefinitionItem> {
+    let mut items = Vec::new();
+    let mut i = 0;
 
-    // Different colors for different levels
-    let color = match level {
-        1 => BLUE,
-        2 => GREEN,
-        3 => YELLOW,
-        4 => CYAN,
-        _ => MAGENTA,
-    };
+    while i < nodes.len() {
+        let node = &nodes[i];
+        if node.kind.as_str() == node::DEFINITION_TERM {
+            let term = node
+                .children
+                .iter()
+                .map(|n| node_to_ansi_inline(n, ctx))
+                .collect();
 
-    ctx.write(BOLD);
-    ctx.write(color);
+            let mut desc = Vec::new();
+            i += 1;
 
-    // Add level indicator
-    for _ in 0..level {
-        ctx.write("#");
-    }
-    ctx.write(" ");
+            while i < nodes.len() && nodes[i].kind.as_str() == node::DEFINITION_DESC {
+                desc.extend(nodes[i].children.iter().map(|n| node_to_ansi_block(n, ctx)));
+                i += 1;
+            }
 
-    emit_nodes(&node.children, ctx);
-    ctx.write(RESET);
-    ctx.write("\n\n");
-}
-
-/// Emit a code block with syntax highlighting approximation.
-fn emit_code_block(node: &Node, ctx: &mut EmitContext) {
-    let lang = node.props.get_str(prop::LANGUAGE);
-
-    // Header with language
-    ctx.write(DIM);
-    ctx.write("┌─");
-    if let Some(lang) = lang {
-        ctx.write(" ");
-        ctx.write(lang);
-        ctx.write(" ");
-    }
-    ctx.write("─\n");
-    ctx.write(RESET);
-
-    ctx.write(BG_BLACK);
-    ctx.write(CYAN);
-    ctx.in_code_block = true;
-
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        for line in content.lines() {
-            ctx.write(DIM);
-            ctx.write("│ ");
-            ctx.write(RESET);
-            ctx.write(BG_BLACK);
-            ctx.write(CYAN);
-            ctx.write(line);
-            ctx.write(RESET);
-            ctx.write("\n");
-        }
-    }
-
-    ctx.in_code_block = false;
-    ctx.write(RESET);
-    ctx.write(DIM);
-    ctx.write("└─\n");
-    ctx.write(RESET);
-    ctx.write("\n");
-}
-
-/// Emit a blockquote with left border.
-fn emit_blockquote(node: &Node, ctx: &mut EmitContext) {
-    let mut inner = EmitContext::new();
-    emit_nodes(&node.children, &mut inner);
-
-    for line in inner.output.lines() {
-        ctx.write(DIM);
-        ctx.write("│ ");
-        ctx.write(RESET);
-        ctx.write(ITALIC);
-        ctx.write(line);
-        ctx.write(RESET);
-        ctx.write("\n");
-    }
-    ctx.write("\n");
-    ctx.warnings.extend(inner.warnings);
-}
-
-/// Emit a list.
-fn emit_list(node: &Node, ctx: &mut EmitContext) {
-    ctx.list_depth += 1;
-    emit_nodes(&node.children, ctx);
-    ctx.list_depth -= 1;
-    if ctx.list_depth == 0 {
-        ctx.write("\n");
-    }
-}
-
-/// Emit a list item with bullet or number.
-fn emit_list_item(node: &Node, ctx: &mut EmitContext) {
-    let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-
-    ctx.write_indent();
-
-    if ordered {
-        ctx.write(YELLOW);
-        ctx.write("• ");
-        ctx.write(RESET);
-    } else {
-        ctx.write(GREEN);
-        ctx.write("• ");
-        ctx.write(RESET);
-    }
-
-    // Emit children
-    for child in &node.children {
-        if child.kind.as_str() == node::PARAGRAPH {
-            emit_nodes(&child.children, ctx);
-            ctx.write("\n");
+            items.push(ansi_fmt::DefinitionItem { term, desc });
         } else {
-            emit_node(child, ctx);
-        }
-    }
-}
-
-/// Emit a table.
-fn emit_table(node: &Node, ctx: &mut EmitContext) {
-    let rows = collect_table_rows(node);
-    if rows.is_empty() {
-        return;
-    }
-
-    let col_widths = calculate_column_widths(&rows);
-
-    // Top border
-    emit_table_border(&col_widths, ctx, '┌', '┬', '┐');
-
-    // Emit rows
-    let mut is_header = true;
-    for row in &rows {
-        ctx.write("│");
-        for (i, cell) in row.iter().enumerate() {
-            let width = col_widths.get(i).copied().unwrap_or(1);
-            if is_header {
-                ctx.write(BOLD);
-            }
-            ctx.write(" ");
-            ctx.write(cell);
-            for _ in cell.len()..width {
-                ctx.write(" ");
-            }
-            if is_header {
-                ctx.write(RESET);
-            }
-            ctx.write(" │");
-        }
-        ctx.write("\n");
-
-        // Header separator
-        if is_header && rows.len() > 1 {
-            emit_table_border(&col_widths, ctx, '├', '┼', '┤');
-            is_header = false;
+            i += 1;
         }
     }
 
-    // Bottom border
-    emit_table_border(&col_widths, ctx, '└', '┴', '┘');
-    ctx.write("\n");
+    items
 }
 
-fn emit_table_border(widths: &[usize], ctx: &mut EmitContext, left: char, mid: char, right: char) {
-    ctx.write(DIM);
-    ctx.write(&left.to_string());
-    for (i, w) in widths.iter().enumerate() {
-        for _ in 0..(*w + 2) {
-            ctx.write("─");
-        }
-        if i < widths.len() - 1 {
-            ctx.write(&mid.to_string());
-        }
-    }
-    ctx.write(&right.to_string());
-    ctx.write(RESET);
-    ctx.write("\n");
-}
-
-fn collect_table_rows(node: &Node) -> Vec<Vec<String>> {
-    let mut rows = Vec::new();
-    collect_table_rows_inner(&node.children, &mut rows);
-    rows
-}
-
-fn collect_table_rows_inner(nodes: &[Node], rows: &mut Vec<Vec<String>>) {
-    for node in nodes {
-        match node.kind.as_str() {
-            node::TABLE_HEAD | node::TABLE_BODY | node::TABLE_FOOT => {
-                collect_table_rows_inner(&node.children, rows);
-            }
-            node::TABLE_ROW => {
-                let mut row = Vec::new();
-                for cell in &node.children {
-                    let mut text = String::new();
-                    collect_text(&cell.children, &mut text);
-                    row.push(text);
-                }
-                rows.push(row);
-            }
-            _ => {}
-        }
-    }
-}
-
-fn collect_text(nodes: &[Node], out: &mut String) {
-    for node in nodes {
-        if let Some(content) = node.props.get_str(prop::CONTENT) {
-            out.push_str(content);
-        }
-        collect_text(&node.children, out);
-    }
-}
-
-fn calculate_column_widths(rows: &[Vec<String>]) -> Vec<usize> {
-    let num_cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
-    let mut widths = vec![1; num_cols];
-
-    for row in rows {
-        for (i, cell) in row.iter().enumerate() {
-            if cell.len() > widths[i] {
-                widths[i] = cell.len();
+fn collect_inline_text(inlines: &[ansi_fmt::Inline]) -> String {
+    let mut text = String::new();
+    for inline in inlines {
+        match inline {
+            ansi_fmt::Inline::Text(s) => text.push_str(s),
+            ansi_fmt::Inline::Bold(c)
+            | ansi_fmt::Inline::Italic(c)
+            | ansi_fmt::Inline::Underline(c)
+            | ansi_fmt::Inline::Strikethrough(c) => {
+                text.push_str(&collect_inline_text(c));
             }
         }
     }
-    widths
-}
-
-/// Emit a definition list.
-fn emit_definition_list(node: &Node, ctx: &mut EmitContext) {
-    emit_nodes(&node.children, ctx);
-    ctx.write("\n");
-}
-
-/// Emit a definition term.
-fn emit_definition_term(node: &Node, ctx: &mut EmitContext) {
-    ctx.write(BOLD);
-    emit_nodes(&node.children, ctx);
-    ctx.write(RESET);
-    ctx.write("\n");
-}
-
-/// Emit a definition description.
-fn emit_definition_desc(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("  ");
-    emit_nodes(&node.children, ctx);
-    ctx.write("\n");
-}
-
-/// Emit a link.
-fn emit_link(node: &Node, ctx: &mut EmitContext) {
-    if let Some(url) = node.props.get_str(prop::URL) {
-        ctx.write(UNDERLINE);
-        ctx.write(BLUE);
-        emit_nodes(&node.children, ctx);
-        ctx.write(RESET);
-        ctx.write(DIM);
-        ctx.write(" (");
-        ctx.write(url);
-        ctx.write(")");
-        ctx.write(RESET);
-    } else {
-        emit_nodes(&node.children, ctx);
-    }
-}
-
-/// Emit an image placeholder.
-fn emit_image(node: &Node, ctx: &mut EmitContext) {
-    ctx.write(DIM);
-    ctx.write("[Image");
-    if let Some(alt) = node.props.get_str(prop::ALT) {
-        ctx.write(": ");
-        ctx.write(alt);
-    }
-    if let Some(url) = node.props.get_str(prop::URL) {
-        ctx.write(" (");
-        ctx.write(url);
-        ctx.write(")");
-    }
-    ctx.write("]");
-    ctx.write(RESET);
-}
-
-/// Emit a footnote reference.
-fn emit_footnote_ref(node: &Node, ctx: &mut EmitContext) {
-    if let Some(label) = node.props.get_str(prop::LABEL) {
-        ctx.write(CYAN);
-        ctx.write("[");
-        ctx.write(label);
-        ctx.write("]");
-        ctx.write(RESET);
-    }
-}
-
-/// Emit a footnote definition.
-fn emit_footnote_def(node: &Node, ctx: &mut EmitContext) {
-    if let Some(label) = node.props.get_str(prop::LABEL) {
-        ctx.write(CYAN);
-        ctx.write("[");
-        ctx.write(label);
-        ctx.write("] ");
-        ctx.write(RESET);
-        emit_nodes(&node.children, ctx);
-        ctx.write("\n");
-    }
+    text
 }
 
 #[cfg(test)]
@@ -561,7 +579,7 @@ mod tests {
         let doc = doc(|d| d.heading(1, |h| h.text("Title")));
         let output = emit_str(&doc);
         assert!(output.contains("# Title"));
-        assert!(output.contains(BOLD));
+        assert!(output.contains("\x1b[1m"));
     }
 
     #[test]
@@ -569,7 +587,7 @@ mod tests {
         let doc = doc(|d| d.para(|p| p.strong(|s| s.text("bold"))));
         let output = emit_str(&doc);
         assert!(output.contains("bold"));
-        assert!(output.contains(BOLD));
+        assert!(output.contains("\x1b[1m"));
     }
 
     #[test]
@@ -577,7 +595,7 @@ mod tests {
         let doc = doc(|d| d.para(|p| p.em(|e| e.text("italic"))));
         let output = emit_str(&doc);
         assert!(output.contains("italic"));
-        assert!(output.contains(ITALIC));
+        assert!(output.contains("\x1b[3m"));
     }
 
     #[test]
@@ -585,7 +603,6 @@ mod tests {
         let doc = doc(|d| d.para(|p| p.code("code")));
         let output = emit_str(&doc);
         assert!(output.contains("code"));
-        assert!(output.contains(CYAN));
     }
 
     #[test]
@@ -602,7 +619,6 @@ mod tests {
         let output = emit_str(&doc);
         assert!(output.contains("click"));
         assert!(output.contains("https://example.com"));
-        assert!(output.contains(UNDERLINE));
     }
 
     #[test]

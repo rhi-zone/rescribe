@@ -1,9 +1,10 @@
 //! TWiki writer for rescribe.
 //!
-//! Serializes rescribe's document IR to TWiki markup.
+//! Thin adapter layer that serializes rescribe's document IR to TWiki markup.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
+use twiki::{self, Block, Inline, TableCell, TableRow, TwikiDoc};
 
 /// Emit a document to TWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -15,167 +16,165 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut output = String::new();
-    emit_nodes(&doc.content.children, &mut output);
+    let blocks: Vec<Block> = doc
+        .content
+        .children
+        .iter()
+        .filter_map(node_to_block)
+        .collect();
+
+    let twiki_doc = TwikiDoc { blocks };
+    let output = twiki::build(&twiki_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-fn emit_nodes(nodes: &[Node], output: &mut String) {
-    for node in nodes {
-        emit_node(node, output);
-    }
-}
-
-fn emit_node(node: &Node, output: &mut String) {
+fn node_to_block(node: &Node) -> Option<Block> {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, output),
+        node::DOCUMENT => {
+            // Document nodes should have been flattened; skip
+            None
+        }
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as usize;
-            output.push_str("---");
-            for _ in 0..level.min(6) {
-                output.push('+');
-            }
-            output.push(' ');
-            emit_inline_nodes(&node.children, output);
-            output.push('\n');
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
+            Some(Block::Heading {
+                level,
+                inlines: node_children_to_inlines(&node.children),
+            })
         }
 
-        node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, output);
-            output.push_str("\n\n");
-        }
+        node::PARAGRAPH => Some(Block::Paragraph {
+            inlines: node_children_to_inlines(&node.children),
+        }),
 
         node::CODE_BLOCK => {
-            output.push_str("<verbatim>\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                output.push_str(content);
-                if !content.ends_with('\n') {
-                    output.push('\n');
-                }
-            }
-            output.push_str("</verbatim>\n\n");
-        }
-
-        node::BLOCKQUOTE => {
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    output.push_str("<blockquote>\n");
-                    emit_inline_nodes(&child.children, output);
-                    output.push_str("\n</blockquote>\n");
-                } else {
-                    emit_node(child, output);
-                }
-            }
-            output.push('\n');
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            Some(Block::CodeBlock { content })
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    output.push_str("   ");
-                    if ordered {
-                        output.push_str("1. ");
-                    } else {
-                        output.push_str("* ");
-                    }
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, output);
-                        } else {
-                            emit_inline_node(item_child, output);
-                        }
-                    }
-                    output.push('\n');
-                }
-            }
-            output.push('\n');
+            let items: Vec<Vec<Inline>> = node
+                .children
+                .iter()
+                .filter(|child| child.kind.as_str() == node::LIST_ITEM)
+                .map(|item| {
+                    item.children
+                        .iter()
+                        .find(|c| c.kind.as_str() == node::PARAGRAPH)
+                        .map(|para| node_children_to_inlines(&para.children))
+                        .unwrap_or_default()
+                })
+                .collect();
+            Some(Block::List { ordered, items })
         }
 
         node::TABLE => {
-            for row in &node.children {
-                if row.kind.as_str() == node::TABLE_ROW {
-                    output.push('|');
-                    for cell in &row.children {
-                        output.push(' ');
-                        if cell.kind.as_str() == node::TABLE_HEADER {
-                            output.push('*');
-                            emit_inline_nodes(&cell.children, output);
-                            output.push('*');
-                        } else {
-                            emit_inline_nodes(&cell.children, output);
-                        }
-                        output.push_str(" |");
-                    }
-                    output.push('\n');
-                }
-            }
-            output.push('\n');
+            let rows: Vec<TableRow> = node
+                .children
+                .iter()
+                .filter(|child| child.kind.as_str() == node::TABLE_ROW)
+                .map(|row| {
+                    let cells: Vec<TableCell> = row
+                        .children
+                        .iter()
+                        .map(|cell| {
+                            let is_header = cell.kind.as_str() == node::TABLE_HEADER;
+                            let inlines = node_children_to_inlines(&cell.children);
+                            TableCell { inlines, is_header }
+                        })
+                        .collect();
+                    TableRow { cells }
+                })
+                .collect();
+            Some(Block::Table { rows })
         }
 
-        node::HORIZONTAL_RULE => {
-            output.push_str("---\n\n");
-        }
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
 
         node::DIV | node::SPAN | node::FIGURE => {
-            emit_nodes(&node.children, output);
+            // These are container nodes; flatten their children
+            None
         }
 
-        _ => emit_nodes(&node.children, output),
+        _ => None,
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], output: &mut String) {
+fn node_children_to_inlines(nodes: &[Node]) -> Vec<Inline> {
+    let mut inlines = Vec::new();
     for node in nodes {
-        emit_inline_node(node, output);
+        if let Some(inline) = node_to_inline(node) {
+            inlines.push(inline);
+        }
     }
+    inlines
 }
 
-fn emit_inline_node(node: &Node, output: &mut String) {
+fn node_to_inline(node: &Node) -> Option<Inline> {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                output.push_str(content);
-            }
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            Some(Inline::Text(content))
         }
 
         node::STRONG => {
-            output.push('*');
-            emit_inline_nodes(&node.children, output);
-            output.push('*');
+            // Check if child is emphasis (bold italic)
+            if node.children.len() == 1 && node.children[0].kind.as_str() == node::EMPHASIS {
+                let children = node_children_to_inlines(&node.children[0].children);
+                Some(Inline::BoldItalic(children))
+            } else if node.children.len() == 1 && node.children[0].kind.as_str() == node::CODE {
+                // Bold code
+                let children = node_children_to_inlines(&node.children);
+                Some(Inline::BoldCode(children))
+            } else {
+                let children = node_children_to_inlines(&node.children);
+                Some(Inline::Bold(children))
+            }
         }
 
         node::EMPHASIS => {
-            output.push('_');
-            emit_inline_nodes(&node.children, output);
-            output.push('_');
+            let children = node_children_to_inlines(&node.children);
+            Some(Inline::Italic(children))
         }
 
         node::CODE => {
-            output.push('=');
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                output.push_str(content);
-            }
-            emit_inline_nodes(&node.children, output);
-            output.push('=');
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            Some(Inline::Code(content))
         }
 
         node::LINK => {
-            output.push_str("[[");
-            if let Some(url) = node.props.get_str(prop::URL) {
-                output.push_str(url);
-            }
-            output.push_str("][");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("]]");
+            let url = node
+                .props
+                .get_str(prop::URL)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let label = node
+                .children
+                .iter()
+                .find(|c| c.kind.as_str() == node::TEXT)
+                .and_then(|c| c.props.get_str(prop::CONTENT))
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| url.clone());
+            Some(Inline::Link { url, label })
         }
 
-        node::LINE_BREAK => output.push_str("%BR%"),
-        node::SOFT_BREAK => output.push(' '),
+        node::LINE_BREAK => Some(Inline::LineBreak),
+        node::SOFT_BREAK => Some(Inline::Text(" ".to_string())),
 
-        _ => emit_inline_nodes(&node.children, output),
+        _ => None,
     }
 }
 

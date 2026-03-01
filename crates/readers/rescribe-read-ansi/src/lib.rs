@@ -1,6 +1,6 @@
 //! ANSI escape sequence reader for rescribe.
 //!
-//! Parses text with ANSI escape codes into rescribe's document IR.
+//! Thin adapter converting ansi-fmt's AST to rescribe's document IR.
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
 use rescribe_std::{node, prop};
@@ -15,30 +15,15 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let mut result = Vec::new();
-    let lines: Vec<&str> = input.lines().collect();
-    let mut i = 0;
+    let ansi_doc = ansi_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
 
-    while i < lines.len() {
-        let line = lines[i];
-
-        // Empty line
-        if line.is_empty() || strip_ansi(line).is_empty() {
-            i += 1;
-            continue;
-        }
-
-        // Collect paragraph lines
-        let (para_lines, end) = collect_paragraph(&lines, i);
-        if !para_lines.is_empty() {
-            let text = para_lines.join(" ");
-            result.push(Node::new(node::PARAGRAPH).children(parse_inline(&text)));
-        }
-        i = end;
+    let mut blocks = Vec::new();
+    for block in &ansi_doc.blocks {
+        blocks.push(ansi_block_to_node(block));
     }
 
     let document = Document {
-        content: Node::new(node::DOCUMENT).children(result),
+        content: Node::new(node::DOCUMENT).children(blocks),
         resources: Default::default(),
         metadata: Default::default(),
         source: None,
@@ -47,137 +32,192 @@ pub fn parse_with_options(
     Ok(ConversionResult::ok(document))
 }
 
-fn collect_paragraph<'a>(lines: &[&'a str], start: usize) -> (Vec<&'a str>, usize) {
-    let mut para_lines = Vec::new();
-    let mut i = start;
-
-    while i < lines.len() {
-        let line = lines[i];
-        if line.is_empty() || strip_ansi(line).is_empty() {
-            break;
+fn ansi_block_to_node(block: &ansi_fmt::Block) -> Node {
+    match block {
+        ansi_fmt::Block::Paragraph { inlines } => {
+            let children: Vec<Node> = inlines.iter().map(ansi_inline_to_node).collect();
+            Node::new(node::PARAGRAPH).children(children)
         }
-        para_lines.push(line);
-        i += 1;
-    }
-
-    (para_lines, i)
-}
-
-/// Strip ANSI escape sequences from text
-fn strip_ansi(text: &str) -> String {
-    let mut result = String::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-
-    while i < chars.len() {
-        if chars[i] == '\x1b' && i + 1 < chars.len() && chars[i + 1] == '[' {
-            // Skip until 'm' or end of sequence
-            i += 2;
-            while i < chars.len() && !chars[i].is_ascii_alphabetic() {
-                i += 1;
+        ansi_fmt::Block::Heading { level, inlines } => {
+            let children: Vec<Node> = inlines.iter().map(ansi_inline_to_node).collect();
+            Node::new(node::HEADING)
+                .prop(prop::LEVEL, *level as i64)
+                .children(children)
+        }
+        ansi_fmt::Block::CodeBlock { language, content } => {
+            let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
+            if let Some(lang) = language {
+                n = n.prop(prop::LANGUAGE, lang.clone());
             }
-            if i < chars.len() {
-                i += 1; // Skip the terminating letter
+            n
+        }
+        ansi_fmt::Block::Blockquote { children } => {
+            let nodes: Vec<Node> = children.iter().map(ansi_block_to_node).collect();
+            Node::new(node::BLOCKQUOTE).children(nodes)
+        }
+        ansi_fmt::Block::List { ordered, items } => {
+            let mut n = Node::new(node::LIST);
+            if *ordered {
+                n = n.prop(prop::ORDERED, true);
             }
-        } else {
-            result.push(chars[i]);
-            i += 1;
+            let list_items: Vec<Node> = items
+                .iter()
+                .map(|item_blocks| {
+                    let blocks: Vec<Node> = item_blocks.iter().map(ansi_block_to_node).collect();
+                    Node::new(node::LIST_ITEM).children(blocks)
+                })
+                .collect();
+            n.children(list_items)
+        }
+        ansi_fmt::Block::ListItem { children } => {
+            let nodes: Vec<Node> = children.iter().map(ansi_block_to_node).collect();
+            Node::new(node::LIST_ITEM).children(nodes)
+        }
+        ansi_fmt::Block::Table { rows } => {
+            let table_rows: Vec<Node> = rows
+                .iter()
+                .map(|row| {
+                    let cells: Vec<Node> = row
+                        .cells
+                        .iter()
+                        .map(|cell| {
+                            let inlines: Vec<Node> =
+                                cell.inlines.iter().map(ansi_inline_to_node).collect();
+                            Node::new(node::TABLE_CELL).children(inlines)
+                        })
+                        .collect();
+                    Node::new(node::TABLE_ROW).children(cells)
+                })
+                .collect();
+            Node::new(node::TABLE).children(table_rows)
+        }
+        ansi_fmt::Block::TableRow { cells } => {
+            let table_cells: Vec<Node> = cells
+                .iter()
+                .map(|cell| {
+                    let inlines: Vec<Node> = cell.inlines.iter().map(ansi_inline_to_node).collect();
+                    Node::new(node::TABLE_CELL).children(inlines)
+                })
+                .collect();
+            Node::new(node::TABLE_ROW).children(table_cells)
+        }
+        ansi_fmt::Block::TableCell { inlines } => {
+            let children: Vec<Node> = inlines.iter().map(ansi_inline_to_node).collect();
+            Node::new(node::TABLE_CELL).children(children)
+        }
+        ansi_fmt::Block::TableHeader { cells } => {
+            let table_cells: Vec<Node> = cells
+                .iter()
+                .map(|cell| {
+                    let inlines: Vec<Node> = cell.inlines.iter().map(ansi_inline_to_node).collect();
+                    Node::new(node::TABLE_CELL).children(inlines)
+                })
+                .collect();
+            Node::new(node::TABLE_HEAD).children(table_cells)
+        }
+        ansi_fmt::Block::TableBody { rows } => {
+            let table_rows: Vec<Node> = rows
+                .iter()
+                .map(|row| {
+                    let cells: Vec<Node> = row
+                        .cells
+                        .iter()
+                        .map(|cell| {
+                            let inlines: Vec<Node> =
+                                cell.inlines.iter().map(ansi_inline_to_node).collect();
+                            Node::new(node::TABLE_CELL).children(inlines)
+                        })
+                        .collect();
+                    Node::new(node::TABLE_ROW).children(cells)
+                })
+                .collect();
+            Node::new(node::TABLE_BODY).children(table_rows)
+        }
+        ansi_fmt::Block::TableFoot { rows } => {
+            let table_rows: Vec<Node> = rows
+                .iter()
+                .map(|row| {
+                    let cells: Vec<Node> = row
+                        .cells
+                        .iter()
+                        .map(|cell| {
+                            let inlines: Vec<Node> =
+                                cell.inlines.iter().map(ansi_inline_to_node).collect();
+                            Node::new(node::TABLE_CELL).children(inlines)
+                        })
+                        .collect();
+                    Node::new(node::TABLE_ROW).children(cells)
+                })
+                .collect();
+            Node::new(node::TABLE_FOOT).children(table_rows)
+        }
+        ansi_fmt::Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        ansi_fmt::Block::Div { children } => {
+            let nodes: Vec<Node> = children.iter().map(ansi_block_to_node).collect();
+            Node::new(node::DIV).children(nodes)
+        }
+        ansi_fmt::Block::Span { inlines } => {
+            let children: Vec<Node> = inlines.iter().map(ansi_inline_to_node).collect();
+            Node::new(node::SPAN).children(children)
+        }
+        ansi_fmt::Block::RawBlock { content } => {
+            Node::new(node::RAW_BLOCK).prop(prop::CONTENT, content.clone())
+        }
+        ansi_fmt::Block::RawInline { content } => {
+            Node::new(node::RAW_INLINE).prop(prop::CONTENT, content.clone())
+        }
+        ansi_fmt::Block::DefinitionList { items } => {
+            let list_items: Vec<Node> = items
+                .iter()
+                .flat_map(|item| {
+                    let term = Node::new(node::DEFINITION_TERM).children(
+                        item.term
+                            .iter()
+                            .map(ansi_inline_to_node)
+                            .collect::<Vec<_>>(),
+                    );
+                    let descs: Vec<Node> = item.desc.iter().map(ansi_block_to_node).collect();
+                    let desc = Node::new(node::DEFINITION_DESC).children(descs);
+                    vec![term, desc]
+                })
+                .collect();
+            Node::new(node::DEFINITION_LIST).children(list_items)
+        }
+        ansi_fmt::Block::DefinitionTerm { inlines } => {
+            let children: Vec<Node> = inlines.iter().map(ansi_inline_to_node).collect();
+            Node::new(node::DEFINITION_TERM).children(children)
+        }
+        ansi_fmt::Block::DefinitionDesc { children } => {
+            let nodes: Vec<Node> = children.iter().map(ansi_block_to_node).collect();
+            Node::new(node::DEFINITION_DESC).children(nodes)
+        }
+        ansi_fmt::Block::Figure { children } => {
+            let nodes: Vec<Node> = children.iter().map(ansi_block_to_node).collect();
+            Node::new(node::FIGURE).children(nodes)
         }
     }
-
-    result
 }
 
-/// ANSI SGR (Select Graphic Rendition) codes
-#[derive(Default, Clone)]
-struct Style {
-    bold: bool,
-    italic: bool,
-    underline: bool,
-    strikethrough: bool,
-}
-
-fn parse_inline(text: &str) -> Vec<Node> {
-    let mut nodes = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    let mut current = String::new();
-    let mut style = Style::default();
-
-    while i < chars.len() {
-        // Check for ANSI escape sequence
-        if chars[i] == '\x1b' && i + 1 < chars.len() && chars[i + 1] == '[' {
-            // Flush current text
-            if !current.is_empty() {
-                nodes.push(create_styled_node(&current, &style));
-                current.clear();
-            }
-
-            // Parse escape sequence
-            i += 2; // Skip ESC [
-            let mut params = String::new();
-            while i < chars.len() && !chars[i].is_ascii_alphabetic() {
-                params.push(chars[i]);
-                i += 1;
-            }
-
-            if i < chars.len() {
-                let cmd = chars[i];
-                i += 1;
-
-                if cmd == 'm' {
-                    // SGR command
-                    for code in params.split(';') {
-                        match code.trim() {
-                            "0" | "" => style = Style::default(), // Reset
-                            "1" => style.bold = true,
-                            "3" => style.italic = true,
-                            "4" => style.underline = true,
-                            "9" => style.strikethrough = true,
-                            "22" => style.bold = false,
-                            "23" => style.italic = false,
-                            "24" => style.underline = false,
-                            "29" => style.strikethrough = false,
-                            _ => {} // Ignore colors and other codes
-                        }
-                    }
-                }
-            }
-            continue;
+fn ansi_inline_to_node(inline: &ansi_fmt::Inline) -> Node {
+    match inline {
+        ansi_fmt::Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        ansi_fmt::Inline::Bold(children) => {
+            let inner: Vec<Node> = children.iter().map(ansi_inline_to_node).collect();
+            Node::new(node::STRONG).children(inner)
         }
-
-        current.push(chars[i]);
-        i += 1;
+        ansi_fmt::Inline::Italic(children) => {
+            let inner: Vec<Node> = children.iter().map(ansi_inline_to_node).collect();
+            Node::new(node::EMPHASIS).children(inner)
+        }
+        ansi_fmt::Inline::Underline(children) => {
+            let inner: Vec<Node> = children.iter().map(ansi_inline_to_node).collect();
+            Node::new(node::UNDERLINE).children(inner)
+        }
+        ansi_fmt::Inline::Strikethrough(children) => {
+            let inner: Vec<Node> = children.iter().map(ansi_inline_to_node).collect();
+            Node::new(node::STRIKEOUT).children(inner)
+        }
     }
-
-    // Flush remaining text
-    if !current.is_empty() {
-        nodes.push(create_styled_node(&current, &style));
-    }
-
-    nodes
-}
-
-fn create_styled_node(text: &str, style: &Style) -> Node {
-    let text_node = Node::new(node::TEXT).prop(prop::CONTENT, text.to_string());
-
-    // Apply styles from innermost to outermost
-    let mut node = text_node;
-
-    if style.strikethrough {
-        node = Node::new(node::STRIKEOUT).child(node);
-    }
-    if style.underline {
-        node = Node::new(node::UNDERLINE).child(node);
-    }
-    if style.italic {
-        node = Node::new(node::EMPHASIS).child(node);
-    }
-    if style.bold {
-        node = Node::new(node::STRONG).child(node);
-    }
-
-    node
 }
 
 #[cfg(test)]
@@ -206,13 +246,6 @@ mod tests {
     fn test_parse_underline() {
         let result = parse("\x1b[4mUnderlined\x1b[0m").unwrap();
         assert!(!result.value.content.children.is_empty());
-    }
-
-    #[test]
-    fn test_strip_ansi() {
-        assert_eq!(strip_ansi("\x1b[1mBold\x1b[0m"), "Bold");
-        assert_eq!(strip_ansi("\x1b[31mRed\x1b[0m"), "Red");
-        assert_eq!(strip_ansi("Plain text"), "Plain text");
     }
 
     #[test]

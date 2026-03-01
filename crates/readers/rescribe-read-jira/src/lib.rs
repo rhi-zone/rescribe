@@ -1,9 +1,9 @@
 //! Jira markup reader for rescribe.
 //!
 //! Parses Jira/Confluence wiki markup into rescribe documents.
+//! Thin adapter over `jira-fmt` standalone library.
 
-#![allow(clippy::collapsible_if)]
-
+use jira_fmt::{Block, Inline, parse as jira_parse};
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
 use rescribe_std::{node, prop};
 
@@ -17,532 +17,144 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let mut parser = Parser::new(input);
-    let root = parser.parse_document();
+    let jira_doc = jira_parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+
+    let mut children = Vec::new();
+    for block in jira_doc.blocks {
+        children.push(block_to_node(&block));
+    }
+
+    let root = Node::new(node::DOCUMENT).children(children);
     let doc = Document::new().with_content(root);
     Ok(ConversionResult::ok(doc))
 }
 
-struct Parser<'a> {
-    lines: Vec<&'a str>,
-    pos: usize,
+fn block_to_node(block: &Block) -> Node {
+    match block {
+        Block::Paragraph { inlines } => {
+            Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))
+        }
+
+        Block::Heading { level, inlines } => Node::new(node::HEADING)
+            .prop(prop::LEVEL, *level as i64)
+            .children(inlines_to_nodes(inlines)),
+
+        Block::CodeBlock { content, language } => {
+            let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
+            if let Some(lang) = language {
+                n = n.prop(prop::LANGUAGE, lang.clone());
+            }
+            n
+        }
+
+        Block::Blockquote { children } => {
+            let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
+            Node::new(node::BLOCKQUOTE).children(block_children)
+        }
+
+        Block::Panel { children } => {
+            let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
+            Node::new(node::DIV)
+                .prop("jira:type", "panel")
+                .children(block_children)
+        }
+
+        Block::List { ordered, items } => {
+            let mut list_items = Vec::new();
+            for item_blocks in items {
+                let mut item_children = Vec::new();
+                for item_block in item_blocks {
+                    item_children.push(block_to_node(item_block));
+                }
+                list_items.push(Node::new(node::LIST_ITEM).children(item_children));
+            }
+            Node::new(node::LIST)
+                .prop(prop::ORDERED, *ordered)
+                .children(list_items)
+        }
+
+        Block::Table { rows } => {
+            let mut table_rows = Vec::new();
+            let mut first_row = true;
+            let mut has_header = false;
+
+            for row in rows {
+                let has_header_cells = row.cells.iter().any(|c| c.is_header);
+                if first_row && has_header_cells {
+                    has_header = true;
+                }
+                first_row = false;
+            }
+
+            first_row = true;
+            for row in rows {
+                let mut cells = Vec::new();
+                for cell in &row.cells {
+                    let cell_kind = if cell.is_header {
+                        node::TABLE_HEADER
+                    } else {
+                        node::TABLE_CELL
+                    };
+                    cells.push(Node::new(cell_kind).children(inlines_to_nodes(&cell.inlines)));
+                }
+
+                let table_row = Node::new(node::TABLE_ROW).children(cells);
+                if first_row && has_header {
+                    table_rows.push(Node::new(node::TABLE_HEAD).child(table_row));
+                } else {
+                    table_rows.push(table_row);
+                }
+                first_row = false;
+            }
+
+            Node::new(node::TABLE).children(table_rows)
+        }
+
+        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+    }
 }
 
-impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
-        let lines: Vec<&str> = input.lines().collect();
-        Self { lines, pos: 0 }
-    }
+fn inlines_to_nodes(inlines: &[Inline]) -> Vec<Node> {
+    inlines.iter().map(inline_to_node).collect()
+}
 
-    fn parse_document(&mut self) -> Node {
-        let mut children = Vec::new();
+fn inline_to_node(inline: &Inline) -> Node {
+    match inline {
+        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        while self.pos < self.lines.len() {
-            if let Some(node) = self.parse_block() {
-                children.push(node);
+        Inline::Bold(children) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
+
+        Inline::Italic(children) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
+
+        Inline::Underline(children) => {
+            Node::new(node::UNDERLINE).children(inlines_to_nodes(children))
+        }
+
+        Inline::Strikethrough(children) => {
+            Node::new(node::STRIKEOUT).children(inlines_to_nodes(children))
+        }
+
+        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+
+        Inline::Link { url, children } => Node::new(node::LINK)
+            .prop(prop::URL, url.clone())
+            .children(inlines_to_nodes(children)),
+
+        Inline::Image { url, alt } => {
+            let mut img = Node::new(node::IMAGE).prop(prop::URL, url.clone());
+            if let Some(alt_text) = alt {
+                img = img.prop(prop::ALT, alt_text.clone());
             }
+            img
         }
 
-        Node::new(node::DOCUMENT).children(children)
-    }
-
-    fn current_line(&self) -> Option<&'a str> {
-        self.lines.get(self.pos).copied()
-    }
-
-    fn advance(&mut self) {
-        self.pos += 1;
-    }
-
-    fn parse_block(&mut self) -> Option<Node> {
-        let line = self.current_line()?;
-
-        // Skip blank lines
-        if line.trim().is_empty() {
-            self.advance();
-            return None;
+        Inline::Superscript(children) => {
+            Node::new(node::SUPERSCRIPT).children(inlines_to_nodes(children))
         }
 
-        // Heading: h1. to h6.
-        if let Some(rest) = line.strip_prefix("h1. ") {
-            self.advance();
-            return Some(
-                Node::new(node::HEADING)
-                    .prop(prop::LEVEL, 1i64)
-                    .children(self.parse_inline(rest)),
-            );
+        Inline::Subscript(children) => {
+            Node::new(node::SUBSCRIPT).children(inlines_to_nodes(children))
         }
-        if let Some(rest) = line.strip_prefix("h2. ") {
-            self.advance();
-            return Some(
-                Node::new(node::HEADING)
-                    .prop(prop::LEVEL, 2i64)
-                    .children(self.parse_inline(rest)),
-            );
-        }
-        if let Some(rest) = line.strip_prefix("h3. ") {
-            self.advance();
-            return Some(
-                Node::new(node::HEADING)
-                    .prop(prop::LEVEL, 3i64)
-                    .children(self.parse_inline(rest)),
-            );
-        }
-        if let Some(rest) = line.strip_prefix("h4. ") {
-            self.advance();
-            return Some(
-                Node::new(node::HEADING)
-                    .prop(prop::LEVEL, 4i64)
-                    .children(self.parse_inline(rest)),
-            );
-        }
-        if let Some(rest) = line.strip_prefix("h5. ") {
-            self.advance();
-            return Some(
-                Node::new(node::HEADING)
-                    .prop(prop::LEVEL, 5i64)
-                    .children(self.parse_inline(rest)),
-            );
-        }
-        if let Some(rest) = line.strip_prefix("h6. ") {
-            self.advance();
-            return Some(
-                Node::new(node::HEADING)
-                    .prop(prop::LEVEL, 6i64)
-                    .children(self.parse_inline(rest)),
-            );
-        }
-
-        // Code block: {code} or {code:lang}
-        if line.starts_with("{code") {
-            return Some(self.parse_code_block());
-        }
-
-        // Quote block: {quote}
-        if line.trim() == "{quote}" {
-            return Some(self.parse_quote_block());
-        }
-
-        // Panel: {panel}
-        if line.starts_with("{panel") {
-            return Some(self.parse_panel_block());
-        }
-
-        // Lists: * or #
-        if line.starts_with('*') || line.starts_with('#') {
-            return Some(self.parse_list());
-        }
-
-        // Table: starts with |
-        if line.starts_with('|') {
-            return Some(self.parse_table());
-        }
-
-        // Horizontal rule: ----
-        if line.trim() == "----" {
-            self.advance();
-            return Some(Node::new(node::HORIZONTAL_RULE));
-        }
-
-        // Default: paragraph
-        Some(self.parse_paragraph())
-    }
-
-    fn parse_code_block(&mut self) -> Node {
-        let line = self.current_line().unwrap();
-        self.advance();
-
-        // Extract language from {code:lang}
-        let lang = if let Some(rest) = line.strip_prefix("{code:") {
-            rest.strip_suffix('}').map(|s| s.to_string())
-        } else {
-            None
-        };
-
-        let mut content = String::new();
-        while let Some(line) = self.current_line() {
-            if line.trim() == "{code}" {
-                self.advance();
-                break;
-            }
-            if !content.is_empty() {
-                content.push('\n');
-            }
-            content.push_str(line);
-            self.advance();
-        }
-
-        let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content);
-        if let Some(lang) = lang {
-            node = node.prop(prop::LANGUAGE, lang);
-        }
-        node
-    }
-
-    fn parse_quote_block(&mut self) -> Node {
-        self.advance(); // Skip {quote}
-        let mut children = Vec::new();
-
-        while let Some(line) = self.current_line() {
-            if line.trim() == "{quote}" {
-                self.advance();
-                break;
-            }
-            if line.trim().is_empty() {
-                self.advance();
-                continue;
-            }
-            children.push(Node::new(node::PARAGRAPH).children(self.parse_inline(line)));
-            self.advance();
-        }
-
-        Node::new(node::BLOCKQUOTE).children(children)
-    }
-
-    fn parse_panel_block(&mut self) -> Node {
-        self.advance(); // Skip {panel...}
-        let mut children = Vec::new();
-
-        while let Some(line) = self.current_line() {
-            if line.trim() == "{panel}" {
-                self.advance();
-                break;
-            }
-            if line.trim().is_empty() {
-                self.advance();
-                continue;
-            }
-            children.push(Node::new(node::PARAGRAPH).children(self.parse_inline(line)));
-            self.advance();
-        }
-
-        Node::new(node::DIV)
-            .prop("jira:type", "panel")
-            .children(children)
-    }
-
-    fn parse_list(&mut self) -> Node {
-        let first_line = self.current_line().unwrap();
-        let ordered = first_line.starts_with('#');
-        let mut items = Vec::new();
-
-        while let Some(line) = self.current_line() {
-            let marker = if ordered { '#' } else { '*' };
-            if !line.starts_with(marker) {
-                break;
-            }
-
-            // Count depth
-            let depth = line.chars().take_while(|&c| c == marker).count();
-            let content = line[depth..].trim_start();
-
-            // For now, just handle single-level lists
-            if depth == 1 {
-                let item = Node::new(node::LIST_ITEM).children(vec![
-                    Node::new(node::PARAGRAPH).children(self.parse_inline(content)),
-                ]);
-                items.push(item);
-            }
-            self.advance();
-        }
-
-        Node::new(node::LIST)
-            .prop(prop::ORDERED, ordered)
-            .children(items)
-    }
-
-    fn parse_table(&mut self) -> Node {
-        let mut rows = Vec::new();
-        let mut first_row = true;
-
-        while let Some(line) = self.current_line() {
-            if !line.starts_with('|') {
-                break;
-            }
-
-            // Check if header row (starts with ||)
-            let is_header = line.starts_with("||");
-            let cells: Vec<Node> = if is_header {
-                line.split("||")
-                    .filter(|s| !s.is_empty())
-                    .map(|cell| {
-                        Node::new(node::TABLE_HEADER).children(self.parse_inline(cell.trim()))
-                    })
-                    .collect()
-            } else {
-                line.split('|')
-                    .filter(|s| !s.is_empty())
-                    .map(|cell| {
-                        Node::new(node::TABLE_CELL).children(self.parse_inline(cell.trim()))
-                    })
-                    .collect()
-            };
-
-            let row = Node::new(node::TABLE_ROW).children(cells);
-
-            if first_row && is_header {
-                rows.push(Node::new(node::TABLE_HEAD).child(row));
-            } else {
-                if first_row {
-                    // Start tbody
-                }
-                rows.push(row);
-            }
-
-            first_row = false;
-            self.advance();
-        }
-
-        Node::new(node::TABLE).children(rows)
-    }
-
-    fn parse_paragraph(&mut self) -> Node {
-        let mut lines = Vec::new();
-
-        while let Some(line) = self.current_line() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                break;
-            }
-            // Stop at block-level elements
-            if trimmed.starts_with("h1. ")
-                || trimmed.starts_with("h2. ")
-                || trimmed.starts_with("h3. ")
-                || trimmed.starts_with("h4. ")
-                || trimmed.starts_with("h5. ")
-                || trimmed.starts_with("h6. ")
-                || trimmed.starts_with("{code")
-                || trimmed == "{quote}"
-                || trimmed.starts_with("{panel")
-                || trimmed.starts_with('*')
-                || trimmed.starts_with('#')
-                || trimmed.starts_with('|')
-                || trimmed == "----"
-            {
-                break;
-            }
-            lines.push(trimmed);
-            self.advance();
-        }
-
-        let text = lines.join(" ");
-        Node::new(node::PARAGRAPH).children(self.parse_inline(&text))
-    }
-
-    fn parse_inline(&self, text: &str) -> Vec<Node> {
-        let mut nodes = Vec::new();
-        let mut current = String::new();
-        let chars: Vec<char> = text.chars().collect();
-        let mut i = 0;
-
-        while i < chars.len() {
-            // Bold: *text*
-            if chars[i] == '*' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_delim(&chars, i + 1, '*') {
-                    nodes.push(
-                        Node::new(node::STRONG)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, content)),
-                    );
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Italic: _text_
-            if chars[i] == '_' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_delim(&chars, i + 1, '_') {
-                    nodes.push(
-                        Node::new(node::EMPHASIS)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, content)),
-                    );
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Strikethrough: -text-
-            if chars[i] == '-' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_delim(&chars, i + 1, '-') {
-                    nodes.push(
-                        Node::new(node::STRIKEOUT)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, content)),
-                    );
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Underline: +text+
-            if chars[i] == '+' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_delim(&chars, i + 1, '+') {
-                    nodes.push(
-                        Node::new(node::UNDERLINE)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, content)),
-                    );
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Superscript: ^text^
-            if chars[i] == '^' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_delim(&chars, i + 1, '^') {
-                    nodes.push(
-                        Node::new(node::SUPERSCRIPT)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, content)),
-                    );
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Subscript: ~text~
-            if chars[i] == '~' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_delim(&chars, i + 1, '~') {
-                    nodes.push(
-                        Node::new(node::SUBSCRIPT)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, content)),
-                    );
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Monospace: {{text}}
-            if i + 1 < chars.len() && chars[i] == '{' && chars[i + 1] == '{' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((content, end)) = self.find_double_brace(&chars, i + 2) {
-                    nodes.push(Node::new(node::CODE).prop(prop::CONTENT, content));
-                    i = end + 2;
-                    continue;
-                }
-            }
-
-            // Link: [text|url] or [url]
-            if chars[i] == '[' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((link_content, end)) = self.find_bracket(&chars, i + 1) {
-                    let (text, url) = if let Some(pipe_pos) = link_content.find('|') {
-                        (&link_content[..pipe_pos], &link_content[pipe_pos + 1..])
-                    } else {
-                        (link_content.as_str(), link_content.as_str())
-                    };
-                    nodes.push(
-                        Node::new(node::LINK)
-                            .prop(prop::URL, url)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, text)),
-                    );
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            // Image: !url! or !url|alt!
-            if chars[i] == '!' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-                if let Some((img_content, end)) = self.find_delim(&chars, i + 1, '!') {
-                    let (url, alt) = if let Some(pipe_pos) = img_content.find('|') {
-                        (&img_content[..pipe_pos], Some(&img_content[pipe_pos + 1..]))
-                    } else {
-                        (img_content.as_str(), None)
-                    };
-                    let mut img = Node::new(node::IMAGE).prop(prop::URL, url);
-                    if let Some(alt) = alt {
-                        img = img.prop(prop::ALT, alt);
-                    }
-                    nodes.push(img);
-                    i = end + 1;
-                    continue;
-                }
-            }
-
-            current.push(chars[i]);
-            i += 1;
-        }
-
-        if !current.is_empty() {
-            nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current));
-        }
-
-        nodes
-    }
-
-    fn find_delim(&self, chars: &[char], start: usize, delim: char) -> Option<(String, usize)> {
-        let mut content = String::new();
-        let mut i = start;
-
-        while i < chars.len() {
-            if chars[i] == delim {
-                return Some((content, i));
-            }
-            content.push(chars[i]);
-            i += 1;
-        }
-
-        None
-    }
-
-    fn find_double_brace(&self, chars: &[char], start: usize) -> Option<(String, usize)> {
-        let mut content = String::new();
-        let mut i = start;
-
-        while i + 1 < chars.len() {
-            if chars[i] == '}' && chars[i + 1] == '}' {
-                return Some((content, i));
-            }
-            content.push(chars[i]);
-            i += 1;
-        }
-
-        None
-    }
-
-    fn find_bracket(&self, chars: &[char], start: usize) -> Option<(String, usize)> {
-        let mut content = String::new();
-        let mut i = start;
-
-        while i < chars.len() {
-            if chars[i] == ']' {
-                return Some((content, i));
-            }
-            content.push(chars[i]);
-            i += 1;
-        }
-
-        None
     }
 }
 

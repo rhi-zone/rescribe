@@ -9,3 +9,4 @@ description = "Fountain screenplay format reader for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
+fountain-fmt = { workspace = true }

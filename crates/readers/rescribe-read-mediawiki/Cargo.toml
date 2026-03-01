@@ -9,3 +9,4 @@ description = "MediaWiki reader for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
+mediawiki-fmt = { workspace = true }

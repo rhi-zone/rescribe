@@ -9,3 +9,4 @@ description = "TWiki reader for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
+twiki = { workspace = true }

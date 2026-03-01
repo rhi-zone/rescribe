@@ -39,13 +39,6 @@ impl EmitContext {
             warnings: Vec::new(),
         }
     }
-
-    fn write_tag(&mut self, tag: &str, value: &str) {
-        self.output.push_str(tag);
-        self.output.push_str("  - ");
-        self.output.push_str(value);
-        self.output.push('\n');
-    }
 }
 
 fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
@@ -97,8 +90,7 @@ fn is_bibtex_type(s: &str) -> bool {
 }
 
 fn emit_ris_entry(node: &Node, ctx: &mut EmitContext) {
-    let ris_type = node.props.get_str("ris:type").unwrap_or("GEN");
-    ctx.write_tag("TY", ris_type);
+    let mut entry = ris::RisEntry::new(node.props.get_str("ris:type").unwrap_or("GEN"));
 
     // Emit all ris: prefixed properties
     for (key, value) in node.props.iter() {
@@ -107,92 +99,95 @@ fn emit_ris_entry(node: &Node, ctx: &mut EmitContext) {
             && tag != "key"
             && let rescribe_core::PropValue::String(s) = value
         {
-            ctx.write_tag(&tag.to_uppercase(), s);
+            entry.add_field(&tag.to_uppercase(), s);
         }
     }
 
-    ctx.write_tag("ER", "");
-    ctx.output.push('\n');
+    let output = ris::build(&ris::RisDoc {
+        entries: vec![entry],
+    });
+    ctx.output.push_str(&output);
 }
 
 fn emit_bibtex_entry(node: &Node, ctx: &mut EmitContext) {
     let bibtex_type = node.props.get_str("bibtex:type").unwrap_or("misc");
-    let ris_type = bibtex_type_to_ris(bibtex_type);
-
-    ctx.write_tag("TY", ris_type);
+    let ris_type = ris::bibtex_type_to_ris(bibtex_type);
+    let mut entry = ris::RisEntry::new(ris_type);
 
     // Map bibtex fields to RIS tags
-    emit_bibtex_fields(node, ctx);
+    emit_bibtex_fields(node, &mut entry);
 
-    ctx.write_tag("ER", "");
-    ctx.output.push('\n');
+    let output = ris::build(&ris::RisDoc {
+        entries: vec![entry],
+    });
+    ctx.output.push_str(&output);
 }
 
-fn emit_bibtex_fields(node: &Node, ctx: &mut EmitContext) {
+fn emit_bibtex_fields(node: &Node, entry: &mut ris::RisEntry) {
     for (key, value) in node.props.iter() {
         if let Some(field) = key.strip_prefix("bibtex:")
             && let rescribe_core::PropValue::String(s) = value
-            && let Some(ris_tag) = bibtex_field_to_ris(field)
+            && let Some(ris_tag) = ris::bibtex_field_to_ris(field)
         {
-            ctx.write_tag(ris_tag, s);
+            entry.add_field(ris_tag, s);
         }
     }
 }
 
 fn emit_citation_entry(node: &Node, ctx: &mut EmitContext) {
     let csl_type = node.props.get_str("type").unwrap_or("misc");
-    let ris_type = csl_type_to_ris(csl_type);
-
-    ctx.write_tag("TY", ris_type);
+    let ris_type = ris::csl_type_to_ris(csl_type);
+    let mut entry = ris::RisEntry::new(ris_type);
 
     // Map CSL fields to RIS
     if let Some(title) = node.props.get_str("title") {
-        ctx.write_tag("TI", title);
+        entry.add_field("TI", title);
     }
     if let Some(author) = node.props.get_str("author") {
         // Authors might be semicolon-separated
         for a in author.split(';') {
-            ctx.write_tag("AU", a.trim());
+            entry.add_field("AU", a.trim());
         }
     }
     if let Some(container) = node.props.get_str("container-title") {
-        ctx.write_tag("JO", container);
+        entry.add_field("JO", container);
     }
     if let Some(issued) = node.props.get_str("issued") {
-        ctx.write_tag("PY", issued);
+        entry.add_field("PY", issued);
     }
     if let Some(volume) = node.props.get_str("volume") {
-        ctx.write_tag("VL", volume);
+        entry.add_field("VL", volume);
     }
     if let Some(page) = node.props.get_str("page") {
         // Pages might be in format "start-end"
         let parts: Vec<&str> = page.split('-').collect();
         if !parts.is_empty() {
-            ctx.write_tag("SP", parts[0]);
+            entry.add_field("SP", parts[0]);
         }
         if parts.len() > 1 {
-            ctx.write_tag("EP", parts[1]);
+            entry.add_field("EP", parts[1]);
         }
     }
     if let Some(doi) = node.props.get_str("DOI") {
-        ctx.write_tag("DO", doi);
+        entry.add_field("DO", doi);
     }
     if let Some(url) = node.props.get_str("URL") {
-        ctx.write_tag("UR", url);
+        entry.add_field("UR", url);
     }
     if let Some(abs) = node.props.get_str("abstract") {
-        ctx.write_tag("AB", abs);
+        entry.add_field("AB", abs);
     }
 
-    ctx.write_tag("ER", "");
-    ctx.output.push('\n');
+    let output = ris::build(&ris::RisDoc {
+        entries: vec![entry],
+    });
+    ctx.output.push_str(&output);
 }
 
 fn emit_typed_entry(node: &Node, ctx: &mut EmitContext) {
     let bibtex_type = node.kind.as_str().to_lowercase();
-    let ris_type = bibtex_type_to_ris(&bibtex_type);
-
-    ctx.write_tag("TY", ris_type);
+    let ris_type = ris::bibtex_type_to_ris(&bibtex_type);
+    let mut entry = ris::RisEntry::new(ris_type);
 
     // Emit standard fields
     let field_mappings = [
@@ -219,83 +214,27 @@ fn emit_typed_entry(node: &Node, ctx: &mut EmitContext) {
             if prop_name == "author" {
                 // Authors might be "and"-separated
                 for author in value.split(" and ") {
-                    ctx.write_tag(ris_tag, author.trim());
+                    entry.add_field(ris_tag, author.trim());
                 }
             } else if prop_name == "pages" {
                 // Handle page ranges
                 let parts: Vec<&str> = value.split('-').collect();
                 if !parts.is_empty() {
-                    ctx.write_tag("SP", parts[0].trim());
+                    entry.add_field("SP", parts[0].trim());
                 }
                 if parts.len() > 1 {
-                    ctx.write_tag("EP", parts[1].trim());
+                    entry.add_field("EP", parts[1].trim());
                 }
             } else {
-                ctx.write_tag(ris_tag, value);
+                entry.add_field(ris_tag, value);
             }
         }
     }
 
-    ctx.write_tag("ER", "");
-    ctx.output.push('\n');
-}
-
-fn bibtex_type_to_ris(bibtex: &str) -> &'static str {
-    match bibtex.to_lowercase().as_str() {
-        "article" => "JOUR",
-        "book" => "BOOK",
-        "incollection" | "inbook" => "CHAP",
-        "inproceedings" | "conference" => "CONF",
-        "phdthesis" => "THES",
-        "mastersthesis" => "THES",
-        "techreport" => "RPRT",
-        "online" => "ELEC",
-        "software" => "COMP",
-        "dataset" => "DATA",
-        "unpublished" => "UNPB",
-        "booklet" => "PAMP",
-        "proceedings" => "CONF",
-        "manual" => "BOOK",
-        _ => "GEN",
-    }
-}
-
-fn bibtex_field_to_ris(field: &str) -> Option<&'static str> {
-    match field {
-        "author" => Some("AU"),
-        "title" => Some("TI"),
-        "journal" => Some("JO"),
-        "booktitle" => Some("T2"),
-        "year" => Some("PY"),
-        "volume" => Some("VL"),
-        "number" => Some("IS"),
-        "publisher" => Some("PB"),
-        "address" => Some("CY"),
-        "doi" => Some("DO"),
-        "url" => Some("UR"),
-        "abstract" => Some("AB"),
-        "keywords" => Some("KW"),
-        "isbn" | "issn" => Some("SN"),
-        "edition" => Some("ET"),
-        "note" => Some("N1"),
-        "type" | "key" => None,
-        _ => None,
-    }
-}
-
-fn csl_type_to_ris(csl: &str) -> &'static str {
-    match csl {
-        "article-journal" | "article-magazine" | "article-newspaper" => "JOUR",
-        "book" => "BOOK",
-        "chapter" => "CHAP",
-        "paper-conference" => "CONF",
-        "thesis" => "THES",
-        "report" => "RPRT",
-        "webpage" | "post-weblog" => "ELEC",
-        "software" => "COMP",
-        "dataset" => "DATA",
-        _ => "GEN",
-    }
+    let output = ris::build(&ris::RisDoc {
+        entries: vec![entry],
+    });
+    ctx.output.push_str(&output);
 }
 
 #[cfg(test)]

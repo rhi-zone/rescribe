@@ -1,8 +1,12 @@
 [package]
 name = "rescribe-read-native"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "rescribe native format reader"
 
 [dependencies]
-rescribe-core = { path = "../../rescribe-core" }
-rescribe-std = { path = "../../nodes/rescribe-std" }
+rescribe-core = { workspace = true }
+rescribe-std = { workspace = true }
+native = { workspace = true }

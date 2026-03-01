@@ -9,3 +9,4 @@ description = "Textile markup writer for rescribe"
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+textile-fmt = { workspace = true }

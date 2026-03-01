@@ -1,0 +1,7 @@
+[package]
+name = "tikiwiki"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "TikiWiki parser, AST, and builder — no rescribe dependency"

@@ -1,7 +1,9 @@
 //! Man page (roff/troff) writer for rescribe.
 //!
+//! Thin adapter layer around the `man-fmt` crate.
 //! Emits documents as Unix man page format using common macros.
 
+use man_fmt::{Block, Inline, ManDoc};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
 
@@ -15,279 +17,296 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
+    let man_doc = convert_from_document(doc);
+    let output = man_fmt::build(&man_doc);
 
-    // Write title header if available
-    let title = doc.metadata.get_str("title").unwrap_or("UNTITLED");
-    let section = doc.metadata.get_str("man:section").unwrap_or("1");
-    ctx.write(&format!(".TH {} {} ", title.to_uppercase(), section));
-    ctx.write("\"\" \"\" \"\"\n");
-
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-struct EmitContext {
-    output: String,
-    in_paragraph: bool,
-}
+fn convert_from_document(doc: &Document) -> ManDoc {
+    let mut man = ManDoc {
+        title: doc.metadata.get_str("title").map(|s| s.to_string()),
+        section: doc.metadata.get_str("man:section").map(|s| s.to_string()),
+        blocks: Vec::new(),
+    };
 
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-            in_paragraph: false,
+    for node in &doc.content.children {
+        if let Some(block) = convert_node(node) {
+            man.blocks.push(block);
         }
     }
 
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-
-    fn newline(&mut self) {
-        if !self.output.ends_with('\n') {
-            self.write("\n");
-        }
-    }
+    man
 }
 
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_node(node: &Node) -> Option<Block> {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => {
+            // Should not appear here, but handle it gracefully
+            None
+        }
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
-            ctx.newline();
-
-            // Level 1 is document title (already handled), 2 is .SH, 3+ is .SS
-            let macro_name = if level <= 2 { ".SH" } else { ".SS" };
-            ctx.write(macro_name);
-            ctx.write(" ");
-
-            // Emit text in uppercase for sections
-            let text = extract_text(&node.children);
-            ctx.write(&text.to_uppercase());
-            ctx.write("\n");
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
+            let inlines = convert_nodes_to_inlines(&node.children);
+            Some(Block::Heading { level, inlines })
         }
 
         node::PARAGRAPH => {
-            ctx.newline();
-            ctx.write(".PP\n");
-            ctx.in_paragraph = true;
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n");
-            ctx.in_paragraph = false;
+            let inlines = convert_nodes_to_inlines(&node.children);
+            Some(Block::Paragraph { inlines })
         }
 
         node::CODE_BLOCK => {
-            ctx.newline();
-            ctx.write(".nf\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                // Escape special characters in code
-                for line in content.lines() {
-                    // Lines starting with . need escaping
-                    if line.starts_with('.') {
-                        ctx.write("\\&");
-                    }
-                    ctx.write(line);
-                    ctx.write("\n");
-                }
-            }
-            ctx.write(".fi\n");
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            Some(Block::CodeBlock { content })
         }
 
         node::BLOCKQUOTE => {
-            ctx.newline();
-            ctx.write(".RS\n");
-            emit_nodes(&node.children, ctx);
-            ctx.write(".RE\n");
+            // Convert blockquote children as regular blocks
+            let mut items = Vec::new();
+            let inlines = convert_nodes_to_inlines(&node.children);
+            if !inlines.is_empty() {
+                items.push((vec![], vec![Block::Paragraph { inlines }]));
+            }
+            if items.is_empty() {
+                None
+            } else {
+                Some(Block::DefinitionList { items })
+            }
         }
 
         node::LIST => {
-            ctx.newline();
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            for (i, child) in node.children.iter().enumerate() {
-                if ordered {
-                    ctx.write(&format!(".IP {}.\n", i + 1));
-                } else {
-                    ctx.write(".IP \\(bu\n");
+            let mut items = Vec::new();
+            for child in &node.children {
+                if child.kind.as_str() == node::LIST_ITEM {
+                    let mut item_blocks = Vec::new();
+                    for list_child in &child.children {
+                        if let Some(block) = convert_node(list_child) {
+                            item_blocks.push(block);
+                        }
+                    }
+                    if !item_blocks.is_empty() {
+                        items.push(item_blocks);
+                    }
                 }
-                emit_list_item_content(child, ctx);
+            }
+            if items.is_empty() {
+                None
+            } else {
+                Some(Block::List { ordered, items })
             }
         }
 
         node::LIST_ITEM => {
             // Handled by LIST
-            emit_nodes(&node.children, ctx);
+            None
         }
 
         node::DEFINITION_LIST => {
-            for child in &node.children {
-                emit_node(child, ctx);
-            }
-        }
+            let mut items = Vec::new();
+            let mut i = 0;
+            while i < node.children.len() {
+                let child = &node.children[i];
+                if child.kind.as_str() == node::DEFINITION_TERM {
+                    let term_inlines = convert_nodes_to_inlines(&child.children);
+                    let mut content_blocks = Vec::new();
 
-        node::DEFINITION_TERM => {
-            ctx.newline();
-            ctx.write(".TP\n");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n");
-        }
+                    // Collect following definition_desc nodes
+                    i += 1;
+                    while i < node.children.len() {
+                        let next = &node.children[i];
+                        if next.kind.as_str() == node::DEFINITION_DESC {
+                            for desc_child in &next.children {
+                                if let Some(block) = convert_node(desc_child) {
+                                    content_blocks.push(block);
+                                }
+                            }
+                            i += 1;
+                        } else {
+                            break;
+                        }
+                    }
 
-        node::DEFINITION_DESC => {
-            // Content follows the .TP term
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("\n");
+                    if content_blocks.is_empty() {
+                        content_blocks.push(Block::Paragraph { inlines: vec![] });
+                    }
+                    items.push((term_inlines, content_blocks));
                 } else {
-                    emit_node(child, ctx);
+                    i += 1;
                 }
             }
-        }
 
-        node::HORIZONTAL_RULE => {
-            ctx.newline();
-            ctx.write(".sp\n");
-        }
-
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
-
-        node::FIGURE => emit_nodes(&node.children, ctx),
-
-        // Block-level inline elements
-        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            ctx.newline();
-            ctx.write(".PP\n");
-            emit_inline_node(node, ctx);
-            ctx.write("\n");
-        }
-
-        _ => emit_nodes(&node.children, ctx),
-    }
-}
-
-fn emit_list_item_content(node: &Node, ctx: &mut EmitContext) {
-    if node.kind.as_str() == node::LIST_ITEM {
-        for child in &node.children {
-            if child.kind.as_str() == node::PARAGRAPH {
-                emit_inline_nodes(&child.children, ctx);
-                ctx.write("\n");
+            if items.is_empty() {
+                None
             } else {
-                emit_node(child, ctx);
+                Some(Block::DefinitionList { items })
             }
         }
+
+        node::DEFINITION_TERM | node::DEFINITION_DESC => {
+            // Handled by DEFINITION_LIST
+            None
+        }
+
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
+
+        node::DIV | node::SPAN => {
+            // Convert children as a paragraph if there are inlines
+            let inlines = convert_nodes_to_inlines(&node.children);
+            if inlines.is_empty() {
+                None
+            } else {
+                Some(Block::Paragraph { inlines })
+            }
+        }
+
+        node::FIGURE => {
+            let inlines = convert_nodes_to_inlines(&node.children);
+            if inlines.is_empty() {
+                None
+            } else {
+                Some(Block::Paragraph { inlines })
+            }
+        }
+
+        // Block-level inline elements - wrap in paragraph
+        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK | node::IMAGE => {
+            convert_node_to_inline(node).map(|inline| Block::Paragraph {
+                inlines: vec![inline],
+            })
+        }
+
+        _ => None,
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
+fn convert_nodes_to_inlines(nodes: &[Node]) -> Vec<Inline> {
+    let mut inlines = Vec::new();
     for node in nodes {
-        emit_inline_node(node, ctx);
+        if let Some(inline) = convert_node_to_inline(node) {
+            inlines.push(inline);
+        }
     }
+    inlines
 }
 
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_node_to_inline(node: &Node) -> Option<Inline> {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                // Escape special characters
-                let escaped = escape_man(content);
-                ctx.write(&escaped);
-            }
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            Some(Inline::Text(content))
         }
 
         node::STRONG => {
-            ctx.write("\\fB");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\\fR");
+            let children = convert_nodes_to_inlines(&node.children);
+            Some(Inline::Bold(children))
         }
 
         node::EMPHASIS => {
-            ctx.write("\\fI");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\\fR");
+            let children = convert_nodes_to_inlines(&node.children);
+            Some(Inline::Italic(children))
         }
 
         node::CODE => {
-            // Bold for code
-            ctx.write("\\fB");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(&escape_man(content));
-            }
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\\fR");
+            let content = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let text = if content.is_empty() {
+                let children = convert_nodes_to_inlines(&node.children);
+                let mut text = String::new();
+                for child in children {
+                    if let Inline::Text(s) = child {
+                        text.push_str(&s);
+                    }
+                }
+                text
+            } else {
+                content
+            };
+            Some(Inline::Bold(vec![Inline::Text(text)]))
         }
 
         node::LINK => {
-            // Show URL in parentheses after text
-            emit_inline_nodes(&node.children, ctx);
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write(" (");
-                ctx.write(&escape_man(url));
-                ctx.write(")");
-            }
-        }
-
-        node::SUBSCRIPT | node::SUPERSCRIPT => {
-            // No native support, just emit text
-            emit_inline_nodes(&node.children, ctx);
-        }
-
-        node::LINE_BREAK => {
-            ctx.write("\n.br\n");
-        }
-
-        node::SOFT_BREAK => {
-            ctx.write(" ");
+            let url = node
+                .props
+                .get_str(prop::URL)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let children = convert_nodes_to_inlines(&node.children);
+            Some(Inline::Link { url, children })
         }
 
         node::IMAGE => {
-            // No native image support, show alt text or URL
-            if let Some(alt) = node.props.get_str(prop::ALT) {
-                ctx.write("[Image: ");
-                ctx.write(&escape_man(alt));
-                ctx.write("]");
-            } else if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("[Image: ");
-                ctx.write(&escape_man(url));
-                ctx.write("]");
+            let url = node
+                .props
+                .get_str(prop::URL)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let alt = node
+                .props
+                .get_str(prop::ALT)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let label = if !alt.is_empty() { alt } else { url };
+            Some(Inline::Text(format!("[Image: {}]", label)))
+        }
+
+        node::SUBSCRIPT | node::SUPERSCRIPT => {
+            // No native support, just emit children
+            let children = convert_nodes_to_inlines(&node.children);
+            if children.is_empty() {
+                None
+            } else if children.len() == 1 {
+                Some(children.into_iter().next().unwrap())
+            } else {
+                Some(Inline::Text(
+                    children
+                        .iter()
+                        .filter_map(|i| {
+                            if let Inline::Text(s) = i {
+                                Some(s.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(""),
+                ))
             }
         }
 
-        _ => emit_inline_nodes(&node.children, ctx),
-    }
-}
+        node::LINE_BREAK => Some(Inline::Text("\n".to_string())),
 
-fn escape_man(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '\\' => result.push_str("\\\\"),
-            '-' => result.push_str("\\-"),
-            _ => result.push(c),
-        }
-    }
-    result
-}
+        node::SOFT_BREAK => Some(Inline::Text(" ".to_string())),
 
-fn extract_text(nodes: &[Node]) -> String {
-    let mut text = String::new();
-    for node in nodes {
-        if node.kind.as_str() == node::TEXT
-            && let Some(content) = node.props.get_str(prop::CONTENT)
-        {
-            text.push_str(content);
+        node::DIV | node::SPAN => {
+            // Container, unwrap children
+            let children = convert_nodes_to_inlines(&node.children);
+            if children.is_empty() {
+                None
+            } else if children.len() == 1 {
+                Some(children.into_iter().next().unwrap())
+            } else {
+                // Multiple children - create a compound structure if possible
+                // For now, just take the first one
+                Some(children.into_iter().next().unwrap())
+            }
         }
-        text.push_str(&extract_text(&node.children));
+
+        _ => None,
     }
-    text
 }
 
 #[cfg(test)]

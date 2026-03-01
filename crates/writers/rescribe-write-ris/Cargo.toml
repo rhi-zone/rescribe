@@ -9,3 +9,4 @@ description = "RIS (Research Information Systems) writer for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
+ris = { workspace = true }

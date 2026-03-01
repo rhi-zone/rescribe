@@ -1,6 +1,6 @@
 //! Markua (Leanpub) writer for rescribe.
 //!
-//! Emits documents as Markua markup (Markdown for books).
+//! Thin adapter from rescribe document model to standalone markua format crate.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
@@ -15,280 +15,161 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
+    let markua_blocks = convert_blocks(&doc.content.children);
+    let markua_doc = markua::MarkuaDoc {
+        blocks: markua_blocks,
+    };
+    let output = markua::build(&markua_doc);
 
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-struct EmitContext {
-    output: String,
+fn convert_blocks(nodes: &[Node]) -> Vec<markua::Block> {
+    nodes.iter().map(convert_block).collect()
 }
 
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-}
-
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_block(node: &Node) -> markua::Block {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => {
+            if node.children.len() == 1 {
+                convert_block(&node.children[0])
+            } else {
+                convert_blocks(&node.children)
+                    .into_iter()
+                    .next()
+                    .unwrap_or_else(|| markua::Block::Paragraph {
+                        inlines: Vec::new(),
+                    })
+            }
+        }
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).clamp(1, 6) as usize;
-            let marker: String = "#".repeat(level);
-            ctx.write(&marker);
-            ctx.write(" ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
+            markua::Block::Heading {
+                level,
+                inlines: convert_inlines(&node.children),
+            }
         }
 
-        node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
-        }
+        node::PARAGRAPH => markua::Block::Paragraph {
+            inlines: convert_inlines(&node.children),
+        },
 
         node::CODE_BLOCK => {
-            ctx.write("```");
-            if let Some(lang) = node.props.get_str(prop::LANGUAGE) {
-                ctx.write(lang);
-            }
-            ctx.write("\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-                if !content.ends_with('\n') {
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("```\n\n");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
+            markua::Block::CodeBlock { content, language }
         }
 
-        node::BLOCKQUOTE => {
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    ctx.write("> ");
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("\n");
-                } else {
-                    emit_node(child, ctx);
-                }
-            }
-            ctx.write("\n");
-        }
+        node::BLOCKQUOTE => markua::Block::Blockquote {
+            children: convert_blocks(&node.children),
+        },
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let mut num = 1;
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    if ordered {
-                        ctx.write(&format!("{}. ", num));
-                        num += 1;
+            let items: Vec<Vec<markua::Block>> = node
+                .children
+                .iter()
+                .map(|item_node| {
+                    if item_node.kind.as_str() == node::LIST_ITEM {
+                        convert_blocks(&item_node.children)
                     } else {
-                        ctx.write("- ");
+                        vec![convert_block(item_node)]
                     }
-
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, ctx);
-                        } else {
-                            emit_node(item_child, ctx);
-                        }
-                    }
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("\n");
-        }
-
-        node::LIST_ITEM => {
-            emit_nodes(&node.children, ctx);
-        }
-
-        node::HORIZONTAL_RULE => {
-            ctx.write("* * *\n\n");
-        }
-
-        node::DIV => {
-            // Check for Markua special blocks
-            if let Some(class) = node.props.get_str("class") {
-                let prefix = match class {
-                    "aside" => "A> ",
-                    "blurb" => "B> ",
-                    "warning" => "W> ",
-                    "tip" => "T> ",
-                    "error" => "E> ",
-                    "discussion" => "D> ",
-                    "question" => "Q> ",
-                    "information" => "I> ",
-                    _ => "",
-                };
-
-                if !prefix.is_empty() {
-                    for child in &node.children {
-                        if child.kind.as_str() == node::PARAGRAPH {
-                            ctx.write(prefix);
-                            emit_inline_nodes(&child.children, ctx);
-                            ctx.write("\n");
-                        } else {
-                            emit_node(child, ctx);
-                        }
-                    }
-                    ctx.write("\n");
-                    return;
-                }
-            }
-            emit_nodes(&node.children, ctx);
+                })
+                .collect();
+            markua::Block::List { ordered, items }
         }
 
         node::TABLE => {
-            // Markua supports GFM tables
-            for (row_idx, row) in node.children.iter().enumerate() {
-                if row.kind.as_str() == node::TABLE_ROW {
-                    ctx.write("|");
-                    for cell in &row.children {
-                        ctx.write(" ");
-                        emit_inline_nodes(&cell.children, ctx);
-                        ctx.write(" |");
-                    }
-                    ctx.write("\n");
+            let rows: Vec<markua::TableRow> = node
+                .children
+                .iter()
+                .filter(|n| n.kind.as_str() == node::TABLE_ROW)
+                .map(|row_node| {
+                    let cells: Vec<Vec<markua::Inline>> = row_node
+                        .children
+                        .iter()
+                        .map(|cell_node| convert_inlines(&cell_node.children))
+                        .collect();
+                    markua::TableRow { cells }
+                })
+                .collect();
+            markua::Block::Table { rows }
+        }
 
-                    // Add separator after header row
-                    if row_idx == 0 {
-                        ctx.write("|");
-                        for _ in &row.children {
-                            ctx.write(" --- |");
+        node::HORIZONTAL_RULE => markua::Block::HorizontalRule,
+
+        node::DIV => {
+            if let Some(class) = node.props.get_str("class") {
+                let block_type = class.to_string();
+                let inlines: Vec<markua::Inline> = node
+                    .children
+                    .iter()
+                    .flat_map(|child| {
+                        if child.kind.as_str() == node::PARAGRAPH {
+                            convert_inlines(&child.children)
+                        } else {
+                            Vec::new()
                         }
-                        ctx.write("\n");
-                    }
+                    })
+                    .collect();
+                markua::Block::SpecialBlock {
+                    block_type,
+                    inlines,
+                }
+            } else {
+                markua::Block::Paragraph {
+                    inlines: convert_inlines(&node.children),
                 }
             }
-            ctx.write("\n");
         }
 
-        node::SPAN | node::FIGURE => emit_nodes(&node.children, ctx),
-
-        // Inline nodes at block level
-        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            emit_inline_node(node, ctx);
-            ctx.write("\n\n");
-        }
-
-        _ => emit_nodes(&node.children, ctx),
+        _ => markua::Block::Paragraph {
+            inlines: convert_inlines(&node.children),
+        },
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_inline_node(node, ctx);
-    }
+fn convert_inlines(nodes: &[Node]) -> Vec<markua::Inline> {
+    nodes.iter().map(convert_inline).collect()
 }
 
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_inline(node: &Node) -> markua::Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            markua::Inline::Text(content)
         }
 
-        node::STRONG => {
-            ctx.write("**");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("**");
-        }
+        node::STRONG => markua::Inline::Strong(convert_inlines(&node.children)),
 
-        node::EMPHASIS => {
-            ctx.write("*");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("*");
-        }
+        node::EMPHASIS => markua::Inline::Emphasis(convert_inlines(&node.children)),
 
-        node::STRIKEOUT => {
-            ctx.write("~~");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("~~");
-        }
-
-        node::UNDERLINE => {
-            // Markua doesn't have underline, render as emphasis
-            ctx.write("*");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("*");
-        }
+        node::STRIKEOUT => markua::Inline::Strikethrough(convert_inlines(&node.children)),
 
         node::CODE => {
-            let content = node.props.get_str(prop::CONTENT).unwrap_or("");
-            // Use double backticks if content contains single backtick
-            if content.contains('`') {
-                ctx.write("`` ");
-                ctx.write(content);
-                ctx.write(" ``");
-            } else {
-                ctx.write("`");
-                ctx.write(content);
-                ctx.write("`");
-            }
-            emit_inline_nodes(&node.children, ctx);
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            markua::Inline::Code(content)
         }
 
         node::LINK => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("[");
-                if node.children.is_empty() {
-                    ctx.write(url);
-                } else {
-                    emit_inline_nodes(&node.children, ctx);
-                }
-                ctx.write("](");
-                ctx.write(url);
-                ctx.write(")");
-            } else {
-                emit_inline_nodes(&node.children, ctx);
-            }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let children = convert_inlines(&node.children);
+            markua::Inline::Link { url, children }
         }
 
         node::IMAGE => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("![");
-                if let Some(alt) = node.props.get_str(prop::ALT) {
-                    ctx.write(alt);
-                }
-                ctx.write("](");
-                ctx.write(url);
-                ctx.write(")");
-            }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let alt = node.props.get_str(prop::ALT).unwrap_or("").to_string();
+            markua::Inline::Image { url, alt }
         }
 
-        node::LINE_BREAK => {
-            ctx.write("\n");
-        }
+        node::LINE_BREAK => markua::Inline::LineBreak,
 
-        node::SOFT_BREAK => {
-            ctx.write(" ");
-        }
+        node::SOFT_BREAK => markua::Inline::SoftBreak,
 
-        node::SUBSCRIPT | node::SUPERSCRIPT => {
-            // Markua doesn't support these directly
-            emit_inline_nodes(&node.children, ctx);
-        }
-
-        _ => emit_inline_nodes(&node.children, ctx),
+        _ => markua::Inline::Text(String::new()),
     }
 }
 

@@ -1,9 +1,10 @@
 //! ZimWiki writer for rescribe.
 //!
-//! Emits documents as Zim Desktop Wiki markup.
+//! Thin adapter layer converting rescribe Document model to zimwiki AST.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
+use zimwiki::{Block, Inline, ListItem, TableRow, ZimwikiDoc, build as build_zimwiki};
 
 /// Emit a document as ZimWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -15,245 +16,157 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
+    let mut blocks = Vec::new();
 
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
-}
-
-struct EmitContext {
-    output: String,
-}
-
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
+    for node in &doc.content.children {
+        if let Some(block) = convert_node(node) {
+            blocks.push(block);
         }
     }
 
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
+    let zimwiki_doc = ZimwikiDoc { blocks };
+    let output = build_zimwiki(&zimwiki_doc);
+
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_node(node: &Node) -> Option<Block> {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => {
+            for child in &node.children {
+                if let Some(block) = convert_node(child) {
+                    return Some(block);
+                }
+            }
+            None
+        }
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).clamp(1, 5) as usize;
-            // ZimWiki uses inverted levels: level 1 = 6 equals signs, level 2 = 5, etc.
-            let eq_count = 7 - level;
-            let marker: String = "=".repeat(eq_count);
-            ctx.write(&marker);
-            ctx.write(" ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write(" ");
-            ctx.write(&marker);
-            ctx.write("\n\n");
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
+            let inlines: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
+            Some(Block::Heading { level, inlines })
         }
 
         node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let inlines: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
+            Some(Block::Paragraph { inlines })
         }
 
         node::CODE_BLOCK => {
-            ctx.write("'''\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-                if !content.ends_with('\n') {
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("'''\n\n");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Some(Block::CodeBlock { content })
         }
 
         node::BLOCKQUOTE => {
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    ctx.write("> ");
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("\n");
-                } else {
-                    emit_node(child, ctx);
-                }
-            }
-            ctx.write("\n");
+            let children: Vec<Block> = node.children.iter().filter_map(convert_node).collect();
+            Some(Block::Blockquote { children })
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let mut num = 1;
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    // Check for checkbox first
-                    if let Some(checked) = child.props.get_bool("checked") {
-                        if checked {
-                            ctx.write("[*] ");
-                        } else {
-                            ctx.write("[ ] ");
-                        }
-                    } else if ordered {
-                        ctx.write(&format!("{}. ", num));
-                        num += 1;
-                    } else {
-                        ctx.write("* ");
-                    }
-
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, ctx);
-                        } else {
-                            emit_node(item_child, ctx);
-                        }
-                    }
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("\n");
-        }
-
-        node::LIST_ITEM => {
-            emit_nodes(&node.children, ctx);
+            let items = node
+                .children
+                .iter()
+                .filter(|n| n.kind.as_str() == node::LIST_ITEM)
+                .map(|n| {
+                    let children: Vec<Block> = n.children.iter().filter_map(convert_node).collect();
+                    let checked = n.props.get_bool("checked");
+                    ListItem { checked, children }
+                })
+                .collect();
+            Some(Block::List { ordered, items })
         }
 
         node::TABLE => {
-            for row in &node.children {
-                if row.kind.as_str() == node::TABLE_ROW {
-                    ctx.write("|");
-                    for cell in &row.children {
-                        ctx.write(" ");
-                        emit_inline_nodes(&cell.children, ctx);
-                        ctx.write(" |");
-                    }
-                    ctx.write("\n");
+            let rows = node
+                .children
+                .iter()
+                .filter(|n| n.kind.as_str() == node::TABLE_ROW)
+                .map(|row| {
+                    let cells: Vec<Vec<Inline>> = row
+                        .children
+                        .iter()
+                        .map(|cell| cell.children.iter().filter_map(convert_inline).collect())
+                        .collect();
+                    TableRow { cells }
+                })
+                .collect();
+            Some(Block::Table { rows })
+        }
+
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
+
+        node::DIV | node::SPAN | node::FIGURE => {
+            for child in &node.children {
+                if let Some(block) = convert_node(child) {
+                    return Some(block);
                 }
             }
-            ctx.write("\n");
+            None
         }
 
-        node::HORIZONTAL_RULE => {
-            ctx.write("----\n\n");
-        }
-
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
-
-        node::FIGURE => emit_nodes(&node.children, ctx),
-
-        // Inline nodes at block level
-        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            emit_inline_node(node, ctx);
-            ctx.write("\n\n");
-        }
-
-        _ => emit_nodes(&node.children, ctx),
+        _ => None,
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_inline_node(node, ctx);
-    }
-}
-
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn convert_inline(node: &Node) -> Option<Inline> {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
+            let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Some(Inline::Text(s))
         }
 
         node::STRONG => {
-            ctx.write("**");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("**");
+            let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
+            Some(Inline::Bold(children))
         }
 
         node::EMPHASIS => {
-            ctx.write("//");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("//");
-        }
-
-        node::STRIKEOUT => {
-            ctx.write("~~");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("~~");
+            let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
+            Some(Inline::Italic(children))
         }
 
         node::UNDERLINE => {
-            ctx.write("__");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("__");
+            let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
+            Some(Inline::Underline(children))
         }
 
-        node::CODE => {
-            ctx.write("''");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("''");
+        node::STRIKEOUT => {
+            let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
+            Some(Inline::Strikethrough(children))
         }
 
         node::SUBSCRIPT => {
-            ctx.write("_{");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
+            let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
+            Some(Inline::Subscript(children))
         }
 
         node::SUPERSCRIPT => {
-            ctx.write("^{");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
+            let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
+            Some(Inline::Superscript(children))
+        }
+
+        node::CODE => {
+            let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Some(Inline::Code(s))
         }
 
         node::LINK => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("[[");
-                ctx.write(url);
-                if !node.children.is_empty() {
-                    ctx.write("|");
-                    emit_inline_nodes(&node.children, ctx);
-                }
-                ctx.write("]]");
-            } else {
-                emit_inline_nodes(&node.children, ctx);
-            }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
+            Some(Inline::Link { url, children })
         }
 
         node::IMAGE => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("{{");
-                ctx.write(url);
-                if let Some(alt) = node.props.get_str(prop::ALT) {
-                    ctx.write("|");
-                    ctx.write(alt);
-                }
-                ctx.write("}}");
-            }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            Some(Inline::Image { url })
         }
 
-        node::LINE_BREAK => {
-            ctx.write("\n");
-        }
+        node::LINE_BREAK => Some(Inline::LineBreak),
 
-        node::SOFT_BREAK => {
-            ctx.write(" ");
-        }
+        node::SOFT_BREAK => Some(Inline::SoftBreak),
 
-        _ => emit_inline_nodes(&node.children, ctx),
+        _ => None,
     }
 }
 

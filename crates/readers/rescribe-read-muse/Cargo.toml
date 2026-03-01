@@ -9,3 +9,4 @@ description = "Muse markup reader for rescribe"
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+muse-fmt.workspace = true

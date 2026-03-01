@@ -1,9 +1,11 @@
 //! txt2tags (t2t) writer for rescribe.
 //!
-//! Emits documents as txt2tags markup.
+//! Thin adapter that uses the `t2t` crate to emit rescribe documents
+//! as txt2tags markup.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
+use t2t::{Block, Inline};
 
 /// Emit a document as txt2tags markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -15,247 +17,188 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
+    let mut blocks = Vec::new();
 
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
-}
-
-struct EmitContext {
-    output: String,
-}
-
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
+    for node in &doc.content.children {
+        if let Some(block) = node_to_block(node) {
+            blocks.push(block);
         }
     }
 
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
+    let t2t_doc = t2t::T2tDoc { blocks };
+    let output = t2t::build(&t2t_doc);
+
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
-}
-
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn node_to_block(node: &Node) -> Option<Block> {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => {
+            // Document nodes should not be converted directly
+            None
+        }
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(5) as usize;
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(5) as u8;
             let numbered = node.props.get_bool("numbered").unwrap_or(false);
-            let marker = if numbered { '+' } else { '=' };
+            let inlines = node.children.iter().map(node_to_inline).collect();
 
-            for _ in 0..level {
-                ctx.write(&marker.to_string());
-            }
-            ctx.write(" ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write(" ");
-            for _ in 0..level {
-                ctx.write(&marker.to_string());
-            }
-            ctx.write("\n\n");
+            Some(Block::Heading {
+                level,
+                numbered,
+                inlines,
+            })
         }
 
         node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\n\n");
+            let inlines = node.children.iter().map(node_to_inline).collect();
+            Some(Block::Paragraph { inlines })
         }
 
         node::CODE_BLOCK => {
-            ctx.write("```\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-                if !content.ends_with('\n') {
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("```\n\n");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Some(Block::CodeBlock { content })
         }
 
         node::RAW_BLOCK => {
-            ctx.write("\"\"\"\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-                if !content.ends_with('\n') {
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("\"\"\"\n\n");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Some(Block::RawBlock { content })
         }
 
         node::BLOCKQUOTE => {
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    ctx.write("\t");
-                    emit_inline_nodes(&child.children, ctx);
-                    ctx.write("\n");
-                } else {
-                    emit_node(child, ctx);
-                }
-            }
-            ctx.write("\n");
+            let children: Vec<Block> = node.children.iter().filter_map(node_to_block).collect();
+            Some(Block::Blockquote { children })
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let marker = if ordered { "+ " } else { "- " };
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    ctx.write(marker);
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, ctx);
+            let items: Vec<Vec<Block>> = node
+                .children
+                .iter()
+                .filter_map(|child| {
+                    if child.kind.as_str() == node::LIST_ITEM {
+                        let item_blocks: Vec<Block> =
+                            child.children.iter().filter_map(node_to_block).collect();
+                        if !item_blocks.is_empty() {
+                            Some(item_blocks)
                         } else {
-                            emit_node(item_child, ctx);
+                            None
                         }
+                    } else {
+                        None
                     }
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("\n");
-        }
+                })
+                .collect();
 
-        node::LIST_ITEM => {
-            emit_nodes(&node.children, ctx);
+            Some(Block::List { ordered, items })
         }
 
         node::TABLE => {
-            for row in &node.children {
-                if row.kind.as_str() == node::TABLE_ROW {
-                    let is_header = row
-                        .children
-                        .first()
-                        .map(|c| c.kind.as_str() == node::TABLE_HEADER)
-                        .unwrap_or(false);
+            let rows = node
+                .children
+                .iter()
+                .filter_map(|row_node| {
+                    if row_node.kind.as_str() == node::TABLE_ROW {
+                        let is_header = row_node
+                            .children
+                            .first()
+                            .map(|c| c.kind.as_str() == node::TABLE_HEADER)
+                            .unwrap_or(false);
 
-                    if is_header {
-                        ctx.write("||");
+                        let cells: Vec<Vec<Inline>> = row_node
+                            .children
+                            .iter()
+                            .map(|cell| cell.children.iter().map(node_to_inline).collect())
+                            .collect();
+
+                        Some(t2t::TableRow { cells, is_header })
                     } else {
-                        ctx.write("|");
+                        None
                     }
+                })
+                .collect();
 
-                    for cell in &row.children {
-                        ctx.write(" ");
-                        emit_inline_nodes(&cell.children, ctx);
-                        ctx.write(" |");
-                    }
-                    ctx.write("\n");
-                }
-            }
-            ctx.write("\n");
+            Some(Block::Table { rows })
         }
 
-        node::HORIZONTAL_RULE => {
-            ctx.write("--------------------\n\n");
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
+
+        node::DIV | node::SPAN | node::FIGURE => {
+            // These container nodes should not emit themselves
+            // but their children may be processed by the parent
+            None
         }
 
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
-
-        node::FIGURE => emit_nodes(&node.children, ctx),
-
-        // Inline nodes at block level
-        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            emit_inline_node(node, ctx);
-            ctx.write("\n\n");
+        // Inline nodes at block level should be wrapped in paragraphs
+        node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK | node::IMAGE => {
+            let inlines = vec![node_to_inline(node)];
+            Some(Block::Paragraph { inlines })
         }
 
-        _ => emit_nodes(&node.children, ctx),
+        _ => None,
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_inline_node(node, ctx);
-    }
-}
-
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Text(content)
         }
 
         node::STRONG => {
-            ctx.write("**");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("**");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Bold(children)
         }
 
         node::EMPHASIS => {
-            ctx.write("//");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("//");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Italic(children)
         }
 
         node::UNDERLINE => {
-            ctx.write("__");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("__");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Underline(children)
         }
 
         node::STRIKEOUT => {
-            ctx.write("--");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("--");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Strikethrough(children)
         }
 
         node::CODE => {
-            ctx.write("``");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("``");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Code(content)
         }
 
         node::LINK => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("[");
-                if !node.children.is_empty() {
-                    emit_inline_nodes(&node.children, ctx);
-                    ctx.write(" ");
-                }
-                ctx.write(url);
-                ctx.write("]");
-            } else {
-                emit_inline_nodes(&node.children, ctx);
-            }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Link { url, children }
         }
 
         node::IMAGE => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("[");
-                ctx.write(url);
-                ctx.write("]");
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            Inline::Image { url }
+        }
+
+        node::LINE_BREAK => Inline::LineBreak,
+
+        node::SOFT_BREAK => Inline::SoftBreak,
+
+        // For unsupported nodes, emit children as text
+        _ => {
+            let children: Vec<Inline> = node.children.iter().map(node_to_inline).collect();
+            if children.is_empty() {
+                Inline::Text(String::new())
+            } else if children.len() == 1 {
+                children.into_iter().next().unwrap()
+            } else {
+                // Multiple children, wrap in a generic container
+                // Since t2t doesn't have generic containers, just concatenate
+                Inline::Text(String::new())
             }
         }
-
-        node::LINE_BREAK => {
-            ctx.write("\n");
-        }
-
-        node::SOFT_BREAK => {
-            ctx.write(" ");
-        }
-
-        node::SUPERSCRIPT | node::SUBSCRIPT => {
-            // t2t doesn't support these, emit as-is
-            emit_inline_nodes(&node.children, ctx);
-        }
-
-        _ => emit_inline_nodes(&node.children, ctx),
     }
 }
 

@@ -1,81 +1,32 @@
 //! Fountain screenplay format writer for rescribe.
 //!
-//! Generates Fountain screenplay markup from rescribe's document IR.
-//!
-//! # Fountain Elements
-//!
-//! - Scene headings (INT./EXT.)
-//! - Action
-//! - Character and dialogue
-//! - Parentheticals
-//! - Transitions
-//! - Title page metadata
+//! Thin adapter over [`fountain_fmt`]: maps the rescribe document model to
+//! the `fountain_fmt` AST, then builds Fountain output.
 
-use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node};
+use fountain_fmt::{Block, FountainDoc};
+use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
+use std::collections::BTreeMap;
 
-/// Emit a document as Fountain format.
+/// Emit a document as Fountain.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     emit_with_options(doc, &EmitOptions::default())
 }
 
-/// Emit a document as Fountain format with options.
+/// Emit a document as Fountain with custom options.
 pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
-
-    // Emit title page metadata
-    emit_title_page(doc, &mut ctx);
-
-    // Emit content
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    Ok(ConversionResult::with_warnings(
-        ctx.output.into_bytes(),
-        ctx.warnings,
-    ))
+    let fountain = doc_to_fountain(doc);
+    let output = fountain_fmt::build(&fountain);
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-struct EmitContext {
-    output: String,
-    warnings: Vec<FidelityWarning>,
-}
-
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-            warnings: Vec::new(),
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-
-    fn writeln(&mut self, s: &str) {
-        self.output.push_str(s);
-        self.output.push('\n');
-    }
-
-    fn ensure_blank_line(&mut self) {
-        if !self.output.is_empty() && !self.output.ends_with("\n\n") {
-            if self.output.ends_with('\n') {
-                self.output.push('\n');
-            } else {
-                self.output.push_str("\n\n");
-            }
-        }
-    }
-}
-
-fn emit_title_page(doc: &Document, ctx: &mut EmitContext) {
-    let mut has_title_page = false;
-
-    // Standard title page fields
-    let fields = [
+fn doc_to_fountain(doc: &Document) -> FountainDoc {
+    // Extract metadata
+    let mut metadata = BTreeMap::new();
+    let fountain_fields = [
         "title",
         "credit",
         "author",
@@ -87,225 +38,134 @@ fn emit_title_page(doc: &Document, ctx: &mut EmitContext) {
         "notes",
     ];
 
-    for field in fields {
+    for field in fountain_fields {
         let key = format!("fountain:{}", field);
         if let Some(value) = doc.metadata.get_str(&key) {
-            let display_key = field
-                .split('_')
-                .map(|s| {
-                    let mut c = s.chars();
-                    match c.next() {
-                        None => String::new(),
-                        Some(f) => f.to_uppercase().chain(c).collect(),
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(" ");
-
-            ctx.write(&display_key);
-            ctx.write(": ");
-            ctx.writeln(value);
-            has_title_page = true;
+            metadata.insert(field.to_string(), value.to_string());
         }
     }
 
-    if has_title_page {
-        ctx.writeln("");
-    }
+    // Convert nodes to blocks
+    let blocks = nodes_to_blocks(&doc.content.children);
+
+    FountainDoc { metadata, blocks }
 }
 
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
+fn nodes_to_blocks(nodes: &[Node]) -> Vec<Block> {
+    let mut blocks = Vec::new();
+
     for node in nodes {
-        emit_node(node, ctx);
+        blocks.extend(node_to_blocks(node));
     }
+
+    blocks
 }
 
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+fn node_to_blocks(node: &Node) -> Vec<Block> {
     let fountain_type = node.props.get_str("fountain:type").unwrap_or("");
 
     match fountain_type {
-        "scene_heading" => emit_scene_heading(node, ctx),
-        "action" => emit_action(node, ctx),
-        "dialogue_block" => emit_dialogue_block(node, ctx),
-        "character" => emit_character(node, ctx),
-        "dialogue" => emit_dialogue(node, ctx),
-        "parenthetical" => emit_parenthetical(node, ctx),
-        "transition" => emit_transition(node, ctx),
-        "centered" => emit_centered(node, ctx),
-        "lyric" => emit_lyric(node, ctx),
-        "note" => emit_note(node, ctx),
-        "synopsis" => emit_synopsis(node, ctx),
-        "section" => emit_section(node, ctx),
-        "page_break" => emit_page_break(ctx),
-        _ => emit_generic(node, ctx),
-    }
-}
+        "scene_heading" => {
+            let text = get_text_content(node);
+            vec![Block::SceneHeading { text }]
+        }
 
-fn emit_scene_heading(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    emit_text_content(node, ctx);
-    ctx.writeln("");
-}
+        "action" => {
+            let text = get_text_content(node);
+            vec![Block::Action { text }]
+        }
 
-fn emit_action(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    emit_text_content(node, ctx);
-    ctx.writeln("");
-}
+        "transition" => {
+            let text = get_text_content(node);
+            vec![Block::Transition { text }]
+        }
 
-fn emit_dialogue_block(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
+        "centered" => {
+            let text = get_text_content(node);
+            vec![Block::Centered { text }]
+        }
 
-    for child in &node.children {
-        let child_type = child.props.get_str("fountain:type").unwrap_or("");
-        match child_type {
-            "character" => {
-                let text = get_text_content(child);
-                let dual = node.props.get_bool("fountain:dual").unwrap_or(false);
-                if dual {
-                    ctx.writeln(&format!("{} ^", text.to_uppercase()));
-                } else {
-                    ctx.writeln(&text.to_uppercase());
+        "lyric" => {
+            let text = get_text_content(node);
+            vec![Block::Lyric { text }]
+        }
+
+        "note" => {
+            let text = get_text_content(node);
+            vec![Block::Note { text }]
+        }
+
+        "synopsis" => {
+            let text = get_text_content(node);
+            vec![Block::Synopsis { text }]
+        }
+
+        "section" => {
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as usize;
+            let text = get_text_content(node);
+            vec![Block::Section { level, text }]
+        }
+
+        "page_break" => {
+            vec![Block::PageBreak]
+        }
+
+        "dialogue_block" => {
+            // Extract character, dialogue, and parenthetical from dialogue block
+            let mut blocks = Vec::new();
+            let dual = node.props.get_bool("fountain:dual").unwrap_or(false);
+
+            for child in &node.children {
+                let child_type = child.props.get_str("fountain:type").unwrap_or("");
+                match child_type {
+                    "character" => {
+                        let name = get_text_content(child);
+                        blocks.push(Block::Character { name, dual });
+                    }
+                    "dialogue" => {
+                        let text = get_text_content(child);
+                        blocks.push(Block::Dialogue { text });
+                    }
+                    "parenthetical" => {
+                        let text = get_text_content(child);
+                        blocks.push(Block::Parenthetical { text });
+                    }
+                    _ => {}
                 }
             }
-            "parenthetical" => {
-                let text = get_text_content(child);
-                ctx.writeln(&text);
-            }
-            "dialogue" => {
-                let text = get_text_content(child);
-                ctx.writeln(&text);
-            }
-            _ => emit_node(child, ctx),
+
+            blocks
         }
-    }
-}
 
-fn emit_character(node: &Node, ctx: &mut EmitContext) {
-    let text = get_text_content(node);
-    ctx.writeln(&text.to_uppercase());
-}
-
-fn emit_dialogue(node: &Node, ctx: &mut EmitContext) {
-    emit_text_content(node, ctx);
-    ctx.writeln("");
-}
-
-fn emit_parenthetical(node: &Node, ctx: &mut EmitContext) {
-    emit_text_content(node, ctx);
-    ctx.writeln("");
-}
-
-fn emit_transition(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    let text = get_text_content(node);
-    // If it doesn't look like a standard transition, force it with >
-    if !text.to_uppercase().ends_with("TO:") {
-        ctx.write(">");
-    }
-    ctx.writeln(&text.to_uppercase());
-}
-
-fn emit_centered(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    ctx.write(">");
-    emit_text_content(node, ctx);
-    ctx.writeln("<");
-}
-
-fn emit_lyric(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("~");
-    emit_text_content(node, ctx);
-    ctx.writeln("");
-}
-
-fn emit_note(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("[[");
-    emit_text_content(node, ctx);
-    ctx.writeln("]]");
-}
-
-fn emit_synopsis(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("= ");
-    emit_text_content(node, ctx);
-    ctx.writeln("");
-}
-
-fn emit_section(node: &Node, ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as usize;
-    ctx.write(&"#".repeat(level));
-    ctx.write(" ");
-    emit_text_content(node, ctx);
-    ctx.writeln("");
-}
-
-fn emit_page_break(ctx: &mut EmitContext) {
-    ctx.ensure_blank_line();
-    ctx.writeln("===");
-}
-
-fn emit_generic(node: &Node, ctx: &mut EmitContext) {
-    match node.kind.as_str() {
-        node::HEADING => {
-            ctx.ensure_blank_line();
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
-            // Level 2 headings become scene headings
-            if level == 2 {
-                ctx.write(".");
-            } else {
-                ctx.write(&"#".repeat(level as usize));
-                ctx.write(" ");
-            }
-            emit_text_content(node, ctx);
-            ctx.writeln("");
-        }
-        node::PARAGRAPH => {
-            ctx.ensure_blank_line();
-            emit_text_content(node, ctx);
-            ctx.writeln("");
-        }
-        node::HORIZONTAL_RULE => {
-            emit_page_break(ctx);
-        }
-        node::DIV => {
-            emit_nodes(&node.children, ctx);
-        }
-        node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
-            }
-        }
         _ => {
-            emit_nodes(&node.children, ctx);
-        }
-    }
-}
+            // Generic handling
+            match node.kind.as_str() {
+                node::DOCUMENT => nodes_to_blocks(&node.children),
 
-fn emit_text_content(node: &Node, ctx: &mut EmitContext) {
-    for child in &node.children {
-        match child.kind.as_str() {
-            node::TEXT => {
-                if let Some(content) = child.props.get_str(prop::CONTENT) {
-                    ctx.write(content);
+                node::HEADING => {
+                    let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as usize;
+                    if level == 2 {
+                        // Treat as scene heading
+                        let text = get_text_content(node);
+                        vec![Block::SceneHeading { text }]
+                    } else {
+                        // Treat as section
+                        let text = get_text_content(node);
+                        vec![Block::Section { level, text }]
+                    }
                 }
+
+                node::PARAGRAPH => {
+                    let text = get_text_content(node);
+                    vec![Block::Action { text }]
+                }
+
+                node::HORIZONTAL_RULE => vec![Block::PageBreak],
+
+                node::DIV | node::SPAN => nodes_to_blocks(&node.children),
+
+                _ => nodes_to_blocks(&node.children),
             }
-            node::STRONG => {
-                ctx.write("**");
-                emit_text_content(child, ctx);
-                ctx.write("**");
-            }
-            node::EMPHASIS => {
-                ctx.write("*");
-                emit_text_content(child, ctx);
-                ctx.write("*");
-            }
-            node::UNDERLINE => {
-                ctx.write("_");
-                emit_text_content(child, ctx);
-                ctx.write("_");
-            }
-            _ => emit_text_content(child, ctx),
         }
     }
 }

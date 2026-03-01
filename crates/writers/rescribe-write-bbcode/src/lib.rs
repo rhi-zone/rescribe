@@ -1,7 +1,9 @@
 //! BBCode writer for rescribe.
 //!
 //! Serializes rescribe's document IR to BBCode forum markup.
+//! Uses `bbcode-fmt` for building, adapts from rescribe types.
 
+use bbcode_fmt::{Block, Inline, TableRow};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
 
@@ -15,203 +17,194 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut output = String::new();
-    emit_nodes(&doc.content.children, &mut output);
+    let mut blocks = Vec::new();
+    for child in &doc.content.children {
+        if child.kind.as_str() != node::DOCUMENT {
+            blocks.push(node_to_block(child));
+        } else {
+            for doc_child in &child.children {
+                blocks.push(node_to_block(doc_child));
+            }
+        }
+    }
+
+    let bbcode_doc = bbcode_fmt::BbcodeDoc { blocks };
+    let output = bbcode_fmt::build(&bbcode_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-fn emit_nodes(nodes: &[Node], output: &mut String) {
-    for node in nodes {
-        emit_node(node, output);
-    }
-}
-
-fn emit_node(node: &Node, output: &mut String) {
+fn node_to_block(node: &Node) -> Block {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, output),
-
-        node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
-            // BBCode doesn't have native headings - use size and bold
-            let size = match level {
-                1 => "6",
-                2 => "5",
-                3 => "4",
-                _ => "3",
-            };
-            output.push_str(&format!("[size={}][b]", size));
-            emit_inline_nodes(&node.children, output);
-            output.push_str("[/b][/size]\n\n");
-        }
-
         node::PARAGRAPH => {
-            emit_inline_nodes(&node.children, output);
-            output.push_str("\n\n");
+            let inlines = node.children.iter().map(node_to_inline).collect();
+            Block::Paragraph { inlines }
         }
 
         node::CODE_BLOCK => {
-            output.push_str("[code]\n");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                output.push_str(content);
-                if !content.ends_with('\n') {
-                    output.push('\n');
-                }
-            }
-            output.push_str("[/code]\n\n");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Block::CodeBlock { content }
         }
 
         node::BLOCKQUOTE => {
-            output.push_str("[quote]\n");
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    emit_inline_nodes(&child.children, output);
-                    output.push('\n');
-                } else {
-                    emit_node(child, output);
-                }
-            }
-            output.push_str("[/quote]\n\n");
+            let children = node.children.iter().map(node_to_block).collect();
+            Block::Blockquote { children }
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            if ordered {
-                output.push_str("[list=1]\n");
-            } else {
-                output.push_str("[list]\n");
-            }
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    output.push_str("[*]");
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, output);
-                        } else {
-                            emit_inline_node(item_child, output);
-                        }
-                    }
-                    output.push('\n');
-                }
-            }
-
-            output.push_str("[/list]\n\n");
+            let items = node
+                .children
+                .iter()
+                .filter(|child| child.kind.as_str() == node::LIST_ITEM)
+                .map(|item| {
+                    item.children
+                        .iter()
+                        .filter(|child| child.kind.as_str() == node::PARAGRAPH)
+                        .flat_map(|para| {
+                            para.children.iter().map(node_to_inline).collect::<Vec<_>>()
+                        })
+                        .collect()
+                })
+                .collect();
+            Block::List { ordered, items }
         }
 
         node::TABLE => {
-            output.push_str("[table]\n");
-            for row in &node.children {
-                if row.kind.as_str() == node::TABLE_ROW {
-                    output.push_str("[tr]");
-                    for cell in &row.children {
-                        let tag = if cell.kind.as_str() == node::TABLE_HEADER {
-                            "th"
-                        } else {
-                            "td"
-                        };
-                        output.push_str(&format!("[{}]", tag));
-                        emit_inline_nodes(&cell.children, output);
-                        output.push_str(&format!("[/{}]", tag));
-                    }
-                    output.push_str("[/tr]\n");
-                }
-            }
-            output.push_str("[/table]\n\n");
+            let rows = node
+                .children
+                .iter()
+                .filter(|child| child.kind.as_str() == node::TABLE_ROW)
+                .map(|row| {
+                    let cells = row
+                        .children
+                        .iter()
+                        .map(|cell| {
+                            let is_header = cell.kind.as_str() == node::TABLE_HEADER;
+                            let inlines = cell.children.iter().map(node_to_inline).collect();
+                            (is_header, inlines)
+                        })
+                        .collect();
+                    TableRow { cells }
+                })
+                .collect();
+            Block::Table { rows }
         }
 
-        node::HORIZONTAL_RULE => {
-            output.push_str("[hr]\n\n");
+        node::HEADING => {
+            // BBCode doesn't have native headings - use bold text in paragraph
+            let inlines = node.children.iter().map(node_to_inline).collect();
+            Block::Paragraph {
+                inlines: vec![Inline::Bold(inlines)],
+            }
         }
 
         node::DIV | node::SPAN | node::FIGURE => {
-            emit_nodes(&node.children, output);
+            // Transparent wrapper - emit children as paragraph
+            let inlines = node.children.iter().map(node_to_inline).collect();
+            Block::Paragraph { inlines }
         }
 
-        _ => emit_nodes(&node.children, output),
+        _ => {
+            // Fallback: treat as paragraph
+            let inlines = node.children.iter().map(node_to_inline).collect();
+            Block::Paragraph { inlines }
+        }
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], output: &mut String) {
-    for node in nodes {
-        emit_inline_node(node, output);
-    }
-}
-
-fn emit_inline_node(node: &Node, output: &mut String) {
+fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                output.push_str(content);
-            }
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Text(content)
         }
 
         node::STRONG => {
-            output.push_str("[b]");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("[/b]");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Bold(children)
         }
 
         node::EMPHASIS => {
-            output.push_str("[i]");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("[/i]");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Italic(children)
         }
 
         node::UNDERLINE => {
-            output.push_str("[u]");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("[/u]");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Underline(children)
         }
 
         node::STRIKEOUT => {
-            output.push_str("[s]");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("[/s]");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Strikethrough(children)
         }
 
         node::CODE => {
-            output.push_str("[code]");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                output.push_str(content);
-            }
-            emit_inline_nodes(&node.children, output);
-            output.push_str("[/code]");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Code(content)
         }
 
         node::LINK => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                output.push_str(&format!("[url={}]", url));
-                emit_inline_nodes(&node.children, output);
-                output.push_str("[/url]");
-            } else {
-                emit_inline_nodes(&node.children, output);
-            }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Link { url, children }
         }
 
         node::IMAGE => {
-            if let Some(url) = node.props.get_str(prop::URL) {
-                output.push_str("[img]");
-                output.push_str(url);
-                output.push_str("[/img]");
-            }
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            Inline::Image { url }
         }
 
         node::SUBSCRIPT => {
-            output.push_str("[sub]");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("[/sub]");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Subscript(children)
         }
 
         node::SUPERSCRIPT => {
-            output.push_str("[sup]");
-            emit_inline_nodes(&node.children, output);
-            output.push_str("[/sup]");
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Superscript(children)
         }
 
-        node::LINE_BREAK => output.push('\n'),
-        node::SOFT_BREAK => output.push(' '),
+        node::LINE_BREAK => {
+            // BBCode doesn't have explicit line break inline element
+            // Use newline in text instead
+            Inline::Text("\n".to_string())
+        }
 
-        _ => emit_inline_nodes(&node.children, output),
+        node::SOFT_BREAK => Inline::Text(" ".to_string()),
+
+        node::SPAN => {
+            let attr = node
+                .props
+                .get_str("style:color")
+                .map(|_| "color".to_string())
+                .unwrap_or_else(|| "color".to_string());
+            let value = node
+                .props
+                .get_str("style:color")
+                .or_else(|| node.props.get_str("style:size"))
+                .unwrap_or("inherit")
+                .to_string();
+            let children = node.children.iter().map(node_to_inline).collect();
+            Inline::Span {
+                attr,
+                value,
+                children,
+            }
+        }
+
+        _ => {
+            // Fallback: collect children
+            let children: Vec<Inline> = node.children.iter().map(node_to_inline).collect();
+            if children.is_empty() {
+                Inline::Text("".to_string())
+            } else if children.len() == 1 {
+                children.into_iter().next().unwrap()
+            } else {
+                // Wrap in a container if multiple children
+                Inline::Bold(children)
+            }
+        }
     }
 }
 

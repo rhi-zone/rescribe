@@ -1,0 +1,7 @@
+[package]
+name = "tsv-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "TSV (Tab-Separated Values) parser, AST, and builder — no rescribe dependency"

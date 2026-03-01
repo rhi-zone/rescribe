@@ -1,428 +1,136 @@
 //! Fountain screenplay format reader for rescribe.
 //!
-//! Parses Fountain screenplay markup into rescribe's document IR.
-//!
-//! # Fountain Elements
-//!
-//! - Scene headings (INT./EXT.)
-//! - Action
-//! - Character and dialogue
-//! - Parentheticals
-//! - Transitions
-//! - Title page metadata
+//! Thin adapter over [`fountain_fmt`]: parses Fountain into the `fountain_fmt` AST,
+//! then maps it to the rescribe document model.
 
-use rescribe_core::{ConversionResult, Document, ParseError, ParseOptions, Properties};
-use rescribe_std::{Node, node, prop};
+use fountain_fmt::Block;
+use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_std::{node, prop};
 
-/// Parse Fountain input into a document.
+/// Parse a Fountain document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
     parse_with_options(input, &ParseOptions::default())
 }
 
-/// Parse Fountain input into a document with options.
+/// Parse a Fountain document with custom options.
 pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let mut parser = Parser::new(input);
-    let (content, metadata) = parser.parse();
+    let fountain = fountain_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
 
-    let document = Document {
-        content: Node::new(node::DOCUMENT).children(content),
-        resources: Default::default(),
-        metadata,
-        source: None,
-    };
-
-    Ok(ConversionResult::ok(document))
-}
-
-struct Parser<'a> {
-    lines: Vec<&'a str>,
-    pos: usize,
-    metadata: Properties,
-}
-
-impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
-        Self {
-            lines: input.lines().collect(),
-            pos: 0,
-            metadata: Properties::new(),
-        }
+    let mut metadata = rescribe_core::Properties::new();
+    for (key, value) in &fountain.metadata {
+        metadata.set(
+            format!("fountain:{}", key),
+            rescribe_core::PropValue::String(value.clone()),
+        );
     }
 
-    fn parse(&mut self) -> (Vec<Node>, Properties) {
-        let mut nodes = Vec::new();
+    let nodes = blocks_to_nodes(&fountain.blocks);
+    let root = Node::new(node::DOCUMENT).children(nodes);
+    let doc = Document::new().with_content(root).with_metadata(metadata);
 
-        // Parse title page if present
-        self.parse_title_page();
+    Ok(ConversionResult::ok(doc))
+}
 
-        // Parse screenplay body
-        while self.pos < self.lines.len() {
-            if let Some(node) = self.parse_element() {
-                nodes.push(node);
-            }
-        }
+fn blocks_to_nodes(blocks: &[Block]) -> Vec<Node> {
+    let mut nodes = Vec::new();
+    let mut i = 0;
 
-        (nodes, std::mem::take(&mut self.metadata))
-    }
-
-    fn parse_title_page(&mut self) {
-        // Valid title page fields
-        let valid_fields = [
-            "title",
-            "credit",
-            "author",
-            "authors",
-            "source",
-            "draft date",
-            "contact",
-            "copyright",
-            "notes",
-        ];
-
-        // Title page consists of key: value pairs at the start
-        while self.pos < self.lines.len() {
-            let line = self.lines[self.pos];
-
-            // Empty line ends title page
-            if line.trim().is_empty() {
-                self.pos += 1;
-                break;
-            }
-
-            // Check for key: value pattern
-            if let Some((key, value)) = line.split_once(':') {
-                let key_lower = key.trim().to_lowercase();
-
-                // Only accept known title page fields
-                if !valid_fields.contains(&key_lower.as_str()) {
-                    break;
-                }
-
-                let value = value.trim();
-
-                // Multi-line values are indented
-                let mut full_value = value.to_string();
-                self.pos += 1;
-
-                while self.pos < self.lines.len() {
-                    let next_line = self.lines[self.pos];
-                    if next_line.starts_with("   ") || next_line.starts_with('\t') {
-                        full_value.push('\n');
-                        full_value.push_str(next_line.trim());
-                        self.pos += 1;
-                    } else {
-                        break;
-                    }
-                }
-
-                self.metadata.set(
-                    format!("fountain:{}", key_lower.replace(' ', "_")),
-                    rescribe_core::PropValue::String(full_value),
+    while i < blocks.len() {
+        // Group Character + Dialogue + Parenthetical into a dialogue_block
+        if let Block::Character { name, dual } = &blocks[i] {
+            let mut dialogue_node = Node::new(node::DIV)
+                .prop("fountain:type", "dialogue_block")
+                .child(
+                    Node::new(node::PARAGRAPH)
+                        .prop("fountain:type", "character")
+                        .child(Node::new(node::TEXT).prop(prop::CONTENT, name.clone())),
                 );
-            } else {
-                // Not a title page element
-                break;
+
+            if *dual {
+                dialogue_node = dialogue_node.prop("fountain:dual", true);
             }
-        }
-    }
 
-    fn parse_element(&mut self) -> Option<Node> {
-        if self.pos >= self.lines.len() {
-            return None;
-        }
+            i += 1;
 
-        let line = self.lines[self.pos];
+            // Collect following dialogue and parenthetical blocks
+            while i < blocks.len() {
+                match &blocks[i] {
+                    Block::Dialogue { text } => {
+                        dialogue_node = dialogue_node.child(
+                            Node::new(node::PARAGRAPH)
+                                .prop("fountain:type", "dialogue")
+                                .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
+                        );
+                        i += 1;
+                    }
+                    Block::Parenthetical { text } => {
+                        dialogue_node = dialogue_node.child(
+                            Node::new(node::PARAGRAPH)
+                                .prop("fountain:type", "parenthetical")
+                                .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
+                        );
+                        i += 1;
+                    }
+                    _ => break,
+                }
+            }
 
-        // Skip empty lines
-        if line.trim().is_empty() {
-            self.pos += 1;
-            return None;
-        }
-
-        // Page break: ===
-        if line.trim() == "===" {
-            self.pos += 1;
-            return Some(Node::new(node::HORIZONTAL_RULE).prop("fountain:type", "page_break"));
-        }
-
-        // Section: # heading
-        if line.starts_with('#') {
-            return Some(self.parse_section());
-        }
-
-        // Synopsis: = text
-        if line.starts_with('=') && !line.starts_with("===") {
-            return Some(self.parse_synopsis());
-        }
-
-        // Note: [[text]]
-        if line.contains("[[") {
-            return Some(self.parse_note());
-        }
-
-        // Centered text: >text<
-        if line.starts_with('>') && line.ends_with('<') {
-            return Some(self.parse_centered());
-        }
-
-        // Transition: text ending in TO: or starting with >
-        if self.is_transition(line) {
-            return Some(self.parse_transition());
-        }
-
-        // Scene heading
-        if self.is_scene_heading(line) {
-            return Some(self.parse_scene_heading());
-        }
-
-        // Character (all caps, possibly with dialogue following)
-        if self.is_character(line) {
-            return Some(self.parse_character_and_dialogue());
-        }
-
-        // Lyric: ~text
-        if line.starts_with('~') {
-            return Some(self.parse_lyric());
-        }
-
-        // Default: action
-        Some(self.parse_action())
-    }
-
-    fn is_scene_heading(&self, line: &str) -> bool {
-        let line = line.trim();
-        // Forced scene heading
-        if line.starts_with('.') && line.len() > 1 {
-            return true;
-        }
-        // Standard scene heading prefixes
-        let upper = line.to_uppercase();
-        upper.starts_with("INT ")
-            || upper.starts_with("INT.")
-            || upper.starts_with("EXT ")
-            || upper.starts_with("EXT.")
-            || upper.starts_with("INT/EXT")
-            || upper.starts_with("I/E")
-            || upper.starts_with("EST ")
-            || upper.starts_with("EST.")
-    }
-
-    fn is_transition(&self, line: &str) -> bool {
-        let line = line.trim();
-        // Forced transition
-        if line.starts_with('>') && !line.ends_with('<') {
-            return true;
-        }
-        // Standard transitions end in TO:
-        line.to_uppercase().ends_with("TO:") && line == line.to_uppercase()
-    }
-
-    fn is_character(&self, line: &str) -> bool {
-        let line = line.trim();
-        if line.is_empty() {
-            return false;
-        }
-        // Forced character
-        if line.starts_with('@') {
-            return true;
-        }
-        // Must be all uppercase (allowing parentheticals like (V.O.))
-        let name_part = if let Some(paren_pos) = line.find('(') {
-            &line[..paren_pos]
+            nodes.push(dialogue_node);
         } else {
-            line
-        };
-        let name_part = name_part.trim();
-        !name_part.is_empty()
-            && name_part
-                .chars()
-                .all(|c| c.is_uppercase() || c.is_whitespace() || c == '^')
-            && name_part.chars().any(|c| c.is_alphabetic())
+            nodes.push(block_to_node(&blocks[i]));
+            i += 1;
+        }
     }
 
-    fn parse_scene_heading(&mut self) -> Node {
-        let line = self.lines[self.pos].trim();
-        self.pos += 1;
+    nodes
+}
 
-        // Remove forced marker if present
-        let heading = line.strip_prefix('.').unwrap_or(line);
-
-        Node::new(node::HEADING)
+fn block_to_node(block: &Block) -> Node {
+    match block {
+        Block::SceneHeading { text } => Node::new(node::HEADING)
             .prop(prop::LEVEL, 2i64)
             .prop("fountain:type", "scene_heading")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, heading.to_string()))
-    }
+            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-    fn parse_transition(&mut self) -> Node {
-        let line = self.lines[self.pos].trim();
-        self.pos += 1;
-
-        // Remove forced marker if present
-        let text = line.strip_prefix('>').map(|s| s.trim()).unwrap_or(line);
-
-        Node::new(node::PARAGRAPH)
-            .prop("fountain:type", "transition")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()))
-    }
-
-    fn parse_character_and_dialogue(&mut self) -> Node {
-        let char_line = self.lines[self.pos].trim();
-        self.pos += 1;
-
-        // Remove forced marker if present
-        let char_name = char_line.strip_prefix('@').unwrap_or(char_line);
-
-        // Check for dual dialogue marker
-        let dual = char_name.ends_with('^');
-        let char_name = char_name.trim_end_matches('^').trim();
-
-        let mut dialogue_node = Node::new(node::DIV)
-            .prop("fountain:type", "dialogue_block")
-            .child(
-                Node::new(node::PARAGRAPH)
-                    .prop("fountain:type", "character")
-                    .child(Node::new(node::TEXT).prop(prop::CONTENT, char_name.to_string())),
-            );
-
-        if dual {
-            dialogue_node = dialogue_node.prop("fountain:dual", true);
-        }
-
-        // Parse dialogue and parentheticals
-        while self.pos < self.lines.len() {
-            let line = self.lines[self.pos].trim();
-
-            if line.is_empty() {
-                break;
-            }
-
-            // Parenthetical
-            if line.starts_with('(') && line.ends_with(')') {
-                dialogue_node = dialogue_node.child(
-                    Node::new(node::PARAGRAPH)
-                        .prop("fountain:type", "parenthetical")
-                        .child(Node::new(node::TEXT).prop(prop::CONTENT, line.to_string())),
-                );
-                self.pos += 1;
-            }
-            // Dialogue line
-            else if !self.is_scene_heading(line)
-                && !self.is_transition(line)
-                && !self.is_character(line)
-            {
-                dialogue_node = dialogue_node.child(
-                    Node::new(node::PARAGRAPH)
-                        .prop("fountain:type", "dialogue")
-                        .child(Node::new(node::TEXT).prop(prop::CONTENT, line.to_string())),
-                );
-                self.pos += 1;
-            } else {
-                break;
-            }
-        }
-
-        dialogue_node
-    }
-
-    fn parse_action(&mut self) -> Node {
-        let mut lines = Vec::new();
-
-        while self.pos < self.lines.len() {
-            let line = self.lines[self.pos];
-
-            if line.trim().is_empty() {
-                self.pos += 1;
-                break;
-            }
-
-            // Check if this starts a new element
-            if self.is_scene_heading(line)
-                || self.is_transition(line)
-                || self.is_character(line)
-                || line.starts_with('#')
-                || line.starts_with('=')
-                || line.starts_with('~')
-                || line.contains("[[")
-            {
-                break;
-            }
-
-            // Handle forced action with !
-            let text = line.strip_prefix('!').unwrap_or(line);
-
-            lines.push(text.to_string());
-            self.pos += 1;
-        }
-
-        let content = lines.join("\n");
-        Node::new(node::PARAGRAPH)
+        Block::Action { text } => Node::new(node::PARAGRAPH)
             .prop("fountain:type", "action")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, content))
-    }
+            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-    fn parse_section(&mut self) -> Node {
-        let line = self.lines[self.pos];
-        self.pos += 1;
+        Block::Transition { text } => Node::new(node::PARAGRAPH)
+            .prop("fountain:type", "transition")
+            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-        // Count # symbols for level
-        let level = line.chars().take_while(|&c| c == '#').count() as i64;
-        let text = line[level as usize..].trim();
-
-        Node::new(node::HEADING)
-            .prop(prop::LEVEL, level)
-            .prop("fountain:type", "section")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()))
-    }
-
-    fn parse_synopsis(&mut self) -> Node {
-        let line = self.lines[self.pos].trim();
-        self.pos += 1;
-
-        let text = line[1..].trim(); // Remove = prefix
-
-        Node::new(node::PARAGRAPH)
-            .prop("fountain:type", "synopsis")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()))
-    }
-
-    fn parse_note(&mut self) -> Node {
-        let line = self.lines[self.pos];
-        self.pos += 1;
-
-        // Extract note content between [[ and ]]
-        let start = line.find("[[").unwrap_or(0);
-        let end = line.find("]]").unwrap_or(line.len());
-        let note_text = &line[start + 2..end];
-
-        Node::new(node::PARAGRAPH)
-            .prop("fountain:type", "note")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, note_text.to_string()))
-    }
-
-    fn parse_centered(&mut self) -> Node {
-        let line = self.lines[self.pos].trim();
-        self.pos += 1;
-
-        // Remove > and < markers
-        let text = &line[1..line.len() - 1];
-
-        Node::new(node::PARAGRAPH)
+        Block::Centered { text } => Node::new(node::PARAGRAPH)
             .prop("fountain:type", "centered")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()))
-    }
+            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-    fn parse_lyric(&mut self) -> Node {
-        let line = self.lines[self.pos].trim();
-        self.pos += 1;
-
-        let text = &line[1..]; // Remove ~ prefix
-
-        Node::new(node::PARAGRAPH)
+        Block::Lyric { text } => Node::new(node::PARAGRAPH)
             .prop("fountain:type", "lyric")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()))
+            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
+
+        Block::Note { text } => Node::new(node::PARAGRAPH)
+            .prop("fountain:type", "note")
+            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
+
+        Block::Synopsis { text } => Node::new(node::PARAGRAPH)
+            .prop("fountain:type", "synopsis")
+            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
+
+        Block::Section { level, text } => Node::new(node::HEADING)
+            .prop(prop::LEVEL, *level as i64)
+            .prop("fountain:type", "section")
+            .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
+
+        Block::PageBreak => Node::new(node::HORIZONTAL_RULE).prop("fountain:type", "page_break"),
+
+        // These shouldn't appear at top level in the output AST,
+        // but handle them gracefully
+        Block::Character { .. } | Block::Dialogue { .. } | Block::Parenthetical { .. } => {
+            Node::new(node::PARAGRAPH)
+        }
     }
 }
 

@@ -1,452 +1,153 @@
 //! Man page (roff/troff) reader for rescribe.
 //!
+//! Thin adapter layer around the `man-fmt` crate.
 //! Parses Unix manual pages into rescribe's document IR.
-//! Supports common man macros like .TH, .SH, .SS, .PP, .TP, .B, .I, etc.
 
+use man_fmt::{Block, Inline, ManDoc};
 use rescribe_core::{ConversionResult, Document, Node, ParseError, Properties};
 use rescribe_std::{node, prop};
 
 /// Parse man page source into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let mut parser = Parser::new(input);
-    let root = parser.parse_document();
+    let man_doc = man_fmt::parse(input)
+        .map_err(|e| ParseError::Invalid(format!("man page parsing error: {}", e)))?;
 
+    let rescribe_doc = convert_to_document(man_doc);
+
+    Ok(ConversionResult::ok(rescribe_doc))
+}
+
+fn convert_to_document(man: ManDoc) -> Document {
     let mut metadata = Properties::new();
-    if let Some(title) = parser.title.take() {
+
+    if let Some(title) = man.title {
         metadata.set("title", title);
     }
-    if let Some(section) = parser.section.take() {
+    if let Some(section) = man.section {
         metadata.set("man:section", section);
     }
 
-    let doc = Document {
-        content: root,
+    let mut children = Vec::new();
+    for block in man.blocks {
+        if let Some(node) = convert_block(&block) {
+            children.push(node);
+        }
+    }
+
+    let content = Node::new(node::DOCUMENT).children(children);
+
+    Document {
+        content,
         resources: Default::default(),
         metadata,
         source: None,
-    };
-
-    Ok(ConversionResult::ok(doc))
+    }
 }
 
-struct Parser<'a> {
-    lines: Vec<&'a str>,
-    pos: usize,
-    title: Option<String>,
-    section: Option<String>,
-}
-
-impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
-        let lines: Vec<&str> = input.lines().collect();
-        Self {
-            lines,
-            pos: 0,
-            title: None,
-            section: None,
-        }
-    }
-
-    fn parse_document(&mut self) -> Node {
-        let mut children = Vec::new();
-
-        while self.pos < self.lines.len() {
-            if let Some(node) = self.parse_element() {
-                children.push(node);
-            }
+fn convert_block(block: &Block) -> Option<Node> {
+    match block {
+        Block::Heading { level, inlines } => {
+            let level_int = *level as i64;
+            let children = convert_inlines(inlines);
+            Some(
+                Node::new(node::HEADING)
+                    .prop(prop::LEVEL, level_int)
+                    .children(children),
+            )
         }
 
-        Node::new(node::DOCUMENT).children(children)
-    }
-
-    fn current_line(&self) -> Option<&'a str> {
-        self.lines.get(self.pos).copied()
-    }
-
-    fn advance(&mut self) {
-        self.pos += 1;
-    }
-
-    fn parse_element(&mut self) -> Option<Node> {
-        let line = self.current_line()?;
-
-        // Skip empty lines and comments
-        if line.is_empty() {
-            self.advance();
-            return None;
-        }
-        if line.starts_with(".\\\"") || line.starts_with("'\\\"") {
-            self.advance();
-            return None;
+        Block::Paragraph { inlines } => {
+            let children = convert_inlines(inlines);
+            Some(Node::new(node::PARAGRAPH).children(children))
         }
 
-        // Macro lines start with .
-        if line.starts_with('.') {
-            return self.parse_macro();
+        Block::CodeBlock { content } => {
+            Some(Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone()))
         }
 
-        // Plain text paragraph
-        Some(self.parse_text_block())
-    }
-
-    fn parse_macro(&mut self) -> Option<Node> {
-        let line = self.current_line()?;
-        self.advance();
-
-        let (macro_name, args) = self.parse_macro_line(line);
-
-        match macro_name.as_str() {
-            // Title header
-            "TH" => {
-                if !args.is_empty() {
-                    self.title = Some(args[0].clone());
-                }
-                if args.len() > 1 {
-                    self.section = Some(args[1].clone());
-                }
-                // Create a heading with the title
-                if let Some(title) = &self.title {
-                    return Some(
-                        Node::new(node::HEADING)
-                            .prop(prop::LEVEL, 1i64)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, title.clone())),
-                    );
-                }
-                None
-            }
-
-            // Section heading
-            "SH" => {
-                let text = args.join(" ");
-                Some(
-                    Node::new(node::HEADING)
-                        .prop(prop::LEVEL, 2i64)
-                        .children(self.parse_inline_text(&text)),
-                )
-            }
-
-            // Subsection heading
-            "SS" => {
-                let text = args.join(" ");
-                Some(
-                    Node::new(node::HEADING)
-                        .prop(prop::LEVEL, 3i64)
-                        .children(self.parse_inline_text(&text)),
-                )
-            }
-
-            // Paragraph break
-            "PP" | "P" | "LP" => {
-                // Consume following text as paragraph
-                self.parse_paragraph()
-            }
-
-            // Indented paragraph
-            "IP" | "TP" => {
-                // These create list-like structures
-                // IP has an optional tag, TP has tag on next line
-                let tag = if macro_name == "TP" {
-                    // Tag is on the next line
-                    self.current_line().map(|l| {
-                        self.advance();
-                        l.to_string()
-                    })
-                } else {
-                    args.first().cloned()
-                };
-
-                // Content follows
-                let content = self.collect_paragraph_text();
-                let content_inline = self.parse_inline_text(&content);
-
-                if let Some(tag) = tag {
-                    // Create definition list item
-                    Some(Node::new(node::DEFINITION_LIST).children(vec![
-                            Node::new(node::DEFINITION_TERM)
-                                .children(self.parse_inline_text(&tag)),
-                            Node::new(node::DEFINITION_DESC).child(
-                                Node::new(node::PARAGRAPH).children(content_inline),
-                            ),
-                        ]))
-                } else {
-                    Some(Node::new(node::PARAGRAPH).children(content_inline))
-                }
-            }
-
-            // Relative indent start/end
-            "RS" | "RE" => {
-                // Skip these for now, they affect indentation
-                None
-            }
-
-            // No-fill (preformatted)
-            "nf" => Some(self.parse_preformatted()),
-
-            // Bold text
-            "B" => {
-                let text = args.join(" ");
-                Some(Node::new(node::PARAGRAPH).child(
-                    Node::new(node::STRONG).child(Node::new(node::TEXT).prop(prop::CONTENT, text)),
-                ))
-            }
-
-            // Italic text
-            "I" => {
-                let text = args.join(" ");
-                Some(
-                    Node::new(node::PARAGRAPH).child(
-                        Node::new(node::EMPHASIS)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, text)),
-                    ),
-                )
-            }
-
-            // Bold-Roman alternation
-            "BR" => self.parse_alternating(&args, true),
-
-            // Italic-Roman alternation
-            "IR" => self.parse_alternating(&args, false),
-
-            // Roman-Bold alternation
-            "RB" => self.parse_alternating(&args, true),
-
-            // Roman-Italic alternation
-            "RI" => self.parse_alternating(&args, false),
-
-            // Bold-Italic alternation
-            "BI" => {
-                let mut children = Vec::new();
-                let mut is_bold = true;
-                for arg in &args {
-                    if is_bold {
-                        children.push(
-                            Node::new(node::STRONG)
-                                .child(Node::new(node::TEXT).prop(prop::CONTENT, arg.clone())),
-                        );
-                    } else {
-                        children.push(
-                            Node::new(node::EMPHASIS)
-                                .child(Node::new(node::TEXT).prop(prop::CONTENT, arg.clone())),
-                        );
-                    }
-                    is_bold = !is_bold;
-                }
-                Some(Node::new(node::PARAGRAPH).children(children))
-            }
-
-            // Italic-Bold alternation
-            "IB" => {
-                let mut children = Vec::new();
-                let mut is_italic = true;
-                for arg in &args {
-                    if is_italic {
-                        children.push(
-                            Node::new(node::EMPHASIS)
-                                .child(Node::new(node::TEXT).prop(prop::CONTENT, arg.clone())),
-                        );
-                    } else {
-                        children.push(
-                            Node::new(node::STRONG)
-                                .child(Node::new(node::TEXT).prop(prop::CONTENT, arg.clone())),
-                        );
-                    }
-                    is_italic = !is_italic;
-                }
-                Some(Node::new(node::PARAGRAPH).children(children))
-            }
-
-            // URL (groff extension)
-            "URL" | "UR" => {
-                let url = args.first().cloned().unwrap_or_default();
-                let text = args.get(1).cloned().unwrap_or_else(|| url.clone());
-                Some(
-                    Node::new(node::PARAGRAPH).child(
-                        Node::new(node::LINK)
-                            .prop(prop::URL, url)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, text)),
-                    ),
-                )
-            }
-
-            // End URL
-            "UE" => None,
-
-            // Horizontal rule / break
-            "sp" => Some(Node::new(node::HORIZONTAL_RULE)),
-
-            // Other macros - ignore
-            _ => None,
-        }
-    }
-
-    fn parse_macro_line(&self, line: &str) -> (String, Vec<String>) {
-        let line = &line[1..]; // Skip leading .
-        let mut parts = Vec::new();
-        let mut current = String::new();
-        let mut in_quote = false;
-
-        for c in line.chars() {
-            match c {
-                '"' => {
-                    in_quote = !in_quote;
-                }
-                ' ' | '\t' if !in_quote => {
-                    if !current.is_empty() {
-                        parts.push(current);
-                        current = String::new();
+        Block::List { ordered, items } => {
+            let mut children = Vec::new();
+            for item_blocks in items {
+                let mut item_children = Vec::new();
+                for block in item_blocks {
+                    if let Some(n) = convert_block(block) {
+                        item_children.push(n);
                     }
                 }
-                _ => {
-                    current.push(c);
-                }
+                let item_node = Node::new(node::LIST_ITEM).children(item_children);
+                children.push(item_node);
             }
-        }
-        if !current.is_empty() {
-            parts.push(current);
-        }
-
-        let macro_name = parts.first().cloned().unwrap_or_default();
-        let args = parts.into_iter().skip(1).collect();
-
-        (macro_name, args)
-    }
-
-    fn parse_paragraph(&mut self) -> Option<Node> {
-        let text = self.collect_paragraph_text();
-        if text.is_empty() {
-            return None;
-        }
-        Some(Node::new(node::PARAGRAPH).children(self.parse_inline_text(&text)))
-    }
-
-    fn collect_paragraph_text(&mut self) -> String {
-        let mut lines = Vec::new();
-
-        while let Some(line) = self.current_line() {
-            // Stop at macro lines or empty lines
-            if line.is_empty() || line.starts_with('.') {
-                break;
-            }
-            lines.push(line);
-            self.advance();
+            Some(
+                Node::new(node::LIST)
+                    .prop(prop::ORDERED, *ordered)
+                    .children(children),
+            )
         }
 
-        lines.join(" ")
-    }
+        Block::DefinitionList { items } => {
+            let mut children = Vec::new();
+            for (term_inlines, content_blocks) in items {
+                let term_children = convert_inlines(term_inlines);
+                let term_node = Node::new(node::DEFINITION_TERM).children(term_children);
+                children.push(term_node);
 
-    fn parse_text_block(&mut self) -> Node {
-        let text = self.collect_paragraph_text();
-        Node::new(node::PARAGRAPH).children(self.parse_inline_text(&text))
-    }
-
-    fn parse_preformatted(&mut self) -> Node {
-        let mut lines = Vec::new();
-
-        while let Some(line) = self.current_line() {
-            if line == ".fi" {
-                self.advance();
-                break;
-            }
-            // Skip macro lines inside preformatted
-            if !line.starts_with('.') {
-                lines.push(line);
-            }
-            self.advance();
-        }
-
-        let content = lines.join("\n");
-        Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content)
-    }
-
-    fn parse_alternating(&mut self, args: &[String], bold_first: bool) -> Option<Node> {
-        let mut children = Vec::new();
-        let mut use_style = bold_first;
-
-        for arg in args {
-            if use_style {
-                children.push(
-                    Node::new(if bold_first {
-                        node::STRONG
-                    } else {
-                        node::EMPHASIS
-                    })
-                    .child(Node::new(node::TEXT).prop(prop::CONTENT, arg.clone())),
-                );
-            } else {
-                children.push(Node::new(node::TEXT).prop(prop::CONTENT, arg.clone()));
-            }
-            use_style = !use_style;
-        }
-
-        Some(Node::new(node::PARAGRAPH).children(children))
-    }
-
-    fn parse_inline_text(&self, text: &str) -> Vec<Node> {
-        let mut nodes = Vec::new();
-        let mut current = String::new();
-        let chars: Vec<char> = text.chars().collect();
-        let mut i = 0;
-
-        while i < chars.len() {
-            // Font escape: \fX or \f(XX
-            if i + 2 < chars.len() && chars[i] == '\\' && chars[i + 1] == 'f' {
-                if !current.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current.clone()));
-                    current.clear();
-                }
-
-                let font_char = chars[i + 2];
-                i += 3;
-
-                // Find the text until next font change or end
-                let mut styled_text = String::new();
-                while i < chars.len() {
-                    if i + 2 < chars.len() && chars[i] == '\\' && chars[i + 1] == 'f' {
-                        break;
-                    }
-                    styled_text.push(chars[i]);
-                    i += 1;
-                }
-
-                if !styled_text.is_empty() {
-                    let styled_node = match font_char {
-                        'B' => Node::new(node::STRONG)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, styled_text)),
-                        'I' => Node::new(node::EMPHASIS)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, styled_text)),
-                        'R' | 'P' => Node::new(node::TEXT).prop(prop::CONTENT, styled_text),
-                        _ => Node::new(node::TEXT).prop(prop::CONTENT, styled_text),
+                for content_block in content_blocks {
+                    let content_children = match content_block {
+                        Block::Paragraph { inlines } => {
+                            vec![Node::new(node::PARAGRAPH).children(convert_inlines(inlines))]
+                        }
+                        other => {
+                            if let Some(n) = convert_block(other) {
+                                vec![n]
+                            } else {
+                                vec![]
+                            }
+                        }
                     };
-                    nodes.push(styled_node);
-                }
-                continue;
-            }
 
-            // Other escapes
-            if i + 1 < chars.len() && chars[i] == '\\' {
-                match chars[i + 1] {
-                    '-' => current.push('-'),
-                    '\\' => current.push('\\'),
-                    'e' => current.push('\\'),
-                    '&' => {} // Zero-width space, ignore
-                    _ => {
-                        current.push(chars[i]);
-                        current.push(chars[i + 1]);
-                    }
+                    let desc_node = Node::new(node::DEFINITION_DESC).children(content_children);
+                    children.push(desc_node);
                 }
-                i += 2;
-                continue;
             }
-
-            current.push(chars[i]);
-            i += 1;
+            Some(Node::new(node::DEFINITION_LIST).children(children))
         }
 
-        if !current.is_empty() {
-            nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current));
+        Block::HorizontalRule => Some(Node::new(node::HORIZONTAL_RULE)),
+    }
+}
+
+fn convert_inlines(inlines: &[Inline]) -> Vec<Node> {
+    let mut nodes = Vec::new();
+    for inline in inlines {
+        if let Some(node) = convert_inline(inline) {
+            nodes.push(node);
+        }
+    }
+    nodes
+}
+
+fn convert_inline(inline: &Inline) -> Option<Node> {
+    match inline {
+        Inline::Text(text) => Some(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
+
+        Inline::Bold(children) => {
+            let child_nodes = convert_inlines(children);
+            Some(Node::new(node::STRONG).children(child_nodes))
         }
 
-        nodes
+        Inline::Italic(children) => {
+            let child_nodes = convert_inlines(children);
+            Some(Node::new(node::EMPHASIS).children(child_nodes))
+        }
+
+        Inline::Link { url, children } => {
+            let child_nodes = convert_inlines(children);
+            Some(
+                Node::new(node::LINK)
+                    .prop(prop::URL, url.clone())
+                    .children(child_nodes),
+            )
+        }
     }
 }
 
