@@ -22,7 +22,9 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let mut ctx = EmitContext::new();
     emit_node(&doc.content, &mut ctx);
 
-    let output = ctx.output.trim_end().to_string() + "\n";
+    // Trim only trailing newlines, not spaces — trailing spaces on marker lines
+    // like "- " (empty list item) are syntactically significant in djot.
+    let output = ctx.output.trim_end_matches('\n').to_string() + "\n";
     Ok(ConversionResult::with_warnings(
         output.into_bytes(),
         ctx.warnings,
