@@ -1,0 +1,4 @@
+{
+  "description": "Basic DZSlides presentation: section elements for slides",
+  "output_contains": ["<!DOCTYPE html>", "<section>"]
+}

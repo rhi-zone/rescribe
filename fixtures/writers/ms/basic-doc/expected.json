@@ -1,0 +1,4 @@
+{
+  "description": "Basic groff ms document: section heading and paragraph macros",
+  "output_contains": [".SH", ".PP"]
+}

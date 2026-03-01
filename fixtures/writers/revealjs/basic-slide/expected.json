@@ -1,0 +1,4 @@
+{
+  "description": "Basic reveal.js presentation: HTML wrapper and slides container",
+  "output_contains": ["<!DOCTYPE html>", "class=\"reveal\"", "class=\"slides\""]
+}

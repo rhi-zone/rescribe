@@ -209,6 +209,150 @@ fn check_prop_in(
 }
 
 // ---------------------------------------------------------------------------
+// Writer fixture types and runner
+// ---------------------------------------------------------------------------
+
+/// A parsed writer fixture manifest (`expected.json` for write-only formats).
+#[derive(Debug, Deserialize)]
+pub struct WriterFixture {
+    pub description: String,
+    #[serde(default = "default_category")]
+    pub category: String,
+    /// If true, an emit error is acceptable (no output assertions are checked).
+    /// The emitter must still not panic.
+    #[serde(default)]
+    pub expect_error: bool,
+    /// Substrings that must appear in the emitted output.
+    #[serde(default)]
+    pub output_contains: Vec<String>,
+}
+
+/// Load a writer fixture from `expected.json` in `dir`.
+pub fn load_writer_fixture(dir: &Path) -> Result<WriterFixture, String> {
+    let path = dir.join("expected.json");
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    serde_json::from_str(&content).map_err(|e| format!("cannot parse {}: {e}", path.display()))
+}
+
+/// Run all writer fixtures for `format` against `emit_fn`.
+///
+/// Fixtures live under `fixtures/writers/{format}/`.  Each fixture directory
+/// must contain `input.json` (pandoc-json) and `expected.json`.
+///
+/// `emit_fn` receives the parsed `Document` and must return the emitted bytes.
+/// Panics if any fixture fails.
+pub fn run_format_writer_fixtures(
+    fixtures_root: &Path,
+    format: &str,
+    emit_fn: impl Fn(&Document) -> Result<Vec<u8>, String>,
+) {
+    let writers_root = fixtures_root.join("writers");
+    let dirs = discover_fixtures(&writers_root, format);
+    if dirs.is_empty() {
+        return; // No fixtures yet — skip gracefully.
+    }
+
+    let mut all_failures: Vec<(String, Vec<Failure>)> = Vec::new();
+
+    for dir in &dirs {
+        let fixture = match load_writer_fixture(dir) {
+            Ok(f) => f,
+            Err(e) => panic!("writer fixture load error in {}: {e}", dir.display()),
+        };
+
+        let input_path = std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .find(|p| {
+                p.file_stem().and_then(|s| s.to_str()) == Some("input") && p.extension().is_some()
+            })
+            .unwrap_or_else(|| panic!("no input.* file in {}", dir.display()));
+
+        let input = std::fs::read(&input_path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", input_path.display()));
+
+        let desc = format!("{} ({})", fixture.description, dir.display());
+
+        let input_str = match std::str::from_utf8(&input) {
+            Ok(s) => s,
+            Err(e) => {
+                all_failures.push((
+                    desc,
+                    vec![Failure {
+                        path: String::new(),
+                        message: format!("input is not UTF-8: {e}"),
+                    }],
+                ));
+                continue;
+            }
+        };
+
+        let doc = match rescribe_read_pandoc_json::parse(input_str) {
+            Ok(r) => r.value,
+            Err(e) => {
+                all_failures.push((
+                    desc,
+                    vec![Failure {
+                        path: String::new(),
+                        message: format!("input pandoc-json parse error: {e}"),
+                    }],
+                ));
+                continue;
+            }
+        };
+
+        let output = match emit_fn(&doc) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                if !fixture.expect_error {
+                    all_failures.push((
+                        desc,
+                        vec![Failure {
+                            path: String::new(),
+                            message: format!("emit error: {e}"),
+                        }],
+                    ));
+                }
+                continue;
+            }
+        };
+
+        if !fixture.output_contains.is_empty() {
+            let output_str = String::from_utf8_lossy(&output);
+            let mut failures = Vec::new();
+            for expected in &fixture.output_contains {
+                if !output_str.contains(expected.as_str()) {
+                    failures.push(Failure {
+                        path: String::new(),
+                        message: format!("output does not contain {expected:?}"),
+                    });
+                }
+            }
+            if !failures.is_empty() {
+                all_failures.push((desc, failures));
+            }
+        }
+    }
+
+    if !all_failures.is_empty() {
+        let mut msg = format!(
+            "{} writer fixture(s) failed for format {:?}:\n",
+            all_failures.len(),
+            format
+        );
+        for (desc, failures) in &all_failures {
+            msg.push_str(&format!("\n  FAIL: {desc}\n"));
+            for f in failures {
+                msg.push_str(&format!("    - {f}\n"));
+            }
+        }
+        panic!("{msg}");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Fixture discovery and runner
 // ---------------------------------------------------------------------------
 

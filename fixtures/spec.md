@@ -1,6 +1,6 @@
 # Rescribe Fixture Specification
 
-Version: 1.1
+Version: 1.2
 License: MIT
 
 This document defines the cross-language fixture format used by rescribe tests.
@@ -159,6 +159,48 @@ A validator can:
 2. Parse the resulting JSON
 3. Check `metadata` assertions against the top-level `metadata` field
 4. Walk paths and check node assertions
+
+## Writer fixtures
+
+Write-only formats (presentation writers, etc.) use a parallel directory tree
+under `fixtures/writers/`:
+
+```
+fixtures/
+  writers/
+    {format}/
+      {feature}/
+        input.json   ← pandoc-json document (the IR input)
+        expected.json ← output assertions (see below)
+```
+
+`input.json` is a pandoc-json document.  The runner parses it with
+`rescribe_read_pandoc_json`, then passes the resulting `Document` to the emitter.
+
+### Writer `expected.json` schema
+
+```json
+{
+  "description": "Human-readable description",
+  "category": "happy",
+  "expect_error": false,
+  "output_contains": ["\\documentclass{beamer}", "\\begin{document}"]
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `description` | string | yes | — | Free-text description |
+| `category` | string | no | `"happy"` | Same values as reader fixtures |
+| `expect_error` | bool | no | `false` | If true, an emit error is acceptable |
+| `output_contains` | array of strings | no | `[]` | Substrings that must appear in the emitted output |
+
+A validator can:
+1. Parse `input.json` as pandoc-json into a rescribe document
+2. Invoke `rescribe convert --from pandoc-json --to {format} < input.json`
+3. Check that each `output_contains` string appears somewhere in the output
+
+---
 
 ## Example
 

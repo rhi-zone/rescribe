@@ -1,0 +1,4 @@
+{
+  "description": "Basic Beamer presentation: preamble and frame structure",
+  "output_contains": ["\\documentclass{beamer}", "\\begin{document}", "\\begin{frame}"]
+}

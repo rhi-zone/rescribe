@@ -3,8 +3,11 @@
 //! Discovers fixtures from `fixtures/{format}/` at the workspace root and
 //! runs each against the appropriate reader.  Tests skip gracefully if a
 //! format directory doesn't exist yet.
+//!
+//! Writer smoke tests discover fixtures from `fixtures/writers/{format}/` and
+//! run them against the appropriate emitter.
 
-use rescribe_fixtures::run_format_fixtures;
+use rescribe_fixtures::{run_format_fixtures, run_format_writer_fixtures};
 use std::path::PathBuf;
 
 fn fixtures_root() -> PathBuf {
@@ -506,6 +509,105 @@ fn rtf() {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
         rescribe_read_rtf::parse(s)
             .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Tier D presentation writer smoke tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn beamer_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "beamer", |doc| {
+        rescribe_write_beamer::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn revealjs_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "revealjs", |doc| {
+        rescribe_write_revealjs::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn slidy_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "slidy", |doc| {
+        rescribe_write_slidy::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn s5_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "s5", |doc| {
+        rescribe_write_s5::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn dzslides_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "dzslides", |doc| {
+        rescribe_write_dzslides::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn slideous_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "slideous", |doc| {
+        rescribe_write_slideous::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn context_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "context", |doc| {
+        rescribe_write_context::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn ms_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "ms", |doc| {
+        rescribe_write_ms::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn icml_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "icml", |doc| {
+        rescribe_write_icml::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn chunkedhtml_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "chunkedhtml", |doc| {
+        rescribe_write_chunkedhtml::emit(doc)
+            .map(|r| {
+                r.value
+                    .iter()
+                    .flat_map(|chunk| chunk.content.iter().copied())
+                    .collect()
+            })
             .map_err(|e| e.to_string())
     });
 }

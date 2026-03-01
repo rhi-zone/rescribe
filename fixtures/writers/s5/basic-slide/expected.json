@@ -1,0 +1,4 @@
+{
+  "description": "Basic S5 presentation: HTML wrapper and slide divs",
+  "output_contains": ["<!DOCTYPE html PUBLIC", "class=\"slide\""]
+}

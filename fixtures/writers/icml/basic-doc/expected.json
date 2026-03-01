@@ -1,0 +1,4 @@
+{
+  "description": "Basic ICML document: XML declaration and Document element",
+  "output_contains": ["<?xml version=", "</Document>"]
+}

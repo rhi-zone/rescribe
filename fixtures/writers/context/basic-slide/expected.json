@@ -1,0 +1,4 @@
+{
+  "description": "Basic ConTeXt document: starttext/stoptext wrapper",
+  "output_contains": ["\\starttext", "\\stoptext"]
+}

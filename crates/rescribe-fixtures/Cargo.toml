@@ -68,3 +68,15 @@ rescribe-read-xlsx = { workspace = true }
 ooxml-sml = { workspace = true }
 rescribe-read-pdf = { workspace = true }
 rescribe-read-rtf = { workspace = true }
+
+# Tier D presentation writers (tests/run.rs writer smoke tests)
+rescribe-write-beamer = { workspace = true }
+rescribe-write-revealjs = { workspace = true }
+rescribe-write-slidy = { workspace = true }
+rescribe-write-s5 = { workspace = true }
+rescribe-write-dzslides = { workspace = true }
+rescribe-write-slideous = { workspace = true }
+rescribe-write-context = { workspace = true }
+rescribe-write-ms = { workspace = true }
+rescribe-write-icml = { workspace = true }
+rescribe-write-chunkedhtml = { workspace = true }

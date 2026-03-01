@@ -126,16 +126,16 @@ These formats have no reader; stage 3 (harness) is not applicable.
 
 | Format | W | Library | W-next |
 |--------|---|---------|--------|
-| beamer | 1 | hand | fixtures |
-| revealjs | 1 | hand | fixtures |
-| slidy | 1 | hand | fixtures |
-| s5 | 1 | hand | fixtures |
-| dzslides | 1 | hand | fixtures |
-| slideous | 1 | hand | fixtures |
-| context | 1 | hand | fixtures |
-| ms | 1 | hand | fixtures |
-| icml | 1 | hand | fixtures |
-| chunkedhtml | 1 | hand | fixtures |
+| beamer | 2 | hand | fuzz |
+| revealjs | 2 | hand | fuzz |
+| slidy | 2 | hand | fuzz |
+| s5 | 2 | hand | fuzz |
+| dzslides | 2 | hand | fuzz |
+| slideous | 2 | hand | fuzz |
+| context | 2 | hand | fuzz |
+| ms | 2 | hand | fuzz |
+| icml | 2 | hand | fuzz |
+| chunkedhtml | 2 | hand | fuzz |
 | plaintext | 2 | hand | fuzz |
 
 ---

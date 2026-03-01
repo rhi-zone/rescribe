@@ -1,0 +1,4 @@
+{
+  "description": "Basic chunked HTML document: full HTML pages per section",
+  "output_contains": ["<!DOCTYPE html>"]
+}
