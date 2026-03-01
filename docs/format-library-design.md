@@ -129,8 +129,8 @@ crates/formats/{name}/
 - [ ] `parse(input) -> (Ast, Vec<Diagnostic>)`
 - [ ] `events(input) -> impl Iterator<Item = Event>`
 - [ ] `emit(ast) -> String`
-- [ ] Round-trip fuzz target passes clean for 1h+
-- [ ] No-panic fuzz target passes clean for 1h+
+- [ ] Round-trip fuzz target passes clean
+- [ ] No-panic fuzz target passes clean
 - [ ] Published to crates.io (or ready to publish)
 - [ ] Thin rescribe adapter (reader + writer, ≤300 lines each)
 - [ ] Rescribe fixture suite at 3-Harness

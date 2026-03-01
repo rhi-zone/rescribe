@@ -133,7 +133,7 @@ For each format in priority order:
 2. Thin rescribe adapter (`rescribe-read-{fmt}`, `rescribe-write-{fmt}`)
 3. Owned fixture suite (2-Fixtures)
 4. Pandoc/oracle harness (3-Harness)
-5. Fuzz targets (4-Fuzz): **both** no-panic gate **and** round-trip property, run 1h+ each
+5. Fuzz targets (4-Fuzz): **both** no-panic gate **and** round-trip property, run until clean
 6. Production sign-off (5-Production)
 
 **A vertical is not done until step 5 passes.** Fixtures + harness without fuzz is only

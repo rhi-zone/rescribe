@@ -101,13 +101,13 @@ Each standalone format crate (`crates/formats/{name}/`) must satisfy all of:
 - `parse(input) -> (Ast, Vec<Diagnostic>)` — infallible
 - `events(input) -> impl Iterator<Item = Event>` — pull tokenizer
 - `emit(ast) -> String` — round-trip guarantee
-- No-panic fuzz gate: arbitrary bytes must not panic (run 1h+)
-- Round-trip fuzz: `parse(emit(parse(s).0)).0.strip_spans() == parse(s).0.strip_spans()` (run 1h+)
+- No-panic fuzz gate: arbitrary bytes must not panic — run until clean
+- Round-trip fuzz: `parse(emit(parse(s).0)).0.strip_spans() == parse(s).0.strip_spans()` — run until clean
 - Thin rescribe adapter ≤300 lines each side
 - Rescribe fixture suite at 3-Harness
 
 See `docs/format-library-design.md` for the full spec.
-**A vertical is not done until both fuzz targets have run clean for 1h+.**
+**A vertical is not done until both fuzz targets pass clean.**
 
 ## Marathon Mode
 

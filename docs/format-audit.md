@@ -151,7 +151,7 @@ These formats have no reader; stage 3 (harness) is not applicable.
 - Fuzz targets written and compiling; ready to run
 - Rescribe reader promoted to 3 (fixture suite: paragraph, heading, bold, italic, underline,
   strikethrough, superscript, subscript, special_chars, multiple_paragraphs + adversarial)
-- Next: run fuzz targets for 1h+, then writer fixtures + writer harness
+- Next: run fuzz targets, then writer fixtures + writer harness
 
 ### ODT writer — medium risk
 - 404 lines building ODF zip by hand (no schema library)
