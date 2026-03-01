@@ -247,11 +247,67 @@ fn emit_inline_children(node: &Node, ctx: &mut EmitContext) {
     }
 }
 
+/// Escape special djot characters in plain text content.
+///
+/// Djot uses `\X` to escape any non-alphanumeric ASCII character.
+/// We escape inline markup characters unconditionally, plus `:` which
+/// is a definition-list block marker and dangerous even in inline
+/// positions (jotdown will parse a paragraph starting with `:` as a
+/// definition list).  Other block-level starters (`-`, `+`, `#`, `>`)
+/// are only ever special at the start of a *block line*, not inside an
+/// already-open inline run, so we leave them unescaped to keep output
+/// readable.
+fn escape_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let chars: Vec<char> = s.chars().collect();
+    for (i, &ch) in chars.iter().enumerate() {
+        match ch {
+            // Escape character itself
+            '\\' => {
+                out.push('\\');
+                out.push('\\');
+            }
+            // Inline code
+            '`' => {
+                out.push('\\');
+                out.push('`');
+            }
+            // Strong / emphasis
+            '*' | '_' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            // Span / link / footnote starters
+            '{' | '[' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            // Superscript / subscript / math
+            '^' | '~' | '$' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            // Image: only special before '['
+            '!' if chars.get(i + 1) == Some(&'[') => {
+                out.push('\\');
+                out.push('!');
+            }
+            // Definition-list marker: dangerous at start of any line
+            ':' => {
+                out.push('\\');
+                out.push(':');
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 fn emit_inline(node: &Node, ctx: &mut EmitContext) {
     match node.kind.as_str() {
         node::TEXT => {
             if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write(content);
+                ctx.write(&escape_text(content));
             }
         }
         node::EMPHASIS => {
