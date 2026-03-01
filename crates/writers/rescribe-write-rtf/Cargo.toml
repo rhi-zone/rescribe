@@ -9,3 +9,4 @@ description = "RTF (Rich Text Format) writer for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
+rtf-fmt = { workspace = true }

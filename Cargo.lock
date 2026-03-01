@@ -1911,6 +1911,7 @@ version = "0.1.0"
 dependencies = [
  "rescribe-core",
  "rescribe-std",
+ "rtf-fmt",
 ]
 
 [[package]]
@@ -2438,6 +2439,7 @@ version = "0.1.0"
 dependencies = [
  "rescribe-core",
  "rescribe-std",
+ "rtf-fmt",
 ]
 
 [[package]]
@@ -2567,6 +2569,10 @@ name = "roman-numerals-rs"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c85cd47a33a4510b1424fe796498e174c6a9cf94e606460ef022a19f3e4ff85e"
+
+[[package]]
+name = "rtf-fmt"
+version = "0.1.0"
 
 [[package]]
 name = "rustc-hash"

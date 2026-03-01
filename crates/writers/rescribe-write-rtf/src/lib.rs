@@ -1,9 +1,11 @@
 //! RTF (Rich Text Format) writer for rescribe.
 //!
-//! Emits documents as RTF format.
+//! Thin adapter over [`rtf_fmt`]: maps the rescribe document model to
+//! the `rtf_fmt` AST, then builds RTF output.
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
+use rtf_fmt::{Block, Inline, RtfDoc, TableRow};
 
 /// Emit a document as RTF.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -15,290 +17,163 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new();
-
-    // Write RTF header
-    ctx.write(r"{\rtf1\ansi\deff0");
-    ctx.write(r"{\fonttbl{\f0 Times New Roman;}}");
-    ctx.write("\n");
-
-    emit_nodes(&doc.content.children, &mut ctx);
-
-    ctx.write("}");
-
-    Ok(ConversionResult::ok(ctx.output.into_bytes()))
+    let rtf = doc_to_rtf(doc);
+    let output = rtf_fmt::build(&rtf);
+    Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-struct EmitContext {
-    output: String,
-}
-
-impl EmitContext {
-    fn new() -> Self {
-        Self {
-            output: String::new(),
-        }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-
-    fn write_escaped(&mut self, s: &str) {
-        for ch in s.chars() {
-            match ch {
-                '\\' => self.write("\\\\"),
-                '{' => self.write("\\{"),
-                '}' => self.write("\\}"),
-                '\t' => self.write("\\tab "),
-                '\n' => self.write("\\line "),
-                '\u{00A0}' => self.write("\\~"), // non-breaking space
-                '\u{2014}' => self.write("\\emdash "),
-                '\u{2013}' => self.write("\\endash "),
-                '\u{2018}' => self.write("\\lquote "),
-                '\u{2019}' => self.write("\\rquote "),
-                '\u{201C}' => self.write("\\ldblquote "),
-                '\u{201D}' => self.write("\\rdblquote "),
-                '\u{2022}' => self.write("\\bullet "),
-                c if c.is_ascii() => self.output.push(c),
-                c => {
-                    // Non-ASCII: use Unicode escape
-                    let code = c as u32;
-                    if code <= 0x7FFF {
-                        self.write(&format!("\\u{}?", code as i16));
-                    } else {
-                        // For characters > 0x7FFF, use negative value
-                        self.write(&format!("\\u{}?", code as i16));
-                    }
-                }
-            }
-        }
+fn doc_to_rtf(doc: &Document) -> RtfDoc {
+    RtfDoc {
+        blocks: nodes_to_blocks(&doc.content.children),
     }
 }
 
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_node(node, ctx);
-    }
+fn nodes_to_blocks(nodes: &[Node]) -> Vec<Block> {
+    nodes.iter().flat_map(node_to_blocks).collect()
 }
 
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+/// Convert a rescribe node to zero or more `Block`s.
+fn node_to_blocks(node: &Node) -> Vec<Block> {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
+        node::DOCUMENT => nodes_to_blocks(&node.children),
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
-            // Use font size based on heading level
-            let size = match level {
-                1 => 48, // 24pt
-                2 => 40, // 20pt
-                3 => 32, // 16pt
-                4 => 28, // 14pt
-                _ => 24, // 12pt
-            };
-            ctx.write(&format!("\\pard\\fs{} \\b ", size));
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\\b0\\par\n");
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
+            vec![Block::Heading {
+                level,
+                inlines: nodes_to_inlines(&node.children),
+            }]
         }
 
-        node::PARAGRAPH => {
-            ctx.write("\\pard\\fs24 ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("\\par\n");
-        }
+        node::PARAGRAPH => vec![Block::Paragraph {
+            inlines: nodes_to_inlines(&node.children),
+        }],
 
         node::CODE_BLOCK => {
-            ctx.write("\\pard\\f1\\fs20 ");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                for line in content.lines() {
-                    ctx.write_escaped(line);
-                    ctx.write("\\line ");
-                }
-            }
-            ctx.write("\\f0\\par\n");
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            vec![Block::CodeBlock { content }]
         }
 
-        node::BLOCKQUOTE => {
-            ctx.write("\\pard\\li720 "); // indent 720 twips (0.5 inch)
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    emit_inline_nodes(&child.children, ctx);
-                } else {
-                    emit_node(child, ctx);
-                }
-            }
-            ctx.write("\\par\n");
-        }
+        node::BLOCKQUOTE => vec![Block::Blockquote {
+            children: nodes_to_blocks(&node.children),
+        }],
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let mut num = 1;
-
-            for child in &node.children {
-                if child.kind.as_str() == node::LIST_ITEM {
-                    ctx.write("\\pard\\li720\\fi-360 ");
-                    if ordered {
-                        ctx.write(&format!("{}. ", num));
-                        num += 1;
-                    } else {
-                        ctx.write("\\bullet  ");
-                    }
-
-                    for item_child in &child.children {
-                        if item_child.kind.as_str() == node::PARAGRAPH {
-                            emit_inline_nodes(&item_child.children, ctx);
-                        } else {
-                            emit_node(item_child, ctx);
-                        }
-                    }
-                    ctx.write("\\par\n");
-                }
-            }
+            let items: Vec<Vec<Block>> = node
+                .children
+                .iter()
+                .filter(|c| c.kind.as_str() == node::LIST_ITEM)
+                .map(|item| nodes_to_blocks(&item.children))
+                .collect();
+            vec![Block::List { ordered, items }]
         }
 
-        node::LIST_ITEM => {
-            emit_nodes(&node.children, ctx);
-        }
+        node::LIST_ITEM => nodes_to_blocks(&node.children),
 
         node::TABLE => {
-            for row in &node.children {
-                if row.kind.as_str() == node::TABLE_ROW {
-                    ctx.write("\\trowd ");
-
-                    // Define cell positions
-                    let _cell_count = row.children.len();
-                    for (i, _) in row.children.iter().enumerate() {
-                        let right = (i + 1) * 2000; // 2000 twips per cell
-                        ctx.write(&format!("\\cellx{}", right));
-                    }
-
-                    for cell in &row.children {
-                        ctx.write("\\pard\\intbl ");
-                        emit_inline_nodes(&cell.children, ctx);
-                        ctx.write("\\cell ");
-                    }
-                    ctx.write("\\row\n");
-                }
-            }
+            let rows: Vec<TableRow> = node
+                .children
+                .iter()
+                .filter(|r| {
+                    r.kind.as_str() == node::TABLE_ROW || r.kind.as_str() == node::TABLE_HEADER
+                })
+                .map(|row| TableRow {
+                    cells: row
+                        .children
+                        .iter()
+                        .map(|cell| nodes_to_inlines(&cell.children))
+                        .collect(),
+                })
+                .collect();
+            vec![Block::Table { rows }]
         }
 
-        node::HORIZONTAL_RULE => {
-            ctx.write("\\pard\\brdrb\\brdrs\\brdrw10\\brsp20 \\par\n");
-        }
+        node::HORIZONTAL_RULE => vec![Block::HorizontalRule],
 
-        node::DIV | node::SPAN => emit_nodes(&node.children, ctx),
+        node::DIV | node::SPAN | node::FIGURE => nodes_to_blocks(&node.children),
 
-        node::FIGURE => emit_nodes(&node.children, ctx),
-
-        // Inline nodes at block level
+        // Inline nodes at block level: wrap in a paragraph
         node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
-            ctx.write("\\pard ");
-            emit_inline_node(node, ctx);
-            ctx.write("\\par\n");
+            vec![Block::Paragraph {
+                inlines: nodes_to_inlines(std::slice::from_ref(node)),
+            }]
         }
 
-        _ => emit_nodes(&node.children, ctx),
+        _ => nodes_to_blocks(&node.children),
     }
 }
 
-fn emit_inline_nodes(nodes: &[Node], ctx: &mut EmitContext) {
-    for node in nodes {
-        emit_inline_node(node, ctx);
-    }
+fn nodes_to_inlines(nodes: &[Node]) -> Vec<Inline> {
+    nodes.iter().map(node_to_inline).collect()
 }
 
-fn emit_inline_node(node: &Node, ctx: &mut EmitContext) {
+fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write_escaped(content);
-            }
+            let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            Inline::Text(s)
         }
 
-        node::STRONG => {
-            ctx.write("{\\b ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
-        }
+        node::STRONG => Inline::Bold(nodes_to_inlines(&node.children)),
 
-        node::EMPHASIS => {
-            ctx.write("{\\i ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
-        }
+        node::EMPHASIS => Inline::Italic(nodes_to_inlines(&node.children)),
 
-        node::UNDERLINE => {
-            ctx.write("{\\ul ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
-        }
+        node::UNDERLINE => Inline::Underline(nodes_to_inlines(&node.children)),
 
-        node::STRIKEOUT => {
-            ctx.write("{\\strike ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
-        }
+        node::STRIKEOUT => Inline::Strikethrough(nodes_to_inlines(&node.children)),
 
         node::CODE => {
-            ctx.write("{\\f1 ");
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                ctx.write_escaped(content);
+            let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            let mut children = nodes_to_inlines(&node.children);
+            if !s.is_empty() {
+                children.insert(0, Inline::Text(s));
             }
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
+            Inline::Code(
+                children
+                    .iter()
+                    .map(|i| match i {
+                        Inline::Text(t) => t.clone(),
+                        _ => String::new(),
+                    })
+                    .collect(),
+            )
         }
 
         node::LINK => {
-            // RTF hyperlinks are complex; just emit the text
-            if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("{\\field{\\*\\fldinst HYPERLINK \"");
-                ctx.write(url);
-                ctx.write("\"}{\\fldrslt ");
-                if node.children.is_empty() {
-                    ctx.write_escaped(url);
-                } else {
-                    emit_inline_nodes(&node.children, ctx);
-                }
-                ctx.write("}}");
-            } else {
-                emit_inline_nodes(&node.children, ctx);
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            Inline::Link {
+                url,
+                children: nodes_to_inlines(&node.children),
             }
         }
 
         node::IMAGE => {
-            // RTF images are binary and complex; skip for now
-            if let Some(alt) = node.props.get_str(prop::ALT) {
-                ctx.write("[Image: ");
-                ctx.write_escaped(alt);
-                ctx.write("]");
-            } else if let Some(url) = node.props.get_str(prop::URL) {
-                ctx.write("[Image: ");
-                ctx.write_escaped(url);
-                ctx.write("]");
+            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let alt = node.props.get_str(prop::ALT).unwrap_or("").to_string();
+            Inline::Image { url, alt }
+        }
+
+        node::LINE_BREAK => Inline::LineBreak,
+
+        node::SOFT_BREAK => Inline::SoftBreak,
+
+        node::SUPERSCRIPT => Inline::Superscript(nodes_to_inlines(&node.children)),
+
+        node::SUBSCRIPT => Inline::Subscript(nodes_to_inlines(&node.children)),
+
+        _ => {
+            // Unknown inline: recurse into children, or emit empty text
+            let children = nodes_to_inlines(&node.children);
+            if children.is_empty() {
+                Inline::Text(String::new())
+            } else if children.len() == 1 {
+                children.into_iter().next().unwrap()
+            } else {
+                // Wrap in a span-like bold to group — best effort
+                Inline::Bold(children)
             }
         }
-
-        node::LINE_BREAK => {
-            ctx.write("\\line ");
-        }
-
-        node::SOFT_BREAK => {
-            ctx.write(" ");
-        }
-
-        node::SUPERSCRIPT => {
-            ctx.write("{\\super ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
-        }
-
-        node::SUBSCRIPT => {
-            ctx.write("{\\sub ");
-            emit_inline_nodes(&node.children, ctx);
-            ctx.write("}");
-        }
-
-        _ => emit_inline_nodes(&node.children, ctx),
     }
 }
 
@@ -317,7 +192,7 @@ mod tests {
         let doc = doc(|d| d.para(|p| p.text("Hello")));
         let output = emit_str(&doc);
         assert!(output.starts_with("{\\rtf1"));
-        assert!(output.ends_with("}"));
+        assert!(output.ends_with('}'));
     }
 
     #[test]
