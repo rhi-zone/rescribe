@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-02-28.
+Assessed 2026-02-24; stages updated 2026-03-01.
 
 ## Maturity Pipeline
 
@@ -42,7 +42,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 |--------|---|---|---------|--------|--------|
 | djot | 3† | 2† | jotdown | fuzz | harness |
 | org | 4 | 2 | hand | production | harness |
-| rst | 2 | 2 | hand | harness | harness |
+| rst | 3 | 2 | hand | fuzz | harness |
 | asciidoc | 2 | 2 | hand | alt harness† | harness |
 | textile | 3 | 2 | hand | fuzz | harness |
 | muse | 3 | 2 | hand | fuzz | harness |
@@ -154,10 +154,9 @@ These formats have no reader; stage 3 (harness) is not applicable.
 - No ODT equivalent of `ooxml-wml`/`ooxml-pml` exists in the ecosystem
 - See Priority 4 in TODO.md
 
-### RST reader — medium risk
-- 1,263 lines, handwritten
-- RST has tricky rules: underline-based heading priority, inline markup precedence
-- No independent test harness; hard to verify edge cases
+### RST reader — resolved
+- Pandoc harness: 96% word coverage (ref=618, ours=639) — promoted to 3-Harness
+- Next: fuzz target
 
 ### AsciiDoc reader — low-medium risk
 - 1,290 lines, handwritten
