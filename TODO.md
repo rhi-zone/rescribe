@@ -64,16 +64,73 @@ Chunked HTML, Plaintext
 
 ---
 
+## Architecture: Format Crate Split (M0-style, ongoing)
+
+### Motivation
+
+`rescribe-read-{format}` and `rescribe-write-{format}` should be **thin IR adapters only** —
+they translate between rescribe's `Document` IR and the format, nothing more.
+
+Hand-rolled format logic (tokenizer, AST, builder) belongs in a **standalone crate** with
+no rescribe dependency, so it can be used, tested, and fuzzed independently.
+
+Library-backed formats (pulldown-cmark, html5ever, ooxml-*, etc.) already follow this
+pattern — we wrap them. Hand-rolled formats should look the same from the outside.
+
+### Naming convention
+
+- `{format}` when the crates.io name is available (e.g. `asciidoc`, `odt`, `docbook`)
+- `{format}-fmt` when taken (e.g. `rst-fmt`, `rtf-fmt`, `latex-fmt`)
+
+### Crate layout (target state)
+
+```
+crates/
+├── formats/             ← standalone format libraries, no rescribe dep
+│   ├── rst-fmt/         # RST parser + builder API
+│   ├── asciidoc/        # AsciiDoc parser + builder API
+│   ├── rtf-fmt/         # RTF tokenizer + builder API
+│   ├── org-fmt/         # Org-mode parser + builder API
+│   ├── latex-fmt/       # LaTeX parser + builder API
+│   └── ...              # one per hand-rolled format
+├── readers/             ← thin IR adapters: {format} → rescribe Document
+└── writers/             ← thin IR adapters: rescribe Document → {format}
+```
+
+### Name availability (checked 2026-03-01)
+
+Available (use plain name): asciidoc, t2t, markua, texinfo, creole, dokuwiki, zimwiki,
+xwiki, twiki, tikiwiki, docbook, native, ris, endnotexml, odt
+
+Need `-fmt` suffix: rst, org, rtf, textile, mediawiki, muse, fountain, bbcode, pod,
+haddock, ansi, man, vimwiki, jira, fb2, opml, tsv, tei, typst (already `typst-syntax`),
+djot (already `jotdown`), latex
+
+### Migration order (suggested)
+
+1. `rtf-fmt` — highest risk, most isolated logic, good proving ground
+2. `rst-fmt` — large parser, complex spec, highest correctness benefit
+3. `asciidoc` — similar to RST
+4. `org-fmt` — already partially modular (handwritten.rs), 3-Harness reader
+5. Remaining formats incrementally
+
+### What each standalone crate exposes
+
+- **Parser**: takes raw bytes/str → returns owned AST (no rescribe types)
+- **Builder**: typed API for constructing valid output → returns `Vec<u8>` or `String`
+- **No `Document`, `Node`, or `Properties`** anywhere in the standalone crate
+
+---
+
 ## Milestones
 
-### M1: Fixture CI — all formats at ≥2-Fixtures, running in CI
+### M1: Fixture CI — all formats at ≥2-Fixtures, running in CI ✓
 
-The owned fixture suite (`fixtures/`) exists but does not yet run in CI.
-
-- [ ] Write fixture runner: parse input, serialize to rescribe JSON, diff vs expected
-- [ ] Hook fixture runner into CI
-- [ ] Fill gaps: any format still at 0-Stub or 1-Partial gets minimum fixture coverage
-- [ ] Presentation writers (Tier D): author at least one fixture each
+- [x] Write fixture runner (`rescribe-fixtures`, `tests/run.rs`)
+- [x] Hook fixture runner into CI (`cargo test --all-targets`)
+- [x] Fill gaps: all formats at ≥2-Fixtures
+- [x] Presentation writers (Tier D): writer fixture infrastructure + one fixture each
+- [x] Fixture spec v1.2: writer fixture format documented
 
 **Done when:** CI is green, every format has at least one passing fixture.
 
@@ -125,6 +182,7 @@ Final production pass for Tier A formats.
 
 Low priority; add if there's demand.
 
+- [ ] Marp (CommonMark + slide separators + speaker-note comments; ~50 lines on top of GFM reader; write support is Beamer/revealjs-style)
 - [ ] Gemtext (Gemini protocol markup)
 - [ ] Mermaid (diagram markup)
 - [ ] PlantUML (UML diagrams)
