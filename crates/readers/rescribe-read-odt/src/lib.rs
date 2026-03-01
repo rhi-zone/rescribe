@@ -91,7 +91,10 @@ fn parse_metadata(xml: &str, metadata: &mut Properties) {
 
 fn parse_content(xml: &str) -> Result<Node, ParseError> {
     let mut reader = Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
+    // Do NOT trim_text: we need to preserve spaces between inline elements
+    // (e.g. "Here comes " + "bold" + " text"). Whitespace outside paragraphs
+    // is harmless because we only accumulate when in_paragraph is true.
+    reader.config_mut().trim_text(false);
 
     let mut doc = Node::new(node::DOCUMENT);
     let mut buf = Vec::new();
@@ -100,6 +103,12 @@ fn parse_content(xml: &str) -> Result<Node, ParseError> {
     let mut in_heading = false;
     let mut _in_list = false;
     let mut in_list_item = false;
+    // Depth counter for nested text:p / text:h (e.g. footnote bodies).
+    // We only open/close paragraph state at depth 0; inner paragraphs just
+    // continue accumulating text into the outer one.
+    let mut para_depth: usize = 0;
+    // Skip text inside footnote citation markers (superscript numbers/symbols).
+    let mut in_note_citation = false;
     let mut current_style = String::new();
     let mut pending_children: Vec<Node> = Vec::new();
     let mut list_stack: Vec<Node> = Vec::new();
@@ -111,33 +120,48 @@ fn parse_content(xml: &str) -> Result<Node, ParseError> {
 
                 match name.as_str() {
                     "text:p" => {
-                        in_paragraph = true;
-                        text_content.clear();
-                        pending_children.clear();
+                        if para_depth == 0 {
+                            in_paragraph = true;
+                            text_content.clear();
+                            pending_children.clear();
 
-                        // Check for heading style
-                        for attr in e.attributes().flatten() {
-                            if attr.key.as_ref() == b"text:style-name" {
-                                current_style = String::from_utf8_lossy(&attr.value).to_string();
+                            // Check for heading style
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"text:style-name" {
+                                    current_style =
+                                        String::from_utf8_lossy(&attr.value).to_string();
+                                }
                             }
-                        }
 
-                        if current_style.starts_with("Heading") {
-                            in_heading = true;
+                            if current_style.starts_with("Heading") {
+                                in_heading = true;
+                            }
+                        } else if in_paragraph
+                            && !text_content.is_empty()
+                            && !text_content.ends_with(char::is_whitespace)
+                        {
+                            // Inner paragraph (e.g. footnote body): separate
+                            // from surrounding text with a space.
+                            text_content.push(' ');
                         }
+                        para_depth += 1;
                     }
                     "text:h" => {
-                        in_heading = true;
-                        in_paragraph = true;
-                        text_content.clear();
-                        pending_children.clear();
+                        if para_depth == 0 {
+                            in_heading = true;
+                            in_paragraph = true;
+                            text_content.clear();
+                            pending_children.clear();
 
-                        // Get outline level
-                        for attr in e.attributes().flatten() {
-                            if attr.key.as_ref() == b"text:outline-level" {
-                                current_style = String::from_utf8_lossy(&attr.value).to_string();
+                            // Get outline level
+                            for attr in e.attributes().flatten() {
+                                if attr.key.as_ref() == b"text:outline-level" {
+                                    current_style =
+                                        String::from_utf8_lossy(&attr.value).to_string();
+                                }
                             }
                         }
+                        para_depth += 1;
                     }
                     "text:list" => {
                         _in_list = true;
@@ -175,9 +199,32 @@ fn parse_content(xml: &str) -> Result<Node, ParseError> {
                         }
                     }
                     "text:line-break" => {
+                        // text:line-break may appear as Start or Empty event
+                        // (quick_xml fires Empty for <text:line-break/>).
+                        // Handle both here via the Start arm; Empty is below.
+                        if !text_content.is_empty() {
+                            pending_children.push(
+                                Node::new(node::TEXT).prop(prop::CONTENT, text_content.clone()),
+                            );
+                            text_content.clear();
+                        }
                         pending_children.push(Node::new(node::LINE_BREAK));
                     }
+                    "text:note-citation" => {
+                        in_note_citation = true;
+                    }
                     _ => {}
+                }
+            }
+            Ok(Event::Empty(e)) => {
+                let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                if name == "text:line-break" && in_paragraph {
+                    if !text_content.is_empty() {
+                        pending_children
+                            .push(Node::new(node::TEXT).prop(prop::CONTENT, text_content.clone()));
+                        text_content.clear();
+                    }
+                    pending_children.push(Node::new(node::LINE_BREAK));
                 }
             }
             Ok(Event::End(e)) => {
@@ -185,7 +232,11 @@ fn parse_content(xml: &str) -> Result<Node, ParseError> {
 
                 match name.as_str() {
                     "text:p" | "text:h" => {
-                        if in_paragraph {
+                        para_depth = para_depth.saturating_sub(1);
+                        // Only emit at outermost level; inner closes (nested
+                        // paragraphs in footnote bodies etc.) just keep
+                        // accumulating into the outer paragraph's text.
+                        if para_depth == 0 && in_paragraph {
                             if !text_content.is_empty() {
                                 pending_children.push(
                                     Node::new(node::TEXT).prop(prop::CONTENT, text_content.clone()),
@@ -235,11 +286,14 @@ fn parse_content(xml: &str) -> Result<Node, ParseError> {
                     "text:list-item" => {
                         in_list_item = false;
                     }
+                    "text:note-citation" => {
+                        in_note_citation = false;
+                    }
                     _ => {}
                 }
             }
             Ok(Event::Text(e)) => {
-                if in_paragraph {
+                if in_paragraph && !in_note_citation {
                     let text = String::from_utf8_lossy(e.as_ref()).to_string();
                     text_content.push_str(&text);
                 }

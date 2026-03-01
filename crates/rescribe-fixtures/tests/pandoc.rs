@@ -55,6 +55,12 @@ fn run_formats(
 }
 
 fn parse_format(format: &str, input: &[u8]) -> Result<Document, String> {
+    // Binary formats — handle before UTF-8 conversion.
+    if format == "odt" {
+        return rescribe_read_odt::parse(input)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string());
+    }
     let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
     match format {
         "markdown" => rescribe_read_markdown::parse(s)

@@ -280,6 +280,36 @@ pub const CORPUS: &[CorpusEntry] = &[
         pandoc_from: "fb2",
         filename: "fb2/basic.fb2",
     },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/paragraph.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/headers.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/listBlocks.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/bold.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/italic.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/footnote.odt",
+    },
 ];
 
 // ---------------------------------------------------------------------------
