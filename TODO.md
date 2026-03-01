@@ -113,9 +113,14 @@ djot (already `jotdown`), latex
 
 ### What each standalone crate exposes
 
-- **Parser**: takes raw bytes/str → returns owned AST (no rescribe types)
-- **Builder**: typed API for constructing valid output → returns `Vec<u8>` or `String`
-- **No `Document`, `Node`, or `Properties`** anywhere in the standalone crate
+See **[`docs/format-library-design.md`](docs/format-library-design.md)** for the
+full design spec and per-vertical checklist. Short version:
+
+- Owned AST with source spans on every node
+- `parse(input) -> (Ast, Vec<Diagnostic>)` + `events()` pull iterator
+- `emit(ast) -> String` with round-trip guarantee
+- No `Document`, `Node`, or `Properties` anywhere in the standalone crate
+- Thin rescribe adapter (≤300 lines each side)
 
 ---
 
