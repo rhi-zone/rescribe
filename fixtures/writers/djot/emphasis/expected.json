@@ -1,0 +1,4 @@
+{
+  "description": "Emphasis text emits wrapped in underscores (Djot italic)",
+  "output_contains": ["_italic_"]
+}

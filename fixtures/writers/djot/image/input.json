@@ -1,0 +1,1 @@
+{"pandoc-api-version": [1, 23], "meta": {}, "blocks": [{"t": "Para", "c": [{"t": "Image", "c": [["", [], []], [{"t": "Str", "c": "alt text"}], ["photo.png", ""]]}]}]}

@@ -1,0 +1,4 @@
+{
+  "description": "Image emits as ![alt](url) syntax",
+  "output_contains": ["![alt text](photo.png)"]
+}

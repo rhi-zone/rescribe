@@ -1,0 +1,4 @@
+{
+  "description": "Inline code emits wrapped in backticks",
+  "output_contains": ["`printf`"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Link emits as [text](url) inline syntax",
+  "output_contains": ["[click here](https://example.com)"]
+}

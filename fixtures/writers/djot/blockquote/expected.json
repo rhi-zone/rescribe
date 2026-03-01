@@ -1,0 +1,4 @@
+{
+  "description": "Blockquote emits with '> ' prefix",
+  "output_contains": ["> "]
+}

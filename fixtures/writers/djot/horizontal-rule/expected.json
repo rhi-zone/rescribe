@@ -1,0 +1,4 @@
+{
+  "description": "Horizontal rule emits as '* * *'",
+  "output_contains": ["* * *"]
+}

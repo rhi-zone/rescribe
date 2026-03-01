@@ -69,6 +69,9 @@ ooxml-sml = { workspace = true }
 rescribe-read-pdf = { workspace = true }
 rescribe-read-rtf = { workspace = true }
 
+# Bidirectional format writer harness tests
+rescribe-write-djot = { workspace = true }
+
 # Tier D presentation writers (tests/run.rs writer smoke tests)
 rescribe-write-beamer = { workspace = true }
 rescribe-write-revealjs = { workspace = true }

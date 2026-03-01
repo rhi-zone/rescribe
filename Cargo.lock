@@ -1578,6 +1578,7 @@ dependencies = [
  "rescribe-write-beamer",
  "rescribe-write-chunkedhtml",
  "rescribe-write-context",
+ "rescribe-write-djot",
  "rescribe-write-dzslides",
  "rescribe-write-icml",
  "rescribe-write-ms",

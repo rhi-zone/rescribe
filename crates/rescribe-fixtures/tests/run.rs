@@ -514,6 +514,19 @@ fn rtf() {
 }
 
 // ---------------------------------------------------------------------------
+// Writer harness tests for bidirectional formats
+// ---------------------------------------------------------------------------
+
+#[test]
+fn djot_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "djot", |doc| {
+        rescribe_write_djot::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Tier D presentation writer smoke tests
 // ---------------------------------------------------------------------------
 

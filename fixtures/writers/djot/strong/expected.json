@@ -1,0 +1,4 @@
+{
+  "description": "Strong text emits wrapped in single asterisks (Djot bold)",
+  "output_contains": ["*bold*"]
+}

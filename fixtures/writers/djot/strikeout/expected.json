@@ -1,0 +1,4 @@
+{
+  "description": "Strikeout emits using Djot {- -} delete syntax",
+  "output_contains": ["{-deleted-}"]
+}

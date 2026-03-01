@@ -1,3 +1,8 @@
+## Status Indicator
+- Current: ◐ Fleshed Out — kept despite high commit count (112 commits, 207 Rust files)
+- Needs hardening/verification work before upgrading to ● Potentially Mature
+- Lots of code, but needs more verification to count as mature
+
 # Rescribe Roadmap
 
 Per-format status is tracked in `docs/format-audit.md` using the maturity pipeline

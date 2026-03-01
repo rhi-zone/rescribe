@@ -1,0 +1,4 @@
+{
+  "description": "Unordered list items emit with '- ' prefix",
+  "output_contains": ["- first", "- second", "- third"]
+}

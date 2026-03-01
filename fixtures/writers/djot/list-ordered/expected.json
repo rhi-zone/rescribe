@@ -1,0 +1,4 @@
+{
+  "description": "Ordered list items emit with '1. ' style numeric prefix",
+  "output_contains": ["1. one", "2. two", "3. three"]
+}
