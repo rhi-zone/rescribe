@@ -78,7 +78,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
 | docx | 3† | 3† | ooxml-wml | fuzz | fuzz |
-| odt | 2 | 2 | quick-xml / hand | harness | harness |
+| odt | 3 | 2 | quick-xml / hand | fuzz | harness |
 | epub | 3† | 3† | epub / epub-builder | fuzz | fuzz |
 | fb2 | 3 | 2 | hand | fuzz | harness |
 | pptx | 3† | 3† | ooxml-pml | fuzz | fuzz |
@@ -152,7 +152,7 @@ These formats have no reader; stage 3 (harness) is not applicable.
 - 404 lines building ODF zip by hand (no schema library)
 - Reader uses `quick-xml`; writer generates raw XML strings
 - No ODT equivalent of `ooxml-wml`/`ooxml-pml` exists in the ecosystem
-- See Priority 4 in TODO.md
+- Reader promoted to 3-Harness (100% coverage, 6 corpus files, 2026-03-01)
 
 ### RST reader — resolved
 - Pandoc harness: 96% word coverage (ref=618, ours=639) — promoted to 3-Harness
