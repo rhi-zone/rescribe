@@ -40,7 +40,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| djot | 3† | 3† | jotdown | fuzz | fuzz |
+| djot | 3† | 3† | jotdown | fuzz (target ready) | fuzz (target ready) |
 | org | 4 | 2 | hand | production | harness |
 | rst | 3 | 2 | hand | fuzz | harness |
 | asciidoc | 2 | 2 | hand | alt harness† | harness |

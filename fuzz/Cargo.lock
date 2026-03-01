@@ -314,6 +314,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "jotdown"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "086b08ec7a274cd60cd575ed3651ba081ee72dec0d39a6210e8adcff9efe3880"
+
+[[package]]
 name = "libc"
 version = "0.2.180"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -461,6 +467,10 @@ checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "org-fmt"
+version = "0.1.0"
 
 [[package]]
 name = "parking_lot"
@@ -679,6 +689,7 @@ dependencies = [
  "arbitrary",
  "libfuzzer-sys",
  "rescribe-core",
+ "rescribe-read-djot",
  "rescribe-read-html",
  "rescribe-read-latex",
  "rescribe-read-markdown",
@@ -686,8 +697,18 @@ dependencies = [
  "rescribe-read-pandoc-json",
  "rescribe-read-pdf",
  "rescribe-std",
+ "rescribe-write-djot",
  "rescribe-write-html",
  "rescribe-write-markdown",
+]
+
+[[package]]
+name = "rescribe-read-djot"
+version = "0.1.0"
+dependencies = [
+ "jotdown",
+ "rescribe-core",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -723,6 +744,7 @@ dependencies = [
 name = "rescribe-read-org"
 version = "0.1.0"
 dependencies = [
+ "org-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -751,6 +773,14 @@ name = "rescribe-std"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+]
+
+[[package]]
+name = "rescribe-write-djot"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
 ]
 
 [[package]]

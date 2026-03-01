@@ -35,6 +35,12 @@ path = "../crates/writers/rescribe-write-markdown"
 [dependencies.rescribe-write-html]
 path = "../crates/writers/rescribe-write-html"
 
+[dependencies.rescribe-read-djot]
+path = "../crates/readers/rescribe-read-djot"
+
+[dependencies.rescribe-write-djot]
+path = "../crates/writers/rescribe-write-djot"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -93,6 +99,20 @@ bench = false
 [[bin]]
 name = "fuzz_html_roundtrip"
 path = "fuzz_targets/html_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_djot_reader"
+path = "fuzz_targets/djot_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_djot_roundtrip"
+path = "fuzz_targets/djot_roundtrip.rs"
 test = false
 doc = false
 bench = false
