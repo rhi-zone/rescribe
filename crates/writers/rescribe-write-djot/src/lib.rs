@@ -297,6 +297,12 @@ fn escape_text(s: &str) -> String {
                 out.push('\\');
                 out.push(':');
             }
+            // Straight quotes: jotdown applies smart-quote substitution, so
+            // an unescaped ' or " round-trips as a curly quote (≠ original).
+            '\'' | '"' => {
+                out.push('\\');
+                out.push(ch);
+            }
             other => out.push(other),
         }
     }
@@ -596,5 +602,12 @@ mod roundtrip_tests {
     #[test]
     fn code_span_internal_backtick_run() {
         roundtrip_text_preserved("`-``)");
+    }
+
+    // Smart quotes: unescaped straight apostrophe ' (U+0027) round-trips as
+    // curly right-single-quote ' (U+2019) because jotdown applies smart quotes.
+    #[test]
+    fn smart_quote_apostrophe() {
+        roundtrip_text_preserved("\\'|");
     }
 }
