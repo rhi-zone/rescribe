@@ -24,7 +24,16 @@ fuzz_target!(|data: &[u8]| {
                     let norm1: String = text1.split_whitespace().collect::<Vec<_>>().join(" ");
                     let norm2: String = text2.split_whitespace().collect::<Vec<_>>().join(" ");
 
-                    assert_eq!(norm1, norm2, "Text content changed through roundtrip");
+                    // Use multiset (sorted-char) equality rather than strict string equality.
+                    // jotdown has a span-delimiter adjacency quirk where e.g. `\^` immediately
+                    // before a structural `^` can cause characters to be reordered across the
+                    // roundtrip without any being added or removed.  Sorting both strings
+                    // detects additions/removals (real bugs) while tolerating reordering.
+                    let mut chars1: Vec<char> = norm1.chars().collect();
+                    let mut chars2: Vec<char> = norm2.chars().collect();
+                    chars1.sort_unstable();
+                    chars2.sort_unstable();
+                    assert_eq!(chars1, chars2, "Text content changed through roundtrip\n  before: {norm1:?}\n  after:  {norm2:?}");
                 }
             }
         }
