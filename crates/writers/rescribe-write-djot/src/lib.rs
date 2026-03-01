@@ -303,6 +303,12 @@ fn escape_text(s: &str) -> String {
                 out.push('\\');
                 out.push(ch);
             }
+            // Table marker: '|' is a table-row delimiter even at start of
+            // a paragraph — jotdown parses "|cell|" as a table, not text.
+            '|' => {
+                out.push('\\');
+                out.push('|');
+            }
             other => out.push(other),
         }
     }
@@ -609,5 +615,12 @@ mod roundtrip_tests {
     #[test]
     fn smart_quote_apostrophe() {
         roundtrip_text_preserved("\\'|");
+    }
+
+    // Table marker: unescaped '|' is absorbed as a table column separator on
+    // re-parse, stripping the pipe characters from the text content.
+    #[test]
+    fn pipe_as_table_marker() {
+        roundtrip_text_preserved("|\x7f\\|");
     }
 }
