@@ -526,6 +526,15 @@ fn djot_writer() {
     });
 }
 
+#[test]
+fn rtf_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "rtf", |doc| {
+        rescribe_write_rtf::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Tier D presentation writer smoke tests
 // ---------------------------------------------------------------------------

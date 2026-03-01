@@ -1583,6 +1583,7 @@ dependencies = [
  "rescribe-write-icml",
  "rescribe-write-ms",
  "rescribe-write-revealjs",
+ "rescribe-write-rtf",
  "rescribe-write-s5",
  "rescribe-write-slideous",
  "rescribe-write-slidy",

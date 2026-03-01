@@ -84,7 +84,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | pptx | 3† | 3† | ooxml-pml | fuzz | fuzz |
 | xlsx | 3† | 3† | ooxml-sml | fuzz | fuzz |
 | pdf | 4† | – | pdf-extract | production | – |
-| rtf | 4 | 2 | rtf-fmt (standalone) | production | harness |
+| rtf | 4 | 3 | rtf-fmt (standalone) | production | fuzz |
 | mobi | – | – | – (planned) | – | – |
 | azw3 | – | – | – (planned) | – | – |
 | kfx | – | – | – (planned) | – | – |
@@ -155,7 +155,11 @@ These formats have no reader; stage 3 (harness) is not applicable.
   - Fixed: `\r`/`\n` in Text content emitted as bare chars (stripped on re-parse); now `\'0d`/`\'0a`
 - Rescribe reader at 4-Fuzz (fixture suite: paragraph, heading, bold, italic, underline,
   strikethrough, superscript, subscript, special_chars, multiple_paragraphs + adversarial)
-- Next: writer fixtures + writer harness, then production sign-off
+- Writer promoted to 3 (2026-03-02): 15 writer fixtures covering all inline and
+  block constructs (paragraph, heading, strong, emphasis, underline, strikeout,
+  code-inline, code-block, link, list-unordered, list-ordered, blockquote,
+  horizontal-rule, superscript, subscript); all passing in CI
+- Next: writer fuzz target, then production sign-off for both
 
 ### ODT writer — medium risk
 - 404 lines building ODF zip by hand (no schema library)

@@ -1,0 +1,4 @@
+{
+  "description": "Horizontal rule emits as a paragraph with bottom border (\\brdrb)",
+  "output_contains": ["\\brdrb", "above", "below"]
+}

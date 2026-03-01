@@ -1,0 +1,4 @@
+{
+  "description": "Hyperlink emits as RTF HYPERLINK field with URL and display text",
+  "output_contains": ["HYPERLINK", "https://example.com", "click here"]
+}

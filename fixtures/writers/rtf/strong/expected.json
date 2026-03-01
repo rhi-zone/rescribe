@@ -1,0 +1,4 @@
+{
+  "description": "Strong text emits as {\\b ...} group",
+  "output_contains": ["{\\b bold}"]
+}

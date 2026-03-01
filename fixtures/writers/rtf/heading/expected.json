@@ -1,0 +1,4 @@
+{
+  "description": "Headings emit with bold and font-size scaled by level",
+  "output_contains": ["\\fs48", "My Title", "\\fs40", "Sub Heading", "\\b "]
+}

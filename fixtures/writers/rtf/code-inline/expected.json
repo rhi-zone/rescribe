@@ -1,0 +1,4 @@
+{
+  "description": "Inline code emits as {\\f1 ...} monospace group",
+  "output_contains": ["{\\f1 printf}"]
+}

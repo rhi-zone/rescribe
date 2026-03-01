@@ -1,0 +1,4 @@
+{
+  "description": "Strikeout text emits as {\\strike ...} group",
+  "output_contains": ["{\\strike deleted}"]
+}

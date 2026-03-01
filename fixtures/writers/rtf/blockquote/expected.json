@@ -1,0 +1,4 @@
+{
+  "description": "Blockquote emits with left-indent (\\li720) and quoted content",
+  "output_contains": ["\\li720", "quoted text"]
+}

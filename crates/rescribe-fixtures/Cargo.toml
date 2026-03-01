@@ -71,6 +71,7 @@ rescribe-read-rtf = { workspace = true }
 
 # Bidirectional format writer harness tests
 rescribe-write-djot = { workspace = true }
+rescribe-write-rtf = { workspace = true }
 
 # Tier D presentation writers (tests/run.rs writer smoke tests)
 rescribe-write-beamer = { workspace = true }

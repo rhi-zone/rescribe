@@ -1,0 +1,4 @@
+{
+  "description": "Unordered list items emit with bullet character and indentation",
+  "output_contains": ["\\bullet", "first", "second", "third"]
+}

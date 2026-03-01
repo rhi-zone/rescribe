@@ -1,0 +1,4 @@
+{
+  "description": "Superscript text emits as {\\super ...} group",
+  "output_contains": ["{\\super 2}"]
+}

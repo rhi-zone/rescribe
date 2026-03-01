@@ -1,0 +1,4 @@
+{
+  "description": "Code block emits in monospace font with \\line terminators per source line",
+  "output_contains": ["\\f1\\fs20", "fn main() \\{", "println!", "\\line", "\\f0\\par"]
+}

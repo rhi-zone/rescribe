@@ -1,0 +1,4 @@
+{
+  "description": "Subscript text emits as {\\sub ...} group",
+  "output_contains": ["{\\sub 2}"]
+}

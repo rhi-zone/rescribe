@@ -1,0 +1,4 @@
+{
+  "description": "Underline text emits as {\\ul ...} group",
+  "output_contains": ["{\\ul underlined}"]
+}
