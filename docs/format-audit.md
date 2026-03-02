@@ -77,12 +77,12 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| docx | 3† | 3† | ooxml-wml | fuzz | fuzz |
+| docx | 4† | 3† | ooxml-wml | production | fuzz |
 | odt | 3 | 2 | quick-xml / hand | fuzz | harness |
 | epub | 3† | 3† | epub / epub-builder | fuzz | fuzz |
 | fb2 | 3 | 2 | hand | fuzz | harness |
-| pptx | 3† | 3† | ooxml-pml | fuzz | fuzz |
-| xlsx | 3† | 3† | ooxml-sml | fuzz | fuzz |
+| pptx | 4† | 3† | ooxml-pml | production | fuzz |
+| xlsx | 4† | 3† | ooxml-sml | production | fuzz |
 | pdf | 4† | – | pdf-extract | production | – |
 | rtf | 5 | 5 | rtf-fmt (standalone) | – | – |
 | mobi | – | – | – (planned) | – | – |

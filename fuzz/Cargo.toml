@@ -50,6 +50,15 @@ path = "../crates/readers/rescribe-read-rtf"
 [dependencies.rescribe-write-rtf]
 path = "../crates/writers/rescribe-write-rtf"
 
+[dependencies.rescribe-read-docx]
+path = "../crates/readers/rescribe-read-docx"
+
+[dependencies.rescribe-read-xlsx]
+path = "../crates/readers/rescribe-read-xlsx"
+
+[dependencies.rescribe-read-pptx]
+path = "../crates/readers/rescribe-read-pptx"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -143,6 +152,27 @@ bench = false
 [[bin]]
 name = "fuzz_rtf_writer"
 path = "fuzz_targets/rtf_writer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_docx_reader"
+path = "fuzz_targets/docx_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_xlsx_reader"
+path = "fuzz_targets/xlsx_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_pptx_reader"
+path = "fuzz_targets/pptx_reader.rs"
 test = false
 doc = false
 bench = false
