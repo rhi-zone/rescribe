@@ -65,6 +65,37 @@ struct TextState {
     char_props: String,
 }
 
+// ── Table accumulator ─────────────────────────────────────────────────────────
+
+/// Accumulates table state across `\intbl` / `\cell` / `\row` control words.
+#[derive(Default)]
+struct TableAccum {
+    /// True while we are inside a table paragraph (`\intbl` has been seen for
+    /// the current paragraph and `\pard` has not reset it yet).
+    in_table: bool,
+    /// Inlines accumulated for the cell currently being parsed.
+    current_row: Vec<Vec<Inline>>,
+    /// Rows accumulated for the table currently being parsed.
+    table_rows: Vec<TableRow>,
+    /// Byte offset where the current table started (for Span).
+    table_start: usize,
+    /// Byte offset where the current row started (for Span).
+    row_start: usize,
+}
+
+impl TableAccum {
+    /// Flush any fully-accumulated table into `paragraphs`.  Call this before
+    /// pushing a non-table paragraph (on `\pard`).
+    fn flush_table(&mut self, paragraphs: &mut Vec<Block>, pos: usize) {
+        if !self.table_rows.is_empty() {
+            paragraphs.push(Block::Table {
+                rows: std::mem::take(&mut self.table_rows),
+                span: Span::new(self.table_start, pos),
+            });
+        }
+    }
+}
+
 // ── Parser ────────────────────────────────────────────────────────────────────
 
 struct Parser<'a> {
@@ -112,6 +143,7 @@ impl<'a> Parser<'a> {
         // Accumulates raw RTF paragraph-layout control words verbatim so they
         // can be preserved in the AST and re-emitted without loss.
         let mut current_para_props = String::new();
+        let mut tbl = TableAccum::default();
 
         while self.pos < self.input.len() {
             let Some(byte) = self.current_byte() else {
@@ -140,6 +172,7 @@ impl<'a> Parser<'a> {
                             &mut para_start,
                             &mut current_align,
                             &mut current_para_props,
+                            &mut tbl,
                         );
                     } else if next == b'\'' {
                         // \'XX hex-encoded byte (Windows-1252).
@@ -235,6 +268,18 @@ impl<'a> Parser<'a> {
                 &self.font_table,
             ));
         }
+        // Flush any pending table row / table before flushing the final paragraph.
+        if tbl.in_table && !current_para.is_empty() {
+            // Unterminated last cell: treat current_para as the last cell.
+            tbl.current_row.push(std::mem::take(&mut current_para));
+        }
+        if !tbl.current_row.is_empty() {
+            tbl.table_rows.push(TableRow {
+                cells: std::mem::take(&mut tbl.current_row),
+                span: Span::new(tbl.row_start, self.pos),
+            });
+        }
+        tbl.flush_table(&mut paragraphs, self.pos);
         if !current_para.is_empty() {
             paragraphs.push(Block::Paragraph {
                 inlines: merge_text_inlines(current_para),
@@ -410,6 +455,7 @@ impl<'a> Parser<'a> {
         para_start: &mut usize,
         current_align: &mut Align,
         current_para_props: &mut String,
+        tbl: &mut TableAccum,
     ) {
         match word {
             // \binN — N raw binary bytes follow; skip them entirely.
@@ -428,21 +474,76 @@ impl<'a> Parser<'a> {
                     current_para.push(make_inline(current_text, state, span, &self.color_table, &self.font_table));
                     current_text.clear();
                 }
-                if !current_para.is_empty() {
-                    paragraphs.push(Block::Paragraph {
-                        inlines: merge_text_inlines(std::mem::take(current_para)),
-                        align: *current_align,
-                        para_props: std::mem::take(current_para_props),
-                        span: Span::new(*para_start, self.pos),
-                    });
+                if tbl.in_table {
+                    // Inside a table: \par is just a soft paragraph break within
+                    // the cell — don't push a Block::Paragraph.  Leave current_para
+                    // in place so its inlines become part of the cell on \cell.
+                    if word == "pard" {
+                        // \pard exits the table context for this paragraph.
+                        tbl.in_table = false;
+                        // Flush accumulated table rows as a Block::Table.
+                        tbl.flush_table(paragraphs, self.pos);
+                        // current_para was cell content — discard it (table is already
+                        // pushed; any text was not part of a complete cell).
+                        current_para.clear();
+                        *state = TextState::default();
+                        *current_align = Align::Default;
+                    }
                 } else {
-                    current_para_props.clear();
+                    if !current_para.is_empty() {
+                        paragraphs.push(Block::Paragraph {
+                            inlines: merge_text_inlines(std::mem::take(current_para)),
+                            align: *current_align,
+                            para_props: std::mem::take(current_para_props),
+                            span: Span::new(*para_start, self.pos),
+                        });
+                    } else {
+                        current_para_props.clear();
+                    }
+                    if word == "pard" {
+                        *state = TextState::default();
+                        *current_align = Align::Default;
+                    }
                 }
                 *text_start = self.pos;
                 *para_start = self.pos;
-                if word == "pard" {
-                    *state = TextState::default();
-                    *current_align = Align::Default;
+            }
+
+            // ── Table control words ──────────────────────────────────────────
+            "intbl" => {
+                if !tbl.in_table {
+                    tbl.in_table = true;
+                    if tbl.table_rows.is_empty() && tbl.current_row.is_empty() {
+                        tbl.table_start = self.pos;
+                    }
+                    tbl.row_start = self.pos;
+                }
+            }
+
+            "cell" => {
+                // End of a table cell: flush current text + inlines into the cell.
+                if !current_text.is_empty() {
+                    let span = Span::new(*text_start, self.pos);
+                    current_para.push(make_inline(current_text, state, span, &self.color_table, &self.font_table));
+                    current_text.clear();
+                }
+                tbl.current_row.push(std::mem::take(current_para));
+                *text_start = self.pos;
+                *para_start = self.pos;
+            }
+
+            "row" => {
+                // End of a table row: push the accumulated cells as a TableRow.
+                if !tbl.current_row.is_empty() || !current_para.is_empty() {
+                    // Handle case where last cell wasn't explicitly closed.
+                    if !current_para.is_empty() {
+                        tbl.current_row.push(std::mem::take(current_para));
+                    }
+                    tbl.table_rows.push(TableRow {
+                        cells: std::mem::take(&mut tbl.current_row),
+                        span: Span::new(tbl.row_start, self.pos),
+                    });
+                    tbl.row_start = self.pos;
                 }
             }
 
@@ -838,7 +939,7 @@ impl<'a> Parser<'a> {
             | "deflang" | "widowctrl" | "hyphauto" | "hyphconsec" | "hyphcaps" | "paperw"
             | "paperh" | "margl" | "margr" | "margt" | "margb" | "cols" | "colsx"
             | "endhere" | "headerl" | "headerr" | "header" | "footer"
-            | "footerl" | "footerr" | "trowd" | "cellx" | "intbl" | "cell" | "row" | "trgaph"
+            | "footerl" | "footerr" | "trowd" | "cellx" | "trgaph"
             | "trql" | "trqr" | "trqc" | "b0"
             | "i0"
             // Revision tracking / session IDs (no semantic content)
@@ -1896,6 +1997,60 @@ mod font_bg_tests {
     #[test]
     fn test_roundtrip_bg_color() {
         let input = r"{\rtf1{\colortbl ;\red255\green255\blue0;}\cb1 yellow bg\par}";
+        let (doc1, diags) = parse_str(input);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        let emitted = crate::emit::emit(&doc1);
+        let (doc2, _) = parse_str(&emitted);
+        assert_eq!(doc1.strip_spans(), doc2.strip_spans());
+    }
+
+    fn collect_text(inlines: &[Inline]) -> String {
+        inlines
+            .iter()
+            .map(|i| match i {
+                Inline::Text { text, .. } => text.clone(),
+                _ => String::new(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_parse_table_simple() {
+        let doc = p(
+            r"{\rtf1\trowd\cellx2000\cellx4000\intbl Cell 1\cell Cell 2\cell\row\pard After\par}",
+        );
+        assert_eq!(
+            doc.blocks.len(),
+            2,
+            "expected table + paragraph, got: {:?}",
+            doc.blocks
+        );
+        let Block::Table { rows, .. } = &doc.blocks[0] else {
+            panic!("expected table as first block, got: {:?}", &doc.blocks[0]);
+        };
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].cells.len(), 2);
+        // Check cell content
+        let text = collect_text(&rows[0].cells[0]);
+        assert!(text.contains("Cell 1"), "cell 0: {text:?}");
+        let text = collect_text(&rows[0].cells[1]);
+        assert!(text.contains("Cell 2"), "cell 1: {text:?}");
+    }
+
+    #[test]
+    fn test_parse_table_multi_row() {
+        let doc = p(
+            r"{\rtf1\trowd\cellx2000\intbl A\cell\row\trowd\cellx2000\intbl B\cell\row\pard\par}",
+        );
+        let Block::Table { rows, .. } = &doc.blocks[0] else {
+            panic!("expected table");
+        };
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn test_roundtrip_table() {
+        let input = r"{\rtf1\trowd\cellx2000\cellx4000\intbl Cell 1\cell Cell 2\cell\row\pard\par}";
         let (doc1, diags) = parse_str(input);
         assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
         let emitted = crate::emit::emit(&doc1);

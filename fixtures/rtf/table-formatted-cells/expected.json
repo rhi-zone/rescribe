@@ -1,0 +1,13 @@
+{
+  "description": "RTF table with formatted cell content (bold and italic)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/0/0", "kind": "strong" },
+    { "path": "/0/0/1", "kind": "table_cell" },
+    { "path": "/0/0/1/0", "kind": "emphasis" }
+  ]
+}
