@@ -225,7 +225,7 @@ fuzz_target!(|paras: Vec<FuzzPara>| {
     // Text nodes would emit as one continuous run and re-parse as one node.
     let doc = RtfDoc { blocks, color_table, span: Span::NONE }.normalize();
     let emitted = emit(&doc);
-    let (reparsed, _) = parse(&emitted);
+    let (reparsed, _) = parse(emitted.as_bytes());
 
     assert_eq!(
         doc.strip_spans(),

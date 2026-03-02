@@ -17,7 +17,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let (rtf, _diagnostics) = rtf_fmt::parse(input);
+    let (rtf, _diagnostics) = rtf_fmt::parse(input.as_bytes());
     let nodes = doc_to_nodes(&rtf);
     let root = Node::new(node::DOCUMENT).children(nodes);
     let doc = Document::new().with_content(root);

@@ -351,7 +351,7 @@ fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parse::parse;
+    use crate::parse::parse_str as parse;
 
     #[test]
     fn test_emit_header() {

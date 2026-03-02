@@ -1,11 +1,15 @@
 /// High-level parser: RTF text → [`RtfDoc`] + diagnostics.
 use crate::ast::*;
 
-/// Parse an RTF string into an [`RtfDoc`].
+/// Parse raw RTF bytes into an [`RtfDoc`].
+///
+/// Accepts arbitrary bytes: Windows-1252 high bytes (0x80–0xFF) are decoded
+/// lazily via the built-in `windows1252_to_char` table, and `\binN` binary
+/// blocks are skipped by advancing the byte position directly.
 ///
 /// Parsing is always infallible: malformed constructs are silently tolerated
 /// and may produce entries in the returned [`Diagnostic`] list.
-pub fn parse(input: &str) -> (RtfDoc, Vec<Diagnostic>) {
+pub fn parse(input: &[u8]) -> (RtfDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.run();
     // The parser's internal color_table always has index-0 = auto/default
@@ -23,6 +27,11 @@ pub fn parse(input: &str) -> (RtfDoc, Vec<Diagnostic>) {
         span: Span::new(0, input.len()),
     };
     (doc, p.diagnostics)
+}
+
+/// Convenience wrapper for callers that already have a `&str`.
+pub fn parse_str(input: &str) -> (RtfDoc, Vec<Diagnostic>) {
+    parse(input.as_bytes())
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -53,14 +62,14 @@ struct TextState {
 // ── Parser ────────────────────────────────────────────────────────────────────
 
 struct Parser<'a> {
-    input: &'a str,
+    input: &'a [u8],
     pos: usize,
     pub diagnostics: Vec<Diagnostic>,
     pub color_table: Vec<(u8, u8, u8)>,
 }
 
 impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
+    fn new(input: &'a [u8]) -> Self {
         Self {
             input,
             pos: 0,
@@ -69,14 +78,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn current_char(&self) -> Option<char> {
-        self.input[self.pos..].chars().next()
+    fn current_byte(&self) -> Option<u8> {
+        self.input.get(self.pos).copied()
     }
 
     fn advance(&mut self) {
-        if let Some(ch) = self.current_char() {
-            self.pos += ch.len_utf8();
-        }
+        self.pos += 1;
     }
 
     fn run(&mut self) -> Vec<Block> {
@@ -95,14 +102,14 @@ impl<'a> Parser<'a> {
         let mut current_para_props = String::new();
 
         while self.pos < self.input.len() {
-            let Some(ch) = self.current_char() else {
+            let Some(byte) = self.current_byte() else {
                 break;
             };
 
-            match ch {
-                '\\' => {
+            match byte {
+                b'\\' => {
                     self.advance(); // skip '\'
-                    let Some(next) = self.current_char() else {
+                    let Some(next) = self.current_byte() else {
                         break;
                     };
 
@@ -122,16 +129,14 @@ impl<'a> Parser<'a> {
                             &mut current_align,
                             &mut current_para_props,
                         );
-                    } else if next == '\'' {
+                    } else if next == b'\'' {
                         // \'XX hex-encoded byte (Windows-1252).
-                        // Read two chars via current_char()/advance() to stay
-                        // on UTF-8 character boundaries (byte slicing panics).
                         self.advance(); // skip '\''
-                        let hi = self.current_char();
+                        let hi = self.current_byte();
                         if hi.is_some() {
                             self.advance();
                         }
-                        let lo = self.current_char();
+                        let lo = self.current_byte();
                         if lo.is_some() {
                             self.advance();
                         }
@@ -139,8 +144,9 @@ impl<'a> Parser<'a> {
                             && h.is_ascii_hexdigit()
                             && l.is_ascii_hexdigit()
                         {
-                            let code =
-                                (h.to_digit(16).unwrap() * 16 + l.to_digit(16).unwrap()) as u8;
+                            let code = ((h as char).to_digit(16).unwrap() * 16
+                                + (l as char).to_digit(16).unwrap())
+                                as u8;
                             if current_text.is_empty() {
                                 text_start = self.pos;
                             }
@@ -149,20 +155,20 @@ impl<'a> Parser<'a> {
                     } else {
                         // Control symbol
                         match next {
-                            '\\' => current_text.push('\\'),
-                            '{' => current_text.push('{'),
-                            '}' => current_text.push('}'),
-                            '~' => current_text.push('\u{00A0}'), // non-breaking space
-                            '-' => {}                             // optional hyphen — ignore
-                            '_' => current_text.push('\u{2011}'), // non-breaking hyphen
-                            '\n' | '\r' => {}                     // escaped newline = ignored
-                            _ => {}                               // unknown control symbol — ignore
+                            b'\\' => current_text.push('\\'),
+                            b'{' => current_text.push('{'),
+                            b'}' => current_text.push('}'),
+                            b'~' => current_text.push('\u{00A0}'), // non-breaking space
+                            b'-' => {}                             // optional hyphen — ignore
+                            b'_' => current_text.push('\u{2011}'), // non-breaking hyphen
+                            b'\n' | b'\r' => {}                    // escaped newline = ignored
+                            _ => {} // unknown control symbol — ignore
                         }
                         self.advance();
                     }
                 }
 
-                '{' => {
+                b'{' => {
                     self.advance();
                     if self.is_skip_group() {
                         self.skip_balanced_group();
@@ -171,7 +177,7 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                '}' => {
+                b'}' => {
                     // Flush pending text before restoring state
                     if !current_text.is_empty() {
                         let span = Span::new(text_start, self.pos);
@@ -191,7 +197,7 @@ impl<'a> Parser<'a> {
                     self.advance();
                 }
 
-                '\n' | '\r' => {
+                b'\n' | b'\r' => {
                     self.advance();
                 }
 
@@ -199,7 +205,7 @@ impl<'a> Parser<'a> {
                     if current_text.is_empty() {
                         text_start = self.pos;
                     }
-                    current_text.push(ch);
+                    current_text.push(windows1252_to_char(byte));
                     self.advance();
                 }
             }
@@ -244,17 +250,18 @@ impl<'a> Parser<'a> {
     /// Skip past the `\rtf1` header word so we start processing at the
     /// document body.
     fn skip_rtf_header(&mut self) {
-        if let Some(pos) = self.input.find("\\rtf") {
+        let pattern = b"\\rtf";
+        if let Some(pos) = self.input.windows(pattern.len()).position(|w| w == pattern) {
             self.pos = pos;
             // Skip `\rtf1` (or `\rtf`) word
             while self.pos < self.input.len() {
-                match self.current_char() {
-                    Some(' ') | Some('\\') | Some('{') => break,
+                match self.current_byte() {
+                    Some(b' ') | Some(b'\\') | Some(b'{') => break,
                     _ => self.advance(),
                 }
             }
             // Skip the trailing space delimiter if present
-            if self.current_char() == Some(' ') {
+            if self.current_byte() == Some(b' ') {
                 self.advance();
             }
         }
@@ -266,35 +273,35 @@ impl<'a> Parser<'a> {
         let rest = &self.input[self.pos..];
 
         // `{\*\...}` destination groups
-        if rest.starts_with("\\*") {
+        if rest.starts_with(b"\\*") {
             return true;
         }
 
-        const SKIP_PREFIXES: &[&str] = &[
-            "\\fonttbl",
-            "\\colortbl",
-            "\\stylesheet",
-            "\\info",
-            "\\pict",
-            "\\object",
-            "\\header",
-            "\\footer",
-            "\\headerl",
-            "\\headerr",
-            "\\footerl",
-            "\\footerr",
-            "\\fldinst",
+        const SKIP_PREFIXES: &[&[u8]] = &[
+            b"\\fonttbl",
+            b"\\colortbl",
+            b"\\stylesheet",
+            b"\\info",
+            b"\\pict",
+            b"\\object",
+            b"\\header",
+            b"\\footer",
+            b"\\headerl",
+            b"\\headerr",
+            b"\\footerl",
+            b"\\footerr",
+            b"\\fldinst",
             // Footnotes, endnotes, annotations: skip content so it doesn't
             // bleed into the main paragraph text.
-            "\\footnote",
-            "\\endnote",
-            "\\annotation",
+            b"\\footnote",
+            b"\\endnote",
+            b"\\annotation",
             // Table of contents / index entry markers
-            "\\tc",
-            "\\xe",
+            b"\\tc",
+            b"\\xe",
             // List override / numbering tables
-            "\\listoverridetable",
-            "\\listtable",
+            b"\\listoverridetable",
+            b"\\listtable",
         ];
 
         SKIP_PREFIXES.iter().any(|p| rest.starts_with(p))
@@ -305,19 +312,19 @@ impl<'a> Parser<'a> {
     fn skip_balanced_group(&mut self) {
         let mut depth = 1usize;
         while self.pos < self.input.len() && depth > 0 {
-            match self.current_char() {
-                Some('{') => {
+            match self.current_byte() {
+                Some(b'{') => {
                     depth += 1;
                     self.advance();
                 }
-                Some('}') => {
+                Some(b'}') => {
                     depth -= 1;
                     self.advance();
                 }
-                Some('\\') => {
+                Some(b'\\') => {
                     self.advance(); // skip '\'
                     if self.pos < self.input.len() {
-                        self.advance(); // skip next char (control symbol or start of word)
+                        self.advance(); // skip next byte (control symbol or start of word)
                     }
                 }
                 _ => self.advance(),
@@ -328,9 +335,9 @@ impl<'a> Parser<'a> {
     fn read_control_word(&mut self) -> (String, Option<i32>) {
         let mut word = String::new();
         while self.pos < self.input.len() {
-            match self.current_char() {
-                Some(c) if c.is_ascii_alphabetic() => {
-                    word.push(c);
+            match self.current_byte() {
+                Some(b) if b.is_ascii_alphabetic() => {
+                    word.push(b as char);
                     self.advance();
                 }
                 _ => break,
@@ -338,16 +345,16 @@ impl<'a> Parser<'a> {
         }
 
         let mut negative = false;
-        if self.current_char() == Some('-') {
+        if self.current_byte() == Some(b'-') {
             negative = true;
             self.advance();
         }
 
         let mut num = String::new();
         while self.pos < self.input.len() {
-            match self.current_char() {
-                Some(c) if c.is_ascii_digit() => {
-                    num.push(c);
+            match self.current_byte() {
+                Some(b) if b.is_ascii_digit() => {
+                    num.push(b as char);
                     self.advance();
                 }
                 _ => break,
@@ -363,7 +370,7 @@ impl<'a> Parser<'a> {
         };
 
         // Consume optional trailing space delimiter
-        if self.current_char() == Some(' ') {
+        if self.current_byte() == Some(b' ') {
             self.advance();
         }
 
@@ -390,21 +397,10 @@ impl<'a> Parser<'a> {
             // Without this, the parser reads binary image/OLE data as RTF text,
             // producing spurious control words from stray 0x5C bytes in the payload.
             "bin" => {
+                // \binN — N raw binary bytes follow; skip them entirely.
+                // With the byte-level parser this is trivially correct.
                 let n = param.unwrap_or(0).max(0) as usize;
-                // Advance byte-by-byte; the binary payload is not valid UTF-8 so we
-                // can't use str indexing.  We stay on char boundaries by walking the
-                // remaining &str as bytes and reconstructing the position.
-                let remaining = &self.input.as_bytes()[self.pos..];
-                let skip = n.min(remaining.len());
-                // Count how many UTF-8 characters correspond to `skip` bytes
-                // (some bytes may be continuation bytes; we just need to bump pos).
-                self.pos += skip;
-                // Re-sync to a valid UTF-8 char boundary (binary data may end mid-char).
-                while self.pos < self.input.len()
-                    && !self.input.is_char_boundary(self.pos)
-                {
-                    self.pos += 1;
-                }
+                self.pos = (self.pos + n).min(self.input.len());
             }
 
             "par" | "pard" => {
@@ -658,7 +654,7 @@ impl<'a> Parser<'a> {
                     }
                     current_text.push(ch);
                     // Skip the ANSI fallback character that follows \uN
-                    if self.current_char() == Some('?') {
+                    if self.current_byte() == Some(b'?') {
                         self.advance();
                     }
                 }
@@ -1135,34 +1131,36 @@ fn make_inline(text: &str, state: &TextState, span: Span, color_table: &[(u8, u8
 
 /// Pre-scan the input for a `\colortbl` group and parse its RGB entries.
 /// Index 0 is the auto color (no RGB), subsequent entries are RGB triples.
-fn parse_color_table(input: &str) -> Vec<(u8, u8, u8)> {
+fn parse_color_table(input: &[u8]) -> Vec<(u8, u8, u8)> {
     let mut colors = vec![(0u8, 0u8, 0u8)]; // index 0 = auto/default
-    let Some(start) = input.find("{\\colortbl") else {
+    let pattern = b"{\\colortbl";
+    let Some(start) = input.windows(pattern.len()).position(|w| w == pattern) else {
         return colors;
     };
-    // Find the content of the group (just scan chars, counting braces)
+    // Find the content of the group (just scan bytes, counting braces)
     let rest = &input[start + 1..]; // skip the opening '{'
     let mut depth = 1usize;
-    let mut content = String::new();
-    let chars = rest.chars();
-    for c in chars {
-        match c {
-            '{' => {
+    let mut content: Vec<u8> = Vec::new();
+    for &b in rest {
+        match b {
+            b'{' => {
                 depth += 1;
-                content.push(c);
+                content.push(b);
             }
-            '}' => {
+            b'}' => {
                 depth -= 1;
                 if depth == 0 {
                     break;
                 }
-                content.push(c);
+                content.push(b);
             }
-            _ => content.push(c),
+            _ => content.push(b),
         }
     }
+    // The colortbl body is always pure ASCII RTF; lossy conversion is safe.
+    let content_str = String::from_utf8_lossy(&content);
     // Parse semicolon-delimited entries; first entry is index 0 (auto)
-    for entry in content.split(';').skip(1) {
+    for entry in content_str.split(';').skip(1) {
         // skip before first ';' = index 0
         // Skip empty/whitespace entries (e.g. trailing ';' at end of colortbl)
         if entry.split('\\').all(|t| t.trim().is_empty()) {
@@ -1170,17 +1168,17 @@ fn parse_color_table(input: &str) -> Vec<(u8, u8, u8)> {
         }
         let mut r = 0u8;
         let mut g = 0u8;
-        let mut b = 0u8;
+        let mut bv = 0u8;
         for token in entry.split('\\').filter(|s| !s.is_empty()) {
             if let Some(n) = token.strip_prefix("red") {
                 r = n.trim().parse().unwrap_or(0);
             } else if let Some(n) = token.strip_prefix("green") {
                 g = n.trim().parse().unwrap_or(0);
             } else if let Some(n) = token.strip_prefix("blue") {
-                b = n.trim().parse().unwrap_or(0);
+                bv = n.trim().parse().unwrap_or(0);
             }
         }
-        colors.push((r, g, b));
+        colors.push((r, g, bv));
     }
     colors
 }
@@ -1201,7 +1199,7 @@ fn merge_text_inlines(inlines: Vec<Inline>) -> Vec<Inline> {
 ///
 /// For bytes 0x00–0x7F it is identical to ASCII.  The range 0x80–0x9F is
 /// remapped per the Windows-1252 code page.  0xA0–0xFF map to Latin-1.
-fn windows1252_to_char(byte: u8) -> char {
+pub(crate) fn windows1252_to_char(byte: u8) -> char {
     // Only the 0x80–0x9F range differs from Latin-1
     #[rustfmt::skip]
     const W1252: [char; 32] = [
@@ -1228,7 +1226,7 @@ mod tests {
     use super::*;
 
     fn p(input: &str) -> RtfDoc {
-        parse(input).0
+        parse_str(input).0
     }
 
     #[test]
@@ -1327,7 +1325,7 @@ mod tests {
     fn test_hex_escape_multibyte_boundary() {
         // bytes: \ ' p 0xD9 0x9B \  — the hex digits are 'p' + non-ASCII byte
         let s = "\\'p\u{066B}\\";
-        let (doc, _) = parse(s); // must not panic
+        let (doc, _) = parse_str(s); // must not panic
         // 'p' is not a valid hex digit pair so no char is emitted; that's fine
         let _ = doc;
     }
@@ -1337,9 +1335,9 @@ mod tests {
     #[test]
     fn test_roundtrip_tab_group_close() {
         let s = "\t}\t";
-        let (ast1, _) = parse(s);
+        let (ast1, _) = parse_str(s);
         let emitted = crate::emit::emit(&ast1);
-        let (ast2, _) = parse(&emitted);
+        let (ast2, _) = parse(emitted.as_bytes());
         assert_eq!(ast1.strip_spans(), ast2.strip_spans());
     }
 

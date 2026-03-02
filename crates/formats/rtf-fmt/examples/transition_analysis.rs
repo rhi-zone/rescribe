@@ -159,10 +159,7 @@ fn analyze(dir: &str) -> (HashMap<Trans, usize>, usize) {
         let Ok(bytes) = std::fs::read(path) else {
             continue;
         };
-        let Ok(s) = std::str::from_utf8(&bytes) else {
-            continue;
-        };
-        let (ast, _) = parse(s);
+        let (ast, _) = parse(&bytes);
         if ast.blocks.is_empty() {
             continue; // skip files our parser extracted nothing from
         }

@@ -8,10 +8,12 @@
 //!
 //! ```text
 //! // Low-level: pull tokenizer — zero allocation, streaming
-//! pub fn events(input: &str) -> impl Iterator<Item = Event> + '_;
+//! pub fn events(input: &[u8]) -> impl Iterator<Item = Event> + '_;
+//! pub fn events_str(input: &str) -> impl Iterator<Item = Event> + '_;  // convenience
 //!
 //! // High-level: owned AST
-//! pub fn parse(input: &str) -> (RtfDoc, Vec<Diagnostic>);
+//! pub fn parse(input: &[u8]) -> (RtfDoc, Vec<Diagnostic>);
+//! pub fn parse_str(input: &str) -> (RtfDoc, Vec<Diagnostic>);          // convenience
 //! pub fn emit(doc: &RtfDoc) -> String;
 //! ```
 //!
@@ -32,5 +34,5 @@ mod parse;
 
 pub use ast::{Align, Block, Diagnostic, Inline, RtfDoc, Severity, Span, TableRow};
 pub use emit::emit;
-pub use events::{Event, events};
-pub use parse::parse;
+pub use events::{Event, events, events_str};
+pub use parse::{parse, parse_str};

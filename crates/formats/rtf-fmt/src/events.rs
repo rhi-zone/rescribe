@@ -3,6 +3,7 @@
 /// This is a zero-allocation iterator over the raw RTF token stream.
 /// Most callers will prefer the higher-level [`parse`][crate::parse] API.
 use crate::ast::Span;
+use crate::parse::windows1252_to_char;
 
 /// A single RTF token.
 #[derive(Debug, Clone, PartialEq)]
@@ -28,12 +29,17 @@ pub enum Event {
 }
 
 /// Returns an iterator that tokenizes `input` into RTF [`Event`]s.
-pub fn events(input: &str) -> impl Iterator<Item = Event> + '_ {
+pub fn events(input: &[u8]) -> impl Iterator<Item = Event> + '_ {
     EventIter { input, pos: 0 }
 }
 
+/// Convenience wrapper for callers that already have a `&str`.
+pub fn events_str(input: &str) -> impl Iterator<Item = Event> + '_ {
+    events(input.as_bytes())
+}
+
 struct EventIter<'a> {
-    input: &'a str,
+    input: &'a [u8],
     pos: usize,
 }
 
@@ -46,43 +52,45 @@ impl<'a> Iterator for EventIter<'a> {
                 return None;
             }
 
-            let ch = self.current_char()?;
+            let byte = self.current_byte()?;
 
-            match ch {
-                '{' => {
+            match byte {
+                b'{' => {
                     let start = self.pos;
                     self.advance();
                     return Some(Event::GroupStart {
                         span: Span::new(start, self.pos),
                     });
                 }
-                '}' => {
+                b'}' => {
                     let start = self.pos;
                     self.advance();
                     return Some(Event::GroupEnd {
                         span: Span::new(start, self.pos),
                     });
                 }
-                '\\' => {
+                b'\\' => {
                     let start = self.pos;
                     self.advance(); // skip '\'
                     if self.pos >= self.input.len() {
                         return None;
                     }
-                    let next = self.current_char()?;
-                    if next.is_ascii_alphabetic() {
+                    let next = self.current_byte()?;
+                    if next.is_ascii_lowercase() {
                         let (name, param) = self.read_control_word();
                         return Some(Event::ControlWord {
                             name,
                             param,
                             span: Span::new(start, self.pos),
                         });
-                    } else if next == '\'' {
+                    } else if next == b'\'' {
                         // \'XX hex-encoded byte
                         self.advance(); // skip '\''
                         let hex_byte = if self.pos + 2 <= self.input.len() {
-                            let hex = &self.input[self.pos..self.pos + 2];
-                            let b = u8::from_str_radix(hex, 16).ok();
+                            let two = &self.input[self.pos..self.pos + 2];
+                            let b = std::str::from_utf8(two)
+                                .ok()
+                                .and_then(|s| u8::from_str_radix(s, 16).ok());
                             self.pos += 2;
                             b
                         } else {
@@ -94,7 +102,7 @@ impl<'a> Iterator for EventIter<'a> {
                             span: Span::new(start, self.pos),
                         });
                     } else {
-                        let sym = next;
+                        let sym = next as char;
                         self.advance();
                         return Some(Event::ControlSymbol {
                             ch: sym,
@@ -103,7 +111,7 @@ impl<'a> Iterator for EventIter<'a> {
                         });
                     }
                 }
-                '\n' | '\r' => {
+                b'\n' | b'\r' => {
                     // Bare newlines in RTF are ignored (they're not paragraph breaks)
                     self.advance();
                     continue;
@@ -112,13 +120,10 @@ impl<'a> Iterator for EventIter<'a> {
                     let start = self.pos;
                     let mut text = String::new();
                     while self.pos < self.input.len() {
-                        match self.current_char() {
-                            Some(c @ ('{' | '}' | '\\' | '\n' | '\r')) => {
-                                let _ = c;
-                                break;
-                            }
-                            Some(c) => {
-                                text.push(c);
+                        match self.current_byte() {
+                            Some(b'{' | b'}' | b'\\' | b'\n' | b'\r') => break,
+                            Some(b) => {
+                                text.push(windows1252_to_char(b));
                                 self.advance();
                             }
                             None => break,
@@ -138,25 +143,23 @@ impl<'a> Iterator for EventIter<'a> {
 }
 
 impl<'a> EventIter<'a> {
-    fn current_char(&self) -> Option<char> {
-        self.input[self.pos..].chars().next()
+    fn current_byte(&self) -> Option<u8> {
+        self.input.get(self.pos).copied()
     }
 
     fn advance(&mut self) {
-        if let Some(ch) = self.current_char() {
-            self.pos += ch.len_utf8();
-        }
+        self.pos += 1;
     }
 
     /// Read a control word name and optional numeric parameter.
     ///
-    /// Called after the `\` and after verifying the next char is alphabetic.
+    /// Called after the `\` and after verifying the next byte is ascii-lowercase.
     fn read_control_word(&mut self) -> (String, Option<i32>) {
         let mut name = String::new();
         while self.pos < self.input.len() {
-            match self.current_char() {
-                Some(c) if c.is_ascii_alphabetic() => {
-                    name.push(c);
+            match self.current_byte() {
+                Some(b) if b.is_ascii_alphabetic() => {
+                    name.push(b as char);
                     self.advance();
                 }
                 _ => break,
@@ -164,16 +167,16 @@ impl<'a> EventIter<'a> {
         }
 
         let mut negative = false;
-        if self.pos < self.input.len() && self.current_char() == Some('-') {
+        if self.pos < self.input.len() && self.current_byte() == Some(b'-') {
             negative = true;
             self.advance();
         }
 
         let mut param_str = String::new();
         while self.pos < self.input.len() {
-            match self.current_char() {
-                Some(c) if c.is_ascii_digit() => {
-                    param_str.push(c);
+            match self.current_byte() {
+                Some(b) if b.is_ascii_digit() => {
+                    param_str.push(b as char);
                     self.advance();
                 }
                 _ => break,
@@ -190,7 +193,7 @@ impl<'a> EventIter<'a> {
         };
 
         // Optional trailing space is a delimiter; consume it
-        if self.pos < self.input.len() && self.current_char() == Some(' ') {
+        if self.pos < self.input.len() && self.current_byte() == Some(b' ') {
             self.advance();
         }
 
@@ -204,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_events_simple() {
-        let evts: Vec<_> = events(r"{\rtf1 Hello\par}").collect();
+        let evts: Vec<_> = events(br"{\rtf1 Hello\par}").collect();
         assert!(evts.iter().any(|e| matches!(e, Event::GroupStart { .. })));
         assert!(evts.iter().any(|e| matches!(e, Event::GroupEnd { .. })));
         assert!(
@@ -223,7 +226,7 @@ mod tests {
 
     #[test]
     fn test_events_control_symbol() {
-        let evts: Vec<_> = events(r"\{").collect();
+        let evts: Vec<_> = events(br"\{").collect();
         assert!(
             evts.iter()
                 .any(|e| matches!(e, Event::ControlSymbol { ch: '{', .. }))
@@ -232,7 +235,7 @@ mod tests {
 
     #[test]
     fn test_events_hex() {
-        let evts: Vec<_> = events(r"\'41").collect();
+        let evts: Vec<_> = events(br"\'41").collect();
         assert!(evts.iter().any(|e| matches!(
             e,
             Event::ControlSymbol {
@@ -245,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_events_spans() {
-        let input = r"\b hello";
+        let input = br"\b hello";
         let evts: Vec<_> = events(input).collect();
         // \b starts at byte 0
         let cw = evts
