@@ -1,3 +1,24 @@
+/// Merge consecutive `Inline::Text` nodes in a flat list into one.
+///
+/// This is the canonical normalization the parser always applies; any document
+/// produced by `parse()` is already in this form.  Use it to normalize
+/// programmatically-constructed documents before round-trip comparisons.
+pub(crate) fn merge_text_inlines(inlines: Vec<Inline>) -> Vec<Inline> {
+    let mut out: Vec<Inline> = Vec::with_capacity(inlines.len());
+    for inline in inlines {
+        if let Inline::Text { text: new_text, .. } = &inline
+            && let Some(Inline::Text {
+                text: prev_text, ..
+            }) = out.last_mut()
+        {
+            prev_text.push_str(new_text);
+            continue;
+        }
+        out.push(inline);
+    }
+    out
+}
+
 /// Byte range in the original source input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Span {
@@ -54,6 +75,19 @@ impl RtfDoc {
             span: Span::NONE,
         }
     }
+
+    /// Return a copy of this document in canonical form.
+    ///
+    /// "Canonical form" matches the output the parser always produces:
+    /// adjacent `Text` siblings are merged into one node, recursively through
+    /// all container inlines.  A document that is not in canonical form cannot
+    /// roundtrip through `emit → parse` without structural changes.
+    pub fn normalize(&self) -> Self {
+        RtfDoc {
+            blocks: self.blocks.iter().map(Block::normalize).collect(),
+            span: self.span,
+        }
+    }
 }
 
 // ── Block ─────────────────────────────────────────────────────────────────────
@@ -93,6 +127,45 @@ pub enum Block {
 }
 
 impl Block {
+    pub fn normalize(&self) -> Self {
+        match self {
+            Block::Paragraph { inlines, span } => Block::Paragraph {
+                inlines: merge_text_inlines(inlines.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Block::Heading {
+                level,
+                inlines,
+                span,
+            } => Block::Heading {
+                level: *level,
+                inlines: merge_text_inlines(inlines.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Block::Blockquote { children, span } => Block::Blockquote {
+                children: children.iter().map(Block::normalize).collect(),
+                span: *span,
+            },
+            Block::List {
+                ordered,
+                items,
+                span,
+            } => Block::List {
+                ordered: *ordered,
+                items: items
+                    .iter()
+                    .map(|item| item.iter().map(Block::normalize).collect())
+                    .collect(),
+                span: *span,
+            },
+            Block::Table { rows, span } => Block::Table {
+                rows: rows.iter().map(TableRow::normalize).collect(),
+                span: *span,
+            },
+            other => other.clone(),
+        }
+    }
+
     pub fn span(&self) -> Span {
         match self {
             Block::Paragraph { span, .. }
@@ -151,6 +224,17 @@ pub struct TableRow {
 }
 
 impl TableRow {
+    pub fn normalize(&self) -> Self {
+        TableRow {
+            cells: self
+                .cells
+                .iter()
+                .map(|cell| merge_text_inlines(cell.iter().map(Inline::normalize).collect()))
+                .collect(),
+            span: self.span,
+        }
+    }
+
     pub fn strip_spans(&self) -> Self {
         TableRow {
             cells: self
@@ -219,6 +303,45 @@ pub enum Inline {
 }
 
 impl Inline {
+    pub fn normalize(&self) -> Self {
+        match self {
+            Inline::Bold { children, span } => Inline::Bold {
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Inline::Italic { children, span } => Inline::Italic {
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Inline::Underline { children, span } => Inline::Underline {
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Inline::Strikethrough { children, span } => Inline::Strikethrough {
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Inline::Superscript { children, span } => Inline::Superscript {
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Inline::Subscript { children, span } => Inline::Subscript {
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Inline::Link {
+                url,
+                children,
+                span,
+            } => Inline::Link {
+                url: url.clone(),
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            other => other.clone(),
+        }
+    }
+
     pub fn span(&self) -> Span {
         match self {
             Inline::Text { span, .. }

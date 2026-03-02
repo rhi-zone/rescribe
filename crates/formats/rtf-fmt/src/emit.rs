@@ -5,8 +5,14 @@ use crate::ast::*;
 ///
 /// # Round-trip guarantee
 ///
-/// `parse(emit(&parse(input).0)).0.strip_spans()` is identical to
-/// `parse(input).0.strip_spans()` for any valid RTF input.
+/// For any document `doc` in canonical AST form (i.e. the kind the parser
+/// produces), `parse(emit(doc)).strip_spans() == doc.strip_spans()`.
+///
+/// "Canonical form" means inline formatting wrappers are nested in the fixed
+/// order the parser always produces: strikethrough → underline → italic →
+/// bold → superscript|subscript (outermost last).  Non-canonical nesting
+/// (e.g. Italic outer, Bold inner) is not a valid parser output and does not
+/// carry a roundtrip guarantee.
 pub fn emit(doc: &RtfDoc) -> String {
     let mut ctx = Ctx::new();
     ctx.push(r"{\rtf1\ansi\deff0");

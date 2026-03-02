@@ -539,56 +539,16 @@ fn make_inline(text: &str, state: &TextState, span: Span) -> Inline {
     inline
 }
 
-/// Merge consecutive `Inline::Text` nodes into a single node.
+/// Merge consecutive `Inline::Text` nodes and recursively normalise children.
 ///
-/// This normalises the inline list so that round-tripping (parse → emit →
-/// parse) yields a structurally identical AST.  Without this, a `}` that
-/// closes a group flushes a Text node and the next characters start a new one;
-/// the emitter merges them back into a single token, so re-parsing produces
-/// one node where the original had two.
+/// Delegates flat merging to `ast::merge_text_inlines` and recurses into
+/// container nodes so every level of the tree is normalised.
 fn merge_text_inlines(inlines: Vec<Inline>) -> Vec<Inline> {
-    let mut out: Vec<Inline> = Vec::with_capacity(inlines.len());
-    for inline in inlines {
-        // Recursively normalise children of container nodes.
-        let inline = match inline {
-            Inline::Bold { children, span } => Inline::Bold {
-                children: merge_text_inlines(children),
-                span,
-            },
-            Inline::Italic { children, span } => Inline::Italic {
-                children: merge_text_inlines(children),
-                span,
-            },
-            Inline::Underline { children, span } => Inline::Underline {
-                children: merge_text_inlines(children),
-                span,
-            },
-            Inline::Strikethrough { children, span } => Inline::Strikethrough {
-                children: merge_text_inlines(children),
-                span,
-            },
-            Inline::Superscript { children, span } => Inline::Superscript {
-                children: merge_text_inlines(children),
-                span,
-            },
-            Inline::Subscript { children, span } => Inline::Subscript {
-                children: merge_text_inlines(children),
-                span,
-            },
-            other => other,
-        };
-        // Merge adjacent Text nodes.
-        if let Inline::Text { text: new_text, .. } = &inline
-            && let Some(Inline::Text {
-                text: prev_text, ..
-            }) = out.last_mut()
-        {
-            prev_text.push_str(new_text);
-            continue;
-        }
-        out.push(inline);
-    }
-    out
+    let normalised = inlines
+        .into_iter()
+        .map(|inline| inline.normalize())
+        .collect();
+    crate::ast::merge_text_inlines(normalised)
 }
 
 /// Decode a Windows-1252 byte to a Unicode char.

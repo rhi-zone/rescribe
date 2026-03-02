@@ -17,8 +17,11 @@
 //!
 //! # Round-trip guarantee
 //!
-//! `parse(emit(&parse(s).0)).0.strip_spans()` equals `parse(s).0.strip_spans()`
-//! for any valid RTF input — verified by the fuzz round-trip harness.
+//! For any document `doc` in canonical form,
+//! `parse(emit(doc)).strip_spans() == doc.strip_spans()`.
+//! Use `RtfDoc::normalize()` to put a programmatically-built document into
+//! canonical form before round-tripping.  Verified by the fuzz round-trip
+//! harness (`fuzz_rtf_roundtrip`).
 
 mod ast;
 mod emit;
