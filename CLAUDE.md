@@ -138,6 +138,27 @@ the gap. Fixtures that test new features should be added before calling a vertic
 - Format-specific kinds: `{format}:{name}` (`html:div`)
 - Properties: lowercase, colons for namespacing
 
+## What "5-Production" actually means
+
+**5-Production requires 100% construct coverage — not "enough for common cases."**
+
+A format vertical is not production-grade until every construct the format can express is
+either modeled in the IR or raw-preserved. "Most documents work" is not the bar. The bar
+is: a correct alternative implementation reading the fixture suite would know exactly what
+to produce for every construct, including:
+
+- All block types (tables, lists, footnotes, code blocks, blockquotes, …)
+- All inline types (all formatting, hyperlinks, images, footnote refs, …)
+- All significant properties (font, color, alignment, language, size, …)
+- Structure (nested lists, table cells with formatting, footnote content, …)
+
+If a construct appears in real documents and the parser silently drops it — even if "most
+documents don't use it" — the vertical is not 5-Production. It should be marked 4-Fuzz
+(infrastructure solid, coverage incomplete) until every gap is closed.
+
+**The ignored match arm is a debt list, not an exemption list.** Every control word in
+the ignored arm that carries semantic content is a gap. Document them in TODO.md.
+
 ## Vertical completion checklist
 
 Each standalone format crate (`crates/formats/{name}/`) must satisfy all of:
@@ -150,9 +171,10 @@ Each standalone format crate (`crates/formats/{name}/`) must satisfy all of:
 - Thin rescribe adapter ≤300 lines each side
 - Rescribe fixture suite at 3-Harness
 - Rescribe-level round-trip fuzz: arbitrary rescribe `Document` → emit → parse → assert equal
+- **100% construct coverage** — no silently-dropped semantic constructs; see above
 
 See `docs/format-library-design.md` for the full spec.
-**A vertical is not done until both fuzz targets pass clean.**
+**A vertical is not done until both fuzz targets pass clean AND coverage is 100%.**
 
 ### Roundtrip direction matters
 

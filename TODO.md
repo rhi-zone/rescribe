@@ -170,7 +170,18 @@ The format tiers below determine priority order within this model.
 
 Each Tier A format at 5-Production with a published standalone crate.
 
-- [x] `rtf-fmt` vertical — 5-Production (2026-03-02); follow-on: `rtf:char-props` for char-level layout words
+- [ ] `rtf-fmt` vertical — **downgraded to 4-Fuzz** (infrastructure solid; coverage incomplete)
+  - Silently-dropped constructs that must be modeled before 5-Production:
+  - [ ] **Tables** — `\intbl`/`\trowd`/`\cellx`/`\cell`/`\row` currently in ignored list; `Block::Table` exists in AST but parser never produces it from real RTF. Table cell text bleeds into flat paragraphs. Biggest gap.
+  - [ ] **Footnotes/endnotes** — `{\footnote ...}` and `{\endnote ...}` are skip groups; content dropped. Needs `footnote_ref` + `footnote_def` IR nodes.
+  - [ ] **Lists** — RTF list mechanism (`\ls`, `\ilvl`, `\listtext`, `\listtable`, `\listoverridetable`) is complex and ignored; lists appear as indented paragraphs. Needs `Block::List` / `Block::ListItem`.
+  - [ ] **Font face** — `\f<N>` is in the ignored list; `style:font` never populated. Needs font table pre-scan (like color table) + `Inline::Font` or `style:font` property on spans.
+  - [ ] **Background color** — `\cb<N>` ignored; `style:background` never set.
+  - [ ] **Language tags** — `\lang`/`\langfe` ignored; no `lang` property on spans.
+  - [ ] **Code page** — `\ansicpg` ignored; parser always decodes as Windows-1252. Files with `\ansicpg932` (Shift-JIS), `\ansicpg950` (Big5), etc. will decode incorrectly.
+  - [ ] **Drawing-object property words** — `\dpfillfgcb`, `\dpfillbgcr`, `\dplinehollow`, `\dropcapt`, etc. not in ignored list → spurious diagnostics in corpus. Add to ignored (they're inside `\do` groups which are already structural no-ops).
+  - [ ] **Asian typography words** — `\mm`, `\chm`, `\duj`, `\ffc`, `\jdc`, `\iov`, etc. from ~14 govdocs1 files not in ignored list → diagnostics. Investigate whether semantic; add to ignored if not.
+  - [ ] **Zero-diagnostic corpus gate** — enforce 0 unknown-control-word diagnostics across full govdocs1 corpus as a CI check before declaring 5-Production.
 - [ ] `rst-fmt` vertical
 - [ ] `asciidoc` vertical
 - [ ] `org-fmt` vertical
