@@ -161,6 +161,11 @@ These formats have no reader; stage 3 (harness) is not applicable.
   horizontal-rule, superscript, subscript); all passing in CI
 - Writer promoted to 4-Fuzz (2026-03-02): fuzz_rtf_writer (read→write pipeline,
   2.8M execs, no crashes); both reader and writer at 4-Fuzz
+- Raw preservation of paragraph layout words via `para_props: String` on `Block::Paragraph` (2026-03-02):
+  - Parser accumulates paragraph-scoped RTF control words (indents, spacing, tab stops, borders, etc.) verbatim
+  - Emitter re-emits `para_props` after `\pard` so RTF→IR→RTF is lossless for layout formatting
+  - rescribe-read-rtf surfaces as `rtf:para-props` string property; writer reads it back on re-emit
+  - Added fixture `fixtures/rtf/para_props/` and unit test `test_roundtrip_para_props`
 - Extended AST with paragraph alignment, inline font-size, and inline color (2026-03-02):
   - Parser: \colortbl pre-scan, \ql/\qr/\qc/\qj alignment words, \fs font-size, \cf color index
   - Emitter: color table emission, alignment words, FontSize/Color group emission
