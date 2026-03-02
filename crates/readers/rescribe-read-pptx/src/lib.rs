@@ -5,6 +5,7 @@
 //! headings, body paragraphs become paragraphs, tables become table nodes,
 //! images are stored as resources, and speaker notes become a nested div.
 
+use ooxml_dml::ext::{TextParagraphExt, TextRunExt};
 use ooxml_pml::types::STPlaceholderType;
 use ooxml_pml::{PictureExt, Presentation, Shape, ShapeExt};
 use rescribe_core::{
@@ -63,32 +64,26 @@ pub fn parse_with_options(
         let mut slide_node = Node::new(node::DIV).prop("slide", slide_num as i64);
 
         // Title shape → heading level 1
-        if let Some(title_text) = slide.shapes().iter().find_map(|s| {
-            if is_title_shape(s) {
-                s.text().filter(|t| !t.is_empty())
-            } else {
-                None
+        if let Some(title_shape) = slide.shapes().iter().find(|s| is_title_shape(s)) {
+            let inline = convert_shape_paragraphs(title_shape);
+            if !inline.is_empty() {
+                let heading = Node::new(node::HEADING)
+                    .prop(prop::LEVEL, 1)
+                    .children(inline);
+                slide_node = slide_node.child(heading);
             }
-        }) {
-            let heading = Node::new(node::HEADING)
-                .prop(prop::LEVEL, 1)
-                .child(Node::new(node::TEXT).prop(prop::CONTENT, title_text));
-            slide_node = slide_node.child(heading);
         }
 
-        // Body shapes → paragraphs
+        // Body shapes → paragraphs (with run-level formatting)
         for shape in slide.shapes() {
             if is_title_shape(shape) {
                 continue;
             }
-            if let Some(text) = shape.text() {
-                for line in text.lines() {
-                    let line = line.trim();
-                    if !line.is_empty() {
-                        let para = Node::new(node::PARAGRAPH)
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, line.to_string()));
-                        slide_node = slide_node.child(para);
-                    }
+            for pml_para in shape.paragraphs() {
+                let inline = convert_pptx_paragraph(pml_para);
+                if !inline.is_empty() {
+                    let para = Node::new(node::PARAGRAPH).children(inline);
+                    slide_node = slide_node.child(para);
                 }
             }
         }
@@ -146,6 +141,43 @@ pub fn parse_with_options(
         metadata: Properties::new(),
         source: None,
     }))
+}
+
+/// Convert a shape's text paragraphs into a flat list of inline IR nodes.
+///
+/// Used for title shapes where all paragraphs are combined into one heading.
+fn convert_shape_paragraphs(shape: &Shape) -> Vec<Node> {
+    let mut inline = Vec::new();
+    for para in shape.paragraphs() {
+        inline.extend(convert_pptx_paragraph(para));
+    }
+    inline
+}
+
+/// Convert one DML `TextParagraph` into inline IR nodes with run-level formatting.
+fn convert_pptx_paragraph(para: &ooxml_dml::types::TextParagraph) -> Vec<Node> {
+    let mut nodes = Vec::new();
+    for run in para.runs() {
+        let text = run.text();
+        if text.is_empty() {
+            continue;
+        }
+        let text_node = Node::new(node::TEXT).prop(prop::CONTENT, text.to_string());
+        let mut node = text_node;
+        // Apply run-level formatting (innermost first, outermost last — same
+        // convention as the DOCX reader).
+        if run.is_underlined() {
+            node = Node::new(node::UNDERLINE).child(node);
+        }
+        if run.is_italic() {
+            node = Node::new(node::EMPHASIS).child(node);
+        }
+        if run.is_bold() {
+            node = Node::new(node::STRONG).child(node);
+        }
+        nodes.push(node);
+    }
+    nodes
 }
 
 /// Return true if the shape is a title or centre-title placeholder.

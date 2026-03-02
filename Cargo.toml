@@ -183,6 +183,7 @@ typst-syntax = "0.14"
 ooxml-wml = "0.1"
 ooxml-sml = "0.1"
 ooxml-pml = "0.1"
+ooxml-dml = "0.1"
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }

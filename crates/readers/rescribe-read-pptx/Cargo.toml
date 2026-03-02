@@ -7,3 +7,4 @@ edition = "2024"
 rescribe-core = { path = "../../rescribe-core" }
 rescribe-std = { path = "../../nodes/rescribe-std" }
 ooxml-pml = { workspace = true }
+ooxml-dml = { workspace = true }

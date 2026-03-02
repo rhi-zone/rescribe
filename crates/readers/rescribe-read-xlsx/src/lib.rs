@@ -13,7 +13,10 @@
 //! // Process the document...
 //! ```
 
-use ooxml_sml::{CellValue, RowExt, Workbook, ext::ResolvedSheet};
+use ooxml_sml::{
+    CellValue, RowExt, Workbook,
+    ext::{CellExt, ResolvedSheet},
+};
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Severity,
     SourceInfo, WarningKind,
@@ -120,6 +123,14 @@ impl Converter {
             return Ok(None);
         }
 
+        // Emit fidelity warnings for features we detect but don't fully model.
+        if sheet.has_merged_cells() {
+            self.warn("Merged cells detected; merge ranges not represented in IR");
+        }
+        if sheet.has_conditional_formatting() {
+            self.warn("Conditional formatting detected; not represented in IR");
+        }
+
         // Determine dimensions
         let (min_row, min_col, max_row, max_col) = match sheet.dimensions() {
             Some(dims) => dims,
@@ -133,17 +144,6 @@ impl Converter {
             let mut cells = Vec::new();
 
             for col_num in min_col..=max_col {
-                let cell_value = if let Some(row) = sheet.row(row_num) {
-                    if let Some(cell) = row.cell_at_column(col_num) {
-                        let val = sheet.cell_value(cell);
-                        self.convert_cell_value(&val)
-                    } else {
-                        String::new()
-                    }
-                } else {
-                    String::new()
-                };
-
                 // Use table_header for first row, table_cell for others
                 let cell_kind = if first_row {
                     node::TABLE_HEADER
@@ -151,9 +151,30 @@ impl Converter {
                     node::TABLE_CELL
                 };
 
-                let text_node = Node::new(node::TEXT).prop(prop::CONTENT, cell_value);
-                let para = Node::new(node::PARAGRAPH).child(text_node);
-                cells.push(Node::new(cell_kind).child(para));
+                let mut cell_node = Node::new(cell_kind);
+
+                if let Some(row) = sheet.row(row_num) {
+                    if let Some(cell) = row.cell_at_column(col_num) {
+                        let val = sheet.cell_value(cell);
+                        let text_str = self.convert_cell_value(&val);
+                        let text_node = Node::new(node::TEXT).prop(prop::CONTENT, text_str);
+                        let mut para = Node::new(node::PARAGRAPH).child(text_node);
+                        // Preserve raw formula for round-trip fidelity.
+                        if let Some(formula) = cell.formula_text() {
+                            para = para.prop("xlsx:formula", formula.to_string());
+                        }
+                        cell_node = cell_node.child(para);
+                    } else {
+                        // Empty cell — add empty paragraph for structural completeness.
+                        let text_node = Node::new(node::TEXT).prop(prop::CONTENT, String::new());
+                        cell_node = cell_node.child(Node::new(node::PARAGRAPH).child(text_node));
+                    }
+                } else {
+                    let text_node = Node::new(node::TEXT).prop(prop::CONTENT, String::new());
+                    cell_node = cell_node.child(Node::new(node::PARAGRAPH).child(text_node));
+                }
+
+                cells.push(cell_node);
             }
 
             table_rows.push(Node::new(node::TABLE_ROW).children(cells));
