@@ -102,12 +102,42 @@ Each standalone format crate (`crates/formats/{name}/`) must satisfy all of:
 - `events(input) -> impl Iterator<Item = Event>` — pull tokenizer
 - `emit(ast) -> String` — round-trip guarantee
 - No-panic fuzz gate: arbitrary bytes must not panic — run until clean
-- Round-trip fuzz: `parse(emit(parse(s).0)).0.strip_spans() == parse(s).0.strip_spans()` — run until clean
+- Round-trip fuzz: `parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast` — run until clean
 - Thin rescribe adapter ≤300 lines each side
 - Rescribe fixture suite at 3-Harness
+- Rescribe-level round-trip fuzz: arbitrary rescribe `Document` → emit → parse → assert equal
 
 See `docs/format-library-design.md` for the full spec.
 **A vertical is not done until both fuzz targets pass clean.**
+
+### Roundtrip direction matters
+
+There are two wrong directions and one right one.
+
+**Wrong (direction 1):** `parse(emit(parse(bytes))) == parse(bytes)`
+Tests parse→emit→parse consistency. If the parser is lossy, the first parse already drops
+content; the assertion only checks that dropped content stays dropped. "Zero roundtrip
+failures" here is not evidence of losslessness.
+
+**Wrong (direction 2):** `parse(emit(arbitrary_rescribe_doc)) == arbitrary_rescribe_doc`
+Starting from the rescribe IR only exercises constructs the IR can express. Format-specific
+constructs (RTF field codes, color tables, font tables, etc.) that don't map to the IR
+will never be generated, so this direction can't find gaps in their handling.
+
+**Correct:** `parse(emit(arbitrary_format_ast)) == arbitrary_format_ast`
+Start from an arbitrary instance of the *format crate's own `Ast` type*. The native AST
+can express everything the format can. Emit it to wire bytes. Parse those bytes back.
+Assert equality. This finds both emitter gaps (constructs the emitter fails to encode) and
+parser gaps (constructs the parser fails to recover from valid-encoded input), across the
+full surface area of the format.
+
+### Fidelity warnings are not optional
+
+Silent drops are failures. Every format construct the reader encounters but cannot represent
+in the IR **must** emit a fidelity warning via `ConversionResult`. A reader that drops
+font colors, footnotes, or paragraph alignment without warning is incorrect, not "lossy by
+design." The goal is losslessness; where true losslessness is impossible, the loss must be
+tracked.
 
 ## Marathon Mode
 
@@ -128,6 +158,21 @@ When working autonomously:
 **Explicit over implicit.** Log when skipping. Show what's at stake before refusing.
 
 **Separate niche from shared.** Don't bloat shared config with feature-specific data. Use separate files for specialized data.
+
+## When something goes wrong: update CLAUDE.md first
+
+When you discover a design mistake, a wrong mental model, a subtle gotcha, or a case where
+the obvious approach is wrong — **stop and update CLAUDE.md before continuing**. Don't
+leave the lesson in conversation history; it will be lost. CLAUDE.md is the only memory
+that survives across sessions.
+
+This applies to:
+- A test that passes for the wrong reason (like a lossless-looking roundtrip on a lossy parser)
+- A framing that sounded right but isn't (like "start from IR to test losslessness")
+- A constraint that wasn't written down and caused a mistake (like silent drops being treated as acceptable)
+- Any time the user corrects a design assumption
+
+The rule: **lesson learned → CLAUDE.md updated → then continue**. Never the other way.
 
 ## Negative Constraints
 
