@@ -17,14 +17,15 @@ use ooxml_wml::ext::{
     CellExt, DrawingExt, HyperlinkExt, ParagraphExt, RowExt, RunExt, RunPropertiesExt, TableExt,
 };
 use ooxml_wml::types::{
-    BlockContent, BlockContentChoice, Hyperlink, Paragraph, ParagraphContent, Run, RunContent,
-    RunContentChoice, Table,
+    BlockContent, BlockContentChoice, FootnoteEndnote, Hyperlink, Paragraph, ParagraphContent, Run,
+    RunContent, RunContentChoice, STJc, Table,
 };
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Resource,
     ResourceId, ResourceMap, Severity, SourceInfo, WarningKind,
 };
 use rescribe_std::{node, prop};
+use std::collections::HashMap;
 use std::io::{Read, Seek};
 use std::path::Path;
 
@@ -52,6 +53,8 @@ pub fn parse_bytes(bytes: &[u8]) -> Result<ConversionResult<Document>, ParseErro
 struct Converter {
     warnings: Vec<FidelityWarning>,
     resources: ResourceMap,
+    /// Footnote content keyed by footnote id, for inline lookup.
+    footnotes: HashMap<i64, Vec<Node>>,
 }
 
 impl Converter {
@@ -59,6 +62,7 @@ impl Converter {
         Self {
             warnings: Vec::new(),
             resources: ResourceMap::new(),
+            footnotes: HashMap::new(),
         }
     }
 
@@ -91,6 +95,25 @@ fn convert_document<R: Read + Seek>(
 ) -> Result<ConversionResult<Document>, ParseError> {
     let mut converter = Converter::new();
 
+    // Pre-load footnotes into converter state so convert_run can look them up.
+    if let Ok(footnotes) = doc.get_footnotes() {
+        let body_content_clone: Vec<BlockContent> = Vec::new(); // placeholder
+        // We need to convert each footnote's block content to IR nodes.
+        // To avoid borrow conflicts, collect footnote data first.
+        let footnote_data: Vec<(i64, Vec<BlockContent>)> = footnotes
+            .footnote
+            .into_iter()
+            .filter(|f| f.id > 0) // skip separator footnotes (id <= 0)
+            .map(|f: FootnoteEndnote| (f.id, f.block_content))
+            .collect();
+        let _ = body_content_clone; // silence warning
+
+        for (id, block_content) in footnote_data {
+            let fn_node = convert_body_content(&mut converter, &mut doc, &block_content)?;
+            converter.footnotes.insert(id, fn_node.children);
+        }
+    }
+
     // Clone the body content to avoid borrow issues
     let body_content = doc.body().block_content.clone();
 
@@ -117,34 +140,67 @@ fn convert_document<R: Read + Seek>(
     })
 }
 
-fn convert_body<R: Read + Seek>(
+/// Convert a slice of BlockContent into a document-level node.
+fn convert_body_content<R: Read + Seek>(
     converter: &mut Converter,
     doc: &mut OoxmlDocument<R>,
     content: &[BlockContent],
 ) -> Result<Node, ParseError> {
     let mut children = Vec::new();
+    convert_block_content_into(converter, doc, content, &mut children)?;
+    Ok(Node::new(node::DOCUMENT).children(children))
+}
+
+/// Inner helper: push converted nodes into `out`, grouping list paragraphs.
+fn convert_block_content_into<R: Read + Seek>(
+    converter: &mut Converter,
+    doc: &mut OoxmlDocument<R>,
+    content: &[BlockContent],
+    out: &mut Vec<Node>,
+) -> Result<(), ParseError> {
+    // Pending list accumulator: (num_id, items)
+    let mut pending_list: Option<(i64, Vec<Node>)> = None;
 
     for block in content {
         match block {
             BlockContent::P(para) => {
-                if let Some(node) = convert_paragraph(converter, doc, para)? {
-                    children.push(node);
+                // Check for list membership
+                if let Some((num_id, _ilvl)) = para.numbering() {
+                    let item_children = convert_paragraph_content(converter, doc, para)?;
+                    let item = Node::new(node::LIST_ITEM).children(item_children);
+                    match &mut pending_list {
+                        Some((cur_id, items)) if *cur_id == num_id => {
+                            items.push(item);
+                        }
+                        _ => {
+                            // Flush old list if any
+                            flush_pending_list(&mut pending_list, out);
+                            pending_list = Some((num_id, vec![item]));
+                        }
+                    }
+                } else {
+                    flush_pending_list(&mut pending_list, out);
+                    if let Some(n) = convert_paragraph(converter, doc, para)? {
+                        out.push(n);
+                    }
                 }
             }
             BlockContent::Tbl(table) => {
-                children.push(convert_table(converter, doc, table)?);
+                flush_pending_list(&mut pending_list, out);
+                out.push(convert_table(converter, doc, table)?);
             }
             BlockContent::Sdt(ctrl) => {
+                flush_pending_list(&mut pending_list, out);
                 if let Some(content) = &ctrl.sdt_content {
                     for inner_block in &content.block_content {
                         match inner_block {
                             BlockContentChoice::P(para) => {
-                                if let Some(node) = convert_paragraph(converter, doc, para)? {
-                                    children.push(node);
+                                if let Some(n) = convert_paragraph(converter, doc, para)? {
+                                    out.push(n);
                                 }
                             }
                             BlockContentChoice::Tbl(table) => {
-                                children.push(convert_table(converter, doc, table)?);
+                                out.push(convert_table(converter, doc, table)?);
                             }
                             _ => {}
                         }
@@ -152,15 +208,16 @@ fn convert_body<R: Read + Seek>(
                 }
             }
             BlockContent::CustomXml(xml) => {
+                flush_pending_list(&mut pending_list, out);
                 for inner_block in &xml.block_content {
                     match inner_block {
                         BlockContentChoice::P(para) => {
-                            if let Some(node) = convert_paragraph(converter, doc, para)? {
-                                children.push(node);
+                            if let Some(n) = convert_paragraph(converter, doc, para)? {
+                                out.push(n);
                             }
                         }
                         BlockContentChoice::Tbl(table) => {
-                            children.push(convert_table(converter, doc, table)?);
+                            out.push(convert_table(converter, doc, table)?);
                         }
                         _ => {}
                     }
@@ -170,6 +227,27 @@ fn convert_body<R: Read + Seek>(
         }
     }
 
+    flush_pending_list(&mut pending_list, out);
+    Ok(())
+}
+
+fn flush_pending_list(pending: &mut Option<(i64, Vec<Node>)>, out: &mut Vec<Node>) {
+    if let Some((_num_id, items)) = pending.take() {
+        out.push(
+            Node::new(node::LIST)
+                .prop(prop::ORDERED, false)
+                .children(items),
+        );
+    }
+}
+
+fn convert_body<R: Read + Seek>(
+    converter: &mut Converter,
+    doc: &mut OoxmlDocument<R>,
+    content: &[BlockContent],
+) -> Result<Node, ParseError> {
+    let mut children = Vec::new();
+    convert_block_content_into(converter, doc, content, &mut children)?;
     Ok(Node::new(node::DOCUMENT).children(children))
 }
 
@@ -190,32 +268,42 @@ fn convert_paragraph<R: Read + Seek>(
     }
 
     if let Some(level) = heading_level {
-        // Create heading node
         Ok(Some(
             Node::new(node::HEADING)
                 .prop(prop::LEVEL, level as i64)
                 .children(inline_children),
         ))
     } else {
-        // Create paragraph node
-        Ok(Some(Node::new(node::PARAGRAPH).children(inline_children)))
+        let mut node = Node::new(node::PARAGRAPH).children(inline_children);
+
+        // Apply paragraph alignment
+        if let Some(align) = para.alignment() {
+            let align_str = match align {
+                STJc::Left | STJc::Start => "left",
+                STJc::Right | STJc::End => "right",
+                STJc::Center => "center",
+                STJc::Both => "justify",
+                _ => "",
+            };
+            if !align_str.is_empty() {
+                node = node.prop(prop::STYLE_ALIGN, align_str.to_string());
+            }
+        }
+
+        Ok(Some(node))
     }
 }
 
 fn detect_heading_level(para: &Paragraph) -> Option<u8> {
-    // Check for outline level in paragraph properties
     if let Some(props) = para.properties() {
-        // Outline level 0-8 maps to heading levels 1-9
         if let Some(outline) = &props.outline_lvl {
             let level = outline.value as u8;
             return Some(level + 1);
         }
 
-        // Check style name for heading patterns
         if let Some(style) = &props.paragraph_style {
             let style_lower = style.value.to_lowercase();
             if style_lower.starts_with("heading") || style_lower.starts_with("titre") {
-                // Try to extract number from style name
                 for c in style_lower.chars() {
                     if let Some(digit) = c.to_digit(10)
                         && (1..=9).contains(&digit)
@@ -240,8 +328,8 @@ fn convert_paragraph_content<R: Read + Seek>(
     for content in &para.paragraph_content {
         match content {
             ParagraphContent::R(run) => {
-                if let Some(node) = convert_run(converter, doc, run)? {
-                    children.push(node);
+                for n in convert_run(converter, doc, run)? {
+                    children.push(n);
                 }
             }
             ParagraphContent::Hyperlink(link) => {
@@ -252,32 +340,32 @@ fn convert_paragraph_content<R: Read + Seek>(
             ParagraphContent::Ins(ins) => {
                 // Include inserted content (from tracked changes)
                 for item in &ins.run_content {
-                    if let RunContentChoice::R(run) = item
-                        && let Some(node) = convert_run(converter, doc, run)?
-                    {
-                        children.push(node);
+                    if let RunContentChoice::R(run) = item {
+                        for n in convert_run(converter, doc, run)? {
+                            children.push(n);
+                        }
                     }
                 }
             }
             ParagraphContent::Del(_del) => {
-                // Skip deleted content (tracked changes)
                 converter.warn("Tracked deletion content skipped");
             }
             ParagraphContent::FldSimple(field) => {
-                // Extract displayed text from simple fields
+                // Extract displayed text from simple fields; instruction is in field.instruction
+                converter.warn("Field instruction lost (display text preserved)");
                 for item in &field.paragraph_content {
-                    if let ParagraphContent::R(run) = item
-                        && let Some(node) = convert_run(converter, doc, run)?
-                    {
-                        children.push(node);
+                    if let ParagraphContent::R(run) = item {
+                        for n in convert_run(converter, doc, run)? {
+                            children.push(n);
+                        }
                     }
                 }
             }
-            ParagraphContent::BookmarkStart(_)
-            | ParagraphContent::BookmarkEnd(_)
-            | ParagraphContent::CommentRangeStart(_)
-            | ParagraphContent::CommentRangeEnd(_) => {
-                // Skip bookmark and comment markers
+            ParagraphContent::BookmarkStart(_) | ParagraphContent::BookmarkEnd(_) => {
+                converter.warn("Bookmark marker not representable in IR");
+            }
+            ParagraphContent::CommentRangeStart(_) | ParagraphContent::CommentRangeEnd(_) => {
+                converter.warn("Comment range marker not representable in IR");
             }
             _ => {}
         }
@@ -286,18 +374,39 @@ fn convert_paragraph_content<R: Read + Seek>(
     Ok(children)
 }
 
+/// Convert a run, returning zero or more nodes (a run may produce a footnote_ref + text).
 fn convert_run<R: Read + Seek>(
     converter: &mut Converter,
     doc: &mut OoxmlDocument<R>,
     run: &Run,
-) -> Result<Option<Node>, ParseError> {
-    let text = run.text();
+) -> Result<Vec<Node>, ParseError> {
+    let mut result = Vec::new();
+
+    // Handle footnote reference (takes precedence over text)
+    if let Some(fn_ref) = run.footnote_ref() {
+        let fn_id = fn_ref.id;
+        let content = converter.footnotes.remove(&fn_id).unwrap_or_default();
+        result.push(
+            Node::new(node::FOOTNOTE_REF)
+                .prop(prop::LABEL, fn_id.to_string())
+                .children(content),
+        );
+        return Ok(result);
+    }
+
+    // Handle endnote reference
+    if let Some(en_ref) = run.endnote_ref() {
+        let en_id = en_ref.id;
+        converter.warn(format!("Endnote {} content not yet represented", en_id));
+        result.push(Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, format!("en{}", en_id)));
+        return Ok(result);
+    }
 
     // Handle DrawingML images in the run
     for drawing in run.drawings() {
         for rel_id in drawing.all_image_rel_ids() {
             if let Some(image_node) = convert_image(converter, doc, rel_id)? {
-                return Ok(Some(image_node));
+                result.push(image_node);
             }
         }
     }
@@ -311,18 +420,19 @@ fn convert_run<R: Read + Seek>(
         converter.warn_lost("VML picture content not fully supported");
     }
 
-    // Skip empty text runs
+    let text = run.text();
+
+    // If we already pushed image nodes, skip empty text
     if text.is_empty() {
-        return Ok(None);
+        return Ok(result);
     }
 
     // Create text node with formatting
     let text_node = create_text_node(&text);
-
-    // Apply formatting wrappers
     let formatted = apply_formatting(run, text_node);
+    result.push(formatted);
 
-    Ok(Some(formatted))
+    Ok(result)
 }
 
 fn convert_image<R: Read + Seek>(
@@ -330,7 +440,6 @@ fn convert_image<R: Read + Seek>(
     doc: &mut OoxmlDocument<R>,
     rel_id: &str,
 ) -> Result<Option<Node>, ParseError> {
-    // Try to load image data
     match doc.get_image_data(rel_id) {
         Ok(image_data) => {
             let resource_id = converter.add_resource(image_data.data, &image_data.content_type);
@@ -352,10 +461,9 @@ fn convert_hyperlink<R: Read + Seek>(
 ) -> Result<Option<Node>, ParseError> {
     let mut children = Vec::new();
 
-    // Convert runs inside the hyperlink
     for run in link.runs() {
-        if let Some(node) = convert_run(converter, doc, run)? {
-            children.push(node);
+        for n in convert_run(converter, doc, run)? {
+            children.push(n);
         }
     }
 
@@ -365,13 +473,11 @@ fn convert_hyperlink<R: Read + Seek>(
 
     let mut node = Node::new(node::LINK);
 
-    // Get URL from relationship or anchor
     if let Some(rel_id) = link.rel_id() {
         if let Some(url) = doc.get_hyperlink_url(rel_id) {
             node = node.prop(prop::URL, url.to_string());
         }
     } else if let Some(anchor) = link.anchor_str() {
-        // Internal bookmark link
         node = node.prop(prop::URL, format!("#{}", anchor));
     }
 
@@ -388,7 +494,6 @@ fn convert_table<R: Read + Seek>(
     for row in table.rows() {
         let mut cells = Vec::new();
 
-        // Determine if this is a header row via tblHeader property
         let is_header = row
             .properties()
             .and_then(|p| p.tbl_header.as_ref())
@@ -427,8 +532,52 @@ fn create_text_node(text: &str) -> Node {
 }
 
 fn apply_formatting(run: &Run, mut node: Node) -> Node {
-    // Apply formatting in order: subscript/superscript, strikethrough, underline, italic, bold
-    // Inner-most formatting is applied first
+    // --- Span-level styling (color, font, size, background) ---
+    // Collect properties that go onto a span wrapper.
+    let mut span_props = Properties::new();
+
+    if let Some(props) = run.properties() {
+        if let Some(color) = props.color_hex() {
+            // "auto" is the default; skip it
+            if color != "auto" && !color.is_empty() {
+                span_props.set(prop::STYLE_COLOR, color.to_string());
+            }
+        }
+        if let Some(font) = props.font_ascii()
+            && !font.is_empty()
+        {
+            span_props.set(prop::STYLE_FONT, font.to_string());
+        }
+        if let Some(size_pts) = props.font_size_points() {
+            span_props.set(prop::STYLE_SIZE, size_pts);
+        }
+        if let Some(highlight) = props.highlight_color() {
+            let color_str = highlight.to_string();
+            if color_str != "none" {
+                span_props.set(prop::STYLE_BG_COLOR, color_str);
+            }
+        }
+    }
+
+    if !span_props.is_empty() {
+        let mut span_node = Node::new(node::SPAN);
+        span_node.props = span_props;
+        node = span_node.child(node);
+    }
+
+    // --- Semantic inline node wrappers ---
+
+    if run.properties().is_some_and(|p| p.is_hidden()) {
+        node = Node::new(node::HIDDEN).child(node);
+    }
+
+    if run.properties().is_some_and(|p| p.is_small_caps()) {
+        node = Node::new(node::SMALL_CAPS).child(node);
+    }
+
+    if run.properties().is_some_and(|p| p.is_all_caps()) {
+        node = Node::new(node::ALL_CAPS).child(node);
+    }
 
     if run.properties().is_some_and(|p| p.is_subscript()) {
         node = Node::new(node::SUBSCRIPT).child(node);

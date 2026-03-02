@@ -1,0 +1,9 @@
+{
+  "description": "DOCX paragraph with center alignment produces style:align=center",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",   "kind": "document" },
+    { "path": "/0",  "kind": "paragraph", "props": { "style:align": "center" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "centered paragraph" } }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "description": "DOCX run with text color produces span with style:color",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "span", "props": { "style:color": "FF0000" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "red text" } }
+  ]
+}

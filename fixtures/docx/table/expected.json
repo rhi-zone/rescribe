@@ -1,0 +1,15 @@
+{
+  "description": "DOCX table with one row and two cells produces table/table_row/table_cell structure",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",           "kind": "document" },
+    { "path": "/0",          "kind": "table" },
+    { "path": "/0/0",        "kind": "table_row" },
+    { "path": "/0/0/0",      "kind": "table_cell" },
+    { "path": "/0/0/0/0",    "kind": "paragraph" },
+    { "path": "/0/0/0/0/0",  "kind": "text", "props": { "content": "Cell A1" } },
+    { "path": "/0/0/1",      "kind": "table_cell" },
+    { "path": "/0/0/1/0",    "kind": "paragraph" },
+    { "path": "/0/0/1/0/0",  "kind": "text", "props": { "content": "Cell B1" } }
+  ]
+}

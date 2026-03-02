@@ -1,0 +1,10 @@
+{
+  "description": "DOCX run with explicit font size produces span with style:size in points",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",      "kind": "document" },
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "span", "props": { "style:size": 24.0 } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "big text" } }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "description": "DOCX ordered-list paragraphs are grouped into a list node with list_item children",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",       "kind": "document" },
+    { "path": "/0",      "kind": "list" },
+    { "path": "/0/0",    "kind": "list_item" },
+    { "path": "/0/0/0",  "kind": "text", "props": { "content": "first item" } },
+    { "path": "/0/1",    "kind": "list_item" },
+    { "path": "/0/1/0",  "kind": "text", "props": { "content": "second item" } }
+  ]
+}
