@@ -1,0 +1,13 @@
+{
+  "description": "RTF paragraph alignment (left, center, right)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph", "props": { "style:align": "left" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "left" } },
+    { "path": "/1", "kind": "paragraph", "props": { "style:align": "center" } },
+    { "path": "/1/0", "kind": "text", "props": { "content": "centered" } },
+    { "path": "/2", "kind": "paragraph", "props": { "style:align": "right" } },
+    { "path": "/2/0", "kind": "text", "props": { "content": "right" } }
+  ]
+}

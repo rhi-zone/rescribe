@@ -1,0 +1,11 @@
+{
+  "description": "RTF color wrapping a font-size span",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:color": "#008000" } },
+    { "path": "/0/0/0", "kind": "span", "props": { "style:size": "18pt" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "green big text" } }
+  ]
+}

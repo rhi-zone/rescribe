@@ -1,0 +1,10 @@
+{
+  "description": "RTF inline foreground color span",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:color": "#ff0000" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "red text" } }
+  ]
+}

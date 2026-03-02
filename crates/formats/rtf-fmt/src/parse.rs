@@ -684,18 +684,22 @@ impl<'a> Parser<'a> {
             | "shp" | "shprslt" | "nonesttables" | "tblrsid" | "sectrsid" | "tldot"
             | "footery" | "headery" | "pnrdate" | "pnrauth"
             | "softline" | "clshdng" | "clcfpat" | "clmrg" | "yts"
-            | "caps" | "v" | "scaps" | "cchs" | "flddirty" | "fldedit" | "ftnbj"
+            // NOTE: \caps, \scaps, \v (hidden), \webhidden, \up, \dn are SEMANTIC
+            // (all-caps, small-caps, hidden text, baseline offset) and intentionally
+            // NOT in this list — they fall through to the diagnostic arm so the caller
+            // knows fidelity was lost.
+            | "cchs" | "flddirty" | "fldedit" | "ftnbj"
             | "sectlinegrid" | "psz" | "margbsxn" | "margtsxn" | "margrsxn" | "marglsxn"
             | "nestcell" | "clshdngraw" | "ansicpg" | "charscalex" | "aenddoc"
-            | "webhidden" | "ltrsect" | "deflangfe" | "revised" | "ppscheme"
+            | "ltrsect" | "deflangfe" | "revised" | "ppscheme"
             | "tbllkhdrrows" | "tbllkhdrcols" | "tbllklastcol" | "tbllklastrow" | "saftnnar"
             | "brdrhair" | "pgnhn" | "pgnlcrm" | "lndscpsxn" | "sbauto" | "saauto"
             | "pgnrestart" | "cbpat" | "tcf" | "tcl"
             // Drawing grid
             | "dghshow" | "dghorigin" | "dghspace" | "dgvshow" | "dgvorigin" | "dgvspace"
             | "horzdoc" | "vertdoc"
-            // Vertical offset / superscript by twips (not semantic super/sub)
-            | "up" | "dn"
+            // Typography hints (no semantic content — affect spacing/rendering only)
+            // NOTE: \up/\dn are SEMANTIC (baseline offset) and not in this list.
             // Underline color / char properties
             | "ulc" | "nospaceforul" | "noultrlspc" | "expshrtn" | "noxlattoyen"
             | "nolnhtadjtbl" | "titlepg" | "cufi"

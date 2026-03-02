@@ -2,6 +2,21 @@
 
 Behavioral rules for Claude Code in the rescribe repository.
 
+## Core value proposition: losslessness
+
+**rescribe's primary differentiation from Pandoc is losslessness.** Pandoc silently drops
+constructs it can't represent; rescribe never silently drops anything. Every construct that
+cannot be represented in the IR must surface as a fidelity warning via `ConversionResult`.
+The user always knows exactly what was lost.
+
+This means:
+- Silent drops are bugs, not acceptable limitations
+- "Silently ignored" control words in a parser are suspect — distinguish layout-only
+  (tab stops, margins, borders: genuinely no semantic content) from semantic
+  (caps, hidden text, vertical offset, footnotes: visible effect the user would notice)
+- Layout-only: silent ignore is fine
+- Semantic: must emit a diagnostic / fidelity warning, even if we can't model it in IR
+
 ## Project Overview
 
 rescribe is a universal document conversion library, inspired by Pandoc but with:
@@ -85,6 +100,10 @@ The owned fixture suite (`fixtures/`) is the primary deliverable for correctness
 - **See `fixtures/spec.md`** for the fixture format spec
 
 When adding fixtures, always think: "would a correct alternative implementation of this format, reading this fixture, know exactly what to produce?" If not, the fixture is underspecified.
+
+**When you add support for a new parsed construct, add a fixture for it in the same commit.**
+No new feature without a fixture. Use `transition_analysis` to verify the fixture closes
+the gap. Fixtures that test new features should be added before calling a vertical "done."
 
 ## Conventions
 

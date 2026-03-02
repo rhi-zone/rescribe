@@ -1,0 +1,12 @@
+{
+  "description": "RTF inline font-size span",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "normal " } },
+    { "path": "/0/1", "kind": "span", "props": { "style:size": "24pt" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "big text" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " normal" } }
+  ]
+}
