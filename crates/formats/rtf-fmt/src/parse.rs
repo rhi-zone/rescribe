@@ -270,6 +270,17 @@ impl<'a> Parser<'a> {
             "\\footerl",
             "\\footerr",
             "\\fldinst",
+            // Footnotes, endnotes, annotations: skip content so it doesn't
+            // bleed into the main paragraph text.
+            "\\footnote",
+            "\\endnote",
+            "\\annotation",
+            // Table of contents / index entry markers
+            "\\tc",
+            "\\xe",
+            // List override / numbering tables
+            "\\listoverridetable",
+            "\\listtable",
         ];
 
         SKIP_PREFIXES.iter().any(|p| rest.starts_with(p))
@@ -597,16 +608,110 @@ impl<'a> Parser<'a> {
                 // pushed), so just continue parsing normally.
             }
 
+            // \plain resets all character formatting to default.
+            "plain" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                *state = TextState::default();
+            }
+
             // Ignored formatting / sizing controls
             "f" | "cb" | "li" | "fi" | "ri" | "sa" | "sb" | "sl" | "slmult" | "outlinelevel"
             | "pntext" | "pn" | "pnlvlblt" | "rtf" | "ansi" | "mac" | "pc" | "pca" | "deff"
             | "deflang" | "widowctrl" | "hyphauto" | "hyphconsec" | "hyphcaps" | "paperw"
-            | "paperh" | "margl" | "margr" | "margt" | "margb" | "sectd" | "cols" | "colsx"
-            | "endhere" | "pgwsxn" | "pghsxn" | "headerl" | "headerr" | "header" | "footer"
+            | "paperh" | "margl" | "margr" | "margt" | "margb" | "cols" | "colsx"
+            | "endhere" | "headerl" | "headerr" | "header" | "footer"
             | "footerl" | "footerr" | "trowd" | "cellx" | "intbl" | "cell" | "row" | "trgaph"
-            | "trql" | "trqr" | "trqc" | "clmgf" | "clmrg" | "brdrb" | "brdrs" | "brdrw"
+            | "trql" | "trqr" | "trqc" | "brdrb" | "brdrs" | "brdrw"
             | "brsp" | "brdrt" | "brdrl" | "brdrr" | "brdrth" | "brdrdot" | "brdrdash" | "b0"
-            | "i0" => {
+            | "i0"
+            // Tab stops and paragraph positioning
+            | "tx" | "tqr" | "tqc" | "tqdec" | "tbin" | "tbpos"
+            // Revision tracking / session IDs (no semantic content)
+            | "insrsid" | "charrsid" | "delrsid" | "rsidroot" | "rsid" | "pararsid"
+            // Font color space / associated font / complex script
+            | "fcs" | "af" | "afs" | "afcs" | "ab" | "ai" | "loch" | "hich" | "dbch"
+            | "ltrch" | "rtlch" | "alang" | "faroman" | "cs" | "ds" | "ts"
+            // Paragraph / section direction
+            | "ltrpar" | "rtlpar" | "ltrrow" | "rtlrow" | "ltrmark" | "rtlmark"
+            // Paragraph formatting
+            | "s" | "rin" | "lin" | "itap" | "faauto" | "nowidctlpar" | "widctlpar"
+            | "adjustright" | "wrapdefault" | "aspnum" | "aspalpha" | "expnd" | "expndtw"
+            | "kerning" | "sbys" | "keep" | "keepn" | "noline" | "nooverflow"
+            | "snext" | "styrsid" | "qnatural" | "hyphpar" | "noproof"
+            // Border controls
+            | "brdrnone" | "brdrcf" | "clbrdrl" | "clbrdrt" | "clbrdrr" | "clbrdrb"
+            | "clftsWidth" | "clwWidth" | "clvertalt" | "clvertalb" | "clvertalc"
+            | "clshdrawnil" | "clpadl" | "clpadr" | "clpadt" | "clpadb" | "brdrtbl"
+            | "clpadfl" | "clpadfr" | "clpadft" | "clpadfb" | "clcbpat" | "clcbpatraw"
+            | "cltxlrtb" | "cltxtbrl" | "cltxbtlr" | "cltxlrtbv" | "cltxtbrlv" | "clNoWrap"
+            // Cell / table
+            | "clvmgf" | "clvmrg" | "tcelld"
+            | "trpadl" | "trpadr" | "trpadt" | "trpadb" | "trrh" | "trleft" | "tblind"
+            | "tblindtype" | "trautofit" | "irow" | "irowband"
+            | "trpadfl" | "trpadfr" | "trpadft" | "trpadfb"
+            | "trspfl" | "trspfr" | "trspft" | "trspfb"
+            | "trspdl" | "trspdr" | "trspdt" | "trspdb"
+            | "trftsWidthB" | "trftsWidth" | "trwWidthB" | "trwWidth"
+            | "trftsWidthA" | "trwWidthA" | "trkeep" | "trkeepfollow"
+            | "trhdr" | "lastrow" | "taprtl"
+            // Page / section properties
+            | "pgwsxn" | "pghsxn" | "sect" | "sectd" | "sbknone" | "sbkcol"
+            | "sbkeven" | "sbkodd" | "sbkpage" | "pgncont" | "pgnstarts" | "pgdec"
+            | "cgrid" | "lang" | "langfe" | "langnp" | "langfenp" | "page"
+            // Absolute positioning
+            | "posx" | "posy" | "absw" | "absh" | "phpg" | "pvpg" | "phcol" | "phmrg"
+            | "pvmrg" | "pvpara" | "posxc" | "posxl" | "posxr" | "posyb" | "posyt"
+            | "posyin" | "posyc" | "dxfrtext" | "dfrmtxtx" | "dfrmtxty" | "dfrmtxtl"
+            | "dfrmtxtr" | "nowrap"
+            // Paragraph numbering
+            | "pnrpnbr" | "pnrnfc" | "pnrstart" | "pnrindent" | "pnrhang"
+            | "pnrrgb" | "pnrxst" | "pnrstop" | "ls" | "ilvl" | "jclisttab"
+            | "listtext" | "stextflow"
+            // Table row/border
+            | "trpaddfl" | "trpaddfr" | "trpaddft" | "trpaddfb"
+            | "trpaddl" | "trpaddr" | "trpaddt" | "trpaddb"
+            | "trbrdrb" | "trbrdrt" | "trbrdrr" | "trbrdrl" | "trbrdrv" | "trbrdrh"
+            // Misc layout / section
+            | "linex" | "linemod" | "sectdefaultcl" | "endnhere" | "rtlgutter"
+            | "brdroutset" | "brdrdb" | "brdrnil" | "sftnbj"
+            | "shp" | "shprslt" | "nonesttables" | "tblrsid" | "sectrsid" | "tldot"
+            | "footery" | "headery" | "pnrdate" | "pnrauth"
+            | "softline" | "clshdng" | "clcfpat" | "clmrg" | "yts"
+            | "caps" | "v" | "scaps" | "cchs" | "flddirty" | "fldedit" | "ftnbj"
+            | "sectlinegrid" | "psz" | "margbsxn" | "margtsxn" | "margrsxn" | "marglsxn"
+            | "nestcell" | "clshdngraw" | "ansicpg" | "charscalex" | "aenddoc"
+            | "webhidden" | "ltrsect" | "deflangfe" | "revised" | "ppscheme"
+            | "tbllkhdrrows" | "tbllkhdrcols" | "tbllklastcol" | "tbllklastrow" | "saftnnar"
+            | "brdrhair" | "pgnhn" | "pgnlcrm" | "lndscpsxn" | "sbauto" | "saauto"
+            | "pgnrestart" | "cbpat" | "tcf" | "tcl"
+            // Drawing grid
+            | "dghshow" | "dghorigin" | "dghspace" | "dgvshow" | "dgvorigin" | "dgvspace"
+            | "horzdoc" | "vertdoc"
+            // Vertical offset / superscript by twips (not semantic super/sub)
+            | "up" | "dn"
+            // Underline color / char properties
+            | "ulc" | "nospaceforul" | "noultrlspc" | "expshrtn" | "noxlattoyen"
+            | "nolnhtadjtbl" | "titlepg" | "cufi"
+            // Style sheet font refs
+            | "stshfloch" | "stshfdbch" | "stshfbi" | "stshfhich"
+            // Footnote / misc refs (skip group handles content; word itself is ignored)
+            | "chftn" | "fldpriv" | "nonshppict"
+            // Section / column layout
+            | "trspdfr" | "trspdfl" | "trspdfb" | "trspdft" | "colno" | "colw" | "column"
+            // More page numbering / annotation
+            | "aftnnar" | "pgbrdrfoot" | "pgbrdrhead"
+            // Noextrasprl / misc
+            | "noextrasprl" | "htmautsp" | "dntblnsbdb" | "useltbaln" | "fet"
+            | "formshade" | "viewkind" | "viewscale" | "viewzk"
+            | "uc" | "ud" | "field"
+            => {
                 // Most toggle-off words are redundant after state flush above,
                 // but b0/i0 specifically turn off formatting
                 if word == "b0" {
