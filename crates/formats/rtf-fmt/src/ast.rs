@@ -392,6 +392,15 @@ pub enum Inline {
         children: Vec<Inline>,
         span: Span,
     },
+
+    /// Inline span with a language tag (from `\lang<N>`).
+    ///
+    /// `lcid` is the Windows LCID (e.g. 1033 = en-US, 1031 = de-DE).
+    Lang {
+        lcid: u16,
+        children: Vec<Inline>,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -495,6 +504,15 @@ impl Inline {
                 children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
                 span: *span,
             },
+            Inline::Lang {
+                lcid,
+                children,
+                span,
+            } => Inline::Lang {
+                lcid: *lcid,
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
             other => other.clone(),
         }
     }
@@ -520,7 +538,8 @@ impl Inline {
             | Inline::Hidden { span, .. }
             | Inline::CharSpan { span, .. }
             | Inline::Font { span, .. }
-            | Inline::BgColor { span, .. } => *span,
+            | Inline::BgColor { span, .. }
+            | Inline::Lang { span, .. } => *span,
         }
     }
 
@@ -616,6 +635,11 @@ impl Inline {
                 r: *r,
                 g: *g,
                 b: *b,
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Lang { lcid, children, .. } => Inline::Lang {
+                lcid: *lcid,
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },

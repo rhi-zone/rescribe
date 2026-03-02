@@ -185,7 +185,72 @@ fn inline_to_node(inline: &Inline) -> Node {
         } => Node::new(node::SPAN)
             .prop("style:background", format!("#{r:02x}{g:02x}{b:02x}"))
             .children(inlines_to_nodes(children)),
+
+        Inline::Lang { lcid, children, .. } => Node::new(node::SPAN)
+            .prop("lang", lcid_to_bcp47(*lcid))
+            .children(inlines_to_nodes(children)),
     }
+}
+
+/// Convert a Windows LCID to a BCP-47 language tag.
+///
+/// Covers the most common LCIDs; uncommon ones are represented as `und-LCID`.
+fn lcid_to_bcp47(lcid: u16) -> String {
+    match lcid {
+        1025 => "ar-SA",
+        1026 => "bg-BG",
+        1027 => "ca-ES",
+        1028 => "zh-TW",
+        1029 => "cs-CZ",
+        1030 => "da-DK",
+        1031 => "de-DE",
+        1032 => "el-GR",
+        1033 => "en-US",
+        1034 => "es-ES",
+        1035 => "fi-FI",
+        1036 => "fr-FR",
+        1037 => "he-IL",
+        1038 => "hu-HU",
+        1040 => "it-IT",
+        1041 => "ja-JP",
+        1042 => "ko-KR",
+        1043 => "nl-NL",
+        1044 => "nb-NO",
+        1045 => "pl-PL",
+        1046 => "pt-BR",
+        1048 => "ro-RO",
+        1049 => "ru-RU",
+        1050 => "hr-HR",
+        1051 => "sk-SK",
+        1052 => "sq-AL",
+        1053 => "sv-SE",
+        1054 => "th-TH",
+        1055 => "tr-TR",
+        1058 => "uk-UA",
+        1060 => "sl-SI",
+        1061 => "et-EE",
+        1062 => "lv-LV",
+        1063 => "lt-LT",
+        1066 => "vi-VN",
+        2052 => "zh-CN",
+        2055 => "de-CH",
+        2057 => "en-GB",
+        2058 => "es-MX",
+        2060 => "fr-BE",
+        2064 => "it-CH",
+        2067 => "nl-BE",
+        2068 => "nn-NO",
+        2070 => "pt-PT",
+        2074 => "sr-Latn-CS",
+        2077 => "sv-FI",
+        3076 => "zh-HK",
+        3079 => "de-AT",
+        3081 => "en-AU",
+        3082 => "es-ES",
+        3084 => "fr-CA",
+        _ => return format!("und-x-lcid{lcid}"),
+    }
+    .to_string()
 }
 
 #[cfg(test)]

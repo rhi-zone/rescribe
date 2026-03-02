@@ -1,0 +1,10 @@
+{
+  "description": "RTF inline language tag (LCID → BCP-47)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "lang": "de-DE" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "German text" } }
+  ]
+}

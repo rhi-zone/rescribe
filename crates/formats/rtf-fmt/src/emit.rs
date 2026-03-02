@@ -67,7 +67,8 @@ fn collect_colors_in_inline(inline: &Inline, out: &mut Vec<(u8, u8, u8)>) {
         | Inline::Hidden { children, .. }
         | Inline::CharSpan { children, .. }
         | Inline::Link { children, .. }
-        | Inline::Font { children, .. } => {
+        | Inline::Font { children, .. }
+        | Inline::Lang { children, .. } => {
             for child in children {
                 collect_colors_in_inline(child, out);
             }
@@ -155,7 +156,8 @@ fn collect_fonts_in_inline(inline: &Inline, out: &mut Vec<String>) {
         | Inline::CharSpan { children, .. }
         | Inline::Color { children, .. }
         | Inline::BgColor { children, .. }
-        | Inline::Link { children, .. } => {
+        | Inline::Link { children, .. }
+        | Inline::Lang { children, .. } => {
             for child in children {
                 collect_fonts_in_inline(child, out);
             }
@@ -466,6 +468,11 @@ fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
         Inline::Font { name, children, .. } => {
             let idx = ctx.font_map.iter().position(|f| f == name).unwrap_or(0);
             ctx.push(&format!("{{\\f{idx} "));
+            emit_inlines(children, ctx);
+            ctx.push("}");
+        }
+        Inline::Lang { lcid, children, .. } => {
+            ctx.push(&format!("{{\\lang{lcid} "));
             emit_inlines(children, ctx);
             ctx.push("}");
         }

@@ -58,6 +58,8 @@ struct TextState {
     bg_color_idx: u8,
     /// Font table index (0 = default font).  Set by `\f<N>`.
     font_idx: u16,
+    /// Language LCID (0 = not explicitly set).  Set by `\lang<N>`.
+    lang_id: u16,
     /// Raw RTF character-layout control words (e.g. `\dn3\shad`) accumulated
     /// verbatim for re-emission.  Empty string means no char-layout words active.
     char_props: String,
@@ -813,6 +815,20 @@ impl<'a> Parser<'a> {
                 );
                 state.bg_color_idx = param.unwrap_or(0).max(0) as u8;
             }
+            // Language tag: \lang<N> and \langfe<N> (complex-script language)
+            "lang" | "langfe" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                    &self.font_table,
+                );
+                state.lang_id = param.unwrap_or(0).max(0) as u16;
+            }
+
 
             // Ignored formatting / sizing controls
             "pntext" | "pn" | "pnlvlblt" | "rtf" | "ansi" | "mac" | "pc" | "pca" | "deff"
@@ -851,7 +867,7 @@ impl<'a> Parser<'a> {
             // Page / section properties
             | "pgwsxn" | "pghsxn" | "sect" | "sectd" | "sbknone" | "sbkcol"
             | "sbkeven" | "sbkodd" | "sbkpage" | "pgncont" | "pgnstarts" | "pgdec"
-            | "cgrid" | "lang" | "langfe" | "langnp" | "langfenp" | "page"
+            | "cgrid" | "langnp" | "langfenp" | "page"
             // Absolute positioning
             | "posx" | "posy" | "absw" | "absh" | "phpg" | "pvpg" | "phcol" | "phmrg"
             | "pvmrg" | "pvpara" | "posxc" | "posxl" | "posxr" | "posyb" | "posyt"
@@ -1253,6 +1269,13 @@ fn make_inline(
             };
         }
     }
+    if state.lang_id != 0 {
+        inline = Inline::Lang {
+            lcid: state.lang_id,
+            children: vec![inline],
+            span,
+        };
+    }
     inline
 }
 
@@ -1653,7 +1676,8 @@ mod tests {
                 | Inline::Hidden { children, .. }
                 | Inline::CharSpan { children, .. }
                 | Inline::Font { children, .. }
-                | Inline::BgColor { children, .. } => out.push_str(&collect_text(children)),
+                | Inline::BgColor { children, .. }
+                | Inline::Lang { children, .. } => out.push_str(&collect_text(children)),
                 Inline::Code { text, .. } => out.push_str(text),
                 Inline::Link { children, url, .. } => {
                     if children.is_empty() {

@@ -54,6 +54,7 @@ fn inline_kind(i: &Inline) -> &'static str {
         Inline::CharSpan { .. } => "char_span",
         Inline::Font { .. } => "font",
         Inline::BgColor { .. } => "bg_color",
+        Inline::Lang { .. } => "lang",
     }
 }
 
@@ -125,6 +126,7 @@ fn collect_inlines(inlines: &[Inline], parent: &str, out: &mut HashSet<Trans>) {
             | Inline::CharSpan { children, .. }
             | Inline::Font { children, .. }
             | Inline::BgColor { children, .. }
+            | Inline::Lang { children, .. }
             | Inline::Link { children, .. } => Some(children.as_slice()),
             _ => None,
         };
