@@ -170,8 +170,8 @@ The format tiers below determine priority order within this model.
 
 Each Tier A format at 5-Production with a published standalone crate.
 
-- [ ] `rtf-fmt` vertical — **4-Fuzz** → needs fuzz re-run + 5-Production sign-off
-  - All 9 coverage gaps closed (2026-03-02/03):
+- [x] `rtf-fmt` vertical — **5-Production** (2026-03-03)
+  - All 9 coverage gaps closed; 3 fuzz bugs found and fixed during final fuzz run
   - [x] **Ignored-list cleanup** — drawing-obj + Asian typography words added; 0% diagnostic rate
   - [x] **Font face** — `\fonttbl` pre-scan; `Inline::Font`; `style:font` in IR
   - [x] **Background color** — `\cb<N>`; `Inline::BgColor`; `style:background` in IR
@@ -181,7 +181,7 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] **Footnotes** — `{\footnote...}` sub-parsed; `Inline::Footnote`; `footnote_ref` in IR
   - [x] **Lists** — `{\*\pn\pnlvlblt}`/`{\*\pn\pnlvlbody}` → `Block::List`
   - [x] **Zero-diagnostic corpus gate** — `#[ignore]` test; 1125 files, 0% diagnostics
-  - Remaining before 5-Production: re-run fuzz targets under `nix develop .#fuzz`
+  - [x] **Fuzz clean** — reader/roundtrip/writer all clean; 3 bugs fixed (slice panic, OOM, UTF-8 boundary)
 - [ ] `rst-fmt` vertical
 - [ ] `asciidoc` vertical
 - [ ] `org-fmt` vertical
