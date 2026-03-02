@@ -107,6 +107,40 @@ Two targets per format, same as the djot precedent:
 
 ---
 
+## Memory model and zero-copy
+
+**Why zero-copy doesn't apply to format text content.**
+Every markup format requires transformation during parsing — RTF decodes `\'XX`
+hex escapes (Windows-1252 → Unicode), named control words (`\emdash` → U+2014),
+`\uN` Unicode escapes, and backslash-escaped literals. The decoded text is never
+a verbatim slice of the input, so `&'a str` borrowing from the source buffer is
+not possible for text nodes. `Cow<'a, str>` would help only for runs with zero
+escapes, which are uncommon in real-world files of any format.
+
+The same applies to format-specific raw-preservation fields like RTF's
+`para_props`: they are reconstructed from the parsed token stream, not lifted
+verbatim from the input, so they are owned `String`s.
+
+**Why this is not a problem in practice.**
+The AST heap cost is proportional to document size, and the document was already
+in memory as the input `&str`. `para_props` adds ~20 bytes per paragraph on
+average (a typical indent+spacing definition). For a 10,000-paragraph document
+that is ~200 KB — negligible relative to the input itself.
+
+**When it would matter: the `events()` pull iterator.**
+For very large files or streaming pipelines, the right tool is the low-level
+pull iterator — not feature flags or zero-copy tricks. The iterator emits one
+event at a time and requires only O(nesting depth) working state, so the full
+AST is never materialised. The rescribe adapter can choose to use `events()`
+internally instead of `parse()` if memory is a concern.
+
+Feature flags should be reserved for *optional dependencies* (e.g. `serde` for
+`Serialize`/`Deserialize` on AST types), not for behavioral toggles like
+"skip layout props". Behavioral options belong in a `ParseOptions` struct passed
+to `parse_with_options()`.
+
+---
+
 ## Crate layout
 
 ```
