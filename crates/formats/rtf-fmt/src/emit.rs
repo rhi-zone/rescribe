@@ -62,6 +62,9 @@ fn collect_colors_in_inline(inline: &Inline, out: &mut Vec<(u8, u8, u8)>) {
         | Inline::Superscript { children, .. }
         | Inline::Subscript { children, .. }
         | Inline::FontSize { children, .. }
+        | Inline::AllCaps { children, .. }
+        | Inline::SmallCaps { children, .. }
+        | Inline::Hidden { children, .. }
         | Inline::Link { children, .. } => {
             for child in children {
                 collect_colors_in_inline(child, out);
@@ -334,6 +337,24 @@ fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
 
         Inline::FontSize { size, children, .. } => {
             ctx.push(&format!("{{\\fs{size} "));
+            emit_inlines(children, ctx);
+            ctx.push("}");
+        }
+
+        Inline::AllCaps { children, .. } => {
+            ctx.push("{\\caps ");
+            emit_inlines(children, ctx);
+            ctx.push("}");
+        }
+
+        Inline::SmallCaps { children, .. } => {
+            ctx.push("{\\scaps ");
+            emit_inlines(children, ctx);
+            ctx.push("}");
+        }
+
+        Inline::Hidden { children, .. } => {
+            ctx.push("{\\v ");
             emit_inlines(children, ctx);
             ctx.push("}");
         }

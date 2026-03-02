@@ -91,6 +91,10 @@ pub mod node {
     pub const FOOTNOTE_DEF: &str = "footnote_def";
     /// Small caps text.
     pub const SMALL_CAPS: &str = "small_caps";
+    /// All-caps text (rendered uppercase; original-case content preserved).
+    pub const ALL_CAPS: &str = "all_caps";
+    /// Hidden text (present in document but not displayed).
+    pub const HIDDEN: &str = "hidden";
     /// Quoted text (use `quote_type` property: single/double).
     pub const QUOTED: &str = "quoted";
     /// A citation.

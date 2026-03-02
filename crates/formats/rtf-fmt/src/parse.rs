@@ -37,6 +37,10 @@ struct TextState {
     strikethrough: bool,
     superscript: bool,
     subscript: bool,
+    all_caps: bool,
+    small_caps: bool,
+    /// Hidden text (`\v`, `\webhidden`): present in document but not displayed.
+    hidden: bool,
     /// Font size in half-points (0 = not explicitly set).
     font_size: u16,
     /// Color table index (0 = auto/default).
@@ -579,6 +583,41 @@ impl<'a> Parser<'a> {
                 state.color_idx = param.unwrap_or(0).max(0) as u8;
             }
 
+            "caps" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                state.all_caps = param.unwrap_or(1) != 0;
+            }
+            "scaps" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                state.small_caps = param.unwrap_or(1) != 0;
+            }
+            // \v = hidden text; \webhidden = hidden in web view — treat both as hidden.
+            "v" | "webhidden" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                state.hidden = param.unwrap_or(1) != 0;
+            }
+
             "tab" => {
                 if current_text.is_empty() {
                     *text_start = self.pos;
@@ -743,6 +782,19 @@ impl<'a> Parser<'a> {
             | "noextrasprl" | "htmautsp" | "dntblnsbdb" | "useltbaln" | "fet"
             | "formshade" | "viewkind" | "viewscale" | "viewzk"
             | "uc" | "ud" | "field"
+            // Table cell structure (cell-level, not paragraph-level)
+            | "clmgf" | "clcfpatraw"
+            // Section / footnote structure
+            | "ftnrestart" | "endnrestart" | "aftnrestart"
+            // Page number absolute positioning (document-level layout)
+            | "pgnx" | "pgny"
+            // Asian typography document settings
+            | "adeflang" | "adeff" | "colsr" | "ilfomacatclnup" | "dgmargin"
+            // Word compatibility / document-level flags
+            | "lnbrkrule" | "alntblind" | "lyttblrtgr" | "lytcalctblwd"
+            | "splytwnine" | "ftnlytwnine" | "grfdocevents"
+            | "ignoremixedcontent" | "saveinvalidxml" | "donotembedlingdata"
+            | "showplaceholdtext" | "showxmlerrors"
             => {
                 // Most toggle-off words are redundant after state flush above,
                 // but b0/i0 specifically turn off formatting
@@ -822,6 +874,24 @@ fn make_inline(text: &str, state: &TextState, span: Span, color_table: &[(u8, u8
         text: text.to_string(),
         span,
     };
+    if state.small_caps {
+        inline = Inline::SmallCaps {
+            children: vec![inline],
+            span,
+        };
+    }
+    if state.all_caps {
+        inline = Inline::AllCaps {
+            children: vec![inline],
+            span,
+        };
+    }
+    if state.hidden {
+        inline = Inline::Hidden {
+            children: vec![inline],
+            span,
+        };
+    }
     if state.strikethrough {
         inline = Inline::Strikethrough {
             children: vec![inline],
@@ -1145,7 +1215,10 @@ mod tests {
                 | Inline::Superscript { children, .. }
                 | Inline::Subscript { children, .. }
                 | Inline::FontSize { children, .. }
-                | Inline::Color { children, .. } => out.push_str(&collect_text(children)),
+                | Inline::Color { children, .. }
+                | Inline::AllCaps { children, .. }
+                | Inline::SmallCaps { children, .. }
+                | Inline::Hidden { children, .. } => out.push_str(&collect_text(children)),
                 Inline::Code { text, .. } => out.push_str(text),
                 Inline::Link { children, url, .. } => {
                     if children.is_empty() {

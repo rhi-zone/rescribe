@@ -1,0 +1,12 @@
+{
+  "description": "RTF small-caps formatting (\\scaps)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "normal " } },
+    { "path": "/0/1", "kind": "small_caps" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Small Caps Text" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " normal" } }
+  ]
+}

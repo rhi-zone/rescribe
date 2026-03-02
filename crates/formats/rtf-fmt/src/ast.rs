@@ -350,6 +350,21 @@ pub enum Inline {
         children: Vec<Inline>,
         span: Span,
     },
+    /// All-caps rendering (`\caps`): text stored in original case, rendered uppercase.
+    AllCaps {
+        children: Vec<Inline>,
+        span: Span,
+    },
+    /// Small-caps rendering (`\scaps`): text stored in original case, rendered in small capitals.
+    SmallCaps {
+        children: Vec<Inline>,
+        span: Span,
+    },
+    /// Hidden text (`\v`, `\webhidden`): content present in the document but not displayed.
+    Hidden {
+        children: Vec<Inline>,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -410,6 +425,18 @@ impl Inline {
                 children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
                 span: *span,
             },
+            Inline::AllCaps { children, span } => Inline::AllCaps {
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Inline::SmallCaps { children, span } => Inline::SmallCaps {
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Inline::Hidden { children, span } => Inline::Hidden {
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
             other => other.clone(),
         }
     }
@@ -429,7 +456,10 @@ impl Inline {
             | Inline::Superscript { span, .. }
             | Inline::Subscript { span, .. }
             | Inline::FontSize { span, .. }
-            | Inline::Color { span, .. } => *span,
+            | Inline::Color { span, .. }
+            | Inline::AllCaps { span, .. }
+            | Inline::SmallCaps { span, .. }
+            | Inline::Hidden { span, .. } => *span,
         }
     }
 
@@ -490,6 +520,18 @@ impl Inline {
                 r: *r,
                 g: *g,
                 b: *b,
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::AllCaps { children, .. } => Inline::AllCaps {
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::SmallCaps { children, .. } => Inline::SmallCaps {
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Hidden { children, .. } => Inline::Hidden {
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },

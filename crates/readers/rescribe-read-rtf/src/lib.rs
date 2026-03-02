@@ -155,6 +155,18 @@ fn inline_to_node(inline: &Inline) -> Node {
         } => Node::new(node::SPAN)
             .prop(prop::STYLE_COLOR, format!("#{r:02x}{g:02x}{b:02x}"))
             .children(inlines_to_nodes(children)),
+
+        Inline::AllCaps { children, .. } => {
+            Node::new(node::ALL_CAPS).children(inlines_to_nodes(children))
+        }
+
+        Inline::SmallCaps { children, .. } => {
+            Node::new(node::SMALL_CAPS).children(inlines_to_nodes(children))
+        }
+
+        Inline::Hidden { children, .. } => {
+            Node::new(node::HIDDEN).children(inlines_to_nodes(children))
+        }
     }
 }
 

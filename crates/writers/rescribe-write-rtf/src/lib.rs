@@ -229,6 +229,21 @@ fn node_to_inline(node: &Node) -> Inline {
             span: Span::NONE,
         },
 
+        node::ALL_CAPS => Inline::AllCaps {
+            children: nodes_to_inlines(&node.children),
+            span: Span::NONE,
+        },
+
+        node::SMALL_CAPS => Inline::SmallCaps {
+            children: nodes_to_inlines(&node.children),
+            span: Span::NONE,
+        },
+
+        node::HIDDEN => Inline::Hidden {
+            children: nodes_to_inlines(&node.children),
+            span: Span::NONE,
+        },
+
         node::SPAN => {
             // Check for style:size → FontSize
             if let Some(size_str) = node.props.get_str(prop::STYLE_SIZE)
