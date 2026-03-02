@@ -1,0 +1,11 @@
+{
+  "description": "RTF paragraph layout properties (indent, spacing) preserved as rtf:para-props",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph", "props": { "rtf:para-props": "\\li720\\sa200" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "indented paragraph" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "normal paragraph" } }
+  ]
+}

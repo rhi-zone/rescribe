@@ -50,9 +50,15 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
 
         node::PARAGRAPH => {
             let align = parse_align(node.props.get_str(prop::STYLE_ALIGN));
+            let para_props = node
+                .props
+                .get_str("rtf:para-props")
+                .unwrap_or("")
+                .to_string();
             vec![Block::Paragraph {
                 inlines: nodes_to_inlines(&node.children),
                 align,
+                para_props,
                 span: Span::NONE,
             }]
         }
@@ -118,6 +124,7 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
             vec![Block::Paragraph {
                 inlines: nodes_to_inlines(std::slice::from_ref(node)),
                 align: Align::Default,
+                para_props: String::new(),
                 span: Span::NONE,
             }]
         }
@@ -127,6 +134,7 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
             vec![Block::Paragraph {
                 inlines: nodes_to_inlines(std::slice::from_ref(node)),
                 align: Align::Default,
+                para_props: String::new(),
                 span: Span::NONE,
             }]
         }

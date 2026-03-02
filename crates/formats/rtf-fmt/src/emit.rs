@@ -160,7 +160,12 @@ impl Ctx {
 
 fn emit_block(block: &Block, ctx: &mut Ctx) {
     match block {
-        Block::Paragraph { inlines, align, .. } => {
+        Block::Paragraph {
+            inlines,
+            align,
+            para_props,
+            ..
+        } => {
             ctx.push("\\pard");
             match align {
                 Align::Left => ctx.push("\\ql"),
@@ -168,6 +173,9 @@ fn emit_block(block: &Block, ctx: &mut Ctx) {
                 Align::Center => ctx.push("\\qc"),
                 Align::Justify => ctx.push("\\qj"),
                 Align::Default => {}
+            }
+            if !para_props.is_empty() {
+                ctx.push(para_props);
             }
             ctx.push(" ");
             emit_inlines(inlines, ctx);
@@ -369,6 +377,7 @@ mod tests {
                     span: Span::NONE,
                 }],
                 align: Align::Default,
+                para_props: String::new(),
                 span: Span::NONE,
             }],
             color_table: vec![],
@@ -391,6 +400,7 @@ mod tests {
                     span: Span::NONE,
                 }],
                 align: Align::Default,
+                para_props: String::new(),
                 span: Span::NONE,
             }],
             color_table: vec![],
@@ -409,6 +419,7 @@ mod tests {
                     span: Span::NONE,
                 }],
                 align: Align::Default,
+                para_props: String::new(),
                 span: Span::NONE,
             }],
             color_table: vec![],
@@ -432,6 +443,7 @@ mod tests {
                     span: Span::NONE,
                 }],
                 align: Align::Default,
+                para_props: String::new(),
                 span: Span::NONE,
             }],
             color_table: vec![],
@@ -482,6 +494,7 @@ mod tests {
                     span: Span::NONE,
                 }],
                 align: Align::Center,
+                para_props: String::new(),
                 span: Span::NONE,
             }],
             color_table: vec![],
@@ -504,6 +517,7 @@ mod tests {
                     span: Span::NONE,
                 }],
                 align: Align::Default,
+                para_props: String::new(),
                 span: Span::NONE,
             }],
             color_table: vec![],
@@ -528,6 +542,7 @@ mod tests {
                     span: Span::NONE,
                 }],
                 align: Align::Default,
+                para_props: String::new(),
                 span: Span::NONE,
             }],
             color_table: vec![],
@@ -566,6 +581,23 @@ mod tests {
         assert_eq!(doc1.strip_spans(), doc2.strip_spans());
     }
 
+    #[test]
+    fn test_roundtrip_para_props() {
+        // Paragraph with indent and space-after: raw props must survive emit → parse.
+        let input = r"{\rtf1\pard\li720\sa200 indented\par}";
+        let (doc1, _) = parse(input);
+        let Block::Paragraph { para_props, .. } = &doc1.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert_eq!(
+            para_props, "\\li720\\sa200",
+            "para_props captured incorrectly"
+        );
+        let emitted = emit(&doc1);
+        let (doc2, _) = parse(&emitted);
+        assert_eq!(doc1.strip_spans(), doc2.strip_spans());
+    }
+
     /// Regression: paragraph with only LineBreak + non-default alignment
     /// used to fail because parse_color_table always stored a (0,0,0) sentinel
     /// at index 0, causing the reparsed color_table to differ from the original.
@@ -575,6 +607,7 @@ mod tests {
             blocks: vec![Block::Paragraph {
                 inlines: vec![Inline::LineBreak { span: Span::NONE }],
                 align: Align::Center,
+                para_props: String::new(),
                 span: Span::NONE,
             }],
             color_table: vec![],

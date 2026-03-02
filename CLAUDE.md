@@ -5,17 +5,42 @@ Behavioral rules for Claude Code in the rescribe repository.
 ## Core value proposition: losslessness
 
 **rescribe's primary differentiation from Pandoc is losslessness.** Pandoc silently drops
-constructs it can't represent; rescribe never silently drops anything. Every construct that
-cannot be represented in the IR must surface as a fidelity warning via `ConversionResult`.
-The user always knows exactly what was lost.
+constructs it can't represent; rescribe never silently drops anything. Every construct must
+either be modeled in the IR or preserved verbatim so a round-trip produces the original.
 
-This means:
-- Silent drops are bugs, not acceptable limitations
-- "Silently ignored" control words in a parser are suspect — distinguish layout-only
-  (tab stops, margins, borders: genuinely no semantic content) from semantic
-  (caps, hidden text, vertical offset, footnotes: visible effect the user would notice)
-- Layout-only: silent ignore is fine
-- Semantic: must emit a diagnostic / fidelity warning, even if we can't model it in IR
+There is no "layout-only = fine to drop" exception. Tab stops, margins, border widths — a
+user converting RTF→IR→RTF expects to get the same RTF back. Dropping tab stops is still
+loss, even if it's "just layout."
+
+### Two levels of preservation
+
+**Semantic modeling** — construct has a cross-format meaning; represent it in the IR:
+- Paragraph alignment → `style:align` property
+- Font size → `style:size` on a `span` node
+- Bold/italic/color → existing inline node kinds
+- Footnotes → `footnote_ref` + `footnote_def` node kinds (once implemented)
+
+Semantic constructs that can't yet be modeled must emit a `ConversionResult` fidelity
+warning so the caller knows exactly what was lost.
+
+**Raw preservation** — construct is format-specific with no cross-format equivalent;
+capture it verbatim in a format-namespaced property so the writer can re-emit it:
+- RTF paragraph layout words (tab stops, indents, borders) → `rtf:para-props` string
+  property on the paragraph node, containing the raw RTF control words verbatim
+- RTF character layout words (baseline twips, char spacing) → `rtf:char-props` on a span
+- Other formats follow the same pattern: `html:attr`, `docx:rpr`, etc.
+
+The IR supports this via:
+- Format-specific property namespaces (`rtf:`, `html:`, `docx:`, etc.)
+- `raw_inline` and `raw_block` node kinds for structured raw content
+- Open `Properties` bag on every node (no construct is unrepresentable)
+
+### The test
+
+A format reader is correct when `parse(emit(parse(input))) == parse(input)` for all inputs,
+where `emit` is the format writer and `parse` is the format reader. Every dropped construct
+breaks this. "Unknown control word: \tx720" in a diagnostic is acceptable only if `\tx720`
+is also in the IR somewhere that the writer will re-emit it.
 
 ## Project Overview
 

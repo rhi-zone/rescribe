@@ -115,6 +115,10 @@ pub enum Block {
     Paragraph {
         inlines: Vec<Inline>,
         align: Align,
+        /// Raw RTF paragraph-layout control words (e.g. `\li720\keep`) captured
+        /// verbatim during parsing so the emitter can re-emit them without loss.
+        /// Empty string means no paragraph-layout words were present.
+        para_props: String,
         span: Span,
     },
     Heading {
@@ -150,10 +154,12 @@ impl Block {
             Block::Paragraph {
                 inlines,
                 align,
+                para_props,
                 span,
             } => Block::Paragraph {
                 inlines: merge_text_inlines(inlines.iter().map(Inline::normalize).collect()),
                 align: *align,
+                para_props: para_props.clone(),
                 span: *span,
             },
             Block::Heading {
@@ -203,9 +209,15 @@ impl Block {
 
     pub fn strip_spans(&self) -> Self {
         match self {
-            Block::Paragraph { inlines, align, .. } => Block::Paragraph {
+            Block::Paragraph {
+                inlines,
+                align,
+                para_props,
+                ..
+            } => Block::Paragraph {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 align: *align,
+                para_props: para_props.clone(),
                 span: Span::NONE,
             },
             Block::Heading { level, inlines, .. } => Block::Heading {

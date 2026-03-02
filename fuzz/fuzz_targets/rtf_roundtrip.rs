@@ -172,6 +172,7 @@ fuzz_target!(|paras: Vec<FuzzPara>| {
                 Some(Block::Paragraph {
                     inlines,
                     align: fuzz_para.align.to_align(),
+                    para_props: String::new(),
                     span: Span::NONE,
                 })
             }

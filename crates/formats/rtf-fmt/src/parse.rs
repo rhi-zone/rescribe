@@ -83,6 +83,9 @@ impl<'a> Parser<'a> {
         let mut text_start = self.pos;
         let mut para_start = self.pos;
         let mut current_align = Align::Default;
+        // Accumulates raw RTF paragraph-layout control words verbatim so they
+        // can be preserved in the AST and re-emitted without loss.
+        let mut current_para_props = String::new();
 
         while self.pos < self.input.len() {
             let Some(ch) = self.current_char() else {
@@ -110,6 +113,7 @@ impl<'a> Parser<'a> {
                             &mut paragraphs,
                             &mut para_start,
                             &mut current_align,
+                            &mut current_para_props,
                         );
                     } else if next == '\'' {
                         // \'XX hex-encoded byte (Windows-1252).
@@ -203,6 +207,7 @@ impl<'a> Parser<'a> {
             paragraphs.push(Block::Paragraph {
                 inlines: merge_text_inlines(current_para),
                 align: current_align,
+                para_props: current_para_props,
                 span: Span::new(para_start, self.pos),
             });
         }
@@ -216,10 +221,12 @@ impl<'a> Parser<'a> {
                 Block::Paragraph {
                     inlines,
                     align,
+                    para_props,
                     span,
                 } => Block::Paragraph {
                     inlines: merge_text_inlines(inlines),
                     align,
+                    para_props,
                     span,
                 },
                 other => other,
@@ -369,6 +376,7 @@ impl<'a> Parser<'a> {
         paragraphs: &mut Vec<Block>,
         para_start: &mut usize,
         current_align: &mut Align,
+        current_para_props: &mut String,
     ) {
         match word {
             "par" | "pard" => {
@@ -381,8 +389,11 @@ impl<'a> Parser<'a> {
                     paragraphs.push(Block::Paragraph {
                         inlines: merge_text_inlines(std::mem::take(current_para)),
                         align: *current_align,
+                        para_props: std::mem::take(current_para_props),
                         span: Span::new(*para_start, self.pos),
                     });
+                } else {
+                    current_para_props.clear();
                 }
                 *text_start = self.pos;
                 *para_start = self.pos;
@@ -621,32 +632,49 @@ impl<'a> Parser<'a> {
                 *state = TextState::default();
             }
 
+            // Paragraph-layout words: captured verbatim into para_props for
+            // raw preservation so the emitter can re-emit them without loss.
+            // These are paragraph-scoped (appear between \pard and \par).
+            "li" | "fi" | "ri" | "rin" | "lin"      // left/first-line/right indent
+            | "sa" | "sb" | "sl" | "slmult"          // space after/before/line-spacing
+            // Tab stops and their alignment modifiers
+            | "tx" | "tqr" | "tqc" | "tqdec" | "tbin" | "tbpos"
+            // Keep-with-next / orphan control
+            | "keep" | "keepn" | "widctlpar" | "nowidctlpar"
+            // Paragraph direction
+            | "ltrpar" | "rtlpar"
+            // Layout hints (rendering only, but still paragraph-scoped)
+            | "adjustright" | "wrapdefault" | "faauto"
+            | "nooverflow" | "noline" | "sbys" | "hyphpar"
+            // Structure
+            | "outlinelevel" | "itap"
+            // Paragraph borders
+            | "brdrb" | "brdrs" | "brdrw" | "brsp" | "brdrt" | "brdrl" | "brdrr"
+            | "brdrth" | "brdrdot" | "brdrdash" | "brdrnone" | "brdrcf"
+            | "brdrhair" | "brdrnil" | "brdroutset" | "brdrdb" => {
+                current_para_props.push_str(&format_para_word(word, param));
+            }
+
             // Ignored formatting / sizing controls
-            "f" | "cb" | "li" | "fi" | "ri" | "sa" | "sb" | "sl" | "slmult" | "outlinelevel"
-            | "pntext" | "pn" | "pnlvlblt" | "rtf" | "ansi" | "mac" | "pc" | "pca" | "deff"
+            "f" | "cb" | "pntext" | "pn" | "pnlvlblt" | "rtf" | "ansi" | "mac" | "pc" | "pca" | "deff"
             | "deflang" | "widowctrl" | "hyphauto" | "hyphconsec" | "hyphcaps" | "paperw"
             | "paperh" | "margl" | "margr" | "margt" | "margb" | "cols" | "colsx"
             | "endhere" | "headerl" | "headerr" | "header" | "footer"
             | "footerl" | "footerr" | "trowd" | "cellx" | "intbl" | "cell" | "row" | "trgaph"
-            | "trql" | "trqr" | "trqc" | "brdrb" | "brdrs" | "brdrw"
-            | "brsp" | "brdrt" | "brdrl" | "brdrr" | "brdrth" | "brdrdot" | "brdrdash" | "b0"
+            | "trql" | "trqr" | "trqc" | "b0"
             | "i0"
-            // Tab stops and paragraph positioning
-            | "tx" | "tqr" | "tqc" | "tqdec" | "tbin" | "tbpos"
             // Revision tracking / session IDs (no semantic content)
             | "insrsid" | "charrsid" | "delrsid" | "rsidroot" | "rsid" | "pararsid"
-            // Font color space / associated font / complex script
+            // Font color space / associated font / complex script (character-level)
             | "fcs" | "af" | "afs" | "afcs" | "ab" | "ai" | "loch" | "hich" | "dbch"
             | "ltrch" | "rtlch" | "alang" | "faroman" | "cs" | "ds" | "ts"
-            // Paragraph / section direction
-            | "ltrpar" | "rtlpar" | "ltrrow" | "rtlrow" | "ltrmark" | "rtlmark"
-            // Paragraph formatting
-            | "s" | "rin" | "lin" | "itap" | "faauto" | "nowidctlpar" | "widctlpar"
-            | "adjustright" | "wrapdefault" | "aspnum" | "aspalpha" | "expnd" | "expndtw"
-            | "kerning" | "sbys" | "keep" | "keepn" | "noline" | "nooverflow"
-            | "snext" | "styrsid" | "qnatural" | "hyphpar" | "noproof"
-            // Border controls
-            | "brdrnone" | "brdrcf" | "clbrdrl" | "clbrdrt" | "clbrdrr" | "clbrdrb"
+            // Row/section direction (not paragraph-level)
+            | "ltrrow" | "rtlrow" | "ltrmark" | "rtlmark"
+            // Paragraph style / misc (kept in ignored: complex or unclear scope)
+            | "s" | "aspnum" | "aspalpha" | "expnd" | "expndtw"
+            | "kerning" | "snext" | "styrsid" | "qnatural" | "noproof"
+            // Border controls (cell-level, not paragraph-level)
+            | "clbrdrl" | "clbrdrt" | "clbrdrr" | "clbrdrb"
             | "clftsWidth" | "clwWidth" | "clvertalt" | "clvertalb" | "clvertalc"
             | "clshdrawnil" | "clpadl" | "clpadr" | "clpadt" | "clpadb" | "brdrtbl"
             | "clpadfl" | "clpadfr" | "clpadft" | "clpadfb" | "clcbpat" | "clcbpatraw"
@@ -680,7 +708,7 @@ impl<'a> Parser<'a> {
             | "trbrdrb" | "trbrdrt" | "trbrdrr" | "trbrdrl" | "trbrdrv" | "trbrdrh"
             // Misc layout / section
             | "linex" | "linemod" | "sectdefaultcl" | "endnhere" | "rtlgutter"
-            | "brdroutset" | "brdrdb" | "brdrnil" | "sftnbj"
+            | "sftnbj"
             | "shp" | "shprslt" | "nonesttables" | "tblrsid" | "sectrsid" | "tldot"
             | "footery" | "headery" | "pnrdate" | "pnrauth"
             | "softline" | "clshdng" | "clcfpat" | "clmrg" | "yts"
@@ -693,7 +721,7 @@ impl<'a> Parser<'a> {
             | "nestcell" | "clshdngraw" | "ansicpg" | "charscalex" | "aenddoc"
             | "ltrsect" | "deflangfe" | "revised" | "ppscheme"
             | "tbllkhdrrows" | "tbllkhdrcols" | "tbllklastcol" | "tbllklastrow" | "saftnnar"
-            | "brdrhair" | "pgnhn" | "pgnlcrm" | "lndscpsxn" | "sbauto" | "saauto"
+            | "pgnhn" | "pgnlcrm" | "lndscpsxn" | "sbauto" | "saauto"
             | "pgnrestart" | "cbpat" | "tcf" | "tcl"
             // Drawing grid
             | "dghshow" | "dghorigin" | "dghspace" | "dgvshow" | "dgvorigin" | "dgvspace"
@@ -755,6 +783,16 @@ impl<'a> Parser<'a> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Format a paragraph-layout control word for raw accumulation in `para_props`.
+///
+/// Produces `\word` (no param) or `\wordN` (with integer param).
+fn format_para_word(word: &str, param: Option<i32>) -> String {
+    match param {
+        Some(n) => format!("\\{word}{n}"),
+        None => format!("\\{word}"),
+    }
+}
 
 fn flush_text(
     current_text: &mut String,

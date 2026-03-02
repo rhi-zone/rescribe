@@ -30,7 +30,12 @@ fn doc_to_nodes(rtf: &RtfDoc) -> Vec<Node> {
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines, align, .. } => {
+        Block::Paragraph {
+            inlines,
+            align,
+            para_props,
+            ..
+        } => {
             let mut node = Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines));
             if *align != Align::Default {
                 let align_str = match align {
@@ -41,6 +46,9 @@ fn block_to_node(block: &Block) -> Node {
                     Align::Default => unreachable!(),
                 };
                 node = node.prop(prop::STYLE_ALIGN, align_str);
+            }
+            if !para_props.is_empty() {
+                node = node.prop("rtf:para-props", para_props.clone());
             }
             node
         }
