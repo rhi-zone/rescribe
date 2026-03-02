@@ -1,0 +1,11 @@
+{
+  "description": "Paragraph with a line break splitting two text spans",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "first line" } },
+    { "path": "/0/1", "kind": "line_break" },
+    { "path": "/0/2", "kind": "text", "props": { "content": "second line" } }
+  ]
+}

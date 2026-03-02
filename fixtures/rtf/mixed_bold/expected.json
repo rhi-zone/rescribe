@@ -1,0 +1,12 @@
+{
+  "description": "Paragraph with plain text before and after a bold span",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "plain " } },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "bold" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " plain" } }
+  ]
+}
