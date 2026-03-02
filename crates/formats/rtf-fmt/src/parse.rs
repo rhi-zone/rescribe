@@ -1698,8 +1698,29 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
             _ => content.push(b),
         }
     }
-    // Work entirely on bytes to avoid UTF-8 boundary panics from from_utf8_lossy
-    // expanding invalid bytes into multi-byte replacement chars.
+    // We work on raw bytes throughout the outer scanning loop so that we
+    // never byte-index into a `String::from_utf8_lossy` result using offsets
+    // derived from the original byte slice.  The hazard: `from_utf8_lossy`
+    // replaces each invalid byte with the 3-byte sequence U+FFFD (EF BF BD),
+    // so the lossy string can be *longer* than `content`.  An offset `j` that
+    // is valid in `content` may then fall in the middle of a replacement
+    // character in the lossy string, causing a panic on `&lossy_str[j..]`.
+    //
+    // We do still call `from_utf8_lossy` once per font entry (line below), but
+    // only AFTER extracting `eb` as a raw-byte slice.  `extract_font_name`
+    // receives the already-bounded lossy string and computes `last_word_end`
+    // from *its own* `as_bytes()` scan — there is no cross-slice offset reuse.
+    // That call is safe because `last_word_end` is only ever set to `i` after
+    // an `is_ascii_alphabetic / is_ascii_digit` scan stops.  Those predicates
+    // return false for any byte ≥ 128, so after the scan `i` is either at an
+    // ASCII byte (1-byte char, always a valid boundary) or at 0xEF — the
+    // *first* byte of U+FFFD and therefore a valid UTF-8 char boundary.  The
+    // 0xBF and 0xBD continuation bytes are visited only by the `else { i += 1
+    // }` branch, which never writes to `last_word_end`.
+    //
+    // The cleanest alternative would be making `extract_font_name` accept
+    // `&[u8]` directly and calling `from_utf8_lossy` only on the final
+    // name slice; that would eliminate the boundary-safety argument entirely.
     let bytes = &content[..];
     let mut fonts: Vec<(usize, String)> = Vec::new();
     let mut i = 0usize;
@@ -1716,6 +1737,17 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
                 }
                 j += 1;
             }
+            // `j` starts at `entry_start` and only ever increases, so
+            // `j.saturating_sub(1) < entry_start` iff `j == entry_start`,
+            // which only happens when the inner loop never executed at all —
+            // i.e. the opening `{` was the very last byte in `content` and
+            // there is nothing to parse.  Skip to end.
+            //
+            // Note: we do NOT use `depth2 > 0` here even though that also
+            // detects an unclosed group.  `depth2 > 0` would skip entries
+            // like `{\f0 Times` (unclosed but non-empty), which we can still
+            // partially parse.  The `end < entry_start` guard is narrower: it
+            // only fires when the entry is completely empty (zero bytes).
             let end = j.saturating_sub(1);
             if end < entry_start {
                 i = j;
@@ -1744,6 +1776,20 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
                     if word == b"f" && pos > num_start {
                         let idx_str = std::str::from_utf8(&eb[num_start..pos]).unwrap_or("0");
                         let idx = idx_str.parse::<usize>().unwrap_or(0);
+                        // Cap to prevent OOM: a pathological `\f31500405`
+                        // would make `vec![String::new(); idx+1]` below
+                        // allocate tens of millions of entries.  4096 is far
+                        // beyond any real-world RTF document (Word caps at
+                        // ~256).  Indices above the cap are silently ignored;
+                        // the main parser's `if idx < font_table.len()` guard
+                        // means they produce no output rather than panicking.
+                        //
+                        // The cleaner alternative would be storing fonts in a
+                        // HashMap<usize, String> so arbitrary indices cost
+                        // only one allocation each.  That would require
+                        // changing `Parser::font_table: Vec<String>` and all
+                        // its call sites; the cap is a deliberate simplicity
+                        // tradeoff given the real-world bound is well under 256.
                         if idx <= 4096 {
                             font_idx = Some(idx);
                         }
