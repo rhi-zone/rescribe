@@ -180,9 +180,9 @@ rescribe-fixtures = { path = "crates/rescribe-fixtures" }
 
 # External dependencies
 typst-syntax = "0.14"
-ooxml-wml = { git = "https://github.com/pterror/ooxml", package = "ooxml-wml" }
-ooxml-sml = { git = "https://github.com/pterror/ooxml", package = "ooxml-sml" }
-ooxml-pml = { git = "https://github.com/pterror/ooxml", package = "ooxml-pml" }
+ooxml-wml = "0.1"
+ooxml-sml = "0.1"
+ooxml-pml = "0.1"
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
