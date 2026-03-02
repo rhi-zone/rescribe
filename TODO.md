@@ -170,7 +170,7 @@ The format tiers below determine priority order within this model.
 
 Each Tier A format at 5-Production with a published standalone crate.
 
-- [ ] `rtf-fmt` vertical
+- [x] `rtf-fmt` vertical — 5-Production (2026-03-02); follow-on: `rtf:char-props` for char-level layout words
 - [ ] `rst-fmt` vertical
 - [ ] `asciidoc` vertical
 - [ ] `org-fmt` vertical
