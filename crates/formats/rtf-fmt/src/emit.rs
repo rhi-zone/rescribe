@@ -266,33 +266,25 @@ fn emit_inlines(inlines: &[Inline], ctx: &mut Ctx) {
     }
 }
 
+fn emit_wrapped(keyword: &str, children: &[Inline], ctx: &mut Ctx) {
+    ctx.push(&format!("{{\\{keyword} "));
+    emit_inlines(children, ctx);
+    ctx.push("}");
+}
+
 fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
     match inline {
         Inline::Text { text, .. } => ctx.push_escaped(text),
 
-        Inline::Bold { children, .. } => {
-            ctx.push("{\\b ");
-            emit_inlines(children, ctx);
-            ctx.push("}");
-        }
-
-        Inline::Italic { children, .. } => {
-            ctx.push("{\\i ");
-            emit_inlines(children, ctx);
-            ctx.push("}");
-        }
-
-        Inline::Underline { children, .. } => {
-            ctx.push("{\\ul ");
-            emit_inlines(children, ctx);
-            ctx.push("}");
-        }
-
-        Inline::Strikethrough { children, .. } => {
-            ctx.push("{\\strike ");
-            emit_inlines(children, ctx);
-            ctx.push("}");
-        }
+        Inline::Bold { children, .. } => emit_wrapped("b", children, ctx),
+        Inline::Italic { children, .. } => emit_wrapped("i", children, ctx),
+        Inline::Underline { children, .. } => emit_wrapped("ul", children, ctx),
+        Inline::Strikethrough { children, .. } => emit_wrapped("strike", children, ctx),
+        Inline::Superscript { children, .. } => emit_wrapped("super", children, ctx),
+        Inline::Subscript { children, .. } => emit_wrapped("sub", children, ctx),
+        Inline::AllCaps { children, .. } => emit_wrapped("caps", children, ctx),
+        Inline::SmallCaps { children, .. } => emit_wrapped("scaps", children, ctx),
+        Inline::Hidden { children, .. } => emit_wrapped("v", children, ctx),
 
         Inline::Code { text, .. } => {
             ctx.push("{\\f1 ");
@@ -323,38 +315,8 @@ fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
 
         Inline::SoftBreak { .. } => ctx.push(" "),
 
-        Inline::Superscript { children, .. } => {
-            ctx.push("{\\super ");
-            emit_inlines(children, ctx);
-            ctx.push("}");
-        }
-
-        Inline::Subscript { children, .. } => {
-            ctx.push("{\\sub ");
-            emit_inlines(children, ctx);
-            ctx.push("}");
-        }
-
         Inline::FontSize { size, children, .. } => {
             ctx.push(&format!("{{\\fs{size} "));
-            emit_inlines(children, ctx);
-            ctx.push("}");
-        }
-
-        Inline::AllCaps { children, .. } => {
-            ctx.push("{\\caps ");
-            emit_inlines(children, ctx);
-            ctx.push("}");
-        }
-
-        Inline::SmallCaps { children, .. } => {
-            ctx.push("{\\scaps ");
-            emit_inlines(children, ctx);
-            ctx.push("}");
-        }
-
-        Inline::Hidden { children, .. } => {
-            ctx.push("{\\v ");
             emit_inlines(children, ctx);
             ctx.push("}");
         }
@@ -362,7 +324,6 @@ fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
         Inline::Color {
             r, g, b, children, ..
         } => {
-            // find 1-based index in color_map
             let idx = ctx
                 .color_map
                 .iter()
