@@ -161,6 +161,13 @@ These formats have no reader; stage 3 (harness) is not applicable.
   horizontal-rule, superscript, subscript); all passing in CI
 - Writer promoted to 4-Fuzz (2026-03-02): fuzz_rtf_writer (read→write pipeline,
   2.8M execs, no crashes); both reader and writer at 4-Fuzz
+- Extended AST with paragraph alignment, inline font-size, and inline color (2026-03-02):
+  - Parser: \colortbl pre-scan, \ql/\qr/\qc/\qj alignment words, \fs font-size, \cf color index
+  - Emitter: color table emission, alignment words, FontSize/Color group emission
+  - Roundtrip fuzz direction corrected: arbitrary canonical AST → emit → parse → assert equal
+  - Three fuzz bugs found and fixed: color_table sentinel (0,0,0) mismatch, trailing ';'
+    in colortbl creating spurious entries, color added to table from empty-text leaves
+  - 510K roundtrip fuzz execs clean at new direction; 7 new corpus fixtures
 - Next: production sign-off (validate against real-world RTF files)
 
 ### ODT writer — medium risk
