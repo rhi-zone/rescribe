@@ -168,7 +168,12 @@ These formats have no reader; stage 3 (harness) is not applicable.
   - Three fuzz bugs found and fixed: color_table sentinel (0,0,0) mismatch, trailing ';'
     in colortbl creating spurious entries, color added to table from empty-text leaves
   - 510K roundtrip fuzz execs clean at new direction; 7 new corpus fixtures
-- Next: production sign-off (validate against real-world RTF files)
+- Production sign-off (2026-03-02): govdocs1 RTF corpus (1,125 real-world files):
+  - 0 panics / crashes
+  - 0 files with empty parsed output
+  - \plain resets TextState; footnote/endnote/annotation/tc/xe/listable groups skip correctly
+  - ~100 layout/formatting/revision-tracking control words added to ignored list
+  - 89% of files have diagnostics for genuinely unknown niche control words (acceptable)
 
 ### ODT writer — medium risk
 - 404 lines building ODF zip by hand (no schema library)
