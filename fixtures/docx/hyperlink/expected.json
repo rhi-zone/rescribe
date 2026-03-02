@@ -1,0 +1,10 @@
+{
+  "description": "DOCX hyperlink produces a link node with URL and text child",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",         "kind": "document" },
+    { "path": "/0",        "kind": "paragraph" },
+    { "path": "/0/0",      "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0",    "kind": "text", "props": { "content": "click here" } }
+  ]
+}

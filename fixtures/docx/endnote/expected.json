@@ -1,0 +1,12 @@
+{
+  "description": "DOCX endnote reference produces a footnote_ref node with endnote content as children",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",         "kind": "document" },
+    { "path": "/0",        "kind": "paragraph" },
+    { "path": "/0/0",      "kind": "text", "props": { "content": "Body text." } },
+    { "path": "/0/1",      "kind": "footnote_ref", "props": { "label": "en1" } },
+    { "path": "/0/1/0",    "kind": "paragraph" },
+    { "path": "/0/1/0/0",  "kind": "text", "props": { "content": "Endnote text." } }
+  ]
+}

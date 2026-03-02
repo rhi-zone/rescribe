@@ -954,6 +954,7 @@ dependencies = [
  "rescribe-read-xlsx",
  "rescribe-std",
  "rescribe-write-djot",
+ "rescribe-write-docx",
  "rescribe-write-html",
  "rescribe-write-markdown",
  "rescribe-write-rtf",
@@ -974,6 +975,7 @@ name = "rescribe-read-docx"
 version = "0.1.0"
 dependencies = [
  "ooxml-wml",
+ "quick-xml",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1074,6 +1076,15 @@ dependencies = [
 name = "rescribe-write-djot"
 version = "0.1.0"
 dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-docx"
+version = "0.1.0"
+dependencies = [
+ "ooxml-wml",
  "rescribe-core",
  "rescribe-std",
 ]

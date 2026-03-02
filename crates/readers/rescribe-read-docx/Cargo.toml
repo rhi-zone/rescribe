@@ -10,5 +10,6 @@ description = "DOCX (Word) reader for rescribe"
 rescribe-core.workspace = true
 rescribe-std.workspace = true
 ooxml-wml.workspace = true
+quick-xml.workspace = true
 
 [dev-dependencies]

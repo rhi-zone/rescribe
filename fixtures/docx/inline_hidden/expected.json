@@ -1,0 +1,11 @@
+{
+  "description": "DOCX hidden (vanish) run produces a hidden wrapper node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",        "kind": "document" },
+    { "path": "/0",       "kind": "paragraph" },
+    { "path": "/0/0",     "kind": "text", "props": { "content": "visible" } },
+    { "path": "/0/1",     "kind": "hidden" },
+    { "path": "/0/1/0",   "kind": "text", "props": { "content": "hidden" } }
+  ]
+}

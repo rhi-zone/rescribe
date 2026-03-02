@@ -3,7 +3,7 @@
   "category": "happy",
   "assertions": [
     { "path": "/",       "kind": "document" },
-    { "path": "/0",      "kind": "list" },
+    { "path": "/0",      "kind": "list", "props": { "ordered": true } },
     { "path": "/0/0",    "kind": "list_item" },
     { "path": "/0/0/0",  "kind": "text", "props": { "content": "first item" } },
     { "path": "/0/1",    "kind": "list_item" },

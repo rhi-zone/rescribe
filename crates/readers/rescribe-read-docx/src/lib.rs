@@ -55,6 +55,10 @@ struct Converter {
     resources: ResourceMap,
     /// Footnote content keyed by footnote id, for inline lookup.
     footnotes: HashMap<i64, Vec<Node>>,
+    /// Endnote content keyed by endnote id, for inline lookup.
+    endnotes: HashMap<i64, Vec<Node>>,
+    /// Maps num_id → is_ordered (true = decimal/numbered, false = bullet).
+    numbering_order: HashMap<i64, bool>,
 }
 
 impl Converter {
@@ -63,6 +67,8 @@ impl Converter {
             warnings: Vec::new(),
             resources: ResourceMap::new(),
             footnotes: HashMap::new(),
+            endnotes: HashMap::new(),
+            numbering_order: HashMap::new(),
         }
     }
 
@@ -97,20 +103,56 @@ fn convert_document<R: Read + Seek>(
 
     // Pre-load footnotes into converter state so convert_run can look them up.
     if let Ok(footnotes) = doc.get_footnotes() {
-        let body_content_clone: Vec<BlockContent> = Vec::new(); // placeholder
-        // We need to convert each footnote's block content to IR nodes.
-        // To avoid borrow conflicts, collect footnote data first.
         let footnote_data: Vec<(i64, Vec<BlockContent>)> = footnotes
             .footnote
             .into_iter()
             .filter(|f| f.id > 0) // skip separator footnotes (id <= 0)
             .map(|f: FootnoteEndnote| (f.id, f.block_content))
             .collect();
-        let _ = body_content_clone; // silence warning
 
         for (id, block_content) in footnote_data {
             let fn_node = convert_body_content(&mut converter, &mut doc, &block_content)?;
             converter.footnotes.insert(id, fn_node.children);
+        }
+    }
+
+    // Pre-load endnotes into converter state.
+    if let Ok(endnotes) = doc.get_endnotes() {
+        let endnote_data: Vec<(i64, Vec<BlockContent>)> = endnotes
+            .endnote
+            .into_iter()
+            .filter(|e| e.id > 0) // skip separator endnotes (id <= 0)
+            .map(|e: FootnoteEndnote| (e.id, e.block_content))
+            .collect();
+
+        for (id, block_content) in endnote_data {
+            let en_node = convert_body_content(&mut converter, &mut doc, &block_content)?;
+            converter.endnotes.insert(id, en_node.children);
+        }
+    }
+
+    // Pre-load numbering definitions to determine ordered vs unordered lists.
+    if let Ok(xml) = doc.package_mut().read_part("word/numbering.xml") {
+        converter.numbering_order = parse_numbering_order(&xml);
+    } else {
+        // Try via document relationships (numbering.xml may be at a non-default path).
+        // Collect the path first to avoid holding an immutable borrow on `doc`.
+        let numbering_path = doc.doc_relationships().iter().find_map(|rel| {
+            if rel.relationship_type.contains("numbering") {
+                let path = if rel.target.starts_with('/') {
+                    rel.target.trim_start_matches('/').to_string()
+                } else {
+                    format!("word/{}", rel.target)
+                };
+                Some(path)
+            } else {
+                None
+            }
+        });
+        if let Some(path) = numbering_path
+            && let Ok(xml) = doc.package_mut().read_part(&path)
+        {
+            converter.numbering_order = parse_numbering_order(&xml);
         }
     }
 
@@ -140,6 +182,188 @@ fn convert_document<R: Read + Seek>(
     })
 }
 
+/// Parse the numbering.xml bytes and return a map from num_id to is_ordered.
+///
+/// For each concrete `<w:num>`, looks up the referenced abstract numbering's
+/// level 0 `numFmt`. Decimal / roman / alphabetic → ordered; bullet → unordered.
+fn parse_numbering_order(xml: &[u8]) -> HashMap<i64, bool> {
+    use quick_xml::Reader;
+    use quick_xml::events::Event;
+
+    // abstract_num_id → is_ordered (based on level 0 numFmt)
+    let mut abstract_ordered: HashMap<i64, bool> = HashMap::new();
+    // num_id → abstract_num_id
+    let mut num_to_abstract: HashMap<i64, i64> = HashMap::new();
+
+    let mut reader = Reader::from_reader(xml);
+    reader.config_mut().trim_text(true);
+
+    // State: current abstract num being processed
+    let mut current_abstract_id: Option<i64> = None;
+    let mut in_level0 = false;
+    // Track nesting depth within abstractNum so we know when we exit
+    let mut abstract_depth: usize = 0;
+    // State: current num instance being processed
+    let mut current_num_id: Option<i64> = None;
+
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                let e_name = e.name();
+                let local = local_name(e_name.as_ref());
+                match local {
+                    b"abstractNum" => {
+                        let id = attr_i64(&e, b"abstractNumId");
+                        current_abstract_id = id;
+                        abstract_depth = 1;
+                        in_level0 = false;
+                    }
+                    b"num" if current_abstract_id.is_none() => {
+                        current_num_id = attr_i64(&e, b"numId");
+                    }
+                    b"lvl" if current_abstract_id.is_some() => {
+                        if abstract_depth == 1 {
+                            // ilvl="0" means level 0
+                            let ilvl = attr_i64(&e, b"ilvl").unwrap_or(99);
+                            in_level0 = ilvl == 0;
+                        }
+                        abstract_depth += 1;
+                    }
+                    b"numFmt" if in_level0 => {
+                        // val attr tells us the format
+                        if let Some(val) = attr_str(&e, b"val") {
+                            let ordered = is_ordered_num_fmt(&val);
+                            if let Some(aid) = current_abstract_id {
+                                abstract_ordered.insert(aid, ordered);
+                            }
+                        }
+                    }
+                    b"abstractNumId"
+                        if current_num_id.is_some() && current_abstract_id.is_none() =>
+                    {
+                        // inside <w:num>: <w:abstractNumId w:val="N"/>
+                        if let Some(val) = attr_i64(&e, b"val")
+                            && let Some(nid) = current_num_id
+                        {
+                            num_to_abstract.insert(nid, val);
+                        }
+                    }
+                    _ => {
+                        if current_abstract_id.is_some() && abstract_depth > 0 {
+                            abstract_depth += 1;
+                        }
+                    }
+                }
+            }
+            Ok(Event::Empty(e)) => {
+                let e_name = e.name();
+                let local = local_name(e_name.as_ref());
+                match local {
+                    b"abstractNumId"
+                        if current_num_id.is_some() && current_abstract_id.is_none() =>
+                    {
+                        if let Some(val) = attr_i64(&e, b"val")
+                            && let Some(nid) = current_num_id
+                        {
+                            num_to_abstract.insert(nid, val);
+                        }
+                    }
+                    b"numFmt" if in_level0 => {
+                        if let Some(val) = attr_str(&e, b"val") {
+                            let ordered = is_ordered_num_fmt(&val);
+                            if let Some(aid) = current_abstract_id {
+                                abstract_ordered.insert(aid, ordered);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Event::End(e)) => {
+                let e_name = e.name();
+                let local = local_name(e_name.as_ref());
+                match local {
+                    b"abstractNum" => {
+                        current_abstract_id = None;
+                        abstract_depth = 0;
+                        in_level0 = false;
+                    }
+                    b"num" if current_abstract_id.is_none() => {
+                        current_num_id = None;
+                    }
+                    b"lvl" if current_abstract_id.is_some() => {
+                        abstract_depth = abstract_depth.saturating_sub(1);
+                        if abstract_depth == 1 {
+                            in_level0 = false;
+                        }
+                    }
+                    _ => {
+                        if current_abstract_id.is_some() && abstract_depth > 1 {
+                            abstract_depth -= 1;
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    // Build num_id → is_ordered
+    let mut result = HashMap::new();
+    for (num_id, abstract_id) in &num_to_abstract {
+        let ordered = abstract_ordered.get(abstract_id).copied().unwrap_or(false);
+        result.insert(*num_id, ordered);
+    }
+    result
+}
+
+/// Strip the namespace prefix from an XML element name.
+fn local_name(name: &[u8]) -> &[u8] {
+    if let Some(pos) = name.iter().position(|&b| b == b':') {
+        &name[pos + 1..]
+    } else {
+        name
+    }
+}
+
+/// Extract an `i64` attribute value by local name.
+fn attr_i64(e: &quick_xml::events::BytesStart<'_>, local: &[u8]) -> Option<i64> {
+    for attr in e.attributes().flatten() {
+        let key = local_name(attr.key.as_ref());
+        if key == local {
+            let val = std::str::from_utf8(&attr.value).ok()?;
+            return val.parse().ok();
+        }
+    }
+    None
+}
+
+/// Extract a `String` attribute value by local name.
+fn attr_str(e: &quick_xml::events::BytesStart<'_>, local: &[u8]) -> Option<String> {
+    for attr in e.attributes().flatten() {
+        let key = local_name(attr.key.as_ref());
+        if key == local {
+            return std::str::from_utf8(&attr.value).ok().map(|s| s.to_string());
+        }
+    }
+    None
+}
+
+/// Returns true if the OOXML numFmt value represents an ordered (numbered) list.
+///
+/// Unordered: "bullet", "none", "chicago", "ordinalText", "cardinalText".
+/// Everything else (decimal, roman, letter, etc.) is ordered.
+fn is_ordered_num_fmt(val: &str) -> bool {
+    !matches!(
+        val,
+        "bullet" | "none" | "chicago" | "ordinalText" | "cardinalText"
+    )
+}
+
 /// Convert a slice of BlockContent into a document-level node.
 fn convert_body_content<R: Read + Seek>(
     converter: &mut Converter,
@@ -158,8 +382,8 @@ fn convert_block_content_into<R: Read + Seek>(
     content: &[BlockContent],
     out: &mut Vec<Node>,
 ) -> Result<(), ParseError> {
-    // Pending list accumulator: (num_id, items)
-    let mut pending_list: Option<(i64, Vec<Node>)> = None;
+    // Pending list accumulator: (num_id, items, is_ordered)
+    let mut pending_list: Option<(i64, Vec<Node>, bool)> = None;
 
     for block in content {
         match block {
@@ -168,14 +392,18 @@ fn convert_block_content_into<R: Read + Seek>(
                 if let Some((num_id, _ilvl)) = para.numbering() {
                     let item_children = convert_paragraph_content(converter, doc, para)?;
                     let item = Node::new(node::LIST_ITEM).children(item_children);
+                    let is_ordered = converter
+                        .numbering_order
+                        .get(&num_id)
+                        .copied()
+                        .unwrap_or(false);
                     match &mut pending_list {
-                        Some((cur_id, items)) if *cur_id == num_id => {
+                        Some((cur_id, items, _)) if *cur_id == num_id => {
                             items.push(item);
                         }
                         _ => {
-                            // Flush old list if any
                             flush_pending_list(&mut pending_list, out);
-                            pending_list = Some((num_id, vec![item]));
+                            pending_list = Some((num_id, vec![item], is_ordered));
                         }
                     }
                 } else {
@@ -231,11 +459,11 @@ fn convert_block_content_into<R: Read + Seek>(
     Ok(())
 }
 
-fn flush_pending_list(pending: &mut Option<(i64, Vec<Node>)>, out: &mut Vec<Node>) {
-    if let Some((_num_id, items)) = pending.take() {
+fn flush_pending_list(pending: &mut Option<(i64, Vec<Node>, bool)>, out: &mut Vec<Node>) {
+    if let Some((_num_id, items, ordered)) = pending.take() {
         out.push(
             Node::new(node::LIST)
-                .prop(prop::ORDERED, false)
+                .prop(prop::ORDERED, ordered)
                 .children(items),
         );
     }
@@ -350,6 +578,81 @@ fn convert_paragraph_content<R: Read + Seek>(
             ParagraphContent::Del(_del) => {
                 converter.warn("Tracked deletion content skipped");
             }
+            ParagraphContent::MoveFrom(move_from) => {
+                // MoveFrom contains text being moved away — include it (it was visible).
+                for item in &move_from.run_content {
+                    if let RunContentChoice::R(run) = item {
+                        for n in convert_run(converter, doc, run)? {
+                            children.push(n);
+                        }
+                    }
+                }
+            }
+            ParagraphContent::MoveTo(move_to) => {
+                // MoveTo contains text at its new location — include it.
+                for item in &move_to.run_content {
+                    if let RunContentChoice::R(run) = item {
+                        for n in convert_run(converter, doc, run)? {
+                            children.push(n);
+                        }
+                    }
+                }
+            }
+            ParagraphContent::Dir(dir) => {
+                // Bidirectional content run — recurse into paragraph content.
+                for inner in &dir.paragraph_content {
+                    if let ParagraphContent::R(run) = inner {
+                        for n in convert_run(converter, doc, run)? {
+                            children.push(n);
+                        }
+                    }
+                }
+            }
+            ParagraphContent::Bdo(bdo) => {
+                // Bidirectional override — recurse into paragraph content.
+                for inner in &bdo.paragraph_content {
+                    if let ParagraphContent::R(run) = inner {
+                        for n in convert_run(converter, doc, run)? {
+                            children.push(n);
+                        }
+                    }
+                }
+            }
+            ParagraphContent::Sdt(sdt) => {
+                // Inline structured document tag — extract runs from content.
+                if let Some(content) = &sdt.sdt_content {
+                    for item in &content.paragraph_content {
+                        if let ParagraphContent::R(run) = item {
+                            for n in convert_run(converter, doc, run)? {
+                                children.push(n);
+                            }
+                        }
+                    }
+                }
+            }
+            ParagraphContent::SmartTag(tag) => {
+                // Smart tag wraps runs — just include the runs.
+                for item in &tag.paragraph_content {
+                    if let ParagraphContent::R(run) = item {
+                        for n in convert_run(converter, doc, run)? {
+                            children.push(n);
+                        }
+                    }
+                }
+            }
+            ParagraphContent::CustomXml(cx) => {
+                // Custom XML wraps runs — include the runs.
+                for item in &cx.paragraph_content {
+                    if let ParagraphContent::R(run) = item {
+                        for n in convert_run(converter, doc, run)? {
+                            children.push(n);
+                        }
+                    }
+                }
+            }
+            ParagraphContent::SubDoc(_) => {
+                converter.warn_lost("SubDoc reference not representable in IR");
+            }
             ParagraphContent::FldSimple(field) => {
                 // Extract displayed text from simple fields; instruction is in field.instruction
                 converter.warn("Field instruction lost (display text preserved)");
@@ -367,7 +670,24 @@ fn convert_paragraph_content<R: Read + Seek>(
             ParagraphContent::CommentRangeStart(_) | ParagraphContent::CommentRangeEnd(_) => {
                 converter.warn("Comment range marker not representable in IR");
             }
-            _ => {}
+            // Markers that carry no text content
+            ParagraphContent::ProofErr(_)
+            | ParagraphContent::PermStart(_)
+            | ParagraphContent::PermEnd(_)
+            | ParagraphContent::MoveFromRangeStart(_)
+            | ParagraphContent::MoveFromRangeEnd(_)
+            | ParagraphContent::MoveToRangeStart(_)
+            | ParagraphContent::MoveToRangeEnd(_)
+            | ParagraphContent::CustomXmlInsRangeStart(_)
+            | ParagraphContent::CustomXmlInsRangeEnd(_)
+            | ParagraphContent::CustomXmlDelRangeStart(_)
+            | ParagraphContent::CustomXmlDelRangeEnd(_)
+            | ParagraphContent::CustomXmlMoveFromRangeStart(_)
+            | ParagraphContent::CustomXmlMoveFromRangeEnd(_)
+            | ParagraphContent::CustomXmlMoveToRangeStart(_)
+            | ParagraphContent::CustomXmlMoveToRangeEnd(_) => {
+                // Structural markers with no text — silently skip.
+            }
         }
     }
 
@@ -397,8 +717,12 @@ fn convert_run<R: Read + Seek>(
     // Handle endnote reference
     if let Some(en_ref) = run.endnote_ref() {
         let en_id = en_ref.id;
-        converter.warn(format!("Endnote {} content not yet represented", en_id));
-        result.push(Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, format!("en{}", en_id)));
+        let content = converter.endnotes.remove(&en_id).unwrap_or_default();
+        result.push(
+            Node::new(node::FOOTNOTE_REF)
+                .prop(prop::LABEL, format!("en{}", en_id))
+                .children(content),
+        );
         return Ok(result);
     }
 

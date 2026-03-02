@@ -1,0 +1,10 @@
+{
+  "description": "DOCX highlight run produces a span with style:bg_color property",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",       "kind": "document" },
+    { "path": "/0",      "kind": "paragraph" },
+    { "path": "/0/0",    "kind": "span", "props": { "style:bg_color": "yellow" } },
+    { "path": "/0/0/0",  "kind": "text", "props": { "content": "highlighted" } }
+  ]
+}

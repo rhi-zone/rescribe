@@ -1,0 +1,10 @@
+{
+  "description": "DOCX all-caps run produces an all_caps wrapper node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/",       "kind": "document" },
+    { "path": "/0",      "kind": "paragraph" },
+    { "path": "/0/0",    "kind": "all_caps" },
+    { "path": "/0/0/0",  "kind": "text", "props": { "content": "All Caps Text" } }
+  ]
+}
