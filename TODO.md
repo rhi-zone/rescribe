@@ -188,7 +188,37 @@ Each Tier A format at 5-Production with a published standalone crate.
 - [ ] `djot-fmt` vertical
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)
-- [ ] DOCX, PPTX, XLSX (ooxml-* backed; same)
+- [ ] DOCX, PPTX, XLSX (ooxml-* backed; same) — now at 4-Fuzz; gaps below
+
+  **DOCX reader** (closest to production):
+  - [ ] Endnote content — warned but dropped; needs same treatment as footnotes (`doc.get_endnotes()`)
+  - [ ] Para-props raw preservation — indents, spacing, tab stops silently dropped; add `docx:para-props` string (same pattern as `rtf:para-props`)
+  - [ ] List ordering — always emits `ordered: false`; consult numbering definitions to distinguish bullet vs decimal
+  - [ ] Audit `_ => {}` at line 370 — `MoveFrom`/`MoveTo` tracked changes contain text; `SubDoc` references; should warn or convert
+  - [ ] Fixtures: images, hyperlinks, small_caps, all_caps, hidden, highlight color, ordered lists, table header rows, endnotes
+  - [ ] Roundtrip fuzz target (`fuzz_docx_roundtrip`)
+
+  **DOCX writer**:
+  - [ ] Image embedding (resource:xxx → embedded DOCX media)
+  - [ ] Footnote writing (`footnote_ref` currently falls through)
+  - [ ] Hyperlink writing (`link` URL currently lost)
+  - [ ] Metadata writing
+  - [ ] Roundtrip fuzz target
+
+  **XLSX reader**:
+  - [ ] Cell formatting (number formats, colors, fonts, borders, alignment) — silently dropped, needs fidelity warning
+  - [ ] Charts, named ranges — silently dropped, needs fidelity warning
+  - [ ] Metadata extraction (TODO stub in code)
+  - [ ] More fixtures (only `basic` exists)
+  - [ ] Roundtrip fuzz target
+
+  **PPTX reader**:
+  - [ ] Bullet/list detection (all body content → flat paragraphs; no list structure)
+  - [ ] Speaker notes rich text — currently flat string, rich text lost without warning
+  - [ ] Charts, SmartArt — silently dropped, needs fidelity warning
+  - [ ] More fixtures (only `slide` exists)
+  - [ ] Roundtrip fuzz target
+  - [ ] Writer needed before roundtrip fuzz is possible
 - [ ] EPUB (epub/epub-builder backed; same)
 - [ ] ODT writer (no library; treat as a vertical)
 - [ ] AZW3 reader/writer (boko as reference, MIT attribution)
