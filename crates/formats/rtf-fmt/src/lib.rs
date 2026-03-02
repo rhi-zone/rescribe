@@ -30,7 +30,7 @@ mod parse;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────
 
-pub use ast::{Block, Diagnostic, Inline, RtfDoc, Severity, Span, TableRow};
+pub use ast::{Align, Block, Diagnostic, Inline, RtfDoc, Severity, Span, TableRow};
 pub use emit::emit;
 pub use events::{Event, events};
 pub use parse::parse;

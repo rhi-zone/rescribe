@@ -3,10 +3,11 @@
   "category": "happy",
   "assertions": [
     { "path": "/", "kind": "document" },
-    { "path": "/0", "kind": "paragraph" },
-    { "path": "/0/0", "kind": "strong" },
-    { "path": "/0/0/0", "kind": "text", "props": { "content": "My Heading" } },
-    { "path": "/1", "kind": "paragraph" },
+    { "path": "/0", "kind": "paragraph", "props": { "style:align": "left" } },
+    { "path": "/0/0", "kind": "span", "props": { "style:size": "18pt" } },
+    { "path": "/0/0/0", "kind": "strong" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "My Heading" } },
+    { "path": "/1", "kind": "paragraph", "props": { "style:align": "left" } },
     { "path": "/1/0", "kind": "text", "props": { "content": "Some content." } }
   ]
 }

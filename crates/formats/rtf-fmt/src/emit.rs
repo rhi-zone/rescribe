@@ -1,6 +1,80 @@
 /// Emit an [`RtfDoc`] to an RTF string.
 use crate::ast::*;
 
+/// Collect all unique RGB colors referenced in an `RtfDoc` (excluding black/default).
+fn collect_colors(doc: &RtfDoc) -> Vec<(u8, u8, u8)> {
+    let mut colors: Vec<(u8, u8, u8)> = Vec::new();
+    for block in &doc.blocks {
+        collect_colors_in_block(block, &mut colors);
+    }
+    colors
+}
+
+fn collect_colors_in_block(block: &Block, out: &mut Vec<(u8, u8, u8)>) {
+    match block {
+        Block::Paragraph { inlines, .. } | Block::Heading { inlines, .. } => {
+            for inline in inlines {
+                collect_colors_in_inline(inline, out);
+            }
+        }
+        Block::Blockquote { children, .. } => {
+            for child in children {
+                collect_colors_in_block(child, out);
+            }
+        }
+        Block::List { items, .. } => {
+            for item in items {
+                for block in item {
+                    collect_colors_in_block(block, out);
+                }
+            }
+        }
+        Block::Table { rows, .. } => {
+            for row in rows {
+                for cell in &row.cells {
+                    for inline in cell {
+                        collect_colors_in_inline(inline, out);
+                    }
+                }
+            }
+        }
+        Block::CodeBlock { .. } | Block::HorizontalRule { .. } => {}
+    }
+}
+
+fn collect_colors_in_inline(inline: &Inline, out: &mut Vec<(u8, u8, u8)>) {
+    match inline {
+        Inline::Color {
+            r, g, b, children, ..
+        } => {
+            let rgb = (*r, *g, *b);
+            if !out.contains(&rgb) {
+                out.push(rgb);
+            }
+            for child in children {
+                collect_colors_in_inline(child, out);
+            }
+        }
+        Inline::Bold { children, .. }
+        | Inline::Italic { children, .. }
+        | Inline::Underline { children, .. }
+        | Inline::Strikethrough { children, .. }
+        | Inline::Superscript { children, .. }
+        | Inline::Subscript { children, .. }
+        | Inline::FontSize { children, .. }
+        | Inline::Link { children, .. } => {
+            for child in children {
+                collect_colors_in_inline(child, out);
+            }
+        }
+        Inline::Text { .. }
+        | Inline::Code { .. }
+        | Inline::Image { .. }
+        | Inline::LineBreak { .. }
+        | Inline::SoftBreak { .. } => {}
+    }
+}
+
 /// Emit an RTF document to a [`String`].
 ///
 /// # Round-trip guarantee
@@ -10,13 +84,21 @@ use crate::ast::*;
 ///
 /// "Canonical form" means inline formatting wrappers are nested in the fixed
 /// order the parser always produces: strikethrough → underline → italic →
-/// bold → superscript|subscript (outermost last).  Non-canonical nesting
-/// (e.g. Italic outer, Bold inner) is not a valid parser output and does not
-/// carry a roundtrip guarantee.
+/// bold → superscript|subscript → font_size → color (outermost last).
+/// Non-canonical nesting is not a valid parser output and does not carry a
+/// roundtrip guarantee.
 pub fn emit(doc: &RtfDoc) -> String {
-    let mut ctx = Ctx::new();
+    let color_map = collect_colors(doc);
+    let mut ctx = Ctx::new(color_map.clone());
     ctx.push(r"{\rtf1\ansi\deff0");
     ctx.push(r"{\fonttbl{\f0 Times New Roman;}}");
+    if !color_map.is_empty() {
+        ctx.push("{\\colortbl;");
+        for (r, g, b) in &color_map {
+            ctx.push(&format!("\\red{r}\\green{g}\\blue{b};"));
+        }
+        ctx.push("}");
+    }
     ctx.push("\n");
     for block in &doc.blocks {
         emit_block(block, &mut ctx);
@@ -27,11 +109,16 @@ pub fn emit(doc: &RtfDoc) -> String {
 
 struct Ctx {
     out: String,
+    /// RGB colors in the color table (1-indexed; index 0 = auto).
+    color_map: Vec<(u8, u8, u8)>,
 }
 
 impl Ctx {
-    fn new() -> Self {
-        Self { out: String::new() }
+    fn new(color_map: Vec<(u8, u8, u8)>) -> Self {
+        Self {
+            out: String::new(),
+            color_map,
+        }
     }
 
     fn push(&mut self, s: &str) {
@@ -73,8 +160,16 @@ impl Ctx {
 
 fn emit_block(block: &Block, ctx: &mut Ctx) {
     match block {
-        Block::Paragraph { inlines, .. } => {
-            ctx.push("\\pard\\fs24 ");
+        Block::Paragraph { inlines, align, .. } => {
+            ctx.push("\\pard");
+            match align {
+                Align::Left => ctx.push("\\ql"),
+                Align::Right => ctx.push("\\qr"),
+                Align::Center => ctx.push("\\qc"),
+                Align::Justify => ctx.push("\\qj"),
+                Align::Default => {}
+            }
+            ctx.push(" ");
             emit_inlines(inlines, ctx);
             ctx.push("\\par\n");
         }
@@ -228,6 +323,27 @@ fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
             emit_inlines(children, ctx);
             ctx.push("}");
         }
+
+        Inline::FontSize { size, children, .. } => {
+            ctx.push(&format!("{{\\fs{size} "));
+            emit_inlines(children, ctx);
+            ctx.push("}");
+        }
+
+        Inline::Color {
+            r, g, b, children, ..
+        } => {
+            // find 1-based index in color_map
+            let idx = ctx
+                .color_map
+                .iter()
+                .position(|c| *c == (*r, *g, *b))
+                .map(|i| i + 1)
+                .unwrap_or(0);
+            ctx.push(&format!("{{\\cf{idx} "));
+            emit_inlines(children, ctx);
+            ctx.push("}");
+        }
     }
 }
 
@@ -252,8 +368,10 @@ mod tests {
                     text: "Hello, world!".into(),
                     span: Span::NONE,
                 }],
+                align: Align::Default,
                 span: Span::NONE,
             }],
+            color_table: vec![],
             span: Span::NONE,
         };
         let out = emit(&doc);
@@ -272,8 +390,10 @@ mod tests {
                     }],
                     span: Span::NONE,
                 }],
+                align: Align::Default,
                 span: Span::NONE,
             }],
+            color_table: vec![],
             span: Span::NONE,
         };
         let out = emit(&doc);
@@ -288,8 +408,10 @@ mod tests {
                     text: "Open { and close }".into(),
                     span: Span::NONE,
                 }],
+                align: Align::Default,
                 span: Span::NONE,
             }],
+            color_table: vec![],
             span: Span::NONE,
         };
         let out = emit(&doc);
@@ -309,8 +431,10 @@ mod tests {
                     }],
                     span: Span::NONE,
                 }],
+                align: Align::Default,
                 span: Span::NONE,
             }],
+            color_table: vec![],
             span: Span::NONE,
         };
         let out = emit(&doc);
@@ -347,5 +471,118 @@ mod tests {
         let emitted = emit(&doc1);
         let (doc2, _) = parse(&emitted);
         assert_eq!(doc1.strip_spans(), doc2.strip_spans());
+    }
+
+    #[test]
+    fn test_emit_alignment() {
+        let doc = RtfDoc {
+            blocks: vec![Block::Paragraph {
+                inlines: vec![Inline::Text {
+                    text: "centered".into(),
+                    span: Span::NONE,
+                }],
+                align: Align::Center,
+                span: Span::NONE,
+            }],
+            color_table: vec![],
+            span: Span::NONE,
+        };
+        let out = emit(&doc);
+        assert!(out.contains("\\qc"));
+    }
+
+    #[test]
+    fn test_emit_font_size() {
+        let doc = RtfDoc {
+            blocks: vec![Block::Paragraph {
+                inlines: vec![Inline::FontSize {
+                    size: 48,
+                    children: vec![Inline::Text {
+                        text: "big".into(),
+                        span: Span::NONE,
+                    }],
+                    span: Span::NONE,
+                }],
+                align: Align::Default,
+                span: Span::NONE,
+            }],
+            color_table: vec![],
+            span: Span::NONE,
+        };
+        let out = emit(&doc);
+        assert!(out.contains("\\fs48"));
+    }
+
+    #[test]
+    fn test_emit_color() {
+        let doc = RtfDoc {
+            blocks: vec![Block::Paragraph {
+                inlines: vec![Inline::Color {
+                    r: 255,
+                    g: 0,
+                    b: 0,
+                    children: vec![Inline::Text {
+                        text: "red".into(),
+                        span: Span::NONE,
+                    }],
+                    span: Span::NONE,
+                }],
+                align: Align::Default,
+                span: Span::NONE,
+            }],
+            color_table: vec![],
+            span: Span::NONE,
+        };
+        let out = emit(&doc);
+        assert!(out.contains("\\colortbl"));
+        assert!(out.contains("\\red255"));
+        assert!(out.contains("\\cf1"));
+    }
+
+    #[test]
+    fn test_roundtrip_alignment() {
+        let input = r"{\rtf1 \qr right aligned\par}";
+        let (doc1, _) = parse(input);
+        let emitted = emit(&doc1);
+        let (doc2, _) = parse(&emitted);
+        assert_eq!(doc1.strip_spans(), doc2.strip_spans());
+    }
+
+    #[test]
+    fn test_roundtrip_font_size() {
+        let input = r"{\rtf1 \fs36 medium text\par}";
+        let (doc1, _) = parse(input);
+        let emitted = emit(&doc1);
+        let (doc2, _) = parse(&emitted);
+        assert_eq!(doc1.strip_spans(), doc2.strip_spans());
+    }
+
+    #[test]
+    fn test_roundtrip_color() {
+        let input = r"{\rtf1{\colortbl ;\red0\green128\blue0;}\cf1 green text\par}";
+        let (doc1, _) = parse(input);
+        let emitted = emit(&doc1);
+        let (doc2, _) = parse(&emitted);
+        assert_eq!(doc1.strip_spans(), doc2.strip_spans());
+    }
+
+    /// Regression: paragraph with only LineBreak + non-default alignment
+    /// used to fail because parse_color_table always stored a (0,0,0) sentinel
+    /// at index 0, causing the reparsed color_table to differ from the original.
+    #[test]
+    fn test_roundtrip_linebreak_center() {
+        let doc = RtfDoc {
+            blocks: vec![Block::Paragraph {
+                inlines: vec![Inline::LineBreak { span: Span::NONE }],
+                align: Align::Center,
+                span: Span::NONE,
+            }],
+            color_table: vec![],
+            span: Span::NONE,
+        }
+        .normalize();
+        let emitted = emit(&doc);
+        let (reparsed, _) = parse(&emitted);
+        assert_eq!(doc.strip_spans(), reparsed.strip_spans());
     }
 }

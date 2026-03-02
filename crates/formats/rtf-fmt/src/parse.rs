@@ -8,8 +8,18 @@ use crate::ast::*;
 pub fn parse(input: &str) -> (RtfDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.run();
+    // The parser's internal color_table always has index-0 = auto/default
+    // sentinel.  Strip it so that `RtfDoc.color_table` contains only the
+    // actual colors (indices 1..N from the RTF `\colortbl`), matching the
+    // layout that programmatically-built documents use.
+    let color_table = if p.color_table.len() > 1 {
+        p.color_table[1..].to_vec()
+    } else {
+        vec![]
+    };
     let doc = RtfDoc {
         blocks,
+        color_table,
         span: Span::new(0, input.len()),
     };
     (doc, p.diagnostics)
@@ -27,6 +37,10 @@ struct TextState {
     strikethrough: bool,
     superscript: bool,
     subscript: bool,
+    /// Font size in half-points (0 = not explicitly set).
+    font_size: u16,
+    /// Color table index (0 = auto/default).
+    color_idx: u8,
 }
 
 // ── Parser ────────────────────────────────────────────────────────────────────
@@ -35,6 +49,7 @@ struct Parser<'a> {
     input: &'a str,
     pos: usize,
     pub diagnostics: Vec<Diagnostic>,
+    pub color_table: Vec<(u8, u8, u8)>,
 }
 
 impl<'a> Parser<'a> {
@@ -43,6 +58,7 @@ impl<'a> Parser<'a> {
             input,
             pos: 0,
             diagnostics: Vec::new(),
+            color_table: parse_color_table(input),
         }
     }
 
@@ -66,6 +82,7 @@ impl<'a> Parser<'a> {
         let mut current_text = String::new();
         let mut text_start = self.pos;
         let mut para_start = self.pos;
+        let mut current_align = Align::Default;
 
         while self.pos < self.input.len() {
             let Some(ch) = self.current_char() else {
@@ -92,6 +109,7 @@ impl<'a> Parser<'a> {
                             &mut current_para,
                             &mut paragraphs,
                             &mut para_start,
+                            &mut current_align,
                         );
                     } else if next == '\'' {
                         // \'XX hex-encoded byte (Windows-1252).
@@ -146,7 +164,12 @@ impl<'a> Parser<'a> {
                     // Flush pending text before restoring state
                     if !current_text.is_empty() {
                         let span = Span::new(text_start, self.pos);
-                        current_para.push(make_inline(&current_text, &state, span));
+                        current_para.push(make_inline(
+                            &current_text,
+                            &state,
+                            span,
+                            &self.color_table,
+                        ));
                         current_text.clear();
                     }
                     text_start = self.pos;
@@ -174,11 +197,12 @@ impl<'a> Parser<'a> {
         // Flush remaining
         if !current_text.is_empty() {
             let span = Span::new(text_start, self.pos);
-            current_para.push(make_inline(&current_text, &state, span));
+            current_para.push(make_inline(&current_text, &state, span, &self.color_table));
         }
         if !current_para.is_empty() {
             paragraphs.push(Block::Paragraph {
                 inlines: merge_text_inlines(current_para),
+                align: current_align,
                 span: Span::new(para_start, self.pos),
             });
         }
@@ -189,8 +213,13 @@ impl<'a> Parser<'a> {
         paragraphs
             .into_iter()
             .map(|b| match b {
-                Block::Paragraph { inlines, span } => Block::Paragraph {
+                Block::Paragraph {
+                    inlines,
+                    align,
+                    span,
+                } => Block::Paragraph {
                     inlines: merge_text_inlines(inlines),
+                    align,
                     span,
                 },
                 other => other,
@@ -328,17 +357,19 @@ impl<'a> Parser<'a> {
         current_para: &mut Vec<Inline>,
         paragraphs: &mut Vec<Block>,
         para_start: &mut usize,
+        current_align: &mut Align,
     ) {
         match word {
             "par" | "pard" => {
                 if !current_text.is_empty() {
                     let span = Span::new(*text_start, self.pos);
-                    current_para.push(make_inline(current_text, state, span));
+                    current_para.push(make_inline(current_text, state, span, &self.color_table));
                     current_text.clear();
                 }
                 if !current_para.is_empty() {
                     paragraphs.push(Block::Paragraph {
                         inlines: merge_text_inlines(std::mem::take(current_para)),
+                        align: *current_align,
                         span: Span::new(*para_start, self.pos),
                     });
                 }
@@ -346,13 +377,14 @@ impl<'a> Parser<'a> {
                 *para_start = self.pos;
                 if word == "pard" {
                     *state = TextState::default();
+                    *current_align = Align::Default;
                 }
             }
 
             "line" => {
                 if !current_text.is_empty() {
                     let span = Span::new(*text_start, self.pos);
-                    current_para.push(make_inline(current_text, state, span));
+                    current_para.push(make_inline(current_text, state, span, &self.color_table));
                     current_text.clear();
                 }
                 *text_start = self.pos;
@@ -362,39 +394,167 @@ impl<'a> Parser<'a> {
             }
 
             "b" => {
-                flush_text(current_text, text_start, self.pos, state, current_para);
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
                 state.bold = param.unwrap_or(1) != 0;
             }
             "i" => {
-                flush_text(current_text, text_start, self.pos, state, current_para);
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
                 state.italic = param.unwrap_or(1) != 0;
             }
             "ul" | "uld" | "uldb" | "ulw" => {
-                flush_text(current_text, text_start, self.pos, state, current_para);
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
                 state.underline = param.unwrap_or(1) != 0;
             }
             "ulnone" => {
-                flush_text(current_text, text_start, self.pos, state, current_para);
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
                 state.underline = false;
             }
             "strike" => {
-                flush_text(current_text, text_start, self.pos, state, current_para);
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
                 state.strikethrough = param.unwrap_or(1) != 0;
             }
             "super" => {
-                flush_text(current_text, text_start, self.pos, state, current_para);
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
                 state.superscript = true;
                 state.subscript = false;
             }
             "sub" => {
-                flush_text(current_text, text_start, self.pos, state, current_para);
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
                 state.subscript = true;
                 state.superscript = false;
             }
             "nosupersub" => {
-                flush_text(current_text, text_start, self.pos, state, current_para);
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
                 state.superscript = false;
                 state.subscript = false;
+            }
+
+            // Alignment
+            "ql" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                *current_align = Align::Left;
+            }
+            "qr" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                *current_align = Align::Right;
+            }
+            "qc" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                *current_align = Align::Center;
+            }
+            "qj" | "qd" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                *current_align = Align::Justify;
+            }
+
+            // Font size (half-points)
+            "fs" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                state.font_size = param.unwrap_or(0).max(0) as u16;
+            }
+
+            // Foreground color index
+            "cf" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                state.color_idx = param.unwrap_or(0).max(0) as u8;
             }
 
             "tab" => {
@@ -438,22 +598,36 @@ impl<'a> Parser<'a> {
             }
 
             // Ignored formatting / sizing controls
-            "fs" | "f" | "cf" | "cb" | "li" | "fi" | "ri" | "sa" | "sb" | "sl" | "slmult"
-            | "ql" | "qr" | "qc" | "qj" | "qd" | "outlinelevel" | "pntext" | "pn" | "pnlvlblt"
-            | "rtf" | "ansi" | "mac" | "pc" | "pca" | "deff" | "deflang" | "widowctrl"
-            | "hyphauto" | "hyphconsec" | "hyphcaps" | "paperw" | "paperh" | "margl" | "margr"
-            | "margt" | "margb" | "sectd" | "cols" | "colsx" | "endhere" | "pgwsxn" | "pghsxn"
-            | "headerl" | "headerr" | "header" | "footer" | "footerl" | "footerr" | "trowd"
-            | "cellx" | "intbl" | "cell" | "row" | "trgaph" | "trql" | "trqr" | "trqc"
-            | "clmgf" | "clmrg" | "brdrb" | "brdrs" | "brdrw" | "brsp" | "brdrt" | "brdrl"
-            | "brdrr" | "brdrth" | "brdrdot" | "brdrdash" | "b0" | "i0" => {
+            "f" | "cb" | "li" | "fi" | "ri" | "sa" | "sb" | "sl" | "slmult" | "outlinelevel"
+            | "pntext" | "pn" | "pnlvlblt" | "rtf" | "ansi" | "mac" | "pc" | "pca" | "deff"
+            | "deflang" | "widowctrl" | "hyphauto" | "hyphconsec" | "hyphcaps" | "paperw"
+            | "paperh" | "margl" | "margr" | "margt" | "margb" | "sectd" | "cols" | "colsx"
+            | "endhere" | "pgwsxn" | "pghsxn" | "headerl" | "headerr" | "header" | "footer"
+            | "footerl" | "footerr" | "trowd" | "cellx" | "intbl" | "cell" | "row" | "trgaph"
+            | "trql" | "trqr" | "trqc" | "clmgf" | "clmrg" | "brdrb" | "brdrs" | "brdrw"
+            | "brsp" | "brdrt" | "brdrl" | "brdrr" | "brdrth" | "brdrdot" | "brdrdash" | "b0"
+            | "i0" => {
                 // Most toggle-off words are redundant after state flush above,
                 // but b0/i0 specifically turn off formatting
                 if word == "b0" {
-                    flush_text(current_text, text_start, self.pos, state, current_para);
+                    flush_text(
+                        current_text,
+                        text_start,
+                        self.pos,
+                        state,
+                        current_para,
+                        &self.color_table,
+                    );
                     state.bold = false;
                 } else if word == "i0" {
-                    flush_text(current_text, text_start, self.pos, state, current_para);
+                    flush_text(
+                        current_text,
+                        text_start,
+                        self.pos,
+                        state,
+                        current_para,
+                        &self.color_table,
+                    );
                     state.italic = false;
                 }
             }
@@ -479,10 +653,11 @@ fn flush_text(
     pos: usize,
     state: &TextState,
     current_para: &mut Vec<Inline>,
+    color_table: &[(u8, u8, u8)],
 ) {
     if !current_text.is_empty() {
         let span = Span::new(*text_start, pos);
-        current_para.push(make_inline(current_text, state, span));
+        current_para.push(make_inline(current_text, state, span, color_table));
         current_text.clear();
         *text_start = pos;
     }
@@ -495,7 +670,7 @@ fn push_char(current_text: &mut String, text_start: &mut usize, pos: usize, ch: 
     current_text.push(ch);
 }
 
-fn make_inline(text: &str, state: &TextState, span: Span) -> Inline {
+fn make_inline(text: &str, state: &TextState, span: Span, color_table: &[(u8, u8, u8)]) -> Inline {
     let mut inline = Inline::Text {
         text: text.to_string(),
         span,
@@ -536,7 +711,79 @@ fn make_inline(text: &str, state: &TextState, span: Span) -> Inline {
             span,
         };
     }
+    if state.font_size != 0 {
+        inline = Inline::FontSize {
+            size: state.font_size,
+            children: vec![inline],
+            span,
+        };
+    }
+    if state.color_idx != 0 {
+        let idx = state.color_idx as usize;
+        if idx < color_table.len() {
+            let (r, g, b) = color_table[idx];
+            inline = Inline::Color {
+                r,
+                g,
+                b,
+                children: vec![inline],
+                span,
+            };
+        }
+    }
     inline
+}
+
+/// Pre-scan the input for a `\colortbl` group and parse its RGB entries.
+/// Index 0 is the auto color (no RGB), subsequent entries are RGB triples.
+fn parse_color_table(input: &str) -> Vec<(u8, u8, u8)> {
+    let mut colors = vec![(0u8, 0u8, 0u8)]; // index 0 = auto/default
+    let Some(start) = input.find("{\\colortbl") else {
+        return colors;
+    };
+    // Find the content of the group (just scan chars, counting braces)
+    let rest = &input[start + 1..]; // skip the opening '{'
+    let mut depth = 1usize;
+    let mut content = String::new();
+    let chars = rest.chars();
+    for c in chars {
+        match c {
+            '{' => {
+                depth += 1;
+                content.push(c);
+            }
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+                content.push(c);
+            }
+            _ => content.push(c),
+        }
+    }
+    // Parse semicolon-delimited entries; first entry is index 0 (auto)
+    for entry in content.split(';').skip(1) {
+        // skip before first ';' = index 0
+        // Skip empty/whitespace entries (e.g. trailing ';' at end of colortbl)
+        if entry.split('\\').all(|t| t.trim().is_empty()) {
+            continue;
+        }
+        let mut r = 0u8;
+        let mut g = 0u8;
+        let mut b = 0u8;
+        for token in entry.split('\\').filter(|s| !s.is_empty()) {
+            if let Some(n) = token.strip_prefix("red") {
+                r = n.trim().parse().unwrap_or(0);
+            } else if let Some(n) = token.strip_prefix("green") {
+                g = n.trim().parse().unwrap_or(0);
+            } else if let Some(n) = token.strip_prefix("blue") {
+                b = n.trim().parse().unwrap_or(0);
+            }
+        }
+        colors.push((r, g, b));
+    }
+    colors
 }
 
 /// Merge consecutive `Inline::Text` nodes and recursively normalise children.
@@ -697,6 +944,48 @@ mod tests {
         assert_eq!(ast1.strip_spans(), ast2.strip_spans());
     }
 
+    #[test]
+    fn test_parse_alignment() {
+        let doc = p(r"{\rtf1 \qc centered text\par}");
+        let Block::Paragraph { align, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert_eq!(*align, Align::Center);
+    }
+
+    #[test]
+    fn test_parse_font_size() {
+        let doc = p(r"{\rtf1 \fs48 big text\par}");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::FontSize { size: 48, .. }))
+        );
+    }
+
+    #[test]
+    fn test_parse_color_table() {
+        let doc = p(r"{\rtf1{\colortbl ;\red255\green0\blue0;}\cf1 red text\par}");
+        // color_table stores only actual colors (index-0 auto is stripped)
+        assert!(!doc.color_table.is_empty());
+        assert_eq!(doc.color_table[0], (255, 0, 0));
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|i| matches!(
+            i,
+            Inline::Color {
+                r: 255,
+                g: 0,
+                b: 0,
+                ..
+            }
+        )));
+    }
+
     fn collect_text(inlines: &[Inline]) -> String {
         let mut out = String::new();
         for inline in inlines {
@@ -707,7 +996,9 @@ mod tests {
                 | Inline::Underline { children, .. }
                 | Inline::Strikethrough { children, .. }
                 | Inline::Superscript { children, .. }
-                | Inline::Subscript { children, .. } => out.push_str(&collect_text(children)),
+                | Inline::Subscript { children, .. }
+                | Inline::FontSize { children, .. }
+                | Inline::Color { children, .. } => out.push_str(&collect_text(children)),
                 Inline::Code { text, .. } => out.push_str(text),
                 Inline::Link { children, url, .. } => {
                     if children.is_empty() {

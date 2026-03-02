@@ -55,12 +55,27 @@ pub struct Diagnostic {
     pub code: &'static str,
 }
 
+/// Paragraph text alignment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Align {
+    /// No explicit alignment set (RTF default, typically left).
+    #[default]
+    Default,
+    Left,
+    Center,
+    Right,
+    Justify,
+}
+
 // ── Document ──────────────────────────────────────────────────────────────────
 
 /// A parsed RTF document.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RtfDoc {
     pub blocks: Vec<Block>,
+    /// Colors referenced by `\cf<n>` in this document.
+    /// Index 0 is always the auto/default color; indices 1..N are RGB triples.
+    pub color_table: Vec<(u8, u8, u8)>,
     pub span: Span,
 }
 
@@ -72,6 +87,7 @@ impl RtfDoc {
     pub fn strip_spans(&self) -> Self {
         RtfDoc {
             blocks: self.blocks.iter().map(Block::strip_spans).collect(),
+            color_table: self.color_table.clone(),
             span: Span::NONE,
         }
     }
@@ -85,6 +101,7 @@ impl RtfDoc {
     pub fn normalize(&self) -> Self {
         RtfDoc {
             blocks: self.blocks.iter().map(Block::normalize).collect(),
+            color_table: self.color_table.clone(),
             span: self.span,
         }
     }
@@ -97,6 +114,7 @@ impl RtfDoc {
 pub enum Block {
     Paragraph {
         inlines: Vec<Inline>,
+        align: Align,
         span: Span,
     },
     Heading {
@@ -129,8 +147,13 @@ pub enum Block {
 impl Block {
     pub fn normalize(&self) -> Self {
         match self {
-            Block::Paragraph { inlines, span } => Block::Paragraph {
+            Block::Paragraph {
+                inlines,
+                align,
+                span,
+            } => Block::Paragraph {
                 inlines: merge_text_inlines(inlines.iter().map(Inline::normalize).collect()),
+                align: *align,
                 span: *span,
             },
             Block::Heading {
@@ -180,8 +203,9 @@ impl Block {
 
     pub fn strip_spans(&self) -> Self {
         match self {
-            Block::Paragraph { inlines, .. } => Block::Paragraph {
+            Block::Paragraph { inlines, align, .. } => Block::Paragraph {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
+                align: *align,
                 span: Span::NONE,
             },
             Block::Heading { level, inlines, .. } => Block::Heading {
@@ -300,6 +324,20 @@ pub enum Inline {
         children: Vec<Inline>,
         span: Span,
     },
+    /// Inline span with a specific font size (in half-points, e.g. 24 = 12pt).
+    FontSize {
+        size: u16,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    /// Inline span with explicit text color.
+    Color {
+        r: u8,
+        g: u8,
+        b: u8,
+        children: Vec<Inline>,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -338,6 +376,28 @@ impl Inline {
                 children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
                 span: *span,
             },
+            Inline::FontSize {
+                size,
+                children,
+                span,
+            } => Inline::FontSize {
+                size: *size,
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Inline::Color {
+                r,
+                g,
+                b,
+                children,
+                span,
+            } => Inline::Color {
+                r: *r,
+                g: *g,
+                b: *b,
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
             other => other.clone(),
         }
     }
@@ -355,7 +415,9 @@ impl Inline {
             | Inline::LineBreak { span }
             | Inline::SoftBreak { span }
             | Inline::Superscript { span, .. }
-            | Inline::Subscript { span, .. } => *span,
+            | Inline::Subscript { span, .. }
+            | Inline::FontSize { span, .. }
+            | Inline::Color { span, .. } => *span,
         }
     }
 
@@ -402,6 +464,20 @@ impl Inline {
                 span: Span::NONE,
             },
             Inline::Subscript { children, .. } => Inline::Subscript {
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::FontSize { size, children, .. } => Inline::FontSize {
+                size: *size,
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Color {
+                r, g, b, children, ..
+            } => Inline::Color {
+                r: *r,
+                g: *g,
+                b: *b,
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },

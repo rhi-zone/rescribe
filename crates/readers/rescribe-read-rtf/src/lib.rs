@@ -5,7 +5,7 @@
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
 use rescribe_std::{node, prop};
-use rtf_fmt::{Block, Inline, RtfDoc};
+use rtf_fmt::{Align, Block, Inline, RtfDoc};
 
 /// Parse an RTF document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -30,8 +30,19 @@ fn doc_to_nodes(rtf: &RtfDoc) -> Vec<Node> {
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines, .. } => {
-            Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))
+        Block::Paragraph { inlines, align, .. } => {
+            let mut node = Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines));
+            if *align != Align::Default {
+                let align_str = match align {
+                    Align::Left => "left",
+                    Align::Right => "right",
+                    Align::Center => "center",
+                    Align::Justify => "justify",
+                    Align::Default => unreachable!(),
+                };
+                node = node.prop(prop::STYLE_ALIGN, align_str);
+            }
+            node
         }
 
         Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
@@ -122,6 +133,20 @@ fn inline_to_node(inline: &Inline) -> Node {
         Inline::Subscript { children, .. } => {
             Node::new(node::SUBSCRIPT).children(inlines_to_nodes(children))
         }
+
+        Inline::FontSize { size, children, .. } => {
+            // size is in half-points; convert to points as string
+            let pts = *size as f64 / 2.0;
+            Node::new(node::SPAN)
+                .prop(prop::STYLE_SIZE, format!("{pts}pt"))
+                .children(inlines_to_nodes(children))
+        }
+
+        Inline::Color {
+            r, g, b, children, ..
+        } => Node::new(node::SPAN)
+            .prop(prop::STYLE_COLOR, format!("#{r:02x}{g:02x}{b:02x}"))
+            .children(inlines_to_nodes(children)),
     }
 }
 
@@ -194,6 +219,34 @@ mod tests {
         let para = &doc.content.children[0];
         let text = get_all_text(para);
         assert!(text.contains('\u{2014}'));
+    }
+
+    #[test]
+    fn test_parse_alignment() {
+        let doc = parse_str(r"{\rtf1 \qc centered\par}");
+        let para = &doc.content.children[0];
+        assert_eq!(para.props.get_str(prop::STYLE_ALIGN), Some("center"));
+    }
+
+    #[test]
+    fn test_parse_font_size() {
+        let doc = parse_str(r"{\rtf1 \fs48 big\par}");
+        let para = &doc.content.children[0];
+        // FontSize node should become a SPAN with style:size
+        let span = para.children.iter().find(|n| n.kind.as_str() == node::SPAN);
+        assert!(span.is_some());
+        let span = span.unwrap();
+        assert_eq!(span.props.get_str(prop::STYLE_SIZE), Some("24pt"));
+    }
+
+    #[test]
+    fn test_parse_color() {
+        let doc = parse_str(r"{\rtf1{\colortbl ;\red255\green0\blue0;}\cf1 red\par}");
+        let para = &doc.content.children[0];
+        let span = para.children.iter().find(|n| n.kind.as_str() == node::SPAN);
+        assert!(span.is_some());
+        let span = span.unwrap();
+        assert_eq!(span.props.get_str(prop::STYLE_COLOR), Some("#ff0000"));
     }
 
     fn get_all_text(node: &Node) -> String {

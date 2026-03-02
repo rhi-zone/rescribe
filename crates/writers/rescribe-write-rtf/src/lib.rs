@@ -5,7 +5,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use rtf_fmt::{Block, Inline, RtfDoc, Span, TableRow};
+use rtf_fmt::{Align, Block, Inline, RtfDoc, Span, TableRow};
 
 /// Emit a document as RTF.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -25,6 +25,7 @@ pub fn emit_with_options(
 fn doc_to_rtf(doc: &Document) -> RtfDoc {
     RtfDoc {
         blocks: nodes_to_blocks(&doc.content.children),
+        color_table: vec![],
         span: Span::NONE,
     }
 }
@@ -47,10 +48,14 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
             }]
         }
 
-        node::PARAGRAPH => vec![Block::Paragraph {
-            inlines: nodes_to_inlines(&node.children),
-            span: Span::NONE,
-        }],
+        node::PARAGRAPH => {
+            let align = parse_align(node.props.get_str(prop::STYLE_ALIGN));
+            vec![Block::Paragraph {
+                inlines: nodes_to_inlines(&node.children),
+                align,
+                span: Span::NONE,
+            }]
+        }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
@@ -106,17 +111,38 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
 
         node::HORIZONTAL_RULE => vec![Block::HorizontalRule { span: Span::NONE }],
 
-        node::DIV | node::SPAN | node::FIGURE => nodes_to_blocks(&node.children),
+        node::DIV | node::FIGURE => nodes_to_blocks(&node.children),
+
+        node::SPAN => {
+            // A SPAN at block level: treat as a paragraph wrapping inline content
+            vec![Block::Paragraph {
+                inlines: nodes_to_inlines(std::slice::from_ref(node)),
+                align: Align::Default,
+                span: Span::NONE,
+            }]
+        }
 
         // Inline nodes at block level: wrap in a paragraph
         node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
             vec![Block::Paragraph {
                 inlines: nodes_to_inlines(std::slice::from_ref(node)),
+                align: Align::Default,
                 span: Span::NONE,
             }]
         }
 
         _ => nodes_to_blocks(&node.children),
+    }
+}
+
+/// Parse a CSS-style alignment string to an `Align` value.
+fn parse_align(s: Option<&str>) -> Align {
+    match s {
+        Some("left") => Align::Left,
+        Some("right") => Align::Right,
+        Some("center") => Align::Center,
+        Some("justify") => Align::Justify,
+        _ => Align::Default,
     }
 }
 
@@ -195,6 +221,47 @@ fn node_to_inline(node: &Node) -> Inline {
             span: Span::NONE,
         },
 
+        node::SPAN => {
+            // Check for style:size → FontSize
+            if let Some(size_str) = node.props.get_str(prop::STYLE_SIZE)
+                && let Some(size) = parse_half_points(size_str)
+            {
+                return Inline::FontSize {
+                    size,
+                    children: nodes_to_inlines(&node.children),
+                    span: Span::NONE,
+                };
+            }
+            // Check for style:color → Color
+            if let Some(color_str) = node.props.get_str(prop::STYLE_COLOR)
+                && let Some((r, g, b)) = parse_hex_color(color_str)
+            {
+                return Inline::Color {
+                    r,
+                    g,
+                    b,
+                    children: nodes_to_inlines(&node.children),
+                    span: Span::NONE,
+                };
+            }
+            // Plain span: pass children through
+            let children = nodes_to_inlines(&node.children);
+            if children.is_empty() {
+                Inline::Text {
+                    text: String::new(),
+                    span: Span::NONE,
+                }
+            } else if children.len() == 1 {
+                children.into_iter().next().unwrap()
+            } else {
+                // Wrap in bold as a neutral container (best we can do without a generic span)
+                Inline::Bold {
+                    children,
+                    span: Span::NONE,
+                }
+            }
+        }
+
         _ => {
             let children = nodes_to_inlines(&node.children);
             if children.is_empty() {
@@ -212,6 +279,31 @@ fn node_to_inline(node: &Node) -> Inline {
             }
         }
     }
+}
+
+/// Parse a font size string like `"12pt"` or `"12.5pt"` to half-points.
+/// Returns `None` if parsing fails.
+fn parse_half_points(s: &str) -> Option<u16> {
+    let s = s.trim();
+    if let Some(pt_str) = s.strip_suffix("pt") {
+        let pts: f64 = pt_str.trim().parse().ok()?;
+        Some((pts * 2.0).round() as u16)
+    } else {
+        None
+    }
+}
+
+/// Parse a `#rrggbb` hex color string to `(r, g, b)`.
+/// Returns `None` if the format is wrong.
+fn parse_hex_color(s: &str) -> Option<(u8, u8, u8)> {
+    let s = s.trim().strip_prefix('#')?;
+    if s.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&s[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&s[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&s[4..6], 16).ok()?;
+    Some((r, g, b))
 }
 
 #[cfg(test)]
@@ -293,5 +385,30 @@ mod tests {
         assert!(output.contains("\\bullet"));
         assert!(output.contains("one"));
         assert!(output.contains("two"));
+    }
+
+    #[test]
+    fn test_parse_half_points() {
+        assert_eq!(parse_half_points("12pt"), Some(24));
+        assert_eq!(parse_half_points("12.5pt"), Some(25));
+        assert_eq!(parse_half_points("24pt"), Some(48));
+        assert_eq!(parse_half_points("bad"), None);
+    }
+
+    #[test]
+    fn test_parse_hex_color() {
+        assert_eq!(parse_hex_color("#ff0000"), Some((255, 0, 0)));
+        assert_eq!(parse_hex_color("#00ff00"), Some((0, 255, 0)));
+        assert_eq!(parse_hex_color("#0080ff"), Some((0, 128, 255)));
+        assert_eq!(parse_hex_color("bad"), None);
+    }
+
+    #[test]
+    fn test_parse_align() {
+        assert_eq!(parse_align(Some("left")), Align::Left);
+        assert_eq!(parse_align(Some("right")), Align::Right);
+        assert_eq!(parse_align(Some("center")), Align::Center);
+        assert_eq!(parse_align(Some("justify")), Align::Justify);
+        assert_eq!(parse_align(None), Align::Default);
     }
 }

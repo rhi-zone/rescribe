@@ -46,6 +46,8 @@ fn inline_kind(i: &Inline) -> &'static str {
         Inline::SoftBreak { .. } => "soft_break",
         Inline::Superscript { .. } => "super",
         Inline::Subscript { .. } => "sub",
+        Inline::FontSize { .. } => "font_size",
+        Inline::Color { .. } => "color",
     }
 }
 
@@ -109,6 +111,8 @@ fn collect_inlines(inlines: &[Inline], parent: &str, out: &mut HashSet<Trans>) {
             | Inline::Strikethrough { children, .. }
             | Inline::Superscript { children, .. }
             | Inline::Subscript { children, .. }
+            | Inline::FontSize { children, .. }
+            | Inline::Color { children, .. }
             | Inline::Link { children, .. } => Some(children.as_slice()),
             _ => None,
         };
