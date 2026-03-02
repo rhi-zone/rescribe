@@ -244,6 +244,19 @@ fn node_to_inline(node: &Node) -> Inline {
             span: Span::NONE,
         },
 
+        "rtf:char-span" => {
+            let char_props = node
+                .props
+                .get_str("rtf:char-props")
+                .unwrap_or("")
+                .to_string();
+            Inline::CharSpan {
+                char_props,
+                children: nodes_to_inlines(&node.children),
+                span: Span::NONE,
+            }
+        }
+
         node::SPAN => {
             // Check for style:size → FontSize
             if let Some(size_str) = node.props.get_str(prop::STYLE_SIZE)

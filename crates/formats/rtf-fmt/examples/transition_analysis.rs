@@ -51,6 +51,7 @@ fn inline_kind(i: &Inline) -> &'static str {
         Inline::AllCaps { .. } => "all_caps",
         Inline::SmallCaps { .. } => "small_caps",
         Inline::Hidden { .. } => "hidden",
+        Inline::CharSpan { .. } => "char_span",
     }
 }
 
@@ -119,6 +120,7 @@ fn collect_inlines(inlines: &[Inline], parent: &str, out: &mut HashSet<Trans>) {
             | Inline::AllCaps { children, .. }
             | Inline::SmallCaps { children, .. }
             | Inline::Hidden { children, .. }
+            | Inline::CharSpan { children, .. }
             | Inline::Link { children, .. } => Some(children.as_slice()),
             _ => None,
         };

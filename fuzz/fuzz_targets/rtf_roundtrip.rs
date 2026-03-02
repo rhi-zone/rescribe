@@ -23,6 +23,33 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use rtf_fmt::{Align, Block, Inline, RtfDoc, Span, emit, parse};
 
+// ── Char-level layout properties ──────────────────────────────────────────────
+
+/// A single RTF character-layout property that produces a raw `char_props` string
+/// identical to what the parser accumulates.  Only words handled by the parser's
+/// char-props accumulator are represented here to guarantee roundtrip stability.
+#[derive(Arbitrary, Debug)]
+enum FuzzCharProp {
+    Dn(u8),       // \dn<n>  (baseline down, half-points; 0 = off → skip)
+    Up(u8),       // \up<n>  (baseline up, half-points; 0 = off → skip)
+    Shad,         // \shad   (character shadow, binary flag)
+    Expnd(u8),    // \expnd<n> (letter spacing; 0 = off → skip)
+}
+
+impl FuzzCharProp {
+    /// Returns the raw char_props string the parser would accumulate, or `None`
+    /// if the value represents an "off" state (param == 0) that the parser skips.
+    fn to_char_props(&self) -> Option<String> {
+        match self {
+            FuzzCharProp::Dn(0) | FuzzCharProp::Up(0) | FuzzCharProp::Expnd(0) => None,
+            FuzzCharProp::Dn(n) => Some(format!("\\dn{n}")),
+            FuzzCharProp::Up(n) => Some(format!("\\up{n}")),
+            FuzzCharProp::Shad => Some("\\shad".to_string()),
+            FuzzCharProp::Expnd(n) => Some(format!("\\expnd{n}")),
+        }
+    }
+}
+
 // ── Input types ───────────────────────────────────────────────────────────────
 
 /// Vertical-position state: superscript, subscript, or neither.
@@ -69,6 +96,8 @@ enum FuzzInline {
         vert: VertPos,
         font_size: u16,
         color: Option<(u8, u8, u8)>,
+        /// Optional char-level layout property (CharSpan outermost wrapper).
+        char_prop: Option<FuzzCharProp>,
     },
 }
 
@@ -86,13 +115,13 @@ struct FuzzPara {
 fn to_inline(fi: &FuzzInline, color_table: &[(u8, u8, u8)]) -> Option<Inline> {
     match fi {
         FuzzInline::LineBreak => Some(Inline::LineBreak { span: Span::NONE }),
-        FuzzInline::Leaf { text, bold, italic, underline, strikethrough, vert, font_size, color } => {
+        FuzzInline::Leaf { text, bold, italic, underline, strikethrough, vert, font_size, color, char_prop } => {
             if text.is_empty() {
                 return None;
             }
             // Build in the same order as `make_inline` so the roundtrip is
             // stable: innermost first, then each wrapper applied in sequence,
-            // Color ending up outermost.
+            // Color second-to-last, CharSpan outermost.
             let mut inline = Inline::Text { text: text.clone(), span: Span::NONE };
             if *strikethrough {
                 inline = Inline::Strikethrough { children: vec![inline], span: Span::NONE };
@@ -134,6 +163,14 @@ fn to_inline(fi: &FuzzInline, color_table: &[(u8, u8, u8)]) -> Option<Inline> {
                         span: Span::NONE,
                     };
                 }
+            }
+            // CharSpan is outermost (matching make_inline's wrapping order).
+            if let Some(cp_str) = char_prop.as_ref().and_then(FuzzCharProp::to_char_props) {
+                inline = Inline::CharSpan {
+                    char_props: cp_str,
+                    children: vec![inline],
+                    span: Span::NONE,
+                };
             }
             Some(inline)
         }

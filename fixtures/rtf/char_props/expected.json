@@ -1,0 +1,10 @@
+{
+  "description": "RTF character-layout words (baseline offset) preserved as rtf:char-props on a char-span node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "rtf:char-span", "props": { "rtf:char-props": "\\dn3" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "lowered" } }
+  ]
+}

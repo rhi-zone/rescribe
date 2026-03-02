@@ -65,6 +65,7 @@ fn collect_colors_in_inline(inline: &Inline, out: &mut Vec<(u8, u8, u8)>) {
         | Inline::AllCaps { children, .. }
         | Inline::SmallCaps { children, .. }
         | Inline::Hidden { children, .. }
+        | Inline::CharSpan { children, .. }
         | Inline::Link { children, .. } => {
             for child in children {
                 collect_colors_in_inline(child, out);
@@ -334,6 +335,16 @@ fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
             emit_inlines(children, ctx);
             ctx.push("}");
         }
+
+        Inline::CharSpan {
+            char_props,
+            children,
+            ..
+        } => {
+            ctx.push(&format!("{{{char_props} "));
+            emit_inlines(children, ctx);
+            ctx.push("}");
+        }
     }
 }
 
@@ -575,6 +586,35 @@ mod tests {
             para_props, "\\li720\\sa200",
             "para_props captured incorrectly"
         );
+        let emitted = emit(&doc1);
+        let (doc2, _) = parse(&emitted);
+        assert_eq!(doc1.strip_spans(), doc2.strip_spans());
+    }
+
+    #[test]
+    fn test_roundtrip_char_props() {
+        // Paragraph with baseline-down char-prop: raw char_props must survive emit → parse.
+        let input = r"{\rtf1{\dn3 lowered}\par}";
+        let (doc1, diags) = parse(input);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        let Block::Paragraph { inlines, .. } = &doc1.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(
+            matches!(&inlines[0], Inline::CharSpan { char_props, .. } if char_props == "\\dn3"),
+            "expected CharSpan with \\dn3, got: {:?}",
+            inlines[0]
+        );
+        let emitted = emit(&doc1);
+        let (doc2, _) = parse(&emitted);
+        assert_eq!(doc1.strip_spans(), doc2.strip_spans());
+    }
+
+    #[test]
+    fn test_roundtrip_char_props_shad() {
+        let input = r"{\rtf1{\shad shadowed}\par}";
+        let (doc1, diags) = parse(input);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
         let emitted = emit(&doc1);
         let (doc2, _) = parse(&emitted);
         assert_eq!(doc1.strip_spans(), doc2.strip_spans());

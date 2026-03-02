@@ -167,6 +167,14 @@ fn inline_to_node(inline: &Inline) -> Node {
         Inline::Hidden { children, .. } => {
             Node::new(node::HIDDEN).children(inlines_to_nodes(children))
         }
+
+        Inline::CharSpan {
+            char_props,
+            children,
+            ..
+        } => Node::new("rtf:char-span")
+            .prop("rtf:char-props", char_props.clone())
+            .children(inlines_to_nodes(children)),
     }
 }
 

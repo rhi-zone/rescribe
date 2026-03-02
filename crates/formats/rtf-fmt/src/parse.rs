@@ -45,6 +45,9 @@ struct TextState {
     font_size: u16,
     /// Color table index (0 = auto/default).
     color_idx: u8,
+    /// Raw RTF character-layout control words (e.g. `\dn3\shad`) accumulated
+    /// verbatim for re-emission.  Empty string means no char-layout words active.
+    char_props: String,
 }
 
 // ── Parser ────────────────────────────────────────────────────────────────────
@@ -694,6 +697,35 @@ impl<'a> Parser<'a> {
                 current_para_props.push_str(&format_para_word(word, param));
             }
 
+            // Character-layout words: accumulated verbatim in char_props for lossless
+            // re-emission.  These have no cross-format semantic equivalent.
+            // Words with params: skip if param == 0 (means "off").
+            "dn" | "up" | "shading" | "expnd" | "expndtw" | "kerning" | "charscalex" => {
+                if param.is_some_and(|n| n != 0) {
+                    flush_text(
+                        current_text,
+                        text_start,
+                        self.pos,
+                        state,
+                        current_para,
+                        &self.color_table,
+                    );
+                    state.char_props.push_str(&format_para_word(word, param));
+                }
+            }
+            // Binary char-layout flags (no param — always accumulate when seen).
+            "shad" | "jcompress" | "jexpand" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                );
+                state.char_props.push_str(&format_para_word(word, None));
+            }
+
             // Ignored formatting / sizing controls
             "f" | "cb" | "pntext" | "pn" | "pnlvlblt" | "rtf" | "ansi" | "mac" | "pc" | "pca" | "deff"
             | "deflang" | "widowctrl" | "hyphauto" | "hyphconsec" | "hyphcaps" | "paperw"
@@ -710,8 +742,8 @@ impl<'a> Parser<'a> {
             // Row/section direction (not paragraph-level)
             | "ltrrow" | "rtlrow" | "ltrmark" | "rtlmark"
             // Paragraph style / misc (kept in ignored: complex or unclear scope)
-            | "s" | "aspnum" | "aspalpha" | "expnd" | "expndtw"
-            | "kerning" | "snext" | "styrsid" | "qnatural" | "noproof"
+            | "s" | "aspnum" | "aspalpha"
+            | "snext" | "styrsid" | "qnatural" | "noproof"
             // Border controls (cell-level, not paragraph-level)
             | "clbrdrl" | "clbrdrt" | "clbrdrr" | "clbrdrb"
             | "clftsWidth" | "clwWidth" | "clvertalt" | "clvertalb" | "clvertalc"
@@ -757,7 +789,7 @@ impl<'a> Parser<'a> {
             // knows fidelity was lost.
             | "cchs" | "flddirty" | "fldedit" | "ftnbj"
             | "sectlinegrid" | "psz" | "margbsxn" | "margtsxn" | "margrsxn" | "marglsxn"
-            | "nestcell" | "clshdngraw" | "ansicpg" | "charscalex" | "aenddoc"
+            | "nestcell" | "clshdngraw" | "ansicpg" | "aenddoc"
             | "ltrsect" | "deflangfe" | "revised" | "ppscheme"
             | "tbllkhdrrows" | "tbllkhdrcols" | "tbllklastcol" | "tbllklastrow" | "saftnnar"
             | "pgnhn" | "pgnlcrm" | "lndscpsxn" | "sbauto" | "saauto"
@@ -947,6 +979,13 @@ fn make_inline(text: &str, state: &TextState, span: Span, color_table: &[(u8, u8
                 span,
             };
         }
+    }
+    if !state.char_props.is_empty() {
+        inline = Inline::CharSpan {
+            char_props: state.char_props.clone(),
+            children: vec![inline],
+            span,
+        };
     }
     inline
 }
@@ -1218,7 +1257,8 @@ mod tests {
                 | Inline::Color { children, .. }
                 | Inline::AllCaps { children, .. }
                 | Inline::SmallCaps { children, .. }
-                | Inline::Hidden { children, .. } => out.push_str(&collect_text(children)),
+                | Inline::Hidden { children, .. }
+                | Inline::CharSpan { children, .. } => out.push_str(&collect_text(children)),
                 Inline::Code { text, .. } => out.push_str(text),
                 Inline::Link { children, url, .. } => {
                     if children.is_empty() {

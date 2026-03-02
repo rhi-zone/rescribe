@@ -365,6 +365,18 @@ pub enum Inline {
         children: Vec<Inline>,
         span: Span,
     },
+    /// Inline span with raw RTF character-layout control words preserved verbatim.
+    ///
+    /// Captures words like `\dn3`, `\up2`, `\shad`, `\expnd10`, `\charscalex90`
+    /// that have no cross-format semantic equivalent.  The `char_props` string
+    /// contains the raw control words (e.g. `\\dn3\\shad`) exactly as they
+    /// should be re-emitted.
+    CharSpan {
+        /// Raw RTF character-layout control words (e.g. `\dn3\shad`).
+        char_props: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -437,6 +449,15 @@ impl Inline {
                 children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
                 span: *span,
             },
+            Inline::CharSpan {
+                char_props,
+                children,
+                span,
+            } => Inline::CharSpan {
+                char_props: char_props.clone(),
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
             other => other.clone(),
         }
     }
@@ -459,7 +480,8 @@ impl Inline {
             | Inline::Color { span, .. }
             | Inline::AllCaps { span, .. }
             | Inline::SmallCaps { span, .. }
-            | Inline::Hidden { span, .. } => *span,
+            | Inline::Hidden { span, .. }
+            | Inline::CharSpan { span, .. } => *span,
         }
     }
 
@@ -532,6 +554,15 @@ impl Inline {
                 span: Span::NONE,
             },
             Inline::Hidden { children, .. } => Inline::Hidden {
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::CharSpan {
+                char_props,
+                children,
+                ..
+            } => Inline::CharSpan {
+                char_props: char_props.clone(),
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
