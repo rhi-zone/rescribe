@@ -2291,4 +2291,49 @@ mod font_bg_tests {
         let (doc2, _) = parse_str(&emitted);
         assert_eq!(doc1.strip_spans(), doc2.strip_spans());
     }
+
+    /// Corpus gate: parse every RTF file in /tmp/govdocs1_rtf and assert 0 diagnostics.
+    ///
+    /// Run with: `cargo test -p rtf-fmt -- --include-ignored corpus_zero_diagnostics`
+    /// Requires: extract govdocs1 RTF files to /tmp/govdocs1_rtf first.
+    #[test]
+    #[ignore]
+    fn corpus_zero_diagnostics() {
+        fn collect_rtf(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for e in entries.flatten() {
+                    let p = e.path();
+                    if p.is_dir() {
+                        collect_rtf(&p, out);
+                    } else if p.extension().and_then(|x| x.to_str()) == Some("rtf") {
+                        out.push(p);
+                    }
+                }
+            }
+        }
+
+        let corpus_dir = std::path::Path::new("/tmp/govdocs1_rtf");
+        if !corpus_dir.exists() {
+            eprintln!("Skipping corpus gate: /tmp/govdocs1_rtf not found");
+            return;
+        }
+        let mut files = Vec::new();
+        collect_rtf(corpus_dir, &mut files);
+        let total = files.len();
+        let mut failed: Vec<String> = Vec::new();
+        for path in &files {
+            let bytes = std::fs::read(path).expect("read failed");
+            let (_, diags) = parse(&bytes);
+            if !diags.is_empty() {
+                failed.push(path.display().to_string());
+            }
+        }
+        assert!(
+            failed.is_empty(),
+            "{}/{} files had diagnostics:\n{}",
+            failed.len(),
+            total,
+            failed.join("\n")
+        );
+    }
 }
