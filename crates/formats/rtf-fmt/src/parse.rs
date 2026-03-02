@@ -65,6 +65,33 @@ struct TextState {
     char_props: String,
 }
 
+// ── List accumulator ──────────────────────────────────────────────────────────
+
+/// Accumulates consecutive list-paragraph state.
+#[derive(Default)]
+struct ListAccum {
+    /// Whether the current paragraph has been identified as a list item, and
+    /// if so, whether it's ordered (`true`) or unordered/bullet (`false`).
+    current_kind: Option<bool>,
+    /// List items accumulated for the list currently being built.
+    items: Vec<Vec<Block>>,
+    /// Ordered flag for the current list (set when the first item is detected).
+    ordered: bool,
+}
+
+impl ListAccum {
+    /// Flush accumulated list items as a `Block::List`.
+    fn flush_list(&mut self, paragraphs: &mut Vec<Block>, span_start: usize, span_end: usize) {
+        if !self.items.is_empty() {
+            paragraphs.push(Block::List {
+                ordered: self.ordered,
+                items: std::mem::take(&mut self.items),
+                span: Span::new(span_start, span_end),
+            });
+        }
+    }
+}
+
 // ── Table accumulator ─────────────────────────────────────────────────────────
 
 /// Accumulates table state across `\intbl` / `\cell` / `\row` control words.
@@ -162,6 +189,12 @@ impl<'a> Parser<'a> {
         // can be preserved in the AST and re-emitted without loss.
         let mut current_para_props = String::new();
         let mut tbl = TableAccum::default();
+        // ── List accumulation ──────────────────────────────────────────────
+        // `current_list_kind` is set by `{\*\pn\pnlvlblt}` / `{\*\pn\pnlvlbody}`
+        // within the current paragraph.  `\pard` resets it.
+        // `list_items` + `list_ordered` accumulate the current open list.
+        let mut lst = ListAccum::default();
+        let mut list_start = self.pos;
 
         while self.pos < self.input.len() {
             let Some(byte) = self.current_byte() else {
@@ -191,6 +224,8 @@ impl<'a> Parser<'a> {
                             &mut current_align,
                             &mut current_para_props,
                             &mut tbl,
+                            &mut lst,
+                            &mut list_start,
                         );
                     } else if next == b'\'' {
                         // \'XX hex-encoded byte (Windows-1252).
@@ -255,7 +290,17 @@ impl<'a> Parser<'a> {
                         });
                         text_start = self.pos;
                     } else if self.is_skip_group() {
-                        self.skip_balanced_group();
+                        // Before skipping, check if this is a `{\*\pn...}` group
+                        // that carries list-style information (\pnlvlblt / \pnlvlbody).
+                        let rest = &self.input[self.pos..];
+                        if rest.starts_with(b"\\*") {
+                            let group_bytes = self.extract_balanced_group();
+                            if let Some(kind) = Parser::detect_list_kind(group_bytes) {
+                                lst.current_kind = Some(kind);
+                            }
+                        } else {
+                            self.skip_balanced_group();
+                        }
                     } else {
                         state_stack.push(state.clone());
                     }
@@ -319,6 +364,8 @@ impl<'a> Parser<'a> {
             });
         }
         tbl.flush_table(&mut paragraphs, self.pos);
+        // Flush any pending list.
+        lst.flush_list(&mut paragraphs, list_start, self.pos);
         if !current_para.is_empty() {
             paragraphs.push(Block::Paragraph {
                 inlines: merge_text_inlines(current_para),
@@ -517,6 +564,38 @@ impl<'a> Parser<'a> {
         sub.run()
     }
 
+    /// Scan group bytes (already extracted, excluding braces) for list-kind
+    /// control words.  Returns `Some(false)` for bullet, `Some(true)` for
+    /// ordered, `None` if no list marker found.
+    fn detect_list_kind(group_bytes: &[u8]) -> Option<bool> {
+        // Scan for \pnlvlblt (bullet) or \pnlvlbody / \pnlvlbodyxx (ordered)
+        let mut i = 0;
+        while i < group_bytes.len() {
+            if group_bytes[i] == b'\\' {
+                i += 1;
+                let word_start = i;
+                while i < group_bytes.len() && group_bytes[i].is_ascii_alphabetic() {
+                    i += 1;
+                }
+                let word = &group_bytes[word_start..i];
+                if word == b"pnlvlblt" {
+                    return Some(false); // bullet / unordered
+                } else if word.starts_with(b"pnlvlbody") || word == b"pnlvlnum" {
+                    return Some(true); // ordered
+                }
+                // skip optional numeric param
+                while i < group_bytes.len()
+                    && (group_bytes[i].is_ascii_digit() || group_bytes[i] == b'-')
+                {
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+        None
+    }
+
     fn read_control_word(&mut self) -> (String, Option<i32>) {
         let mut word = String::new();
         while self.pos < self.input.len() {
@@ -577,6 +656,8 @@ impl<'a> Parser<'a> {
         current_align: &mut Align,
         current_para_props: &mut String,
         tbl: &mut TableAccum,
+        lst: &mut ListAccum,
+        list_start: &mut usize,
     ) {
         match word {
             // \binN — N raw binary bytes follow; skip them entirely.
@@ -610,7 +691,38 @@ impl<'a> Parser<'a> {
                         *state = TextState::default();
                         *current_align = Align::Default;
                     }
+                } else if let Some(ordered) = lst.current_kind {
+                    // This paragraph is a list item.
+                    if !current_para.is_empty() {
+                        // If this is the first item in a new list (or list type changed):
+                        if lst.items.is_empty() {
+                            lst.ordered = ordered;
+                            *list_start = *para_start;
+                        } else if lst.ordered != ordered {
+                            // List type changed — flush the old list first.
+                            lst.flush_list(paragraphs, *list_start, self.pos);
+                            lst.ordered = ordered;
+                            *list_start = *para_start;
+                        }
+                        let item_para = Block::Paragraph {
+                            inlines: merge_text_inlines(std::mem::take(current_para)),
+                            align: *current_align,
+                            para_props: std::mem::take(current_para_props),
+                            span: Span::new(*para_start, self.pos),
+                        };
+                        lst.items.push(vec![item_para]);
+                    } else {
+                        current_para_props.clear();
+                    }
+                    if word == "pard" {
+                        *state = TextState::default();
+                        *current_align = Align::Default;
+                        lst.current_kind = None;
+                    }
                 } else {
+                    // Non-list paragraph: flush any pending list first.
+                    lst.flush_list(paragraphs, *list_start, self.pos);
+                    lst.current_kind = None;
                     if !current_para.is_empty() {
                         paragraphs.push(Block::Paragraph {
                             inlines: merge_text_inlines(std::mem::take(current_para)),

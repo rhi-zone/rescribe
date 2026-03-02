@@ -1,4 +1,4 @@
 {
-  "description": "Unordered list items emit with bullet character and indentation",
-  "output_contains": ["\\bullet", "first", "second", "third"]
+  "description": "Unordered list items emit with RTF bullet list format and indentation",
+  "output_contains": ["\\pnlvlblt", "first", "second", "third"]
 }

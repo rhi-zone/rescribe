@@ -335,14 +335,12 @@ fn emit_block(block: &Block, ctx: &mut Ctx) {
         }
 
         Block::List { ordered, items, .. } => {
-            let mut num = 1u32;
             for item_blocks in items {
-                ctx.push("\\pard\\li720\\fi-360 ");
+                ctx.push("\\pard ");
                 if *ordered {
-                    ctx.push(&format!("{num}. "));
-                    num += 1;
+                    ctx.push("{\\*\\pn\\pnlvlbody\\pnf0\\pnindent0\\pnstart1\\pndec{\\pntxta.}}\\fi-360\\li720 ");
                 } else {
-                    ctx.push("\\bullet  ");
+                    ctx.push("{\\*\\pn\\pnlvlblt\\pnf2\\pnindent0{\\pntxtb\\'B7}}\\fi-360\\li720 ");
                 }
                 for block in item_blocks {
                     match block {

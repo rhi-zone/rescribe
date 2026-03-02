@@ -418,7 +418,7 @@ mod tests {
     fn test_emit_list() {
         let doc = doc(|d| d.bullet_list(|l| l.item(|i| i.text("one")).item(|i| i.text("two"))));
         let output = emit_str(&doc);
-        assert!(output.contains("\\bullet"));
+        assert!(output.contains("\\pnlvlblt"));
         assert!(output.contains("one"));
         assert!(output.contains("two"));
     }

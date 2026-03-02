@@ -1,4 +1,4 @@
 {
-  "description": "Ordered list items emit with numeric prefix and indentation",
-  "output_contains": ["1. one", "2. two", "3. three"]
+  "description": "Ordered list items emit with RTF ordered list format and indentation",
+  "output_contains": ["\\pnlvlbody", "one", "two", "three"]
 }
