@@ -1,0 +1,9 @@
+{
+  "description": "RTF code page 1250 (Central European) hex-encoded character",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "\u015a" } }
+  ]
+}

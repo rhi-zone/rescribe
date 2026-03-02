@@ -74,6 +74,8 @@ struct Parser<'a> {
     pub color_table: Vec<(u8, u8, u8)>,
     /// Font names from the `\fonttbl` group; index 0 is the default font.
     pub font_table: Vec<String>,
+    /// Windows code page declared by `\ansicpg<N>`; defaults to 1252.
+    pub codepage: u16,
 }
 
 impl<'a> Parser<'a> {
@@ -84,6 +86,7 @@ impl<'a> Parser<'a> {
             diagnostics: Vec::new(),
             color_table: parse_color_table(input),
             font_table: parse_font_table(input),
+            codepage: parse_ansicpg(input),
         }
     }
 
@@ -159,7 +162,7 @@ impl<'a> Parser<'a> {
                             if current_text.is_empty() {
                                 text_start = self.pos;
                             }
-                            current_text.push(windows1252_to_char(code));
+                            current_text.push(codepage_to_char(self.codepage, code));
                         }
                     } else {
                         // Control symbol
@@ -215,7 +218,7 @@ impl<'a> Parser<'a> {
                     if current_text.is_empty() {
                         text_start = self.pos;
                     }
-                    current_text.push(windows1252_to_char(byte));
+                    current_text.push(codepage_to_char(self.codepage, byte));
                     self.advance();
                 }
             }
@@ -1474,6 +1477,148 @@ fn merge_text_inlines(inlines: Vec<Inline>) -> Vec<Inline> {
 ///
 /// For bytes 0x00–0x7F it is identical to ASCII.  The range 0x80–0x9F is
 /// remapped per the Windows-1252 code page.  0xA0–0xFF map to Latin-1.
+/// Pre-scan the input for `\ansicpg<N>` and return the declared code page.
+/// Returns 1252 (Windows Western) if not found.
+fn parse_ansicpg(input: &[u8]) -> u16 {
+    let needle = b"\\ansicpg";
+    let Some(start) = input.windows(needle.len()).position(|w| w == needle) else {
+        return 1252;
+    };
+    let rest = &input[start + needle.len()..];
+    let digits: Vec<u8> = rest
+        .iter()
+        .copied()
+        .take_while(|b| b.is_ascii_digit())
+        .collect();
+    if digits.is_empty() {
+        return 1252;
+    }
+    std::str::from_utf8(&digits)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1252)
+}
+
+/// Decode a single byte using the given Windows code page.
+///
+/// Supported: 1250, 1251, 1252, 1253, 1254.
+/// Unknown code pages fall back to CP1252 with a best-effort mapping.
+pub(crate) fn codepage_to_char(cp: u16, byte: u8) -> char {
+    match cp {
+        1250 => windows1250_to_char(byte),
+        1251 => windows1251_to_char(byte),
+        1253 => windows1253_to_char(byte),
+        1254 => windows1254_to_char(byte),
+        _ => windows1252_to_char(byte),
+    }
+}
+
+/// CP1250 (Central European / Polish etc.): 0x80–0x9F differ from Latin-1.
+fn windows1250_to_char(byte: u8) -> char {
+    #[rustfmt::skip]
+    const W1250: [char; 32] = [
+        '\u{20AC}', '\u{FFFD}', '\u{201A}', '\u{FFFD}',
+        '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}',
+        '\u{FFFD}', '\u{2030}', '\u{0160}', '\u{2039}',
+        '\u{015A}', '\u{0164}', '\u{017D}', '\u{0179}',
+        '\u{FFFD}', '\u{2018}', '\u{2019}', '\u{201C}',
+        '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}',
+        '\u{FFFD}', '\u{2122}', '\u{0161}', '\u{203A}',
+        '\u{015B}', '\u{0165}', '\u{017E}', '\u{017A}',
+    ];
+    if (0x80..=0x9F).contains(&byte) {
+        W1250[(byte - 0x80) as usize]
+    } else {
+        byte as char
+    }
+}
+
+/// CP1251 (Cyrillic).
+fn windows1251_to_char(byte: u8) -> char {
+    #[rustfmt::skip]
+    const W1251: [char; 128] = [
+        // 0x80–0xBF
+        '\u{0402}', '\u{0403}', '\u{201A}', '\u{0453}',
+        '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}',
+        '\u{20AC}', '\u{2030}', '\u{0409}', '\u{2039}',
+        '\u{040A}', '\u{040C}', '\u{040B}', '\u{040F}',
+        '\u{0452}', '\u{2018}', '\u{2019}', '\u{201C}',
+        '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}',
+        '\u{FFFD}', '\u{2122}', '\u{0459}', '\u{203A}',
+        '\u{045A}', '\u{045C}', '\u{045B}', '\u{045F}',
+        '\u{00A0}', '\u{040E}', '\u{045E}', '\u{0408}',
+        '\u{00A4}', '\u{0490}', '\u{00A6}', '\u{00A7}',
+        '\u{0401}', '\u{00A9}', '\u{0404}', '\u{00AB}',
+        '\u{00AC}', '\u{00AD}', '\u{00AE}', '\u{0407}',
+        '\u{00B0}', '\u{00B1}', '\u{0406}', '\u{0456}',
+        '\u{0491}', '\u{00B5}', '\u{00B6}', '\u{00B7}',
+        '\u{0451}', '\u{2116}', '\u{0454}', '\u{00BB}',
+        '\u{0458}', '\u{0405}', '\u{0455}', '\u{0457}',
+        // 0xC0–0xFF: Cyrillic block
+        '\u{0410}', '\u{0411}', '\u{0412}', '\u{0413}',
+        '\u{0414}', '\u{0415}', '\u{0416}', '\u{0417}',
+        '\u{0418}', '\u{0419}', '\u{041A}', '\u{041B}',
+        '\u{041C}', '\u{041D}', '\u{041E}', '\u{041F}',
+        '\u{0420}', '\u{0421}', '\u{0422}', '\u{0423}',
+        '\u{0424}', '\u{0425}', '\u{0426}', '\u{0427}',
+        '\u{0428}', '\u{0429}', '\u{042A}', '\u{042B}',
+        '\u{042C}', '\u{042D}', '\u{042E}', '\u{042F}',
+        '\u{0430}', '\u{0431}', '\u{0432}', '\u{0433}',
+        '\u{0434}', '\u{0435}', '\u{0436}', '\u{0437}',
+        '\u{0438}', '\u{0439}', '\u{043A}', '\u{043B}',
+        '\u{043C}', '\u{043D}', '\u{043E}', '\u{043F}',
+        '\u{0440}', '\u{0441}', '\u{0442}', '\u{0443}',
+        '\u{0444}', '\u{0445}', '\u{0446}', '\u{0447}',
+        '\u{0448}', '\u{0449}', '\u{044A}', '\u{044B}',
+        '\u{044C}', '\u{044D}', '\u{044E}', '\u{044F}',
+    ];
+    if byte >= 0x80 {
+        W1251[(byte - 0x80) as usize]
+    } else {
+        byte as char
+    }
+}
+
+/// CP1253 (Greek).
+fn windows1253_to_char(byte: u8) -> char {
+    #[rustfmt::skip]
+    const W1253: [char; 32] = [
+        '\u{20AC}', '\u{FFFD}', '\u{201A}', '\u{0192}',
+        '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}',
+        '\u{FFFD}', '\u{2030}', '\u{FFFD}', '\u{2039}',
+        '\u{FFFD}', '\u{FFFD}', '\u{FFFD}', '\u{FFFD}',
+        '\u{FFFD}', '\u{2018}', '\u{2019}', '\u{201C}',
+        '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}',
+        '\u{FFFD}', '\u{2122}', '\u{FFFD}', '\u{203A}',
+        '\u{FFFD}', '\u{FFFD}', '\u{FFFD}', '\u{FFFD}',
+    ];
+    if (0x80..=0x9F).contains(&byte) {
+        W1253[(byte - 0x80) as usize]
+    } else {
+        byte as char
+    }
+}
+
+/// CP1254 (Turkish).  The 0x80–0x9F range differs from W1252 in 4 positions.
+fn windows1254_to_char(byte: u8) -> char {
+    #[rustfmt::skip]
+    const W1254: [char; 32] = [
+        '\u{20AC}', '\u{FFFD}', '\u{201A}', '\u{0192}',
+        '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}',
+        '\u{02C6}', '\u{2030}', '\u{0160}', '\u{2039}',
+        '\u{0152}', '\u{FFFD}', '\u{FFFD}', '\u{FFFD}',
+        '\u{FFFD}', '\u{2018}', '\u{2019}', '\u{201C}',
+        '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}',
+        '\u{02DC}', '\u{2122}', '\u{0161}', '\u{203A}',
+        '\u{0153}', '\u{FFFD}', '\u{FFFD}', '\u{0178}',
+    ];
+    if (0x80..=0x9F).contains(&byte) {
+        W1254[(byte - 0x80) as usize]
+    } else {
+        byte as char
+    }
+}
+
 pub(crate) fn windows1252_to_char(byte: u8) -> char {
     // Only the 0x80–0x9F range differs from Latin-1
     #[rustfmt::skip]
