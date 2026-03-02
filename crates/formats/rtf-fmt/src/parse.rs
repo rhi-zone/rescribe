@@ -942,11 +942,37 @@ impl<'a> Parser<'a> {
             // Drawing object primitives (inside \do / \dposp groups)
             | "do" | "dpptx" | "dppty" | "dpxsize" | "dpy" | "dpline"
             | "dplinecob" | "dplinecor" | "dplinecog" | "dpx" | "dodhgt" | "dobxpage"
+            // Drawing object fill/line properties (\do group, no semantic content)
+            | "dpfillfgcb" | "dpfillfgcr" | "dpfillfgcg" | "dpfillbgcb" | "dpfillbgcr" | "dpfillbgcg"
+            | "dplinehollow" | "dropcapt" | "dropcapli"
             // Document flags
             | "donotshowprops"
             // Remaining rare shape / draw / section words
             | "shpbypara" | "shpbxignore" | "shpz" | "shpfhdr"
             | "dpysize" | "dplinew" | "dobypage"
+            // Asian typography control words (CJK-specific, no cross-format semantic equivalent)
+            | "mm" | "chm" | "duj" | "ffc" | "jdc" | "iov" | "qx" | "qcy"
+            | "iy" | "kh" | "kf" | "hf" | "of" | "nc" | "vv" | "fq" | "yoq"
+            | "ixr" | "jr" | "hui" | "xi" | "kuz" | "yk" | "zyf" | "cj" | "rj"
+            | "dd" | "mc" | "xv" | "juc" | "ommu"
+            // Single-letter Asian/CJK layout words (\g, \e, \l, \w, \p — different from EQ field letters)
+            // Note: these overlap with the EQ field single-letter words below; both are no-ops here.
+            | "g" | "e" | "l" | "w" | "p"
+            // Additional Asian/CJK typography (less common, found in govdocs1 corpus)
+            | "embo" | "qe" | "lw" | "jl" | "np" | "owy" | "ya" | "jx" | "yd" | "jhu"
+            | "cd" | "su" | "emjk" | "etz" | "gp" | "mte" | "aiu" | "ids" | "qdl" | "kb"
+            | "bbr" | "lm" | "my" | "fm" | "ka" | "ytkn" | "ma" | "ejo" | "rdlnjs" | "wg"
+            | "utr" | "dmzq" | "vc" | "icpm" | "vn" | "biyypj" | "te" | "fz"
+            // Drawing object fill pattern
+            | "dpfillpat"
+            // \tc as bare word (content handled as skip group when in braces)
+            | "tc"
+            // Additional rare Asian/CJK words found in corpus
+            | "cky" | "mv" | "clols" | "ns" | "az" | "elqc" | "htw" | "ed" | "dh" | "pv"
+            | "qt" | "zf" | "rqn" | "lh" | "je" | "dk" | "hp" | "pi" | "qb" | "yi"
+            | "hyti" | "em" | "lqt" | "yw"
+            // Form display control (document-level, no semantic content)
+            | "formdisp"
             // Page numbering variants
             | "pgnid" | "pgnhnsm"
             // Footnote / endnote numbering
