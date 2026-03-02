@@ -119,17 +119,20 @@ Tests parse→emit→parse consistency. If the parser is lossy, the first parse 
 content; the assertion only checks that dropped content stays dropped. "Zero roundtrip
 failures" here is not evidence of losslessness.
 
-**Wrong (direction 2):** `parse(emit(arbitrary_rescribe_doc)) == arbitrary_rescribe_doc`
-Starting from the rescribe IR only exercises constructs the IR can express. Format-specific
-constructs (RTF field codes, color tables, font tables, etc.) that don't map to the IR
-will never be generated, so this direction can't find gaps in their handling.
+**Also valid:** `parse(emit(arbitrary_rescribe_doc)) == arbitrary_rescribe_doc`
+rescribe's IR is open by design — `NodeKind` is a free string, `Properties` is an open
+bag, format-specific constructs live in `rtf:`/`html:`/etc. namespaces, and `raw_inline`/
+`raw_block` exist for anything else. An RTF field code can be `rtf:field`; a color run
+can carry `style:color`. So arbitrary IR generation CAN cover format-specific constructs
+— once the IR modeling is complete. If this roundtrip shows zero failures, that's not
+evidence of losslessness; it's evidence that constructs are being dropped instead of
+modeled. Anything dropped silently can't be generated, can't fail.
 
 **Correct:** `parse(emit(arbitrary_format_ast)) == arbitrary_format_ast`
 Start from an arbitrary instance of the *format crate's own `Ast` type*. The native AST
-can express everything the format can. Emit it to wire bytes. Parse those bytes back.
-Assert equality. This finds both emitter gaps (constructs the emitter fails to encode) and
-parser gaps (constructs the parser fails to recover from valid-encoded input), across the
-full surface area of the format.
+is the ground truth for what the format can express. Emit it to wire bytes. Parse those
+bytes back. Assert equality. This is the definitive test for the standalone format crate:
+it covers the full surface area of the format regardless of IR modeling completeness.
 
 ### Fidelity warnings are not optional
 
