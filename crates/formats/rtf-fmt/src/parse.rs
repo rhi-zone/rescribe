@@ -1698,29 +1698,14 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
             _ => content.push(b),
         }
     }
-    // We work on raw bytes throughout the outer scanning loop so that we
-    // never byte-index into a `String::from_utf8_lossy` result using offsets
-    // derived from the original byte slice.  The hazard: `from_utf8_lossy`
-    // replaces each invalid byte with the 3-byte sequence U+FFFD (EF BF BD),
-    // so the lossy string can be *longer* than `content`.  An offset `j` that
-    // is valid in `content` may then fall in the middle of a replacement
-    // character in the lossy string, causing a panic on `&lossy_str[j..]`.
-    //
-    // We do still call `from_utf8_lossy` once per font entry (line below), but
-    // only AFTER extracting `eb` as a raw-byte slice.  `extract_font_name`
-    // receives the already-bounded lossy string and computes `last_word_end`
-    // from *its own* `as_bytes()` scan — there is no cross-slice offset reuse.
-    // That call is safe because `last_word_end` is only ever set to `i` after
-    // an `is_ascii_alphabetic / is_ascii_digit` scan stops.  Those predicates
-    // return false for any byte ≥ 128, so after the scan `i` is either at an
-    // ASCII byte (1-byte char, always a valid boundary) or at 0xEF — the
-    // *first* byte of U+FFFD and therefore a valid UTF-8 char boundary.  The
-    // 0xBF and 0xBD continuation bytes are visited only by the `else { i += 1
-    // }` branch, which never writes to `last_word_end`.
-    //
-    // The cleanest alternative would be making `extract_font_name` accept
-    // `&[u8]` directly and calling `from_utf8_lossy` only on the final
-    // name slice; that would eliminate the boundary-safety argument entirely.
+    // Work on raw bytes throughout to avoid indexing into a
+    // `String::from_utf8_lossy` result with offsets from the original byte
+    // slice.  `from_utf8_lossy` replaces each invalid byte with the 3-byte
+    // sequence U+FFFD (EF BF BD), so the lossy string can be *longer* than
+    // `content`; an offset valid in `content` may then fall mid-replacement-
+    // character in the lossy string and panic.  `extract_font_name` takes
+    // `&[u8]` and calls `from_utf8_lossy` only on the final name slice, so
+    // no cross-slice offset reuse occurs.
     let bytes = &content[..];
     let mut fonts: Vec<(usize, String)> = Vec::new();
     let mut i = 0usize;
@@ -1803,9 +1788,7 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
                 }
             }
             if let Some(idx) = font_idx {
-                // Convert entry bytes to string lossily only for name extraction
-                let entry_str = String::from_utf8_lossy(eb);
-                fonts.push((idx, extract_font_name(&entry_str)));
+                fonts.push((idx, extract_font_name(eb)));
             }
             i = j;
         } else {
@@ -1826,18 +1809,17 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
 /// Extract the font name from a font table entry like `\f0\froman Times New Roman;`.
 ///
 /// Returns text after the last control word, stripped of trailing `;` and whitespace.
-fn extract_font_name(entry: &str) -> String {
+fn extract_font_name(entry: &[u8]) -> String {
     let mut last_word_end = 0usize;
     let mut i = 0usize;
-    let b = entry.as_bytes();
-    while i < b.len() {
-        if b[i] == b'\\' {
+    while i < entry.len() {
+        if entry[i] == b'\\' {
             i += 1;
-            while i < b.len() && (b[i].is_ascii_alphabetic() || b[i].is_ascii_digit()) {
+            while i < entry.len() && (entry[i].is_ascii_alphabetic() || entry[i].is_ascii_digit()) {
                 i += 1;
             }
             // skip space delimiter
-            if i < b.len() && b[i] == b' ' {
+            if i < entry.len() && entry[i] == b' ' {
                 i += 1;
             }
             last_word_end = i;
@@ -1845,7 +1827,7 @@ fn extract_font_name(entry: &str) -> String {
             i += 1;
         }
     }
-    entry[last_word_end..]
+    String::from_utf8_lossy(&entry[last_word_end..])
         .trim()
         .trim_end_matches(';')
         .trim()
