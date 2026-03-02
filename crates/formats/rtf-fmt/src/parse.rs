@@ -1698,10 +1698,11 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
             _ => content.push(b),
         }
     }
-    let content_str = String::from_utf8_lossy(&content);
+    // Work entirely on bytes to avoid UTF-8 boundary panics from from_utf8_lossy
+    // expanding invalid bytes into multi-byte replacement chars.
+    let bytes = &content[..];
     let mut fonts: Vec<(usize, String)> = Vec::new();
     let mut i = 0usize;
-    let bytes = content_str.as_bytes();
     while i < bytes.len() {
         if bytes[i] == b'{' {
             let entry_start = i + 1;
@@ -1720,11 +1721,10 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
                 i = j;
                 continue;
             }
-            let entry = &content_str[entry_start..end];
+            let eb = &bytes[entry_start..end];
             // Find the font index from \f<N>
             let mut font_idx: Option<usize> = None;
             let mut pos = 0usize;
-            let eb = entry.as_bytes();
             while pos < eb.len() {
                 if eb[pos] == b'\\' {
                     pos += 1;
@@ -1732,7 +1732,7 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
                     while pos < eb.len() && eb[pos].is_ascii_alphabetic() {
                         pos += 1;
                     }
-                    let word = &entry[word_start..pos];
+                    let word = &eb[word_start..pos];
                     // Read optional integer param
                     let num_start = pos;
                     if pos < eb.len() && eb[pos] == b'-' {
@@ -1741,8 +1741,9 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
                     while pos < eb.len() && eb[pos].is_ascii_digit() {
                         pos += 1;
                     }
-                    if word == "f" && pos > num_start {
-                        let idx = entry[num_start..pos].parse::<usize>().unwrap_or(0);
+                    if word == b"f" && pos > num_start {
+                        let idx_str = std::str::from_utf8(&eb[num_start..pos]).unwrap_or("0");
+                        let idx = idx_str.parse::<usize>().unwrap_or(0);
                         if idx <= 4096 {
                             font_idx = Some(idx);
                         }
@@ -1756,7 +1757,9 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
                 }
             }
             if let Some(idx) = font_idx {
-                fonts.push((idx, extract_font_name(entry)));
+                // Convert entry bytes to string lossily only for name extraction
+                let entry_str = String::from_utf8_lossy(eb);
+                fonts.push((idx, extract_font_name(&entry_str)));
             }
             i = j;
         } else {
