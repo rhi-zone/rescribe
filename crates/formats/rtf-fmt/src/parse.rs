@@ -121,6 +121,24 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Construct a sub-parser that inherits the color table, font table, and
+    /// code page from the parent document, but parses a different byte slice.
+    fn with_tables(
+        input: &'a [u8],
+        color_table: Vec<(u8, u8, u8)>,
+        font_table: Vec<String>,
+        codepage: u16,
+    ) -> Self {
+        Self {
+            input,
+            pos: 0,
+            diagnostics: Vec::new(),
+            color_table,
+            font_table,
+            codepage,
+        }
+    }
+
     fn current_byte(&self) -> Option<u8> {
         self.input.get(self.pos).copied()
     }
@@ -215,7 +233,28 @@ impl<'a> Parser<'a> {
 
                 b'{' => {
                     self.advance();
-                    if self.is_skip_group() {
+                    if self.is_footnote_group() {
+                        // Parse footnote / endnote content into an Inline::Footnote
+                        // at the current position, flushing any pending text first.
+                        if !current_text.is_empty() {
+                            let span = Span::new(text_start, self.pos);
+                            current_para.push(make_inline(
+                                &current_text,
+                                &state,
+                                span,
+                                &self.color_table,
+                                &self.font_table,
+                            ));
+                            current_text.clear();
+                        }
+                        let fn_start = self.pos;
+                        let footnote_content = self.parse_footnote_group();
+                        current_para.push(Inline::Footnote {
+                            content: footnote_content,
+                            span: Span::new(fn_start, self.pos),
+                        });
+                        text_start = self.pos;
+                    } else if self.is_skip_group() {
                         self.skip_balanced_group();
                     } else {
                         state_stack.push(state.clone());
@@ -355,10 +394,8 @@ impl<'a> Parser<'a> {
             b"\\footerl",
             b"\\footerr",
             b"\\fldinst",
-            // Footnotes, endnotes, annotations: skip content so it doesn't
-            // bleed into the main paragraph text.
-            b"\\footnote",
-            b"\\endnote",
+            // Annotations: skip so they don't bleed into main text.
+            // (Footnotes/endnotes are now handled by is_footnote_group().)
             b"\\annotation",
             // Table of contents / index entry markers
             b"\\tc",
@@ -394,6 +431,90 @@ impl<'a> Parser<'a> {
                 _ => self.advance(),
             }
         }
+    }
+
+    /// Return `true` if the current position (already past `{`) begins a
+    /// `\footnote` or `\endnote` group that we should parse rather than skip.
+    fn is_footnote_group(&self) -> bool {
+        let rest = &self.input[self.pos..];
+        // Must start with \footnote or \endnote followed by a word boundary
+        for prefix in [b"\\footnote".as_slice(), b"\\endnote".as_slice()] {
+            if rest.starts_with(prefix) {
+                let after = rest.get(prefix.len()).copied();
+                // word boundary: space, \, {, }, digit, or end
+                if matches!(
+                    after,
+                    None | Some(b' ') | Some(b'\\') | Some(b'{') | Some(b'}')
+                ) || after.map(|b| b.is_ascii_digit()).unwrap_or(false)
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Extract the current balanced group (caller has already consumed `{`)
+    /// as a byte slice, advancing past the closing `}`.
+    /// Returns the group content (between `{` and `}`), not including the braces.
+    fn extract_balanced_group(&mut self) -> &'a [u8] {
+        let content_start = self.pos;
+        let mut depth = 1usize;
+        while self.pos < self.input.len() && depth > 0 {
+            match self.current_byte() {
+                Some(b'{') => {
+                    depth += 1;
+                    self.advance();
+                }
+                Some(b'}') => {
+                    depth -= 1;
+                    if depth == 0 {
+                        let content_end = self.pos;
+                        self.advance(); // consume '}'
+                        return &self.input[content_start..content_end];
+                    }
+                    self.advance();
+                }
+                Some(b'\\') => {
+                    self.advance();
+                    if self.pos < self.input.len() {
+                        self.advance();
+                    }
+                }
+                _ => self.advance(),
+            }
+        }
+        &self.input[content_start..self.pos]
+    }
+
+    /// Parse a `{\footnote ...}` group (caller has already consumed `{`).
+    /// Returns the parsed blocks and advances past the closing `}`.
+    fn parse_footnote_group(&mut self) -> Vec<Block> {
+        let group_bytes = self.extract_balanced_group();
+        // group_bytes starts with `\footnote` or `\endnote`; skip that word
+        let mut sub = Parser::with_tables(
+            group_bytes,
+            self.color_table.clone(),
+            self.font_table.clone(),
+            self.codepage,
+        );
+        // Skip the opening control word (\footnote or \endnote)
+        if sub.current_byte() == Some(b'\\') {
+            sub.advance(); // skip '\'
+            // skip the word itself
+            while sub
+                .current_byte()
+                .map(|b| b.is_ascii_alphabetic())
+                .unwrap_or(false)
+            {
+                sub.advance();
+            }
+            // skip optional trailing space
+            if sub.current_byte() == Some(b' ') {
+                sub.advance();
+            }
+        }
+        sub.run()
     }
 
     fn read_control_word(&mut self) -> (String, Option<i32>) {
@@ -1934,6 +2055,7 @@ mod tests {
                 }
                 Inline::Image { alt, .. } => out.push_str(alt),
                 Inline::LineBreak { .. } | Inline::SoftBreak { .. } => out.push(' '),
+                Inline::Footnote { .. } => {} // footnote body is separate
             }
         }
         out

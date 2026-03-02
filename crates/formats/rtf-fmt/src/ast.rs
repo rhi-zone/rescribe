@@ -401,6 +401,16 @@ pub enum Inline {
         children: Vec<Inline>,
         span: Span,
     },
+
+    /// Footnote (or endnote) embedded at its reference position.
+    ///
+    /// In RTF the content appears inline as `{\footnote ...}` at the point
+    /// in the body where the footnote marker is.  `content` holds the parsed
+    /// blocks that make up the footnote body.
+    Footnote {
+        content: Vec<Block>,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -513,6 +523,10 @@ impl Inline {
                 children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
                 span: *span,
             },
+            Inline::Footnote { content, span } => Inline::Footnote {
+                content: content.iter().map(Block::normalize).collect(),
+                span: *span,
+            },
             other => other.clone(),
         }
     }
@@ -539,7 +553,8 @@ impl Inline {
             | Inline::CharSpan { span, .. }
             | Inline::Font { span, .. }
             | Inline::BgColor { span, .. }
-            | Inline::Lang { span, .. } => *span,
+            | Inline::Lang { span, .. }
+            | Inline::Footnote { span, .. } => *span,
         }
     }
 
@@ -641,6 +656,10 @@ impl Inline {
             Inline::Lang { lcid, children, .. } => Inline::Lang {
                 lcid: *lcid,
                 children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Footnote { content, .. } => Inline::Footnote {
+                content: content.iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
         }

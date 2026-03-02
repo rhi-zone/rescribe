@@ -84,6 +84,11 @@ fn collect_colors_in_inline(inline: &Inline, out: &mut Vec<(u8, u8, u8)>) {
                 collect_colors_in_inline(child, out);
             }
         }
+        Inline::Footnote { content, .. } => {
+            for block in content {
+                collect_colors_in_block(block, out);
+            }
+        }
         Inline::Text { .. }
         | Inline::Code { .. }
         | Inline::Image { .. }
@@ -160,6 +165,11 @@ fn collect_fonts_in_inline(inline: &Inline, out: &mut Vec<String>) {
         | Inline::Lang { children, .. } => {
             for child in children {
                 collect_fonts_in_inline(child, out);
+            }
+        }
+        Inline::Footnote { content, .. } => {
+            for block in content {
+                collect_fonts_in_block(block, out);
             }
         }
         Inline::Text { .. }
@@ -474,6 +484,14 @@ fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
         Inline::Lang { lcid, children, .. } => {
             ctx.push(&format!("{{\\lang{lcid} "));
             emit_inlines(children, ctx);
+            ctx.push("}");
+        }
+
+        Inline::Footnote { content, .. } => {
+            ctx.push("{\\footnote ");
+            for block in content {
+                emit_block(block, ctx);
+            }
             ctx.push("}");
         }
     }

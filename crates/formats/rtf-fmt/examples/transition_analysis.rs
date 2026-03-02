@@ -55,6 +55,7 @@ fn inline_kind(i: &Inline) -> &'static str {
         Inline::Font { .. } => "font",
         Inline::BgColor { .. } => "bg_color",
         Inline::Lang { .. } => "lang",
+        Inline::Footnote { .. } => "footnote",
     }
 }
 

@@ -189,6 +189,10 @@ fn inline_to_node(inline: &Inline) -> Node {
         Inline::Lang { lcid, children, .. } => Node::new(node::SPAN)
             .prop("lang", lcid_to_bcp47(*lcid))
             .children(inlines_to_nodes(children)),
+
+        Inline::Footnote { content, .. } => {
+            Node::new(node::FOOTNOTE_REF).children(content.iter().map(block_to_node))
+        }
     }
 }
 
