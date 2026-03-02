@@ -1,0 +1,10 @@
+{
+  "description": "RTF inline background color span",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:background": "#ffff00" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "yellow bg" } }
+  ]
+}

@@ -377,6 +377,21 @@ pub enum Inline {
         children: Vec<Inline>,
         span: Span,
     },
+    /// Inline span with an explicit font face from the font table.
+    Font {
+        /// Font name (e.g. `"Arial"`, `"Times New Roman"`).
+        name: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    /// Inline span with an explicit background (highlight) color.
+    BgColor {
+        r: u8,
+        g: u8,
+        b: u8,
+        children: Vec<Inline>,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -458,6 +473,28 @@ impl Inline {
                 children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
                 span: *span,
             },
+            Inline::Font {
+                name,
+                children,
+                span,
+            } => Inline::Font {
+                name: name.clone(),
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
+            Inline::BgColor {
+                r,
+                g,
+                b,
+                children,
+                span,
+            } => Inline::BgColor {
+                r: *r,
+                g: *g,
+                b: *b,
+                children: merge_text_inlines(children.iter().map(Inline::normalize).collect()),
+                span: *span,
+            },
             other => other.clone(),
         }
     }
@@ -481,7 +518,9 @@ impl Inline {
             | Inline::AllCaps { span, .. }
             | Inline::SmallCaps { span, .. }
             | Inline::Hidden { span, .. }
-            | Inline::CharSpan { span, .. } => *span,
+            | Inline::CharSpan { span, .. }
+            | Inline::Font { span, .. }
+            | Inline::BgColor { span, .. } => *span,
         }
     }
 
@@ -563,6 +602,20 @@ impl Inline {
                 ..
             } => Inline::CharSpan {
                 char_props: char_props.clone(),
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Font { name, children, .. } => Inline::Font {
+                name: name.clone(),
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::BgColor {
+                r, g, b, children, ..
+            } => Inline::BgColor {
+                r: *r,
+                g: *g,
+                b: *b,
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },

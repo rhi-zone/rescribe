@@ -1,0 +1,10 @@
+{
+  "description": "RTF inline font face span",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:font": "Arial" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Arial text" } }
+  ]
+}

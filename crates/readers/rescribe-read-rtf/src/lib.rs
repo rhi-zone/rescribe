@@ -175,6 +175,16 @@ fn inline_to_node(inline: &Inline) -> Node {
         } => Node::new("rtf:char-span")
             .prop("rtf:char-props", char_props.clone())
             .children(inlines_to_nodes(children)),
+
+        Inline::Font { name, children, .. } => Node::new(node::SPAN)
+            .prop(prop::STYLE_FONT, name.clone())
+            .children(inlines_to_nodes(children)),
+
+        Inline::BgColor {
+            r, g, b, children, ..
+        } => Node::new(node::SPAN)
+            .prop("style:background", format!("#{r:02x}{g:02x}{b:02x}"))
+            .children(inlines_to_nodes(children)),
     }
 }
 

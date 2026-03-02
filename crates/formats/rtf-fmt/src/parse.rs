@@ -52,8 +52,12 @@ struct TextState {
     hidden: bool,
     /// Font size in half-points (0 = not explicitly set).
     font_size: u16,
-    /// Color table index (0 = auto/default).
+    /// Foreground color table index (0 = auto/default).
     color_idx: u8,
+    /// Background color table index (0 = auto/default).  Set by `\cb<N>`.
+    bg_color_idx: u8,
+    /// Font table index (0 = default font).  Set by `\f<N>`.
+    font_idx: u16,
     /// Raw RTF character-layout control words (e.g. `\dn3\shad`) accumulated
     /// verbatim for re-emission.  Empty string means no char-layout words active.
     char_props: String,
@@ -66,6 +70,8 @@ struct Parser<'a> {
     pos: usize,
     pub diagnostics: Vec<Diagnostic>,
     pub color_table: Vec<(u8, u8, u8)>,
+    /// Font names from the `\fonttbl` group; index 0 is the default font.
+    pub font_table: Vec<String>,
 }
 
 impl<'a> Parser<'a> {
@@ -75,6 +81,7 @@ impl<'a> Parser<'a> {
             pos: 0,
             diagnostics: Vec::new(),
             color_table: parse_color_table(input),
+            font_table: parse_font_table(input),
         }
     }
 
@@ -186,6 +193,7 @@ impl<'a> Parser<'a> {
                             &state,
                             span,
                             &self.color_table,
+                            &self.font_table,
                         ));
                         current_text.clear();
                     }
@@ -214,7 +222,13 @@ impl<'a> Parser<'a> {
         // Flush remaining
         if !current_text.is_empty() {
             let span = Span::new(text_start, self.pos);
-            current_para.push(make_inline(&current_text, &state, span, &self.color_table));
+            current_para.push(make_inline(
+                &current_text,
+                &state,
+                span,
+                &self.color_table,
+                &self.font_table,
+            ));
         }
         if !current_para.is_empty() {
             paragraphs.push(Block::Paragraph {
@@ -406,7 +420,7 @@ impl<'a> Parser<'a> {
             "par" | "pard" => {
                 if !current_text.is_empty() {
                     let span = Span::new(*text_start, self.pos);
-                    current_para.push(make_inline(current_text, state, span, &self.color_table));
+                    current_para.push(make_inline(current_text, state, span, &self.color_table, &self.font_table));
                     current_text.clear();
                 }
                 if !current_para.is_empty() {
@@ -430,7 +444,7 @@ impl<'a> Parser<'a> {
             "line" => {
                 if !current_text.is_empty() {
                     let span = Span::new(*text_start, self.pos);
-                    current_para.push(make_inline(current_text, state, span, &self.color_table));
+                    current_para.push(make_inline(current_text, state, span, &self.color_table, &self.font_table));
                     current_text.clear();
                 }
                 *text_start = self.pos;
@@ -447,6 +461,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.bold = param.unwrap_or(1) != 0;
             }
@@ -458,6 +473,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.italic = param.unwrap_or(1) != 0;
             }
@@ -469,6 +485,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.underline = param.unwrap_or(1) != 0;
             }
@@ -480,6 +497,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.underline = false;
             }
@@ -491,6 +509,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.strikethrough = param.unwrap_or(1) != 0;
             }
@@ -502,6 +521,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.superscript = true;
                 state.subscript = false;
@@ -514,6 +534,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.subscript = true;
                 state.superscript = false;
@@ -526,6 +547,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.superscript = false;
                 state.subscript = false;
@@ -540,6 +562,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 *current_align = Align::Left;
             }
@@ -551,6 +574,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 *current_align = Align::Right;
             }
@@ -562,6 +586,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 *current_align = Align::Center;
             }
@@ -573,6 +598,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 *current_align = Align::Justify;
             }
@@ -586,6 +612,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.font_size = param.unwrap_or(0).max(0) as u16;
             }
@@ -599,6 +626,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.color_idx = param.unwrap_or(0).max(0) as u8;
             }
@@ -611,6 +639,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.all_caps = param.unwrap_or(1) != 0;
             }
@@ -622,6 +651,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.small_caps = param.unwrap_or(1) != 0;
             }
@@ -634,6 +664,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.hidden = param.unwrap_or(1) != 0;
             }
@@ -687,6 +718,7 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 *state = TextState::default();
             }
@@ -735,6 +767,7 @@ impl<'a> Parser<'a> {
                         state,
                         current_para,
                         &self.color_table,
+                        &self.font_table,
                     );
                     state.char_props.push_str(&format_para_word(word, param));
                 }
@@ -748,12 +781,41 @@ impl<'a> Parser<'a> {
                     state,
                     current_para,
                     &self.color_table,
+                    &self.font_table,
                 );
                 state.char_props.push_str(&format_para_word(word, None));
             }
 
+            // Font index: \f<N> selects a font from the font table
+            "f" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                    &self.font_table,
+                );
+                state.font_idx = param.unwrap_or(0).max(0) as u16;
+            }
+
+            // Background (highlight) color index: \cb<N>
+            "cb" => {
+                flush_text(
+                    current_text,
+                    text_start,
+                    self.pos,
+                    state,
+                    current_para,
+                    &self.color_table,
+                    &self.font_table,
+                );
+                state.bg_color_idx = param.unwrap_or(0).max(0) as u8;
+            }
+
             // Ignored formatting / sizing controls
-            "f" | "cb" | "pntext" | "pn" | "pnlvlblt" | "rtf" | "ansi" | "mac" | "pc" | "pca" | "deff"
+            "pntext" | "pn" | "pnlvlblt" | "rtf" | "ansi" | "mac" | "pc" | "pca" | "deff"
             | "deflang" | "widowctrl" | "hyphauto" | "hyphconsec" | "hyphcaps" | "paperw"
             | "paperh" | "margl" | "margr" | "margt" | "margb" | "cols" | "colsx"
             | "endhere" | "headerl" | "headerr" | "header" | "footer"
@@ -998,6 +1060,7 @@ impl<'a> Parser<'a> {
                         state,
                         current_para,
                         &self.color_table,
+                        &self.font_table,
                     );
                     state.bold = false;
                 } else if word == "i0" {
@@ -1008,6 +1071,7 @@ impl<'a> Parser<'a> {
                         state,
                         current_para,
                         &self.color_table,
+                        &self.font_table,
                     );
                     state.italic = false;
                 }
@@ -1050,10 +1114,17 @@ fn flush_text(
     state: &TextState,
     current_para: &mut Vec<Inline>,
     color_table: &[(u8, u8, u8)],
+    font_table: &[String],
 ) {
     if !current_text.is_empty() {
         let span = Span::new(*text_start, pos);
-        current_para.push(make_inline(current_text, state, span, color_table));
+        current_para.push(make_inline(
+            current_text,
+            state,
+            span,
+            color_table,
+            font_table,
+        ));
         current_text.clear();
         *text_start = pos;
     }
@@ -1066,7 +1137,13 @@ fn push_char(current_text: &mut String, text_start: &mut usize, pos: usize, ch: 
     current_text.push(ch);
 }
 
-fn make_inline(text: &str, state: &TextState, span: Span, color_table: &[(u8, u8, u8)]) -> Inline {
+fn make_inline(
+    text: &str,
+    state: &TextState,
+    span: Span,
+    color_table: &[(u8, u8, u8)],
+    font_table: &[String],
+) -> Inline {
     let mut inline = Inline::Text {
         text: text.to_string(),
         span,
@@ -1152,6 +1229,30 @@ fn make_inline(text: &str, state: &TextState, span: Span, color_table: &[(u8, u8
             span,
         };
     }
+    if state.bg_color_idx != 0 {
+        let idx = state.bg_color_idx as usize;
+        if idx < color_table.len() {
+            let (r, g, b) = color_table[idx];
+            inline = Inline::BgColor {
+                r,
+                g,
+                b,
+                children: vec![inline],
+                span,
+            };
+        }
+    }
+    if state.font_idx != 0 {
+        let idx = state.font_idx as usize;
+        if idx < font_table.len() {
+            let name = font_table[idx].clone();
+            inline = Inline::Font {
+                name,
+                children: vec![inline],
+                span,
+            };
+        }
+    }
     inline
 }
 
@@ -1207,6 +1308,131 @@ fn parse_color_table(input: &[u8]) -> Vec<(u8, u8, u8)> {
         colors.push((r, g, bv));
     }
     colors
+}
+
+/// Pre-scan the input for a `\fonttbl` group and parse font names.
+///
+/// Returns a `Vec<String>` where index N is the name of `\fN`.  Index 0 is
+/// always present (default font).  Fonts not declared are left as empty strings.
+fn parse_font_table(input: &[u8]) -> Vec<String> {
+    let pattern = b"{\\fonttbl";
+    let Some(start) = input.windows(pattern.len()).position(|w| w == pattern) else {
+        return vec![String::new()]; // index 0 = default (empty)
+    };
+    let rest = &input[start + 1..]; // skip opening '{'
+    let mut depth = 1usize;
+    let mut content: Vec<u8> = Vec::new();
+    for &b in rest {
+        match b {
+            b'{' => {
+                depth += 1;
+                content.push(b);
+            }
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+                content.push(b);
+            }
+            _ => content.push(b),
+        }
+    }
+    let content_str = String::from_utf8_lossy(&content);
+    let mut fonts: Vec<(usize, String)> = Vec::new();
+    let mut i = 0usize;
+    let bytes = content_str.as_bytes();
+    while i < bytes.len() {
+        if bytes[i] == b'{' {
+            let entry_start = i + 1;
+            let mut depth2 = 1usize;
+            let mut j = entry_start;
+            while j < bytes.len() && depth2 > 0 {
+                match bytes[j] {
+                    b'{' => depth2 += 1,
+                    b'}' => depth2 -= 1,
+                    _ => {}
+                }
+                j += 1;
+            }
+            let entry = &content_str[entry_start..j.saturating_sub(1)];
+            // Find the font index from \f<N>
+            let mut font_idx: Option<usize> = None;
+            let mut pos = 0usize;
+            let eb = entry.as_bytes();
+            while pos < eb.len() {
+                if eb[pos] == b'\\' {
+                    pos += 1;
+                    let word_start = pos;
+                    while pos < eb.len() && eb[pos].is_ascii_alphabetic() {
+                        pos += 1;
+                    }
+                    let word = &entry[word_start..pos];
+                    // Read optional integer param
+                    let num_start = pos;
+                    if pos < eb.len() && eb[pos] == b'-' {
+                        pos += 1;
+                    }
+                    while pos < eb.len() && eb[pos].is_ascii_digit() {
+                        pos += 1;
+                    }
+                    if word == "f" && pos > num_start {
+                        font_idx = entry[num_start..pos].parse::<usize>().ok();
+                    }
+                    // skip space delimiter
+                    if pos < eb.len() && eb[pos] == b' ' {
+                        pos += 1;
+                    }
+                } else {
+                    pos += 1;
+                }
+            }
+            if let Some(idx) = font_idx {
+                fonts.push((idx, extract_font_name(entry)));
+            }
+            i = j;
+        } else {
+            i += 1;
+        }
+    }
+    if fonts.is_empty() {
+        return vec![String::new()];
+    }
+    let max_idx = fonts.iter().map(|(idx, _)| *idx).max().unwrap_or(0);
+    let mut table = vec![String::new(); max_idx + 1];
+    for (idx, name) in fonts {
+        table[idx] = name;
+    }
+    table
+}
+
+/// Extract the font name from a font table entry like `\f0\froman Times New Roman;`.
+///
+/// Returns text after the last control word, stripped of trailing `;` and whitespace.
+fn extract_font_name(entry: &str) -> String {
+    let mut last_word_end = 0usize;
+    let mut i = 0usize;
+    let b = entry.as_bytes();
+    while i < b.len() {
+        if b[i] == b'\\' {
+            i += 1;
+            while i < b.len() && (b[i].is_ascii_alphabetic() || b[i].is_ascii_digit()) {
+                i += 1;
+            }
+            // skip space delimiter
+            if i < b.len() && b[i] == b' ' {
+                i += 1;
+            }
+            last_word_end = i;
+        } else {
+            i += 1;
+        }
+    }
+    entry[last_word_end..]
+        .trim()
+        .trim_end_matches(';')
+        .trim()
+        .to_string()
 }
 
 /// Merge consecutive `Inline::Text` nodes and recursively normalise children.
@@ -1425,7 +1651,9 @@ mod tests {
                 | Inline::AllCaps { children, .. }
                 | Inline::SmallCaps { children, .. }
                 | Inline::Hidden { children, .. }
-                | Inline::CharSpan { children, .. } => out.push_str(&collect_text(children)),
+                | Inline::CharSpan { children, .. }
+                | Inline::Font { children, .. }
+                | Inline::BgColor { children, .. } => out.push_str(&collect_text(children)),
                 Inline::Code { text, .. } => out.push_str(text),
                 Inline::Link { children, url, .. } => {
                     if children.is_empty() {
@@ -1439,5 +1667,70 @@ mod tests {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod font_bg_tests {
+    use super::*;
+
+    fn p(input: &str) -> RtfDoc {
+        parse_str(input).0
+    }
+
+    #[test]
+    fn test_parse_font_face() {
+        let doc = p(r"{\rtf1{\fonttbl{\f0 Times New Roman;}{\f1 Arial;}}{\f1 Arial text}\par}");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Font { name, .. } if name == "Arial")),
+            "expected Font{{Arial}} inline, got: {:?}",
+            inlines
+        );
+    }
+
+    #[test]
+    fn test_parse_bg_color() {
+        let doc = p(r"{\rtf1{\colortbl ;\red255\green255\blue0;}\cb1 yellow bg\par}");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(
+            inlines.iter().any(|i| matches!(
+                i,
+                Inline::BgColor {
+                    r: 255,
+                    g: 255,
+                    b: 0,
+                    ..
+                }
+            )),
+            "expected BgColor{{255,255,0}} inline, got: {:?}",
+            inlines
+        );
+    }
+
+    #[test]
+    fn test_roundtrip_font_face() {
+        let input = r"{\rtf1{\fonttbl{\f0 Times New Roman;}{\f1 Arial;}}{\f1 Arial text}\par}";
+        let (doc1, diags) = parse_str(input);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        let emitted = crate::emit::emit(&doc1);
+        let (doc2, _) = parse_str(&emitted);
+        assert_eq!(doc1.strip_spans(), doc2.strip_spans());
+    }
+
+    #[test]
+    fn test_roundtrip_bg_color() {
+        let input = r"{\rtf1{\colortbl ;\red255\green255\blue0;}\cb1 yellow bg\par}";
+        let (doc1, diags) = parse_str(input);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        let emitted = crate::emit::emit(&doc1);
+        let (doc2, _) = parse_str(&emitted);
+        assert_eq!(doc1.strip_spans(), doc2.strip_spans());
     }
 }

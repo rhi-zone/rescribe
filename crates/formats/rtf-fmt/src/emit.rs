@@ -66,9 +66,98 @@ fn collect_colors_in_inline(inline: &Inline, out: &mut Vec<(u8, u8, u8)>) {
         | Inline::SmallCaps { children, .. }
         | Inline::Hidden { children, .. }
         | Inline::CharSpan { children, .. }
-        | Inline::Link { children, .. } => {
+        | Inline::Link { children, .. }
+        | Inline::Font { children, .. } => {
             for child in children {
                 collect_colors_in_inline(child, out);
+            }
+        }
+        Inline::BgColor {
+            r, g, b, children, ..
+        } => {
+            let rgb = (*r, *g, *b);
+            if !out.contains(&rgb) {
+                out.push(rgb);
+            }
+            for child in children {
+                collect_colors_in_inline(child, out);
+            }
+        }
+        Inline::Text { .. }
+        | Inline::Code { .. }
+        | Inline::Image { .. }
+        | Inline::LineBreak { .. }
+        | Inline::SoftBreak { .. } => {}
+    }
+}
+
+/// Collect all unique font names referenced in an `RtfDoc`.
+fn collect_fonts(doc: &RtfDoc) -> Vec<String> {
+    let mut fonts: Vec<String> = Vec::new();
+    for block in &doc.blocks {
+        collect_fonts_in_block(block, &mut fonts);
+    }
+    fonts
+}
+
+fn collect_fonts_in_block(block: &Block, out: &mut Vec<String>) {
+    match block {
+        Block::Paragraph { inlines, .. } | Block::Heading { inlines, .. } => {
+            for inline in inlines {
+                collect_fonts_in_inline(inline, out);
+            }
+        }
+        Block::Blockquote { children, .. } => {
+            for child in children {
+                collect_fonts_in_block(child, out);
+            }
+        }
+        Block::List { items, .. } => {
+            for item in items {
+                for block in item {
+                    collect_fonts_in_block(block, out);
+                }
+            }
+        }
+        Block::Table { rows, .. } => {
+            for row in rows {
+                for cell in &row.cells {
+                    for inline in cell {
+                        collect_fonts_in_inline(inline, out);
+                    }
+                }
+            }
+        }
+        Block::CodeBlock { .. } | Block::HorizontalRule { .. } => {}
+    }
+}
+
+fn collect_fonts_in_inline(inline: &Inline, out: &mut Vec<String>) {
+    match inline {
+        Inline::Font { name, children, .. } => {
+            if !out.contains(name) {
+                out.push(name.clone());
+            }
+            for child in children {
+                collect_fonts_in_inline(child, out);
+            }
+        }
+        Inline::Bold { children, .. }
+        | Inline::Italic { children, .. }
+        | Inline::Underline { children, .. }
+        | Inline::Strikethrough { children, .. }
+        | Inline::Superscript { children, .. }
+        | Inline::Subscript { children, .. }
+        | Inline::FontSize { children, .. }
+        | Inline::AllCaps { children, .. }
+        | Inline::SmallCaps { children, .. }
+        | Inline::Hidden { children, .. }
+        | Inline::CharSpan { children, .. }
+        | Inline::Color { children, .. }
+        | Inline::BgColor { children, .. }
+        | Inline::Link { children, .. } => {
+            for child in children {
+                collect_fonts_in_inline(child, out);
             }
         }
         Inline::Text { .. }
@@ -93,9 +182,20 @@ fn collect_colors_in_inline(inline: &Inline, out: &mut Vec<(u8, u8, u8)>) {
 /// roundtrip guarantee.
 pub fn emit(doc: &RtfDoc) -> String {
     let color_map = collect_colors(doc);
-    let mut ctx = Ctx::new(color_map.clone());
+    // font_map: index 0 = default ("Times New Roman"), then extra fonts
+    let extra_fonts = collect_fonts(doc);
+    let font_map: Vec<String> = {
+        let mut v = vec!["Times New Roman".to_string()];
+        v.extend(extra_fonts);
+        v
+    };
+    let mut ctx = Ctx::new(color_map.clone(), font_map.clone());
     ctx.push(r"{\rtf1\ansi\deff0");
-    ctx.push(r"{\fonttbl{\f0 Times New Roman;}}");
+    ctx.push("{\\fonttbl");
+    for (i, name) in font_map.iter().enumerate() {
+        ctx.push(&format!("{{\\f{i} {name};}}"));
+    }
+    ctx.push("}");
     if !color_map.is_empty() {
         ctx.push("{\\colortbl;");
         for (r, g, b) in &color_map {
@@ -115,13 +215,16 @@ struct Ctx {
     out: String,
     /// RGB colors in the color table (1-indexed; index 0 = auto).
     color_map: Vec<(u8, u8, u8)>,
+    /// Font names (index 0 = default font).
+    font_map: Vec<String>,
 }
 
 impl Ctx {
-    fn new(color_map: Vec<(u8, u8, u8)>) -> Self {
+    fn new(color_map: Vec<(u8, u8, u8)>, font_map: Vec<String>) -> Self {
         Self {
             out: String::new(),
             color_map,
+            font_map,
         }
     }
 
@@ -342,6 +445,27 @@ fn emit_inline(inline: &Inline, ctx: &mut Ctx) {
             ..
         } => {
             ctx.push(&format!("{{{char_props} "));
+            emit_inlines(children, ctx);
+            ctx.push("}");
+        }
+
+        Inline::BgColor {
+            r, g, b, children, ..
+        } => {
+            let idx = ctx
+                .color_map
+                .iter()
+                .position(|c| *c == (*r, *g, *b))
+                .map(|i| i + 1)
+                .unwrap_or(0);
+            ctx.push(&format!("{{\\cb{idx} "));
+            emit_inlines(children, ctx);
+            ctx.push("}");
+        }
+
+        Inline::Font { name, children, .. } => {
+            let idx = ctx.font_map.iter().position(|f| f == name).unwrap_or(0);
+            ctx.push(&format!("{{\\f{idx} "));
             emit_inlines(children, ctx);
             ctx.push("}");
         }
