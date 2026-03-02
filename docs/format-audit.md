@@ -84,7 +84,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | pptx | 3† | 3† | ooxml-pml | fuzz | fuzz |
 | xlsx | 3† | 3† | ooxml-sml | fuzz | fuzz |
 | pdf | 4† | – | pdf-extract | production | – |
-| rtf | 4 | 4 | rtf-fmt (standalone) | production | production |
+| rtf | 5 | 5 | rtf-fmt (standalone) | – | – |
 | mobi | – | – | – (planned) | – | – |
 | azw3 | – | – | – (planned) | – | – |
 | kfx | – | – | – (planned) | – | – |
@@ -142,7 +142,7 @@ These formats have no reader; stage 3 (harness) is not applicable.
 
 ## Risk areas
 
-### RTF — on track
+### RTF — production (2026-03-02)
 
 - Promoted to standalone `rtf-fmt` library (2026-03-02): proper AST with source spans,
   `parse(input) -> (RtfDoc, Vec<Diagnostic>)`, `emit(ast) -> String`, `events()` pull iterator
@@ -173,6 +173,12 @@ These formats have no reader; stage 3 (harness) is not applicable.
   - Three fuzz bugs found and fixed: color_table sentinel (0,0,0) mismatch, trailing ';'
     in colortbl creating spurious entries, color added to table from empty-text leaves
   - 510K roundtrip fuzz execs clean at new direction; 7 new corpus fixtures
+- **Promoted to 5-Production (2026-03-02)**: all gates passed
+- Semantic character words modelled: `\caps`→AllCaps, `\scaps`→SmallCaps, `\v`/`\webhidden`→Hidden;
+  `ALL_CAPS` and `HIDDEN` added to rescribe-std; all have fixtures and roundtrip tests
+- Remaining diagnostics (83% of govdocs1 files): `\dn`/`\up` (baseline offset),
+  `\jcompress`/`\jexpand` (Japanese typography), `\shad`/`\shading` — char-level layout,
+  correctly signalled as known fidelity loss until `rtf:char-props` is implemented
 - Production sign-off (2026-03-02): govdocs1 RTF corpus (1,125 real-world files):
   - 0 panics / crashes
   - 0 files with empty parsed output
