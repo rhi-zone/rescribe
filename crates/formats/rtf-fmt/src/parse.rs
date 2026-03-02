@@ -1715,7 +1715,12 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
                 }
                 j += 1;
             }
-            let entry = &content_str[entry_start..j.saturating_sub(1)];
+            let end = j.saturating_sub(1);
+            if end < entry_start {
+                i = j;
+                continue;
+            }
+            let entry = &content_str[entry_start..end];
             // Find the font index from \f<N>
             let mut font_idx: Option<usize> = None;
             let mut pos = 0usize;
@@ -1737,7 +1742,10 @@ fn parse_font_table(input: &[u8]) -> Vec<String> {
                         pos += 1;
                     }
                     if word == "f" && pos > num_start {
-                        font_idx = entry[num_start..pos].parse::<usize>().ok();
+                        let idx = entry[num_start..pos].parse::<usize>().unwrap_or(0);
+                        if idx <= 4096 {
+                            font_idx = Some(idx);
+                        }
                     }
                     // skip space delimiter
                     if pos < eb.len() && eb[pos] == b' ' {
