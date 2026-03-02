@@ -1,0 +1,9 @@
+{
+  "description": "DOCX paragraph with explicit spacing produces docx:space-before and docx:space-after props",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph", "props": { "docx:space-before": 240, "docx:space-after": 120 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Spaced paragraph." } }
+  ]
+}

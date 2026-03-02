@@ -1,0 +1,9 @@
+{
+  "description": "DOCX paragraph with left indent produces docx:indent-left prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph", "props": { "docx:indent-left": 720 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Indented paragraph." } }
+  ]
+}

@@ -78,6 +78,16 @@ fn main() {
         "list_ordered",
         "table",
         "footnote",
+        "para_spacing",
+        "para_indent",
+        "image",
+        "hyperlink",
+        "inline_small_caps",
+        "inline_all_caps",
+        "inline_hidden",
+        "inline_highlight",
+        "endnote",
+        "table_header",
     ];
 
     for name in &fixtures {

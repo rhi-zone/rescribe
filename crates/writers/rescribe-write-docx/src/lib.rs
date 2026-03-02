@@ -12,9 +12,12 @@
 //! std::fs::write("output.docx", bytes)?;
 //! ```
 
+use ooxml_wml::CoreProperties;
 use ooxml_wml::types;
-use ooxml_wml::writer::{DocumentBuilder, ListType};
-use rescribe_core::{ConversionResult, Document, EmitError, FidelityWarning, Node, PropValue};
+use ooxml_wml::writer::{DocumentBuilder, Drawing, ListType};
+use rescribe_core::{
+    ConversionResult, Document, EmitError, FidelityWarning, Node, PropValue, ResourceId,
+};
 use rescribe_std::{node, prop};
 use std::collections::HashMap;
 
@@ -23,11 +26,15 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let mut warnings = Vec::new();
     let mut builder = DocumentBuilder::new();
 
-    // Pre-registration pass: register hyperlinks and footnotes before writing body.
+    // Write metadata from doc.metadata → core/app properties.
+    write_metadata(&mut builder, doc);
+
+    // Pre-registration pass: register hyperlinks, footnotes, and images before writing body.
     // This is necessary because `para` borrows from `builder`, preventing builder
     // mutations while a paragraph reference is live.
     let hyperlink_map = pre_register_hyperlinks(&mut builder, &doc.content);
     let footnote_map = pre_register_footnotes(&mut builder, &doc.content, &mut warnings);
+    let image_map = pre_register_images(&mut builder, &doc.content, doc);
 
     convert_node(
         &mut builder,
@@ -35,6 +42,7 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         &mut warnings,
         &hyperlink_map,
         &footnote_map,
+        &image_map,
     )?;
 
     let mut bytes = Vec::new();
@@ -46,6 +54,34 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         value: bytes,
         warnings,
     })
+}
+
+// ── Metadata writing ──────────────────────────────────────────────────────────
+
+fn write_metadata(builder: &mut DocumentBuilder, doc: &Document) {
+    let m = &doc.metadata;
+    let has_core = m.get_str("title").is_some()
+        || m.get_str("author").is_some()
+        || m.get_str("subject").is_some()
+        || m.get_str("description").is_some()
+        || m.get_str("keywords").is_some()
+        || m.get_str("category").is_some()
+        || m.get_str("created").is_some()
+        || m.get_str("modified").is_some();
+
+    if has_core {
+        builder.set_core_properties(CoreProperties {
+            title: m.get_str("title").map(|s| s.to_string()),
+            creator: m.get_str("author").map(|s| s.to_string()),
+            subject: m.get_str("subject").map(|s| s.to_string()),
+            description: m.get_str("description").map(|s| s.to_string()),
+            keywords: m.get_str("keywords").map(|s| s.to_string()),
+            category: m.get_str("category").map(|s| s.to_string()),
+            created: m.get_str("created").map(|s| s.to_string()),
+            modified: m.get_str("modified").map(|s| s.to_string()),
+            ..Default::default()
+        });
+    }
 }
 
 // ── Pre-registration: hyperlinks ──────────────────────────────────────────────
@@ -114,6 +150,51 @@ fn collect_footnotes(
     }
 }
 
+// ── Pre-registration: images ──────────────────────────────────────────────────
+
+/// Walk the IR tree, register every `image` resource with the builder, and
+/// pre-build a `CTDrawing` for each. Returns a resource-id → CTDrawing map.
+///
+/// Pre-building avoids borrow conflicts: `Drawing::build` only needs a
+/// `&mut usize` counter (not `&mut builder`), so we can build all drawings
+/// here before any paragraph borrows the builder.
+fn pre_register_images(
+    builder: &mut DocumentBuilder,
+    node: &Node,
+    doc: &Document,
+) -> HashMap<String, types::CTDrawing> {
+    let mut drawing_id = 1usize;
+    let mut map = HashMap::new();
+    collect_images(builder, node, doc, &mut map, &mut drawing_id);
+    map
+}
+
+fn collect_images(
+    builder: &mut DocumentBuilder,
+    node: &Node,
+    doc: &Document,
+    map: &mut HashMap<String, types::CTDrawing>,
+    drawing_id: &mut usize,
+) {
+    if node.kind.as_str() == node::IMAGE
+        && let Some(url) = node.props.get_str(prop::URL)
+        && let Some(res_id_str) = url.strip_prefix("resource:")
+        && !map.contains_key(res_id_str)
+    {
+        let res_id = ResourceId::from_string(res_id_str);
+        if let Some(resource) = doc.resource(&res_id) {
+            let rel_id = builder.add_image(resource.data.clone(), &resource.mime_type);
+            let mut drawing = Drawing::new();
+            drawing.add_image(&rel_id);
+            let ct_drawing = drawing.build(drawing_id);
+            map.insert(res_id_str.to_string(), ct_drawing);
+        }
+    }
+    for child in &node.children {
+        collect_images(builder, child, doc, map, drawing_id);
+    }
+}
+
 /// Write a single block-level IR node into a footnote/endnote body.
 /// Only handles `paragraph` with simple inline content (no nested hyperlinks).
 fn write_block_to_note_body(body: &mut types::FootnoteEndnote, node: &Node) {
@@ -153,29 +234,24 @@ fn convert_node(
     warnings: &mut Vec<FidelityWarning>,
     hyperlink_map: &HashMap<String, String>,
     footnote_map: &HashMap<String, i64>,
+    image_map: &HashMap<String, types::CTDrawing>,
 ) -> Result<(), EmitError> {
     match node.kind.as_str() {
         node::DOCUMENT => {
             for child in &node.children {
-                convert_node(builder, child, warnings, hyperlink_map, footnote_map)?;
+                convert_node(
+                    builder,
+                    child,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                )?;
             }
         }
         node::PARAGRAPH => {
             let para = builder.body_mut().add_paragraph();
-            // Apply paragraph alignment
-            if let Some(align) = node.props.get_str(prop::STYLE_ALIGN) {
-                use ooxml_wml::types::STJc;
-                let jc_val = match align {
-                    "left" => Some(STJc::Left),
-                    "right" => Some(STJc::Right),
-                    "center" => Some(STJc::Center),
-                    "justify" => Some(STJc::Both),
-                    _ => None,
-                };
-                if let Some(jc) = jc_val {
-                    para.set_alignment(jc);
-                }
-            }
+            apply_para_props(para, node);
             write_inline_to_para(
                 para,
                 &node.children,
@@ -183,6 +259,7 @@ fn convert_node(
                 warnings,
                 hyperlink_map,
                 footnote_map,
+                image_map,
             );
         }
         node::HEADING => {
@@ -195,6 +272,7 @@ fn convert_node(
                 })),
                 ..Default::default()
             });
+            apply_para_props(para, node);
             write_inline_to_para(
                 para,
                 &node.children,
@@ -202,7 +280,13 @@ fn convert_node(
                 warnings,
                 hyperlink_map,
                 footnote_map,
+                image_map,
             );
+        }
+        node::IMAGE => {
+            // Image at block level — wrap in a paragraph with a single image run.
+            let para = builder.body_mut().add_paragraph();
+            emit_image_to_para(para, node, image_map);
         }
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
@@ -224,10 +308,18 @@ fn convert_node(
                             warnings,
                             hyperlink_map,
                             footnote_map,
+                            image_map,
                         );
                     }
                     _ => {
-                        convert_node(builder, child, warnings, hyperlink_map, footnote_map)?;
+                        convert_node(
+                            builder,
+                            child,
+                            warnings,
+                            hyperlink_map,
+                            footnote_map,
+                            image_map,
+                        )?;
                     }
                 }
             }
@@ -244,10 +336,18 @@ fn convert_node(
                 warnings,
                 hyperlink_map,
                 footnote_map,
+                image_map,
             );
         }
         node::TABLE => {
-            write_table(builder, node, warnings, hyperlink_map, footnote_map)?;
+            write_table(
+                builder,
+                node,
+                warnings,
+                hyperlink_map,
+                footnote_map,
+                image_map,
+            )?;
         }
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("");
@@ -256,7 +356,14 @@ fn convert_node(
         }
         node::BLOCKQUOTE => {
             for child in &node.children {
-                convert_node(builder, child, warnings, hyperlink_map, footnote_map)?;
+                convert_node(
+                    builder,
+                    child,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                )?;
             }
         }
         node::FOOTNOTE_DEF => {
@@ -274,12 +381,94 @@ fn convert_node(
                 }
             } else {
                 for child in &node.children {
-                    convert_node(builder, child, warnings, hyperlink_map, footnote_map)?;
+                    convert_node(
+                        builder,
+                        child,
+                        warnings,
+                        hyperlink_map,
+                        footnote_map,
+                        image_map,
+                    )?;
                 }
             }
         }
     }
     Ok(())
+}
+
+/// Re-apply `docx:*` paragraph layout props preserved by the reader.
+fn apply_para_props(para: &mut types::Paragraph, node: &Node) {
+    // Alignment (semantic prop)
+    if let Some(align) = node.props.get_str(prop::STYLE_ALIGN) {
+        use ooxml_wml::types::STJc;
+        let jc_val = match align {
+            "left" => Some(STJc::Left),
+            "right" => Some(STJc::Right),
+            "center" => Some(STJc::Center),
+            "justify" => Some(STJc::Both),
+            _ => None,
+        };
+        if let Some(jc) = jc_val {
+            para.set_alignment(jc);
+        }
+    }
+    // Spacing
+    if let Some(v) = node.props.get_int("docx:space-before") {
+        para.set_space_before(v as u32);
+    }
+    if let Some(v) = node.props.get_int("docx:space-after") {
+        para.set_space_after(v as u32);
+    }
+    if let Some(v) = node.props.get_int("docx:line-spacing") {
+        let rule = node
+            .props
+            .get_str("docx:line-spacing-rule")
+            .and_then(|s| s.parse::<types::STLineSpacingRule>().ok())
+            .unwrap_or(types::STLineSpacingRule::Auto);
+        // Set line and lineRule directly on the spacing struct.
+        let ppr = para
+            .p_pr
+            .get_or_insert_with(|| Box::new(types::ParagraphProperties::default()));
+        let spacing = ppr
+            .spacing
+            .get_or_insert_with(|| Box::new(types::CTSpacing::default()));
+        spacing.line = Some(v.to_string());
+        spacing.line_rule = Some(rule);
+    }
+    // Indentation
+    if let Some(v) = node.props.get_int("docx:indent-left") {
+        para.set_indent_left(v as u32);
+    }
+    if let Some(v) = node.props.get_int("docx:indent-right") {
+        para.set_indent_right(v as u32);
+    }
+    if let Some(v) = node.props.get_int("docx:indent-first-line") {
+        para.set_indent_first_line(v as u32);
+    }
+    if let Some(v) = node.props.get_int("docx:indent-hanging") {
+        let ppr = para
+            .p_pr
+            .get_or_insert_with(|| Box::new(types::ParagraphProperties::default()));
+        let ind = ppr
+            .indentation
+            .get_or_insert_with(|| Box::new(types::CTInd::default()));
+        ind.hanging = Some(v.to_string());
+    }
+}
+
+/// Emit an image node as a drawing run in an existing paragraph.
+fn emit_image_to_para(
+    para: &mut types::Paragraph,
+    node: &Node,
+    image_map: &HashMap<String, types::CTDrawing>,
+) {
+    if let Some(url) = node.props.get_str(prop::URL)
+        && let Some(res_id_str) = url.strip_prefix("resource:")
+        && let Some(ct_drawing) = image_map.get(res_id_str)
+    {
+        let run = para.add_run();
+        run.add_drawing(ct_drawing.clone());
+    }
 }
 
 fn write_table(
@@ -288,6 +477,7 @@ fn write_table(
     warnings: &mut Vec<FidelityWarning>,
     hyperlink_map: &HashMap<String, String>,
     footnote_map: &HashMap<String, i64>,
+    image_map: &HashMap<String, types::CTDrawing>,
 ) -> Result<(), EmitError> {
     let table = builder.body_mut().add_table();
 
@@ -311,6 +501,7 @@ fn write_table(
                     warnings,
                     hyperlink_map,
                     footnote_map,
+                    image_map,
                 );
             }
         }
@@ -340,6 +531,7 @@ fn write_inline_to_para(
     warnings: &mut Vec<FidelityWarning>,
     hyperlink_map: &HashMap<String, String>,
     footnote_map: &HashMap<String, i64>,
+    image_map: &HashMap<String, types::CTDrawing>,
 ) {
     for node in nodes {
         match node.kind.as_str() {
@@ -348,6 +540,9 @@ fn write_inline_to_para(
                 if !text.is_empty() {
                     emit_run(para, text, fmt);
                 }
+            }
+            node::IMAGE => {
+                emit_image_to_para(para, node, image_map);
             }
             node::STRONG => {
                 let mut next = fmt.clone();
@@ -359,6 +554,7 @@ fn write_inline_to_para(
                     warnings,
                     hyperlink_map,
                     footnote_map,
+                    image_map,
                 );
             }
             node::EMPHASIS => {
@@ -371,6 +567,7 @@ fn write_inline_to_para(
                     warnings,
                     hyperlink_map,
                     footnote_map,
+                    image_map,
                 );
             }
             node::UNDERLINE => {
@@ -383,6 +580,7 @@ fn write_inline_to_para(
                     warnings,
                     hyperlink_map,
                     footnote_map,
+                    image_map,
                 );
             }
             node::STRIKEOUT => {
@@ -395,6 +593,7 @@ fn write_inline_to_para(
                     warnings,
                     hyperlink_map,
                     footnote_map,
+                    image_map,
                 );
             }
             node::SPAN => {
@@ -420,10 +619,19 @@ fn write_inline_to_para(
                     warnings,
                     hyperlink_map,
                     footnote_map,
+                    image_map,
                 );
             }
             node::LINK => {
-                write_hyperlink_to_para(para, node, fmt, warnings, hyperlink_map, footnote_map);
+                write_hyperlink_to_para(
+                    para,
+                    node,
+                    fmt,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                );
             }
             node::FOOTNOTE_REF => {
                 // Look up the pre-registered footnote ID.
@@ -448,6 +656,7 @@ fn write_inline_to_para(
                     warnings,
                     hyperlink_map,
                     footnote_map,
+                    image_map,
                 );
             }
             node::LINE_BREAK | node::SOFT_BREAK => {
@@ -463,6 +672,7 @@ fn write_inline_to_para(
                     warnings,
                     hyperlink_map,
                     footnote_map,
+                    image_map,
                 );
             }
         }
@@ -477,6 +687,7 @@ fn write_hyperlink_to_para(
     warnings: &mut Vec<FidelityWarning>,
     hyperlink_map: &HashMap<String, String>,
     footnote_map: &HashMap<String, i64>,
+    image_map: &HashMap<String, types::CTDrawing>,
 ) {
     let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
     let hyperlink = para.add_hyperlink();
@@ -498,6 +709,7 @@ fn write_hyperlink_to_para(
         warnings,
         hyperlink_map,
         footnote_map,
+        image_map,
     );
 }
 
@@ -509,6 +721,7 @@ fn write_inline_to_hyperlink(
     _warnings: &mut Vec<FidelityWarning>,
     _hyperlink_map: &HashMap<String, String>,
     _footnote_map: &HashMap<String, i64>,
+    _image_map: &HashMap<String, types::CTDrawing>,
 ) {
     for node in nodes {
         match node.kind.as_str() {
@@ -529,6 +742,7 @@ fn write_inline_to_hyperlink(
                     _warnings,
                     _hyperlink_map,
                     _footnote_map,
+                    _image_map,
                 );
             }
             node::EMPHASIS => {
@@ -541,6 +755,7 @@ fn write_inline_to_hyperlink(
                     _warnings,
                     _hyperlink_map,
                     _footnote_map,
+                    _image_map,
                 );
             }
             _ => {
@@ -551,6 +766,7 @@ fn write_inline_to_hyperlink(
                     _warnings,
                     _hyperlink_map,
                     _footnote_map,
+                    _image_map,
                 );
             }
         }

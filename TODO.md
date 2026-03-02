@@ -191,19 +191,19 @@ Each Tier A format at 5-Production with a published standalone crate.
 - [ ] DOCX, PPTX, XLSX (ooxml-* backed; same) — now at 4-Fuzz; gaps below
 
   **DOCX reader** (closest to production):
-  - [ ] Endnote content — warned but dropped; needs same treatment as footnotes (`doc.get_endnotes()`)
-  - [ ] Para-props raw preservation — indents, spacing, tab stops silently dropped; add `docx:para-props` string (same pattern as `rtf:para-props`)
-  - [ ] List ordering — always emits `ordered: false`; consult numbering definitions to distinguish bullet vs decimal
-  - [ ] Audit `_ => {}` at line 370 — `MoveFrom`/`MoveTo` tracked changes contain text; `SubDoc` references; should warn or convert
-  - [ ] Fixtures: images, hyperlinks, small_caps, all_caps, hidden, highlight color, ordered lists, table header rows, endnotes
-  - [ ] Roundtrip fuzz target (`fuzz_docx_roundtrip`)
+  - [x] Endnote content — `doc.get_endnotes()` pre-loaded; `footnote_ref` nodes with `label:"en{id}"` prefix
+  - [x] Para-props raw preservation — `docx:space-before`, `docx:space-after`, `docx:line-spacing`, `docx:indent-left/right/first-line/hanging` props
+  - [x] List ordering — numbering definitions consulted via `ParagraphExt::num_fmt()`; `ordered: true` for decimal
+  - [x] Audit `_ => {}` at line 370 — `MoveFrom`/`MoveTo`/`SubDoc` now emit fidelity warnings
+  - [x] Fixtures: all 22 fixtures have expected.json (image, hyperlink, small_caps, all_caps, hidden, highlight, ordered lists, table_header, endnote, para_spacing, para_indent)
+  - [x] Roundtrip fuzz target (`fuzz_docx_roundtrip`) — clean
 
   **DOCX writer**:
-  - [ ] Image embedding (resource:xxx → embedded DOCX media)
-  - [ ] Footnote writing (`footnote_ref` currently falls through)
-  - [ ] Hyperlink writing (`link` URL currently lost)
-  - [ ] Metadata writing
-  - [ ] Roundtrip fuzz target
+  - [x] Image embedding (resource:xxx → embedded DOCX media via pre-registration + CTDrawing clone)
+  - [x] Footnote writing (`footnote_ref` → endnote API)
+  - [x] Hyperlink writing (`link` URL → rel-registered hyperlink)
+  - [x] Metadata writing (`doc.metadata` → `set_core_properties()`)
+  - [x] Roundtrip fuzz target — clean
 
   **XLSX reader**:
   - [ ] Cell formatting (number formats, colors, fonts, borders, alignment) — silently dropped, needs fidelity warning

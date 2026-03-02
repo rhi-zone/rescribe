@@ -133,5 +133,51 @@ fn main() {
         write_docx(builder, fixtures_dir.join("table_header/input.docx"));
     }
 
+    // ── para_spacing ──────────────────────────────────────────────────────────
+    {
+        let mut builder = DocumentBuilder::new();
+        let para = builder.body_mut().add_paragraph();
+        para.set_space_before(240); // 12pt before
+        para.set_space_after(120); // 6pt after
+        para.add_run().set_text("Spaced paragraph.");
+        write_docx(builder, fixtures_dir.join("para_spacing/input.docx"));
+    }
+
+    // ── para_indent ───────────────────────────────────────────────────────────
+    {
+        let mut builder = DocumentBuilder::new();
+        let para = builder.body_mut().add_paragraph();
+        para.set_indent_left(720); // half inch left indent
+        para.add_run().set_text("Indented paragraph.");
+        write_docx(builder, fixtures_dir.join("para_indent/input.docx"));
+    }
+
+    // ── image ─────────────────────────────────────────────────────────────────
+    {
+        // A minimal 1×1 white PNG (67 bytes): used to test image embedding
+        // without depending on a real image file.
+        #[rustfmt::skip]
+        let png_bytes: &[u8] = &[
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG magic
+            0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, // IHDR chunk length + type
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // width=1, height=1
+            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, // bit depth=8, color=RGB
+            0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, // IHDR CRC, IDAT chunk
+            0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00, // IDAT type + data
+            0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc, // IDAT data + CRC
+            0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, // IEND chunk
+            0x44, 0xae, 0x42, 0x60, 0x82,                   // IEND data + CRC
+        ];
+        let mut builder = DocumentBuilder::new();
+        let rel_id = builder.add_image(png_bytes.to_vec(), "image/png");
+        let mut drawing = ooxml_wml::writer::Drawing::new();
+        drawing.add_image(&rel_id);
+        let ct_drawing = drawing.build(&mut 1usize);
+        let para = builder.body_mut().add_paragraph();
+        let run = para.add_run();
+        run.add_drawing(ct_drawing);
+        write_docx(builder, fixtures_dir.join("image/input.docx"));
+    }
+
     println!("Done.");
 }

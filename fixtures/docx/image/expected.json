@@ -1,0 +1,9 @@
+{
+  "description": "DOCX paragraph with embedded image produces image node with resource: URL",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "resource:res_0" } }
+  ]
+}

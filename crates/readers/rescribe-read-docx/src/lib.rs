@@ -496,11 +496,10 @@ fn convert_paragraph<R: Read + Seek>(
     }
 
     if let Some(level) = heading_level {
-        Ok(Some(
-            Node::new(node::HEADING)
-                .prop(prop::LEVEL, level as i64)
-                .children(inline_children),
-        ))
+        let node = Node::new(node::HEADING)
+            .prop(prop::LEVEL, level as i64)
+            .children(inline_children);
+        Ok(Some(apply_para_layout_props(node, para)))
     } else {
         let mut node = Node::new(node::PARAGRAPH).children(inline_children);
 
@@ -518,8 +517,41 @@ fn convert_paragraph<R: Read + Seek>(
             }
         }
 
-        Ok(Some(node))
+        Ok(Some(apply_para_layout_props(node, para)))
     }
+}
+
+/// Attach format-specific paragraph layout properties (`docx:*`) to a node.
+///
+/// These mirror the `rtf:para-props` pattern: format-specific constructs that have
+/// no cross-format semantic go into namespaced properties so a DOCX writer can
+/// re-emit them verbatim on roundtrip.
+fn apply_para_layout_props(mut node: Node, para: &Paragraph) -> Node {
+    if let Some(v) = para.space_before() {
+        node = node.prop("docx:space-before", v);
+    }
+    if let Some(v) = para.space_after() {
+        node = node.prop("docx:space-after", v);
+    }
+    if let Some(v) = para.line_spacing() {
+        node = node.prop("docx:line-spacing", v);
+    }
+    if let Some(v) = para.line_spacing_rule() {
+        node = node.prop("docx:line-spacing-rule", v.to_string());
+    }
+    if let Some(v) = para.indent_left() {
+        node = node.prop("docx:indent-left", v);
+    }
+    if let Some(v) = para.indent_right() {
+        node = node.prop("docx:indent-right", v);
+    }
+    if let Some(v) = para.indent_first_line() {
+        node = node.prop("docx:indent-first-line", v);
+    }
+    if let Some(v) = para.indent_hanging() {
+        node = node.prop("docx:indent-hanging", v);
+    }
+    node
 }
 
 fn detect_heading_level(para: &Paragraph) -> Option<u8> {
