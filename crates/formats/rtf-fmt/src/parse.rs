@@ -693,14 +693,21 @@ impl<'a> Parser<'a> {
             // Paragraph borders
             | "brdrb" | "brdrs" | "brdrw" | "brsp" | "brdrt" | "brdrl" | "brdrr"
             | "brdrth" | "brdrdot" | "brdrdash" | "brdrnone" | "brdrcf"
-            | "brdrhair" | "brdrnil" | "brdroutset" | "brdrdb" => {
+            | "brdrhair" | "brdrnil" | "brdroutset" | "brdrdb" | "brdrtriple" | "box"
+            // List spacing / indent
+            | "lisa" | "lisb" | "ipgp"
+            // Page / paragraph flow
+            | "pagebb" | "notabind"
+            // Tab stop leaders and alignment variants
+            | "tl" | "tql" | "tlul" => {
                 current_para_props.push_str(&format_para_word(word, param));
             }
 
             // Character-layout words: accumulated verbatim in char_props for lossless
             // re-emission.  These have no cross-format semantic equivalent.
             // Words with params: skip if param == 0 (means "off").
-            "dn" | "up" | "shading" | "expnd" | "expndtw" | "kerning" | "charscalex" => {
+            "dn" | "up" | "shading" | "expnd" | "expndtw" | "kerning" | "charscalex"
+            | "chcfpat" | "chcbpat" | "chshdng" | "highlight" | "cfpat" => {
                 if param.is_some_and(|n| n != 0) {
                     flush_text(
                         current_text,
@@ -827,6 +834,53 @@ impl<'a> Parser<'a> {
             | "splytwnine" | "ftnlytwnine" | "grfdocevents"
             | "ignoremixedcontent" | "saveinvalidxml" | "donotembedlingdata"
             | "showplaceholdtext" | "showxmlerrors"
+            // Page numbering format
+            | "pgndec"
+            // Layout / print compat flags
+            | "lytprtmet" | "subfontbysize" | "donotembedsysfont" | "validatexml"
+            | "allowfieldendsel" | "nobrkwrptbl"
+            // Document geometry
+            | "gutter"
+            // Hyphenation
+            | "hyphhotz"
+            // Field flags
+            | "fldlock"
+            // Table look flags
+            | "tbllkfont" | "tbllkborder" | "tbllkshading" | "tbllkbestfit" | "tbllkcolor"
+            // Text wrap (floating objects)
+            | "wraptrsp" | "wraparound"
+            // Shape object properties (name/value pairs inside \shp groups)
+            | "sp" | "sn" | "sv"
+            // Equation / EQ field keywords (single-letter, mixed case — inside \field groups)
+            | "c" | "r" | "m" | "o" | "k" | "d" | "n" | "q" | "j" | "z"
+            | "x" | "y" | "h" | "t" | "a"
+            | "T" | "Y" | "V" | "K" | "S" | "E" | "U" | "Q" | "H" | "R" | "X" | "I"
+            | "L" | "N" | "Z" | "C" | "O" | "A" | "W"
+            // Asian typography compat flags
+            | "wrppunct" | "asianbrkrule" | "snaptogridincell" | "sprslnsp" | "nojkernpunct"
+            // Section / document properties
+            | "nocolbal" | "pgbrdropt" | "deftab" | "facingp" | "ftnrstpg"
+            | "binsxn" | "binfsxn" | "newtblstyruls" | "transmf" | "brkfrm"
+            | "truncatefontheight" | "abslock" | "pnrnot" | "pgnstart" | "chatn"
+            | "vertalc" | "rempersonalinfo" | "revisions" | "fracwidth" | "makebackup"
+            | "prcolbl" | "cvmme" | "wpjst"
+            // Table frame distances (floating table text wrap offsets)
+            | "tdfrmtxtLeft" | "tdfrmtxtRight" | "tdfrmtxtTop" | "tdfrmtxtBottom"
+            | "nogrowautofit"
+            // Extended absolute positioning
+            | "tposy" | "posnegy" | "tposx" | "posnegx" | "tphmrg" | "tpvpara" | "tpvpg"
+            // Revision tracking (we don't model change-tracking; words appear in tracked groups)
+            | "deleted" | "revdttmdel" | "revauthdel" | "revauth" | "revdttm"
+            // Unicode representation group (ANSI fallback — complex; skip word, content flows through)
+            | "upr"
+            // Border styles not yet in para_props list
+            | "brdrthtnsg" | "brdrthtnmg" | "brdrthtnlg" | "brdrtnthmg" | "brdrtnthsg"
+            | "brdrtnthtnsg" | "brdrtnthtnmg" | "brdrtnthtnlg" | "brdrtnthlg"
+            | "brdrdashd" | "brdrdashdd" | "brdrdashsm" | "brdrwavydb" | "brdrwavy"
+            | "brdremboss" | "brdrengrave" | "brdrframe" | "bdrrlswsix"
+            | "brdrsh" | "brdrbtw" | "swpbdr"
+            // Paragraph spacing / flow suppressions
+            | "contextualspace" | "sprstsp" | "sprsspbf" | "sprsbsp"
             => {
                 // Most toggle-off words are redundant after state flush above,
                 // but b0/i0 specifically turn off formatting
