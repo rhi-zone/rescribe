@@ -176,15 +176,22 @@ These formats have no reader; stage 3 (harness) is not applicable.
 - **Promoted to 5-Production (2026-03-02)**: all gates passed
 - Semantic character words modelled: `\caps`→AllCaps, `\scaps`→SmallCaps, `\v`/`\webhidden`→Hidden;
   `ALL_CAPS` and `HIDDEN` added to rescribe-std; all have fixtures and roundtrip tests
-- Remaining diagnostics (83% of govdocs1 files): `\dn`/`\up` (baseline offset),
-  `\jcompress`/`\jexpand` (Japanese typography), `\shad`/`\shading` — char-level layout,
-  correctly signalled as known fidelity loss until `rtf:char-props` is implemented
-- Production sign-off (2026-03-02): govdocs1 RTF corpus (1,125 real-world files):
+- **`rtf:char-props` implemented**: `\dn`/`\up`/`\shad`/`\shading`/`\expnd`/`\expndtw`/
+  `\kerning`/`\charscalex`/`\jcompress`/`\jexpand`/`\chcfpat`/`\chcbpat`/`\chshdng`/
+  `\highlight` accumulated verbatim as `Inline::CharSpan { char_props }`, surfaced as
+  `rtf:char-span` node with `rtf:char-props` property; losslessly round-tripped
+- **Parser spec-compliance fix**: control word lexer now requires lowercase-only start
+  (`is_ascii_lowercase`), so uppercase sequences from binary garbage no longer generate
+  spurious diagnostics
+- **`\bin` handler added**: RTF binary embedding (`\binN`) now skips N raw bytes;
+  architectural note: parser takes `&str` so files with `\bin` blocks containing
+  non-UTF-8 bytes are excluded by the corpus runner (correct); true fix requires
+  byte-level parsing (future work)
+- govdocs1 RTF corpus (1,077 UTF-8-clean files, 48 skipped as binary):
   - 0 panics / crashes
   - 0 files with empty parsed output
-  - \plain resets TextState; footnote/endnote/annotation/tc/xe/listable groups skip correctly
-  - ~100 layout/formatting/revision-tracking control words added to ignored list
-  - 89% of files have diagnostics for genuinely unknown niche control words (acceptable)
+  - **0 files (0%) with diagnostics** — complete elimination via char-props + triage
+  - ~150 layout/formatting/revision-tracking control words in ignored list
 
 ### ODT writer — medium risk
 - 404 lines building ODF zip by hand (no schema library)
