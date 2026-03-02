@@ -106,7 +106,7 @@ impl<'a> Parser<'a> {
                         break;
                     };
 
-                    if next.is_ascii_alphabetic() {
+                    if next.is_ascii_lowercase() {
                         let word_start = self.pos - 1; // position of '\'
                         let (word, param) = self.read_control_word();
                         self.handle_control_word(
@@ -386,6 +386,27 @@ impl<'a> Parser<'a> {
         current_para_props: &mut String,
     ) {
         match word {
+            // \binN — N raw binary bytes follow; skip them entirely.
+            // Without this, the parser reads binary image/OLE data as RTF text,
+            // producing spurious control words from stray 0x5C bytes in the payload.
+            "bin" => {
+                let n = param.unwrap_or(0).max(0) as usize;
+                // Advance byte-by-byte; the binary payload is not valid UTF-8 so we
+                // can't use str indexing.  We stay on char boundaries by walking the
+                // remaining &str as bytes and reconstructing the position.
+                let remaining = &self.input.as_bytes()[self.pos..];
+                let skip = n.min(remaining.len());
+                // Count how many UTF-8 characters correspond to `skip` bytes
+                // (some bytes may be continuation bytes; we just need to bump pos).
+                self.pos += skip;
+                // Re-sync to a valid UTF-8 char boundary (binary data may end mid-char).
+                while self.pos < self.input.len()
+                    && !self.input.is_char_boundary(self.pos)
+                {
+                    self.pos += 1;
+                }
+            }
+
             "par" | "pard" => {
                 if !current_text.is_empty() {
                     let span = Span::new(*text_start, self.pos);
@@ -699,7 +720,9 @@ impl<'a> Parser<'a> {
             // Page / paragraph flow
             | "pagebb" | "notabind"
             // Tab stop leaders and alignment variants
-            | "tl" | "tql" | "tlul" => {
+            | "tl" | "tql" | "tlul" | "tlhyph"
+            // Paragraph direction / widow control
+            | "pardirnatural" | "widowctl" => {
                 current_para_props.push_str(&format_para_word(word, param));
             }
 
@@ -707,7 +730,7 @@ impl<'a> Parser<'a> {
             // re-emission.  These have no cross-format semantic equivalent.
             // Words with params: skip if param == 0 (means "off").
             "dn" | "up" | "shading" | "expnd" | "expndtw" | "kerning" | "charscalex"
-            | "chcfpat" | "chcbpat" | "chshdng" | "highlight" | "cfpat" => {
+            | "chcfpat" | "chcbpat" | "chshdng" | "highlight" | "cfpat" | "chbrdr" => {
                 if param.is_some_and(|n| n != 0) {
                     flush_text(
                         current_text,
@@ -851,11 +874,11 @@ impl<'a> Parser<'a> {
             | "wraptrsp" | "wraparound"
             // Shape object properties (name/value pairs inside \shp groups)
             | "sp" | "sn" | "sv"
-            // Equation / EQ field keywords (single-letter, mixed case — inside \field groups)
+            // Equation / EQ field keywords (single lowercase letter — inside \field groups)
+            // Note: uppercase-letter EQ keywords (T, Y, V, etc.) never reach here;
+            // they are silently consumed by the control-symbol handler (\+uppercase → ignored).
             | "c" | "r" | "m" | "o" | "k" | "d" | "n" | "q" | "j" | "z"
             | "x" | "y" | "h" | "t" | "a"
-            | "T" | "Y" | "V" | "K" | "S" | "E" | "U" | "Q" | "H" | "R" | "X" | "I"
-            | "L" | "N" | "Z" | "C" | "O" | "A" | "W"
             // Asian typography compat flags
             | "wrppunct" | "asianbrkrule" | "snaptogridincell" | "sprslnsp" | "nojkernpunct"
             // Section / document properties
@@ -864,6 +887,23 @@ impl<'a> Parser<'a> {
             | "truncatefontheight" | "abslock" | "pnrnot" | "pgnstart" | "chatn"
             | "vertalc" | "rempersonalinfo" | "revisions" | "fracwidth" | "makebackup"
             | "prcolbl" | "cvmme" | "wpjst"
+            // Footnote / endnote restart and numbering
+            | "sftnrestart" | "ftnrstcont" | "ftnnrlc"
+            // Compat / document flags
+            | "oldas" | "otblrul" | "truncex" | "linkstyles" | "enddoc"
+            | "donotshowmarkup" | "margmirror" | "noqfpromote" | "viewnobound"
+            | "relyonvml" | "enforceprot" | "protlevel" | "formprot"
+            // Track changes flags
+            | "trackformatting" | "trackmoves" | "revbar"
+            // Author / date info (info group words)
+            | "prdate" | "prauth" | "crdate"
+            // Shape object geometry and positioning
+            | "shpgrp" | "shpwrk" | "shpleft" | "shpwr" | "shpbottom" | "shpright"
+            | "shptop" | "shpinst" | "shpbxmargin" | "msmcap"
+            // Extended text-box / absolute positioning
+            | "tposxr" | "tposyc" | "absnoovrlp"
+            // Theme / language
+            | "themelang"
             // Table frame distances (floating table text wrap offsets)
             | "tdfrmtxtLeft" | "tdfrmtxtRight" | "tdfrmtxtTop" | "tdfrmtxtBottom"
             | "nogrowautofit"
@@ -880,7 +920,51 @@ impl<'a> Parser<'a> {
             | "brdremboss" | "brdrengrave" | "brdrframe" | "bdrrlswsix"
             | "brdrsh" | "brdrbtw" | "swpbdr"
             // Paragraph spacing / flow suppressions
-            | "contextualspace" | "sprstsp" | "sprsspbf" | "sprsbsp"
+            | "contextualspace" | "sprstsp" | "sprsspbf" | "sprsbsp" | "nolead" | "sprstsm"
+            // Tab / absolute positioning para properties
+            | "tabsnoovrlp"
+            // Theme language variants
+            | "themelangcs" | "themelangfe"
+            // Page borders (all sides)
+            | "pgbrdrl" | "pgbrdrr" | "pgbrdrt" | "pgbrdrb"
+            // Section / document protection flags
+            | "annotprot" | "sectunlocked" | "revprot" | "readprot" | "stylelockenforced"
+            // Page / section geometry
+            | "landscape" | "guttersxn" | "marg"
+            // Text box / shape absolute positioning
+            | "tposxc" | "tposnegy" | "tposnegx" | "shpbymargin" | "shpbxpage"
+            | "shpbypage" | "shpbyignore" | "shpfblwtxt" | "shplid"
+            // Document view settings
+            | "vieww" | "viewh" | "viewbksp"
+            // Footnote continuation / separator (destination groups handled structurally)
+            | "ftncn" | "ftnsep" | "ftnsepc" | "chftnsep" | "ftntj" | "ftnstart"
+            | "sftntj" | "aendnotes"
+            // Cocoa (macOS) RTF extensions — version markers
+            | "cocoartf" | "cocoasubrtf"
+            // Revision author (change-tracking metadata)
+            | "crauth"
+            // Drawing object primitives (inside \do / \dposp groups)
+            | "do" | "dpptx" | "dppty" | "dpxsize" | "dpy" | "dpline"
+            | "dplinecob" | "dplinecor" | "dplinecog" | "dpx" | "dodhgt" | "dobxpage"
+            // Document flags
+            | "donotshowprops"
+            // Remaining rare shape / draw / section words
+            | "shpbypara" | "shpbxignore" | "shpz" | "shpfhdr"
+            | "dpysize" | "dplinew" | "dobypage"
+            // Page numbering variants
+            | "pgnid" | "pgnhnsm"
+            // Footnote / endnote numbering
+            | "aftnnrlc"
+            // Style lock
+            | "stylelock"
+            // Language tags
+            | "ksulang"
+            // Revision metadata
+            | "srauth"
+            // Inline text / Unicode flags
+            | "utinl"
+            // From-text marker (document-level)
+            | "fromtext"
             => {
                 // Most toggle-off words are redundant after state flush above,
                 // but b0/i0 specifically turn off formatting
@@ -908,13 +992,18 @@ impl<'a> Parser<'a> {
             }
 
             _ => {
-                // Unknown control word — emit a diagnostic
-                self.diagnostics.push(Diagnostic {
-                    span: Span::new(self.pos, self.pos),
-                    severity: Severity::Info,
-                    message: format!("unknown control word: \\{word}"),
-                    code: "rtf::unknown-control-word",
-                });
+                // Only emit a diagnostic for all-lowercase unknown words — those
+                // might be real RTF words we haven't categorised yet.  Words with
+                // uppercase letters in the middle (e.g. \kR, \dOx) are binary data
+                // bleeding through the parser, not real control words.
+                if word.bytes().all(|b| b.is_ascii_lowercase()) {
+                    self.diagnostics.push(Diagnostic {
+                        span: Span::new(self.pos, self.pos),
+                        severity: Severity::Info,
+                        message: format!("unknown control word: \\{word}"),
+                        code: "rtf::unknown-control-word",
+                    });
+                }
             }
         }
     }

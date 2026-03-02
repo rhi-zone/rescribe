@@ -45,7 +45,13 @@ fn main() {
                 continue;
             }
         };
-        let input = String::from_utf8_lossy(&content);
+        let input = match String::from_utf8(content) {
+            Ok(s) => s,
+            Err(_) => {
+                parse_errors += 1;
+                continue;
+            }
+        };
         let (doc, diags) = parse(&input);
         total += 1;
         if !diags.is_empty() {
