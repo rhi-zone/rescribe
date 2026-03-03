@@ -9,8 +9,8 @@ use ooxml_dml::ext::{TextParagraphExt, TextRunExt};
 use ooxml_pml::types::STPlaceholderType;
 use ooxml_pml::{PictureExt, Presentation, Shape, ShapeExt};
 use rescribe_core::{
-    ConversionResult, Document, ParseError, ParseOptions, Properties, Resource, ResourceId,
-    ResourceMap,
+    ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Properties, Resource,
+    ResourceId, ResourceMap, Severity, WarningKind,
 };
 use rescribe_std::{Node, node, prop};
 use std::io::Cursor;
@@ -31,6 +31,7 @@ pub fn parse_with_options(
 
     let mut doc = Node::new(node::DOCUMENT);
     let mut resources = ResourceMap::new();
+    let mut warnings: Vec<FidelityWarning> = Vec::new();
 
     let slides = pres
         .slides()
@@ -63,6 +64,30 @@ pub fn parse_with_options(
         let slide_num = slide.index() + 1;
         let mut slide_node = Node::new(node::DIV).prop("slide", slide_num as i64);
 
+        // Charts embedded in this slide.
+        if !slide.chart_rel_ids().is_empty() {
+            warn(
+                &mut warnings,
+                format!(
+                    "Slide {}: {} embedded chart(s) detected; chart data not represented in IR",
+                    slide_num,
+                    slide.chart_rel_ids().len()
+                ),
+            );
+        }
+
+        // SmartArt diagrams embedded in this slide.
+        if !slide.smartart_rel_ids().is_empty() {
+            warn(
+                &mut warnings,
+                format!(
+                    "Slide {}: {} SmartArt diagram(s) detected; diagram data not represented in IR",
+                    slide_num,
+                    slide.smartart_rel_ids().len()
+                ),
+            );
+        }
+
         // Title shape → heading level 1
         if let Some(title_shape) = slide.shapes().iter().find(|s| is_title_shape(s)) {
             let inline = convert_shape_paragraphs(title_shape);
@@ -74,18 +99,33 @@ pub fn parse_with_options(
             }
         }
 
-        // Body shapes → paragraphs (with run-level formatting)
+        // Body shapes → paragraphs (with run-level formatting).
+        // Emit a single per-slide warning if any paragraph has a non-zero indent level
+        // (bullet/outline list structure), since we flatten them to plain paragraphs.
+        let mut has_bullets = false;
         for shape in slide.shapes() {
             if is_title_shape(shape) {
                 continue;
             }
             for pml_para in shape.paragraphs() {
+                if !has_bullets && pml_para.level().is_some_and(|lvl| lvl > 0) {
+                    has_bullets = true;
+                }
                 let inline = convert_pptx_paragraph(pml_para);
                 if !inline.is_empty() {
                     let para = Node::new(node::PARAGRAPH).children(inline);
                     slide_node = slide_node.child(para);
                 }
             }
+        }
+        if has_bullets {
+            warn(
+                &mut warnings,
+                format!(
+                    "Slide {}: bullet/outline list paragraphs detected; list structure not represented in IR (flattened to paragraphs)",
+                    slide_num
+                ),
+            );
         }
 
         // Tables
@@ -118,10 +158,18 @@ pub fn parse_with_options(
             slide_node = slide_node.child(img);
         }
 
-        // Speaker notes → nested div with "notes" property
+        // Speaker notes → nested div with "notes" property.
+        // Plain text only; rich text formatting inside notes is not modelled.
         if let Some(notes) = slide.notes() {
             let notes = notes.trim();
             if !notes.is_empty() {
+                warn(
+                    &mut warnings,
+                    format!(
+                        "Slide {}: speaker notes rendered as plain text; rich text formatting inside notes not represented in IR",
+                        slide_num
+                    ),
+                );
                 let notes_div = Node::new(node::DIV).prop("notes", true).child(
                     Node::new(node::PARAGRAPH)
                         .child(Node::new(node::TEXT).prop(prop::CONTENT, notes.to_string())),
@@ -135,12 +183,23 @@ pub fn parse_with_options(
         }
     }
 
-    Ok(ConversionResult::ok(Document {
-        content: doc,
-        resources,
-        metadata: Properties::new(),
-        source: None,
-    }))
+    Ok(ConversionResult::with_warnings(
+        Document {
+            content: doc,
+            resources,
+            metadata: Properties::new(),
+            source: None,
+        },
+        warnings,
+    ))
+}
+
+fn warn(warnings: &mut Vec<FidelityWarning>, message: impl Into<String>) {
+    warnings.push(FidelityWarning::new(
+        Severity::Minor,
+        WarningKind::FeatureLost("pptx".to_string()),
+        message,
+    ));
 }
 
 /// Convert a shape's text paragraphs into a flat list of inline IR nodes.

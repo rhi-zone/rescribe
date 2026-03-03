@@ -96,6 +96,14 @@ impl Converter {
             .map(|s| s.to_string())
             .collect::<Vec<_>>();
 
+        // Warn once if there are any defined names (named ranges).
+        if !workbook.defined_names().is_empty() {
+            self.warn(format!(
+                "Defined names (named ranges) detected ({} entries); not represented in IR",
+                workbook.defined_names().len()
+            ));
+        }
+
         for (i, name) in sheet_names.iter().enumerate() {
             let sheet = workbook.resolved_sheet(i).map_err(|e| {
                 ParseError::Invalid(format!("Failed to load sheet '{}': {}", name, e))
@@ -129,6 +137,24 @@ impl Converter {
         }
         if sheet.has_conditional_formatting() {
             self.warn("Conditional formatting detected; not represented in IR");
+        }
+        // Warn if any cell carries non-default style (fonts, colors, fills, borders, alignment).
+        if sheet.rows().any(|row| {
+            row.cells_iter()
+                .any(|cell| cell.style_index.is_some_and(|s| s > 0))
+        }) {
+            self.warn(format!(
+                "Cell formatting (fonts, colors, fills, borders, alignment) detected in sheet \"{}\"; style details not represented in IR",
+                sheet.name()
+            ));
+        }
+        // Warn if the sheet contains embedded charts.
+        if !sheet.charts().is_empty() {
+            self.warn(format!(
+                "Chart(s) detected in sheet \"{}\" ({} chart(s)); chart data not represented in IR",
+                sheet.name(),
+                sheet.charts().len()
+            ));
         }
 
         // Determine dimensions

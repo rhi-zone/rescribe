@@ -1,0 +1,21 @@
+{
+  "description": "XLSX spreadsheet with formula cells; formula text preserved in xlsx:formula property",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_header" },
+    { "path": "/0/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "Value" } },
+    { "path": "/0/0/1", "kind": "table_header" },
+    { "path": "/0/0/1/0", "kind": "paragraph" },
+    { "path": "/0/0/1/0/0", "kind": "text", "props": { "content": "Double" } },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" },
+    { "path": "/0/1/0/0", "kind": "paragraph" },
+    { "path": "/0/1/0/0/0", "kind": "text", "props": { "content": "10" } },
+    { "path": "/0/1/1", "kind": "table_cell" },
+    { "path": "/0/1/1/0", "kind": "paragraph", "props": { "xlsx:formula": "A2*2" } }
+  ]
+}

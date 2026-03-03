@@ -958,6 +958,7 @@ dependencies = [
  "rescribe-write-html",
  "rescribe-write-markdown",
  "rescribe-write-rtf",
+ "rescribe-write-xlsx",
  "rtf-fmt",
 ]
 
@@ -1112,6 +1113,15 @@ dependencies = [
  "rescribe-core",
  "rescribe-std",
  "rtf-fmt",
+]
+
+[[package]]
+name = "rescribe-write-xlsx"
+version = "0.1.0"
+dependencies = [
+ "ooxml-sml",
+ "rescribe-core",
+ "rescribe-std",
 ]
 
 [[package]]
