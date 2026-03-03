@@ -185,6 +185,18 @@ impl Converter {
                         let text_str = self.convert_cell_value(&val);
                         let text_node = Node::new(node::TEXT).prop(prop::CONTENT, text_str);
                         let mut para = Node::new(node::PARAGRAPH).child(text_node);
+                        // Tag the resolved cell type so the writer can round-trip faithfully
+                        // without guessing from string content (e.g. "007" must not become 7).
+                        let cell_type_tag = match &val {
+                            CellValue::Number(_) => Some("n"),
+                            CellValue::String(_) => Some("s"),
+                            CellValue::Boolean(_) => Some("b"),
+                            CellValue::Error(_) => Some("e"),
+                            CellValue::Empty => None,
+                        };
+                        if let Some(ct) = cell_type_tag {
+                            para = para.prop("xlsx:cell-type", ct);
+                        }
                         // Preserve raw formula for round-trip fidelity.
                         if let Some(formula) = cell.formula_text() {
                             para = para.prop("xlsx:formula", formula.to_string());

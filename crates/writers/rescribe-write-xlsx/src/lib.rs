@@ -129,15 +129,40 @@ impl EmitContext {
                     let col_letter = column_to_letter(col_idx as u32 + 1);
                     let cell_ref = format!("{}{}", col_letter, row_idx + 1);
 
-                    // Try to parse as number
-                    if let Ok(num) = cell_text.parse::<f64>() {
-                        sheet.set_cell(&cell_ref, num);
-                    } else if cell_text.eq_ignore_ascii_case("true") {
-                        sheet.set_cell(&cell_ref, true);
-                    } else if cell_text.eq_ignore_ascii_case("false") {
-                        sheet.set_cell(&cell_ref, false);
+                    // Find the paragraph node to read xlsx:* props.
+                    let para = cell_node
+                        .children
+                        .iter()
+                        .find(|n| n.kind.as_str() == node::PARAGRAPH);
+
+                    let cell_type = para
+                        .and_then(|p| p.props.get_str("xlsx:cell-type"))
+                        .unwrap_or("");
+
+                    let formula = para.and_then(|p| p.props.get_str("xlsx:formula"));
+
+                    if let Some(f) = formula {
+                        // Formula cells: re-emit the formula; cached value is not stored.
+                        sheet.set_formula(&cell_ref, f.to_string());
                     } else {
-                        sheet.set_cell(&cell_ref, cell_text);
+                        // Use the tagged cell type from the reader; fall back to string
+                        // when the type is absent (e.g. cells produced outside this reader).
+                        match cell_type {
+                            "n" => {
+                                if let Ok(num) = cell_text.parse::<f64>() {
+                                    sheet.set_cell(&cell_ref, num);
+                                } else {
+                                    sheet.set_cell(&cell_ref, cell_text);
+                                }
+                            }
+                            "b" => {
+                                sheet.set_cell(&cell_ref, cell_text.eq_ignore_ascii_case("true"));
+                            }
+                            _ => {
+                                // "s", "e", or absent: write as string, preserving value exactly.
+                                sheet.set_cell(&cell_ref, cell_text);
+                            }
+                        }
                     }
                 }
             }

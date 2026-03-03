@@ -35,9 +35,8 @@ struct FuzzSheet {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Sanitise text: strip NUL, XML-illegal control characters, and whitespace
-/// characters that XLSX does not reliably preserve without xml:space="preserve".
-/// Tabs and newlines are stripped; the XLSX cell-value XML path does not
-/// guarantee their preservation when the ooxml-sml writer omits that attribute.
+/// that ooxml-sml does not preserve without xml:space="preserve" on shared strings.
+/// Tabs and leading/trailing spaces are stripped at the trim() call below.
 fn sanitise(s: &str) -> String {
     s.chars()
         .filter(|c| {
@@ -57,23 +56,11 @@ fn cell_text(val: &FuzzCellValue) -> String {
     match val {
         FuzzCellValue::Text(s) => {
             let clean = sanitise(s);
-            // XLSX XML writers may omit xml:space="preserve", so XML normalises
-            // leading/trailing whitespace away. Trim here to match what the reader
-            // will return — this is a known limitation of the XLSX cell-value path.
+            // ooxml-sml shared-string writer may omit xml:space="preserve", so
+            // leading/trailing spaces get normalised away by the XML parser.
             let trimmed = clean.trim().to_string();
-            if trimmed.is_empty() {
-                return String::new();
-            }
-            // The XLSX writer (rescribe-write-xlsx) auto-converts numeric-looking
-            // strings to f64 via `.parse::<f64>()`, so "000" becomes 0.0 → "0".
-            // Apply the same normalisation here so the comparison is fair.
-            if let Ok(n) = trimmed.parse::<f64>() {
-                if n.fract() == 0.0 && n.abs() < 1e15 {
-                    return (n as i64).to_string();
-                } else if n.is_finite() {
-                    return n.to_string();
-                }
-            }
+            // No numeric coercion here — the writer now uses xlsx:cell-type = "s"
+            // set by make_cell_node, so string values roundtrip exactly as strings.
             trimmed
         }
         FuzzCellValue::Number(n) => {
@@ -95,7 +82,19 @@ fn make_cell_node(val: &FuzzCellValue, first_row: bool) -> Node {
     let kind = if first_row { node::TABLE_HEADER } else { node::TABLE_CELL };
     let text = cell_text(val);
     let text_node = Node::new(node::TEXT).prop(prop::CONTENT, text);
-    let para = Node::new(node::PARAGRAPH).child(text_node);
+    // Set xlsx:cell-type so the writer uses the correct API (set_cell(f64) vs
+    // set_cell(str)) without guessing from string content.
+    let para = match val {
+        FuzzCellValue::Text(_) => Node::new(node::PARAGRAPH)
+            .prop("xlsx:cell-type", "s")
+            .child(text_node),
+        FuzzCellValue::Number(_) => Node::new(node::PARAGRAPH)
+            .prop("xlsx:cell-type", "n")
+            .child(text_node),
+        FuzzCellValue::Bool(_) => Node::new(node::PARAGRAPH)
+            .prop("xlsx:cell-type", "b")
+            .child(text_node),
+    };
     Node::new(kind).child(para)
 }
 

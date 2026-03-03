@@ -243,6 +243,34 @@ This applies to:
 
 The rule: **lesson learned → CLAUDE.md updated → then continue**. Never the other way.
 
+### Why "I'll write it down" isn't enough
+
+The instruction above already says to update CLAUDE.md. That alone hasn't been sufficient —
+past sessions have explained mistakes conversationally and moved on without recording them,
+leaving the same traps for the next session.
+
+**The enforcement mechanism:** When the user pushes back on something you said or did,
+treat it as a mandatory CLAUDE.md edit gate. You may not write another line of code or
+explanation until the lesson is captured in CLAUDE.md. Not "I'll add it at the end of the
+session." Not "I'll update memory." Right now, as the first response to the pushback.
+
+Concrete triggers — stop and update CLAUDE.md immediately when:
+- The user says "why did you do X" and X was wrong
+- The user says "that's wrong" or "that's not right"
+- The user asks a clarifying question that reveals your mental model was off
+- You realize mid-explanation that the explanation implies a design flaw you introduced
+
+The update must capture: what was wrong, why it was wrong, and what the correct approach is.
+A one-line entry is fine. The goal is that the next session doesn't repeat the mistake.
+
+### Recorded lessons (update this list, never delete entries)
+
+- **XLSX cell-type inference (2026-03-03):** The XLSX writer used `.parse::<f64>()` on every
+  text node to "auto-detect" numbers, converting `"007"` → `0.0` → `"7"`. This is wrong.
+  The reader knows the actual cell type (`CellValue::Number` vs `CellValue::String`). The fix:
+  reader tags `xlsx:cell-type = "n"/"s"/"b"/"e"` on each paragraph; writer reads that prop
+  instead of guessing. Never infer type from string content when the IR already carries the type.
+
 ## Negative Constraints
 
 Do not:
