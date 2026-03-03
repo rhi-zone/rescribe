@@ -206,19 +206,22 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Roundtrip fuzz target — clean
 
   **XLSX reader**:
-  - [ ] Cell formatting (number formats, colors, fonts, borders, alignment) — silently dropped, needs fidelity warning
-  - [ ] Charts, named ranges — silently dropped, needs fidelity warning
-  - [ ] Metadata extraction (TODO stub in code)
-  - [ ] More fixtures (only `basic` exists)
-  - [ ] Roundtrip fuzz target
+  - [x] Cell formatting fidelity warning — cells with style_index > 0 emit warning (2026-03-03)
+  - [x] Charts fidelity warning — embedded charts per sheet emit warning (2026-03-03)
+  - [x] Named ranges fidelity warning — workbook defined_names emit warning (2026-03-03)
+  - [x] Formula fixture (xlsx/formula) — xlsx:formula property preserved (2026-03-03)
+  - [x] Roundtrip fuzz target (fuzz_xlsx_roundtrip) — 38K runs clean (2026-03-03)
+  - [ ] Metadata extraction (TODO stub in code — ooxml-sml doesn't expose core properties)
+  - [ ] More fixtures (formatted cells, etc.)
 
   **PPTX reader**:
-  - [ ] Bullet/list detection (all body content → flat paragraphs; no list structure)
-  - [ ] Speaker notes rich text — currently flat string, rich text lost without warning
-  - [ ] Charts, SmartArt — silently dropped, needs fidelity warning
-  - [ ] More fixtures (only `slide` exists)
-  - [ ] Roundtrip fuzz target
-  - [ ] Writer needed before roundtrip fuzz is possible
+  - [x] Bullet/list detection warning — paragraphs with level() > 0 emit fidelity warning (2026-03-03)
+  - [x] Speaker notes plain-text warning — notes div emitted with warning about lost rich text (2026-03-03)
+  - [x] Charts/SmartArt fidelity warnings — per-slide warnings when chart_rel_ids/smartart_rel_ids non-empty (2026-03-03)
+  - [x] Notes fixture (pptx/notes) — speaker notes div structure (2026-03-03)
+  - [x] Fix Cargo.toml: workspace deps (was path deps) (2026-03-03)
+  - [ ] Bullet/list structure in IR (paragraphs still flattened; need to emit list/list_item nodes)
+  - [ ] Roundtrip fuzz target (requires PPTX writer capable of roundtrip)
 - [ ] EPUB (epub/epub-builder backed; same)
 - [ ] ODT writer (no library; treat as a vertical)
 - [ ] AZW3 reader/writer (boko as reference, MIT attribution)
