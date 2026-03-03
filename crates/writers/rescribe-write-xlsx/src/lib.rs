@@ -236,7 +236,7 @@ fn extract_text(node: &Node) -> String {
         }
     }
 
-    text.trim().to_string()
+    text
 }
 
 /// Convert a 1-based column number to Excel column letters (A, B, ..., Z, AA, AB, ...).

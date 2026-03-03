@@ -34,19 +34,15 @@ struct FuzzSheet {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Sanitise text: strip NUL, XML-illegal control characters, and whitespace
-/// that ooxml-sml does not preserve without xml:space="preserve" on shared strings.
-/// Tabs and leading/trailing spaces are stripped at the trim() call below.
+/// Sanitise text: strip NUL and XML-illegal control characters.
+/// ooxml-sml ≥ 0.1.1-alpha.1 correctly emits xml:space="preserve" on shared
+/// strings, so leading/trailing spaces and internal whitespace are preserved.
 fn sanitise(s: &str) -> String {
     s.chars()
         .filter(|c| {
             !matches!(
                 *c,
-                '\0' | '\t' | '\n' | '\r'
-                    | '\x01'..='\x08'
-                    | '\x0b'
-                    | '\x0c'
-                    | '\x0e'..='\x1f'
+                '\0' | '\x01'..='\x08' | '\x0b' | '\x0c' | '\x0e'..='\x1f'
             )
         })
         .collect()
@@ -55,13 +51,10 @@ fn sanitise(s: &str) -> String {
 fn cell_text(val: &FuzzCellValue) -> String {
     match val {
         FuzzCellValue::Text(s) => {
-            let clean = sanitise(s);
-            // ooxml-sml shared-string writer may omit xml:space="preserve", so
-            // leading/trailing spaces get normalised away by the XML parser.
-            let trimmed = clean.trim().to_string();
-            // No numeric coercion here — the writer now uses xlsx:cell-type = "s"
-            // set by make_cell_node, so string values roundtrip exactly as strings.
-            trimmed
+            // Sanitise only; no trim() or numeric coercion needed.
+            // xlsx:cell-type = "s" (set in make_cell_node) ensures the writer
+            // calls set_cell(str) and the value roundtrips exactly.
+            sanitise(s)
         }
         FuzzCellValue::Number(n) => {
             if n.is_finite() {
