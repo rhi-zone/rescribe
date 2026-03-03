@@ -188,7 +188,7 @@ Each Tier A format at 5-Production with a published standalone crate.
 - [ ] `djot-fmt` vertical
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)
-- [ ] DOCX, PPTX, XLSX (ooxml-* backed; same) — now at 4-Fuzz; gaps below
+- [ ] DOCX, PPTX, XLSX (ooxml-* backed; same) — DOCX reader at 5-Production (2026-03-03); others at 4-Fuzz; gaps below
 
   **DOCX reader** (closest to production):
   - [x] Endnote content — `doc.get_endnotes()` pre-loaded; `footnote_ref` nodes with `label:"en{id}"` prefix
@@ -196,7 +196,9 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] List ordering — numbering definitions consulted via `ParagraphExt::num_fmt()`; `ordered: true` for decimal
   - [x] Audit `_ => {}` at line 370 — `MoveFrom`/`MoveTo`/`SubDoc` now emit fidelity warnings
   - [x] Fixtures: all 22 fixtures have expected.json (image, hyperlink, small_caps, all_caps, hidden, highlight, ordered lists, table_header, endnote, para_spacing, para_indent)
-  - [x] Roundtrip fuzz target (`fuzz_docx_roundtrip`) — clean
+  - [x] Roundtrip fuzz target (`fuzz_docx_roundtrip`) — 441K runs clean (2026-03-03)
+  - [x] No-panic fuzz gate (`fuzz_docx_reader`) — 5.7M runs clean (2026-03-03)
+  - [x] **5-Production** — all gates passed (2026-03-03)
 
   **DOCX writer**:
   - [x] Image embedding (resource:xxx → embedded DOCX media via pre-registration + CTDrawing clone)
@@ -210,7 +212,7 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Charts fidelity warning — embedded charts per sheet emit warning (2026-03-03)
   - [x] Named ranges fidelity warning — workbook defined_names emit warning (2026-03-03)
   - [x] Formula fixture (xlsx/formula) — xlsx:formula property preserved (2026-03-03)
-  - [x] Roundtrip fuzz target (fuzz_xlsx_roundtrip) — 38K runs clean (2026-03-03)
+  - [x] Roundtrip fuzz target (fuzz_xlsx_roundtrip) — 157K runs clean (2026-03-03)
   - [ ] Metadata extraction (TODO stub in code — ooxml-sml doesn't expose core properties)
   - [ ] More fixtures (formatted cells, etc.)
 

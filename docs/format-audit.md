@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-01.
+Assessed 2026-02-24; stages updated 2026-03-03.
 
 ## Maturity Pipeline
 
@@ -77,7 +77,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| docx | 4† | 3† | ooxml-wml | production | fuzz |
+| docx | 5† | 3† | ooxml-wml | – | fuzz |
 | odt | 3 | 2 | quick-xml / hand | fuzz | harness |
 | epub | 3† | 3† | epub / epub-builder | fuzz | fuzz |
 | fb2 | 3 | 2 | hand | fuzz | harness |
