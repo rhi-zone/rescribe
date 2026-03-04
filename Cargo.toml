@@ -195,3 +195,6 @@ markup5ever_rcdom = "0.36"
 pdf-extract = "0.10"
 quick-xml = "0.39"
 toml = "0.8"
+
+[profile.dev]
+debug = 0
