@@ -6,6 +6,7 @@
 //! images are stored as resources, and speaker notes become a nested div.
 
 use ooxml_dml::ext::{TextParagraphExt, TextRunExt};
+use ooxml_dml::types::{EGTextBullet, TextParagraph};
 use ooxml_pml::types::STPlaceholderType;
 use ooxml_pml::{PictureExt, Presentation, Shape, ShapeExt};
 use rescribe_core::{
@@ -99,30 +100,74 @@ pub fn parse_with_options(
             }
         }
 
-        // Body shapes → paragraphs (with run-level formatting).
-        // Emit a single per-slide warning if any paragraph has a non-zero indent level
-        // (bullet/outline list structure), since we flatten them to plain paragraphs.
-        let mut has_bullets = false;
+        // Body shapes → paragraphs and lists.
+        // Consecutive bullet paragraphs are grouped into list/list_item nodes.
+        // Ordered vs unordered is detected from the paragraph's bullet type.
+        struct BodyPara {
+            inline: Vec<Node>,
+            is_bullet: bool,
+            is_ordered: bool,
+        }
+
+        let mut body_paras: Vec<BodyPara> = Vec::new();
+        let mut has_nested_bullets = false;
+
         for shape in slide.shapes() {
             if is_title_shape(shape) {
                 continue;
             }
             for pml_para in shape.paragraphs() {
-                if !has_bullets && pml_para.level().is_some_and(|lvl| lvl > 0) {
-                    has_bullets = true;
-                }
                 let inline = convert_pptx_paragraph(pml_para);
-                if !inline.is_empty() {
-                    let para = Node::new(node::PARAGRAPH).children(inline);
-                    slide_node = slide_node.child(para);
+                if inline.is_empty() {
+                    continue;
                 }
+                let level = pml_para.level().unwrap_or(0);
+                let is_bullet = level > 0 || has_explicit_bullet(pml_para);
+                let is_ordered = is_ordered_bullet(pml_para);
+                if is_bullet && level > 1 {
+                    has_nested_bullets = true;
+                }
+                body_paras.push(BodyPara {
+                    inline,
+                    is_bullet,
+                    is_ordered,
+                });
             }
         }
-        if has_bullets {
+
+        // Group consecutive bullet paragraphs into list/list_item nodes.
+        let mut pi = 0;
+        while pi < body_paras.len() {
+            if body_paras[pi].is_bullet {
+                // Scan ahead to find end of bullet group and detect ordering.
+                let start = pi;
+                let mut ordered = false;
+                while pi < body_paras.len() && body_paras[pi].is_bullet {
+                    if body_paras[pi].is_ordered {
+                        ordered = true;
+                    }
+                    pi += 1;
+                }
+                let mut list_node = Node::new(node::LIST).prop(prop::ORDERED, ordered);
+                for bp in &mut body_paras[start..pi] {
+                    let item = Node::new(node::LIST_ITEM)
+                        .child(Node::new(node::PARAGRAPH).children(std::mem::take(&mut bp.inline)));
+                    list_node = list_node.child(item);
+                }
+                slide_node = slide_node.child(list_node);
+            } else {
+                let para =
+                    Node::new(node::PARAGRAPH).children(std::mem::take(&mut body_paras[pi].inline));
+                slide_node = slide_node.child(para);
+                pi += 1;
+            }
+        }
+
+        if has_nested_bullets {
             warn(
                 &mut warnings,
                 format!(
-                    "Slide {}: bullet/outline list paragraphs detected; list structure not represented in IR (flattened to paragraphs)",
+                    "Slide {}: nested bullet levels detected; list structure flattened to single level",
                     slide_num
                 ),
             );
@@ -239,6 +284,27 @@ fn convert_pptx_paragraph(para: &ooxml_dml::types::TextParagraph) -> Vec<Node> {
     nodes
 }
 
+/// Check if a paragraph has an explicit bullet (character or auto-number).
+fn has_explicit_bullet(para: &TextParagraph) -> bool {
+    para.p_pr.as_ref().is_some_and(|p| {
+        p.text_bullet.as_ref().is_some_and(|b| {
+            matches!(
+                b.as_ref(),
+                EGTextBullet::BuChar(_) | EGTextBullet::BuAutoNum(_)
+            )
+        })
+    })
+}
+
+/// Check if a paragraph has an ordered (auto-number) bullet.
+fn is_ordered_bullet(para: &TextParagraph) -> bool {
+    para.p_pr.as_ref().is_some_and(|p| {
+        p.text_bullet
+            .as_ref()
+            .is_some_and(|b| matches!(b.as_ref(), EGTextBullet::BuAutoNum(_)))
+    })
+}
+
 /// Return true if the shape is a title or centre-title placeholder.
 ///
 /// Checks both the OOXML placeholder type (set by real PowerPoint files) and the
@@ -278,6 +344,56 @@ mod tests {
         buf.into_inner()
     }
 
+    /// Build a PPTX with bullet paragraphs by patching slide XML.
+    ///
+    /// PresentationBuilder doesn't support bullet properties, so we create a
+    /// basic PPTX, then modify the slide XML in the zip to add `<a:pPr>` with
+    /// `<a:buChar>` attributes.
+    fn create_bullet_pptx() -> Vec<u8> {
+        let mut builder = PresentationBuilder::new();
+        let slide = builder.add_slide();
+        slide.add_title("Bullet Slide");
+        // Add text that we'll replace with bulleted paragraphs.
+        slide.add_text("PLACEHOLDER_BULLETS");
+        let mut buf = Cursor::new(Vec::new());
+        builder.write(&mut buf).unwrap();
+        let pptx_bytes = buf.into_inner();
+
+        // Read the zip and replace the slide XML.
+        use std::io::{Read, Write};
+        let reader = zip::ZipArchive::new(Cursor::new(&pptx_bytes)).unwrap();
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut output);
+            for i in 0..reader.len() {
+                let mut cloned = reader.clone();
+                let mut file = cloned.by_index(i).unwrap();
+                let name = file.name().to_string();
+                let mut contents = Vec::new();
+                file.read_to_end(&mut contents).unwrap();
+
+                if name.contains("slide1.xml") && !name.contains("rels") {
+                    // Replace the placeholder text element with bullet paragraphs.
+                    let xml = String::from_utf8(contents).unwrap();
+                    let bullet_xml = r#"<a:p><a:pPr lvl="1"><a:buChar char="•"/></a:pPr><a:r><a:rPr lang="en-US" sz="2400"/><a:t>First bullet</a:t></a:r></a:p><a:p><a:pPr lvl="1"><a:buChar char="•"/></a:pPr><a:r><a:rPr lang="en-US" sz="2400"/><a:t>Second bullet</a:t></a:r></a:p><a:p><a:pPr lvl="1"><a:buChar char="•"/></a:pPr><a:r><a:rPr lang="en-US" sz="2400"/><a:t>Third bullet</a:t></a:r></a:p>"#;
+                    let xml = xml.replace(
+                        r#"<a:p><a:r><a:rPr lang="en-US" sz="2400"/><a:t>PLACEHOLDER_BULLETS</a:t></a:r></a:p>"#,
+                        bullet_xml,
+                    );
+                    let options = zip::write::SimpleFileOptions::default();
+                    writer.start_file(&name, options).unwrap();
+                    writer.write_all(xml.as_bytes()).unwrap();
+                } else {
+                    let options = zip::write::SimpleFileOptions::default();
+                    writer.start_file(&name, options).unwrap();
+                    writer.write_all(&contents).unwrap();
+                }
+            }
+            writer.finish().unwrap();
+        }
+        output.into_inner()
+    }
+
     #[test]
     fn test_parse_basic() {
         let pptx = create_test_pptx();
@@ -301,5 +417,60 @@ mod tests {
                 .iter()
                 .any(|c| c.kind.as_str() == node::PARAGRAPH)
         );
+    }
+
+    #[test]
+    fn test_parse_bullets() {
+        let pptx = create_bullet_pptx();
+        let result = parse(&pptx).unwrap();
+        let doc = &result.value;
+        let slide = &doc.content.children[0];
+
+        // Should have a heading
+        assert_eq!(slide.children[0].kind.as_str(), node::HEADING);
+
+        // Should have a list node (not flat paragraphs)
+        let list = slide
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::LIST)
+            .expect("Expected a list node for bullet paragraphs");
+
+        // List should be unordered (buChar = character bullets)
+        assert_eq!(
+            list.props.get("ordered"),
+            Some(&rescribe_core::PropValue::Bool(false))
+        );
+
+        // Should have 3 list items
+        assert_eq!(list.children.len(), 3);
+        for item in &list.children {
+            assert_eq!(item.kind.as_str(), node::LIST_ITEM);
+            // Each item should contain a paragraph
+            assert_eq!(item.children[0].kind.as_str(), node::PARAGRAPH);
+        }
+
+        // Verify text content
+        let first_item_para = &list.children[0].children[0];
+        let text_node = &first_item_para.children[0];
+        assert_eq!(
+            text_node.props.get("content"),
+            Some(&rescribe_core::PropValue::String(
+                "First bullet".to_string()
+            ))
+        );
+    }
+
+    /// Generate the bullet fixture PPTX file. Run manually:
+    /// `cargo test -p rescribe-read-pptx -- generate_bullet_fixture --ignored`
+    #[test]
+    #[ignore]
+    fn generate_bullet_fixture() {
+        let pptx = create_bullet_pptx();
+        let fixture_dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/pptx/bullets");
+        std::fs::create_dir_all(&fixture_dir).unwrap();
+        std::fs::write(fixture_dir.join("input.pptx"), &pptx).unwrap();
+        eprintln!("Wrote fixture to {}", fixture_dir.display());
     }
 }
