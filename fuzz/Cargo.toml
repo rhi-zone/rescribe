@@ -65,6 +65,9 @@ path = "../crates/writers/rescribe-write-xlsx"
 [dependencies.rescribe-read-pptx]
 path = "../crates/readers/rescribe-read-pptx"
 
+[dependencies.rescribe-write-pptx]
+path = "../crates/writers/rescribe-write-pptx"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -193,6 +196,13 @@ bench = false
 [[bin]]
 name = "fuzz_pptx_reader"
 path = "fuzz_targets/pptx_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_pptx_roundtrip"
+path = "fuzz_targets/pptx_roundtrip.rs"
 test = false
 doc = false
 bench = false

@@ -957,6 +957,7 @@ dependencies = [
  "rescribe-write-docx",
  "rescribe-write-html",
  "rescribe-write-markdown",
+ "rescribe-write-pptx",
  "rescribe-write-rtf",
  "rescribe-write-xlsx",
  "rtf-fmt",
@@ -1102,6 +1103,15 @@ dependencies = [
 name = "rescribe-write-markdown"
 version = "0.1.0"
 dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-pptx"
+version = "0.1.0"
+dependencies = [
+ "ooxml-pml",
  "rescribe-core",
  "rescribe-std",
 ]

@@ -9,7 +9,10 @@
 //!   starting a new slide.
 
 use ooxml_pml::{PresentationBuilder, TableBuilder};
-use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_core::{
+    ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
+    WarningKind,
+};
 use rescribe_std::{node, prop};
 use std::io::Cursor;
 
@@ -24,6 +27,7 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let mut builder = PresentationBuilder::new();
+    let mut warnings: Vec<FidelityWarning> = Vec::new();
 
     // Check whether the document uses the structured `div[slide]` layout.
     let has_slide_divs = doc
@@ -33,9 +37,9 @@ pub fn emit_with_options(
         .any(|n| n.kind.as_str() == node::DIV && n.props.get("slide").is_some());
 
     if has_slide_divs {
-        emit_structured(&mut builder, &doc.content.children, doc);
+        emit_structured(&mut builder, &doc.content.children, doc, &mut warnings);
     } else {
-        emit_flat(&mut builder, &doc.content.children);
+        emit_flat(&mut builder, &doc.content.children, &mut warnings);
     }
 
     let mut cursor = Cursor::new(Vec::new());
@@ -43,23 +47,36 @@ pub fn emit_with_options(
         .write(&mut cursor)
         .map_err(|e| EmitError::Io(std::io::Error::other(e.to_string())))?;
 
-    Ok(ConversionResult::ok(cursor.into_inner()))
+    Ok(ConversionResult::with_warnings(
+        cursor.into_inner(),
+        warnings,
+    ))
 }
 
 // ---------------------------------------------------------------------------
 // Structured layout: one div[slide] → one slide
 // ---------------------------------------------------------------------------
 
-fn emit_structured(builder: &mut PresentationBuilder, nodes: &[Node], doc: &Document) {
+fn emit_structured(
+    builder: &mut PresentationBuilder,
+    nodes: &[Node],
+    doc: &Document,
+    warnings: &mut Vec<FidelityWarning>,
+) {
     for node in nodes {
         if node.kind.as_str() == node::DIV && node.props.get("slide").is_some() {
             let slide = builder.add_slide();
-            emit_slide_children(slide, &node.children, doc);
+            emit_slide_children(slide, &node.children, doc, warnings);
         }
     }
 }
 
-fn emit_slide_children(slide: &mut ooxml_pml::SlideBuilder, children: &[Node], doc: &Document) {
+fn emit_slide_children(
+    slide: &mut ooxml_pml::SlideBuilder,
+    children: &[Node],
+    doc: &Document,
+    warnings: &mut Vec<FidelityWarning>,
+) {
     for child in children {
         match child.kind.as_str() {
             k if k == node::HEADING => {
@@ -91,10 +108,14 @@ fn emit_slide_children(slide: &mut ooxml_pml::SlideBuilder, children: &[Node], d
                     }
                 } else {
                     // Nested div without slide prop — recurse.
-                    emit_slide_children(slide, &child.children, doc);
+                    emit_slide_children(slide, &child.children, doc, warnings);
                 }
             }
             k if k == node::LIST => {
+                warn(
+                    warnings,
+                    "List structure flattened to bullet-prefixed paragraphs; PresentationBuilder lacks bullet/numbering API",
+                );
                 emit_list(slide, child);
             }
             k if k == node::CODE_BLOCK => {
@@ -117,7 +138,11 @@ fn emit_slide_children(slide: &mut ooxml_pml::SlideBuilder, children: &[Node], d
 // Flat layout: split on level-1 headings
 // ---------------------------------------------------------------------------
 
-fn emit_flat(builder: &mut PresentationBuilder, nodes: &[Node]) {
+fn emit_flat(
+    builder: &mut PresentationBuilder,
+    nodes: &[Node],
+    warnings: &mut Vec<FidelityWarning>,
+) {
     struct FlatSlide<'a> {
         title: String,
         content: Vec<&'a Node>,
@@ -166,6 +191,10 @@ fn emit_flat(builder: &mut PresentationBuilder, nodes: &[Node]) {
                     emit_table(slide, node);
                 }
                 k if k == node::LIST => {
+                    warn(
+                        warnings,
+                        "List structure flattened to bullet-prefixed paragraphs; PresentationBuilder lacks bullet/numbering API",
+                    );
                     emit_list(slide, node);
                 }
                 k if k == node::CODE_BLOCK => {
@@ -187,6 +216,14 @@ fn emit_flat(builder: &mut PresentationBuilder, nodes: &[Node]) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+fn warn(warnings: &mut Vec<FidelityWarning>, message: impl Into<String>) {
+    warnings.push(FidelityWarning::new(
+        Severity::Minor,
+        WarningKind::FeatureLost("pptx".to_string()),
+        message,
+    ));
+}
 
 fn emit_table(slide: &mut ooxml_pml::SlideBuilder, table_node: &Node) {
     let mut table = TableBuilder::new();
