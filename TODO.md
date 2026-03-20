@@ -154,7 +154,7 @@ The format tiers below determine priority order within this model.
 1. `rtf-fmt` — highest risk, most isolated, no viable crate exists
 2. `rst-fmt` — large parser, complex spec, `docutils` is the reference
 3. `asciidoc` — similar scope; `asciidoctor` as oracle
-4. `org-fmt` — reader at 3-Harness; writer needs work; partially modular already
+4. `org-fmt` — reader at 4-Fuzz (2026-03-21); writer still at 2-Fixtures; coverage gaps remain
 5. `djot-fmt` — jotdown has confirmed bugs; djot spec is clean and small
 6. Remaining Tier A formats (epub, odt, azw3) as bandwidth allows
 
@@ -192,7 +192,21 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [ ] Known roundtrip gap: [role]#text# syntax (Strikeout/Underline/SmallCaps emitted as
         [line-through]#text# / [underline]#text# / [small-caps]#text# but parsed back as Highlight)
   - [ ] 100% construct coverage — tables, footnotes, math, admonitions, attributes
-- [ ] `org-fmt` vertical
+- [ ] `org-fmt` vertical — **4-Fuzz** (2026-03-21); needs 5-Production
+  - [x] Split lib.rs into ast.rs / parse.rs / emit.rs
+  - [x] Span/Diagnostic types; infallible parse() → (OrgDoc, Vec<Diagnostic>)
+  - [x] strip_spans() on all AST types; merge_text_inlines() utility
+  - [x] No-panic fuzz gate (`fuzz_org_reader`) — 1.25M runs clean (2026-03-21)
+  - [x] Roundtrip fuzz target (`fuzz_org_roundtrip`) — 274K runs clean (2026-03-21)
+  - [x] Fixed parse_block() infinite loop on bare "#+BEGIN_" input
+  - [ ] Known construct gaps (reader silently drops):
+    - Superscript: builder emits `^{text}` but parser has no `^{` match arm
+    - Subscript: builder emits `_{text}` but parser has no `_{` match arm
+    - DefinitionList: parser has no dedicated `- term :: desc` handler
+    - Table: inline parser; no native table row parsing yet
+    - Blockquote nesting: content re-parsed as inline, structural loss
+  - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
+  - [ ] 100% construct coverage (→ 5-Production)
 - [ ] `djot-fmt` vertical
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)

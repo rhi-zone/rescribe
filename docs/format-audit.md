@@ -41,7 +41,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
 | djot | 4† | 4† | jotdown | production | production |
-| org | 4 | 2 | hand | production | harness |
+| org | 4 | 2 | hand | fuzz | harness |
 | rst | 4 | 2 | hand | fuzz | harness |
 | asciidoc | 4 | 2 | hand | production | harness |
 | textile | 3 | 2 | hand | fuzz | harness |
@@ -168,7 +168,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 | rtf-fmt | ✓ | ~ | | | ✓ |
 | rst-fmt | ✓ | | | ~ | |
 | asciidoc | ✓ | | | ~ | ✓ |
-| org-fmt | | | | | |
+| org-fmt | ✓ | | | | ✓ |
 | djot-fmt | | | | | |
 
 ### Remaining hand-written formats (crate exists, API not started)
