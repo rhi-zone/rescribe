@@ -5,7 +5,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use t2t::{Block, Inline};
+use t2t::{Block, Inline, Span};
 
 /// Emit a document as txt2tags markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -25,8 +25,11 @@ pub fn emit_with_options(
         }
     }
 
-    let t2t_doc = t2t::T2tDoc { blocks };
-    let output = t2t::build(&t2t_doc);
+    let t2t_doc = t2t::T2tDoc {
+        blocks,
+        span: Span::NONE,
+    };
+    let output = t2t::emit(&t2t_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
 }
@@ -47,27 +50,40 @@ fn node_to_block(node: &Node) -> Option<Block> {
                 level,
                 numbered,
                 inlines,
+                span: Span::NONE,
             })
         }
 
         node::PARAGRAPH => {
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Some(Block::Paragraph { inlines })
+            Some(Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            })
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Some(Block::CodeBlock { content })
+            Some(Block::CodeBlock {
+                content,
+                span: Span::NONE,
+            })
         }
 
         node::RAW_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Some(Block::RawBlock { content })
+            Some(Block::RawBlock {
+                content,
+                span: Span::NONE,
+            })
         }
 
         node::BLOCKQUOTE => {
             let children: Vec<Block> = node.children.iter().filter_map(node_to_block).collect();
-            Some(Block::Blockquote { children })
+            Some(Block::Blockquote {
+                children,
+                span: Span::NONE,
+            })
         }
 
         node::LIST => {
@@ -90,7 +106,11 @@ fn node_to_block(node: &Node) -> Option<Block> {
                 })
                 .collect();
 
-            Some(Block::List { ordered, items })
+            Some(Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            })
         }
 
         node::TABLE => {
@@ -111,17 +131,24 @@ fn node_to_block(node: &Node) -> Option<Block> {
                             .map(|cell| cell.children.iter().map(node_to_inline).collect())
                             .collect();
 
-                        Some(t2t::TableRow { cells, is_header })
+                        Some(t2t::TableRow {
+                            cells,
+                            is_header,
+                            span: Span::NONE,
+                        })
                     } else {
                         None
                     }
                 })
                 .collect();
 
-            Some(Block::Table { rows })
+            Some(Block::Table {
+                rows,
+                span: Span::NONE,
+            })
         }
 
-        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule { span: Span::NONE }),
 
         node::DIV | node::SPAN | node::FIGURE => {
             // These container nodes should not emit themselves
@@ -132,7 +159,10 @@ fn node_to_block(node: &Node) -> Option<Block> {
         // Inline nodes at block level should be wrapped in paragraphs
         node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK | node::IMAGE => {
             let inlines = vec![node_to_inline(node)];
-            Some(Block::Paragraph { inlines })
+            Some(Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            })
         }
 
         _ => None,
@@ -143,60 +173,67 @@ fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Text(content)
+            Inline::Text(content, Span::NONE)
         }
 
         node::STRONG => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Bold(children)
+            Inline::Bold(children, Span::NONE)
         }
 
         node::EMPHASIS => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Italic(children)
+            Inline::Italic(children, Span::NONE)
         }
 
         node::UNDERLINE => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Underline(children)
+            Inline::Underline(children, Span::NONE)
         }
 
         node::STRIKEOUT => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Strikethrough(children)
+            Inline::Strikethrough(children, Span::NONE)
         }
 
         node::CODE => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Code(content)
+            Inline::Code(content, Span::NONE)
         }
 
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Link { url, children }
+            Inline::Link {
+                url,
+                children,
+                span: Span::NONE,
+            }
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
-            Inline::Image { url }
+            Inline::Image {
+                url,
+                span: Span::NONE,
+            }
         }
 
-        node::LINE_BREAK => Inline::LineBreak,
+        node::LINE_BREAK => Inline::LineBreak(Span::NONE),
 
-        node::SOFT_BREAK => Inline::SoftBreak,
+        node::SOFT_BREAK => Inline::SoftBreak(Span::NONE),
 
         // For unsupported nodes, emit children as text
         _ => {
             let children: Vec<Inline> = node.children.iter().map(node_to_inline).collect();
             if children.is_empty() {
-                Inline::Text(String::new())
+                Inline::Text(String::new(), Span::NONE)
             } else if children.len() == 1 {
                 children.into_iter().next().unwrap()
             } else {
                 // Multiple children, wrap in a generic container
                 // Since t2t doesn't have generic containers, just concatenate
-                Inline::Text(String::new())
+                Inline::Text(String::new(), Span::NONE)
             }
         }
     }

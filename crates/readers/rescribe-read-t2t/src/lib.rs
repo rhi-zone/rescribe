@@ -17,7 +17,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let t2t_doc = t2t::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (t2t_doc, _diagnostics) = t2t::parse(input);
 
     let mut nodes = Vec::new();
     for block in &t2t_doc.blocks {
@@ -32,7 +32,7 @@ pub fn parse_with_options(
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(inline_to_node).collect();
             Node::new(node::PARAGRAPH).children(children)
         }
@@ -41,6 +41,7 @@ fn block_to_node(block: &Block) -> Node {
             level,
             numbered,
             inlines,
+            ..
         } => {
             let children: Vec<Node> = inlines.iter().map(inline_to_node).collect();
             let mut heading = Node::new(node::HEADING)
@@ -54,20 +55,20 @@ fn block_to_node(block: &Block) -> Node {
             heading
         }
 
-        Block::CodeBlock { content } => {
+        Block::CodeBlock { content, .. } => {
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
         }
 
-        Block::RawBlock { content } => {
+        Block::RawBlock { content, .. } => {
             Node::new(node::RAW_BLOCK).prop(prop::CONTENT, content.clone())
         }
 
-        Block::Blockquote { children } => {
+        Block::Blockquote { children, .. } => {
             let para_children: Vec<Node> = children.iter().map(block_to_node).collect();
             Node::new(node::BLOCKQUOTE).children(para_children)
         }
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_blocks| {
@@ -81,7 +82,7 @@ fn block_to_node(block: &Block) -> Node {
                 .children(list_items)
         }
 
-        Block::Table { rows } => {
+        Block::Table { rows, .. } => {
             let table_rows: Vec<Node> = rows
                 .iter()
                 .map(|row| {
@@ -105,48 +106,50 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::TABLE).children(table_rows)
         }
 
-        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
 fn inline_to_node(inline: &Inline) -> Node {
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        Inline::Bold(children) => {
+        Inline::Bold(children, _) => {
             let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
             Node::new(node::STRONG).children(nodes)
         }
 
-        Inline::Italic(children) => {
+        Inline::Italic(children, _) => {
             let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
             Node::new(node::EMPHASIS).children(nodes)
         }
 
-        Inline::Underline(children) => {
+        Inline::Underline(children, _) => {
             let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
             Node::new(node::UNDERLINE).children(nodes)
         }
 
-        Inline::Strikethrough(children) => {
+        Inline::Strikethrough(children, _) => {
             let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
             Node::new(node::STRIKEOUT).children(nodes)
         }
 
-        Inline::Code(content) => Node::new(node::CODE).prop(prop::CONTENT, content.clone()),
+        Inline::Code(content, _) => {
+            Node::new(node::CODE).prop(prop::CONTENT, content.clone())
+        }
 
-        Inline::Link { url, children } => {
+        Inline::Link { url, children, .. } => {
             let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
             Node::new(node::LINK)
                 .prop(prop::URL, url.clone())
                 .children(nodes)
         }
 
-        Inline::Image { url } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
+        Inline::Image { url, .. } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
 
-        Inline::LineBreak => Node::new(node::LINE_BREAK),
+        Inline::LineBreak(_) => Node::new(node::LINE_BREAK),
 
-        Inline::SoftBreak => Node::new(node::SOFT_BREAK),
+        Inline::SoftBreak(_) => Node::new(node::SOFT_BREAK),
     }
 }
 
