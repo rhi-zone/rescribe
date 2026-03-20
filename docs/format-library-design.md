@@ -50,13 +50,13 @@ Two variants:
 //    Simple; requires buffering the full output before any bytes are emitted.
 pub fn emit(ast: &Ast) -> Vec<u8>;
 
-// 2. Streaming — emit bytes immediately as nodes are fed, no intermediate buffer.
-//    The caller controls pacing; there is no "chunk" concept on the input side
-//    because the caller already owns the node stream.
+// 2. Streaming — emit bytes immediately as events are fed, no intermediate buffer
+//    and no full input tree required. The caller owns the event/node stream and
+//    controls pacing; bytes flow out as events flow in.
 pub struct Writer { /* format state machine */ }
 impl Writer {
     pub fn new(sink: impl Write) -> Self;
-    pub fn write_node(&mut self, node: &Node);
+    pub fn write_event(&mut self, event: Event);  // or write_node for AST nodes
     pub fn finish(self);
 }
 ```

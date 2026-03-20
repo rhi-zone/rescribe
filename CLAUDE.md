@@ -168,7 +168,7 @@ Each standalone format crate (`crates/formats/{name}/`) must satisfy all of:
 - **Reader — streaming**: `events(input: &[u8]) -> impl Iterator<Item = Event>` — no full AST; full input still in memory; can borrow slices, supports lookahead
 - **Reader — batch**: chunk-driven `Parser` (feed/finish) — O(working state) memory; handles files too large to load; cannot borrow across chunk boundaries. Target for GB-scale corpora.
 - **Writer — builder**: `emit(ast: &Ast) -> Vec<u8>` — buffer then serialise
-- **Writer — streaming**: `Writer { write_node, finish }` — emits bytes immediately, no intermediate buffer; caller controls pacing
+- **Writer — streaming**: `Writer { write_event, finish }` — emits bytes immediately as events are fed; no full input tree required, no intermediate buffer; caller controls pacing
 - `emit(ast) -> String` — round-trip guarantee
 - No-panic fuzz gate: arbitrary bytes must not panic — run until clean
 - Round-trip fuzz: `parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast` — run until clean
