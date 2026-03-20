@@ -17,7 +17,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let fountain = fountain_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (fountain, _diags) = fountain_fmt::parse(input);
 
     let mut metadata = rescribe_core::Properties::new();
     for (key, value) in &fountain.metadata {
@@ -40,7 +40,7 @@ fn blocks_to_nodes(blocks: &[Block]) -> Vec<Node> {
 
     while i < blocks.len() {
         // Group Character + Dialogue + Parenthetical into a dialogue_block
-        if let Block::Character { name, dual } = &blocks[i] {
+        if let Block::Character { name, dual, .. } = &blocks[i] {
             let mut dialogue_node = Node::new(node::DIV)
                 .prop("fountain:type", "dialogue_block")
                 .child(
@@ -58,7 +58,7 @@ fn blocks_to_nodes(blocks: &[Block]) -> Vec<Node> {
             // Collect following dialogue and parenthetical blocks
             while i < blocks.len() {
                 match &blocks[i] {
-                    Block::Dialogue { text } => {
+                    Block::Dialogue { text, .. } => {
                         dialogue_node = dialogue_node.child(
                             Node::new(node::PARAGRAPH)
                                 .prop("fountain:type", "dialogue")
@@ -66,7 +66,7 @@ fn blocks_to_nodes(blocks: &[Block]) -> Vec<Node> {
                         );
                         i += 1;
                     }
-                    Block::Parenthetical { text } => {
+                    Block::Parenthetical { text, .. } => {
                         dialogue_node = dialogue_node.child(
                             Node::new(node::PARAGRAPH)
                                 .prop("fountain:type", "parenthetical")
@@ -90,41 +90,43 @@ fn blocks_to_nodes(blocks: &[Block]) -> Vec<Node> {
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::SceneHeading { text } => Node::new(node::HEADING)
+        Block::SceneHeading { text, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, 2i64)
             .prop("fountain:type", "scene_heading")
             .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-        Block::Action { text } => Node::new(node::PARAGRAPH)
+        Block::Action { text, .. } => Node::new(node::PARAGRAPH)
             .prop("fountain:type", "action")
             .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-        Block::Transition { text } => Node::new(node::PARAGRAPH)
+        Block::Transition { text, .. } => Node::new(node::PARAGRAPH)
             .prop("fountain:type", "transition")
             .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-        Block::Centered { text } => Node::new(node::PARAGRAPH)
+        Block::Centered { text, .. } => Node::new(node::PARAGRAPH)
             .prop("fountain:type", "centered")
             .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-        Block::Lyric { text } => Node::new(node::PARAGRAPH)
+        Block::Lyric { text, .. } => Node::new(node::PARAGRAPH)
             .prop("fountain:type", "lyric")
             .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-        Block::Note { text } => Node::new(node::PARAGRAPH)
+        Block::Note { text, .. } => Node::new(node::PARAGRAPH)
             .prop("fountain:type", "note")
             .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-        Block::Synopsis { text } => Node::new(node::PARAGRAPH)
+        Block::Synopsis { text, .. } => Node::new(node::PARAGRAPH)
             .prop("fountain:type", "synopsis")
             .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-        Block::Section { level, text } => Node::new(node::HEADING)
+        Block::Section { level, text, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .prop("fountain:type", "section")
             .child(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-        Block::PageBreak => Node::new(node::HORIZONTAL_RULE).prop("fountain:type", "page_break"),
+        Block::PageBreak { .. } => {
+            Node::new(node::HORIZONTAL_RULE).prop("fountain:type", "page_break")
+        }
 
         // These shouldn't appear at top level in the output AST,
         // but handle them gracefully

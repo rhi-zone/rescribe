@@ -293,6 +293,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "fountain-fmt"
+version = "0.1.0"
+
+[[package]]
 name = "futf"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -956,6 +960,7 @@ dependencies = [
  "rescribe-read-asciidoc",
  "rescribe-read-djot",
  "rescribe-read-docx",
+ "rescribe-read-fountain",
  "rescribe-read-html",
  "rescribe-read-latex",
  "rescribe-read-man",
@@ -974,6 +979,7 @@ dependencies = [
  "rescribe-write-asciidoc",
  "rescribe-write-djot",
  "rescribe-write-docx",
+ "rescribe-write-fountain",
  "rescribe-write-html",
  "rescribe-write-man",
  "rescribe-write-markdown",
@@ -1012,6 +1018,15 @@ version = "0.1.0"
 dependencies = [
  "ooxml-wml",
  "quick-xml",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-fountain"
+version = "0.1.0"
+dependencies = [
+ "fountain-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1175,6 +1190,15 @@ name = "rescribe-write-docx"
 version = "0.1.0"
 dependencies = [
  "ooxml-wml",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-fountain"
+version = "0.1.0"
+dependencies = [
+ "fountain-fmt",
  "rescribe-core",
  "rescribe-std",
 ]

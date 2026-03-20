@@ -107,6 +107,12 @@ path = "../crates/readers/rescribe-read-t2t"
 [dependencies.rescribe-write-t2t]
 path = "../crates/writers/rescribe-write-t2t"
 
+[dependencies.rescribe-read-fountain]
+path = "../crates/readers/rescribe-read-fountain"
+
+[dependencies.rescribe-write-fountain]
+path = "../crates/writers/rescribe-write-fountain"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -333,6 +339,20 @@ bench = false
 [[bin]]
 name = "fuzz_t2t_roundtrip"
 path = "fuzz_targets/t2t_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_fountain_reader"
+path = "fuzz_targets/fountain_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_fountain_roundtrip"
+path = "fuzz_targets/fountain_roundtrip.rs"
 test = false
 doc = false
 bench = false

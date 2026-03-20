@@ -3,7 +3,7 @@
 //! Thin adapter over [`fountain_fmt`]: maps the rescribe document model to
 //! the `fountain_fmt` AST, then builds Fountain output.
 
-use fountain_fmt::{Block, FountainDoc};
+use fountain_fmt::{Block, FountainDoc, Span};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
 use std::collections::BTreeMap;
@@ -48,7 +48,11 @@ fn doc_to_fountain(doc: &Document) -> FountainDoc {
     // Convert nodes to blocks
     let blocks = nodes_to_blocks(&doc.content.children);
 
-    FountainDoc { metadata, blocks }
+    FountainDoc {
+        metadata,
+        blocks,
+        span: Span::NONE,
+    }
 }
 
 fn nodes_to_blocks(nodes: &[Node]) -> Vec<Block> {
@@ -67,47 +71,72 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
     match fountain_type {
         "scene_heading" => {
             let text = get_text_content(node);
-            vec![Block::SceneHeading { text }]
+            vec![Block::SceneHeading {
+                text,
+                span: Span::NONE,
+            }]
         }
 
         "action" => {
             let text = get_text_content(node);
-            vec![Block::Action { text }]
+            vec![Block::Action {
+                text,
+                span: Span::NONE,
+            }]
         }
 
         "transition" => {
             let text = get_text_content(node);
-            vec![Block::Transition { text }]
+            vec![Block::Transition {
+                text,
+                span: Span::NONE,
+            }]
         }
 
         "centered" => {
             let text = get_text_content(node);
-            vec![Block::Centered { text }]
+            vec![Block::Centered {
+                text,
+                span: Span::NONE,
+            }]
         }
 
         "lyric" => {
             let text = get_text_content(node);
-            vec![Block::Lyric { text }]
+            vec![Block::Lyric {
+                text,
+                span: Span::NONE,
+            }]
         }
 
         "note" => {
             let text = get_text_content(node);
-            vec![Block::Note { text }]
+            vec![Block::Note {
+                text,
+                span: Span::NONE,
+            }]
         }
 
         "synopsis" => {
             let text = get_text_content(node);
-            vec![Block::Synopsis { text }]
+            vec![Block::Synopsis {
+                text,
+                span: Span::NONE,
+            }]
         }
 
         "section" => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as usize;
             let text = get_text_content(node);
-            vec![Block::Section { level, text }]
+            vec![Block::Section {
+                level,
+                text,
+                span: Span::NONE,
+            }]
         }
 
         "page_break" => {
-            vec![Block::PageBreak]
+            vec![Block::PageBreak { span: Span::NONE }]
         }
 
         "dialogue_block" => {
@@ -120,15 +149,25 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                 match child_type {
                     "character" => {
                         let name = get_text_content(child);
-                        blocks.push(Block::Character { name, dual });
+                        blocks.push(Block::Character {
+                            name,
+                            dual,
+                            span: Span::NONE,
+                        });
                     }
                     "dialogue" => {
                         let text = get_text_content(child);
-                        blocks.push(Block::Dialogue { text });
+                        blocks.push(Block::Dialogue {
+                            text,
+                            span: Span::NONE,
+                        });
                     }
                     "parenthetical" => {
                         let text = get_text_content(child);
-                        blocks.push(Block::Parenthetical { text });
+                        blocks.push(Block::Parenthetical {
+                            text,
+                            span: Span::NONE,
+                        });
                     }
                     _ => {}
                 }
@@ -147,20 +186,30 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                     if level == 2 {
                         // Treat as scene heading
                         let text = get_text_content(node);
-                        vec![Block::SceneHeading { text }]
+                        vec![Block::SceneHeading {
+                            text,
+                            span: Span::NONE,
+                        }]
                     } else {
                         // Treat as section
                         let text = get_text_content(node);
-                        vec![Block::Section { level, text }]
+                        vec![Block::Section {
+                            level,
+                            text,
+                            span: Span::NONE,
+                        }]
                     }
                 }
 
                 node::PARAGRAPH => {
                     let text = get_text_content(node);
-                    vec![Block::Action { text }]
+                    vec![Block::Action {
+                        text,
+                        span: Span::NONE,
+                    }]
                 }
 
-                node::HORIZONTAL_RULE => vec![Block::PageBreak],
+                node::HORIZONTAL_RULE => vec![Block::PageBreak { span: Span::NONE }],
 
                 node::DIV | node::SPAN => nodes_to_blocks(&node.children),
 
