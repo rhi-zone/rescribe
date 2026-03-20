@@ -276,6 +276,14 @@ Each Tier A format at 5-Production with a published standalone crate.
 Tier B formats at 3-Harness or 2-Fixtures (where harness is N/A), each with a
 standalone library where the ecosystem gap justifies it.
 
+- [x] `t2t` vertical — **4-Fuzz** (2026-03-21)
+  - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
+  - [x] Span on every AST node; Diagnostic type; strip_spans()
+  - [x] parse() infallible → (T2tDoc, Vec<Diagnostic>)
+  - [x] No-panic fuzz gate (`fuzz_t2t_reader`) — 2M runs clean (2026-03-21)
+  - [x] Roundtrip fuzz target (`fuzz_t2t_roundtrip`) — 939K runs clean (2026-03-21)
+  - [x] Fixed URL sanitiser: ':' filtered to prevent http: + //italic// combining into URL patterns
+  - [ ] 100% construct coverage — blockquotes, tables, images, horizontal rules, raw blocks
 - [ ] MOBI reader (boko as reference)
 - [ ] KFX reader/writer (Ion spec + boko)
 - [ ] Remaining Tier B/C formats: audit and bring to target stage
