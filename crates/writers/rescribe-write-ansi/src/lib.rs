@@ -26,7 +26,7 @@ pub fn emit_with_options(
         .iter()
         .map(|n| node_to_ansi_block(n, &mut ctx))
         .collect();
-    let ansi_doc = ansi_fmt::AnsiDoc { blocks };
+    let ansi_doc = ansi_fmt::AnsiDoc { blocks, span: ansi_fmt::Span::NONE };
 
     let output = ansi_fmt::build(&ansi_doc);
 
@@ -64,7 +64,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
             if children.len() == 1 {
                 children[0].clone()
             } else {
-                ansi_fmt::Block::Div { children }
+                ansi_fmt::Block::Div { children, span: ansi_fmt::Span::NONE }
             }
         }
 
@@ -74,7 +74,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Block::Paragraph { inlines }
+            ansi_fmt::Block::Paragraph { inlines, span: ansi_fmt::Span::NONE }
         }
 
         node::HEADING => {
@@ -84,7 +84,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Block::Heading { level, inlines }
+            ansi_fmt::Block::Heading { level, inlines, span: ansi_fmt::Span::NONE }
         }
 
         node::CODE_BLOCK => {
@@ -94,7 +94,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            ansi_fmt::Block::CodeBlock { language, content }
+            ansi_fmt::Block::CodeBlock { language, content, span: ansi_fmt::Span::NONE }
         }
 
         node::BLOCKQUOTE => {
@@ -103,7 +103,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_block(n, ctx))
                 .collect();
-            ansi_fmt::Block::Blockquote { children }
+            ansi_fmt::Block::Blockquote { children, span: ansi_fmt::Span::NONE }
         }
 
         node::LIST => {
@@ -119,7 +119,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                         .collect()
                 })
                 .collect();
-            ansi_fmt::Block::List { ordered, items }
+            ansi_fmt::Block::List { ordered, items, span: ansi_fmt::Span::NONE }
         }
 
         node::LIST_ITEM => {
@@ -128,7 +128,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_block(n, ctx))
                 .collect();
-            ansi_fmt::Block::ListItem { children }
+            ansi_fmt::Block::ListItem { children, span: ansi_fmt::Span::NONE }
         }
 
         node::TABLE => {
@@ -138,8 +138,8 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .filter_map(|n| {
                     if n.kind.as_str() == node::TABLE_ROW {
                         match node_to_table_row(n, ctx) {
-                            ansi_fmt::Block::TableRow { cells } => {
-                                Some(ansi_fmt::TableRow { cells })
+                            ansi_fmt::Block::TableRow { cells, .. } => {
+                                Some(ansi_fmt::TableRow { cells, span: ansi_fmt::Span::NONE })
                             }
                             _ => None,
                         }
@@ -148,7 +148,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                     }
                 })
                 .collect();
-            ansi_fmt::Block::Table { rows }
+            ansi_fmt::Block::Table { rows, span: ansi_fmt::Span::NONE }
         }
 
         node::TABLE_ROW => node_to_table_row(node, ctx),
@@ -159,7 +159,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Block::TableCell { inlines }
+            ansi_fmt::Block::TableCell { inlines, span: ansi_fmt::Span::NONE }
         }
 
         node::TABLE_HEAD => {
@@ -174,13 +174,14 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                                 .iter()
                                 .map(|c| node_to_ansi_inline(c, ctx))
                                 .collect(),
+                            span: ansi_fmt::Span::NONE,
                         })
                     } else {
                         None
                     }
                 })
                 .collect();
-            ansi_fmt::Block::TableHeader { cells }
+            ansi_fmt::Block::TableHeader { cells, span: ansi_fmt::Span::NONE }
         }
 
         node::TABLE_BODY => {
@@ -190,8 +191,8 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .filter_map(|n| {
                     if n.kind.as_str() == node::TABLE_ROW {
                         match node_to_table_row(n, ctx) {
-                            ansi_fmt::Block::TableRow { cells } => {
-                                Some(ansi_fmt::TableRow { cells })
+                            ansi_fmt::Block::TableRow { cells, .. } => {
+                                Some(ansi_fmt::TableRow { cells, span: ansi_fmt::Span::NONE })
                             }
                             _ => None,
                         }
@@ -200,7 +201,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                     }
                 })
                 .collect();
-            ansi_fmt::Block::TableBody { rows }
+            ansi_fmt::Block::TableBody { rows, span: ansi_fmt::Span::NONE }
         }
 
         node::TABLE_FOOT => {
@@ -210,8 +211,8 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .filter_map(|n| {
                     if n.kind.as_str() == node::TABLE_ROW {
                         match node_to_table_row(n, ctx) {
-                            ansi_fmt::Block::TableRow { cells } => {
-                                Some(ansi_fmt::TableRow { cells })
+                            ansi_fmt::Block::TableRow { cells, .. } => {
+                                Some(ansi_fmt::TableRow { cells, span: ansi_fmt::Span::NONE })
                             }
                             _ => None,
                         }
@@ -220,10 +221,10 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                     }
                 })
                 .collect();
-            ansi_fmt::Block::TableFoot { rows }
+            ansi_fmt::Block::TableFoot { rows, span: ansi_fmt::Span::NONE }
         }
 
-        node::HORIZONTAL_RULE => ansi_fmt::Block::HorizontalRule,
+        node::HORIZONTAL_RULE => ansi_fmt::Block::HorizontalRule { span: ansi_fmt::Span::NONE },
 
         node::DIV => {
             let children = node
@@ -231,7 +232,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_block(n, ctx))
                 .collect();
-            ansi_fmt::Block::Div { children }
+            ansi_fmt::Block::Div { children, span: ansi_fmt::Span::NONE }
         }
 
         node::SPAN => {
@@ -240,7 +241,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Block::Span { inlines }
+            ansi_fmt::Block::SpanBlock { inlines, span: ansi_fmt::Span::NONE }
         }
 
         node::RAW_BLOCK => {
@@ -249,7 +250,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            ansi_fmt::Block::RawBlock { content }
+            ansi_fmt::Block::RawBlock { content, span: ansi_fmt::Span::NONE }
         }
 
         node::RAW_INLINE => {
@@ -258,12 +259,12 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            ansi_fmt::Block::RawInline { content }
+            ansi_fmt::Block::RawInline { content, span: ansi_fmt::Span::NONE }
         }
 
         node::DEFINITION_LIST => {
             let items = collect_definition_items(&node.children, ctx);
-            ansi_fmt::Block::DefinitionList { items }
+            ansi_fmt::Block::DefinitionList { items, span: ansi_fmt::Span::NONE }
         }
 
         node::DEFINITION_TERM => {
@@ -272,7 +273,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Block::DefinitionTerm { inlines }
+            ansi_fmt::Block::DefinitionTerm { inlines, span: ansi_fmt::Span::NONE }
         }
 
         node::DEFINITION_DESC => {
@@ -281,7 +282,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_block(n, ctx))
                 .collect();
-            ansi_fmt::Block::DefinitionDesc { children }
+            ansi_fmt::Block::DefinitionDesc { children, span: ansi_fmt::Span::NONE }
         }
 
         node::FIGURE => {
@@ -290,7 +291,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_block(n, ctx))
                 .collect();
-            ansi_fmt::Block::Figure { children }
+            ansi_fmt::Block::Figure { children, span: ansi_fmt::Span::NONE }
         }
 
         _ => {
@@ -303,7 +304,7 @@ fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block 
                 .iter()
                 .map(|n| node_to_ansi_block(n, ctx))
                 .collect();
-            ansi_fmt::Block::Div { children }
+            ansi_fmt::Block::Div { children, span: ansi_fmt::Span::NONE }
         }
     }
 }
@@ -322,10 +323,11 @@ fn node_to_table_row(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block {
                 .iter()
                 .map(|c| node_to_ansi_inline(c, ctx))
                 .collect(),
+            span: ansi_fmt::Span::NONE,
         })
         .collect();
 
-    ansi_fmt::Block::TableRow { cells }
+    ansi_fmt::Block::TableRow { cells, span: ansi_fmt::Span::NONE }
 }
 
 fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inline {
@@ -336,7 +338,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            ansi_fmt::Inline::Text(content)
+            ansi_fmt::Inline::Text(content, ansi_fmt::Span::NONE)
         }
 
         node::EMPHASIS => {
@@ -345,7 +347,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Inline::Italic(children)
+            ansi_fmt::Inline::Italic(children, ansi_fmt::Span::NONE)
         }
 
         node::STRONG => {
@@ -354,7 +356,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Inline::Bold(children)
+            ansi_fmt::Inline::Bold(children, ansi_fmt::Span::NONE)
         }
 
         node::STRIKEOUT => {
@@ -363,7 +365,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Inline::Strikethrough(children)
+            ansi_fmt::Inline::Strikethrough(children, ansi_fmt::Span::NONE)
         }
 
         node::UNDERLINE => {
@@ -372,7 +374,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Inline::Underline(children)
+            ansi_fmt::Inline::Underline(children, ansi_fmt::Span::NONE)
         }
 
         node::CODE => {
@@ -381,12 +383,12 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            ansi_fmt::Inline::Text(content)
+            ansi_fmt::Inline::Text(content, ansi_fmt::Span::NONE)
         }
 
-        node::LINE_BREAK => ansi_fmt::Inline::Text("\n".to_string()),
+        node::LINE_BREAK => ansi_fmt::Inline::Text("\n".to_string(), ansi_fmt::Span::NONE),
 
-        node::SOFT_BREAK => ansi_fmt::Inline::Text(" ".to_string()),
+        node::SOFT_BREAK => ansi_fmt::Inline::Text(" ".to_string(), ansi_fmt::Span::NONE),
 
         node::LINK => {
             let url = node
@@ -401,15 +403,15 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .collect::<Vec<_>>();
 
             if !url.is_empty() {
-                children.push(ansi_fmt::Inline::Text(format!(" ({})", url)));
+                children.push(ansi_fmt::Inline::Text(format!(" ({})", url), ansi_fmt::Span::NONE));
             }
 
             if children.is_empty() {
-                ansi_fmt::Inline::Text(url)
+                ansi_fmt::Inline::Text(url, ansi_fmt::Span::NONE)
             } else if children.len() == 1 {
                 children.pop().unwrap()
             } else {
-                ansi_fmt::Inline::Text(format!("{} ({})", collect_inline_text(&children), url))
+                ansi_fmt::Inline::Text(format!("{} ({})", collect_inline_text(&children), url), ansi_fmt::Span::NONE)
             }
         }
 
@@ -419,7 +421,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .get_str(prop::ALT)
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| "Image".to_string());
-            ansi_fmt::Inline::Text(format!("[{}]", alt))
+            ansi_fmt::Inline::Text(format!("[{}]", alt), ansi_fmt::Span::NONE)
         }
 
         node::SUBSCRIPT | node::SUPERSCRIPT => {
@@ -428,7 +430,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Inline::Italic(children)
+            ansi_fmt::Inline::Italic(children, ansi_fmt::Span::NONE)
         }
 
         node::SMALL_CAPS => {
@@ -437,7 +439,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Inline::Bold(children)
+            ansi_fmt::Inline::Bold(children, ansi_fmt::Span::NONE)
         }
 
         node::QUOTED => {
@@ -454,10 +456,10 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect::<Vec<_>>();
 
-            let mut result = vec![ansi_fmt::Inline::Text(left.to_string())];
+            let mut result = vec![ansi_fmt::Inline::Text(left.to_string(), ansi_fmt::Span::NONE)];
             result.extend(inner);
-            result.push(ansi_fmt::Inline::Text(right.to_string()));
-            ansi_fmt::Inline::Text(collect_inline_text(&result))
+            result.push(ansi_fmt::Inline::Text(right.to_string(), ansi_fmt::Span::NONE));
+            ansi_fmt::Inline::Text(collect_inline_text(&result), ansi_fmt::Span::NONE)
         }
 
         node::FOOTNOTE_REF => {
@@ -466,7 +468,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .get_str(prop::LABEL)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            ansi_fmt::Inline::Text(format!("[{}]", label))
+            ansi_fmt::Inline::Text(format!("[{}]", label), ansi_fmt::Span::NONE)
         }
 
         node::FOOTNOTE_DEF => {
@@ -481,7 +483,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect::<Vec<_>>();
             let text = collect_inline_text(&children);
-            ansi_fmt::Inline::Text(format!("[{}] {}", label, text))
+            ansi_fmt::Inline::Text(format!("[{}] {}", label, text), ansi_fmt::Span::NONE)
         }
 
         "math_inline" | "math_display" => {
@@ -490,7 +492,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .get_str("math:source")
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            ansi_fmt::Inline::Text(source)
+            ansi_fmt::Inline::Text(source, ansi_fmt::Span::NONE)
         }
 
         _ => {
@@ -503,7 +505,7 @@ fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inlin
                 .iter()
                 .map(|n| node_to_ansi_inline(n, ctx))
                 .collect();
-            ansi_fmt::Inline::Italic(children)
+            ansi_fmt::Inline::Italic(children, ansi_fmt::Span::NONE)
         }
     }
 }
@@ -532,7 +534,7 @@ fn collect_definition_items(
                 i += 1;
             }
 
-            items.push(ansi_fmt::DefinitionItem { term, desc });
+            items.push(ansi_fmt::DefinitionItem { term, desc, span: ansi_fmt::Span::NONE });
         } else {
             i += 1;
         }
@@ -545,11 +547,11 @@ fn collect_inline_text(inlines: &[ansi_fmt::Inline]) -> String {
     let mut text = String::new();
     for inline in inlines {
         match inline {
-            ansi_fmt::Inline::Text(s) => text.push_str(s),
-            ansi_fmt::Inline::Bold(c)
-            | ansi_fmt::Inline::Italic(c)
-            | ansi_fmt::Inline::Underline(c)
-            | ansi_fmt::Inline::Strikethrough(c) => {
+            ansi_fmt::Inline::Text(s, _) => text.push_str(s),
+            ansi_fmt::Inline::Bold(c, _)
+            | ansi_fmt::Inline::Italic(c, _)
+            | ansi_fmt::Inline::Underline(c, _)
+            | ansi_fmt::Inline::Strikethrough(c, _) => {
                 text.push_str(&collect_inline_text(c));
             }
         }

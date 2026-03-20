@@ -15,7 +15,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let ansi_doc = ansi_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (ansi_doc, _diagnostics) = ansi_fmt::parse(input);
 
     let mut blocks = Vec::new();
     for block in &ansi_doc.blocks {
@@ -34,28 +34,28 @@ pub fn parse_with_options(
 
 fn ansi_block_to_node(block: &ansi_fmt::Block) -> Node {
     match block {
-        ansi_fmt::Block::Paragraph { inlines } => {
+        ansi_fmt::Block::Paragraph { inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(ansi_inline_to_node).collect();
             Node::new(node::PARAGRAPH).children(children)
         }
-        ansi_fmt::Block::Heading { level, inlines } => {
+        ansi_fmt::Block::Heading { level, inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(ansi_inline_to_node).collect();
             Node::new(node::HEADING)
                 .prop(prop::LEVEL, *level as i64)
                 .children(children)
         }
-        ansi_fmt::Block::CodeBlock { language, content } => {
+        ansi_fmt::Block::CodeBlock { language, content, .. } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
             }
             n
         }
-        ansi_fmt::Block::Blockquote { children } => {
+        ansi_fmt::Block::Blockquote { children, .. } => {
             let nodes: Vec<Node> = children.iter().map(ansi_block_to_node).collect();
             Node::new(node::BLOCKQUOTE).children(nodes)
         }
-        ansi_fmt::Block::List { ordered, items } => {
+        ansi_fmt::Block::List { ordered, items, .. } => {
             let mut n = Node::new(node::LIST);
             if *ordered {
                 n = n.prop(prop::ORDERED, true);
@@ -69,11 +69,11 @@ fn ansi_block_to_node(block: &ansi_fmt::Block) -> Node {
                 .collect();
             n.children(list_items)
         }
-        ansi_fmt::Block::ListItem { children } => {
+        ansi_fmt::Block::ListItem { children, .. } => {
             let nodes: Vec<Node> = children.iter().map(ansi_block_to_node).collect();
             Node::new(node::LIST_ITEM).children(nodes)
         }
-        ansi_fmt::Block::Table { rows } => {
+        ansi_fmt::Block::Table { rows, .. } => {
             let table_rows: Vec<Node> = rows
                 .iter()
                 .map(|row| {
@@ -91,7 +91,7 @@ fn ansi_block_to_node(block: &ansi_fmt::Block) -> Node {
                 .collect();
             Node::new(node::TABLE).children(table_rows)
         }
-        ansi_fmt::Block::TableRow { cells } => {
+        ansi_fmt::Block::TableRow { cells, .. } => {
             let table_cells: Vec<Node> = cells
                 .iter()
                 .map(|cell| {
@@ -101,11 +101,11 @@ fn ansi_block_to_node(block: &ansi_fmt::Block) -> Node {
                 .collect();
             Node::new(node::TABLE_ROW).children(table_cells)
         }
-        ansi_fmt::Block::TableCell { inlines } => {
+        ansi_fmt::Block::TableCell { inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(ansi_inline_to_node).collect();
             Node::new(node::TABLE_CELL).children(children)
         }
-        ansi_fmt::Block::TableHeader { cells } => {
+        ansi_fmt::Block::TableHeader { cells, .. } => {
             let table_cells: Vec<Node> = cells
                 .iter()
                 .map(|cell| {
@@ -115,7 +115,7 @@ fn ansi_block_to_node(block: &ansi_fmt::Block) -> Node {
                 .collect();
             Node::new(node::TABLE_HEAD).children(table_cells)
         }
-        ansi_fmt::Block::TableBody { rows } => {
+        ansi_fmt::Block::TableBody { rows, .. } => {
             let table_rows: Vec<Node> = rows
                 .iter()
                 .map(|row| {
@@ -133,7 +133,7 @@ fn ansi_block_to_node(block: &ansi_fmt::Block) -> Node {
                 .collect();
             Node::new(node::TABLE_BODY).children(table_rows)
         }
-        ansi_fmt::Block::TableFoot { rows } => {
+        ansi_fmt::Block::TableFoot { rows, .. } => {
             let table_rows: Vec<Node> = rows
                 .iter()
                 .map(|row| {
@@ -151,22 +151,22 @@ fn ansi_block_to_node(block: &ansi_fmt::Block) -> Node {
                 .collect();
             Node::new(node::TABLE_FOOT).children(table_rows)
         }
-        ansi_fmt::Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
-        ansi_fmt::Block::Div { children } => {
+        ansi_fmt::Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
+        ansi_fmt::Block::Div { children, .. } => {
             let nodes: Vec<Node> = children.iter().map(ansi_block_to_node).collect();
             Node::new(node::DIV).children(nodes)
         }
-        ansi_fmt::Block::Span { inlines } => {
+        ansi_fmt::Block::SpanBlock { inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(ansi_inline_to_node).collect();
             Node::new(node::SPAN).children(children)
         }
-        ansi_fmt::Block::RawBlock { content } => {
+        ansi_fmt::Block::RawBlock { content, .. } => {
             Node::new(node::RAW_BLOCK).prop(prop::CONTENT, content.clone())
         }
-        ansi_fmt::Block::RawInline { content } => {
+        ansi_fmt::Block::RawInline { content, .. } => {
             Node::new(node::RAW_INLINE).prop(prop::CONTENT, content.clone())
         }
-        ansi_fmt::Block::DefinitionList { items } => {
+        ansi_fmt::Block::DefinitionList { items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .flat_map(|item| {
@@ -183,15 +183,15 @@ fn ansi_block_to_node(block: &ansi_fmt::Block) -> Node {
                 .collect();
             Node::new(node::DEFINITION_LIST).children(list_items)
         }
-        ansi_fmt::Block::DefinitionTerm { inlines } => {
+        ansi_fmt::Block::DefinitionTerm { inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(ansi_inline_to_node).collect();
             Node::new(node::DEFINITION_TERM).children(children)
         }
-        ansi_fmt::Block::DefinitionDesc { children } => {
+        ansi_fmt::Block::DefinitionDesc { children, .. } => {
             let nodes: Vec<Node> = children.iter().map(ansi_block_to_node).collect();
             Node::new(node::DEFINITION_DESC).children(nodes)
         }
-        ansi_fmt::Block::Figure { children } => {
+        ansi_fmt::Block::Figure { children, .. } => {
             let nodes: Vec<Node> = children.iter().map(ansi_block_to_node).collect();
             Node::new(node::FIGURE).children(nodes)
         }
@@ -200,20 +200,20 @@ fn ansi_block_to_node(block: &ansi_fmt::Block) -> Node {
 
 fn ansi_inline_to_node(inline: &ansi_fmt::Inline) -> Node {
     match inline {
-        ansi_fmt::Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
-        ansi_fmt::Inline::Bold(children) => {
+        ansi_fmt::Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        ansi_fmt::Inline::Bold(children, _) => {
             let inner: Vec<Node> = children.iter().map(ansi_inline_to_node).collect();
             Node::new(node::STRONG).children(inner)
         }
-        ansi_fmt::Inline::Italic(children) => {
+        ansi_fmt::Inline::Italic(children, _) => {
             let inner: Vec<Node> = children.iter().map(ansi_inline_to_node).collect();
             Node::new(node::EMPHASIS).children(inner)
         }
-        ansi_fmt::Inline::Underline(children) => {
+        ansi_fmt::Inline::Underline(children, _) => {
             let inner: Vec<Node> = children.iter().map(ansi_inline_to_node).collect();
             Node::new(node::UNDERLINE).children(inner)
         }
-        ansi_fmt::Inline::Strikethrough(children) => {
+        ansi_fmt::Inline::Strikethrough(children, _) => {
             let inner: Vec<Node> = children.iter().map(ansi_inline_to_node).collect();
             Node::new(node::STRIKEOUT).children(inner)
         }

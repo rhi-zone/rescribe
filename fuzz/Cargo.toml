@@ -119,6 +119,12 @@ path = "../crates/readers/rescribe-read-bbcode"
 [dependencies.rescribe-write-bbcode]
 path = "../crates/writers/rescribe-write-bbcode"
 
+[dependencies.rescribe-read-ansi]
+path = "../crates/readers/rescribe-read-ansi"
+
+[dependencies.rescribe-write-ansi]
+path = "../crates/writers/rescribe-write-ansi"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -373,6 +379,20 @@ bench = false
 [[bin]]
 name = "fuzz_bbcode_roundtrip"
 path = "fuzz_targets/bbcode_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ansi_reader"
+path = "fuzz_targets/ansi_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ansi_roundtrip"
+path = "fuzz_targets/ansi_roundtrip.rs"
 test = false
 doc = false
 bench = false

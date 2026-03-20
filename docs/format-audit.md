@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-20.
+Assessed 2026-02-24; stages updated 2026-03-21.
 
 ## Maturity Pipeline
 
@@ -54,7 +54,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | bbcode | 4 | 2 | hand | – (harness N/A; Pandoc cannot read BBCode) | coverage |
 | pod | 2 | 2 | hand | harness (87%) | harness |
 | haddock | 2 | 2 | hand | harness (88%) | harness |
-| ansi | 2 | 2 | hand | – (harness N/A) | fuzz |
+| ansi | 4 | 2 | hand | – (harness N/A; production) | coverage |
 | man | 4 | 2 | hand | coverage | fuzz |
 
 † Pandoc cannot read AsciiDoc (`--from asciidoc` unsupported); consider asciidoctor as alternate oracle.
