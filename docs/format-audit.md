@@ -142,20 +142,65 @@ These formats have no reader; stage 3 (harness) is not applicable.
 
 ## Standalone format crate API coverage
 
-Applies only to formats with a `crates/formats/{name}/` crate.
-Features: `ast` = `parse()`, `stream` = `events()` iterator, `batch` = chunk-driven `Parser`,
-`w-stream` = closure/visitor writer, `w-build` = `emit(ast)` builder wrapper.
-All should ship as Cargo features, all on by default. See `docs/format-library-design.md`.
+**Goal: every format without a quality ecosystem crate gets a proper standalone library here.
+The target state is all checkmarks in this table.**
+
+The Rust ecosystem is missing solid crates for most document formats. rescribe fixes this as
+a byproduct: each hand-written format vertical produces a publishable standalone crate with
+a full API surface. Library-backed formats (pulldown-cmark, ooxml-*, html5ever, etc.) are
+exempt — they already have ecosystem crates.
+
+Features (all ship as Cargo features, all on by default — see `docs/format-library-design.md`):
+- `ast` — `parse(input) -> (Ast, Vec<Diagnostic>)`, Span on every node
+- `stream` — `events(input) -> impl Iterator<Item = Event>`, no full AST, full input in memory
+- `batch` — chunk-driven `Parser` (feed/finish), O(working state), handles arbitrarily large files
+- `w-stream` — closure/visitor writer, emits bytes immediately, no full tree required
+- `w-build` — `emit(ast)` builder, trivial wrapper over `w-stream`
+
+`✓` = complete · `~` = MVP (full-input iterator or simple builder, not yet chunk-driven/fully streaming) · ` ` = not started
+
+### Priority formats (actively worked)
 
 | Crate | ast | stream | batch | w-stream | w-build |
 |-------|-----|--------|-------|----------|---------|
-| rtf-fmt | ✓ | ✓ (MVP) | – | – | ✓ |
-| rst-fmt | ✓ | – | – | ✓ (MVP) | – |
-| asciidoc | ✓ | – | – | ✓ (MVP) | – |
-| org-fmt | – | – | – | – | – |
-| djot-fmt | – | – | – | – | – |
+| rtf-fmt | ✓ | ~ | | | ✓ |
+| rst-fmt | ✓ | | | ~ | |
+| asciidoc | ✓ | | | ~ | |
+| org-fmt | | | | | |
+| djot-fmt | | | | | |
 
-`✓ (MVP)` = implemented but as full-input iterator / simple builder, not yet chunk-driven or fully streaming.
+### Remaining hand-written formats (crate exists, API not started)
+
+| Crate | ast | stream | batch | w-stream | w-build |
+|-------|-----|--------|-------|----------|---------|
+| textile-fmt | | | | | |
+| muse-fmt | | | | | |
+| t2t | | | | | |
+| markua | | | | | |
+| fountain-fmt | | | | | |
+| mediawiki-fmt | | | | | |
+| creole | | | | | |
+| dokuwiki | | | | | |
+| vimwiki-fmt | | | | | |
+| zimwiki | | | | | |
+| xwiki | | | | | |
+| twiki | | | | | |
+| tikiwiki | | | | | |
+| jira-fmt | | | | | |
+| typst (TBD) | | | | | |
+| texinfo | | | | | |
+| bbcode-fmt | | | | | |
+| pod-fmt | | | | | |
+| haddock-fmt | | | | | |
+| ansi-fmt | | | | | |
+| man-fmt | | | | | |
+| csv-fmt | | | | | |
+| tsv-fmt | | | | | |
+| ris | | | | | |
+
+### Formats still needing a standalone crate
+
+odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native, beamer/revealjs/slidy/s5/dzslides/slideous (presentation), context, ms, icml, chunkedhtml, plaintext
 
 ---
 

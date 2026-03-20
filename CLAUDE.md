@@ -53,6 +53,22 @@ rescribe is a universal document conversion library, inspired by Pandoc but with
 
 Part of the [rhi ecosystem](https://rhi.zone).
 
+## The real goal: fix the Rust document ecosystem
+
+**rescribe itself may or may not take off. The standalone format libraries are the more
+durable deliverable.** The Rust ecosystem is missing solid, well-designed crates for most
+document formats. We fix that by building them here as a byproduct — proper standalone
+libraries useful entirely outside rescribe.
+
+**Every format without a quality ecosystem crate gets one here.** The target state is that
+the API coverage matrix in `docs/format-audit.md` is all checkmarks: every standalone
+format crate ships AST, streaming (iterator), batch (chunk-driven), streaming writer, and
+builder writer — as separate Cargo features, all on by default. Library-backed formats
+(pulldown-cmark, ooxml-*, html5ever) are exempt; they already have ecosystem crates.
+
+This is not a nice-to-have. It is the primary reason to build format crates as proper
+standalone libraries rather than internal rescribe adapters.
+
 ## Architecture
 
 ```
