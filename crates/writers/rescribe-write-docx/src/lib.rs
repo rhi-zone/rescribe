@@ -16,7 +16,8 @@ use ooxml_wml::CoreProperties;
 use ooxml_wml::types;
 use ooxml_wml::writer::{DocumentBuilder, Drawing, ListType};
 use rescribe_core::{
-    ConversionResult, Document, EmitError, FidelityWarning, Node, PropValue, ResourceId,
+    ConversionResult, Document, EmitError, FidelityWarning, Node, PropValue, ResourceId, Severity,
+    WarningKind,
 };
 use rescribe_std::{node, prop};
 use std::collections::HashMap;
@@ -228,6 +229,14 @@ fn write_simple_inline(para: &mut types::Paragraph, nodes: &[Node]) {
 
 // ── Main conversion ───────────────────────────────────────────────────────────
 
+fn warn(warnings: &mut Vec<FidelityWarning>, message: impl Into<String>) {
+    warnings.push(FidelityWarning::new(
+        Severity::Minor,
+        WarningKind::FeatureLost("docx".to_string()),
+        message,
+    ));
+}
+
 fn convert_node(
     builder: &mut DocumentBuilder,
     node: &Node,
@@ -350,11 +359,16 @@ fn convert_node(
             )?;
         }
         node::CODE_BLOCK => {
+            warn(
+                warnings,
+                "code_block emitted as plain paragraph; monospace styling and language lost",
+            );
             let content = node.props.get_str(prop::CONTENT).unwrap_or("");
             let para = builder.body_mut().add_paragraph();
             para.add_run().set_text(content);
         }
         node::BLOCKQUOTE => {
+            warn(warnings, "blockquote flattened; indentation/styling lost");
             for child in &node.children {
                 convert_node(
                     builder,
@@ -370,8 +384,17 @@ fn convert_node(
             // Footnote defs at document level: content was already written during
             // pre-registration. Skip.
         }
-        _ => {
-            // For unknown block nodes, try to emit children or extract text
+        other => {
+            // For unhandled block nodes, warn and try to preserve content.
+            if other != node::DOCUMENT {
+                warn(
+                    warnings,
+                    format!(
+                        "'{}' node not natively supported in DOCX; structure lost",
+                        other
+                    ),
+                );
+            }
             if node.children.is_empty() {
                 // Leaf node with content property
                 if let Some(text) = node.props.get_str(prop::CONTENT)
