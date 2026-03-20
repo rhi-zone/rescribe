@@ -9,14 +9,27 @@ What a good standalone format crate looks like. All verticals follow this shape.
 Two layers, one built on the other:
 
 ```rust
-// Low-level: pull parser — zero allocation, streaming
-pub fn events(input: &str) -> impl Iterator<Item = Event> + '_;
-
 // High-level: owned AST — what most users want
 pub fn parse(input: &str) -> (Ast, Vec<Diagnostic>);
+
+// Low-level: chunk-driven streaming — O(1) memory, no full-AST allocation
+// Caller feeds chunks; parser emits events incrementally.
+// Target API (lol-html style):
+pub struct Parser { /* O(nesting depth) working state */ }
+impl Parser {
+    pub fn new() -> Self;
+    pub fn feed(&mut self, chunk: &[u8]) -> Result<(), Error>;
+    pub fn finish(self) -> Result<(), Error>;
+    // events delivered via handler/callback or an output iterator
+}
 ```
 
-The rescribe adapter uses whichever is more convenient. Both are public.
+`events(input: &[u8]) -> impl Iterator<Item = Event>` over a full buffer is a
+valid MVP to get the types and event shapes right. The chunk-driven API comes
+later — but it's the target, not an afterthought. Without it the library is
+useless for large-file processing and batch pipelines over large corpora.
+
+The rescribe adapter uses whichever layer is more convenient. Both are public.
 
 ---
 
@@ -127,12 +140,14 @@ in memory as the input `&str`. `para_props` adds ~20 bytes per paragraph on
 average (a typical indent+spacing definition). For a 10,000-paragraph document
 that is ~200 KB — negligible relative to the input itself.
 
-**When it would matter: the `events()` pull iterator.**
-For very large files or streaming pipelines, the right tool is the low-level
-pull iterator — not feature flags or zero-copy tricks. The iterator emits one
-event at a time and requires only O(nesting depth) working state, so the full
-AST is never materialised. The rescribe adapter can choose to use `events()`
-internally instead of `parse()` if memory is a concern.
+**When it matters: the streaming parser.**
+For large files, batch pipelines over large corpora, or any use case where
+loading the full document into memory is unacceptable, the streaming layer is
+the right tool — not feature flags or zero-copy tricks. It requires only
+O(nesting depth) working state; the full AST is never materialised.
+This is the primary reason to build a proper standalone library rather than
+an internal rescribe adapter: covering every major use case so the ecosystem
+doesn't stay fragmented.
 
 Feature flags should be reserved for *optional dependencies* (e.g. `serde` for
 `Serialize`/`Deserialize` on AST types), not for behavioral toggles like
