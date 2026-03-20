@@ -5,7 +5,7 @@
 //! Delegates all parsing to `org-fmt`, then maps the `OrgDoc` AST into
 //! rescribe `Node`/`Document` types.
 
-use org_fmt::{Block, Inline, ListItem, ListItemContent, OrgDoc, TableRow};
+use org_fmt::{Block, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc, TableRow};
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Severity, WarningKind,
 };
@@ -21,25 +21,24 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let result = org_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (ast, diagnostics) = org_fmt::parse(input);
 
-    let mut warnings: Vec<FidelityWarning> = result
-        .warnings
+    let mut warnings: Vec<FidelityWarning> = diagnostics
         .iter()
-        .map(|w| {
+        .map(|d: &Diagnostic| {
             FidelityWarning::new(
                 Severity::Minor,
-                WarningKind::UnsupportedNode(w.kind.clone()),
-                w.message.clone(),
+                WarningKind::UnsupportedNode(d.code.to_string()),
+                d.message.clone(),
             )
         })
         .collect();
 
-    let (children, mut more_warnings) = convert_doc(&result.doc);
+    let (children, mut more_warnings) = convert_doc(&ast);
     warnings.append(&mut more_warnings);
 
     let mut metadata = rescribe_core::Properties::new();
-    for (key, value) in &result.doc.metadata {
+    for (key, value) in &ast.metadata {
         metadata.set(key, value.clone());
     }
 
@@ -47,6 +46,7 @@ pub fn parse_with_options(
     let doc = Document::new().with_content(root).with_metadata(metadata);
 
     Ok(ConversionResult::with_warnings(doc, warnings))
+
 }
 
 fn convert_doc(org_doc: &OrgDoc) -> (Vec<Node>, Vec<FidelityWarning>) {
@@ -64,15 +64,17 @@ fn convert_doc(org_doc: &OrgDoc) -> (Vec<Node>, Vec<FidelityWarning>) {
 
 fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
     let node = match block {
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(convert_inlines(inlines))
         }
 
-        Block::Heading { level, inlines } => Node::new(node::HEADING)
+        Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .children(convert_inlines(inlines)),
 
-        Block::CodeBlock { language, content } => {
+        Block::CodeBlock {
+            language, content, ..
+        } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -80,7 +82,7 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             n
         }
 
-        Block::Blockquote { children } => {
+        Block::Blockquote { children, .. } => {
             let child_nodes: Vec<Node> = children
                 .iter()
                 .filter_map(|b| convert_block(b).ok().flatten())
@@ -88,18 +90,18 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             Node::new(node::BLOCKQUOTE).children(child_nodes)
         }
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let item_nodes: Vec<Node> = items.iter().map(convert_list_item).collect();
             Node::new(node::LIST)
                 .prop(prop::ORDERED, *ordered)
                 .children(item_nodes)
         }
 
-        Block::Table { rows } => convert_table(rows),
+        Block::Table { rows, .. } => convert_table(rows),
 
-        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
 
-        Block::DefinitionList { items } => {
+        Block::DefinitionList { items, .. } => {
             let mut children = Vec::new();
             for item in items {
                 children
@@ -111,13 +113,15 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             Node::new(node::DEFINITION_LIST).children(children)
         }
 
-        Block::Div { inlines } => Node::new(node::DIV).children(convert_inlines(inlines)),
+        Block::Div { inlines, .. } => Node::new(node::DIV).children(convert_inlines(inlines)),
 
-        Block::RawBlock { format, content } => Node::new(node::RAW_BLOCK)
+        Block::RawBlock {
+            format, content, ..
+        } => Node::new(node::RAW_BLOCK)
             .prop(prop::FORMAT, format.clone())
             .prop(prop::CONTENT, content.clone()),
 
-        Block::Figure { children } => {
+        Block::Figure { children, .. } => {
             let child_nodes: Vec<Node> = children
                 .iter()
                 .filter_map(|b| convert_block(b).ok().flatten())
@@ -125,9 +129,11 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             Node::new(node::FIGURE).children(child_nodes)
         }
 
-        Block::Caption { inlines } => Node::new(node::CAPTION).children(convert_inlines(inlines)),
+        Block::Caption { inlines, .. } => {
+            Node::new(node::CAPTION).children(convert_inlines(inlines))
+        }
 
-        Block::Unknown { kind } => {
+        Block::Unknown { kind, .. } => {
             return Err(FidelityWarning::new(
                 Severity::Minor,
                 WarningKind::UnsupportedNode(kind.clone()),
@@ -189,49 +195,55 @@ fn convert_inlines(inlines: &[Inline]) -> Vec<Node> {
 
 fn convert_inline(inline: &Inline) -> Node {
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Text { text: s, .. } => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        Inline::Bold(children) => Node::new(node::STRONG).children(convert_inlines(children)),
+        Inline::Bold(children, _) => {
+            Node::new(node::STRONG).children(convert_inlines(children))
+        }
 
-        Inline::Italic(children) => Node::new(node::EMPHASIS).children(convert_inlines(children)),
+        Inline::Italic(children, _) => {
+            Node::new(node::EMPHASIS).children(convert_inlines(children))
+        }
 
-        Inline::Underline(children) => {
+        Inline::Underline(children, _) => {
             Node::new(node::UNDERLINE).children(convert_inlines(children))
         }
 
-        Inline::Strikethrough(children) => {
+        Inline::Strikethrough(children, _) => {
             Node::new(node::STRIKEOUT).children(convert_inlines(children))
         }
 
-        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        Inline::Link { url, children } => Node::new(node::LINK)
+        Inline::Link { url, children, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .children(convert_inlines(children)),
 
-        Inline::Image { url } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
+        Inline::Image { url, .. } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
 
-        Inline::LineBreak => Node::new(node::LINE_BREAK),
+        Inline::LineBreak { .. } => Node::new(node::LINE_BREAK),
 
-        Inline::SoftBreak => Node::new(node::SOFT_BREAK),
+        Inline::SoftBreak { .. } => Node::new(node::SOFT_BREAK),
 
-        Inline::Superscript(children) => {
+        Inline::Superscript(children, _) => {
             Node::new(node::SUPERSCRIPT).children(convert_inlines(children))
         }
 
-        Inline::Subscript(children) => {
+        Inline::Subscript(children, _) => {
             Node::new(node::SUBSCRIPT).children(convert_inlines(children))
         }
 
-        Inline::FootnoteRef { label } => {
+        Inline::FootnoteRef { label, .. } => {
             Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, label.clone())
         }
 
-        Inline::FootnoteDefinition { label, children } => Node::new(node::FOOTNOTE_DEF)
+        Inline::FootnoteDefinition {
+            label, children, ..
+        } => Node::new(node::FOOTNOTE_DEF)
             .prop(prop::LABEL, label.clone())
             .children(convert_inlines(children)),
 
-        Inline::MathInline { source } => {
+        Inline::MathInline { source, .. } => {
             Node::new("math_inline").prop("math:source", source.clone())
         }
     }

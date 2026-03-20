@@ -47,19 +47,10 @@ pub fn emit_with_options(
     let blocks = convert_nodes(&doc.content.children, &mut warnings);
 
     let org_doc = OrgDoc { blocks, metadata };
-    let result = org_fmt::build(&org_doc);
-
-    // Map build warnings to fidelity warnings
-    for w in result.warnings {
-        warnings.push(FidelityWarning::new(
-            Severity::Minor,
-            WarningKind::UnsupportedNode(w.kind),
-            w.message,
-        ));
-    }
+    let output = org_fmt::build(&org_doc);
 
     Ok(ConversionResult::with_warnings(
-        result.output.into_bytes(),
+        output.into_bytes(),
         warnings,
     ))
 }
@@ -78,11 +69,13 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             // This shouldn't normally appear but handle gracefully
             Some(Block::Div {
                 inlines: convert_nodes_to_inlines(&n.children, warnings),
+                span: org_fmt::Span::NONE,
             })
         }
 
         node::PARAGRAPH => Some(Block::Paragraph {
             inlines: convert_nodes_to_inlines(&n.children, warnings),
+            span: org_fmt::Span::NONE,
         }),
 
         node::HEADING => {
@@ -90,17 +83,23 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             Some(Block::Heading {
                 level,
                 inlines: convert_nodes_to_inlines(&n.children, warnings),
+                span: org_fmt::Span::NONE,
             })
         }
 
         node::CODE_BLOCK => {
             let content = n.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             let language = n.props.get_str(prop::LANGUAGE).map(str::to_string);
-            Some(Block::CodeBlock { language, content })
+            Some(Block::CodeBlock {
+                language,
+                content,
+                span: org_fmt::Span::NONE,
+            })
         }
 
         node::BLOCKQUOTE => Some(Block::Blockquote {
             children: convert_nodes(&n.children, warnings),
+            span: org_fmt::Span::NONE,
         }),
 
         node::LIST => {
@@ -119,7 +118,11 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
                     }
                 })
                 .collect();
-            Some(Block::List { ordered, items })
+            Some(Block::List {
+                ordered,
+                items,
+                span: org_fmt::Span::NONE,
+            })
         }
 
         node::LIST_ITEM => {
@@ -127,6 +130,7 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             Some(Block::List {
                 ordered: false,
                 items: vec![convert_list_item(n, &mut counter, warnings)],
+                span: org_fmt::Span::NONE,
             })
         }
 
@@ -134,27 +138,39 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
 
         node::FIGURE => Some(Block::Figure {
             children: convert_nodes(&n.children, warnings),
+            span: org_fmt::Span::NONE,
         }),
 
         node::CAPTION => Some(Block::Caption {
             inlines: convert_nodes_to_inlines(&n.children, warnings),
+            span: org_fmt::Span::NONE,
         }),
 
-        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule {
+            span: org_fmt::Span::NONE,
+        }),
 
         node::DIV | node::SPAN => Some(Block::Div {
             inlines: convert_nodes_to_inlines(&n.children, warnings),
+            span: org_fmt::Span::NONE,
         }),
 
         node::RAW_BLOCK => {
             let format = n.props.get_str(prop::FORMAT).unwrap_or("").to_string();
             let content = n.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Some(Block::RawBlock { format, content })
+            Some(Block::RawBlock {
+                format,
+                content,
+                span: org_fmt::Span::NONE,
+            })
         }
 
         node::DEFINITION_LIST => {
             let items = convert_definition_list(&n.children, warnings);
-            Some(Block::DefinitionList { items })
+            Some(Block::DefinitionList {
+                items,
+                span: org_fmt::Span::NONE,
+            })
         }
 
         node::DEFINITION_TERM | node::DEFINITION_DESC => {
@@ -162,6 +178,7 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             // If encountered standalone, treat as paragraph.
             Some(Block::Paragraph {
                 inlines: convert_nodes_to_inlines(&n.children, warnings),
+                span: org_fmt::Span::NONE,
             })
         }
 
@@ -184,6 +201,7 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
         | node::QUOTED
         | node::RAW_INLINE => Some(Block::Paragraph {
             inlines: convert_nodes_to_inlines(std::slice::from_ref(n), warnings),
+            span: org_fmt::Span::NONE,
         }),
 
         "math_display" => n
@@ -192,12 +210,15 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             .map(|source| Block::RawBlock {
                 format: "org".into(),
                 content: format!("\\[\n{}\n\\]\n", source),
+                span: org_fmt::Span::NONE,
             }),
 
         "math_inline" => Some(Block::Paragraph {
             inlines: vec![Inline::MathInline {
                 source: n.props.get_str("math:source").unwrap_or("").to_string(),
+                span: org_fmt::Span::NONE,
             }],
+            span: org_fmt::Span::NONE,
         }),
 
         _ => {
@@ -213,7 +234,10 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             } else if children.len() == 1 {
                 Some(children.into_iter().next().unwrap())
             } else {
-                Some(Block::Figure { children })
+                Some(Block::Figure {
+                    children,
+                    span: org_fmt::Span::NONE,
+                })
             }
         }
     }
@@ -235,6 +259,7 @@ fn convert_list_item(
         } else if child.kind.as_str() == node::PARAGRAPH {
             children.push(ListItemContent::Block(Block::Paragraph {
                 inlines: convert_nodes_to_inlines(&child.children, warnings),
+                span: org_fmt::Span::NONE,
             }));
         } else {
             // Inline children or other block types
@@ -263,7 +288,10 @@ fn convert_list_item(
 fn convert_table(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Block {
     let mut rows = Vec::new();
     collect_table_rows(&n.children, &mut rows, false, warnings);
-    Block::Table { rows }
+    Block::Table {
+        rows,
+        span: org_fmt::Span::NONE,
+    }
 }
 
 fn collect_table_rows(
@@ -331,68 +359,88 @@ fn convert_nodes_to_inlines(nodes: &[Node], warnings: &mut Vec<FidelityWarning>)
 
 fn try_convert_inline(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Inline> {
     match n.kind.as_str() {
-        node::TEXT => Some(Inline::Text(
-            n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
+        node::TEXT => Some(Inline::Text {
+            text: n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
+            span: org_fmt::Span::NONE,
+        }),
+
+        node::EMPHASIS => Some(Inline::Italic(
+            convert_nodes_to_inlines(&n.children, warnings),
+            org_fmt::Span::NONE,
         )),
 
-        node::EMPHASIS => Some(Inline::Italic(convert_nodes_to_inlines(
-            &n.children,
-            warnings,
-        ))),
+        node::STRONG => Some(Inline::Bold(
+            convert_nodes_to_inlines(&n.children, warnings),
+            org_fmt::Span::NONE,
+        )),
 
-        node::STRONG => Some(Inline::Bold(convert_nodes_to_inlines(
-            &n.children,
-            warnings,
-        ))),
+        node::STRIKEOUT => Some(Inline::Strikethrough(
+            convert_nodes_to_inlines(&n.children, warnings),
+            org_fmt::Span::NONE,
+        )),
 
-        node::STRIKEOUT => Some(Inline::Strikethrough(convert_nodes_to_inlines(
-            &n.children,
-            warnings,
-        ))),
+        node::UNDERLINE => Some(Inline::Underline(
+            convert_nodes_to_inlines(&n.children, warnings),
+            org_fmt::Span::NONE,
+        )),
 
-        node::UNDERLINE => Some(Inline::Underline(convert_nodes_to_inlines(
-            &n.children,
-            warnings,
-        ))),
+        node::SUBSCRIPT => Some(Inline::Subscript(
+            convert_nodes_to_inlines(&n.children, warnings),
+            org_fmt::Span::NONE,
+        )),
 
-        node::SUBSCRIPT => Some(Inline::Subscript(convert_nodes_to_inlines(
-            &n.children,
-            warnings,
-        ))),
-
-        node::SUPERSCRIPT => Some(Inline::Superscript(convert_nodes_to_inlines(
-            &n.children,
-            warnings,
-        ))),
+        node::SUPERSCRIPT => Some(Inline::Superscript(
+            convert_nodes_to_inlines(&n.children, warnings),
+            org_fmt::Span::NONE,
+        )),
 
         node::CODE => Some(Inline::Code(
             n.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
+            org_fmt::Span::NONE,
         )),
 
         node::LINK => {
             let url = n.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = convert_nodes_to_inlines(&n.children, warnings);
-            Some(Inline::Link { url, children })
+            Some(Inline::Link {
+                url,
+                children,
+                span: org_fmt::Span::NONE,
+            })
         }
 
         node::IMAGE => {
             let url = n.props.get_str(prop::URL).unwrap_or("").to_string();
-            Some(Inline::Image { url })
+            Some(Inline::Image {
+                url,
+                span: org_fmt::Span::NONE,
+            })
         }
 
-        node::LINE_BREAK => Some(Inline::LineBreak),
+        node::LINE_BREAK => Some(Inline::LineBreak {
+            span: org_fmt::Span::NONE,
+        }),
 
-        node::SOFT_BREAK => Some(Inline::SoftBreak),
+        node::SOFT_BREAK => Some(Inline::SoftBreak {
+            span: org_fmt::Span::NONE,
+        }),
 
         node::FOOTNOTE_REF => {
             let label = n.props.get_str(prop::LABEL).unwrap_or("").to_string();
-            Some(Inline::FootnoteRef { label })
+            Some(Inline::FootnoteRef {
+                label,
+                span: org_fmt::Span::NONE,
+            })
         }
 
         node::FOOTNOTE_DEF => {
             let label = n.props.get_str(prop::LABEL).unwrap_or("").to_string();
             let children = convert_nodes_to_inlines(&n.children, warnings);
-            Some(Inline::FootnoteDefinition { label, children })
+            Some(Inline::FootnoteDefinition {
+                label,
+                children,
+                span: org_fmt::Span::NONE,
+            })
         }
 
         node::SMALL_CAPS => {
@@ -408,7 +456,10 @@ fn try_convert_inline(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<I
                 // Best: return all as separate, but we can only return one Inline.
                 // Return the children by wrapping them inside a no-op container.
                 // We don't have such a container in OrgFmt, so just return first.
-                Some(Inline::Text(collect_text(&children)))
+                Some(Inline::Text {
+                    text: collect_text(&children),
+                    span: org_fmt::Span::NONE,
+                })
             }
         }
 
@@ -417,9 +468,15 @@ fn try_convert_inline(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<I
             let children = convert_nodes_to_inlines(&n.children, warnings);
             let inner_text = collect_text(&children);
             if quote_type == "single" {
-                Some(Inline::Text(format!("'{}'", inner_text)))
+                Some(Inline::Text {
+                    text: format!("'{}'", inner_text),
+                    span: org_fmt::Span::NONE,
+                })
             } else {
-                Some(Inline::Text(format!("\"{}\"", inner_text)))
+                Some(Inline::Text {
+                    text: format!("\"{}\"", inner_text),
+                    span: org_fmt::Span::NONE,
+                })
             }
         }
 
@@ -427,7 +484,10 @@ fn try_convert_inline(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<I
             let format = n.props.get_str(prop::FORMAT).unwrap_or("");
             if format == "org" {
                 let content = n.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-                Some(Inline::Text(content))
+                Some(Inline::Text {
+                    text: content,
+                    span: org_fmt::Span::NONE,
+                })
             } else {
                 None
             }
@@ -435,7 +495,10 @@ fn try_convert_inline(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<I
 
         "math_inline" => {
             let source = n.props.get_str("math:source").unwrap_or("").to_string();
-            Some(Inline::MathInline { source })
+            Some(Inline::MathInline {
+                source,
+                span: org_fmt::Span::NONE,
+            })
         }
 
         _ => {
@@ -450,7 +513,10 @@ fn try_convert_inline(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<I
             } else {
                 let children = convert_nodes_to_inlines(&n.children, warnings);
                 let text = collect_text(&children);
-                Some(Inline::Text(text))
+                Some(Inline::Text {
+                    text,
+                    span: org_fmt::Span::NONE,
+                })
             }
         }
     }
@@ -461,15 +527,15 @@ fn collect_text(inlines: &[Inline]) -> String {
     let mut out = String::new();
     for inline in inlines {
         match inline {
-            Inline::Text(s) => out.push_str(s),
-            Inline::Bold(c)
-            | Inline::Italic(c)
-            | Inline::Underline(c)
-            | Inline::Strikethrough(c)
-            | Inline::Superscript(c)
-            | Inline::Subscript(c) => out.push_str(&collect_text(c)),
-            Inline::Code(s) => out.push_str(s),
-            Inline::Link { url, children } => {
+            Inline::Text { text: s, .. } => out.push_str(s),
+            Inline::Bold(c, _)
+            | Inline::Italic(c, _)
+            | Inline::Underline(c, _)
+            | Inline::Strikethrough(c, _)
+            | Inline::Superscript(c, _)
+            | Inline::Subscript(c, _) => out.push_str(&collect_text(c)),
+            Inline::Code(s, _) => out.push_str(s),
+            Inline::Link { url, children, .. } => {
                 let t = collect_text(children);
                 if t.is_empty() {
                     out.push_str(url);
@@ -477,12 +543,13 @@ fn collect_text(inlines: &[Inline]) -> String {
                     out.push_str(&t);
                 }
             }
-            Inline::Image { url } => out.push_str(url),
-            Inline::LineBreak | Inline::SoftBreak => out.push(' '),
-            Inline::FootnoteRef { label } | Inline::FootnoteDefinition { label, .. } => {
+            Inline::Image { url, .. } => out.push_str(url),
+            Inline::LineBreak { .. } | Inline::SoftBreak { .. } => out.push(' '),
+            Inline::FootnoteRef { label, .. }
+            | Inline::FootnoteDefinition { label, .. } => {
                 out.push_str(label)
             }
-            Inline::MathInline { source } => {
+            Inline::MathInline { source, .. } => {
                 out.push('$');
                 out.push_str(source);
                 out.push('$');
