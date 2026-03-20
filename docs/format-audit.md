@@ -43,7 +43,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | djot | 4† | 4† | jotdown | production | production |
 | org | 4 | 2 | hand | production | harness |
 | rst | 4 | 2 | hand | fuzz | harness |
-| asciidoc | 2 | 2 | hand | alt harness† | harness |
+| asciidoc | 4 | 2 | hand | production | harness |
 | textile | 3 | 2 | hand | fuzz | harness |
 | muse | 3 | 2 | hand | fuzz | harness |
 | t2t | 3 | 2 | hand | fuzz | harness |
@@ -167,7 +167,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 |-------|-----|--------|-------|----------|---------|
 | rtf-fmt | ✓ | ~ | | | ✓ |
 | rst-fmt | ✓ | | | ~ | |
-| asciidoc | ✓ | | | ~ | |
+| asciidoc | ✓ | | | ~ | ✓ |
 | org-fmt | | | | | |
 | djot-fmt | | | | | |
 
@@ -271,10 +271,14 @@ odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native, beamer/revealjs/s
 - Fixed 4 parser bugs during fuzzing: heading parse for adornment-char titles (underline + overline
   paths), heading build using rendered width + clash detection, numbered-list prefix validation
 
-### AsciiDoc reader — low-medium risk
-- 1,290 lines, handwritten
-- `asciidoc-rs` exists on crates.io but is immature
-- Pandoc oracle unavailable; asciidoctor is the alternate reference
+### AsciiDoc reader — promoted to 4-Fuzz (2026-03-20)
+- lib.rs split into ast.rs / parse.rs / emit.rs; Span/Diagnostic added; parse() now infallible
+- strip_spans() implemented on all AST types for roundtrip comparison
+- fuzz_asciidoc_reader: 1.9M runs, 0 crashes
+- fuzz_asciidoc_roundtrip: 591K runs, 0 crashes
+- Known roundtrip gap: [role]#text# inline syntax (Strikeout/Underline/SmallCaps) emitted as
+  [line-through]#text# / [underline]#text# / [small-caps]#text# but re-parsed as Highlight
+- `asciidoc-rs` exists on crates.io but is immature; asciidoctor is the alternate oracle
 
 ### KFX / AZW3 / MOBI — planned, not yet started
 - KFX uses Amazon Ion binary format (public spec: amazon-ion.github.io); Ion layer would be

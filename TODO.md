@@ -186,7 +186,12 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] No-panic fuzz gate (`fuzz_rst_reader`)
   - [x] Roundtrip fuzz target (`fuzz_rst_roundtrip`)
   - [ ] 100% construct coverage — inline markup, links, code blocks, directives, footnotes, tables
-- [ ] `asciidoc` vertical
+- [ ] `asciidoc` vertical — **4-Fuzz** (reader 1.9M clean, roundtrip 591K clean, 2026-03-20)
+  - [x] No-panic fuzz gate (`fuzz_asciidoc_reader`)
+  - [x] Roundtrip fuzz target (`fuzz_asciidoc_roundtrip`)
+  - [ ] Known roundtrip gap: [role]#text# syntax (Strikeout/Underline/SmallCaps emitted as
+        [line-through]#text# / [underline]#text# / [small-caps]#text# but parsed back as Highlight)
+  - [ ] 100% construct coverage — tables, footnotes, math, admonitions, attributes
 - [ ] `org-fmt` vertical
 - [ ] `djot-fmt` vertical
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
