@@ -23,6 +23,9 @@ path = "../crates/readers/rescribe-read-latex"
 [dependencies.rescribe-read-org]
 path = "../crates/readers/rescribe-read-org"
 
+[dependencies.rescribe-write-org]
+path = "../crates/writers/rescribe-write-org"
+
 [dependencies.rescribe-read-pdf]
 path = "../crates/readers/rescribe-read-pdf"
 
@@ -243,6 +246,13 @@ bench = false
 [[bin]]
 name = "fuzz_asciidoc_roundtrip"
 path = "fuzz_targets/asciidoc_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_org_roundtrip"
+path = "fuzz_targets/org_roundtrip.rs"
 test = false
 doc = false
 bench = false

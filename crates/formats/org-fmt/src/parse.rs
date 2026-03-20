@@ -168,11 +168,20 @@ impl<'a> OrgParser<'a> {
     fn parse_block(&mut self) -> Option<Block> {
         let orig_line = self.current_line()?;
         let line_upper = orig_line.to_uppercase();
-        let block_type = line_upper
-            .strip_prefix("#+BEGIN_")?
-            .split_whitespace()
-            .next()?
-            .to_uppercase();
+        // Always advance past the BEGIN line, even on early return, to prevent
+        // infinite loops when the block_type is missing (e.g. "#+BEGIN_" alone).
+        let block_type_opt = line_upper
+            .strip_prefix("#+BEGIN_")
+            .and_then(|rest| rest.split_whitespace().next())
+            .map(|s| s.to_uppercase());
+
+        let block_type = match block_type_opt {
+            Some(bt) => bt,
+            None => {
+                self.advance();
+                return None;
+            }
+        };
 
         // Get language for SRC blocks
         let lang = if block_type == "SRC" {
