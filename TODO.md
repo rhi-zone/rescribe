@@ -57,7 +57,8 @@ Niche formats; fixtures are sufficient, no production guarantee.
 Target: **2-Fixtures**.
 
 Creole, DokuWiki, VimWiki, ZimWiki, XWiki, TWiki, TikiWiki, Jira,
-BBCode, ANSI, Fountain, Haddock, Muse, t2t, Markua, Texinfo, POD
+BBCode, ANSI, Haddock, Markua, Texinfo, POD
+(Fountain: advanced to 4-Fuzz 2026-03-21; Muse: 5-Production; t2t: 4-Fuzz)
 
 ### Tier D — Output-only, low investment
 

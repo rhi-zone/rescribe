@@ -259,8 +259,23 @@ impl<'a> Parser<'a> {
             return Some(self.parse_lyric());
         }
 
-        // Default: action
-        Some(self.parse_action())
+        // Default: action.
+        // Note: parse_action will break immediately if the line starts with a
+        // structural marker like `=`, `#`, `~`, `[[`, etc. If that happens
+        // without advancing pos we'd loop forever. We guard against that by
+        // checking whether parse_action would consume at least one line; if
+        // not, we forcibly consume the current line as raw action text.
+        let pos_before = self.pos;
+        let block = self.parse_action();
+        if self.pos == pos_before {
+            // parse_action stalled — consume the line ourselves.
+            let line_idx = self.pos;
+            let span = self.span_for_line(line_idx);
+            let text = self.lines[self.pos].to_string();
+            self.pos += 1;
+            return Some(Block::Action { text, span });
+        }
+        Some(block)
     }
 
     fn is_scene_heading(&self, line: &str) -> bool {

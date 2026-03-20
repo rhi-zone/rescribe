@@ -84,6 +84,10 @@ fn sanitise(s: &str) -> Option<String> {
                     // Fountain structural / inline markers
                     | '*' | '_' | '@' | '!' | '#' | '=' | '>' | '<' | '~'
                     | '^' | '[' | ']' | '(' | ')' | '.' | '\\'
+                    // ':' stripped to prevent title-page key detection:
+                    // text like "notes:" or "author:" at the start of a
+                    // document gets parsed as metadata, not action.
+                    | ':'
             )
         })
         .collect();
@@ -133,6 +137,28 @@ fn sanitise(s: &str) -> Option<String> {
         for prefix in &["cut to", "fade out", "fade in", "smash to"] {
             if out.to_lowercase().starts_with(prefix) {
                 out = out[prefix.len()..].trim_start().to_string();
+            }
+        }
+
+        // Strip any text that starts with a known Fountain title-page field
+        // followed by ':'. These would be consumed as metadata, not action.
+        // (We already strip ':' above, but be safe for future changes.)
+        let title_page_fields = [
+            "title", "credit", "author", "authors", "source",
+            "draft date", "draft_date", "contact", "copyright", "notes",
+        ];
+        let out_lower = out.to_lowercase();
+        for field in &title_page_fields {
+            if out_lower.starts_with(field) {
+                let rest = &out[field.len()..];
+                if rest.trim_start().starts_with(':') {
+                    // Strip the field and colon
+                    out = rest
+                        .trim_start()
+                        .trim_start_matches(':')
+                        .trim_start()
+                        .to_string();
+                }
             }
         }
 

@@ -48,7 +48,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | muse | 4 | 2 | hand | production | harness |
 | t2t | 4 | 2 | hand | fuzz | harness |
 | markua | 2 | 2 | hand | harness | harness |
-| fountain | 2 | 2 | hand | – (harness N/A) | fuzz |
+| fountain | 4 | 2 | hand | – (harness N/A) | coverage |
 | typst | 1 | 2 | hand | partial→fixtures | harness |
 | texinfo | 2 | 2 | hand | – (harness N/A) | fuzz |
 | bbcode | 2 | 2 | hand | – (harness N/A) | fuzz |
@@ -179,7 +179,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 | muse-fmt | ✓ | | | | ✓ |
 | t2t | ✓ | | ✓ | | ✓ |
 | markua | | | | | |
-| fountain-fmt | | | | | |
+| fountain-fmt | ✓ | | ✓ | | ✓ |
 | mediawiki-fmt | | | | | |
 | creole | | | | | |
 | dokuwiki | | | | | |
