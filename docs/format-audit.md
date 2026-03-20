@@ -147,8 +147,10 @@ The target state is all checkmarks in this table.**
 
 The Rust ecosystem is missing solid crates for most document formats. rescribe fixes this as
 a byproduct: each hand-written format vertical produces a publishable standalone crate with
-a full API surface. Library-backed formats (pulldown-cmark, ooxml-*, html5ever, etc.) are
-exempt — they already have ecosystem crates.
+a full API surface. Library-backed formats fall into two categories:
+- **Third-party** (pulldown-cmark, html5ever, etc.) — not our codebase; contribute upstream if gaps exist.
+- **Ours** (ooxml-wml, ooxml-sml, ooxml-pml) — same standard applies; propose changes directly.
+  ooxml-* is largely codegen'd so raising it to full API coverage is cheaper than it looks.
 
 Features (all ship as Cargo features, all on by default — see `docs/format-library-design.md`):
 - `ast` — `parse(input) -> (Ast, Vec<Diagnostic>)`, Span on every node

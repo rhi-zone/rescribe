@@ -63,8 +63,9 @@ libraries useful entirely outside rescribe.
 **Every format without a quality ecosystem crate gets one here.** The target state is that
 the API coverage matrix in `docs/format-audit.md` is all checkmarks: every standalone
 format crate ships AST, streaming (iterator), batch (chunk-driven), streaming writer, and
-builder writer — as separate Cargo features, all on by default. Library-backed formats
-(pulldown-cmark, ooxml-*, html5ever) are exempt; they already have ecosystem crates.
+builder writer — as separate Cargo features, all on by default. Third-party library-backed formats (pulldown-cmark, html5ever) are out of scope here — contribute
+upstream if gaps exist. The ooxml-* crates (ooxml-wml, ooxml-sml, ooxml-pml) are ours and held
+to the same standard; they're largely codegen'd so raising them to full API coverage is tractable.
 
 This is not a nice-to-have. It is the primary reason to build format crates as proper
 standalone libraries rather than internal rescribe adapters.
