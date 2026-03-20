@@ -19,12 +19,13 @@ use rescribe_std::{node, prop};
 
 // ── Fuzz-friendly types ─────────────────────────────────────────────────────
 
-/// Note: BulletList excluded (writer adds "• " prefix, can't roundtrip).
-/// Table excluded (ooxml-pml TableBuilder has XML escaping bugs for special chars).
-/// Both are tested via fixtures instead.
+/// Note: BulletList excluded because the writer adds "• " prefix to list items
+/// (PresentationBuilder lacks bullet API), making roundtrip text comparison fail.
+/// Lists are tested via fixtures instead.
 #[derive(Arbitrary, Debug)]
 enum FuzzSlideContent {
     Paragraph { text: String },
+    Table { rows: Vec<Vec<String>> },
 }
 
 #[derive(Arbitrary, Debug)]
@@ -83,6 +84,30 @@ fuzz_target!(|slides: Vec<FuzzSlide>| {
                     FuzzSlideContent::Paragraph { text } => {
                         if let Some(text_node) = make_text(text) {
                             div = div.child(Node::new(node::PARAGRAPH).child(text_node));
+                        }
+                    }
+                    FuzzSlideContent::Table { rows } => {
+                        let row_nodes: Vec<Node> = rows
+                            .iter()
+                            .filter_map(|row| {
+                                let cells: Vec<Node> = row
+                                    .iter()
+                                    .filter_map(|t| {
+                                        let text_node = make_text(t)?;
+                                        Some(Node::new(node::TABLE_CELL).child(
+                                            Node::new(node::PARAGRAPH).child(text_node),
+                                        ))
+                                    })
+                                    .collect();
+                                if cells.is_empty() {
+                                    None
+                                } else {
+                                    Some(Node::new(node::TABLE_ROW).children(cells))
+                                }
+                            })
+                            .collect();
+                        if !row_nodes.is_empty() {
+                            div = div.child(Node::new(node::TABLE).children(row_nodes));
                         }
                     }
                 }

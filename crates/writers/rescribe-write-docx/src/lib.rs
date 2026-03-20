@@ -517,6 +517,11 @@ struct FormattingState {
     italic: bool,
     underline: bool,
     strikethrough: bool,
+    small_caps: bool,
+    all_caps: bool,
+    hidden: bool,
+    subscript: bool,
+    superscript: bool,
     color: Option<String>,
     font: Option<String>,
     font_size_half_pts: Option<i64>,
@@ -642,13 +647,74 @@ fn write_inline_to_para(
                 }
                 // Note: footnote content was already written during pre-registration.
             }
-            // Wrap nodes that don't change run formatting — just recurse
-            node::SUBSCRIPT
-            | node::SUPERSCRIPT
-            | node::CODE
-            | node::SMALL_CAPS
-            | node::ALL_CAPS
-            | node::HIDDEN => {
+            node::SUBSCRIPT => {
+                let mut next = fmt.clone();
+                next.subscript = true;
+                write_inline_to_para(
+                    para,
+                    &node.children,
+                    &next,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                );
+            }
+            node::SUPERSCRIPT => {
+                let mut next = fmt.clone();
+                next.superscript = true;
+                write_inline_to_para(
+                    para,
+                    &node.children,
+                    &next,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                );
+            }
+            node::SMALL_CAPS => {
+                let mut next = fmt.clone();
+                next.small_caps = true;
+                write_inline_to_para(
+                    para,
+                    &node.children,
+                    &next,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                );
+            }
+            node::ALL_CAPS => {
+                let mut next = fmt.clone();
+                next.all_caps = true;
+                write_inline_to_para(
+                    para,
+                    &node.children,
+                    &next,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                );
+            }
+            node::HIDDEN => {
+                let mut next = fmt.clone();
+                next.hidden = true;
+                write_inline_to_para(
+                    para,
+                    &node.children,
+                    &next,
+                    warnings,
+                    hyperlink_map,
+                    footnote_map,
+                    image_map,
+                );
+            }
+            node::CODE => {
+                // Code inline — no monospace font available in base DOCX without
+                // a style definition; just recurse for now.
                 write_inline_to_para(
                     para,
                     &node.children,
@@ -793,6 +859,33 @@ fn emit_run_content(run: &mut types::Run, text: &str, fmt: &FormattingState) {
     }
     if fmt.strikethrough {
         run.set_strikethrough(true);
+    }
+    if fmt.small_caps {
+        run.set_small_caps(true);
+    }
+    if fmt.all_caps {
+        run.set_all_caps(true);
+    }
+    if fmt.hidden {
+        run.set_vanish(true);
+    }
+    if fmt.subscript {
+        let rpr = run
+            .r_pr
+            .get_or_insert_with(|| Box::new(types::RunProperties::default()));
+        rpr.vert_align = Some(Box::new(types::CTVerticalAlignRun {
+            value: types::STVerticalAlignRun::Subscript,
+            extra_attrs: HashMap::new(),
+        }));
+    }
+    if fmt.superscript {
+        let rpr = run
+            .r_pr
+            .get_or_insert_with(|| Box::new(types::RunProperties::default()));
+        rpr.vert_align = Some(Box::new(types::CTVerticalAlignRun {
+            value: types::STVerticalAlignRun::Superscript,
+            extra_attrs: HashMap::new(),
+        }));
     }
     if let Some(ref color) = fmt.color {
         run.set_color(color);

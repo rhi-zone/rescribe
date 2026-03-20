@@ -332,6 +332,73 @@ mod tests {
     }
 
     #[test]
+    fn test_table_xml_special_chars_roundtrip() {
+        use rescribe_core::Document as RescribeDocument;
+        use rescribe_std::Node as RescribeNode;
+
+        // Build a structured slide with a table containing XML special chars.
+        let table = RescribeNode::new(node::TABLE).child(
+            RescribeNode::new(node::TABLE_ROW)
+                .child(
+                    RescribeNode::new(node::TABLE_CELL).child(
+                        RescribeNode::new(node::PARAGRAPH)
+                            .child(RescribeNode::new(node::TEXT).prop(prop::CONTENT, "a>b")),
+                    ),
+                )
+                .child(
+                    RescribeNode::new(node::TABLE_CELL).child(
+                        RescribeNode::new(node::PARAGRAPH)
+                            .child(RescribeNode::new(node::TEXT).prop(prop::CONTENT, "c&d")),
+                    ),
+                )
+                .child(
+                    RescribeNode::new(node::TABLE_CELL).child(
+                        RescribeNode::new(node::PARAGRAPH)
+                            .child(RescribeNode::new(node::TEXT).prop(prop::CONTENT, "e'f")),
+                    ),
+                ),
+        );
+        let slide_div = RescribeNode::new(node::DIV)
+            .prop("slide", 1i64)
+            .child(
+                RescribeNode::new(node::HEADING)
+                    .prop(prop::LEVEL, 1i64)
+                    .child(RescribeNode::new(node::TEXT).prop(prop::CONTENT, "Table Test")),
+            )
+            .child(table);
+        let root = RescribeNode::new(node::DOCUMENT).child(slide_div);
+        let document = RescribeDocument::new().with_content(root);
+
+        // Emit to PPTX
+        let emit_result = emit(&document).unwrap();
+        assert!(!emit_result.value.is_empty());
+
+        // Parse back
+        let parse_result = rescribe_read_pptx::parse(&emit_result.value).unwrap();
+
+        // Extract all text from both
+        fn extract_text(node: &RescribeNode) -> String {
+            let mut text = String::new();
+            if node.kind.as_str() == node::TEXT
+                && let Some(content) = node.props.get_str(prop::CONTENT)
+            {
+                text.push_str(content);
+            }
+            for child in &node.children {
+                text.push_str(&extract_text(child));
+            }
+            text
+        }
+
+        let text_before = extract_text(&document.content);
+        let text_after = extract_text(&parse_result.value.content);
+        assert_eq!(
+            text_before, text_after,
+            "Table text with XML special chars should roundtrip"
+        );
+    }
+
+    #[test]
     fn test_emit_structured() {
         use rescribe_core::Document as RescribeDocument;
         use rescribe_std::Node as RescribeNode;
