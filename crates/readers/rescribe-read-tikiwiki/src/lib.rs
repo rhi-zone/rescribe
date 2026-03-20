@@ -16,8 +16,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let tw_doc = tikiwiki::parse(input)
-        .map_err(|e| ParseError::Invalid(format!("TikiWiki parse error: {}", e)))?;
+    let (tw_doc, _diags) = tikiwiki::parse(input);
 
     let mut blocks = Vec::new();
     for block in &tw_doc.blocks {
@@ -38,15 +37,15 @@ fn block_to_node(block: &tikiwiki::Block) -> Node {
     use tikiwiki::Block;
 
     match block {
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))
         }
 
-        Block::Heading { level, inlines } => Node::new(node::HEADING)
+        Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .children(inlines_to_nodes(inlines)),
 
-        Block::CodeBlock { content, language } => {
+        Block::CodeBlock { content, language, .. } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -54,10 +53,10 @@ fn block_to_node(block: &tikiwiki::Block) -> Node {
             n
         }
 
-        Block::Blockquote { inlines } => Node::new(node::BLOCKQUOTE)
+        Block::Blockquote { inlines, .. } => Node::new(node::BLOCKQUOTE)
             .child(Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))),
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let mut list_items = Vec::new();
             for item_inlines in items {
                 list_items
@@ -70,7 +69,7 @@ fn block_to_node(block: &tikiwiki::Block) -> Node {
                 .children(list_items)
         }
 
-        Block::Table { rows } => {
+        Block::Table { rows, .. } => {
             let mut table_rows = Vec::new();
             for row in rows {
                 let mut cells = Vec::new();
@@ -83,7 +82,7 @@ fn block_to_node(block: &tikiwiki::Block) -> Node {
             Node::new(node::TABLE).children(table_rows)
         }
 
-        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
@@ -95,27 +94,27 @@ fn inline_to_node(inline: &TwInline) -> Node {
     use tikiwiki::Inline;
 
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        Inline::Bold(children) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
+        Inline::Bold(children, _) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
 
-        Inline::Italic(children) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
+        Inline::Italic(children, _) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
 
-        Inline::Underline(children) => {
+        Inline::Underline(children, _) => {
             Node::new(node::UNDERLINE).children(inlines_to_nodes(children))
         }
 
-        Inline::Strikethrough(children) => {
+        Inline::Strikethrough(children, _) => {
             Node::new(node::STRIKEOUT).children(inlines_to_nodes(children))
         }
 
-        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        Inline::Link { url, children } => Node::new(node::LINK)
+        Inline::Link { url, children, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .children(inlines_to_nodes(children)),
 
-        Inline::Image { url, alt } => {
+        Inline::Image { url, alt, .. } => {
             let mut n = Node::new(node::IMAGE).prop(prop::URL, url.clone());
             if !alt.is_empty() {
                 n = n.prop(prop::ALT, alt.clone());
@@ -123,7 +122,7 @@ fn inline_to_node(inline: &TwInline) -> Node {
             n
         }
 
-        Inline::LineBreak => Node::new(node::LINE_BREAK),
+        Inline::LineBreak { .. } => Node::new(node::LINE_BREAK),
     }
 }
 

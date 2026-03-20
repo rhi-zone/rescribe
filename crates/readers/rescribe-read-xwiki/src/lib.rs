@@ -16,7 +16,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let doc = xwiki::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (doc, _diags) = xwiki::parse(input);
 
     let mut result = Vec::new();
     for block in &doc.blocks {
@@ -35,15 +35,15 @@ pub fn parse_with_options(
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Heading { level, inlines } => Node::new(node::HEADING)
+        Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .children(inlines_to_nodes(inlines)),
 
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))
         }
 
-        Block::CodeBlock { content, language } => {
+        Block::CodeBlock { content, language, .. } => {
             let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 node = node.prop(prop::LANGUAGE, lang.clone());
@@ -51,7 +51,7 @@ fn block_to_node(block: &Block) -> Node {
             node
         }
 
-        Block::Table { rows } => {
+        Block::Table { rows, .. } => {
             let table_rows: Vec<Node> = rows
                 .iter()
                 .map(|row| {
@@ -73,7 +73,7 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::TABLE).children(table_rows)
         }
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_blocks| {
@@ -86,7 +86,7 @@ fn block_to_node(block: &Block) -> Node {
                 .children(list_items)
         }
 
-        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
@@ -96,31 +96,31 @@ fn inlines_to_nodes(inlines: &[Inline]) -> Vec<Node> {
 
 fn inline_to_node(inline: &Inline) -> Node {
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        Inline::Bold(children) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
+        Inline::Bold(children, _) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
 
-        Inline::Italic(children) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
+        Inline::Italic(children, _) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
 
-        Inline::Underline(children) => {
+        Inline::Underline(children, _) => {
             Node::new(node::UNDERLINE).children(inlines_to_nodes(children))
         }
 
-        Inline::Strikeout(children) => {
+        Inline::Strikeout(children, _) => {
             Node::new(node::STRIKEOUT).children(inlines_to_nodes(children))
         }
 
-        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        Inline::Link { url, label } => Node::new(node::LINK)
+        Inline::Link { url, label, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .child(Node::new(node::TEXT).prop(prop::CONTENT, label.clone())),
 
-        Inline::Image { url } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
+        Inline::Image { url, .. } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
 
-        Inline::LineBreak => Node::new(node::LINE_BREAK),
+        Inline::LineBreak { .. } => Node::new(node::LINE_BREAK),
 
-        Inline::SoftBreak => Node::new(node::SOFT_BREAK),
+        Inline::SoftBreak { .. } => Node::new(node::SOFT_BREAK),
     }
 }
 

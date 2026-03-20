@@ -4,7 +4,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use tikiwiki::{Block as TwBlock, Inline as TwInline};
+use tikiwiki::{Block as TwBlock, Inline as TwInline, Span};
 
 /// Emit a document to TikiWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -23,7 +23,7 @@ pub fn emit_with_options(
         }
     }
 
-    let tw_doc = tikiwiki::TikiwikiDoc { blocks };
+    let tw_doc = tikiwiki::TikiwikiDoc { blocks, span: Span::NONE };
     let output = tikiwiki::build(&tw_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
@@ -35,12 +35,12 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
             let inlines = nodes_to_inlines(&node.children);
-            Some(TwBlock::Heading { level, inlines })
+            Some(TwBlock::Heading { level, inlines, span: Span::NONE })
         }
 
         node::PARAGRAPH => {
             let inlines = nodes_to_inlines(&node.children);
-            Some(TwBlock::Paragraph { inlines })
+            Some(TwBlock::Paragraph { inlines, span: Span::NONE })
         }
 
         node::CODE_BLOCK => {
@@ -50,12 +50,12 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
                 .unwrap_or_default()
                 .to_string();
             let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            Some(TwBlock::CodeBlock { content, language })
+            Some(TwBlock::CodeBlock { content, language, span: Span::NONE })
         }
 
         node::BLOCKQUOTE => {
             let inlines = nodes_to_inlines(&node.children);
-            Some(TwBlock::Blockquote { inlines })
+            Some(TwBlock::Blockquote { inlines, span: Span::NONE })
         }
 
         node::LIST => {
@@ -67,7 +67,7 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
                     items.push(inlines);
                 }
             }
-            Some(TwBlock::List { ordered, items })
+            Some(TwBlock::List { ordered, items, span: Span::NONE })
         }
 
         node::TABLE => {
@@ -81,13 +81,13 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
                             cells.push(inlines);
                         }
                     }
-                    rows.push(tikiwiki::TableRow { cells });
+                    rows.push(tikiwiki::TableRow { cells, span: Span::NONE });
                 }
             }
-            Some(TwBlock::Table { rows })
+            Some(TwBlock::Table { rows, span: Span::NONE })
         }
 
-        node::HORIZONTAL_RULE => Some(TwBlock::HorizontalRule),
+        node::HORIZONTAL_RULE => Some(TwBlock::HorizontalRule { span: Span::NONE }),
 
         node::DIV | node::SPAN | node::FIGURE => {
             // For containers, extract first block child if any
@@ -116,7 +116,7 @@ fn node_to_inline(node: &Node) -> Option<TwInline> {
                 .unwrap_or_default()
                 .to_string();
             if !content.is_empty() {
-                Some(TwInline::Text(content))
+                Some(TwInline::Text(content, Span::NONE))
             } else {
                 None
             }
@@ -125,7 +125,7 @@ fn node_to_inline(node: &Node) -> Option<TwInline> {
         node::STRONG => {
             let children = nodes_to_inlines(&node.children);
             if !children.is_empty() {
-                Some(TwInline::Bold(children))
+                Some(TwInline::Bold(children, Span::NONE))
             } else {
                 None
             }
@@ -134,7 +134,7 @@ fn node_to_inline(node: &Node) -> Option<TwInline> {
         node::EMPHASIS => {
             let children = nodes_to_inlines(&node.children);
             if !children.is_empty() {
-                Some(TwInline::Italic(children))
+                Some(TwInline::Italic(children, Span::NONE))
             } else {
                 None
             }
@@ -143,7 +143,7 @@ fn node_to_inline(node: &Node) -> Option<TwInline> {
         node::UNDERLINE => {
             let children = nodes_to_inlines(&node.children);
             if !children.is_empty() {
-                Some(TwInline::Underline(children))
+                Some(TwInline::Underline(children, Span::NONE))
             } else {
                 None
             }
@@ -152,7 +152,7 @@ fn node_to_inline(node: &Node) -> Option<TwInline> {
         node::STRIKEOUT => {
             let children = nodes_to_inlines(&node.children);
             if !children.is_empty() {
-                Some(TwInline::Strikethrough(children))
+                Some(TwInline::Strikethrough(children, Span::NONE))
             } else {
                 None
             }
@@ -165,7 +165,7 @@ fn node_to_inline(node: &Node) -> Option<TwInline> {
                 .unwrap_or_default()
                 .to_string();
             if !content.is_empty() {
-                Some(TwInline::Code(content))
+                Some(TwInline::Code(content, Span::NONE))
             } else {
                 None
             }
@@ -178,7 +178,7 @@ fn node_to_inline(node: &Node) -> Option<TwInline> {
                 .unwrap_or_default()
                 .to_string();
             let children = nodes_to_inlines(&node.children);
-            Some(TwInline::Link { url, children })
+            Some(TwInline::Link { url, children, span: Span::NONE })
         }
 
         node::IMAGE => {
@@ -192,12 +192,12 @@ fn node_to_inline(node: &Node) -> Option<TwInline> {
                 .get_str(prop::ALT)
                 .unwrap_or_default()
                 .to_string();
-            Some(TwInline::Image { url, alt })
+            Some(TwInline::Image { url, alt, span: Span::NONE })
         }
 
-        node::LINE_BREAK => Some(TwInline::LineBreak),
+        node::LINE_BREAK => Some(TwInline::LineBreak { span: Span::NONE }),
 
-        node::SOFT_BREAK => Some(TwInline::Text(" ".to_string())),
+        node::SOFT_BREAK => Some(TwInline::Text(" ".to_string(), Span::NONE)),
 
         _ => {
             let children = nodes_to_inlines(&node.children);

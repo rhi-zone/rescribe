@@ -18,7 +18,7 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let blocks = doc.content.children.iter().map(node_to_block).collect();
-    let vimwiki_doc = VimwikiDoc { blocks };
+    let vimwiki_doc = VimwikiDoc { blocks, span: Span::NONE };
     let output = vimwiki_fmt::build(&vimwiki_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
@@ -28,13 +28,13 @@ fn node_to_block(node: &Node) -> Block {
     match node.kind.as_str() {
         node::PARAGRAPH => {
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Block::Paragraph { inlines }
+            Block::Paragraph { inlines, span: Span::NONE }
         }
 
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(6) as usize;
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Block::Heading { level, inlines }
+            Block::Heading { level, inlines, span: Span::NONE }
         }
 
         node::CODE_BLOCK => {
@@ -44,7 +44,7 @@ fn node_to_block(node: &Node) -> Block {
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            Block::CodeBlock { language, content }
+            Block::CodeBlock { language, content, span: Span::NONE }
         }
 
         node::BLOCKQUOTE => {
@@ -54,7 +54,7 @@ fn node_to_block(node: &Node) -> Block {
                     inlines.extend(child.children.iter().map(node_to_inline));
                 }
             }
-            Block::Blockquote { inlines }
+            Block::Blockquote { inlines, span: Span::NONE }
         }
 
         node::LIST => {
@@ -71,11 +71,11 @@ fn node_to_block(node: &Node) -> Block {
                             inlines.extend(child.children.iter().map(node_to_inline));
                         }
                     }
-                    ListItem { checked, inlines }
+                    ListItem { checked, inlines, span: Span::NONE }
                 })
                 .collect();
 
-            Block::List { ordered, items }
+            Block::List { ordered, items, span: Span::NONE }
         }
 
         node::TABLE => {
@@ -90,19 +90,19 @@ fn node_to_block(node: &Node) -> Block {
                         .filter(|n| n.kind.as_str() == node::TABLE_CELL)
                         .map(|cell_node| cell_node.children.iter().map(node_to_inline).collect())
                         .collect();
-                    TableRow { cells }
+                    TableRow { cells, span: Span::NONE }
                 })
                 .collect();
 
-            Block::Table { rows }
+            Block::Table { rows, span: Span::NONE }
         }
 
-        node::HORIZONTAL_RULE => Block::HorizontalRule,
+        node::HORIZONTAL_RULE => Block::HorizontalRule { span: Span::NONE },
 
         // Fallback for unhandled block types
         _ => {
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Block::Paragraph { inlines }
+            Block::Paragraph { inlines, span: Span::NONE }
         }
     }
 }
@@ -115,22 +115,22 @@ fn node_to_inline(node: &Node) -> Inline {
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            Inline::Text(content)
+            Inline::Text(content, Span::NONE)
         }
 
         node::STRONG => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Bold(children)
+            Inline::Bold(children, Span::NONE)
         }
 
         node::EMPHASIS => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Italic(children)
+            Inline::Italic(children, Span::NONE)
         }
 
         node::STRIKEOUT => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Strikethrough(children)
+            Inline::Strikethrough(children, Span::NONE)
         }
 
         node::CODE => {
@@ -139,7 +139,7 @@ fn node_to_inline(node: &Node) -> Inline {
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            Inline::Code(content)
+            Inline::Code(content, Span::NONE)
         }
 
         node::LINK => {
@@ -162,7 +162,7 @@ fn node_to_inline(node: &Node) -> Inline {
                     })
                     .collect::<String>()
             };
-            Inline::Link { url, label }
+            Inline::Link { url, label, span: Span::NONE }
         }
 
         node::IMAGE => {
@@ -172,17 +172,17 @@ fn node_to_inline(node: &Node) -> Inline {
                 .map(|s| s.to_string())
                 .unwrap_or_default();
             let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
-            Inline::Image { url, alt }
+            Inline::Image { url, alt, span: Span::NONE }
         }
 
         // Fallback for inline nodes: wrap in text or return text representation
         _ => {
             let children: Vec<Inline> = node.children.iter().map(node_to_inline).collect();
             if children.is_empty() {
-                Inline::Text(String::new())
+                Inline::Text(String::new(), Span::NONE)
             } else {
                 // Wrap unhandled inline types
-                Inline::Text(format!("[{}]", node.kind))
+                Inline::Text(format!("[{}]", node.kind), Span::NONE)
             }
         }
     }

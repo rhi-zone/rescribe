@@ -17,7 +17,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let jira_doc = jira_parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (jira_doc, _diags) = jira_parse(input);
 
     let mut children = Vec::new();
     for block in jira_doc.blocks {
@@ -31,15 +31,15 @@ pub fn parse_with_options(
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))
         }
 
-        Block::Heading { level, inlines } => Node::new(node::HEADING)
+        Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .children(inlines_to_nodes(inlines)),
 
-        Block::CodeBlock { content, language } => {
+        Block::CodeBlock { content, language, .. } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -47,19 +47,19 @@ fn block_to_node(block: &Block) -> Node {
             n
         }
 
-        Block::Blockquote { children } => {
+        Block::Blockquote { children, .. } => {
             let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
             Node::new(node::BLOCKQUOTE).children(block_children)
         }
 
-        Block::Panel { children } => {
+        Block::Panel { children, .. } => {
             let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
             Node::new(node::DIV)
                 .prop("jira:type", "panel")
                 .children(block_children)
         }
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let mut list_items = Vec::new();
             for item_blocks in items {
                 let mut item_children = Vec::new();
@@ -73,7 +73,7 @@ fn block_to_node(block: &Block) -> Node {
                 .children(list_items)
         }
 
-        Block::Table { rows } => {
+        Block::Table { rows, .. } => {
             let mut table_rows = Vec::new();
             let mut first_row = true;
             let mut has_header = false;
@@ -110,7 +110,7 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::TABLE).children(table_rows)
         }
 
-        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
@@ -120,27 +120,27 @@ fn inlines_to_nodes(inlines: &[Inline]) -> Vec<Node> {
 
 fn inline_to_node(inline: &Inline) -> Node {
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        Inline::Bold(children) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
+        Inline::Bold(children, _) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
 
-        Inline::Italic(children) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
+        Inline::Italic(children, _) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
 
-        Inline::Underline(children) => {
+        Inline::Underline(children, _) => {
             Node::new(node::UNDERLINE).children(inlines_to_nodes(children))
         }
 
-        Inline::Strikethrough(children) => {
+        Inline::Strikethrough(children, _) => {
             Node::new(node::STRIKEOUT).children(inlines_to_nodes(children))
         }
 
-        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        Inline::Link { url, children } => Node::new(node::LINK)
+        Inline::Link { url, children, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .children(inlines_to_nodes(children)),
 
-        Inline::Image { url, alt } => {
+        Inline::Image { url, alt, .. } => {
             let mut img = Node::new(node::IMAGE).prop(prop::URL, url.clone());
             if let Some(alt_text) = alt {
                 img = img.prop(prop::ALT, alt_text.clone());
@@ -148,11 +148,11 @@ fn inline_to_node(inline: &Inline) -> Node {
             img
         }
 
-        Inline::Superscript(children) => {
+        Inline::Superscript(children, _) => {
             Node::new(node::SUPERSCRIPT).children(inlines_to_nodes(children))
         }
 
-        Inline::Subscript(children) => {
+        Inline::Subscript(children, _) => {
             Node::new(node::SUBSCRIPT).children(inlines_to_nodes(children))
         }
     }

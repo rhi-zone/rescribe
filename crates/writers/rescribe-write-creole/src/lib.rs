@@ -35,11 +35,15 @@ fn convert_node(node: &Node) -> creole::Block {
             children
                 .into_iter()
                 .next()
-                .unwrap_or_else(|| creole::Block::Paragraph { inlines: vec![] })
+                .unwrap_or_else(|| creole::Block::Paragraph {
+                    inlines: vec![],
+                    span: creole::Span::NONE,
+                })
         }
 
         node::PARAGRAPH => creole::Block::Paragraph {
             inlines: convert_inlines(&node.children),
+            span: creole::Span::NONE,
         },
 
         node::HEADING => {
@@ -47,16 +51,18 @@ fn convert_node(node: &Node) -> creole::Block {
             creole::Block::Heading {
                 level,
                 inlines: convert_inlines(&node.children),
+                span: creole::Span::NONE,
             }
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            creole::Block::CodeBlock { content }
+            creole::Block::CodeBlock { content, span: creole::Span::NONE }
         }
 
         node::BLOCKQUOTE => creole::Block::Blockquote {
             children: convert_nodes(&node.children),
+            span: creole::Span::NONE,
         },
 
         node::LIST => {
@@ -67,7 +73,7 @@ fn convert_node(node: &Node) -> creole::Block {
                 .filter(|child| child.kind.as_str() == node::LIST_ITEM)
                 .map(|item| convert_nodes(&item.children))
                 .collect();
-            creole::Block::List { ordered, items }
+            creole::Block::List { ordered, items, span: creole::Span::NONE }
         }
 
         node::TABLE => {
@@ -82,18 +88,21 @@ fn convert_node(node: &Node) -> creole::Block {
                         .map(|cell| creole::TableCell {
                             is_header: cell.kind.as_str() == node::TABLE_HEADER,
                             inlines: convert_inlines(&cell.children),
+                            span: creole::Span::NONE,
                         })
                         .collect(),
+                    span: creole::Span::NONE,
                 })
                 .collect();
-            creole::Block::Table { rows }
+            creole::Block::Table { rows, span: creole::Span::NONE }
         }
 
-        node::HORIZONTAL_RULE => creole::Block::HorizontalRule,
+        node::HORIZONTAL_RULE => creole::Block::HorizontalRule(creole::Span::NONE),
 
         // Handle other nodes by recursing on children
         _ => creole::Block::Paragraph {
             inlines: convert_inlines(&node.children),
+            span: creole::Span::NONE,
         },
     }
 }
@@ -106,31 +115,33 @@ fn convert_inline(node: &Node) -> creole::Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            creole::Inline::Text(content)
+            creole::Inline::Text(content, creole::Span::NONE)
         }
 
-        node::STRONG => creole::Inline::Bold(convert_inlines(&node.children)),
+        node::STRONG => creole::Inline::Bold(convert_inlines(&node.children), creole::Span::NONE),
 
-        node::EMPHASIS => creole::Inline::Italic(convert_inlines(&node.children)),
+        node::EMPHASIS => {
+            creole::Inline::Italic(convert_inlines(&node.children), creole::Span::NONE)
+        }
 
         node::CODE => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            creole::Inline::Code(content)
+            creole::Inline::Code(content, creole::Span::NONE)
         }
 
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = convert_inlines(&node.children);
-            creole::Inline::Link { url, children }
+            creole::Inline::Link { url, children, span: creole::Span::NONE }
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
-            creole::Inline::Image { url, alt }
+            creole::Inline::Image { url, alt, span: creole::Span::NONE }
         }
 
-        node::LINE_BREAK => creole::Inline::LineBreak,
+        node::LINE_BREAK => creole::Inline::LineBreak(creole::Span::NONE),
 
         // Creole doesn't have strikethrough, underline, superscript, subscript
         // Just emit the children instead
@@ -140,7 +151,7 @@ fn convert_inline(node: &Node) -> creole::Inline {
             if children.len() == 1 {
                 children.into_iter().next().unwrap()
             } else {
-                creole::Inline::Text(format!("{:?}", children))
+                creole::Inline::Text(format!("{:?}", children), creole::Span::NONE)
             }
         }
 
@@ -148,11 +159,11 @@ fn convert_inline(node: &Node) -> creole::Inline {
         _ => {
             let children = convert_inlines(&node.children);
             if children.is_empty() {
-                creole::Inline::Text(String::new())
+                creole::Inline::Text(String::new(), creole::Span::NONE)
             } else if children.len() == 1 {
                 children.into_iter().next().unwrap()
             } else {
-                creole::Inline::Text(format!("{:?}", children))
+                creole::Inline::Text(format!("{:?}", children), creole::Span::NONE)
             }
         }
     }

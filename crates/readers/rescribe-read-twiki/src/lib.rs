@@ -16,7 +16,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let twiki_doc = twiki::parse(input).map_err(|e| ParseError::Invalid(e.0))?;
+    let (twiki_doc, _diags) = twiki::parse(input);
     let mut result = Vec::new();
 
     for block in twiki_doc.blocks {
@@ -35,16 +35,16 @@ pub fn parse_with_options(
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))
         }
-        Block::Heading { level, inlines } => Node::new(node::HEADING)
+        Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .children(inlines_to_nodes(inlines)),
-        Block::CodeBlock { content } => {
+        Block::CodeBlock { content, .. } => {
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
         }
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_inlines| {
@@ -56,7 +56,7 @@ fn block_to_node(block: &Block) -> Node {
                 .prop(prop::ORDERED, *ordered)
                 .children(list_items)
         }
-        Block::Table { rows } => {
+        Block::Table { rows, .. } => {
             let row_nodes: Vec<Node> = rows
                 .iter()
                 .map(|row| {
@@ -78,7 +78,7 @@ fn block_to_node(block: &Block) -> Node {
                 .collect();
             Node::new(node::TABLE).children(row_nodes)
         }
-        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
@@ -92,18 +92,18 @@ fn inlines_to_nodes(inlines: &[Inline]) -> Vec<Node> {
 
 fn inline_to_node(inline: &Inline) -> Node {
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
-        Inline::Bold(children) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
-        Inline::Italic(children) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
-        Inline::BoldItalic(children) => Node::new(node::STRONG)
+        Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Bold(children, _) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
+        Inline::Italic(children, _) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
+        Inline::BoldItalic(children, _) => Node::new(node::STRONG)
             .child(Node::new(node::EMPHASIS).children(inlines_to_nodes(children))),
-        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
-        Inline::BoldCode(children) => Node::new(node::STRONG)
+        Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        Inline::BoldCode(children, _) => Node::new(node::STRONG)
             .child(Node::new(node::CODE).prop(prop::CONTENT, children_to_text(children))),
-        Inline::Link { url, label } => Node::new(node::LINK)
+        Inline::Link { url, label, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .child(Node::new(node::TEXT).prop(prop::CONTENT, label.clone())),
-        Inline::LineBreak => Node::new(node::LINE_BREAK),
+        Inline::LineBreak { .. } => Node::new(node::LINE_BREAK),
     }
 }
 
@@ -111,14 +111,14 @@ fn children_to_text(children: &[Inline]) -> String {
     let mut s = String::new();
     for child in children {
         match child {
-            Inline::Text(t) => s.push_str(t),
-            Inline::Bold(ch) | Inline::Italic(ch) | Inline::BoldItalic(ch) => {
+            Inline::Text(t, _) => s.push_str(t),
+            Inline::Bold(ch, _) | Inline::Italic(ch, _) | Inline::BoldItalic(ch, _) => {
                 s.push_str(&children_to_text(ch));
             }
-            Inline::Code(c) => s.push_str(c),
-            Inline::BoldCode(ch) => s.push_str(&children_to_text(ch)),
+            Inline::Code(c, _) => s.push_str(c),
+            Inline::BoldCode(ch, _) => s.push_str(&children_to_text(ch)),
             Inline::Link { label, .. } => s.push_str(label),
-            Inline::LineBreak => s.push('\n'),
+            Inline::LineBreak { .. } => s.push('\n'),
         }
     }
     s

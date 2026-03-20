@@ -17,7 +17,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let doc = fmt_parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (doc, _diagnostics) = fmt_parse(input);
 
     let mut children = Vec::new();
     for block in &doc.blocks {
@@ -31,19 +31,19 @@ pub fn parse_with_options(
 
 fn convert_block(block: &FmtBlock) -> Node {
     match block {
-        FmtBlock::Paragraph { inlines } => {
+        FmtBlock::Paragraph { inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
             Node::new(node::PARAGRAPH).children(children)
         }
 
-        FmtBlock::Heading { level, inlines } => {
+        FmtBlock::Heading { level, inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
             Node::new(node::HEADING)
                 .prop(prop::LEVEL, *level as i64)
                 .children(children)
         }
 
-        FmtBlock::CodeBlock { language, content } => {
+        FmtBlock::CodeBlock { language, content, .. } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -51,12 +51,12 @@ fn convert_block(block: &FmtBlock) -> Node {
             n
         }
 
-        FmtBlock::Blockquote { children } => {
+        FmtBlock::Blockquote { children, .. } => {
             let converted: Vec<Node> = children.iter().map(convert_block).collect();
             Node::new(node::BLOCKQUOTE).children(converted)
         }
 
-        FmtBlock::List { ordered, items } => {
+        FmtBlock::List { ordered, items, .. } => {
             let mut list_items = Vec::new();
             for item_blocks in items {
                 let mut item_children = Vec::new();
@@ -71,39 +71,39 @@ fn convert_block(block: &FmtBlock) -> Node {
                 .children(list_items)
         }
 
-        FmtBlock::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        FmtBlock::HorizontalRule(_) => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
 fn convert_inline(inline: &FmtInline) -> Node {
     match inline {
-        FmtInline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        FmtInline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        FmtInline::Bold(children) => {
+        FmtInline::Bold(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::STRONG).children(converted)
         }
 
-        FmtInline::Italic(children) => {
+        FmtInline::Italic(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::EMPHASIS).children(converted)
         }
 
-        FmtInline::Underline(children) => {
+        FmtInline::Underline(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::UNDERLINE).children(converted)
         }
 
-        FmtInline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        FmtInline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        FmtInline::Link { url, children } => {
+        FmtInline::Link { url, children, .. } => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::LINK)
                 .prop(prop::URL, url.clone())
                 .children(converted)
         }
 
-        FmtInline::Image { url, alt } => {
+        FmtInline::Image { url, alt, .. } => {
             let mut n = Node::new(node::IMAGE).prop(prop::URL, url.clone());
             if let Some(alt_text) = alt {
                 n = n.prop(prop::ALT, alt_text.clone());
@@ -111,8 +111,8 @@ fn convert_inline(inline: &FmtInline) -> Node {
             n
         }
 
-        FmtInline::LineBreak => Node::new(node::LINE_BREAK),
-        FmtInline::SoftBreak => Node::new(node::SOFT_BREAK),
+        FmtInline::LineBreak(_) => Node::new(node::LINE_BREAK),
+        FmtInline::SoftBreak(_) => Node::new(node::SOFT_BREAK),
     }
 }
 

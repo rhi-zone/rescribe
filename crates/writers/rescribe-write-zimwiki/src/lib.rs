@@ -4,7 +4,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use zimwiki::{Block, Inline, ListItem, TableRow, ZimwikiDoc, build as build_zimwiki};
+use zimwiki::{Block, Inline, ListItem, Span, TableRow, ZimwikiDoc, build as build_zimwiki};
 
 /// Emit a document as ZimWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -24,7 +24,7 @@ pub fn emit_with_options(
         }
     }
 
-    let zimwiki_doc = ZimwikiDoc { blocks };
+    let zimwiki_doc = ZimwikiDoc { blocks, span: zimwiki::Span::NONE };
     let output = build_zimwiki(&zimwiki_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
@@ -44,22 +44,22 @@ fn convert_node(node: &Node) -> Option<Block> {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
             let inlines: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Block::Heading { level, inlines })
+            Some(Block::Heading { level, inlines, span: Span::NONE })
         }
 
         node::PARAGRAPH => {
             let inlines: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Block::Paragraph { inlines })
+            Some(Block::Paragraph { inlines, span: Span::NONE })
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Some(Block::CodeBlock { content })
+            Some(Block::CodeBlock { content, span: Span::NONE })
         }
 
         node::BLOCKQUOTE => {
             let children: Vec<Block> = node.children.iter().filter_map(convert_node).collect();
-            Some(Block::Blockquote { children })
+            Some(Block::Blockquote { children, span: Span::NONE })
         }
 
         node::LIST => {
@@ -71,10 +71,10 @@ fn convert_node(node: &Node) -> Option<Block> {
                 .map(|n| {
                     let children: Vec<Block> = n.children.iter().filter_map(convert_node).collect();
                     let checked = n.props.get_bool("checked");
-                    ListItem { checked, children }
+                    ListItem { checked, children, span: Span::NONE }
                 })
                 .collect();
-            Some(Block::List { ordered, items })
+            Some(Block::List { ordered, items, span: Span::NONE })
         }
 
         node::TABLE => {
@@ -88,13 +88,13 @@ fn convert_node(node: &Node) -> Option<Block> {
                         .iter()
                         .map(|cell| cell.children.iter().filter_map(convert_inline).collect())
                         .collect();
-                    TableRow { cells }
+                    TableRow { cells, span: Span::NONE }
                 })
                 .collect();
-            Some(Block::Table { rows })
+            Some(Block::Table { rows, span: Span::NONE })
         }
 
-        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule { span: Span::NONE }),
 
         node::DIV | node::SPAN | node::FIGURE => {
             for child in &node.children {
@@ -113,58 +113,58 @@ fn convert_inline(node: &Node) -> Option<Inline> {
     match node.kind.as_str() {
         node::TEXT => {
             let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Some(Inline::Text(s))
+            Some(Inline::Text(s, Span::NONE))
         }
 
         node::STRONG => {
             let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Inline::Bold(children))
+            Some(Inline::Bold(children, Span::NONE))
         }
 
         node::EMPHASIS => {
             let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Inline::Italic(children))
+            Some(Inline::Italic(children, Span::NONE))
         }
 
         node::UNDERLINE => {
             let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Inline::Underline(children))
+            Some(Inline::Underline(children, Span::NONE))
         }
 
         node::STRIKEOUT => {
             let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Inline::Strikethrough(children))
+            Some(Inline::Strikethrough(children, Span::NONE))
         }
 
         node::SUBSCRIPT => {
             let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Inline::Subscript(children))
+            Some(Inline::Subscript(children, Span::NONE))
         }
 
         node::SUPERSCRIPT => {
             let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Inline::Superscript(children))
+            Some(Inline::Superscript(children, Span::NONE))
         }
 
         node::CODE => {
             let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Some(Inline::Code(s))
+            Some(Inline::Code(s, Span::NONE))
         }
 
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Inline::Link { url, children })
+            Some(Inline::Link { url, children, span: Span::NONE })
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
-            Some(Inline::Image { url })
+            Some(Inline::Image { url, span: Span::NONE })
         }
 
-        node::LINE_BREAK => Some(Inline::LineBreak),
+        node::LINE_BREAK => Some(Inline::LineBreak { span: Span::NONE }),
 
-        node::SOFT_BREAK => Some(Inline::SoftBreak),
+        node::SOFT_BREAK => Some(Inline::SoftBreak { span: Span::NONE }),
 
         _ => None,
     }

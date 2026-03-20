@@ -4,7 +4,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use xwiki::{self, Block, Inline};
+use xwiki::{self, Block, Inline, Span};
 
 /// Emit a document to XWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -17,7 +17,7 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let blocks: Vec<Block> = doc.content.children.iter().map(node_to_block).collect();
-    let xwiki_doc = xwiki::XwikiDoc { blocks };
+    let xwiki_doc = xwiki::XwikiDoc { blocks, span: Span::NONE };
     let output = xwiki::build(&xwiki_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
@@ -29,17 +29,19 @@ fn node_to_block(node: &Node) -> Block {
             Block::Heading {
                 level: level.min(6),
                 inlines: nodes_to_inlines(&node.children),
+                span: Span::NONE,
             }
         }
 
         node::PARAGRAPH => Block::Paragraph {
             inlines: nodes_to_inlines(&node.children),
+            span: Span::NONE,
         },
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            Block::CodeBlock { content, language }
+            Block::CodeBlock { content, language, span: Span::NONE }
         }
 
         node::TABLE => {
@@ -56,13 +58,14 @@ fn node_to_block(node: &Node) -> Block {
                             xwiki::TableCell {
                                 is_header,
                                 inlines: nodes_to_inlines(&cell.children),
+                                span: Span::NONE,
                             }
                         })
                         .collect();
-                    xwiki::TableRow { cells }
+                    xwiki::TableRow { cells, span: Span::NONE }
                 })
                 .collect();
-            Block::Table { rows }
+            Block::Table { rows, span: Span::NONE }
         }
 
         node::LIST => {
@@ -73,10 +76,10 @@ fn node_to_block(node: &Node) -> Block {
                 .filter(|child| child.kind.as_str() == node::LIST_ITEM)
                 .map(|item| item.children.iter().map(node_to_block).collect())
                 .collect();
-            Block::List { ordered, items }
+            Block::List { ordered, items, span: Span::NONE }
         }
 
-        node::HORIZONTAL_RULE => Block::HorizontalRule,
+        node::HORIZONTAL_RULE => Block::HorizontalRule { span: Span::NONE },
 
         _ => {
             // For unhandled node kinds, recursively process children
@@ -86,7 +89,7 @@ fn node_to_block(node: &Node) -> Block {
             } else if !blocks.is_empty() {
                 blocks[0].clone()
             } else {
-                Block::Paragraph { inlines: vec![] }
+                Block::Paragraph { inlines: vec![], span: Span::NONE }
             }
         }
     }
@@ -100,20 +103,20 @@ fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Text(content)
+            Inline::Text(content, Span::NONE)
         }
 
-        node::STRONG => Inline::Bold(nodes_to_inlines(&node.children)),
+        node::STRONG => Inline::Bold(nodes_to_inlines(&node.children), Span::NONE),
 
-        node::EMPHASIS => Inline::Italic(nodes_to_inlines(&node.children)),
+        node::EMPHASIS => Inline::Italic(nodes_to_inlines(&node.children), Span::NONE),
 
-        node::UNDERLINE => Inline::Underline(nodes_to_inlines(&node.children)),
+        node::UNDERLINE => Inline::Underline(nodes_to_inlines(&node.children), Span::NONE),
 
-        node::STRIKEOUT => Inline::Strikeout(nodes_to_inlines(&node.children)),
+        node::STRIKEOUT => Inline::Strikeout(nodes_to_inlines(&node.children), Span::NONE),
 
         node::CODE => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Code(content)
+            Inline::Code(content, Span::NONE)
         }
 
         node::LINK => {
@@ -124,25 +127,25 @@ fn node_to_inline(node: &Node) -> Inline {
                 nodes_to_inlines(&node.children)
                     .iter()
                     .map(|i| match i {
-                        Inline::Text(s) => s.clone(),
+                        Inline::Text(s, _) => s.clone(),
                         _ => String::new(),
                     })
                     .collect::<Vec<_>>()
                     .join("")
             };
-            Inline::Link { url, label }
+            Inline::Link { url, label, span: Span::NONE }
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
-            Inline::Image { url }
+            Inline::Image { url, span: Span::NONE }
         }
 
-        node::LINE_BREAK => Inline::LineBreak,
+        node::LINE_BREAK => Inline::LineBreak { span: Span::NONE },
 
-        node::SOFT_BREAK => Inline::SoftBreak,
+        node::SOFT_BREAK => Inline::SoftBreak { span: Span::NONE },
 
-        _ => Inline::Text(String::new()),
+        _ => Inline::Text(String::new(), Span::NONE),
     }
 }
 

@@ -4,7 +4,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use twiki::{self, Block, Inline, TableCell, TableRow, TwikiDoc};
+use twiki::{self, Block, Inline, Span, TableCell, TableRow, TwikiDoc};
 
 /// Emit a document to TWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -23,7 +23,7 @@ pub fn emit_with_options(
         .filter_map(node_to_block)
         .collect();
 
-    let twiki_doc = TwikiDoc { blocks };
+    let twiki_doc = TwikiDoc { blocks, span: Span::NONE };
     let output = twiki::build(&twiki_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
@@ -40,11 +40,13 @@ fn node_to_block(node: &Node) -> Option<Block> {
             Some(Block::Heading {
                 level,
                 inlines: node_children_to_inlines(&node.children),
+                span: Span::NONE,
             })
         }
 
         node::PARAGRAPH => Some(Block::Paragraph {
             inlines: node_children_to_inlines(&node.children),
+            span: Span::NONE,
         }),
 
         node::CODE_BLOCK => {
@@ -53,7 +55,7 @@ fn node_to_block(node: &Node) -> Option<Block> {
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            Some(Block::CodeBlock { content })
+            Some(Block::CodeBlock { content, span: Span::NONE })
         }
 
         node::LIST => {
@@ -70,7 +72,7 @@ fn node_to_block(node: &Node) -> Option<Block> {
                         .unwrap_or_default()
                 })
                 .collect();
-            Some(Block::List { ordered, items })
+            Some(Block::List { ordered, items, span: Span::NONE })
         }
 
         node::TABLE => {
@@ -85,16 +87,16 @@ fn node_to_block(node: &Node) -> Option<Block> {
                         .map(|cell| {
                             let is_header = cell.kind.as_str() == node::TABLE_HEADER;
                             let inlines = node_children_to_inlines(&cell.children);
-                            TableCell { inlines, is_header }
+                            TableCell { inlines, is_header, span: Span::NONE }
                         })
                         .collect();
-                    TableRow { cells }
+                    TableRow { cells, span: Span::NONE }
                 })
                 .collect();
-            Some(Block::Table { rows })
+            Some(Block::Table { rows, span: Span::NONE })
         }
 
-        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule { span: Span::NONE }),
 
         node::DIV | node::SPAN | node::FIGURE => {
             // These are container nodes; flatten their children
@@ -123,27 +125,27 @@ fn node_to_inline(node: &Node) -> Option<Inline> {
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            Some(Inline::Text(content))
+            Some(Inline::Text(content, Span::NONE))
         }
 
         node::STRONG => {
             // Check if child is emphasis (bold italic)
             if node.children.len() == 1 && node.children[0].kind.as_str() == node::EMPHASIS {
                 let children = node_children_to_inlines(&node.children[0].children);
-                Some(Inline::BoldItalic(children))
+                Some(Inline::BoldItalic(children, Span::NONE))
             } else if node.children.len() == 1 && node.children[0].kind.as_str() == node::CODE {
                 // Bold code
                 let children = node_children_to_inlines(&node.children);
-                Some(Inline::BoldCode(children))
+                Some(Inline::BoldCode(children, Span::NONE))
             } else {
                 let children = node_children_to_inlines(&node.children);
-                Some(Inline::Bold(children))
+                Some(Inline::Bold(children, Span::NONE))
             }
         }
 
         node::EMPHASIS => {
             let children = node_children_to_inlines(&node.children);
-            Some(Inline::Italic(children))
+            Some(Inline::Italic(children, Span::NONE))
         }
 
         node::CODE => {
@@ -152,7 +154,7 @@ fn node_to_inline(node: &Node) -> Option<Inline> {
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            Some(Inline::Code(content))
+            Some(Inline::Code(content, Span::NONE))
         }
 
         node::LINK => {
@@ -168,11 +170,11 @@ fn node_to_inline(node: &Node) -> Option<Inline> {
                 .and_then(|c| c.props.get_str(prop::CONTENT))
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| url.clone());
-            Some(Inline::Link { url, label })
+            Some(Inline::Link { url, label, span: Span::NONE })
         }
 
-        node::LINE_BREAK => Some(Inline::LineBreak),
-        node::SOFT_BREAK => Some(Inline::Text(" ".to_string())),
+        node::LINE_BREAK => Some(Inline::LineBreak { span: Span::NONE }),
+        node::SOFT_BREAK => Some(Inline::Text(" ".to_string(), Span::NONE)),
 
         _ => None,
     }

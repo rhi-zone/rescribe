@@ -15,7 +15,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let creole_doc = creole::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (creole_doc, _diagnostics) = creole::parse(input);
     let nodes = convert_blocks(&creole_doc.blocks);
     let root = Node::new(node::DOCUMENT).children(nodes);
     let doc = Document::new().with_content(root);
@@ -28,23 +28,23 @@ fn convert_blocks(blocks: &[creole::Block]) -> Vec<Node> {
 
 fn convert_block(block: &creole::Block) -> Node {
     match block {
-        creole::Block::Paragraph { inlines } => {
+        creole::Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(convert_inlines(inlines))
         }
 
-        creole::Block::Heading { level, inlines } => Node::new(node::HEADING)
+        creole::Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .children(convert_inlines(inlines)),
 
-        creole::Block::CodeBlock { content } => {
+        creole::Block::CodeBlock { content, .. } => {
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
         }
 
-        creole::Block::Blockquote { children } => {
+        creole::Block::Blockquote { children, .. } => {
             Node::new(node::BLOCKQUOTE).children(convert_blocks(children))
         }
 
-        creole::Block::List { ordered, items } => {
+        creole::Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_blocks| {
@@ -57,7 +57,7 @@ fn convert_block(block: &creole::Block) -> Node {
                 .children(list_items)
         }
 
-        creole::Block::Table { rows } => {
+        creole::Block::Table { rows, .. } => {
             let table_rows: Vec<Node> = rows
                 .iter()
                 .map(|row| {
@@ -79,7 +79,7 @@ fn convert_block(block: &creole::Block) -> Node {
             Node::new(node::TABLE).children(table_rows)
         }
 
-        creole::Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        creole::Block::HorizontalRule(_) => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
@@ -89,23 +89,23 @@ fn convert_inlines(inlines: &[creole::Inline]) -> Vec<Node> {
 
 fn convert_inline(inline: &creole::Inline) -> Node {
     match inline {
-        creole::Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        creole::Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        creole::Inline::Bold(children) => {
+        creole::Inline::Bold(children, _) => {
             Node::new(node::STRONG).children(convert_inlines(children))
         }
 
-        creole::Inline::Italic(children) => {
+        creole::Inline::Italic(children, _) => {
             Node::new(node::EMPHASIS).children(convert_inlines(children))
         }
 
-        creole::Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        creole::Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        creole::Inline::Link { url, children } => Node::new(node::LINK)
+        creole::Inline::Link { url, children, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .children(convert_inlines(children)),
 
-        creole::Inline::Image { url, alt } => {
+        creole::Inline::Image { url, alt, .. } => {
             let mut img = Node::new(node::IMAGE).prop(prop::URL, url.clone());
             if let Some(alt_text) = alt {
                 img = img.prop(prop::ALT, alt_text.clone());
@@ -113,7 +113,7 @@ fn convert_inline(inline: &creole::Inline) -> Node {
             img
         }
 
-        creole::Inline::LineBreak => Node::new(node::LINE_BREAK),
+        creole::Inline::LineBreak(_) => Node::new(node::LINE_BREAK),
     }
 }
 

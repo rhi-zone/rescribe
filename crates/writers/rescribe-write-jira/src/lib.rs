@@ -3,7 +3,7 @@
 //! Emits documents as Jira/Confluence wiki markup.
 //! Thin adapter over `jira-fmt` standalone library.
 
-use jira_fmt::{Block, Inline, JiraDoc, build as jira_build};
+use jira_fmt::{Block, Inline, JiraDoc, Span, build as jira_build};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
 
@@ -22,7 +22,7 @@ pub fn emit_with_options(
         blocks.push(node_to_block(child));
     }
 
-    let jira_doc = JiraDoc { blocks };
+    let jira_doc = JiraDoc { blocks, span: Span::NONE };
     let output = jira_build(&jira_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
@@ -31,6 +31,7 @@ fn node_to_block(node: &Node) -> Block {
     match node.kind.as_str() {
         node::PARAGRAPH => Block::Paragraph {
             inlines: nodes_to_inlines(&node.children),
+            span: Span::NONE,
         },
 
         node::HEADING => {
@@ -38,18 +39,19 @@ fn node_to_block(node: &Node) -> Block {
             Block::Heading {
                 level,
                 inlines: nodes_to_inlines(&node.children),
+                span: Span::NONE,
             }
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            Block::CodeBlock { content, language }
+            Block::CodeBlock { content, language, span: Span::NONE }
         }
 
         node::BLOCKQUOTE => {
             let children: Vec<Block> = node.children.iter().map(node_to_block).collect();
-            Block::Blockquote { children }
+            Block::Blockquote { children, span: Span::NONE }
         }
 
         node::DIV => {
@@ -60,10 +62,10 @@ fn node_to_block(node: &Node) -> Block {
                 .unwrap_or(false);
             if is_panel {
                 let children: Vec<Block> = node.children.iter().map(node_to_block).collect();
-                Block::Panel { children }
+                Block::Panel { children, span: Span::NONE }
             } else {
                 let children: Vec<Block> = node.children.iter().map(node_to_block).collect();
-                Block::Blockquote { children }
+                Block::Blockquote { children, span: Span::NONE }
             }
         }
 
@@ -77,7 +79,7 @@ fn node_to_block(node: &Node) -> Block {
                     items.push(item_blocks);
                 }
             }
-            Block::List { ordered, items }
+            Block::List { ordered, items, span: Span::NONE }
         }
 
         node::TABLE => {
@@ -91,13 +93,14 @@ fn node_to_block(node: &Node) -> Block {
                     rows.push(node_to_table_row(child));
                 }
             }
-            Block::Table { rows }
+            Block::Table { rows, span: Span::NONE }
         }
 
-        node::HORIZONTAL_RULE => Block::HorizontalRule,
+        node::HORIZONTAL_RULE => Block::HorizontalRule { span: Span::NONE },
 
         _ => Block::Paragraph {
             inlines: nodes_to_inlines(&node.children),
+            span: Span::NONE,
         },
     }
 }
@@ -109,9 +112,10 @@ fn node_to_table_row(node: &Node) -> jira_fmt::TableRow {
         cells.push(jira_fmt::TableCell {
             is_header,
             inlines: nodes_to_inlines(&child.children),
+            span: Span::NONE,
         });
     }
-    jira_fmt::TableRow { cells }
+    jira_fmt::TableRow { cells, span: Span::NONE }
 }
 
 fn nodes_to_inlines(nodes: &[Node]) -> Vec<Inline> {
@@ -122,46 +126,46 @@ fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let text = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Text(text)
+            Inline::Text(text, Span::NONE)
         }
 
-        node::STRONG => Inline::Bold(nodes_to_inlines(&node.children)),
+        node::STRONG => Inline::Bold(nodes_to_inlines(&node.children), Span::NONE),
 
-        node::EMPHASIS => Inline::Italic(nodes_to_inlines(&node.children)),
+        node::EMPHASIS => Inline::Italic(nodes_to_inlines(&node.children), Span::NONE),
 
-        node::UNDERLINE => Inline::Underline(nodes_to_inlines(&node.children)),
+        node::UNDERLINE => Inline::Underline(nodes_to_inlines(&node.children), Span::NONE),
 
-        node::STRIKEOUT => Inline::Strikethrough(nodes_to_inlines(&node.children)),
+        node::STRIKEOUT => Inline::Strikethrough(nodes_to_inlines(&node.children), Span::NONE),
 
         node::CODE => {
             let text = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Code(text)
+            Inline::Code(text, Span::NONE)
         }
 
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = nodes_to_inlines(&node.children);
-            Inline::Link { url, children }
+            Inline::Link { url, children, span: Span::NONE }
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
-            Inline::Image { url, alt }
+            Inline::Image { url, alt, span: Span::NONE }
         }
 
-        node::SUPERSCRIPT => Inline::Superscript(nodes_to_inlines(&node.children)),
+        node::SUPERSCRIPT => Inline::Superscript(nodes_to_inlines(&node.children), Span::NONE),
 
-        node::SUBSCRIPT => Inline::Subscript(nodes_to_inlines(&node.children)),
+        node::SUBSCRIPT => Inline::Subscript(nodes_to_inlines(&node.children), Span::NONE),
 
         _ => {
             let children = nodes_to_inlines(&node.children);
             if children.is_empty() {
-                Inline::Text(String::new())
+                Inline::Text(String::new(), Span::NONE)
             } else if children.len() == 1 {
                 children.into_iter().next().unwrap()
             } else {
-                Inline::Text(String::new())
+                Inline::Text(String::new(), Span::NONE)
             }
         }
     }
