@@ -89,6 +89,12 @@ path = "../crates/readers/rescribe-read-textile"
 [dependencies.rescribe-write-textile]
 path = "../crates/writers/rescribe-write-textile"
 
+[dependencies.rescribe-read-muse]
+path = "../crates/readers/rescribe-read-muse"
+
+[dependencies.rescribe-write-muse]
+path = "../crates/writers/rescribe-write-muse"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -273,6 +279,20 @@ bench = false
 [[bin]]
 name = "fuzz_textile_roundtrip"
 path = "fuzz_targets/textile_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_muse_reader"
+path = "fuzz_targets/muse_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_muse_roundtrip"
+path = "fuzz_targets/muse_roundtrip.rs"
 test = false
 doc = false
 bench = false
