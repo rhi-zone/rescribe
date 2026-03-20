@@ -95,6 +95,12 @@ path = "../crates/readers/rescribe-read-muse"
 [dependencies.rescribe-write-muse]
 path = "../crates/writers/rescribe-write-muse"
 
+[dependencies.rescribe-read-t2t]
+path = "../crates/readers/rescribe-read-t2t"
+
+[dependencies.rescribe-write-t2t]
+path = "../crates/writers/rescribe-write-t2t"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -293,6 +299,20 @@ bench = false
 [[bin]]
 name = "fuzz_muse_roundtrip"
 path = "fuzz_targets/muse_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_t2t_reader"
+path = "fuzz_targets/t2t_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_t2t_roundtrip"
+path = "fuzz_targets/t2t_roundtrip.rs"
 test = false
 doc = false
 bench = false
