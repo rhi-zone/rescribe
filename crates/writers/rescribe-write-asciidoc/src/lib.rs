@@ -26,6 +26,7 @@ fn doc_to_ast(doc: &Document) -> AsciiDoc {
     AsciiDoc {
         blocks: nodes_to_blocks(&doc.content.children),
         attributes: Default::default(),
+        span: asciidoc::Span::NONE,
     }
 }
 
@@ -39,6 +40,7 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
 
         node::PARAGRAPH => vec![Block::Paragraph {
             inlines: nodes_to_inlines(&node.children),
+            span: asciidoc::Span::NONE,
         }],
 
         node::HEADING => {
@@ -46,18 +48,24 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
             vec![Block::Heading {
                 level,
                 inlines: nodes_to_inlines(&node.children),
+                span: asciidoc::Span::NONE,
             }]
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            vec![Block::CodeBlock { content, language }]
+            vec![Block::CodeBlock {
+                content,
+                language,
+                span: asciidoc::Span::NONE,
+            }]
         }
 
         node::BLOCKQUOTE => vec![Block::Blockquote {
             children: nodes_to_blocks(&node.children),
             attribution: None,
+            span: asciidoc::Span::NONE,
         }],
 
         node::LIST => {
@@ -68,7 +76,11 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                 .filter(|c| c.kind.as_str() == node::LIST_ITEM)
                 .map(|item| nodes_to_blocks(&item.children))
                 .collect();
-            vec![Block::List { ordered, items }]
+            vec![Block::List {
+                ordered,
+                items,
+                span: asciidoc::Span::NONE,
+            }]
         }
 
         node::LIST_ITEM => nodes_to_blocks(&node.children),
@@ -93,7 +105,10 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                 }
                 i += 1;
             }
-            vec![Block::DefinitionList { items }]
+            vec![Block::DefinitionList {
+                items,
+                span: asciidoc::Span::NONE,
+            }]
         }
 
         node::DEFINITION_TERM | node::DEFINITION_DESC => {
@@ -103,7 +118,10 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
 
         node::TABLE => {
             let rows: Vec<TableRow> = node.children.iter().flat_map(collect_table_rows).collect();
-            vec![Block::Table { rows }]
+            vec![Block::Table {
+                rows,
+                span: asciidoc::Span::NONE,
+            }]
         }
 
         node::FIGURE => {
@@ -112,13 +130,16 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                 if child.kind.as_str() == node::IMAGE {
                     return vec![Block::Figure {
                         image: node_to_image_data(child),
+                        span: asciidoc::Span::NONE,
                     }];
                 }
             }
             nodes_to_blocks(&node.children)
         }
 
-        node::HORIZONTAL_RULE => vec![Block::HorizontalRule],
+        node::HORIZONTAL_RULE => vec![Block::HorizontalRule {
+            span: asciidoc::Span::NONE,
+        }],
 
         node::DIV | node::SPAN => nodes_to_blocks(&node.children),
 
@@ -130,7 +151,11 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                 .to_string();
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             if format == "asciidoc" {
-                vec![Block::RawBlock { format, content }]
+                vec![Block::RawBlock {
+                    format,
+                    content,
+                    span: asciidoc::Span::NONE,
+                }]
             } else {
                 vec![]
             }
@@ -141,7 +166,9 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                 vec![Block::Paragraph {
                     inlines: vec![Inline::MathDisplay {
                         source: source.to_string(),
+                        span: asciidoc::Span::NONE,
                     }],
+                    span: asciidoc::Span::NONE,
                 }]
             } else {
                 vec![]
@@ -157,6 +184,7 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
             vec![Block::Div {
                 class: Some(format!("admonition {}", adm_type.to_lowercase())),
                 children: nodes_to_blocks(&node.children),
+                span: asciidoc::Span::NONE,
             }]
         }
 
@@ -172,6 +200,7 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
         | node::SUBSCRIPT => {
             vec![Block::Paragraph {
                 inlines: nodes_to_inlines(std::slice::from_ref(node)),
+                span: asciidoc::Span::NONE,
             }]
         }
 
@@ -227,24 +256,35 @@ fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Text(s)
+            Inline::Text {
+                text: s,
+                span: asciidoc::Span::NONE,
+            }
         }
 
-        node::EMPHASIS => Inline::Emphasis(nodes_to_inlines(&node.children)),
+        node::EMPHASIS => Inline::Emphasis(nodes_to_inlines(&node.children), asciidoc::Span::NONE),
 
-        node::STRONG => Inline::Strong(nodes_to_inlines(&node.children)),
+        node::STRONG => Inline::Strong(nodes_to_inlines(&node.children), asciidoc::Span::NONE),
 
-        node::STRIKEOUT => Inline::Strikeout(nodes_to_inlines(&node.children)),
+        node::STRIKEOUT => {
+            Inline::Strikeout(nodes_to_inlines(&node.children), asciidoc::Span::NONE)
+        }
 
-        node::UNDERLINE => Inline::Underline(nodes_to_inlines(&node.children)),
+        node::UNDERLINE => {
+            Inline::Underline(nodes_to_inlines(&node.children), asciidoc::Span::NONE)
+        }
 
-        node::SUBSCRIPT => Inline::Subscript(nodes_to_inlines(&node.children)),
+        node::SUBSCRIPT => {
+            Inline::Subscript(nodes_to_inlines(&node.children), asciidoc::Span::NONE)
+        }
 
-        node::SUPERSCRIPT => Inline::Superscript(nodes_to_inlines(&node.children)),
+        node::SUPERSCRIPT => {
+            Inline::Superscript(nodes_to_inlines(&node.children), asciidoc::Span::NONE)
+        }
 
         node::CODE => {
             let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Code(s)
+            Inline::Code(s, asciidoc::Span::NONE)
         }
 
         node::LINK => {
@@ -252,18 +292,26 @@ fn node_to_inline(node: &Node) -> Inline {
             Inline::Link {
                 url,
                 children: nodes_to_inlines(&node.children),
+                span: asciidoc::Span::NONE,
             }
         }
 
-        node::IMAGE => Inline::Image(node_to_image_data(node)),
+        node::IMAGE => Inline::Image(node_to_image_data(node), asciidoc::Span::NONE),
 
-        node::LINE_BREAK => Inline::LineBreak,
+        node::LINE_BREAK => Inline::LineBreak {
+            span: asciidoc::Span::NONE,
+        },
 
-        node::SOFT_BREAK => Inline::SoftBreak,
+        node::SOFT_BREAK => Inline::SoftBreak {
+            span: asciidoc::Span::NONE,
+        },
 
         node::FOOTNOTE_REF => {
             let label = node.props.get_str(prop::LABEL).unwrap_or("").to_string();
-            Inline::FootnoteRef { label }
+            Inline::FootnoteRef {
+                label,
+                span: asciidoc::Span::NONE,
+            }
         }
 
         node::FOOTNOTE_DEF => {
@@ -271,10 +319,13 @@ fn node_to_inline(node: &Node) -> Inline {
             Inline::FootnoteDef {
                 label,
                 children: nodes_to_inlines(&node.children),
+                span: asciidoc::Span::NONE,
             }
         }
 
-        node::SMALL_CAPS => Inline::SmallCaps(nodes_to_inlines(&node.children)),
+        node::SMALL_CAPS => {
+            Inline::SmallCaps(nodes_to_inlines(&node.children), asciidoc::Span::NONE)
+        }
 
         node::QUOTED => {
             let qt = match node.props.get_str(prop::QUOTE_TYPE).unwrap_or("double") {
@@ -284,6 +335,7 @@ fn node_to_inline(node: &Node) -> Inline {
             Inline::Quoted {
                 quote_type: qt,
                 children: nodes_to_inlines(&node.children),
+                span: asciidoc::Span::NONE,
             }
         }
 
@@ -294,7 +346,7 @@ fn node_to_inline(node: &Node) -> Inline {
                 children.into_iter().next().unwrap()
             } else {
                 // Wrap in a highlight to group
-                Inline::Highlight(children)
+                Inline::Highlight(children, asciidoc::Span::NONE)
             }
         }
 
@@ -305,28 +357,41 @@ fn node_to_inline(node: &Node) -> Inline {
                 .unwrap_or("asciidoc")
                 .to_string();
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::RawInline { format, content }
+            Inline::RawInline {
+                format,
+                content,
+                span: asciidoc::Span::NONE,
+            }
         }
 
         "math_inline" => {
             let source = node.props.get_str("math:source").unwrap_or("").to_string();
-            Inline::MathInline { source }
+            Inline::MathInline {
+                source,
+                span: asciidoc::Span::NONE,
+            }
         }
 
         "math_display" => {
             let source = node.props.get_str("math:source").unwrap_or("").to_string();
-            Inline::MathDisplay { source }
+            Inline::MathDisplay {
+                source,
+                span: asciidoc::Span::NONE,
+            }
         }
 
         _ => {
             // Unknown inline: recurse into children, or emit empty text
             let children = nodes_to_inlines(&node.children);
             if children.is_empty() {
-                Inline::Text(String::new())
+                Inline::Text {
+                    text: String::new(),
+                    span: asciidoc::Span::NONE,
+                }
             } else if children.len() == 1 {
                 children.into_iter().next().unwrap()
             } else {
-                Inline::Highlight(children)
+                Inline::Highlight(children, asciidoc::Span::NONE)
             }
         }
     }

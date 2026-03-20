@@ -4,11 +4,11 @@
 //! then maps it to the rescribe document model.
 
 use asciidoc::{AsciiDoc, Block, DefinitionItem, ImageData, Inline, QuoteType, TableRow};
-use rescribe_core::{ConversionResult, Document, ParseError, ParseOptions};
+use rescribe_core::{ConversionResult, Document, ParseOptions};
 use rescribe_std::{Node, node, prop};
 
 /// Parse AsciiDoc text into a rescribe Document.
-pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
+pub fn parse(input: &str) -> Result<ConversionResult<Document>, rescribe_core::ParseError> {
     parse_with_options(input, &ParseOptions::default())
 }
 
@@ -16,8 +16,8 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
 pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
-) -> Result<ConversionResult<Document>, ParseError> {
-    let ast = asciidoc::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+) -> Result<ConversionResult<Document>, rescribe_core::ParseError> {
+    let (ast, _diagnostics) = asciidoc::parse(input);
     let children = doc_to_nodes(&ast);
     let root = Node::new(node::DOCUMENT).children(children);
     let doc = Document::new().with_content(root);
@@ -30,15 +30,17 @@ fn doc_to_nodes(ast: &AsciiDoc) -> Vec<Node> {
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))
         }
 
-        Block::Heading { level, inlines } => Node::new(node::HEADING)
+        Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .children(inlines_to_nodes(inlines)),
 
-        Block::CodeBlock { content, language } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -49,6 +51,7 @@ fn block_to_node(block: &Block) -> Node {
         Block::Blockquote {
             children,
             attribution,
+            ..
         } => {
             let mut n = Node::new(node::BLOCKQUOTE).children(children.iter().map(block_to_node));
             if let Some(attr) = attribution {
@@ -57,7 +60,7 @@ fn block_to_node(block: &Block) -> Node {
             n
         }
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_blocks| {
@@ -69,21 +72,21 @@ fn block_to_node(block: &Block) -> Node {
                 .children(list_items)
         }
 
-        Block::DefinitionList { items } => {
+        Block::DefinitionList { items, .. } => {
             let children: Vec<Node> = items.iter().flat_map(definition_item_to_nodes).collect();
             Node::new(node::DEFINITION_LIST).children(children)
         }
 
-        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
 
-        Block::PageBreak => Node::new(node::DIV).prop("class", "page-break".to_string()),
+        Block::PageBreak { .. } => Node::new(node::DIV).prop("class", "page-break".to_string()),
 
-        Block::Figure { image } => {
+        Block::Figure { image, .. } => {
             let img = image_data_to_node(image);
             Node::new(node::FIGURE).children(vec![img])
         }
 
-        Block::Div { class, children } => {
+        Block::Div { class, children, .. } => {
             let mut n = Node::new(node::DIV).children(children.iter().map(block_to_node));
             if let Some(cls) = class {
                 n = n.prop("class", cls.clone());
@@ -91,11 +94,11 @@ fn block_to_node(block: &Block) -> Node {
             n
         }
 
-        Block::RawBlock { format, content } => Node::new(node::RAW_BLOCK)
+        Block::RawBlock { format, content, .. } => Node::new(node::RAW_BLOCK)
             .prop(prop::CONTENT, content.clone())
             .prop("format", format.clone()),
 
-        Block::Table { rows } => {
+        Block::Table { rows, .. } => {
             let row_nodes: Vec<Node> = rows.iter().map(table_row_to_node).collect();
             Node::new(node::TABLE).children(row_nodes)
         }
@@ -138,43 +141,46 @@ fn inlines_to_nodes(inlines: &[Inline]) -> Vec<Node> {
 
 fn inline_to_node(inline: &Inline) -> Node {
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Text { text: s, .. } => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        Inline::Strong(children) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
+        Inline::Strong(children, _) => {
+            Node::new(node::STRONG).children(inlines_to_nodes(children))
+        }
 
-        Inline::Emphasis(children) => {
+        Inline::Emphasis(children, _) => {
             Node::new(node::EMPHASIS).children(inlines_to_nodes(children))
         }
 
-        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        Inline::Superscript(children) => {
+        Inline::Superscript(children, _) => {
             Node::new(node::SUPERSCRIPT).children(inlines_to_nodes(children))
         }
 
-        Inline::Subscript(children) => {
+        Inline::Subscript(children, _) => {
             Node::new(node::SUBSCRIPT).children(inlines_to_nodes(children))
         }
 
-        Inline::Highlight(children) => Node::new(node::SPAN)
+        Inline::Highlight(children, _) => Node::new(node::SPAN)
             .prop("class", "highlight".to_string())
             .children(inlines_to_nodes(children)),
 
-        Inline::Strikeout(children) => {
+        Inline::Strikeout(children, _) => {
             Node::new(node::STRIKEOUT).children(inlines_to_nodes(children))
         }
 
-        Inline::Underline(children) => {
+        Inline::Underline(children, _) => {
             Node::new(node::UNDERLINE).children(inlines_to_nodes(children))
         }
 
-        Inline::SmallCaps(children) => {
+        Inline::SmallCaps(children, _) => {
             Node::new(node::SMALL_CAPS).children(inlines_to_nodes(children))
         }
 
         Inline::Quoted {
             quote_type,
             children,
+            ..
         } => {
             let qt = match quote_type {
                 QuoteType::Single => "single",
@@ -185,33 +191,37 @@ fn inline_to_node(inline: &Inline) -> Node {
                 .children(inlines_to_nodes(children))
         }
 
-        Inline::Link { url, children } => Node::new(node::LINK)
+        Inline::Link { url, children, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .children(inlines_to_nodes(children)),
 
-        Inline::Image(img) => image_data_to_node(img),
+        Inline::Image(img, _) => image_data_to_node(img),
 
-        Inline::LineBreak => Node::new(node::LINE_BREAK),
+        Inline::LineBreak { .. } => Node::new(node::LINE_BREAK),
 
-        Inline::SoftBreak => Node::new(node::SOFT_BREAK),
+        Inline::SoftBreak { .. } => Node::new(node::SOFT_BREAK),
 
-        Inline::FootnoteRef { label } => {
+        Inline::FootnoteRef { label, .. } => {
             Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, label.clone())
         }
 
-        Inline::FootnoteDef { label, children } => Node::new(node::FOOTNOTE_DEF)
+        Inline::FootnoteDef {
+            label, children, ..
+        } => Node::new(node::FOOTNOTE_DEF)
             .prop(prop::LABEL, label.clone())
             .children(inlines_to_nodes(children)),
 
-        Inline::MathInline { source } => {
+        Inline::MathInline { source, .. } => {
             Node::new("math_inline").prop("math:source", source.clone())
         }
 
-        Inline::MathDisplay { source } => {
+        Inline::MathDisplay { source, .. } => {
             Node::new("math_display").prop("math:source", source.clone())
         }
 
-        Inline::RawInline { format, content } => Node::new(node::RAW_INLINE)
+        Inline::RawInline {
+            format, content, ..
+        } => Node::new(node::RAW_INLINE)
             .prop("format", format.clone())
             .prop(prop::CONTENT, content.clone()),
     }
