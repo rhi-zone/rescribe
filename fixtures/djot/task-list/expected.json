@@ -1,0 +1,9 @@
+{
+  "description": "Task list with checked and unchecked items",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item", "props": { "checked": true } },
+    { "path": "/0/1", "kind": "list_item", "props": { "checked": false } }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Underline inline text via Djot insert syntax {+...+}",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "underline" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "underlined" } }
+  ]
+}

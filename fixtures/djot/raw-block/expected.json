@@ -1,0 +1,7 @@
+{
+  "description": "Raw block with format annotation using Djot backtick-space-equals syntax",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "format": "html", "content": "<p>hello</p>" } }
+  ]
+}

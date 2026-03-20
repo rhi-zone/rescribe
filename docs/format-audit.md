@@ -271,6 +271,21 @@ odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native, beamer/revealjs/s
 - Fixed 4 parser bugs during fuzzing: heading parse for adornment-char titles (underline + overline
   paths), heading build using rendered width + clash detection, numbered-list prefix validation
 
+### Djot reader/writer — 4-Fuzz (2026-03-21)
+- fuzz_djot_roundtrip rewritten to correct direction: arbitrary rescribe doc → emit → parse
+  (old direction was parse(bytes) → emit → parse, which is vacuous if reader drops constructs)
+- New fuzz target uses FuzzBlock/FuzzInline pattern (same as rst_roundtrip, asciidoc_roundtrip)
+- Sanitiser strips Djot markup chars: `*`, `_`, `#`, `-`, `.`, `)`, `+`, `^`, `~`, `[`, `]`,
+  `{`, `}`, `\`, `$`, `<`, `>`, `'`, `"`, `|` — prevents roundtrip failures from inline/block
+  marker reinterpretation. Code inlines excluded: adjacent code spans produce ```` `` ````
+  delimiters that jotdown re-parses as a 2-backtick verbatim span (TODO: fix writer).
+- 1,005,513 fuzz runs clean (300s, 2026-03-21)
+- 14 new fixtures added: superscript, subscript, underline, image, table, footnote,
+  definition-list, raw-block, raw-inline, math, task-list, div, soft-break, line-break, span
+  (total: 29 fixtures)
+- Math syntax: `$\`...\`$` / `$$\`...\`$$` (dollar+backtick, not `$...$`)
+- Raw block syntax: ` ``` =format` (space before `=`, not `{=format}`)
+
 ### AsciiDoc reader — promoted to 4-Fuzz (2026-03-20)
 - lib.rs split into ast.rs / parse.rs / emit.rs; Span/Diagnostic added; parse() now infallible
 - strip_spans() implemented on all AST types for roundtrip comparison

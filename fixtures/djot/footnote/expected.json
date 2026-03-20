@@ -1,0 +1,9 @@
+{
+  "description": "Footnote reference and definition",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "fn" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "fn" } }
+  ]
+}

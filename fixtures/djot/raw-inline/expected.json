@@ -1,0 +1,8 @@
+{
+  "description": "Raw inline with format annotation",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "raw_inline", "props": { "format": "html", "content": "<br>" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Image with alt text and URL",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "https://example.com/image.png", "alt": "alt text" } }
+  ]
+}

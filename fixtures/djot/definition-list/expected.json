@@ -1,0 +1,11 @@
+{
+  "description": "Definition list with terms and descriptions",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "definition_term" },
+    { "path": "/0/1", "kind": "definition_desc" },
+    { "path": "/0/2", "kind": "definition_term" },
+    { "path": "/0/3", "kind": "definition_desc" }
+  ]
+}

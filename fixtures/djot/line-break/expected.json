@@ -1,0 +1,8 @@
+{
+  "description": "Hard line break within a paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "line_break" }
+  ]
+}

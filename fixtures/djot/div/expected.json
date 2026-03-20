@@ -1,0 +1,8 @@
+{
+  "description": "Div block with class attribute",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "html:class": "warning" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

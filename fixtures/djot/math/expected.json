@@ -1,0 +1,8 @@
+{
+  "description": "Inline math node using Djot dollar-backtick syntax",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "math:inline", "props": { "content": "x^2" } }
+  ]
+}
