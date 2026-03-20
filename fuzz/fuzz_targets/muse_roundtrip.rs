@@ -28,7 +28,7 @@ use rescribe_std::{node, prop};
 
 // ── Fuzz-friendly inline types ────────────────────────────────────────────────
 
-#[derive(Arbitrary, Debug)]
+#[derive(Arbitrary, Debug, PartialEq)]
 enum FuzzInlineKind {
     Plain,
     Bold,
@@ -76,6 +76,10 @@ fn sanitise(s: &str) -> Option<String> {
                     | '"'
                     // Backslash (escape)
                     | '\\'
+                    // Dash: 4+ consecutive dashes trigger horizontal rule; strip
+                    // all dashes to avoid spurious `----` runs when multiple text
+                    // nodes are concatenated by extract_text.
+                    | '-'
             )
         })
         .collect();
@@ -148,20 +152,62 @@ fn sanitise(s: &str) -> Option<String> {
     }
 }
 
-fn make_inline(fi: &FuzzInline) -> Option<Node> {
-    let text = sanitise(&fi.text)?;
-    let leaf = Node::new(node::TEXT).prop(prop::CONTENT, text.clone());
-    Some(match fi.kind {
-        FuzzInlineKind::Plain => leaf,
-        FuzzInlineKind::Bold => Node::new(node::STRONG).child(leaf),
-        FuzzInlineKind::Italic => Node::new(node::EMPHASIS).child(leaf),
-        // CODE uses prop::CONTENT directly (not a child TEXT node)
-        FuzzInlineKind::Code => Node::new(node::CODE).prop(prop::CONTENT, text),
-    })
-}
-
 fn make_para_children(inlines: &[FuzzInline]) -> Vec<Node> {
-    inlines.iter().filter_map(make_inline).collect()
+    // Muse italic `*text*` requires the opening `*` to NOT be preceded by an
+    // alphanumeric character. Bold `**text**` has the same constraint.
+    // If the previous emitted plain text ends in alphanumeric, we skip the
+    // following Bold/Italic inline to avoid roundtrip loss.
+    let is_formatted = |kind: &FuzzInlineKind| {
+        matches!(kind, FuzzInlineKind::Bold | FuzzInlineKind::Italic)
+    };
+
+    let mut result: Vec<Node> = Vec::new();
+    let mut last_char: Option<char> = None;
+    let mut last_was_formatted = false;
+
+    for fi in inlines {
+        let Some(text) = sanitise(&fi.text) else {
+            continue;
+        };
+
+        let this_is_formatted = is_formatted(&fi.kind);
+
+        if this_is_formatted {
+            // Opening delimiter must not be preceded by alphanumeric.
+            if last_char.map(|c| c.is_alphanumeric()).unwrap_or(false) {
+                continue;
+            }
+        } else if fi.kind != FuzzInlineKind::Code {
+            // Plain text after formatted: closing delimiter must not be followed
+            // by alphanumeric. If previous was formatted and this starts with
+            // alphanumeric, skip.
+            if last_was_formatted
+                && text.chars().next().map(|c| c.is_alphanumeric()).unwrap_or(false)
+            {
+                continue;
+            }
+        }
+
+        last_char = if this_is_formatted {
+            // After formatted close delimiter, char before next open is the
+            // close delimiter itself (non-alphanumeric) — safe for next opening.
+            None
+        } else {
+            text.chars().last()
+        };
+        last_was_formatted = this_is_formatted;
+
+        let leaf = Node::new(node::TEXT).prop(prop::CONTENT, text.clone());
+        let node = match fi.kind {
+            FuzzInlineKind::Plain => leaf,
+            FuzzInlineKind::Bold => Node::new(node::STRONG).child(leaf),
+            FuzzInlineKind::Italic => Node::new(node::EMPHASIS).child(leaf),
+            // CODE uses prop::CONTENT directly (not a child TEXT node)
+            FuzzInlineKind::Code => Node::new(node::CODE).prop(prop::CONTENT, text),
+        };
+        result.push(node);
+    }
+    result
 }
 
 fn make_list_item(inlines: &[FuzzInline]) -> Option<Node> {

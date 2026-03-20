@@ -84,11 +84,33 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            // Unknown block tag — starts with '<' but isn't a known tag.
+            // Must advance pos to avoid infinite loop (parse_paragraph would
+            // immediately break on '<' without advancing).
+            if line.trim_start().starts_with('<') {
+                self.pos += 1;
+                continue;
+            }
+
             // Heading * to *****
             if let Some(node) = self.try_parse_heading(line) {
                 nodes.push(node);
                 self.pos += 1;
                 continue;
+            }
+
+            // Over-leveled heading (6+ asterisks followed by space): consume
+            // without parsing to avoid an infinite loop (parse_paragraph breaks
+            // immediately on any `* ` prefix without advancing pos).
+            {
+                let star_count = line.chars().take_while(|&c| c == '*').count();
+                if star_count > 5
+                    && line.len() > star_count
+                    && line.chars().nth(star_count) == Some(' ')
+                {
+                    self.pos += 1;
+                    continue;
+                }
             }
 
             // Horizontal rule (4+ dashes)
