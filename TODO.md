@@ -182,7 +182,10 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] **Lists** — `{\*\pn\pnlvlblt}`/`{\*\pn\pnlvlbody}` → `Block::List`
   - [x] **Zero-diagnostic corpus gate** — `#[ignore]` test; 1125 files, 0% diagnostics
   - [x] **Fuzz clean** — reader/roundtrip/writer all clean; 3 bugs fixed (slice panic, OOM, UTF-8 boundary)
-- [ ] `rst-fmt` vertical
+- [ ] `rst-fmt` vertical — **4-Fuzz** (reader 1.3M clean, roundtrip 576K clean, 2026-03-20)
+  - [x] No-panic fuzz gate (`fuzz_rst_reader`)
+  - [x] Roundtrip fuzz target (`fuzz_rst_roundtrip`)
+  - [ ] 100% construct coverage — inline markup, links, code blocks, directives, footnotes, tables
 - [ ] `asciidoc` vertical
 - [ ] `org-fmt` vertical
 - [ ] `djot-fmt` vertical

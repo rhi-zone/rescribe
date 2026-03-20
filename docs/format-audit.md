@@ -42,7 +42,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 |--------|---|---|---------|--------|--------|
 | djot | 4† | 4† | jotdown | production | production |
 | org | 4 | 2 | hand | production | harness |
-| rst | 3 | 2 | hand | fuzz | harness |
+| rst | 4 | 2 | hand | fuzz | harness |
 | asciidoc | 2 | 2 | hand | alt harness† | harness |
 | textile | 3 | 2 | hand | fuzz | harness |
 | muse | 3 | 2 | hand | fuzz | harness |
@@ -200,8 +200,10 @@ These formats have no reader; stage 3 (harness) is not applicable.
 - Reader promoted to 3-Harness (100% coverage, 6 corpus files, 2026-03-01)
 
 ### RST reader — resolved
-- Pandoc harness: 96% word coverage (ref=618, ours=639) — promoted to 3-Harness
-- Next: fuzz target
+- Pandoc harness: 96% word coverage (ref=618, ours=639) — promoted to 3-Harness (2026-03-01)
+- fuzz_rst_reader: 1.3M runs clean; fuzz_rst_roundtrip: 576K runs clean — promoted to 4-Fuzz (2026-03-20)
+- Fixed 4 parser bugs during fuzzing: heading parse for adornment-char titles (underline + overline
+  paths), heading build using rendered width + clash detection, numbered-list prefix validation
 
 ### AsciiDoc reader — low-medium risk
 - 1,290 lines, handwritten
