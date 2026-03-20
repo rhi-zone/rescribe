@@ -6,30 +6,62 @@ What a good standalone format crate looks like. All verticals follow this shape.
 
 ## API layers
 
-Two layers, one built on the other:
+### Reader
+
+Three variants, each a superset of the previous in implementation complexity:
 
 ```rust
-// High-level: owned AST — what most users want
-pub fn parse(input: &str) -> (Ast, Vec<Diagnostic>);
+// 1. AST — full tree in memory. Convenient for small/medium files.
+//    Can borrow from input (zero-copy text runs where escaping allows).
+//    Supports arbitrary lookahead and forward-reference resolution in one pass.
+pub fn parse(input: &[u8]) -> (Ast, Vec<Diagnostic>);
 
-// Low-level: chunk-driven streaming — O(1) memory, no full-AST allocation
-// Caller feeds chunks; parser emits events incrementally.
-// Target API (lol-html style):
-pub struct Parser { /* O(nesting depth) working state */ }
+// 2. Streaming — iterator over events, no full AST allocated.
+//    Still requires full input in memory; gains: no AST heap cost,
+//    output can start flowing before parse completes.
+//    Can still borrow slices from input (no chunk-boundary buffering needed).
+pub fn events(input: &[u8]) -> impl Iterator<Item = Event> + '_;
+
+// 3. Batch — chunk-driven, O(working state) memory.
+//    Input arrives in arbitrarily-sized chunks; handles files too large to
+//    load into memory. Cannot borrow from input (spans cross chunk boundaries).
+//    This is the target for large-file and batch-over-corpus use cases.
+pub struct Parser { /* O(nesting depth) state */ }
 impl Parser {
     pub fn new() -> Self;
-    pub fn feed(&mut self, chunk: &[u8]) -> Result<(), Error>;
-    pub fn finish(self) -> Result<(), Error>;
-    // events delivered via handler/callback or an output iterator
+    pub fn feed(&mut self, chunk: &[u8]);   // events delivered via callback/sink
+    pub fn finish(self);
 }
 ```
 
-`events(input: &[u8]) -> impl Iterator<Item = Event>` over a full buffer is a
-valid MVP to get the types and event shapes right. The chunk-driven API comes
-later — but it's the target, not an afterthought. Without it the library is
-useless for large-file processing and batch pipelines over large corpora.
+Variants 2 and 3 are distinct because streaming (full input in memory) can
+optimise in ways batch cannot: borrowed slices into the input, single-pass
+forward-reference resolution, unbounded lookahead.
 
-The rescribe adapter uses whichever layer is more convenient. Both are public.
+`events()` is a valid starting point to get event shapes right. The chunk-driven
+`Parser` is the target — without it the library is useless for GB-scale corpora.
+
+### Writer
+
+Two variants:
+
+```rust
+// 1. Builder — construct output AST, then serialise all at once.
+//    Simple; requires buffering the full output before any bytes are emitted.
+pub fn emit(ast: &Ast) -> Vec<u8>;
+
+// 2. Streaming — emit bytes immediately as nodes are fed, no intermediate buffer.
+//    The caller controls pacing; there is no "chunk" concept on the input side
+//    because the caller already owns the node stream.
+pub struct Writer { /* format state machine */ }
+impl Writer {
+    pub fn new(sink: impl Write) -> Self;
+    pub fn write_node(&mut self, node: &Node);
+    pub fn finish(self);
+}
+```
+
+The rescribe adapter uses whichever layer is most convenient. All variants are public.
 
 ---
 

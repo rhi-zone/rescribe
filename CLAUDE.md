@@ -164,7 +164,11 @@ the ignored arm that carries semantic content is a gap. Document them in TODO.md
 Each standalone format crate (`crates/formats/{name}/`) must satisfy all of:
 - `Ast` type with `Span` on every node
 - `parse(input) -> (Ast, Vec<Diagnostic>)` — infallible
-- Streaming pull parser — chunk-driven, O(1) memory relative to input size, no full-AST allocation required. The target is lol-html-style: caller feeds chunks, parser emits events incrementally. `events(input: &[u8])` over a full buffer is a valid MVP to get the types right, but the real target takes chunks. This is what makes the library useful for batch conversion over large corpora.
+- **Reader — AST**: `parse(input: &[u8]) -> (Ast, Vec<Diagnostic>)` — full tree, infallible
+- **Reader — streaming**: `events(input: &[u8]) -> impl Iterator<Item = Event>` — no full AST; full input still in memory; can borrow slices, supports lookahead
+- **Reader — batch**: chunk-driven `Parser` (feed/finish) — O(working state) memory; handles files too large to load; cannot borrow across chunk boundaries. Target for GB-scale corpora.
+- **Writer — builder**: `emit(ast: &Ast) -> Vec<u8>` — buffer then serialise
+- **Writer — streaming**: `Writer { write_node, finish }` — emits bytes immediately, no intermediate buffer; caller controls pacing
 - `emit(ast) -> String` — round-trip guarantee
 - No-panic fuzz gate: arbitrary bytes must not panic — run until clean
 - Round-trip fuzz: `parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast` — run until clean
