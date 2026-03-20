@@ -113,6 +113,12 @@ path = "../crates/readers/rescribe-read-fountain"
 [dependencies.rescribe-write-fountain]
 path = "../crates/writers/rescribe-write-fountain"
 
+[dependencies.rescribe-read-bbcode]
+path = "../crates/readers/rescribe-read-bbcode"
+
+[dependencies.rescribe-write-bbcode]
+path = "../crates/writers/rescribe-write-bbcode"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -353,6 +359,20 @@ bench = false
 [[bin]]
 name = "fuzz_fountain_roundtrip"
 path = "fuzz_targets/fountain_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_bbcode_reader"
+path = "fuzz_targets/bbcode_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_bbcode_roundtrip"
+path = "fuzz_targets/bbcode_roundtrip.rs"
 test = false
 doc = false
 bench = false

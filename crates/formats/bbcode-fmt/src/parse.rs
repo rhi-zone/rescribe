@@ -61,7 +61,9 @@ pub fn parse(input: &str) -> (BbcodeDoc, Vec<Diagnostic>) {
                 span: Span::NONE,
             });
         }
-        i = end;
+        // Always advance at least one line to avoid infinite loop when
+        // collect_paragraph returns end == i (e.g. unrecognised block-like tag).
+        i = end.max(i + 1);
     }
 
     (
@@ -80,8 +82,14 @@ fn collect_paragraph<'a>(lines: &[&'a str], start: usize) -> (Vec<&'a str>, usiz
     while i < lines.len() {
         let line = lines[i];
         let lower = line.trim().to_lowercase();
+        // Break on lines that the main loop handles as block starters.
+        // Use the same exact prefixes as the main loop to avoid mismatch:
+        // - "[code]" (with closing bracket — partial "[code" alone is not a block)
+        // - "[quote" (with or without "=", so prefix match is correct)
+        // - "[list" (with or without "=1]/[list=a]", prefix match is correct)
+        // - "[table]" (exact)
         if line.trim().is_empty()
-            || lower.starts_with("[code")
+            || lower.starts_with("[code]")
             || lower.starts_with("[quote")
             || lower.starts_with("[list")
             || lower.starts_with("[table]")
@@ -397,18 +405,24 @@ fn parse_bbcode_tag(chars: &[char], start: usize) -> Option<(String, String, usi
     }
     i += 1; // Skip ]
 
-    // Find closing tag
-    let close_tag = format!("[/{}]", tag.split('=').next().unwrap_or(&tag));
-    let close_lower = close_tag.to_lowercase();
+    // Build closing tag chars (lowercase) for comparison without allocating per iteration.
+    // e.g. for tag "b" → close_chars = ['[', '/', 'b', ']']
+    let tag_base = tag.split('=').next().unwrap_or(&tag).to_lowercase();
+    let close_lower: Vec<char> = format!("[/{}]", tag_base).chars().collect();
+    let close_len = close_lower.len();
 
     let content_start = i;
 
-    while i < chars.len() {
-        // Check for closing tag
-        let remaining: String = chars[i..].iter().collect();
-        if remaining.to_lowercase().starts_with(&close_lower) {
+    // Scan for the closing tag by comparing slices, not by allocating a String each time.
+    while i + close_len <= chars.len() {
+        // Check if chars[i..i+close_len] matches close_lower (case-insensitive)
+        let matches = chars[i..i + close_len]
+            .iter()
+            .zip(close_lower.iter())
+            .all(|(a, b)| a.to_lowercase().next() == Some(*b));
+        if matches {
             let content: String = chars[content_start..i].iter().collect();
-            return Some((tag, content, i + close_tag.len()));
+            return Some((tag, content, i + close_len));
         }
         i += 1;
     }
