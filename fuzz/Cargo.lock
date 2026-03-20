@@ -578,9 +578,9 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
 name = "ooxml-codegen"
-version = "0.1.1-alpha.1"
+version = "0.1.1-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d7fe0df992caac18a340309b439dbf0c315e83db7cf7c77f570e7f9d1248417"
+checksum = "57338227e655869296d2ed7dbd417651d49c47ba4df65440fe3644d260251386"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -589,9 +589,9 @@ dependencies = [
 
 [[package]]
 name = "ooxml-dml"
-version = "0.1.1-alpha.1"
+version = "0.1.1-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0688f3b8ab93845e108d76a55cf8e7a8c00c0cbcd13b7888ffd5499e16097bd"
+checksum = "f972d82e2d1718af6229a9832b683fae24e9fab6b4b945c3a8690f26e0531369"
 dependencies = [
  "base64",
  "ooxml-codegen",
@@ -603,9 +603,9 @@ dependencies = [
 
 [[package]]
 name = "ooxml-omml"
-version = "0.1.1-alpha.1"
+version = "0.1.1-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aea1ef39106ea5448b15f42caf39cabc74843a60a441a5847d5beeed6791ceb"
+checksum = "02054afe762876347df021bcddac68a95ac0cac2b0ed5004b078d31a9a6864d6"
 dependencies = [
  "ooxml-xml",
  "quick-xml",
@@ -614,9 +614,9 @@ dependencies = [
 
 [[package]]
 name = "ooxml-opc"
-version = "0.1.1-alpha.1"
+version = "0.1.1-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1912ffeeba1033a47e45dde5856fa27d02cba2dae8b3482c8faa957d08a8025f"
+checksum = "82855a6d45fcadb4a3304e10e6da6bee6e37c8aaaf1b57dae4f464a975253d7e"
 dependencies = [
  "quick-xml",
  "thiserror",
@@ -625,9 +625,9 @@ dependencies = [
 
 [[package]]
 name = "ooxml-pml"
-version = "0.1.1-alpha.1"
+version = "0.1.1-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "801c7c5559ef050ad2fb72d181a055c53cbd213c16d539b1ed12d7a303f56c1d"
+checksum = "1fe75bbb5162c9cca3607fca6e144ceda9fa75806d0964595bab51502ffaeaef"
 dependencies = [
  "base64",
  "ooxml-codegen",
@@ -641,9 +641,9 @@ dependencies = [
 
 [[package]]
 name = "ooxml-sml"
-version = "0.1.1-alpha.1"
+version = "0.1.1-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d5c3a8a1be7c5aa83d5fa46a6fbd9d5b412bc1adf24f6c2e8d9e3dfc9dad904"
+checksum = "443b32d494179c510b57cb6d5e434345ec65d7b4229ad0d3eed2ac0dbe572370"
 dependencies = [
  "base64",
  "ooxml-codegen",
@@ -656,9 +656,9 @@ dependencies = [
 
 [[package]]
 name = "ooxml-wml"
-version = "0.1.1-alpha.1"
+version = "0.1.1-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbd6419299d5ffef99c55728a167c4cce2642e5b8823ec3c8edffe40402fe4dc"
+checksum = "30d265b0c29d16565564670adc1eb642bba0a80c06fa529fcb122ba0ec697c14"
 dependencies = [
  "base64",
  "ooxml-codegen",
@@ -673,9 +673,9 @@ dependencies = [
 
 [[package]]
 name = "ooxml-xml"
-version = "0.1.1-alpha.1"
+version = "0.1.1-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bb5cbdf39e83fc37a9d772f0770996a683818fc4e4c44956db1f20adcdd1b5a"
+checksum = "0e24d3a2a545c3c4d29f35f28eec3a8acce18616d5a401e9e1824290b986a98d"
 dependencies = [
  "quick-xml",
  "serde",

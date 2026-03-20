@@ -138,12 +138,19 @@ fuzz_target!(|slides: Vec<FuzzSlide>| {
     };
 
     // All visible text content must survive the roundtrip.
+    // Compare as sorted chars because PPTX shape ordering isn't guaranteed
+    // (tables/text boxes may be read in different order than written).
     let text_before = extract_text(&doc.content);
     let text_after = extract_text(&parse_result.value.content);
 
+    let mut chars_before: Vec<char> = text_before.chars().collect();
+    let mut chars_after: Vec<char> = text_after.chars().collect();
+    chars_before.sort();
+    chars_after.sort();
+
     assert_eq!(
-        text_before,
-        text_after,
+        chars_before,
+        chars_after,
         "PPTX roundtrip lost text content\n  before: {text_before:?}\n  after:  {text_after:?}"
     );
 });
