@@ -74,6 +74,12 @@ path = "../crates/readers/rescribe-read-rst"
 [dependencies.rescribe-write-rst]
 path = "../crates/writers/rescribe-write-rst"
 
+[dependencies.rescribe-read-asciidoc]
+path = "../crates/readers/rescribe-read-asciidoc"
+
+[dependencies.rescribe-write-asciidoc]
+path = "../crates/writers/rescribe-write-asciidoc"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -223,6 +229,20 @@ bench = false
 [[bin]]
 name = "fuzz_rst_roundtrip"
 path = "fuzz_targets/rst_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_asciidoc_reader"
+path = "fuzz_targets/asciidoc_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_asciidoc_roundtrip"
+path = "fuzz_targets/asciidoc_roundtrip.rs"
 test = false
 doc = false
 bench = false

@@ -47,6 +47,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "asciidoc"
+version = "0.1.0"
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -941,6 +945,7 @@ dependencies = [
  "arbitrary",
  "libfuzzer-sys",
  "rescribe-core",
+ "rescribe-read-asciidoc",
  "rescribe-read-djot",
  "rescribe-read-docx",
  "rescribe-read-html",
@@ -954,6 +959,7 @@ dependencies = [
  "rescribe-read-rtf",
  "rescribe-read-xlsx",
  "rescribe-std",
+ "rescribe-write-asciidoc",
  "rescribe-write-djot",
  "rescribe-write-docx",
  "rescribe-write-html",
@@ -963,6 +969,15 @@ dependencies = [
  "rescribe-write-rtf",
  "rescribe-write-xlsx",
  "rtf-fmt",
+]
+
+[[package]]
+name = "rescribe-read-asciidoc"
+version = "0.1.0"
+dependencies = [
+ "asciidoc",
+ "rescribe-core",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -1083,6 +1098,15 @@ name = "rescribe-std"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
+]
+
+[[package]]
+name = "rescribe-write-asciidoc"
+version = "0.1.0"
+dependencies = [
+ "asciidoc",
+ "rescribe-core",
+ "rescribe-std",
 ]
 
 [[package]]
