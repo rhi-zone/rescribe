@@ -9,8 +9,7 @@ use rescribe_std::{node, prop};
 
 /// Parse man page source into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let man_doc = man_fmt::parse(input)
-        .map_err(|e| ParseError::Invalid(format!("man page parsing error: {}", e)))?;
+    let (man_doc, _diags) = man_fmt::parse(input);
 
     let rescribe_doc = convert_to_document(man_doc);
 
@@ -46,7 +45,7 @@ fn convert_to_document(man: ManDoc) -> Document {
 
 fn convert_block(block: &Block) -> Option<Node> {
     match block {
-        Block::Heading { level, inlines } => {
+        Block::Heading { level, inlines, .. } => {
             let level_int = *level as i64;
             let children = convert_inlines(inlines);
             Some(
@@ -56,16 +55,16 @@ fn convert_block(block: &Block) -> Option<Node> {
             )
         }
 
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             let children = convert_inlines(inlines);
             Some(Node::new(node::PARAGRAPH).children(children))
         }
 
-        Block::CodeBlock { content } => {
+        Block::CodeBlock { content, .. } => {
             Some(Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone()))
         }
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let mut children = Vec::new();
             for item_blocks in items {
                 let mut item_children = Vec::new();
@@ -84,7 +83,7 @@ fn convert_block(block: &Block) -> Option<Node> {
             )
         }
 
-        Block::DefinitionList { items } => {
+        Block::DefinitionList { items, .. } => {
             let mut children = Vec::new();
             for (term_inlines, content_blocks) in items {
                 let term_children = convert_inlines(term_inlines);
@@ -93,7 +92,7 @@ fn convert_block(block: &Block) -> Option<Node> {
 
                 for content_block in content_blocks {
                     let content_children = match content_block {
-                        Block::Paragraph { inlines } => {
+                        Block::Paragraph { inlines, .. } => {
                             vec![Node::new(node::PARAGRAPH).children(convert_inlines(inlines))]
                         }
                         other => {
@@ -112,7 +111,7 @@ fn convert_block(block: &Block) -> Option<Node> {
             Some(Node::new(node::DEFINITION_LIST).children(children))
         }
 
-        Block::HorizontalRule => Some(Node::new(node::HORIZONTAL_RULE)),
+        Block::HorizontalRule { .. } => Some(Node::new(node::HORIZONTAL_RULE)),
     }
 }
 
@@ -128,19 +127,19 @@ fn convert_inlines(inlines: &[Inline]) -> Vec<Node> {
 
 fn convert_inline(inline: &Inline) -> Option<Node> {
     match inline {
-        Inline::Text(text) => Some(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
+        Inline::Text(text, _) => Some(Node::new(node::TEXT).prop(prop::CONTENT, text.clone())),
 
-        Inline::Bold(children) => {
+        Inline::Bold(children, _) => {
             let child_nodes = convert_inlines(children);
             Some(Node::new(node::STRONG).children(child_nodes))
         }
 
-        Inline::Italic(children) => {
+        Inline::Italic(children, _) => {
             let child_nodes = convert_inlines(children);
             Some(Node::new(node::EMPHASIS).children(child_nodes))
         }
 
-        Inline::Link { url, children } => {
+        Inline::Link { url, children, .. } => {
             let child_nodes = convert_inlines(children);
             Some(
                 Node::new(node::LINK)

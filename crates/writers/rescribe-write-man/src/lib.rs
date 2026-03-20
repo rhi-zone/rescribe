@@ -3,7 +3,7 @@
 //! Thin adapter layer around the `man-fmt` crate.
 //! Emits documents as Unix man page format using common macros.
 
-use man_fmt::{Block, Inline, ManDoc};
+use man_fmt::{Block, Inline, ManDoc, Span};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
 
@@ -28,6 +28,7 @@ fn convert_from_document(doc: &Document) -> ManDoc {
         title: doc.metadata.get_str("title").map(|s| s.to_string()),
         section: doc.metadata.get_str("man:section").map(|s| s.to_string()),
         blocks: Vec::new(),
+        span: Span::NONE,
     };
 
     for node in &doc.content.children {
@@ -49,12 +50,19 @@ fn convert_node(node: &Node) -> Option<Block> {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
             let inlines = convert_nodes_to_inlines(&node.children);
-            Some(Block::Heading { level, inlines })
+            Some(Block::Heading {
+                level,
+                inlines,
+                span: Span::NONE,
+            })
         }
 
         node::PARAGRAPH => {
             let inlines = convert_nodes_to_inlines(&node.children);
-            Some(Block::Paragraph { inlines })
+            Some(Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            })
         }
 
         node::CODE_BLOCK => {
@@ -63,7 +71,10 @@ fn convert_node(node: &Node) -> Option<Block> {
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            Some(Block::CodeBlock { content })
+            Some(Block::CodeBlock {
+                content,
+                span: Span::NONE,
+            })
         }
 
         node::BLOCKQUOTE => {
@@ -71,12 +82,21 @@ fn convert_node(node: &Node) -> Option<Block> {
             let mut items = Vec::new();
             let inlines = convert_nodes_to_inlines(&node.children);
             if !inlines.is_empty() {
-                items.push((vec![], vec![Block::Paragraph { inlines }]));
+                items.push((
+                    vec![],
+                    vec![Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    }],
+                ));
             }
             if items.is_empty() {
                 None
             } else {
-                Some(Block::DefinitionList { items })
+                Some(Block::DefinitionList {
+                    items,
+                    span: Span::NONE,
+                })
             }
         }
 
@@ -99,7 +119,11 @@ fn convert_node(node: &Node) -> Option<Block> {
             if items.is_empty() {
                 None
             } else {
-                Some(Block::List { ordered, items })
+                Some(Block::List {
+                    ordered,
+                    items,
+                    span: Span::NONE,
+                })
             }
         }
 
@@ -134,7 +158,10 @@ fn convert_node(node: &Node) -> Option<Block> {
                     }
 
                     if content_blocks.is_empty() {
-                        content_blocks.push(Block::Paragraph { inlines: vec![] });
+                        content_blocks.push(Block::Paragraph {
+                            inlines: vec![],
+                            span: Span::NONE,
+                        });
                     }
                     items.push((term_inlines, content_blocks));
                 } else {
@@ -145,7 +172,10 @@ fn convert_node(node: &Node) -> Option<Block> {
             if items.is_empty() {
                 None
             } else {
-                Some(Block::DefinitionList { items })
+                Some(Block::DefinitionList {
+                    items,
+                    span: Span::NONE,
+                })
             }
         }
 
@@ -154,7 +184,7 @@ fn convert_node(node: &Node) -> Option<Block> {
             None
         }
 
-        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule { span: Span::NONE }),
 
         node::DIV | node::SPAN => {
             // Convert children as a paragraph if there are inlines
@@ -162,7 +192,10 @@ fn convert_node(node: &Node) -> Option<Block> {
             if inlines.is_empty() {
                 None
             } else {
-                Some(Block::Paragraph { inlines })
+                Some(Block::Paragraph {
+                    inlines,
+                    span: Span::NONE,
+                })
             }
         }
 
@@ -171,7 +204,10 @@ fn convert_node(node: &Node) -> Option<Block> {
             if inlines.is_empty() {
                 None
             } else {
-                Some(Block::Paragraph { inlines })
+                Some(Block::Paragraph {
+                    inlines,
+                    span: Span::NONE,
+                })
             }
         }
 
@@ -179,6 +215,7 @@ fn convert_node(node: &Node) -> Option<Block> {
         node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK | node::IMAGE => {
             convert_node_to_inline(node).map(|inline| Block::Paragraph {
                 inlines: vec![inline],
+                span: Span::NONE,
             })
         }
 
@@ -204,17 +241,17 @@ fn convert_node_to_inline(node: &Node) -> Option<Inline> {
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            Some(Inline::Text(content))
+            Some(Inline::Text(content, Span::NONE))
         }
 
         node::STRONG => {
             let children = convert_nodes_to_inlines(&node.children);
-            Some(Inline::Bold(children))
+            Some(Inline::Bold(children, Span::NONE))
         }
 
         node::EMPHASIS => {
             let children = convert_nodes_to_inlines(&node.children);
-            Some(Inline::Italic(children))
+            Some(Inline::Italic(children, Span::NONE))
         }
 
         node::CODE => {
@@ -227,7 +264,7 @@ fn convert_node_to_inline(node: &Node) -> Option<Inline> {
                 let children = convert_nodes_to_inlines(&node.children);
                 let mut text = String::new();
                 for child in children {
-                    if let Inline::Text(s) = child {
+                    if let Inline::Text(s, _) = child {
                         text.push_str(&s);
                     }
                 }
@@ -235,7 +272,10 @@ fn convert_node_to_inline(node: &Node) -> Option<Inline> {
             } else {
                 content
             };
-            Some(Inline::Bold(vec![Inline::Text(text)]))
+            Some(Inline::Bold(
+                vec![Inline::Text(text, Span::NONE)],
+                Span::NONE,
+            ))
         }
 
         node::LINK => {
@@ -245,7 +285,11 @@ fn convert_node_to_inline(node: &Node) -> Option<Inline> {
                 .map(|s| s.to_string())
                 .unwrap_or_default();
             let children = convert_nodes_to_inlines(&node.children);
-            Some(Inline::Link { url, children })
+            Some(Inline::Link {
+                url,
+                children,
+                span: Span::NONE,
+            })
         }
 
         node::IMAGE => {
@@ -260,7 +304,7 @@ fn convert_node_to_inline(node: &Node) -> Option<Inline> {
                 .map(|s| s.to_string())
                 .unwrap_or_default();
             let label = if !alt.is_empty() { alt } else { url };
-            Some(Inline::Text(format!("[Image: {}]", label)))
+            Some(Inline::Text(format!("[Image: {}]", label), Span::NONE))
         }
 
         node::SUBSCRIPT | node::SUPERSCRIPT => {
@@ -275,7 +319,7 @@ fn convert_node_to_inline(node: &Node) -> Option<Inline> {
                     children
                         .iter()
                         .filter_map(|i| {
-                            if let Inline::Text(s) = i {
+                            if let Inline::Text(s, _) = i {
                                 Some(s.clone())
                             } else {
                                 None
@@ -283,13 +327,14 @@ fn convert_node_to_inline(node: &Node) -> Option<Inline> {
                         })
                         .collect::<Vec<_>>()
                         .join(""),
+                    Span::NONE,
                 ))
             }
         }
 
-        node::LINE_BREAK => Some(Inline::Text("\n".to_string())),
+        node::LINE_BREAK => Some(Inline::Text("\n".to_string(), Span::NONE)),
 
-        node::SOFT_BREAK => Some(Inline::Text(" ".to_string())),
+        node::SOFT_BREAK => Some(Inline::Text(" ".to_string(), Span::NONE)),
 
         node::DIV | node::SPAN => {
             // Container, unwrap children

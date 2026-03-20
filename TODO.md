@@ -226,6 +226,16 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Fixed roundtrip italic-boundary loss: word-boundary guard in fuzz target
   - [ ] 100% construct coverage — links, verse/quote blocks, definition lists, hr
   - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
+- [x] `man-fmt` vertical — **4-Fuzz** (2026-03-21)
+  - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
+  - [x] Span on every AST node; Diagnostic type; strip_spans()
+  - [x] parse() infallible → (ManDoc, Vec<Diagnostic>)
+  - [x] No-panic fuzz gate (`fuzz_man_reader`) — 2M runs clean (2026-03-21)
+  - [x] Roundtrip fuzz target (`fuzz_man_roundtrip`) — 855K runs clean (2026-03-21)
+  - Note: lists excluded from roundtrip (`.IP \(bu` / `.IP N.` tags become term text in definition lists; structural limitation of man format)
+  - Note: headings excluded from text comparison (emitted uppercase; .TH always adds "UNTITLED" title)
+  - [ ] 100% construct coverage — tables, images, code inline, footnotes
+  - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
 - [ ] `djot-fmt` vertical
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)

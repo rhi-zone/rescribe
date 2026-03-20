@@ -55,7 +55,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | pod | 2 | 2 | hand | harness (87%) | harness |
 | haddock | 2 | 2 | hand | harness (88%) | harness |
 | ansi | 2 | 2 | hand | – (harness N/A) | fuzz |
-| man | 3 | 2 | hand | fuzz | harness |
+| man | 4 | 2 | hand | coverage | fuzz |
 
 † Pandoc cannot read AsciiDoc (`--from asciidoc` unsupported); consider asciidoctor as alternate oracle.
 
@@ -195,7 +195,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 | pod-fmt | | | | | |
 | haddock-fmt | | | | | |
 | ansi-fmt | | | | | |
-| man-fmt | | | | | |
+| man-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse | fuzz_man_reader (2M runs) fuzz_man_roundtrip (855K runs) | – | – |
 | csv-fmt | | | | | |
 | tsv-fmt | | | | | |
 | ris | | | | | |
