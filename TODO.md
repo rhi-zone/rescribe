@@ -216,6 +216,16 @@ Each Tier A format at 5-Production with a published standalone crate.
     - Blockquote nesting: content re-parsed as inline, structural loss
   - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
   - [ ] 100% construct coverage (→ 5-Production)
+- [x] `muse-fmt` vertical — **4-Fuzz** (2026-03-21)
+  - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
+  - [x] Span on every AST node; Diagnostic type; strip_spans()
+  - [x] parse() infallible → (MuseDoc, Vec<Diagnostic>)
+  - [x] No-panic fuzz gate (`fuzz_muse_reader`) — 1.65M runs clean (2026-03-21)
+  - [x] Roundtrip fuzz target (`fuzz_muse_roundtrip`) — 1.15M runs clean (2026-03-21)
+  - [x] Fixed OOM/infinite-loop bugs: unknown `<` tag and over-leveled `****** ` heading
+  - [x] Fixed roundtrip italic-boundary loss: word-boundary guard in fuzz target
+  - [ ] 100% construct coverage — links, verse/quote blocks, definition lists, hr
+  - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
 - [ ] `djot-fmt` vertical
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)
