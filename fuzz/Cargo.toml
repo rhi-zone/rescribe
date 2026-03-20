@@ -119,6 +119,12 @@ path = "../crates/readers/rescribe-read-bbcode"
 [dependencies.rescribe-write-bbcode]
 path = "../crates/writers/rescribe-write-bbcode"
 
+[dependencies.rescribe-read-markua]
+path = "../crates/readers/rescribe-read-markua"
+
+[dependencies.rescribe-write-markua]
+path = "../crates/writers/rescribe-write-markua"
+
 [dependencies.rescribe-read-ansi]
 path = "../crates/readers/rescribe-read-ansi"
 
@@ -379,6 +385,20 @@ bench = false
 [[bin]]
 name = "fuzz_bbcode_roundtrip"
 path = "fuzz_targets/bbcode_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_markua_reader"
+path = "fuzz_targets/markua_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_markua_roundtrip"
+path = "fuzz_targets/markua_roundtrip.rs"
 test = false
 doc = false
 bench = false

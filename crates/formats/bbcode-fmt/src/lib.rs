@@ -158,3 +158,13 @@ mod tests {
         assert!(output.contains("[/b]"));
     }
 }
+
+#[test]
+fn test_timeout_case() {
+    let input = "[codee:";
+    let start = std::time::Instant::now();
+    let (doc, _) = parse(input);
+    let elapsed = start.elapsed();
+    println!("elapsed: {:?}, blocks: {}", elapsed, doc.blocks.len());
+    assert!(elapsed.as_millis() < 100, "parse took too long: {:?}", elapsed);
+}

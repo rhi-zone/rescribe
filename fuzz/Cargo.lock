@@ -38,6 +38,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ansi-fmt"
+version = "0.1.0"
+
+[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -61,6 +65,10 @@ name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "bbcode-fmt"
+version = "0.1.0"
 
 [[package]]
 name = "bitflags"
@@ -490,6 +498,10 @@ checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
 name = "man-fmt"
+version = "0.1.0"
+
+[[package]]
+name = "markua"
 version = "0.1.0"
 
 [[package]]
@@ -957,7 +969,9 @@ dependencies = [
  "arbitrary",
  "libfuzzer-sys",
  "rescribe-core",
+ "rescribe-read-ansi",
  "rescribe-read-asciidoc",
+ "rescribe-read-bbcode",
  "rescribe-read-djot",
  "rescribe-read-docx",
  "rescribe-read-fountain",
@@ -965,6 +979,7 @@ dependencies = [
  "rescribe-read-latex",
  "rescribe-read-man",
  "rescribe-read-markdown",
+ "rescribe-read-markua",
  "rescribe-read-muse",
  "rescribe-read-org",
  "rescribe-read-pandoc-json",
@@ -976,13 +991,16 @@ dependencies = [
  "rescribe-read-textile",
  "rescribe-read-xlsx",
  "rescribe-std",
+ "rescribe-write-ansi",
  "rescribe-write-asciidoc",
+ "rescribe-write-bbcode",
  "rescribe-write-djot",
  "rescribe-write-docx",
  "rescribe-write-fountain",
  "rescribe-write-html",
  "rescribe-write-man",
  "rescribe-write-markdown",
+ "rescribe-write-markua",
  "rescribe-write-muse",
  "rescribe-write-org",
  "rescribe-write-pptx",
@@ -995,10 +1013,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-read-ansi"
+version = "0.1.0"
+dependencies = [
+ "ansi-fmt",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-read-asciidoc"
 version = "0.1.0"
 dependencies = [
  "asciidoc",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-bbcode"
+version = "0.1.0"
+dependencies = [
+ "bbcode-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1067,6 +1103,15 @@ dependencies = [
  "serde_yaml",
  "tree-sitter",
  "tree-sitter-md",
+]
+
+[[package]]
+name = "rescribe-read-markua"
+version = "0.1.0"
+dependencies = [
+ "markua",
+ "rescribe-core",
+ "rescribe-std",
 ]
 
 [[package]]
@@ -1169,10 +1214,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-write-ansi"
+version = "0.1.0"
+dependencies = [
+ "ansi-fmt",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-write-asciidoc"
 version = "0.1.0"
 dependencies = [
  "asciidoc",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-bbcode"
+version = "0.1.0"
+dependencies = [
+ "bbcode-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1224,6 +1287,15 @@ dependencies = [
 name = "rescribe-write-markdown"
 version = "0.1.0"
 dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-markua"
+version = "0.1.0"
+dependencies = [
+ "markua",
  "rescribe-core",
  "rescribe-std",
 ]

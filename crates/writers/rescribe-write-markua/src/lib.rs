@@ -18,6 +18,7 @@ pub fn emit_with_options(
     let markua_blocks = convert_blocks(&doc.content.children);
     let markua_doc = markua::MarkuaDoc {
         blocks: markua_blocks,
+        span: markua::Span::NONE,
     };
     let output = markua::build(&markua_doc);
 
@@ -39,6 +40,7 @@ fn convert_block(node: &Node) -> markua::Block {
                     .next()
                     .unwrap_or_else(|| markua::Block::Paragraph {
                         inlines: Vec::new(),
+                        span: markua::Span::NONE,
                     })
             }
         }
@@ -48,21 +50,28 @@ fn convert_block(node: &Node) -> markua::Block {
             markua::Block::Heading {
                 level,
                 inlines: convert_inlines(&node.children),
+                span: markua::Span::NONE,
             }
         }
 
         node::PARAGRAPH => markua::Block::Paragraph {
             inlines: convert_inlines(&node.children),
+            span: markua::Span::NONE,
         },
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            markua::Block::CodeBlock { content, language }
+            markua::Block::CodeBlock {
+                content,
+                language,
+                span: markua::Span::NONE,
+            }
         }
 
         node::BLOCKQUOTE => markua::Block::Blockquote {
             children: convert_blocks(&node.children),
+            span: markua::Span::NONE,
         },
 
         node::LIST => {
@@ -78,7 +87,11 @@ fn convert_block(node: &Node) -> markua::Block {
                     }
                 })
                 .collect();
-            markua::Block::List { ordered, items }
+            markua::Block::List {
+                ordered,
+                items,
+                span: markua::Span::NONE,
+            }
         }
 
         node::TABLE => {
@@ -92,13 +105,21 @@ fn convert_block(node: &Node) -> markua::Block {
                         .iter()
                         .map(|cell_node| convert_inlines(&cell_node.children))
                         .collect();
-                    markua::TableRow { cells }
+                    markua::TableRow {
+                        cells,
+                        span: markua::Span::NONE,
+                    }
                 })
                 .collect();
-            markua::Block::Table { rows }
+            markua::Block::Table {
+                rows,
+                span: markua::Span::NONE,
+            }
         }
 
-        node::HORIZONTAL_RULE => markua::Block::HorizontalRule,
+        node::HORIZONTAL_RULE => markua::Block::HorizontalRule {
+            span: markua::Span::NONE,
+        },
 
         node::DIV => {
             if let Some(class) = node.props.get_str("class") {
@@ -117,16 +138,19 @@ fn convert_block(node: &Node) -> markua::Block {
                 markua::Block::SpecialBlock {
                     block_type,
                     inlines,
+                    span: markua::Span::NONE,
                 }
             } else {
                 markua::Block::Paragraph {
                     inlines: convert_inlines(&node.children),
+                    span: markua::Span::NONE,
                 }
             }
         }
 
         _ => markua::Block::Paragraph {
             inlines: convert_inlines(&node.children),
+            span: markua::Span::NONE,
         },
     }
 }
@@ -139,37 +163,49 @@ fn convert_inline(node: &Node) -> markua::Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            markua::Inline::Text(content)
+            markua::Inline::Text(content, markua::Span::NONE)
         }
 
-        node::STRONG => markua::Inline::Strong(convert_inlines(&node.children)),
+        node::STRONG => markua::Inline::Strong(convert_inlines(&node.children), markua::Span::NONE),
 
-        node::EMPHASIS => markua::Inline::Emphasis(convert_inlines(&node.children)),
+        node::EMPHASIS => {
+            markua::Inline::Emphasis(convert_inlines(&node.children), markua::Span::NONE)
+        }
 
-        node::STRIKEOUT => markua::Inline::Strikethrough(convert_inlines(&node.children)),
+        node::STRIKEOUT => {
+            markua::Inline::Strikethrough(convert_inlines(&node.children), markua::Span::NONE)
+        }
 
         node::CODE => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            markua::Inline::Code(content)
+            markua::Inline::Code(content, markua::Span::NONE)
         }
 
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = convert_inlines(&node.children);
-            markua::Inline::Link { url, children }
+            markua::Inline::Link {
+                url,
+                children,
+                span: markua::Span::NONE,
+            }
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let alt = node.props.get_str(prop::ALT).unwrap_or("").to_string();
-            markua::Inline::Image { url, alt }
+            markua::Inline::Image {
+                url,
+                alt,
+                span: markua::Span::NONE,
+            }
         }
 
-        node::LINE_BREAK => markua::Inline::LineBreak,
+        node::LINE_BREAK => markua::Inline::LineBreak(markua::Span::NONE),
 
-        node::SOFT_BREAK => markua::Inline::SoftBreak,
+        node::SOFT_BREAK => markua::Inline::SoftBreak(markua::Span::NONE),
 
-        _ => markua::Inline::Text(String::new()),
+        _ => markua::Inline::Text(String::new(), markua::Span::NONE),
     }
 }
 

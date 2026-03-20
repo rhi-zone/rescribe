@@ -47,7 +47,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | textile | 4 | 2 | hand | fuzz | harness |
 | muse | 4 | 2 | hand | production | harness |
 | t2t | 4 | 2 | hand | fuzz | harness |
-| markua | 2 | 2 | hand | harness | harness |
+| markua | 4 | 2 | hand | fuzz | harness |
 | fountain | 4 | 2 | hand | – (harness N/A) | coverage |
 | typst | 1 | 2 | hand | partial→fixtures | harness |
 | texinfo | 2 | 2 | hand | – (harness N/A) | fuzz |
@@ -178,7 +178,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 |-------|-----|--------|-------|----------|---------|
 | muse-fmt | ✓ | | | | ✓ |
 | t2t | ✓ | | ✓ | | ✓ |
-| markua | | | | | |
+| markua | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_markua_reader (559K runs) fuzz_markua_roundtrip (759K runs) | – | – |
 | fountain-fmt | ✓ | | ✓ | | ✓ |
 | mediawiki-fmt | | | | | |
 | creole | | | | | |
@@ -194,7 +194,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 | bbcode-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_bbcode_reader (1.3M runs) fuzz_bbcode_roundtrip (348K runs) | – | – |
 | pod-fmt | | | | | |
 | haddock-fmt | | | | | |
-| ansi-fmt | | | | | |
+| ansi-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_ansi_reader + fuzz_ansi_roundtrip | – | – |
 | man-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse | fuzz_man_reader (2M runs) fuzz_man_roundtrip (855K runs) | – | – |
 | csv-fmt | | | | | |
 | tsv-fmt | | | | | |
