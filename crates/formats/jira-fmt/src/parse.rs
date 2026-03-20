@@ -24,8 +24,13 @@ impl<'a> Parser<'a> {
         let mut blocks = Vec::new();
 
         while self.pos < self.lines.len() {
+            let prev_pos = self.pos;
             if let Some(block) = self.parse_block()? {
                 blocks.push(block);
+            }
+            // Safety: prevent infinite loop when parse_block consumed nothing.
+            if self.pos == prev_pos {
+                self.pos += 1;
             }
         }
 

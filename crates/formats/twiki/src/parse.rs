@@ -169,6 +169,11 @@ fn parse_table(lines: &[&str], start: usize) -> (Block, usize) {
             break;
         }
 
+        // A valid table row needs at least "||" (2 chars).
+        if line.len() < 2 {
+            break;
+        }
+
         let inner = &line[1..line.len() - 1];
         let cells: Vec<TableCell> = inner
             .split('|')

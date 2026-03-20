@@ -104,7 +104,8 @@ fn parse_code_block(lines: &[&str], start: usize) -> (Block, usize) {
 
     // Extract language if present: {CODE(lang=python)}
     let lang = if let Some(paren_start) = first_line.find('(') {
-        if let Some(paren_end) = first_line.find(')') {
+        if let Some(rel_end) = first_line[paren_start + 1..].find(')') {
+            let paren_end = paren_start + 1 + rel_end;
             let params = &first_line[paren_start + 1..paren_end];
             params
                 .split(',')

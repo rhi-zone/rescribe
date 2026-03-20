@@ -66,8 +66,12 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            // Paragraph
+            // Paragraph (or unrecognised line — always advance pos to prevent infinite loop).
+            let prev_pos = self.pos;
             nodes.push(self.parse_paragraph());
+            if self.pos == prev_pos {
+                self.pos += 1;
+            }
         }
 
         nodes

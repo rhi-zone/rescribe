@@ -97,6 +97,11 @@ impl<'a> Parser<'a> {
             return None;
         }
 
+        // Guard: ensure there's content between the leading and trailing = signs.
+        if eq_count + trailing >= trimmed.len() {
+            return None;
+        }
+
         // Extract content
         let content = &trimmed[eq_count..trimmed.len() - trailing].trim();
         if content.is_empty() {
