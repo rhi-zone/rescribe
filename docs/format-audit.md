@@ -140,6 +140,25 @@ These formats have no reader; stage 3 (harness) is not applicable.
 
 ---
 
+## Standalone format crate API coverage
+
+Applies only to formats with a `crates/formats/{name}/` crate.
+Features: `ast` = `parse()`, `stream` = `events()` iterator, `batch` = chunk-driven `Parser`,
+`w-stream` = closure/visitor writer, `w-build` = `emit(ast)` builder wrapper.
+All should ship as Cargo features, all on by default. See `docs/format-library-design.md`.
+
+| Crate | ast | stream | batch | w-stream | w-build |
+|-------|-----|--------|-------|----------|---------|
+| rtf-fmt | ✓ | ✓ (MVP) | – | – | ✓ |
+| rst-fmt | ✓ | – | – | ✓ (MVP) | – |
+| asciidoc | ✓ | – | – | ✓ (MVP) | – |
+| org-fmt | – | – | – | – | – |
+| djot-fmt | – | – | – | – | – |
+
+`✓ (MVP)` = implemented but as full-input iterator / simple builder, not yet chunk-driven or fully streaming.
+
+---
+
 ## Risk areas
 
 ### RTF — production (2026-03-02)

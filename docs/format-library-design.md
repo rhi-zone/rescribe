@@ -181,10 +181,26 @@ This is the primary reason to build a proper standalone library rather than
 an internal rescribe adapter: covering every major use case so the ecosystem
 doesn't stay fragmented.
 
-Feature flags should be reserved for *optional dependencies* (e.g. `serde` for
-`Serialize`/`Deserialize` on AST types), not for behavioral toggles like
-"skip layout props". Behavioral options belong in a `ParseOptions` struct passed
-to `parse_with_options()`.
+**Feature gating philosophy.**
+Each API variant ships as a Cargo feature, all enabled by default:
+
+```toml
+[features]
+default = ["ast", "streaming", "batch", "writer-streaming", "writer-builder", "serde"]
+ast = []
+streaming = ["ast"]        # events() requires Event types from ast
+batch = []                 # chunk-driven Parser; independent of ast
+writer-streaming = []      # closure/visitor writer
+writer-builder = ["ast", "writer-streaming"]  # emit(ast) wraps writer-streaming
+serde = ["dep:serde"]
+```
+
+Feature gating is not about binary size or compile time — it is about **contract
+scoping**. A consumer who specifies `default-features = false, features = ["ast"]`
+is explicitly signing up for only the AST API and cannot accidentally couple to
+the streaming or batch APIs. `default-features = false` is a statement of intent,
+not an optimization. All features on by default means no consumer has to think
+about this unless they choose to.
 
 ---
 

@@ -162,18 +162,28 @@ the ignored arm that carries semantic content is a gap. Document them in TODO.md
 ## Vertical completion checklist
 
 Each standalone format crate (`crates/formats/{name}/`) must satisfy all of:
-- `Ast` type with `Span` on every node
-- `parse(input) -> (Ast, Vec<Diagnostic>)` — infallible
-- **Reader — AST**: `parse(input: &[u8]) -> (Ast, Vec<Diagnostic>)` — full tree, infallible
-- **Reader — streaming**: `events(input: &[u8]) -> impl Iterator<Item = Event>` — no full AST; full input still in memory; can borrow slices, supports lookahead
-- **Reader — batch**: chunk-driven `Parser` (feed/finish) — O(working state) memory; handles files too large to load; cannot borrow across chunk boundaries. Target for GB-scale corpora.
-- **Writer — builder**: `emit(ast: &Ast) -> Vec<u8>` — buffer then serialise
-- **Writer — streaming**: `Writer { write_event, finish }` — emits bytes immediately as events are fed; no full input tree required, no intermediate buffer; caller controls pacing
-- `emit(ast) -> String` — round-trip guarantee
-- No-panic fuzz gate: arbitrary bytes must not panic — run until clean
+
+**Reader:**
+- **AST** (`feature = "ast"`, default on): `parse(input: &[u8]) -> (Ast, Vec<Diagnostic>)` — full tree, infallible, Span on every node
+- **Streaming** (`feature = "streaming"`, default on): `events(input: &[u8]) -> impl Iterator<Item = Event>` — no full AST; full input in memory; can borrow slices, supports lookahead
+- **Batch** (`feature = "batch"`, default on): chunk-driven `Parser` (feed/finish) — O(working state) memory; handles files too large to load; cannot borrow across chunk boundaries
+
+**Writer:**
+- **Streaming** (`feature = "writer-streaming"`, default on): closure/visitor API — emits bytes as closures execute, no full tree required, well-formedness enforced by types
+- **Builder** (`feature = "writer-builder"`, default on): `emit(ast: &Ast) -> Vec<u8>` — trivial wrapper over the streaming writer that walks the AST; ~20 lines
+
+**Feature gating philosophy:** all features are on by default. Feature gating is not about
+binary size or compile time — it's about **contract scoping**. A consumer who enables only
+`features = ["ast"]` is explicitly signing up for that API and cannot accidentally couple
+to the streaming or batch APIs. `default-features = false` is a statement of intent.
+
+**Fuzz:**
+- No-panic gate: arbitrary bytes must not panic — run until clean
 - Round-trip fuzz: `parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast` — run until clean
-- Thin rescribe adapter ≤300 lines each side
-- Rescribe fixture suite at 3-Harness
+
+**Rescribe integration:**
+- Thin adapter ≤300 lines each side
+- Fixture suite at 3-Harness
 - Rescribe-level round-trip fuzz: arbitrary rescribe `Document` → emit → parse → assert equal
 - **100% construct coverage** — no silently-dropped semantic constructs; see above
 
