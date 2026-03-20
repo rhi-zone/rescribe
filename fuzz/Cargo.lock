@@ -957,6 +957,7 @@ dependencies = [
  "rescribe-read-pptx",
  "rescribe-read-rst",
  "rescribe-read-rtf",
+ "rescribe-read-textile",
  "rescribe-read-xlsx",
  "rescribe-std",
  "rescribe-write-asciidoc",
@@ -968,6 +969,7 @@ dependencies = [
  "rescribe-write-pptx",
  "rescribe-write-rst",
  "rescribe-write-rtf",
+ "rescribe-write-textile",
  "rescribe-write-xlsx",
  "rtf-fmt",
 ]
@@ -1086,6 +1088,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-read-textile"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "textile-fmt",
+]
+
+[[package]]
 name = "rescribe-read-xlsx"
 version = "0.1.0"
 dependencies = [
@@ -1177,6 +1188,15 @@ dependencies = [
  "rescribe-core",
  "rescribe-std",
  "rtf-fmt",
+]
+
+[[package]]
+name = "rescribe-write-textile"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "textile-fmt",
 ]
 
 [[package]]
@@ -1385,6 +1405,10 @@ dependencies = [
  "mac",
  "utf-8",
 ]
+
+[[package]]
+name = "textile-fmt"
+version = "0.1.0"
 
 [[package]]
 name = "thiserror"

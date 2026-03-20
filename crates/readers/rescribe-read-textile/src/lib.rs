@@ -16,7 +16,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let doc = parse_textile(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (doc, _diags) = parse_textile(input);
 
     let blocks = doc.blocks.iter().map(convert_block).collect::<Vec<_>>();
 
@@ -28,29 +28,29 @@ pub fn parse_with_options(
 
 fn convert_block(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
             Node::new(node::PARAGRAPH).children(children)
         }
 
-        Block::Heading { level, inlines } => {
+        Block::Heading { level, inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
             Node::new(node::HEADING)
                 .prop(prop::LEVEL, *level as i64)
                 .children(children)
         }
 
-        Block::CodeBlock { content } => {
+        Block::CodeBlock { content, .. } => {
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
         }
 
-        Block::Blockquote { inlines } => {
+        Block::Blockquote { inlines, .. } => {
             let para_children: Vec<Node> = inlines.iter().map(convert_inline).collect();
             let para = Node::new(node::PARAGRAPH).children(para_children);
             Node::new(node::BLOCKQUOTE).children(vec![para])
         }
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_blocks| {
@@ -63,7 +63,7 @@ fn convert_block(block: &Block) -> Node {
                 .children(list_items)
         }
 
-        Block::Table { rows } => {
+        Block::Table { rows, .. } => {
             let table_rows: Vec<Node> = rows
                 .iter()
                 .map(|row| {
@@ -91,38 +91,38 @@ fn convert_block(block: &Block) -> Node {
 
 fn convert_inline(inline: &Inline) -> Node {
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        Inline::Bold(children) => {
+        Inline::Bold(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::STRONG).children(converted)
         }
 
-        Inline::Italic(children) => {
+        Inline::Italic(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::EMPHASIS).children(converted)
         }
 
-        Inline::Underline(children) => {
+        Inline::Underline(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::UNDERLINE).children(converted)
         }
 
-        Inline::Strikethrough(children) => {
+        Inline::Strikethrough(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::STRIKEOUT).children(converted)
         }
 
-        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        Inline::Link { url, children } => {
+        Inline::Link { url, children, .. } => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::LINK)
                 .prop(prop::URL, url.clone())
                 .children(converted)
         }
 
-        Inline::Image { url, alt } => {
+        Inline::Image { url, alt, .. } => {
             let mut node = Node::new(node::IMAGE).prop(prop::URL, url.clone());
             if let Some(alt_text) = alt {
                 node = node.prop(prop::ALT, alt_text.clone());
@@ -130,12 +130,12 @@ fn convert_inline(inline: &Inline) -> Node {
             node
         }
 
-        Inline::Superscript(children) => {
+        Inline::Superscript(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::SUPERSCRIPT).children(converted)
         }
 
-        Inline::Subscript(children) => {
+        Inline::Subscript(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::SUBSCRIPT).children(converted)
         }

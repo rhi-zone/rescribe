@@ -192,6 +192,15 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [ ] Known roundtrip gap: [role]#text# syntax (Strikeout/Underline/SmallCaps emitted as
         [line-through]#text# / [underline]#text# / [small-caps]#text# but parsed back as Highlight)
   - [ ] 100% construct coverage — tables, footnotes, math, admonitions, attributes
+- [ ] `textile-fmt` vertical — **4-Fuzz** (2026-03-21)
+  - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
+  - [x] Span on every AST node; Diagnostic type; strip_spans()
+  - [x] parse() infallible → (TextileDoc, Vec<Diagnostic>)
+  - [x] build() renamed to emit() returning String
+  - [x] No-panic fuzz gate (`fuzz_textile_reader`) — 1.6M runs clean (2026-03-21)
+  - [x] Roundtrip fuzz target (`fuzz_textile_roundtrip`) — 923K runs clean (2026-03-21)
+  - [x] Fixed infinite loop bug: list parser on `** ` (level-2 marker with no level-1 items)
+  - [ ] 100% construct coverage — tables, images, blockquotes, superscript, subscript
 - [ ] `org-fmt` vertical — **4-Fuzz** (2026-03-21); needs 5-Production
   - [x] Split lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span/Diagnostic types; infallible parse() → (OrgDoc, Vec<Diagnostic>)

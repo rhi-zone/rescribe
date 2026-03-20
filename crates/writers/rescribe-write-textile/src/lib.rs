@@ -4,7 +4,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use textile_fmt::{Block, Inline, TableCell, TableRow, TextileDoc, build as build_textile};
+use textile_fmt::{Block, Inline, Span, TableCell, TableRow, TextileDoc, emit as emit_textile};
 
 /// Emit a document as Textile markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -23,23 +23,34 @@ pub fn emit_with_options(
         .map(convert_node_to_block)
         .collect::<Vec<_>>();
 
-    let textile_doc = TextileDoc { blocks };
-    let output = build_textile(&textile_doc);
+    let textile_doc = TextileDoc {
+        blocks,
+        span: Span::dummy(),
+    };
+    let output = emit_textile(&textile_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
 }
 
 fn convert_node_to_block(node: &Node) -> Block {
+    let dummy = Span::dummy();
     match node.kind.as_str() {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(6) as u8;
             let inlines = node.children.iter().map(convert_node_to_inline).collect();
-            Block::Heading { level, inlines }
+            Block::Heading {
+                level,
+                inlines,
+                span: dummy,
+            }
         }
 
         node::PARAGRAPH => {
             let inlines = node.children.iter().map(convert_node_to_inline).collect();
-            Block::Paragraph { inlines }
+            Block::Paragraph {
+                inlines,
+                span: dummy,
+            }
         }
 
         node::CODE_BLOCK => {
@@ -48,7 +59,10 @@ fn convert_node_to_block(node: &Node) -> Block {
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            Block::CodeBlock { content }
+            Block::CodeBlock {
+                content,
+                span: dummy,
+            }
         }
 
         node::BLOCKQUOTE => {
@@ -59,7 +73,10 @@ fn convert_node_to_block(node: &Node) -> Block {
                     inlines.extend(child.children.iter().map(convert_node_to_inline));
                 }
             }
-            Block::Blockquote { inlines }
+            Block::Blockquote {
+                inlines,
+                span: dummy,
+            }
         }
 
         node::LIST => {
@@ -70,7 +87,11 @@ fn convert_node_to_block(node: &Node) -> Block {
                 .filter(|child| child.kind.as_str() == node::LIST_ITEM)
                 .map(|item| item.children.iter().map(convert_node_to_block).collect())
                 .collect();
-            Block::List { ordered, items }
+            Block::List {
+                ordered,
+                items,
+                span: dummy,
+            }
         }
 
         node::TABLE => {
@@ -86,38 +107,55 @@ fn convert_node_to_block(node: &Node) -> Block {
                             let is_header = cell.kind.as_str() == node::TABLE_HEADER;
                             let inlines: Vec<Inline> =
                                 cell.children.iter().map(convert_node_to_inline).collect();
-                            TableCell { is_header, inlines }
+                            TableCell {
+                                is_header,
+                                inlines,
+                                span: dummy,
+                            }
                         })
                         .collect();
-                    TableRow { cells }
+                    TableRow { cells, span: dummy }
                 })
                 .collect();
-            Block::Table { rows }
+            Block::Table { rows, span: dummy }
         }
 
         node::DOCUMENT => {
             let inlines: Vec<Inline> = node.children.iter().map(convert_node_to_inline).collect();
-            Block::Paragraph { inlines }
+            Block::Paragraph {
+                inlines,
+                span: dummy,
+            }
         }
 
         node::DIV | node::SPAN => {
             let inlines: Vec<Inline> = node.children.iter().map(convert_node_to_inline).collect();
-            Block::Paragraph { inlines }
+            Block::Paragraph {
+                inlines,
+                span: dummy,
+            }
         }
 
         node::FIGURE => {
             let inlines: Vec<Inline> = node.children.iter().map(convert_node_to_inline).collect();
-            Block::Paragraph { inlines }
+            Block::Paragraph {
+                inlines,
+                span: dummy,
+            }
         }
 
         _ => {
             let inlines: Vec<Inline> = node.children.iter().map(convert_node_to_inline).collect();
-            Block::Paragraph { inlines }
+            Block::Paragraph {
+                inlines,
+                span: dummy,
+            }
         }
     }
 }
 
 fn convert_node_to_inline(node: &Node) -> Inline {
+    let dummy = Span::dummy();
     match node.kind.as_str() {
         node::TEXT => {
             let s = node
@@ -125,27 +163,27 @@ fn convert_node_to_inline(node: &Node) -> Inline {
                 .get_str(prop::CONTENT)
                 .map(|x| x.to_string())
                 .unwrap_or_default();
-            Inline::Text(s)
+            Inline::Text(s, dummy)
         }
 
         node::STRONG => {
             let children = node.children.iter().map(convert_node_to_inline).collect();
-            Inline::Bold(children)
+            Inline::Bold(children, dummy)
         }
 
         node::EMPHASIS => {
             let children = node.children.iter().map(convert_node_to_inline).collect();
-            Inline::Italic(children)
+            Inline::Italic(children, dummy)
         }
 
         node::UNDERLINE => {
             let children = node.children.iter().map(convert_node_to_inline).collect();
-            Inline::Underline(children)
+            Inline::Underline(children, dummy)
         }
 
         node::STRIKEOUT => {
             let children = node.children.iter().map(convert_node_to_inline).collect();
-            Inline::Strikethrough(children)
+            Inline::Strikethrough(children, dummy)
         }
 
         node::CODE => {
@@ -154,7 +192,7 @@ fn convert_node_to_inline(node: &Node) -> Inline {
                 .get_str(prop::CONTENT)
                 .map(|x| x.to_string())
                 .unwrap_or_default();
-            Inline::Code(s)
+            Inline::Code(s, dummy)
         }
 
         node::LINK => {
@@ -164,7 +202,11 @@ fn convert_node_to_inline(node: &Node) -> Inline {
                 .map(|x| x.to_string())
                 .unwrap_or_default();
             let children = node.children.iter().map(convert_node_to_inline).collect();
-            Inline::Link { url, children }
+            Inline::Link {
+                url,
+                children,
+                span: dummy,
+            }
         }
 
         node::IMAGE => {
@@ -174,32 +216,36 @@ fn convert_node_to_inline(node: &Node) -> Inline {
                 .map(|x| x.to_string())
                 .unwrap_or_default();
             let alt = node.props.get_str(prop::ALT).map(|x| x.to_string());
-            Inline::Image { url, alt }
+            Inline::Image {
+                url,
+                alt,
+                span: dummy,
+            }
         }
 
         node::SUPERSCRIPT => {
             let children = node.children.iter().map(convert_node_to_inline).collect();
-            Inline::Superscript(children)
+            Inline::Superscript(children, dummy)
         }
 
         node::SUBSCRIPT => {
             let children = node.children.iter().map(convert_node_to_inline).collect();
-            Inline::Subscript(children)
+            Inline::Subscript(children, dummy)
         }
 
-        node::LINE_BREAK => Inline::Text("\n".to_string()),
+        node::LINE_BREAK => Inline::Text("\n".to_string(), dummy),
 
-        node::SOFT_BREAK => Inline::Text(" ".to_string()),
+        node::SOFT_BREAK => Inline::Text(" ".to_string(), dummy),
 
         _ => {
             let children: Vec<Inline> = node.children.iter().map(convert_node_to_inline).collect();
             if children.is_empty() {
-                Inline::Text(String::new())
+                Inline::Text(String::new(), dummy)
             } else if children.len() == 1 {
                 children.into_iter().next().unwrap()
             } else {
                 // Wrap multiple children as text sequence
-                Inline::Text(String::new())
+                Inline::Text(String::new(), dummy)
             }
         }
     }
