@@ -15,8 +15,8 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let doc = haddock_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
-    let nodes = convert_blocks(&doc.blocks);
+    let (haddock_doc, _diagnostics) = haddock_fmt::parse(input);
+    let nodes = convert_blocks(&haddock_doc.blocks);
 
     let root = Node::new(node::DOCUMENT).children(nodes);
     let doc = Document::new().with_content(root);
@@ -30,19 +30,19 @@ fn convert_blocks(blocks: &[haddock_fmt::Block]) -> Vec<Node> {
 
 fn convert_block(block: &haddock_fmt::Block) -> Node {
     match block {
-        haddock_fmt::Block::Heading { level, inlines } => Node::new(node::HEADING)
+        haddock_fmt::Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .children(convert_inlines(inlines)),
 
-        haddock_fmt::Block::Paragraph { inlines } => {
+        haddock_fmt::Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(convert_inlines(inlines))
         }
 
-        haddock_fmt::Block::CodeBlock { content } => {
+        haddock_fmt::Block::CodeBlock { content, .. } => {
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
         }
 
-        haddock_fmt::Block::UnorderedList { items } => {
+        haddock_fmt::Block::UnorderedList { items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_inlines| {
@@ -56,7 +56,7 @@ fn convert_block(block: &haddock_fmt::Block) -> Node {
                 .children(list_items)
         }
 
-        haddock_fmt::Block::OrderedList { items } => {
+        haddock_fmt::Block::OrderedList { items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_inlines| {
@@ -70,7 +70,7 @@ fn convert_block(block: &haddock_fmt::Block) -> Node {
                 .children(list_items)
         }
 
-        haddock_fmt::Block::DefinitionList { items } => {
+        haddock_fmt::Block::DefinitionList { items, .. } => {
             let mut def_items = Vec::new();
             for (term_inlines, desc_inlines) in items {
                 def_items
@@ -90,19 +90,19 @@ fn convert_inlines(inlines: &[haddock_fmt::Inline]) -> Vec<Node> {
 
 fn convert_inline(inline: &haddock_fmt::Inline) -> Node {
     match inline {
-        haddock_fmt::Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        haddock_fmt::Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        haddock_fmt::Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        haddock_fmt::Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        haddock_fmt::Inline::Strong(children) => {
+        haddock_fmt::Inline::Strong(children, _) => {
             Node::new(node::STRONG).children(convert_inlines(children))
         }
 
-        haddock_fmt::Inline::Emphasis(children) => {
+        haddock_fmt::Inline::Emphasis(children, _) => {
             Node::new(node::EMPHASIS).children(convert_inlines(children))
         }
 
-        haddock_fmt::Inline::Link { url, text } => {
+        haddock_fmt::Inline::Link { url, text, .. } => {
             let text_node = Node::new(node::TEXT).prop(prop::CONTENT, text.clone());
             Node::new(node::LINK)
                 .prop(prop::URL, url.clone())

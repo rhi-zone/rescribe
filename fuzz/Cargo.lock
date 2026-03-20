@@ -339,6 +339,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "haddock-fmt"
+version = "0.1.0"
+
+[[package]]
 name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -810,6 +814,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 
 [[package]]
+name = "pod-fmt"
+version = "0.1.0"
+
+[[package]]
 name = "pom"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -975,6 +983,7 @@ dependencies = [
  "rescribe-read-djot",
  "rescribe-read-docx",
  "rescribe-read-fountain",
+ "rescribe-read-haddock",
  "rescribe-read-html",
  "rescribe-read-latex",
  "rescribe-read-man",
@@ -984,6 +993,7 @@ dependencies = [
  "rescribe-read-org",
  "rescribe-read-pandoc-json",
  "rescribe-read-pdf",
+ "rescribe-read-pod",
  "rescribe-read-pptx",
  "rescribe-read-rst",
  "rescribe-read-rtf",
@@ -997,12 +1007,14 @@ dependencies = [
  "rescribe-write-djot",
  "rescribe-write-docx",
  "rescribe-write-fountain",
+ "rescribe-write-haddock",
  "rescribe-write-html",
  "rescribe-write-man",
  "rescribe-write-markdown",
  "rescribe-write-markua",
  "rescribe-write-muse",
  "rescribe-write-org",
+ "rescribe-write-pod",
  "rescribe-write-pptx",
  "rescribe-write-rst",
  "rescribe-write-rtf",
@@ -1063,6 +1075,15 @@ name = "rescribe-read-fountain"
 version = "0.1.0"
 dependencies = [
  "fountain-fmt",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-haddock"
+version = "0.1.0"
+dependencies = [
+ "haddock-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1147,6 +1168,15 @@ name = "rescribe-read-pdf"
 version = "0.1.0"
 dependencies = [
  "pdf-extract",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-pod"
+version = "0.1.0"
+dependencies = [
+ "pod-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1267,6 +1297,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-write-haddock"
+version = "0.1.0"
+dependencies = [
+ "haddock-fmt",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-write-html"
 version = "0.1.0"
 dependencies = [
@@ -1314,6 +1353,15 @@ name = "rescribe-write-org"
 version = "0.1.0"
 dependencies = [
  "org-fmt",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-pod"
+version = "0.1.0"
+dependencies = [
+ "pod-fmt",
  "rescribe-core",
  "rescribe-std",
 ]

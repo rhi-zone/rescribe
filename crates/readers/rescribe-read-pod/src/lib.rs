@@ -15,7 +15,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let doc = pod_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (doc, _diagnostics) = pod_fmt::parse(input);
 
     let blocks: Vec<Node> = doc.blocks.into_iter().map(convert_block).collect();
     let root = Node::new(node::DOCUMENT).children(blocks);
@@ -26,19 +26,19 @@ pub fn parse_with_options(
 
 fn convert_block(block: pod_fmt::Block) -> Node {
     match block {
-        pod_fmt::Block::Heading { level, inlines } => Node::new(node::HEADING)
+        pod_fmt::Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, level as i64)
             .children(convert_inlines(inlines)),
 
-        pod_fmt::Block::Paragraph { inlines } => {
+        pod_fmt::Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(convert_inlines(inlines))
         }
 
-        pod_fmt::Block::CodeBlock { content } => {
+        pod_fmt::Block::CodeBlock { content, .. } => {
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content)
         }
 
-        pod_fmt::Block::List { ordered, items } => {
+        pod_fmt::Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .into_iter()
                 .map(|item_blocks| {
@@ -60,23 +60,23 @@ fn convert_inlines(inlines: Vec<pod_fmt::Inline>) -> Vec<Node> {
 
 fn convert_inline(inline: pod_fmt::Inline) -> Node {
     match inline {
-        pod_fmt::Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s),
+        pod_fmt::Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s),
 
-        pod_fmt::Inline::Bold(children) => {
+        pod_fmt::Inline::Bold(children, _) => {
             Node::new(node::STRONG).children(convert_inlines(children))
         }
 
-        pod_fmt::Inline::Italic(children) => {
+        pod_fmt::Inline::Italic(children, _) => {
             Node::new(node::EMPHASIS).children(convert_inlines(children))
         }
 
-        pod_fmt::Inline::Underline(children) => {
+        pod_fmt::Inline::Underline(children, _) => {
             Node::new(node::UNDERLINE).children(convert_inlines(children))
         }
 
-        pod_fmt::Inline::Code(content) => Node::new(node::CODE).prop(prop::CONTENT, content),
+        pod_fmt::Inline::Code(content, _) => Node::new(node::CODE).prop(prop::CONTENT, content),
 
-        pod_fmt::Inline::Link { url, label } => {
+        pod_fmt::Inline::Link { url, label, .. } => {
             let text_node = Node::new(node::TEXT).prop(prop::CONTENT, label);
             Node::new(node::LINK)
                 .prop(prop::URL, url)

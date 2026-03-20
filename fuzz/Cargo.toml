@@ -131,6 +131,18 @@ path = "../crates/readers/rescribe-read-ansi"
 [dependencies.rescribe-write-ansi]
 path = "../crates/writers/rescribe-write-ansi"
 
+[dependencies.rescribe-read-pod]
+path = "../crates/readers/rescribe-read-pod"
+
+[dependencies.rescribe-write-pod]
+path = "../crates/writers/rescribe-write-pod"
+
+[dependencies.rescribe-read-haddock]
+path = "../crates/readers/rescribe-read-haddock"
+
+[dependencies.rescribe-write-haddock]
+path = "../crates/writers/rescribe-write-haddock"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -413,6 +425,34 @@ bench = false
 [[bin]]
 name = "fuzz_ansi_roundtrip"
 path = "fuzz_targets/ansi_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_pod_reader"
+path = "fuzz_targets/pod_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_pod_roundtrip"
+path = "fuzz_targets/pod_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_haddock_reader"
+path = "fuzz_targets/haddock_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_haddock_roundtrip"
+path = "fuzz_targets/haddock_roundtrip.rs"
 test = false
 doc = false
 bench = false

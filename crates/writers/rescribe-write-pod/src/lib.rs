@@ -21,7 +21,7 @@ pub fn emit_with_options(
         .iter()
         .map(convert_node_to_block)
         .collect();
-    let pod_doc = pod_fmt::PodDoc { blocks };
+    let pod_doc = pod_fmt::PodDoc { blocks, span: pod_fmt::Span::NONE };
     let output = pod_fmt::build(&pod_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
@@ -32,17 +32,17 @@ fn convert_node_to_block(node: &Node) -> pod_fmt::Block {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1).clamp(1, 6) as u32;
             let inlines = node.children.iter().map(convert_node_to_inline).collect();
-            pod_fmt::Block::Heading { level, inlines }
+            pod_fmt::Block::Heading { level, inlines, span: pod_fmt::Span::NONE }
         }
 
         node::PARAGRAPH => {
             let inlines = node.children.iter().map(convert_node_to_inline).collect();
-            pod_fmt::Block::Paragraph { inlines }
+            pod_fmt::Block::Paragraph { inlines, span: pod_fmt::Span::NONE }
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            pod_fmt::Block::CodeBlock { content }
+            pod_fmt::Block::CodeBlock { content, span: pod_fmt::Span::NONE }
         }
 
         node::LIST => {
@@ -59,13 +59,13 @@ fn convert_node_to_block(node: &Node) -> pod_fmt::Block {
                         .collect()
                 })
                 .collect();
-            pod_fmt::Block::List { ordered, items }
+            pod_fmt::Block::List { ordered, items, span: pod_fmt::Span::NONE }
         }
 
         node::BLOCKQUOTE => {
             // POD doesn't have native blockquote; output as paragraph with children
             let inlines = node.children.iter().map(convert_node_to_inline).collect();
-            pod_fmt::Block::Paragraph { inlines }
+            pod_fmt::Block::Paragraph { inlines, span: pod_fmt::Span::NONE }
         }
 
         node::TABLE => {
@@ -73,25 +73,27 @@ fn convert_node_to_block(node: &Node) -> pod_fmt::Block {
             pod_fmt::Block::Paragraph {
                 inlines: vec![pod_fmt::Inline::Text(
                     "[Table not supported in POD]".to_string(),
+                    pod_fmt::Span::NONE,
                 )],
+                span: pod_fmt::Span::NONE,
             }
         }
 
         // Inline nodes at block level
         node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
             let inlines = vec![convert_node_to_inline(node)];
-            pod_fmt::Block::Paragraph { inlines }
+            pod_fmt::Block::Paragraph { inlines, span: pod_fmt::Span::NONE }
         }
 
         node::DOCUMENT => {
             // Document nodes get skipped; children become blocks
-            pod_fmt::Block::Paragraph { inlines: vec![] }
+            pod_fmt::Block::Paragraph { inlines: vec![], span: pod_fmt::Span::NONE }
         }
 
         _ => {
             // Default: collect text from children
             let inlines = node.children.iter().map(convert_node_to_inline).collect();
-            pod_fmt::Block::Paragraph { inlines }
+            pod_fmt::Block::Paragraph { inlines, span: pod_fmt::Span::NONE }
         }
     }
 }
@@ -100,34 +102,34 @@ fn convert_node_to_inline(node: &Node) -> pod_fmt::Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            pod_fmt::Inline::Text(content)
+            pod_fmt::Inline::Text(content, pod_fmt::Span::NONE)
         }
 
         node::STRONG => {
             let children = node.children.iter().map(convert_node_to_inline).collect();
-            pod_fmt::Inline::Bold(children)
+            pod_fmt::Inline::Bold(children, pod_fmt::Span::NONE)
         }
 
         node::EMPHASIS => {
             let children = node.children.iter().map(convert_node_to_inline).collect();
-            pod_fmt::Inline::Italic(children)
+            pod_fmt::Inline::Italic(children, pod_fmt::Span::NONE)
         }
 
         node::UNDERLINE => {
             let children = node.children.iter().map(convert_node_to_inline).collect();
-            pod_fmt::Inline::Underline(children)
+            pod_fmt::Inline::Underline(children, pod_fmt::Span::NONE)
         }
 
         node::CODE => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            pod_fmt::Inline::Code(content)
+            pod_fmt::Inline::Code(content, pod_fmt::Span::NONE)
         }
 
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let mut label = String::new();
             collect_text(&node.children, &mut label);
-            pod_fmt::Inline::Link { url, label }
+            pod_fmt::Inline::Link { url, label, span: pod_fmt::Span::NONE }
         }
 
         node::STRIKEOUT => {
@@ -135,7 +137,7 @@ fn convert_node_to_inline(node: &Node) -> pod_fmt::Inline {
             let children: Vec<pod_fmt::Inline> =
                 node.children.iter().map(convert_node_to_inline).collect();
             if children.is_empty() {
-                pod_fmt::Inline::Text(String::new())
+                pod_fmt::Inline::Text(String::new(), pod_fmt::Span::NONE)
             } else {
                 children.into_iter().next().unwrap()
             }
@@ -145,23 +147,23 @@ fn convert_node_to_inline(node: &Node) -> pod_fmt::Inline {
             // POD doesn't support sub/superscript; collect text
             let mut text = String::new();
             collect_text(&node.children, &mut text);
-            pod_fmt::Inline::Text(text)
+            pod_fmt::Inline::Text(text, pod_fmt::Span::NONE)
         }
 
-        node::LINE_BREAK => pod_fmt::Inline::Text("\n".to_string()),
+        node::LINE_BREAK => pod_fmt::Inline::Text("\n".to_string(), pod_fmt::Span::NONE),
 
-        node::SOFT_BREAK => pod_fmt::Inline::Text(" ".to_string()),
+        node::SOFT_BREAK => pod_fmt::Inline::Text(" ".to_string(), pod_fmt::Span::NONE),
 
         node::IMAGE => {
             let alt = node.props.get_str(prop::ALT).unwrap_or("").to_string();
-            pod_fmt::Inline::Text(format!("[Image: {}]", alt))
+            pod_fmt::Inline::Text(format!("[Image: {}]", alt), pod_fmt::Span::NONE)
         }
 
         _ => {
             // Default: collect text from children
             let mut text = String::new();
             collect_text(&node.children, &mut text);
-            pod_fmt::Inline::Text(text)
+            pod_fmt::Inline::Text(text, pod_fmt::Span::NONE)
         }
     }
 }

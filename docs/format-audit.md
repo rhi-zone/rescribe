@@ -52,8 +52,8 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | typst | 1 | 2 | hand | partial→fixtures | harness |
 | texinfo | 2 | 2 | hand | – (harness N/A) | fuzz |
 | bbcode | 4 | 2 | hand | – (harness N/A; Pandoc cannot read BBCode) | coverage |
-| pod | 2 | 2 | hand | harness (87%) | harness |
-| haddock | 2 | 2 | hand | harness (88%) | harness |
+| pod | 4 | 2 | hand | fuzz | harness |
+| haddock | 4 | 2 | hand | fuzz | harness |
 | ansi | 4 | 2 | hand | – (harness N/A; production) | coverage |
 | man | 4 | 2 | hand | coverage | fuzz |
 
@@ -192,8 +192,8 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 | typst (TBD) | | | | | |
 | texinfo | | | | | |
 | bbcode-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_bbcode_reader (1.3M runs) fuzz_bbcode_roundtrip (348K runs) | – | – |
-| pod-fmt | | | | | |
-| haddock-fmt | | | | | |
+| pod-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_pod_reader (863K runs) fuzz_pod_roundtrip (375K runs) | – | – |
+| haddock-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_haddock_reader (1.1M runs) fuzz_haddock_roundtrip (415K runs) | – | – |
 | ansi-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_ansi_reader + fuzz_ansi_roundtrip | – | – |
 | man-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse | fuzz_man_reader (2M runs) fuzz_man_roundtrip (855K runs) | – | – |
 | csv-fmt | | | | | |

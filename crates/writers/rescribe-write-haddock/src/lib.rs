@@ -16,7 +16,10 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let blocks = convert_nodes(&doc.content.children);
-    let haddock_doc = haddock_fmt::HaddockDoc { blocks };
+    let haddock_doc = haddock_fmt::HaddockDoc {
+        blocks,
+        span: haddock_fmt::Span::NONE,
+    };
     let output = haddock_fmt::build(&haddock_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
@@ -31,7 +34,10 @@ fn convert_node(node: &Node) -> haddock_fmt::Block {
         node::DOCUMENT => {
             let blocks: Vec<_> = node.children.iter().map(convert_node).collect();
             if blocks.is_empty() {
-                haddock_fmt::Block::Paragraph { inlines: vec![] }
+                haddock_fmt::Block::Paragraph {
+                    inlines: vec![],
+                    span: haddock_fmt::Span::NONE,
+                }
             } else {
                 blocks.into_iter().next().unwrap()
             }
@@ -40,17 +46,27 @@ fn convert_node(node: &Node) -> haddock_fmt::Block {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(6) as u8;
             let inlines = convert_inlines(&node.children);
-            haddock_fmt::Block::Heading { level, inlines }
+            haddock_fmt::Block::Heading {
+                level,
+                inlines,
+                span: haddock_fmt::Span::NONE,
+            }
         }
 
         node::PARAGRAPH => {
             let inlines = convert_inlines(&node.children);
-            haddock_fmt::Block::Paragraph { inlines }
+            haddock_fmt::Block::Paragraph {
+                inlines,
+                span: haddock_fmt::Span::NONE,
+            }
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            haddock_fmt::Block::CodeBlock { content }
+            haddock_fmt::Block::CodeBlock {
+                content,
+                span: haddock_fmt::Span::NONE,
+            }
         }
 
         node::LIST => {
@@ -69,9 +85,15 @@ fn convert_node(node: &Node) -> haddock_fmt::Block {
                 .collect();
 
             if ordered {
-                haddock_fmt::Block::OrderedList { items }
+                haddock_fmt::Block::OrderedList {
+                    items,
+                    span: haddock_fmt::Span::NONE,
+                }
             } else {
-                haddock_fmt::Block::UnorderedList { items }
+                haddock_fmt::Block::UnorderedList {
+                    items,
+                    span: haddock_fmt::Span::NONE,
+                }
             }
         }
 
@@ -105,7 +127,10 @@ fn convert_node(node: &Node) -> haddock_fmt::Block {
                     i += 1;
                 }
             }
-            haddock_fmt::Block::DefinitionList { items }
+            haddock_fmt::Block::DefinitionList {
+                items,
+                span: haddock_fmt::Span::NONE,
+            }
         }
 
         node::DIV | node::SPAN => {
@@ -113,7 +138,10 @@ fn convert_node(node: &Node) -> haddock_fmt::Block {
             if let Some(first) = blocks.first() {
                 first.clone()
             } else {
-                haddock_fmt::Block::Paragraph { inlines: vec![] }
+                haddock_fmt::Block::Paragraph {
+                    inlines: vec![],
+                    span: haddock_fmt::Span::NONE,
+                }
             }
         }
 
@@ -122,7 +150,10 @@ fn convert_node(node: &Node) -> haddock_fmt::Block {
             if let Some(first) = blocks.first() {
                 first.clone()
             } else {
-                haddock_fmt::Block::Paragraph { inlines: vec![] }
+                haddock_fmt::Block::Paragraph {
+                    inlines: vec![],
+                    span: haddock_fmt::Span::NONE,
+                }
             }
         }
 
@@ -131,7 +162,10 @@ fn convert_node(node: &Node) -> haddock_fmt::Block {
             if let Some(first) = blocks.first() {
                 first.clone()
             } else {
-                haddock_fmt::Block::Paragraph { inlines: vec![] }
+                haddock_fmt::Block::Paragraph {
+                    inlines: vec![],
+                    span: haddock_fmt::Span::NONE,
+                }
             }
         }
     }
@@ -145,28 +179,32 @@ fn convert_inline(node: &Node) -> haddock_fmt::Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let text = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            haddock_fmt::Inline::Text(text)
+            haddock_fmt::Inline::Text(text, haddock_fmt::Span::NONE)
         }
 
         node::CODE => {
             let text = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            haddock_fmt::Inline::Code(text)
+            haddock_fmt::Inline::Code(text, haddock_fmt::Span::NONE)
         }
 
         node::STRONG => {
             let children = convert_inlines(&node.children);
-            haddock_fmt::Inline::Strong(children)
+            haddock_fmt::Inline::Strong(children, haddock_fmt::Span::NONE)
         }
 
         node::EMPHASIS => {
             let children = convert_inlines(&node.children);
-            haddock_fmt::Inline::Emphasis(children)
+            haddock_fmt::Inline::Emphasis(children, haddock_fmt::Span::NONE)
         }
 
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let text = extract_text(&node.children);
-            haddock_fmt::Inline::Link { url, text }
+            haddock_fmt::Inline::Link {
+                url,
+                text,
+                span: haddock_fmt::Span::NONE,
+            }
         }
 
         node::IMAGE => {
@@ -174,6 +212,7 @@ fn convert_inline(node: &Node) -> haddock_fmt::Inline {
             haddock_fmt::Inline::Link {
                 url: url.clone(),
                 text: url,
+                span: haddock_fmt::Span::NONE,
             }
         }
 
@@ -182,7 +221,7 @@ fn convert_inline(node: &Node) -> haddock_fmt::Inline {
             if !children.is_empty() {
                 children.into_iter().next().unwrap()
             } else {
-                haddock_fmt::Inline::Text(String::new())
+                haddock_fmt::Inline::Text(String::new(), haddock_fmt::Span::NONE)
             }
         }
     }
