@@ -143,6 +143,54 @@ path = "../crates/readers/rescribe-read-haddock"
 [dependencies.rescribe-write-haddock]
 path = "../crates/writers/rescribe-write-haddock"
 
+[dependencies.rescribe-read-creole]
+path = "../crates/readers/rescribe-read-creole"
+
+[dependencies.rescribe-write-creole]
+path = "../crates/writers/rescribe-write-creole"
+
+[dependencies.rescribe-read-dokuwiki]
+path = "../crates/readers/rescribe-read-dokuwiki"
+
+[dependencies.rescribe-write-dokuwiki]
+path = "../crates/writers/rescribe-write-dokuwiki"
+
+[dependencies.rescribe-read-vimwiki]
+path = "../crates/readers/rescribe-read-vimwiki"
+
+[dependencies.rescribe-write-vimwiki]
+path = "../crates/writers/rescribe-write-vimwiki"
+
+[dependencies.rescribe-read-zimwiki]
+path = "../crates/readers/rescribe-read-zimwiki"
+
+[dependencies.rescribe-write-zimwiki]
+path = "../crates/writers/rescribe-write-zimwiki"
+
+[dependencies.rescribe-read-xwiki]
+path = "../crates/readers/rescribe-read-xwiki"
+
+[dependencies.rescribe-write-xwiki]
+path = "../crates/writers/rescribe-write-xwiki"
+
+[dependencies.rescribe-read-twiki]
+path = "../crates/readers/rescribe-read-twiki"
+
+[dependencies.rescribe-write-twiki]
+path = "../crates/writers/rescribe-write-twiki"
+
+[dependencies.rescribe-read-tikiwiki]
+path = "../crates/readers/rescribe-read-tikiwiki"
+
+[dependencies.rescribe-write-tikiwiki]
+path = "../crates/writers/rescribe-write-tikiwiki"
+
+[dependencies.rescribe-read-jira]
+path = "../crates/readers/rescribe-read-jira"
+
+[dependencies.rescribe-write-jira]
+path = "../crates/writers/rescribe-write-jira"
+
 [dependencies.rescribe-core]
 path = "../crates/rescribe-core"
 
@@ -453,6 +501,118 @@ bench = false
 [[bin]]
 name = "fuzz_haddock_roundtrip"
 path = "fuzz_targets/haddock_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_creole_reader"
+path = "fuzz_targets/creole_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_creole_roundtrip"
+path = "fuzz_targets/creole_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_dokuwiki_reader"
+path = "fuzz_targets/dokuwiki_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_dokuwiki_roundtrip"
+path = "fuzz_targets/dokuwiki_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_vimwiki_reader"
+path = "fuzz_targets/vimwiki_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_vimwiki_roundtrip"
+path = "fuzz_targets/vimwiki_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_zimwiki_reader"
+path = "fuzz_targets/zimwiki_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_zimwiki_roundtrip"
+path = "fuzz_targets/zimwiki_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_xwiki_reader"
+path = "fuzz_targets/xwiki_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_xwiki_roundtrip"
+path = "fuzz_targets/xwiki_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_twiki_reader"
+path = "fuzz_targets/twiki_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_twiki_roundtrip"
+path = "fuzz_targets/twiki_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_tikiwiki_reader"
+path = "fuzz_targets/tikiwiki_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_tikiwiki_roundtrip"
+path = "fuzz_targets/tikiwiki_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_jira_reader"
+path = "fuzz_targets/jira_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_jira_roundtrip"
+path = "fuzz_targets/jira_roundtrip.rs"
 test = false
 doc = false
 bench = false

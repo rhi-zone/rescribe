@@ -198,6 +198,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "creole"
+version = "0.1.0"
+
+[[package]]
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -243,6 +247,10 @@ dependencies = [
  "crypto-common",
  "subtle",
 ]
+
+[[package]]
+name = "dokuwiki"
+version = "0.1.0"
 
 [[package]]
 name = "ecb"
@@ -392,6 +400,10 @@ name = "itoa"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
+
+[[package]]
+name = "jira-fmt"
+version = "0.1.0"
 
 [[package]]
 name = "jobserver"
@@ -980,11 +992,14 @@ dependencies = [
  "rescribe-read-ansi",
  "rescribe-read-asciidoc",
  "rescribe-read-bbcode",
+ "rescribe-read-creole",
  "rescribe-read-djot",
  "rescribe-read-docx",
+ "rescribe-read-dokuwiki",
  "rescribe-read-fountain",
  "rescribe-read-haddock",
  "rescribe-read-html",
+ "rescribe-read-jira",
  "rescribe-read-latex",
  "rescribe-read-man",
  "rescribe-read-markdown",
@@ -999,16 +1014,24 @@ dependencies = [
  "rescribe-read-rtf",
  "rescribe-read-t2t",
  "rescribe-read-textile",
+ "rescribe-read-tikiwiki",
+ "rescribe-read-twiki",
+ "rescribe-read-vimwiki",
  "rescribe-read-xlsx",
+ "rescribe-read-xwiki",
+ "rescribe-read-zimwiki",
  "rescribe-std",
  "rescribe-write-ansi",
  "rescribe-write-asciidoc",
  "rescribe-write-bbcode",
+ "rescribe-write-creole",
  "rescribe-write-djot",
  "rescribe-write-docx",
+ "rescribe-write-dokuwiki",
  "rescribe-write-fountain",
  "rescribe-write-haddock",
  "rescribe-write-html",
+ "rescribe-write-jira",
  "rescribe-write-man",
  "rescribe-write-markdown",
  "rescribe-write-markua",
@@ -1020,7 +1043,12 @@ dependencies = [
  "rescribe-write-rtf",
  "rescribe-write-t2t",
  "rescribe-write-textile",
+ "rescribe-write-tikiwiki",
+ "rescribe-write-twiki",
+ "rescribe-write-vimwiki",
  "rescribe-write-xlsx",
+ "rescribe-write-xwiki",
+ "rescribe-write-zimwiki",
  "rtf-fmt",
 ]
 
@@ -1052,6 +1080,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-read-creole"
+version = "0.1.0"
+dependencies = [
+ "creole",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-read-djot"
 version = "0.1.0"
 dependencies = [
@@ -1066,6 +1103,15 @@ version = "0.1.0"
 dependencies = [
  "ooxml-wml",
  "quick-xml",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-dokuwiki"
+version = "0.1.0"
+dependencies = [
+ "dokuwiki",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1094,6 +1140,15 @@ version = "0.1.0"
 dependencies = [
  "html5ever",
  "markup5ever_rcdom",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-jira"
+version = "0.1.0"
+dependencies = [
+ "jira-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1228,12 +1283,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-read-tikiwiki"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "tikiwiki",
+]
+
+[[package]]
+name = "rescribe-read-twiki"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "twiki",
+]
+
+[[package]]
+name = "rescribe-read-vimwiki"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "vimwiki-fmt",
+]
+
+[[package]]
 name = "rescribe-read-xlsx"
 version = "0.1.0"
 dependencies = [
  "ooxml-sml",
  "rescribe-core",
  "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-xwiki"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "xwiki",
+]
+
+[[package]]
+name = "rescribe-read-zimwiki"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "zimwiki",
 ]
 
 [[package]]
@@ -1271,6 +1371,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-write-creole"
+version = "0.1.0"
+dependencies = [
+ "creole",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-write-djot"
 version = "0.1.0"
 dependencies = [
@@ -1283,6 +1392,15 @@ name = "rescribe-write-docx"
 version = "0.1.0"
 dependencies = [
  "ooxml-wml",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-dokuwiki"
+version = "0.1.0"
+dependencies = [
+ "dokuwiki",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1309,6 +1427,15 @@ dependencies = [
 name = "rescribe-write-html"
 version = "0.1.0"
 dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-jira"
+version = "0.1.0"
+dependencies = [
+ "jira-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1412,12 +1539,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-write-tikiwiki"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "tikiwiki",
+]
+
+[[package]]
+name = "rescribe-write-twiki"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "twiki",
+]
+
+[[package]]
+name = "rescribe-write-vimwiki"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "vimwiki-fmt",
+]
+
+[[package]]
 name = "rescribe-write-xlsx"
 version = "0.1.0"
 dependencies = [
  "ooxml-sml",
  "rescribe-core",
  "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-xwiki"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "xwiki",
+]
+
+[[package]]
+name = "rescribe-write-zimwiki"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "zimwiki",
 ]
 
 [[package]]
@@ -1647,6 +1819,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "tikiwiki"
+version = "0.1.0"
+
+[[package]]
 name = "time"
 version = "0.3.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1718,6 +1894,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 
 [[package]]
+name = "twiki"
+version = "0.1.0"
+
+[[package]]
 name = "type1-encoding-parser"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1782,6 +1962,10 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vimwiki-fmt"
+version = "0.1.0"
 
 [[package]]
 name = "wasip2"
@@ -1878,6 +2062,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "xwiki"
+version = "0.1.0"
+
+[[package]]
 name = "zerocopy"
 version = "0.8.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1916,6 +2104,10 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "zimwiki"
+version = "0.1.0"
 
 [[package]]
 name = "zip"
