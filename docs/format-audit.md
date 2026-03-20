@@ -15,7 +15,7 @@ Assessed 2026-02-24; stages updated 2026-03-20.
 | **2-Fixtures** | Owned fixture suite authored and passing in CI |
 | **3-Harness** | Pandoc oracle harness ≥90% word coverage |
 | **4-Fuzz** | Fuzz target exists and has been run |
-| **5-Production** | All gates passed |
+| **5-Production** | All gates passed (see "Vertical completion checklist" in CLAUDE.md) |
 
 **Conventions:**
 `†` = library-backed (upstream provides correctness guarantee; wrapper still needs fixtures and fuzz).

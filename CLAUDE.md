@@ -164,7 +164,7 @@ the ignored arm that carries semantic content is a gap. Document them in TODO.md
 Each standalone format crate (`crates/formats/{name}/`) must satisfy all of:
 - `Ast` type with `Span` on every node
 - `parse(input) -> (Ast, Vec<Diagnostic>)` — infallible
-- `events(input) -> impl Iterator<Item = Event>` — pull tokenizer
+- `events(input) -> impl Iterator<Item = Event>` — pull tokenizer (where a lexer/parser split is meaningful; e.g. RTF's bracket/backslash grammar benefits from this; line-oriented formats like AsciiDoc may not)
 - `emit(ast) -> String` — round-trip guarantee
 - No-panic fuzz gate: arbitrary bytes must not panic — run until clean
 - Round-trip fuzz: `parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast` — run until clean
