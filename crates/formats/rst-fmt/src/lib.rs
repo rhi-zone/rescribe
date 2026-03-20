@@ -294,33 +294,53 @@ impl<'a> Parser<'a> {
             // Overlined heading: === then title then ===
             let overline_char = line.chars().next()?;
             let next_line = self.peek_line()?;
-            if !next_line.trim().is_empty() && !self.is_underline(next_line) {
-                // Check for underline after title
-                let title = next_line.trim();
-                if let Some(underline) = self.lines.get(self.line_idx + 2) {
-                    if self.is_underline(underline) && underline.starts_with(overline_char) {
-                        self.advance_line(); // skip overline
-                        self.advance_line(); // skip title
-                        self.advance_line(); // skip underline
-                        let level = self.get_heading_level(overline_char);
-                        let inlines = parse_inline_content(title, &self.link_targets);
-                        return Some(Block::Heading { level, inlines });
+            // The title may itself look like an adornment line (e.g., "^" for a
+            // level-1 heading whose text happens to be "^").  Allow this as long
+            // as the title char is DIFFERENT from the overline char — otherwise
+            // it's three identical adornment lines and not a valid heading.
+            if !next_line.trim().is_empty() {
+                let title_first = next_line.trim().chars().next().unwrap_or('\0');
+                let title_same_as_overline =
+                    self.is_underline(next_line.trim()) && title_first == overline_char;
+                if !title_same_as_overline {
+                    // Check for underline after title
+                    let title = next_line.trim();
+                    if let Some(underline) = self.lines.get(self.line_idx + 2) {
+                        if self.is_underline(underline) && underline.starts_with(overline_char) {
+                            self.advance_line(); // skip overline
+                            self.advance_line(); // skip title
+                            self.advance_line(); // skip underline
+                            let level = self.get_heading_level(overline_char);
+                            let inlines = parse_inline_content(title, &self.link_targets);
+                            return Some(Block::Heading { level, inlines });
+                        }
                     }
                 }
             }
         }
 
         // Underlined heading: title then ===
-        if !line.trim().is_empty() && !self.is_underline(line) {
+        // The title may itself look like a line of adornment chars (e.g., "+").
+        // Distinguish from the overline case: if the title and underline use the
+        // SAME char, it's not a plain-underline heading (that is handled by the
+        // overline path above or is ambiguous RST). If they use DIFFERENT chars,
+        // treat the first line as the title text.
+        if !line.trim().is_empty() {
             if let Some(underline) = self.peek_line() {
                 if self.is_underline(underline) && underline.len() >= line.trim().len() {
-                    let title = line.trim();
-                    let underline_char = underline.chars().next()?;
-                    self.advance_line(); // skip title
-                    self.advance_line(); // skip underline
-                    let level = self.get_heading_level(underline_char);
-                    let inlines = parse_inline_content(title, &self.link_targets);
-                    return Some(Block::Heading { level, inlines });
+                    let title_first = line.trim().chars().next().unwrap_or('\0');
+                    let underline_first = underline.chars().next().unwrap_or('\0');
+                    let title_looks_like_adornment = self.is_underline(line.trim());
+                    // Only accept when title doesn't look like adornment, OR it does
+                    // but uses a different char than the underline (unambiguous).
+                    if !title_looks_like_adornment || title_first != underline_first {
+                        let title = line.trim();
+                        self.advance_line(); // skip title
+                        self.advance_line(); // skip underline
+                        let level = self.get_heading_level(underline_first);
+                        let inlines = parse_inline_content(title, &self.link_targets);
+                        return Some(Block::Heading { level, inlines });
+                    }
                 }
             }
         }
@@ -515,7 +535,9 @@ impl<'a> Parser<'a> {
         // Numbered list: 1. or #.
         if let Some(idx) = trimmed.find(". ") {
             let prefix = &trimmed[..idx];
-            if prefix.chars().all(|c| c.is_ascii_digit()) || prefix == "#" {
+            // Require non-empty prefix: an empty prefix (line starting with ". ")
+            // is NOT a numbered list — it's a paragraph beginning with a period.
+            if !prefix.is_empty() && (prefix.chars().all(|c| c.is_ascii_digit()) || prefix == "#") {
                 return Some(self.parse_numbered_list());
             }
         }
@@ -1261,10 +1283,18 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
 }
 
 fn build_heading(level: i64, inlines: &[Inline], ctx: &mut BuildContext) {
-    let mut text = String::new();
-    collect_text_from_inlines(inlines, &mut text);
+    let mut plain_text = String::new();
+    collect_text_from_inlines(inlines, &mut plain_text);
 
-    let underline_char = match level {
+    // Render the inline markup to a temporary buffer to measure the RST
+    // source length (e.g., "**e**" is 5 chars, not 1).  The underline must be
+    // at least as long as the RST source line, not the plain-text length.
+    let mut tmp = BuildContext::new();
+    build_inlines(inlines, &mut tmp);
+    let rendered = tmp.output;
+    let render_len = rendered.len().max(1);
+
+    let preferred_char = match level {
         1 => '=',
         2 => '-',
         3 => '~',
@@ -1273,17 +1303,32 @@ fn build_heading(level: i64, inlines: &[Inline], ctx: &mut BuildContext) {
         _ => '\'',
     };
 
-    // For level 1, add overline
-    if level == 1 {
-        let line: String = std::iter::repeat_n(underline_char, text.len()).collect();
+    // If the title itself looks like an adornment line (all chars equal the
+    // preferred underline char), the emitted RST would be ambiguous: e.g.,
+    // "-\n-\n" can't be parsed as a heading.  Use a different underline char.
+    let title_clashes = !plain_text.is_empty() && plain_text.chars().all(|c| c == preferred_char);
+    let underline_char = if title_clashes {
+        // Pick the first HEADING_CHAR that differs from preferred_char.
+        HEADING_CHARS
+            .iter()
+            .find(|&&c| c != preferred_char)
+            .copied()
+            .unwrap_or('=')
+    } else {
+        preferred_char
+    };
+
+    // For level 1, add overline (only when using the preferred char and no clash)
+    if level == 1 && !title_clashes {
+        let line: String = std::iter::repeat_n(underline_char, render_len).collect();
         ctx.write(&line);
         ctx.write("\n");
     }
 
-    build_inlines(inlines, ctx);
+    ctx.write(&rendered);
     ctx.write("\n");
 
-    let line: String = std::iter::repeat_n(underline_char, text.len()).collect();
+    let line: String = std::iter::repeat_n(underline_char, render_len).collect();
     ctx.write(&line);
     ctx.write("\n\n");
 }
@@ -1871,5 +1916,38 @@ mod tests {
         let output = build(&doc);
         assert!(output.contains("- one"));
         assert!(output.contains("- two"));
+    }
+
+    /// Heading whose title text looks like an RST adornment line (a single
+    /// repeated HEADING_CHARS character) must survive a build→parse roundtrip.
+    #[test]
+    fn test_heading_adornment_title_roundtrip() {
+        // "+" is a HEADING_CHAR, so a heading with text "+" historically
+        // caused the parser to mistake the title line for an overline.
+        for title in &["+", "~", "=", "-", "^", "\""] {
+            let doc = RstDoc {
+                blocks: vec![Block::Heading {
+                    level: 2,
+                    inlines: vec![Inline::Text((*title).into())],
+                }],
+            };
+            let rst_output = build(&doc);
+            let reparsed = parse(&rst_output).expect("parse should not fail");
+            assert_eq!(
+                reparsed.blocks.len(),
+                1,
+                "heading with title {title:?} should round-trip; got: {reparsed:?}\nRST:\n{rst_output}"
+            );
+            if let Block::Heading { inlines, .. } = &reparsed.blocks[0] {
+                let mut text = String::new();
+                collect_text_from_inlines(inlines, &mut text);
+                assert_eq!(
+                    text, *title,
+                    "heading title {title:?} changed after roundtrip"
+                );
+            } else {
+                panic!("expected Heading block, got {:?}", reparsed.blocks[0]);
+            }
+        }
     }
 }
