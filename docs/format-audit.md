@@ -51,7 +51,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | fountain | 4 | 2 | hand | – (harness N/A) | coverage |
 | typst | 1 | 2 | hand | partial→fixtures | harness |
 | texinfo | 2 | 2 | hand | – (harness N/A) | fuzz |
-| bbcode | 2 | 2 | hand | – (harness N/A) | fuzz |
+| bbcode | 4 | 2 | hand | – (harness N/A; Pandoc cannot read BBCode) | coverage |
 | pod | 2 | 2 | hand | harness (87%) | harness |
 | haddock | 2 | 2 | hand | harness (88%) | harness |
 | ansi | 2 | 2 | hand | – (harness N/A) | fuzz |
@@ -191,7 +191,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 | jira-fmt | | | | | |
 | typst (TBD) | | | | | |
 | texinfo | | | | | |
-| bbcode-fmt | | | | | |
+| bbcode-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_bbcode_reader (1.3M runs) fuzz_bbcode_roundtrip (348K runs) | – | – |
 | pod-fmt | | | | | |
 | haddock-fmt | | | | | |
 | ansi-fmt | | | | | |
