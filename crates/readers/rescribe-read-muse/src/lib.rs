@@ -16,7 +16,7 @@ pub fn parse_with_options(
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
     // Parse using the format-specific crate
-    let muse_doc = muse_fmt::parse(input).map_err(|e| ParseError::Invalid(e.0))?;
+    let (muse_doc, _diagnostics) = muse_fmt::parse(input);
 
     // Convert muse_doc to rescribe Document
     let blocks = convert_blocks(&muse_doc.blocks);
@@ -32,23 +32,23 @@ fn convert_blocks(blocks: &[muse_fmt::Block]) -> Vec<Node> {
 
 fn convert_block(block: &muse_fmt::Block) -> Node {
     match block {
-        muse_fmt::Block::Paragraph { inlines } => {
+        muse_fmt::Block::Paragraph { inlines, .. } => {
             Node::new(node::PARAGRAPH).children(convert_inlines(inlines))
         }
 
-        muse_fmt::Block::Heading { level, inlines } => Node::new(node::HEADING)
+        muse_fmt::Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
             .prop(prop::LEVEL, *level as i64)
             .children(convert_inlines(inlines)),
 
-        muse_fmt::Block::CodeBlock { content } => {
+        muse_fmt::Block::CodeBlock { content, .. } => {
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
         }
 
-        muse_fmt::Block::Blockquote { children } => {
+        muse_fmt::Block::Blockquote { children, .. } => {
             Node::new(node::BLOCKQUOTE).children(convert_blocks(children))
         }
 
-        muse_fmt::Block::List { ordered, items } => {
+        muse_fmt::Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_blocks| {
@@ -61,7 +61,7 @@ fn convert_block(block: &muse_fmt::Block) -> Node {
                 .children(list_items)
         }
 
-        muse_fmt::Block::DefinitionList { items } => {
+        muse_fmt::Block::DefinitionList { items, .. } => {
             let mut children: Vec<Node> = Vec::new();
             for (term_inlines, desc_blocks) in items {
                 let term_node =
@@ -74,7 +74,7 @@ fn convert_block(block: &muse_fmt::Block) -> Node {
             Node::new(node::DEFINITION_LIST).children(children)
         }
 
-        muse_fmt::Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        muse_fmt::Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
@@ -84,19 +84,19 @@ fn convert_inlines(inlines: &[muse_fmt::Inline]) -> Vec<Node> {
 
 fn convert_inline(inline: &muse_fmt::Inline) -> Node {
     match inline {
-        muse_fmt::Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        muse_fmt::Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        muse_fmt::Inline::Bold(children) => {
+        muse_fmt::Inline::Bold(children, _) => {
             Node::new(node::STRONG).children(convert_inlines(children))
         }
 
-        muse_fmt::Inline::Italic(children) => {
+        muse_fmt::Inline::Italic(children, _) => {
             Node::new(node::EMPHASIS).children(convert_inlines(children))
         }
 
-        muse_fmt::Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        muse_fmt::Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        muse_fmt::Inline::Link { url, children } => Node::new(node::LINK)
+        muse_fmt::Inline::Link { url, children, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .children(convert_inlines(children)),
     }

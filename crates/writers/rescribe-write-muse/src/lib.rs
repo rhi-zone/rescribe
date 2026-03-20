@@ -2,6 +2,7 @@
 //!
 //! Emits documents as Emacs Muse markup.
 
+use muse_fmt::{Block, Inline, MuseDoc, Span};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
 
@@ -19,60 +20,60 @@ pub fn emit_with_options(
     let blocks = convert_nodes_to_blocks(&doc.content.children);
 
     // Build using the format-specific crate
-    let muse_doc = muse_fmt::MuseDoc { blocks };
+    let muse_doc = MuseDoc { blocks, span: Span::NONE };
     let output = muse_fmt::build(&muse_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
 }
 
-fn convert_nodes_to_blocks(nodes: &[Node]) -> Vec<muse_fmt::Block> {
+fn convert_nodes_to_blocks(nodes: &[Node]) -> Vec<Block> {
     nodes.iter().map(convert_node_to_block).collect()
 }
 
-fn convert_node_to_block(node: &Node) -> muse_fmt::Block {
+fn convert_node_to_block(node: &Node) -> Block {
     match node.kind.as_str() {
-        node::DOCUMENT => {
+        rescribe_std::node::DOCUMENT => {
             // Flatten document, just process children
             // This shouldn't normally happen at top level
-            let children: Vec<muse_fmt::Block> =
+            let children: Vec<Block> =
                 node.children.iter().map(convert_node_to_block).collect();
             // Return first block or empty paragraph
             children
                 .into_iter()
                 .next()
-                .unwrap_or_else(|| muse_fmt::Block::Paragraph { inlines: vec![] })
+                .unwrap_or_else(|| Block::Paragraph { inlines: vec![], span: Span::NONE })
         }
 
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(5) as u8;
             let inlines = convert_nodes_to_inlines(&node.children);
-            muse_fmt::Block::Heading { level, inlines }
+            Block::Heading { level, inlines, span: Span::NONE }
         }
 
         node::PARAGRAPH => {
             let inlines = convert_nodes_to_inlines(&node.children);
-            muse_fmt::Block::Paragraph { inlines }
+            Block::Paragraph { inlines, span: Span::NONE }
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            muse_fmt::Block::CodeBlock { content }
+            Block::CodeBlock { content, span: Span::NONE }
         }
 
         node::BLOCKQUOTE => {
             let children = convert_nodes_to_blocks(&node.children);
-            muse_fmt::Block::Blockquote { children }
+            Block::Blockquote { children, span: Span::NONE }
         }
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let items: Vec<Vec<muse_fmt::Block>> = node
+            let items: Vec<Vec<Block>> = node
                 .children
                 .iter()
                 .filter(|n| n.kind.as_str() == node::LIST_ITEM)
                 .map(|n| convert_nodes_to_blocks(&n.children))
                 .collect();
-            muse_fmt::Block::List { ordered, items }
+            Block::List { ordered, items, span: Span::NONE }
         }
 
         node::DEFINITION_LIST => {
@@ -92,10 +93,10 @@ fn convert_node_to_block(node: &Node) -> muse_fmt::Block {
                 }
                 i += 1;
             }
-            muse_fmt::Block::DefinitionList { items }
+            Block::DefinitionList { items, span: Span::NONE }
         }
 
-        node::HORIZONTAL_RULE => muse_fmt::Block::HorizontalRule,
+        node::HORIZONTAL_RULE => Block::HorizontalRule { span: Span::NONE },
 
         node::DIV | node::SPAN | node::FIGURE => {
             // Containers that pass through to their children
@@ -104,13 +105,13 @@ fn convert_node_to_block(node: &Node) -> muse_fmt::Block {
             children
                 .into_iter()
                 .next()
-                .unwrap_or_else(|| muse_fmt::Block::Paragraph { inlines: vec![] })
+                .unwrap_or_else(|| Block::Paragraph { inlines: vec![], span: Span::NONE })
         }
 
         // Inline nodes at block level (shouldn't happen, but handle them)
         node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
             let inlines = vec![convert_node_to_inline(node)];
-            muse_fmt::Block::Paragraph { inlines }
+            Block::Paragraph { inlines, span: Span::NONE }
         }
 
         _ => {
@@ -119,48 +120,48 @@ fn convert_node_to_block(node: &Node) -> muse_fmt::Block {
             children
                 .into_iter()
                 .next()
-                .unwrap_or_else(|| muse_fmt::Block::Paragraph { inlines: vec![] })
+                .unwrap_or_else(|| Block::Paragraph { inlines: vec![], span: Span::NONE })
         }
     }
 }
 
-fn convert_nodes_to_inlines(nodes: &[Node]) -> Vec<muse_fmt::Inline> {
+fn convert_nodes_to_inlines(nodes: &[Node]) -> Vec<Inline> {
     nodes.iter().map(convert_node_to_inline).collect()
 }
 
-fn convert_node_to_inline(node: &Node) -> muse_fmt::Inline {
+fn convert_node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            muse_fmt::Inline::Text(content)
+            Inline::Text(content, Span::NONE)
         }
 
         node::STRONG => {
             let children = convert_nodes_to_inlines(&node.children);
-            muse_fmt::Inline::Bold(children)
+            Inline::Bold(children, Span::NONE)
         }
 
         node::EMPHASIS => {
             let children = convert_nodes_to_inlines(&node.children);
-            muse_fmt::Inline::Italic(children)
+            Inline::Italic(children, Span::NONE)
         }
 
         node::CODE => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            muse_fmt::Inline::Code(content)
+            Inline::Code(content, Span::NONE)
         }
 
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = convert_nodes_to_inlines(&node.children);
-            muse_fmt::Inline::Link { url, children }
+            Inline::Link { url, children, span: Span::NONE }
         }
 
         node::STRIKEOUT | node::UNDERLINE | node::SUBSCRIPT | node::SUPERSCRIPT => {
             // Muse doesn't support these, emit children as-is
             let children = convert_nodes_to_inlines(&node.children);
             if children.is_empty() {
-                muse_fmt::Inline::Text(String::new())
+                Inline::Text(String::new(), Span::NONE)
             } else {
                 children.into_iter().next().unwrap()
             }
@@ -168,24 +169,25 @@ fn convert_node_to_inline(node: &Node) -> muse_fmt::Inline {
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
-            muse_fmt::Inline::Link {
+            Inline::Link {
                 url,
                 children: vec![],
+                span: Span::NONE,
             }
         }
 
         node::LINE_BREAK => {
             // Muse doesn't support line breaks in the AST, convert to text
-            muse_fmt::Inline::Text("\n".to_string())
+            Inline::Text("\n".to_string(), Span::NONE)
         }
 
-        node::SOFT_BREAK => muse_fmt::Inline::Text(" ".to_string()),
+        node::SOFT_BREAK => Inline::Text(" ".to_string(), Span::NONE),
 
         _ => {
             // Unknown inline type, process children
             let children = convert_nodes_to_inlines(&node.children);
             if children.is_empty() {
-                muse_fmt::Inline::Text(String::new())
+                Inline::Text(String::new(), Span::NONE)
             } else {
                 children.into_iter().next().unwrap()
             }
