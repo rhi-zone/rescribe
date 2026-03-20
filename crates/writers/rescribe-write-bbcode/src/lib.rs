@@ -3,7 +3,7 @@
 //! Serializes rescribe's document IR to BBCode forum markup.
 //! Uses `bbcode-fmt` for building, adapts from rescribe types.
 
-use bbcode_fmt::{Block, Inline, TableRow};
+use bbcode_fmt::{Block, Inline, Span, TableRow};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
 
@@ -28,8 +28,11 @@ pub fn emit_with_options(
         }
     }
 
-    let bbcode_doc = bbcode_fmt::BbcodeDoc { blocks };
-    let output = bbcode_fmt::build(&bbcode_doc);
+    let bbcode_doc = bbcode_fmt::BbcodeDoc {
+        blocks,
+        span: bbcode_fmt::Span::NONE,
+    };
+    let output = bbcode_fmt::emit(&bbcode_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
 
@@ -37,17 +40,26 @@ fn node_to_block(node: &Node) -> Block {
     match node.kind.as_str() {
         node::PARAGRAPH => {
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Block::Paragraph { inlines }
+            Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            }
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Block::CodeBlock { content }
+            Block::CodeBlock {
+                content,
+                span: Span::NONE,
+            }
         }
 
         node::BLOCKQUOTE => {
             let children = node.children.iter().map(node_to_block).collect();
-            Block::Blockquote { children }
+            Block::Blockquote {
+                children,
+                span: Span::NONE,
+            }
         }
 
         node::LIST => {
@@ -66,7 +78,11 @@ fn node_to_block(node: &Node) -> Block {
                         .collect()
                 })
                 .collect();
-            Block::List { ordered, items }
+            Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            }
         }
 
         node::TABLE => {
@@ -84,30 +100,43 @@ fn node_to_block(node: &Node) -> Block {
                             (is_header, inlines)
                         })
                         .collect();
-                    TableRow { cells }
+                    TableRow {
+                        cells,
+                        span: Span::NONE,
+                    }
                 })
                 .collect();
-            Block::Table { rows }
+            Block::Table {
+                rows,
+                span: Span::NONE,
+            }
         }
 
         node::HEADING => {
             // BBCode doesn't have native headings - use bold text in paragraph
             let inlines = node.children.iter().map(node_to_inline).collect();
             Block::Paragraph {
-                inlines: vec![Inline::Bold(inlines)],
+                inlines: vec![Inline::Bold(inlines, Span::NONE)],
+                span: Span::NONE,
             }
         }
 
         node::DIV | node::SPAN | node::FIGURE => {
             // Transparent wrapper - emit children as paragraph
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Block::Paragraph { inlines }
+            Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            }
         }
 
         _ => {
             // Fallback: treat as paragraph
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Block::Paragraph { inlines }
+            Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            }
         }
     }
 }
@@ -116,62 +145,69 @@ fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Text(content)
+            Inline::Text(content, Span::NONE)
         }
 
         node::STRONG => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Bold(children)
+            Inline::Bold(children, Span::NONE)
         }
 
         node::EMPHASIS => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Italic(children)
+            Inline::Italic(children, Span::NONE)
         }
 
         node::UNDERLINE => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Underline(children)
+            Inline::Underline(children, Span::NONE)
         }
 
         node::STRIKEOUT => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Strikethrough(children)
+            Inline::Strikethrough(children, Span::NONE)
         }
 
         node::CODE => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Code(content)
+            Inline::Code(content, Span::NONE)
         }
 
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Link { url, children }
+            Inline::Link {
+                url,
+                children,
+                span: Span::NONE,
+            }
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
-            Inline::Image { url }
+            Inline::Image {
+                url,
+                span: Span::NONE,
+            }
         }
 
         node::SUBSCRIPT => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Subscript(children)
+            Inline::Subscript(children, Span::NONE)
         }
 
         node::SUPERSCRIPT => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Superscript(children)
+            Inline::Superscript(children, Span::NONE)
         }
 
         node::LINE_BREAK => {
             // BBCode doesn't have explicit line break inline element
             // Use newline in text instead
-            Inline::Text("\n".to_string())
+            Inline::Text("\n".to_string(), Span::NONE)
         }
 
-        node::SOFT_BREAK => Inline::Text(" ".to_string()),
+        node::SOFT_BREAK => Inline::Text(" ".to_string(), Span::NONE),
 
         node::SPAN => {
             let attr = node
@@ -190,6 +226,7 @@ fn node_to_inline(node: &Node) -> Inline {
                 attr,
                 value,
                 children,
+                span: Span::NONE,
             }
         }
 
@@ -197,12 +234,12 @@ fn node_to_inline(node: &Node) -> Inline {
             // Fallback: collect children
             let children: Vec<Inline> = node.children.iter().map(node_to_inline).collect();
             if children.is_empty() {
-                Inline::Text("".to_string())
+                Inline::Text("".to_string(), Span::NONE)
             } else if children.len() == 1 {
                 children.into_iter().next().unwrap()
             } else {
                 // Wrap in a container if multiple children
-                Inline::Bold(children)
+                Inline::Bold(children, Span::NONE)
             }
         }
     }
