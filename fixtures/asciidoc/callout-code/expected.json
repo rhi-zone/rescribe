@@ -1,0 +1,9 @@
+{
+  "description": "Source block with <N> callout markers in the code body; markers are preserved as literal text in the code block content. The callout list below is not recognized; adjacent callout lines are joined into a single paragraph.",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "ruby" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "<1> Print hello <2> Print world" } }
+  ]
+}

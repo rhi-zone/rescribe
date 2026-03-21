@@ -1,0 +1,11 @@
+{
+  "description": "[start=N] attribute on an ordered list; parser does not yet support start offset so it is silently ignored; list is still produced correctly",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": true }, "children_count": 2 },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "First" } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Second" } }
+  ]
+}

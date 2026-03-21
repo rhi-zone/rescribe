@@ -1,0 +1,3 @@
+[%hardbreaks]
+First line
+Second line

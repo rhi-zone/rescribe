@@ -1,0 +1,9 @@
+{
+  "description": "Bibliography list entry (- [[[id]]] text) is parsed as an unordered list; the triple-bracket anchor [[[id]]] is partially recognized (double-bracket [[id becomes an anchor node with a malformed id). No panic.",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

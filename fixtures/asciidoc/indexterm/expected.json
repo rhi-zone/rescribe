@@ -1,0 +1,8 @@
+{
+  "description": "Triple-paren indexterm (((term))) is not recognized; it is passed through as literal text in the paragraph. No panic.",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "A paragraph with an (((indexterm,primary))) inline index term." } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "ifdef:: conditional directive is not processed; it is parsed as a definition list because the parser sees :: as a description list separator. No panic.",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" }
+  ]
+}

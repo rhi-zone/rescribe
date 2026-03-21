@@ -1,0 +1,10 @@
+{
+  "description": "Callout list items (<1> text) are not yet recognized as a callout list; they are parsed as paragraphs containing the literal callout marker text. No panic.",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "<1> First annotation" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "<2> Second annotation" } }
+  ]
+}

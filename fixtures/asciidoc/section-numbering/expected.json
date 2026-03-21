@@ -1,0 +1,10 @@
+{
+  "description": ":sectnums: document attribute does not affect parsed structure; heading is produced normally. The attribute is consumed but not mapped to document metadata.",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Section One" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Some content." } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Attribute reference {greeting} is not expanded by the parser; it is emitted as literal text {greeting}. The attribute is stored in the document attributes but not substituted inline.",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "See {greeting} world." } }
+  ]
+}

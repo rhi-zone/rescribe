@@ -29,15 +29,15 @@ See `fixtures/spec.md` for category definitions.
 - [x] comment block (////) — `comment-block`
 - [x] table (|=== syntax) — `table`
 - [x] discrete heading ([discrete]) — `discrete-heading`
-- [ ] include directive (include::) — (missing)
-- [ ] conditional directives (ifdef::, ifndef::, ifeval::) — (missing)
+- [x] include directive (include::) — (N/A: filesystem dependency; no fixture)
+- [x] conditional directives (ifdef::, ifndef::, ifeval::) — `conditional`
 - [x] attribute definition (:attr: value) — `attribute-def`
 - [x] block title (.Title) — `block-title`
 - [x] list continuation (+) — `list-continuation`
-- [ ] ordered list start offset — (missing)
+- [x] ordered list start offset — `ordered-list-start`
 - [x] checklist (- [ ] / - [x]) — `checklist`
-- [ ] callout list (<1> ... <1> annotations) — (missing)
-- [ ] bibliography list (- [ref]) — (missing)
+- [x] callout list (<1> ... <1> annotations) — `callout-list`
+- [x] bibliography list (- [ref]) — `bibliography-list`
 - [x] footnote block — `footnote`
 
 ## Inline constructs
@@ -56,12 +56,12 @@ See `fixtures/spec.md` for category definitions.
 - [x] line break ( + at end of line) — `line-break`
 - [x] footnote macro (footnote:[text]) — `footnote`
 - [x] anchor ([[id]]) — `anchor`
-- [ ] bibliography ref (<<bib>>) — (missing)
+- [x] bibliography ref (<<bib>>) — `bibliography-ref`
 - [x] keyboard macro (kbd:[Ctrl+C]) — `kbd-macro`
 - [x] button macro (btn:[OK]) — `btn-macro`
 - [x] menu macro (menu:File[Open]) — `menu-macro`
-- [ ] attribute reference ({attr}) — (missing)
-- [ ] indexterm macro ((((term)))) — (missing)
+- [x] attribute reference ({attr}) — `attribute-ref`
+- [x] indexterm macro ((((term)))) — `indexterm`
 - [x] pass macro (pass:[raw]) — `pass-macro`
 - [x] inline literal passthrough (+raw+) — `inline-literal-pass`
 
@@ -69,14 +69,14 @@ See `fixtures/spec.md` for category definitions.
 - [x] document title metadata (author, revnumber, revdate) — `doc-metadata`
 - [x] image alt text, width, height — `figure`
 - [x] code block language — `code-block-source`
-- [ ] table column spec (cols= attribute) — (missing)
+- [x] table column spec (cols= attribute) — `table-col-spec`
 - [x] table header row — `table-header`
 - [x] link window target — `link-target`
 - [x] block id ([#id]) — `block-id`
 - [x] block role ([.role]) — `block-role`
-- [ ] block option ([%option]) — (missing)
+- [x] block option ([%option]) — `block-option`
 - [x] list marker style (arabic, loweralpha, etc.) — `list-marker-style`
-- [ ] section numbering attribute — (missing)
+- [x] section numbering attribute — `section-numbering`
 - [x] unknown attribute — `adv-unknown-attr`
 
 ## Composition (integration)
@@ -87,7 +87,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] example block containing a code block — `integration-example-code`
 - [x] link with formatted text label — `integration-link-formatted`
 - [x] heading with inline formatting — `integration-heading-inline`
-- [ ] callout annotation in code block — (missing)
+- [x] callout annotation in code block — `callout-code`
 
 ## Adversarial
 - [x] empty document — `adv-empty`
