@@ -43,7 +43,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | djot | 4† | 4† | jotdown | production | production |
 | org | 4 | 2 | hand | fuzz | harness ✓ fixtures (88) |
 | rst | 4 | 2 | hand | fuzz | harness ✓ fixtures (80) |
-| asciidoc | 4 | 2 | hand | production | harness |
+| asciidoc | 4 | 2 | hand | production | harness ✓ fixtures (84) |
 | textile | 4 | 2 | hand | fuzz | harness |
 | muse | 4 | 2 | hand | production | harness |
 | t2t | 4 | 2 | hand | fuzz | harness |
