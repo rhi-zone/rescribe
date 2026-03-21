@@ -1,0 +1,10 @@
+Document {
+  content:
+  document() [
+    paragraph() [
+      raw_inline( { format: "html", content: "<em>" })
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

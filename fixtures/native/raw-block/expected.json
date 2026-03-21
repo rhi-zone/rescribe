@@ -1,0 +1,6 @@
+{
+  "description": "Native raw_block node becomes raw_block node",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "format": "html" } }
+  ]
+}

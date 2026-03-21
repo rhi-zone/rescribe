@@ -1,0 +1,8 @@
+Document {
+  content:
+  document() [
+    raw_block( { format: "html", content: "<div>hello</div>" })
+  ]
+  metadata: {}
+  resources: {}
+}

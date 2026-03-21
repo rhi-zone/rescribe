@@ -1,0 +1,6 @@
+{
+  "description": "Native raw_inline node becomes raw_inline node",
+  "assertions": [
+    { "path": "/0/0", "kind": "raw_inline", "props": { "format": "html" } }
+  ]
+}
