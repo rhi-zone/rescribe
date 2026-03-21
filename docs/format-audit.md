@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13).
 
 ## Maturity Pipeline
 
@@ -30,11 +30,11 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| commonmark | 3† | 3† | pulldown-cmark | fuzz | fuzz |
-| gfm | 3† | 3† | pulldown-cmark | fuzz | fuzz |
+| commonmark | 4† | 3† | pulldown-cmark | production | fuzz |
+| gfm | 4† | 3† | pulldown-cmark | production | fuzz |
 | markdown | 4† | 4† | pulldown-cmark | production | production |
-| markdown-strict | 3† | 2† | pulldown-cmark | fuzz | harness |
-| multimarkdown | 3† | 2† | pulldown-cmark | fuzz | harness |
+| markdown-strict | 4† | 2† | pulldown-cmark | production | harness |
+| multimarkdown | 4† | 2† | pulldown-cmark | production | harness |
 
 ### Lightweight markup
 

@@ -180,6 +180,12 @@ impl Converter {
                 self.stack
                     .push((format!("metadata_block:{}", format), Vec::new()));
             }
+            Tag::Superscript => {
+                self.stack.push((node::SUPERSCRIPT.to_string(), Vec::new()));
+            }
+            Tag::Subscript => {
+                self.stack.push((node::SUBSCRIPT.to_string(), Vec::new()));
+            }
         }
     }
 

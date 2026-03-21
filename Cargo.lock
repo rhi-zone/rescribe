@@ -1261,6 +1261,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulldown-cmark"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83c41efbf8f90ac44de7f3a868f0867851d261b56291732d0cbf7cceaaeb55a6"
+dependencies = [
+ "bitflags",
+ "getopts",
+ "memchr",
+ "pulldown-cmark-escape",
+ "unicase",
+]
+
+[[package]]
 name = "pulldown-cmark-escape"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1656,7 +1669,7 @@ dependencies = [
 name = "rescribe-read-commonmark"
 version = "0.1.0"
 dependencies = [
- "pulldown-cmark",
+ "pulldown-cmark 0.12.2",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1768,7 +1781,7 @@ dependencies = [
 name = "rescribe-read-gfm"
 version = "0.1.0"
 dependencies = [
- "pulldown-cmark",
+ "pulldown-cmark 0.12.2",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1849,7 +1862,7 @@ dependencies = [
 name = "rescribe-read-markdown"
 version = "0.1.0"
 dependencies = [
- "pulldown-cmark",
+ "pulldown-cmark 0.12.2",
  "rescribe-core",
  "rescribe-read-html",
  "rescribe-std",
@@ -1865,7 +1878,7 @@ dependencies = [
 name = "rescribe-read-markdown-strict"
 version = "0.1.0"
 dependencies = [
- "pulldown-cmark",
+ "pulldown-cmark 0.12.2",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1892,7 +1905,7 @@ dependencies = [
 name = "rescribe-read-multimarkdown"
 version = "0.1.0"
 dependencies = [
- "pulldown-cmark",
+ "pulldown-cmark 0.13.1",
  "rescribe-core",
  "rescribe-std",
 ]

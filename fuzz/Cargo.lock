@@ -379,6 +379,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "getopts"
+version = "0.2.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfe4fbac503b8d1f88e6676011885f34b7174f46e59956bba534ba83abded4df"
+dependencies = [
+ "unicode-width",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -949,6 +958,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulldown-cmark"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f86ba2052aebccc42cbbb3ed234b8b13ce76f75c3551a303cb2bcffcff12bb14"
+dependencies = [
+ "bitflags",
+ "getopts",
+ "memchr",
+ "pulldown-cmark-escape",
+ "unicase",
+]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83c41efbf8f90ac44de7f3a868f0867851d261b56291732d0cbf7cceaaeb55a6"
+dependencies = [
+ "bitflags",
+ "getopts",
+ "memchr",
+ "pulldown-cmark-escape",
+ "unicase",
+]
+
+[[package]]
+name = "pulldown-cmark-escape"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "007d8adb5ddab6f8e3f491ac63566a7d5002cc7ed73901f72057943fa71ae1ae"
+
+[[package]]
 name = "quick-xml"
 version = "0.39.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1065,6 +1106,7 @@ dependencies = [
  "rescribe-read-ansi",
  "rescribe-read-asciidoc",
  "rescribe-read-bbcode",
+ "rescribe-read-commonmark",
  "rescribe-read-creole",
  "rescribe-read-djot",
  "rescribe-read-docbook",
@@ -1072,6 +1114,7 @@ dependencies = [
  "rescribe-read-dokuwiki",
  "rescribe-read-fb2",
  "rescribe-read-fountain",
+ "rescribe-read-gfm",
  "rescribe-read-haddock",
  "rescribe-read-html",
  "rescribe-read-jats",
@@ -1079,7 +1122,9 @@ dependencies = [
  "rescribe-read-latex",
  "rescribe-read-man",
  "rescribe-read-markdown",
+ "rescribe-read-markdown-strict",
  "rescribe-read-markua",
+ "rescribe-read-multimarkdown",
  "rescribe-read-muse",
  "rescribe-read-odt",
  "rescribe-read-opml",
@@ -1162,6 +1207,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-read-commonmark"
+version = "0.1.0"
+dependencies = [
+ "pulldown-cmark 0.12.2",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-read-creole"
 version = "0.1.0"
 dependencies = [
@@ -1222,6 +1276,15 @@ name = "rescribe-read-fountain"
 version = "0.1.0"
 dependencies = [
  "fountain-fmt",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-gfm"
+version = "0.1.0"
+dependencies = [
+ "pulldown-cmark 0.12.2",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1292,10 +1355,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-read-markdown-strict"
+version = "0.1.0"
+dependencies = [
+ "pulldown-cmark 0.12.2",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-read-markua"
 version = "0.1.0"
 dependencies = [
  "markua",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-multimarkdown"
+version = "0.1.0"
+dependencies = [
+ "pulldown-cmark 0.13.1",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -2069,6 +2150,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
 
 [[package]]
+name = "unicase"
+version = "2.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbc4bc3a9f746d862c45cb89d705aa10f187bb96c76001afab07a0d35ce60142"
+
+[[package]]
 name = "unicode-bidi"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2094,6 +2181,12 @@ name = "unicode-properties"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
+
+[[package]]
+name = "unicode-width"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "unsafe-libyaml"
