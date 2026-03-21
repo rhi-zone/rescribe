@@ -1,0 +1,6 @@
+{
+  "description": "Single newline within a paragraph produces a soft_break node",
+  "assertions": [
+    { "path": "/0/1", "kind": "soft_break" }
+  ]
+}
