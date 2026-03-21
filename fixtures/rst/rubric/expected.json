@@ -1,0 +1,9 @@
+{
+  "description": "rubric directive becomes div with rst:directive prop; argument preserved as child paragraph",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "rst:directive": "rubric" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "My Rubric Heading" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "container directive becomes div with rst:directive prop and class from argument",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "rst:directive": "container", "class": "my-class" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

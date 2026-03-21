@@ -1,0 +1,7 @@
+{
+  "description": "list-table directive becomes div with rst:directive prop",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "rst:directive": "list-table" } }
+  ]
+}

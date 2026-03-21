@@ -170,6 +170,20 @@ fn block_to_node(block: &Block, warnings: &mut Vec<FidelityWarning>) -> Node {
                 .prop("admonition_type", admonition_type.clone())
                 .children(child_nodes)
         }
+
+        Block::LineBlock { lines } => {
+            // Each line becomes a paragraph; lines are separated by line_break nodes.
+            // The whole block is wrapped in a div with class "line-block".
+            let line_nodes: Vec<Node> = lines
+                .iter()
+                .map(|inlines| {
+                    Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines, warnings))
+                })
+                .collect();
+            Node::new(node::DIV)
+                .prop("class", "line-block")
+                .children(line_nodes)
+        }
     }
 }
 

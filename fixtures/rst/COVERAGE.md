@@ -24,20 +24,20 @@ See `fixtures/spec.md` for category definitions.
 - [x] rare admonitions (danger, caution, hint, attention, error) — `rare-admonition`
 - [x] math block (.. math:: directive) — `math-display`
 - [x] raw block (.. raw:: directive) — `raw-block`
-- [ ] topic (.. topic:: directive) — (missing)
-- [ ] sidebar (.. sidebar:: directive) — (missing)
-- [ ] rubric (.. rubric:: directive) — (missing)
-- [ ] epigraph (.. epigraph:: directive) — (missing)
-- [ ] highlights (.. highlights:: directive) — (missing)
-- [ ] pull-quote (.. pull-quote:: directive) — (missing)
-- [ ] compound (.. compound:: directive) — (missing)
-- [ ] container (.. container:: directive) — (missing)
-- [ ] table (.. table:: directive) — (missing)
-- [ ] csv-table (.. csv-table:: directive) — (missing)
-- [ ] list-table (.. list-table:: directive) — (missing)
+- [x] topic (.. topic:: directive) — `topic`
+- [x] sidebar (.. sidebar:: directive) — `sidebar`
+- [x] rubric (.. rubric:: directive) — `rubric`
+- [x] epigraph (.. epigraph:: directive) — `epigraph`
+- [x] highlights (.. highlights:: directive) — `highlights`
+- [x] pull-quote (.. pull-quote:: directive) — `pull-quote`
+- [x] compound (.. compound:: directive) — `compound`
+- [x] container (.. container:: directive) — `container`
+- [x] table (.. table:: directive) — `table-directive`
+- [x] csv-table (.. csv-table:: directive) — `csv-table`
+- [x] list-table (.. list-table:: directive) — `list-table`
 - [x] grid table (not parsed; treated as paragraph) — `table-grid`
 - [x] simple table (not parsed; treated as paragraph) — `table-simple`
-- [ ] line block (| prefix) — (missing)
+- [x] line block (| prefix) — `line-block`
 - [x] bullet list with auto-enumeration (#.) — `list-auto-enum`
 - [x] field list (parsed as paragraph; no field-list support) — `field-list`
 - [ ] option list — (missing)

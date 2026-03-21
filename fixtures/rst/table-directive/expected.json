@@ -1,0 +1,7 @@
+{
+  "description": "table directive becomes div with rst:directive prop (grid table body not parsed)",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "rst:directive": "table" } }
+  ]
+}

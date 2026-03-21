@@ -84,6 +84,10 @@ pub enum Block {
         admonition_type: String,
         children: Vec<Block>,
     },
+    /// RST line block (lines starting with `| `)
+    LineBlock {
+        lines: Vec<Vec<Inline>>,
+    },
 }
 
 /// A definition list item (term + description pair).
@@ -163,6 +167,10 @@ struct Parser<'a> {
     heading_levels: Vec<char>,
     /// Link targets: name -> url
     link_targets: std::collections::HashMap<String, String>,
+    /// Substitution definitions: |name| -> replacement text
+    substitutions: std::collections::HashMap<String, String>,
+    /// Anonymous link targets (__ url), in order of definition
+    anon_targets: Vec<String>,
 }
 
 impl<'a> Parser<'a> {
@@ -173,6 +181,8 @@ impl<'a> Parser<'a> {
             line_idx: 0,
             heading_levels: Vec::new(),
             link_targets: std::collections::HashMap::new(),
+            substitutions: std::collections::HashMap::new(),
+            anon_targets: Vec::new(),
         }
     }
 
@@ -204,16 +214,35 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// First pass: collect link targets (.. _name: url)
+    /// First pass: collect link targets (.. _name: url), substitution defs, and anonymous targets
     fn collect_link_targets(&mut self) {
         let mut idx = 0;
         while idx < self.lines.len() {
             let line = self.lines[idx];
+            // Named link target: .. _name: url
             if let Some(rest) = line.strip_prefix(".. _") {
                 if let Some(colon_idx) = rest.find(':') {
                     let name = rest[..colon_idx].trim().to_lowercase();
                     let url = rest[colon_idx + 1..].trim().to_string();
                     self.link_targets.insert(name, url);
+                }
+            }
+            // Substitution definition: .. |name| replace:: text
+            if let Some(rest) = line.strip_prefix(".. |") {
+                if let Some(pipe_idx) = rest.find('|') {
+                    let sub_name = rest[..pipe_idx].to_lowercase();
+                    let after_pipe = rest[pipe_idx + 1..].trim();
+                    if let Some(replacement) = after_pipe.strip_prefix("replace::") {
+                        let replacement = replacement.trim().to_string();
+                        self.substitutions.insert(sub_name, replacement);
+                    }
+                }
+            }
+            // Anonymous target: __ url (line starting with exactly "__ ")
+            if let Some(url) = line.strip_prefix("__ ") {
+                let url = url.trim();
+                if !url.is_empty() {
+                    self.anon_targets.push(url.to_string());
                 }
             }
             idx += 1;
@@ -251,6 +280,29 @@ impl<'a> Parser<'a> {
                 return self.try_parse_block();
             }
         }
+        // Skip substitution definitions (already collected in first pass)
+        if let Some(line) = self.current_line() {
+            if line.starts_with(".. |") && line.contains("::") {
+                self.advance_line();
+                // Skip indented continuation lines
+                while !self.is_eof() {
+                    let cont = self.current_line().unwrap_or("");
+                    if cont.starts_with(' ') || cont.starts_with('\t') {
+                        self.advance_line();
+                    } else {
+                        break;
+                    }
+                }
+                return self.try_parse_block();
+            }
+        }
+        // Skip anonymous target lines (__ url)
+        if let Some(line) = self.current_line() {
+            if line.starts_with("__ ") {
+                self.advance_line();
+                return self.try_parse_block();
+            }
+        }
 
         // Check for horizontal rule (transition: 4+ underline chars, no following text)
         if let Some(hr) = self.try_parse_horizontal_rule() {
@@ -275,6 +327,11 @@ impl<'a> Parser<'a> {
         // Check for simple table (=== ===)
         if let Some(table) = self.try_parse_simple_table() {
             return Some(table);
+        }
+
+        // Check for line block (| prefix)
+        if let Some(lb) = self.try_parse_line_block() {
+            return Some(lb);
         }
 
         // Check for list
@@ -344,7 +401,7 @@ impl<'a> Parser<'a> {
                             self.advance_line(); // skip title
                             self.advance_line(); // skip underline
                             let level = self.get_heading_level(overline_char);
-                            let inlines = parse_inline_content(title, &self.link_targets);
+                            let inlines = self.inline_from(title);
                             return Some(Block::Heading { level, inlines });
                         }
                     }
@@ -371,7 +428,7 @@ impl<'a> Parser<'a> {
                         self.advance_line(); // skip title
                         self.advance_line(); // skip underline
                         let level = self.get_heading_level(underline_first);
-                        let inlines = parse_inline_content(title, &self.link_targets);
+                        let inlines = self.inline_from(title);
                         return Some(Block::Heading { level, inlines });
                     }
                 }
@@ -436,7 +493,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let inlines = parse_inline_content(&content, &self.link_targets);
+        let inlines = self.inline_from(&content);
         Some(Block::FootnoteDef {
             label: label.to_string(),
             inlines,
@@ -546,7 +603,7 @@ impl<'a> Parser<'a> {
             "note" | "warning" | "tip" | "important" | "caution" | "danger" | "error" | "hint"
             | "attention" => {
                 let content = content_lines.join("\n");
-                let inlines = parse_inline_content(&content, &self.link_targets);
+                let inlines = self.inline_from(&content);
                 Block::Div {
                     class: Some(directive_name.to_string()),
                     directive: None,
@@ -563,7 +620,7 @@ impl<'a> Parser<'a> {
                     None
                 } else {
                     let caption_text = content_lines.join(" ");
-                    Some(parse_inline_content(&caption_text, &self.link_targets))
+                    Some(self.inline_from(&caption_text))
                 };
                 Block::Figure {
                     url: argument.to_string(),
@@ -583,13 +640,52 @@ impl<'a> Parser<'a> {
             "math" => Block::MathDisplay {
                 source: content_lines.join("\n"),
             },
+            "admonition" => {
+                // Custom admonition with a title: .. admonition:: My Title
+                let content = content_lines.join("\n");
+                let body_inlines = self.inline_from(&content);
+                Block::Admonition {
+                    admonition_type: argument.to_string(),
+                    children: if content.is_empty() {
+                        vec![]
+                    } else {
+                        vec![Block::Paragraph {
+                            inlines: body_inlines,
+                        }]
+                    },
+                }
+            }
+            "rubric" => {
+                // rubric: argument is the heading text; no body
+                let inlines = self.inline_from(argument);
+                Block::Div {
+                    class: None,
+                    directive: Some("rubric".to_string()),
+                    children: vec![Block::Paragraph { inlines }],
+                }
+            }
+            "container" => {
+                // container: argument is the CSS class name
+                let content = content_lines.join("\n");
+                let children = if content.is_empty() {
+                    vec![]
+                } else {
+                    let inlines = self.inline_from(&content);
+                    vec![Block::Paragraph { inlines }]
+                };
+                Block::Div {
+                    class: if argument.is_empty() { None } else { Some(argument.to_string()) },
+                    directive: Some("container".to_string()),
+                    children,
+                }
+            }
             _ => {
                 // Unknown directive — create generic div (warnings handled by adapter)
                 let content = content_lines.join("\n");
                 let children = if content.is_empty() {
                     vec![]
                 } else {
-                    let inlines = parse_inline_content(&content, &self.link_targets);
+                    let inlines = self.inline_from(&content);
                     vec![Block::Paragraph { inlines }]
                 };
                 Block::Div {
@@ -648,7 +744,7 @@ impl<'a> Parser<'a> {
                             Inline::Text(s) => s.clone(),
                             _ => String::new(),
                         }).collect::<Vec<_>>().join("").trim().to_string();
-                        parse_inline_content(&text, &self.link_targets)
+                        self.inline_from(&text)
                     })
                     .collect();
                 if cells.iter().any(|c| !c.is_empty()) {
@@ -757,7 +853,7 @@ impl<'a> Parser<'a> {
                 } else {
                     String::new()
                 };
-                cells.push(parse_inline_content(&cell_text, &self.link_targets));
+                cells.push(self.inline_from(&cell_text));
             }
             rows.push(TableRow {
                 cells,
@@ -976,7 +1072,7 @@ impl<'a> Parser<'a> {
         }
 
         let mut blocks = vec![Block::Paragraph {
-            inlines: parse_inline_content(&content, &self.link_targets),
+            inlines: self.inline_from(&content),
         }];
         blocks.extend(extra_blocks);
         blocks
@@ -1046,7 +1142,7 @@ impl<'a> Parser<'a> {
             }
 
             let term = vec![Inline::Text(fname.to_string())];
-            let desc = parse_inline_content(&value, &self.link_targets);
+            let desc = self.inline_from(&value);
             items.push(DefinitionItem { term, desc });
         }
 
@@ -1098,7 +1194,7 @@ impl<'a> Parser<'a> {
                         && !next_line.trim().is_empty()
                     {
                         let term_str = line.trim();
-                        let term = parse_inline_content(term_str, &self.link_targets);
+                        let term = self.inline_from(term_str);
 
                         self.advance_line();
 
@@ -1120,7 +1216,7 @@ impl<'a> Parser<'a> {
                             }
                         }
 
-                        let desc = parse_inline_content(&def_content, &self.link_targets);
+                        let desc = self.inline_from(&def_content);
                         items.push(DefinitionItem { term, desc });
                         continue;
                     }
@@ -1251,13 +1347,38 @@ impl<'a> Parser<'a> {
                 }
             }
 
-            let inlines = parse_inline_content(&content, &self.link_targets);
+            let inlines = self.inline_from(&content);
             return Some(Block::Blockquote {
                 children: vec![Block::Paragraph { inlines }],
             });
         }
 
         None
+    }
+
+    fn try_parse_line_block(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+        // Line block: lines starting with "| " or the bare "|" (empty line in block)
+        if !line.starts_with("| ") && line != "|" {
+            return None;
+        }
+        let mut lines: Vec<Vec<Inline>> = Vec::new();
+        while !self.is_eof() {
+            let cur = self.current_line().unwrap_or("");
+            if let Some(text) = cur.strip_prefix("| ") {
+                lines.push(self.inline_from(text));
+                self.advance_line();
+            } else if cur == "|" {
+                lines.push(vec![]);
+                self.advance_line();
+            } else {
+                break;
+            }
+        }
+        if lines.is_empty() {
+            return None;
+        }
+        Some(Block::LineBlock { lines })
     }
 
     fn parse_paragraph(&mut self) -> Option<Block> {
@@ -1300,7 +1421,7 @@ impl<'a> Parser<'a> {
             content
         };
 
-        let inlines = parse_inline_content(&content, &self.link_targets);
+        let inlines = self.inline_from(&content);
         Some(Block::Paragraph { inlines })
     }
 
@@ -1312,6 +1433,16 @@ impl<'a> Parser<'a> {
 
     fn get_line_indent(&self, line: &str) -> usize {
         line.chars().take_while(|c| *c == ' ' || *c == '\t').count()
+    }
+
+    /// Parse inline content with substitution expansion and anonymous link resolution.
+    fn inline_from(&self, content: &str) -> Vec<Inline> {
+        // Expand substitutions: replace |name| with the defined replacement text
+        let expanded = expand_substitutions(content, &self.substitutions);
+        let mut nodes = parse_inline_content(&expanded, &self.link_targets);
+        // Resolve anonymous link placeholders in order
+        resolve_anon_links(&mut nodes, &self.anon_targets);
+        nodes
     }
 }
 
@@ -1414,10 +1545,33 @@ fn parse_inline_content(
             }
         }
 
-        // Inline link: `text <url>`_
+        // Inline link: `text <url>`_ or `text <url>`__ (anonymous) or `text`__ (anon ref)
         if chars[pos] == '`' {
             if let Some((end, text)) = find_closing_char(&chars, pos + 1, '`') {
-                // Check for trailing _
+                // Check for trailing __ (anonymous link — must check before single _)
+                if end + 2 < chars.len() && chars[end + 1] == '_' && chars[end + 2] == '_' {
+                    if let Some(angle_start) = text.rfind('<') {
+                        if text.ends_with('>') {
+                            let link_text = text[..angle_start].trim();
+                            let url = &text[angle_start + 1..text.len() - 1];
+                            nodes.push(Inline::Link {
+                                url: url.to_string(),
+                                children: vec![Inline::Text(link_text.to_string())],
+                            });
+                            pos = end + 3;
+                            continue;
+                        }
+                    }
+                    // Anonymous reference: `text`__ — placeholder resolved later
+                    nodes.push(Inline::Link {
+                        url: "rst:anon".to_string(),
+                        children: vec![Inline::Text(text.to_string())],
+                    });
+                    pos = end + 3;
+                    continue;
+                }
+
+                // Check for trailing _ (named link)
                 if end + 1 < chars.len() && chars[end + 1] == '_' {
                     // Check if it's an inline link with URL
                     if let Some(angle_start) = text.rfind('<') {
@@ -1646,6 +1800,74 @@ fn merge_text_nodes(nodes: &mut Vec<Inline>) {
     }
 }
 
+/// Expand substitution references `|name|` in content using the given map.
+fn expand_substitutions(
+    content: &str,
+    subs: &std::collections::HashMap<String, String>,
+) -> String {
+    if subs.is_empty() || !content.contains('|') {
+        return content.to_string();
+    }
+    let mut result = String::with_capacity(content.len());
+    let chars: Vec<char> = content.chars().collect();
+    let mut pos = 0;
+    while pos < chars.len() {
+        if chars[pos] == '|' {
+            // Find closing |
+            let mut end = pos + 1;
+            while end < chars.len() && chars[end] != '|' {
+                end += 1;
+            }
+            if end < chars.len() && chars[end] == '|' {
+                let name: String = chars[pos + 1..end].iter().collect();
+                let key = name.to_lowercase();
+                if let Some(replacement) = subs.get(&key) {
+                    result.push_str(replacement);
+                    pos = end + 1;
+                    continue;
+                }
+            }
+        }
+        result.push(chars[pos]);
+        pos += 1;
+    }
+    result
+}
+
+/// Resolve anonymous link placeholders ("rst:anon") in order using the anon_targets list.
+fn resolve_anon_links(nodes: &mut [Inline], anon_targets: &[String]) {
+    let mut idx = 0;
+    resolve_anon_links_in(nodes, anon_targets, &mut idx);
+}
+
+fn resolve_anon_links_in(nodes: &mut [Inline], anon_targets: &[String], idx: &mut usize) {
+    for node in nodes.iter_mut() {
+        match node {
+            Inline::Link { url, children } if url == "rst:anon" => {
+                if *idx < anon_targets.len() {
+                    *url = anon_targets[*idx].clone();
+                    *idx += 1;
+                }
+                resolve_anon_links_in(children, anon_targets, idx);
+            }
+            Inline::Link { children, .. }
+            | Inline::Emphasis(children)
+            | Inline::Strong(children)
+            | Inline::Strikeout(children)
+            | Inline::Underline(children)
+            | Inline::Subscript(children)
+            | Inline::Superscript(children)
+            | Inline::SmallCaps(children)
+            | Inline::RstSpan { children, .. }
+            | Inline::Quoted { children, .. }
+            | Inline::FootnoteDef { children, .. } => {
+                resolve_anon_links_in(children, anon_targets, idx);
+            }
+            _ => {}
+        }
+    }
+}
+
 // ── Builder ───────────────────────────────────────────────────────────────────
 
 /// Build an RST string from an [`RstDoc`].
@@ -1742,6 +1964,15 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             admonition_type,
             children,
         } => build_admonition(admonition_type, children, ctx),
+
+        Block::LineBlock { lines } => {
+            for line_inlines in lines {
+                ctx.write("| ");
+                build_inlines(line_inlines, ctx);
+                ctx.write("\n");
+            }
+            ctx.write("\n");
+        }
     }
 }
 
@@ -2412,5 +2643,34 @@ mod tests {
                 panic!("expected Heading block, got {:?}", reparsed.blocks[0]);
             }
         }
+    }
+}
+
+
+
+#[cfg(test)]
+#[test]
+fn test_new_features_quick() {
+    // Substitution
+    let doc = parse(".. |brand| replace:: Acme\n\nHello |brand| world.\n").unwrap();
+    if let Block::Paragraph { inlines } = &doc.blocks[0] {
+        let mut flat = String::new();
+        collect_text_from_inlines(inlines, &mut flat);
+        assert_eq!(flat, "Hello Acme world.", "substitution expansion");
+    }
+    // Anonymous link
+    let doc = parse("Visit `Example`__ for info.\n\n__ https://example.com\n").unwrap();
+    if let Block::Paragraph { inlines } = &doc.blocks[0] {
+        let link = inlines.iter().find(|i| matches!(i, Inline::Link { .. }));
+        assert!(link.is_some(), "anonymous link not found");
+        if let Some(Inline::Link { url, .. }) = link {
+            assert_eq!(url, "https://example.com", "anonymous link url");
+        }
+    }
+    // Custom admonition
+    let doc = parse(".. admonition:: My Title\n\n   Content here.\n").unwrap();
+    assert!(matches!(doc.blocks[0], Block::Admonition { .. }), "expected Admonition");
+    if let Block::Admonition { admonition_type, .. } = &doc.blocks[0] {
+        assert_eq!(admonition_type, "My Title");
     }
 }

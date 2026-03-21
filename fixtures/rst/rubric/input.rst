@@ -1,0 +1,1 @@
+.. rubric:: My Rubric Heading
