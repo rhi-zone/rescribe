@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Journal Article">17</ref-type>
+      <contributors>
+        <authors>
+          <author>Lee, Wei</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>A Paper with DOI</title>
+        <secondary-title>Nature</secondary-title>
+      </titles>
+      <dates>
+        <year>2022</year>
+      </dates>
+      <electronic-resource-num>10.1234/example.5678</electronic-resource-num>
+    </record>
+  </records>
+</xml>

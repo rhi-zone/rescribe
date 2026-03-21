@@ -1,0 +1,6 @@
+{
+  "description": "image node with url and alt properties",
+  "assertions": [
+    { "path": "/0", "kind": "image", "props": { "url": "photo.png", "alt": "A photo" } }
+  ]
+}

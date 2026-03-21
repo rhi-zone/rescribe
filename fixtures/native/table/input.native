@@ -1,0 +1,17 @@
+Document {
+  content:
+  document() [
+    table() [
+      table_row() [
+        table_cell() [
+          text( { content: "A" })
+        ]
+        table_cell() [
+          text( { content: "B" })
+        ]
+      ]
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

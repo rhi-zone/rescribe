@@ -1,0 +1,9 @@
+{
+  "description": "Multiple authors joined with semicolons in the description",
+  "assertions": [
+    { "path": "/0",   "kind": "definition_list" },
+    { "path": "/0/0", "kind": "endnote:entry" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/1", "kind": "definition_desc" }
+  ]
+}

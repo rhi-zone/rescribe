@@ -1,0 +1,8 @@
+Document {
+  content:
+  document() [
+    image( { url: "photo.png", alt: "A photo" })
+  ]
+  metadata: {}
+  resources: {}
+}

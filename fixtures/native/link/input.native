@@ -1,0 +1,12 @@
+Document {
+  content:
+  document() [
+    paragraph() [
+      link( { url: "https://example.com" }) [
+        text( { content: "Example" })
+      ]
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}
