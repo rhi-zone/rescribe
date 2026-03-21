@@ -1,0 +1,1 @@
+Use <code>inline code</code> in text.
