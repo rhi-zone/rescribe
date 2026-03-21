@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <table>
+        <row role="label"><cell>Name</cell><cell>Age</cell></row>
+        <row><cell>Alice</cell><cell>30</cell></row>
+      </table>
+    </body>
+  </text>
+</TEI>
