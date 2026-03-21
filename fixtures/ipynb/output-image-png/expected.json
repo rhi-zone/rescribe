@@ -1,0 +1,7 @@
+{
+  "description": "Jupyter display_data with image/png becomes image node",
+  "assertions": [
+    { "path": "/0", "kind": "code_block" },
+    { "path": "/1", "kind": "image", "props": { "alt": "Output image" } }
+  ]
+}

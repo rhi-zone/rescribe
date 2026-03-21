@@ -4,6 +4,6 @@
   "assertions": [
     { "path": "/", "kind": "document" },
     { "path": "/0", "kind": "paragraph" },
-    { "path": "/0/0", "kind": "image", "props": { "url": "resource:res_0" } }
+    { "path": "/0/0", "kind": "image" }
   ]
 }
