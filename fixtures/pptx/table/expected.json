@@ -1,0 +1,9 @@
+{
+  "description": "PPTX table shape becomes table node with table_row and table_cell children",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "table" },
+    { "path": "/0/0/0",     "kind": "table_row" },
+    { "path": "/0/0/0/0",   "kind": "table_cell" }
+  ]
+}
