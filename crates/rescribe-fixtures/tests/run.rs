@@ -533,6 +533,16 @@ fn rtf() {
     });
 }
 
+#[test]
+fn multimarkdown() {
+    run_format_fixtures(&fixtures_root(), "multimarkdown", |input| {
+        let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+        rescribe_read_multimarkdown::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Writer harness tests for bidirectional formats
 // ---------------------------------------------------------------------------

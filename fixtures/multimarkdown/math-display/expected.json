@@ -1,0 +1,7 @@
+{
+  "description": "MultiMarkdown $$...$$ syntax becomes math_block node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "math_block" }
+  ]
+}

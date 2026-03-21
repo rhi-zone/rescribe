@@ -1,0 +1,6 @@
+{
+  "description": "Plain paragraph becomes paragraph node",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}
