@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4).
 
 ## Maturity Pipeline
 
@@ -63,7 +63,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| mediawiki | 3 | 2 | hand | fuzz | harness |
+| mediawiki | 4 | 4 | hand | production | harness |
 | creole | 4 | 2 | hand | production | harness |
 | dokuwiki | 4 | 2 | hand | production | harness |
 | vimwiki | 4 | 2 | hand | production | harness |
@@ -196,6 +196,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 | haddock-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_haddock_reader (1.1M runs) fuzz_haddock_roundtrip (415K runs) | – | – |
 | ansi-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_ansi_reader + fuzz_ansi_roundtrip | – | – |
 | man-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse | fuzz_man_reader (2M runs) fuzz_man_roundtrip (855K runs) | – | – |
+| mediawiki-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated | fuzz_mediawiki_reader (1.5M runs) fuzz_mediawiki_roundtrip (850K runs) | – | – |
 | csv-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated | fuzz_csv_reader (807K runs) fuzz_csv_roundtrip (clean) | – | – |
 | tsv-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated; fixed whitespace-only row filter | fuzz_tsv_reader (1.1M runs) fuzz_tsv_roundtrip (670K runs) | – | – |
 | ris | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed char-boundary panic on multi-byte tag chars | fuzz_ris_reader (1.1M runs) fuzz_ris_roundtrip (241K runs) | – | – |
