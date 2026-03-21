@@ -1,0 +1,8 @@
+{
+  "description": "CSL-JSON report entry becomes csl:item with csl:type report",
+  "assertions": [
+    { "path": "/0",     "kind": "definition_list" },
+    { "path": "/0/0",   "kind": "csl:item" },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "csl:type": "report" } }
+  ]
+}
