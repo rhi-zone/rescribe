@@ -263,6 +263,39 @@ path = "../crates/readers/rescribe-read-endnotexml"
 [dependencies.rescribe-read-native]
 path = "../crates/readers/rescribe-read-native"
 
+[dependencies.rescribe-write-beamer]
+path = "../crates/writers/rescribe-write-beamer"
+
+[dependencies.rescribe-write-chunkedhtml]
+path = "../crates/writers/rescribe-write-chunkedhtml"
+
+[dependencies.rescribe-write-context]
+path = "../crates/writers/rescribe-write-context"
+
+[dependencies.rescribe-write-dzslides]
+path = "../crates/writers/rescribe-write-dzslides"
+
+[dependencies.rescribe-write-icml]
+path = "../crates/writers/rescribe-write-icml"
+
+[dependencies.rescribe-write-ms]
+path = "../crates/writers/rescribe-write-ms"
+
+[dependencies.rescribe-write-plaintext]
+path = "../crates/writers/rescribe-write-plaintext"
+
+[dependencies.rescribe-write-revealjs]
+path = "../crates/writers/rescribe-write-revealjs"
+
+[dependencies.rescribe-write-s5]
+path = "../crates/writers/rescribe-write-s5"
+
+[dependencies.rescribe-write-slideous]
+path = "../crates/writers/rescribe-write-slideous"
+
+[dependencies.rescribe-write-slidy]
+path = "../crates/writers/rescribe-write-slidy"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -850,5 +883,71 @@ doc = false
 [[bin]]
 name = "fuzz_native_reader"
 path = "fuzz_targets/native_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_beamer_writer"
+path = "fuzz_targets/beamer_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_chunkedhtml_writer"
+path = "fuzz_targets/chunkedhtml_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_context_writer"
+path = "fuzz_targets/context_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_dzslides_writer"
+path = "fuzz_targets/dzslides_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_icml_writer"
+path = "fuzz_targets/icml_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_ms_writer"
+path = "fuzz_targets/ms_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_plaintext_writer"
+path = "fuzz_targets/plaintext_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_revealjs_writer"
+path = "fuzz_targets/revealjs_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_s5_writer"
+path = "fuzz_targets/s5_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_slideous_writer"
+path = "fuzz_targets/slideous_writer.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_slidy_writer"
+path = "fuzz_targets/slidy_writer.rs"
 test = false
 doc = false

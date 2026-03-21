@@ -1203,23 +1203,34 @@ dependencies = [
  "rescribe-write-ansi",
  "rescribe-write-asciidoc",
  "rescribe-write-bbcode",
+ "rescribe-write-beamer",
+ "rescribe-write-chunkedhtml",
+ "rescribe-write-context",
  "rescribe-write-creole",
  "rescribe-write-djot",
  "rescribe-write-docx",
  "rescribe-write-dokuwiki",
+ "rescribe-write-dzslides",
  "rescribe-write-fountain",
  "rescribe-write-haddock",
  "rescribe-write-html",
+ "rescribe-write-icml",
  "rescribe-write-jira",
  "rescribe-write-man",
  "rescribe-write-markdown",
  "rescribe-write-markua",
+ "rescribe-write-ms",
  "rescribe-write-muse",
  "rescribe-write-org",
+ "rescribe-write-plaintext",
  "rescribe-write-pod",
  "rescribe-write-pptx",
+ "rescribe-write-revealjs",
  "rescribe-write-rst",
  "rescribe-write-rtf",
+ "rescribe-write-s5",
+ "rescribe-write-slideous",
+ "rescribe-write-slidy",
  "rescribe-write-t2t",
  "rescribe-write-textile",
  "rescribe-write-tikiwiki",
@@ -1713,6 +1724,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-write-beamer"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-chunkedhtml"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-context"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-write-creole"
 version = "0.1.0"
 dependencies = [
@@ -1748,6 +1783,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-write-dzslides"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-write-fountain"
 version = "0.1.0"
 dependencies = [
@@ -1767,6 +1810,14 @@ dependencies = [
 
 [[package]]
 name = "rescribe-write-html"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-icml"
 version = "0.1.0"
 dependencies = [
  "rescribe-core",
@@ -1809,6 +1860,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-write-ms"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-write-muse"
 version = "0.1.0"
 dependencies = [
@@ -1822,6 +1881,14 @@ name = "rescribe-write-org"
 version = "0.1.0"
 dependencies = [
  "org-fmt",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-plaintext"
+version = "0.1.0"
+dependencies = [
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1845,6 +1912,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-write-revealjs"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-write-rst"
 version = "0.1.0"
 dependencies = [
@@ -1860,6 +1935,30 @@ dependencies = [
  "rescribe-core",
  "rescribe-std",
  "rtf-fmt",
+]
+
+[[package]]
+name = "rescribe-write-s5"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-slideous"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-write-slidy"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
 ]
 
 [[package]]

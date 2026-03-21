@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4).
 
 ## Maturity Pipeline
 
@@ -126,17 +126,17 @@ These formats have no reader; stage 3 (harness) is not applicable.
 
 | Format | W | Library | W-next |
 |--------|---|---------|--------|
-| beamer | 2 | hand | fuzz |
-| revealjs | 2 | hand | fuzz |
-| slidy | 2 | hand | fuzz |
-| s5 | 2 | hand | fuzz |
-| dzslides | 2 | hand | fuzz |
-| slideous | 2 | hand | fuzz |
-| context | 2 | hand | fuzz |
-| ms | 2 | hand | fuzz |
-| icml | 2 | hand | fuzz |
-| chunkedhtml | 2 | hand | fuzz |
-| plaintext | 2 | hand | fuzz |
+| beamer | 4 | hand | coverage |
+| revealjs | 4 | hand | coverage |
+| slidy | 4 | hand | coverage |
+| s5 | 4 | hand | coverage |
+| dzslides | 4 | hand | coverage |
+| slideous | 4 | hand | coverage |
+| context | 4 | hand | coverage |
+| ms | 4 | hand | coverage |
+| icml | 4 | hand | coverage |
+| chunkedhtml | 4 | hand | coverage |
+| plaintext | 4 | hand | coverage |
 
 ---
 
@@ -203,7 +203,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 
 ### Formats still needing a standalone crate
 
-odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native, beamer/revealjs/slidy/s5/dzslides/slideous (presentation), context, ms, icml, chunkedhtml, plaintext
+odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native
 
 ---
 
