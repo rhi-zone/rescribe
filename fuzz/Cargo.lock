@@ -686,6 +686,10 @@ name = "muse-fmt"
 version = "0.1.0"
 
 [[package]]
+name = "native"
+version = "0.1.0"
+
+[[package]]
 name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1159,6 +1163,7 @@ dependencies = [
  "rescribe-read-docbook",
  "rescribe-read-docx",
  "rescribe-read-dokuwiki",
+ "rescribe-read-endnotexml",
  "rescribe-read-epub",
  "rescribe-read-fb2",
  "rescribe-read-fountain",
@@ -1175,6 +1180,7 @@ dependencies = [
  "rescribe-read-markua",
  "rescribe-read-multimarkdown",
  "rescribe-read-muse",
+ "rescribe-read-native",
  "rescribe-read-odt",
  "rescribe-read-opml",
  "rescribe-read-org",
@@ -1339,6 +1345,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-read-endnotexml"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-read-epub"
 version = "0.1.0"
 dependencies = [
@@ -1485,6 +1500,15 @@ name = "rescribe-read-muse"
 version = "0.1.0"
 dependencies = [
  "muse-fmt",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-native"
+version = "0.1.0"
+dependencies = [
+ "native",
  "rescribe-core",
  "rescribe-std",
 ]

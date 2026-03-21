@@ -257,6 +257,12 @@ path = "../crates/readers/rescribe-read-ipynb"
 [dependencies.rescribe-read-biblatex]
 path = "../crates/readers/rescribe-read-biblatex"
 
+[dependencies.rescribe-read-endnotexml]
+path = "../crates/readers/rescribe-read-endnotexml"
+
+[dependencies.rescribe-read-native]
+path = "../crates/readers/rescribe-read-native"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -832,5 +838,17 @@ doc = false
 [[bin]]
 name = "fuzz_biblatex_reader"
 path = "fuzz_targets/biblatex_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_endnotexml_reader"
+path = "fuzz_targets/endnotexml_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_native_reader"
+path = "fuzz_targets/native_reader.rs"
 test = false
 doc = false

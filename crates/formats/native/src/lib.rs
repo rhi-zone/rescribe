@@ -292,10 +292,12 @@ impl<'a> Parser<'a> {
             // String value
             self.advance();
             let start = self.pos;
+            let mut prev_was_backslash = false;
             while let Some(c) = self.peek() {
-                if c == '"' && !self.input[self.pos.saturating_sub(1)..self.pos].ends_with('\\') {
+                if c == '"' && !prev_was_backslash {
                     break;
                 }
+                prev_was_backslash = c == '\\';
                 self.advance();
             }
             let value = self.input[start..self.pos].replace("\\\"", "\"");
