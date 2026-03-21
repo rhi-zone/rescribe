@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc Cite becomes cite node containing the citation text inlines",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "cite" }
+  ]
+}

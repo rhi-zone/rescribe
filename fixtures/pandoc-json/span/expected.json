@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc Span becomes span node with id and classes properties",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "id": "my-id", "classes": "highlight" } }
+  ]
+}

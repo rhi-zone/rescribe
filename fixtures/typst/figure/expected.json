@@ -1,0 +1,7 @@
+{
+  "description": "Typst #figure() becomes figure node with image and paragraph caption children",
+  "assertions": [
+    { "path": "/0",   "kind": "figure" },
+    { "path": "/0/0", "kind": "image" }
+  ]
+}

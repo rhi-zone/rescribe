@@ -1,0 +1,7 @@
+{
+  "description": "AsciiDoc block image (image::path[alt]) becomes figure node containing image node",
+  "assertions": [
+    { "path": "/0",   "kind": "figure" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "photo.png", "alt": "A photo" } }
+  ]
+}

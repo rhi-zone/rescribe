@@ -1,0 +1,6 @@
+{
+  "description": "Typst #quote() becomes blockquote node",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" }
+  ]
+}

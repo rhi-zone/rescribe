@@ -1,0 +1,7 @@
+{
+  "description": "Typst display math ($ ... $) becomes math_block node with math:source property",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "math_block" }
+  ]
+}

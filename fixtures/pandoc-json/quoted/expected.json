@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc Quoted becomes quoted node with quote_type property",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "quoted", "props": { "quote_type": "double" } }
+  ]
+}

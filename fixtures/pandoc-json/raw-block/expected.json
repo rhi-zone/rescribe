@@ -1,0 +1,6 @@
+{
+  "description": "Pandoc RawBlock becomes raw_block node with format and content properties",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "format": "html", "content": "<hr/>" } }
+  ]
+}

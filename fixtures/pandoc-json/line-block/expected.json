@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc LineBlock becomes paragraph with line_break between lines",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "line_break" }
+  ]
+}

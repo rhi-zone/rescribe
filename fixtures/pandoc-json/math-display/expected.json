@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc DisplayMath becomes math_display node with math:source property",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "math_display", "props": { "math:source": "E = mc^2" } }
+  ]
+}

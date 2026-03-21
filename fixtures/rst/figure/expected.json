@@ -1,0 +1,8 @@
+{
+  "description": "RST figure directive becomes figure node with image and caption children",
+  "assertions": [
+    { "path": "/0",   "kind": "figure" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "photo.png", "alt": "A photo" } },
+    { "path": "/0/1", "kind": "caption" }
+  ]
+}

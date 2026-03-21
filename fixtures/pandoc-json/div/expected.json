@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc Div becomes div node with id and classes properties",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "id": "my-div", "classes": "note" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

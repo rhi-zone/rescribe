@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc Image becomes image node with url, alt, and title properties",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "image.png", "alt": "alt text", "title": "My title" } }
+  ]
+}

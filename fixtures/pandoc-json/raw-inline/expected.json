@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc RawInline becomes raw_inline node with format and content properties",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "raw_inline", "props": { "format": "html", "content": "<em>raw</em>" } }
+  ]
+}

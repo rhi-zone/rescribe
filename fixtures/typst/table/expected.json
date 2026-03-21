@@ -1,0 +1,10 @@
+{
+  "description": "Typst #table() becomes table node with table_row children",
+  "assertions": [
+    { "path": "/0",       "kind": "table" },
+    { "path": "/0/0",     "kind": "table_row" },
+    { "path": "/0/0/0",   "kind": "table_cell" },
+    { "path": "/0/1",     "kind": "table_row" },
+    { "path": "/0/1/0",   "kind": "table_cell" }
+  ]
+}
