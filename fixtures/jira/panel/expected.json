@@ -1,0 +1,6 @@
+{
+  "description": "Panel block via {panel:title=...}...{panel}",
+  "assertions": [
+    { "path": "/0", "kind": "div" }
+  ]
+}
