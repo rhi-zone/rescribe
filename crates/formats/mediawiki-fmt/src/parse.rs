@@ -2,6 +2,26 @@
 
 use crate::ast::{Block, Diagnostic, Inline, MediawikiDoc, Span, TableCell, TableRow};
 
+/// Returns true if `chars[pos..]` starts with `<tag>` exactly.
+fn match_html_tag(chars: &[char], pos: usize, tag: &str) -> bool {
+    let tag_chars: Vec<char> = tag.chars().collect();
+    let open_len = 1 + tag_chars.len() + 1;
+    if pos + open_len > chars.len() {
+        return false;
+    }
+    chars[pos] == '<'
+        && chars[pos + 1..pos + 1 + tag_chars.len()] == tag_chars[..]
+        && chars[pos + 1 + tag_chars.len()] == '>'
+}
+
+/// Finds the first occurrence of `</tag>` in `chars[start..]`, returns its position.
+fn find_close_html_tag(chars: &[char], start: usize, tag: &str) -> Option<usize> {
+    let close: Vec<char> = format!("</{}>", tag).chars().collect();
+    let close_len = close.len();
+    (start..=chars.len().saturating_sub(close_len))
+        .find(|&pos| chars[pos..pos + close_len] == close[..])
+}
+
 /// Parse a MediaWiki string into a [`MediawikiDoc`].
 ///
 /// The parser is infallible: any unrecognised input is treated as a paragraph.
@@ -317,6 +337,30 @@ impl<'a> Parser<'a> {
 
                 if end + 1 < chars.len() {
                     let inner: String = chars[start..end].iter().collect();
+
+                    // Image: [[File:filename|alt]] or [[Image:filename|alt]]
+                    let image_prefix = if inner.starts_with("File:") {
+                        Some(5usize)
+                    } else if inner.starts_with("Image:") {
+                        Some(6usize)
+                    } else {
+                        None
+                    };
+                    if let Some(prefix_len) = image_prefix {
+                        let (url_part, alt_part) = if let Some(pipe_pos) = inner.find('|') {
+                            (inner[prefix_len..pipe_pos].to_string(), inner[pipe_pos + 1..].to_string())
+                        } else {
+                            (inner[prefix_len..].to_string(), String::new())
+                        };
+                        if !current_text.is_empty() {
+                            inlines.push(Inline::Text(current_text.clone()));
+                            current_text.clear();
+                        }
+                        inlines.push(Inline::Image { url: url_part, alt: alt_part });
+                        i = end + 2;
+                        continue;
+                    }
+
                     let (url, text) = if let Some(pipe_pos) = inner.find('|') {
                         let url = &inner[..pipe_pos];
                         let text = &inner[pipe_pos + 1..];
@@ -381,6 +425,85 @@ impl<'a> Parser<'a> {
                     let code_text: String = chars[start..end].iter().collect();
                     inlines.push(Inline::Code(code_text));
                     i = end + 7;
+                    continue;
+                }
+            }
+
+            // HTML tag inlines: <br/>, <br />, <sup>, <sub>, <s>, <u>
+            if chars[i] == '<' {
+                // <br/> or <br />
+                let is_br_void = chars.get(i + 1) == Some(&'b')
+                    && chars.get(i + 2) == Some(&'r')
+                    && chars.get(i + 3) == Some(&'/')
+                    && chars.get(i + 4) == Some(&'>');
+                let is_br_space = chars.get(i + 1) == Some(&'b')
+                    && chars.get(i + 2) == Some(&'r')
+                    && chars.get(i + 3) == Some(&' ')
+                    && chars.get(i + 4) == Some(&'/')
+                    && chars.get(i + 5) == Some(&'>');
+                if is_br_void || is_br_space {
+                    if !current_text.is_empty() {
+                        inlines.push(Inline::Text(current_text.clone()));
+                        current_text.clear();
+                    }
+                    inlines.push(Inline::LineBreak);
+                    i += if is_br_void { 5 } else { 6 };
+                    continue;
+                }
+
+                // <sup>...</sup>
+                if match_html_tag(&chars, i, "sup")
+                    && let Some(close) = find_close_html_tag(&chars, i + 5, "sup")
+                {
+                    if !current_text.is_empty() {
+                        inlines.push(Inline::Text(current_text.clone()));
+                        current_text.clear();
+                    }
+                    let inner: String = chars[i + 5..close].iter().collect();
+                    inlines.push(Inline::Superscript(self.parse_inline(&inner)));
+                    i = close + 6; // "</sup>" is 6 chars
+                    continue;
+                }
+
+                // <sub>...</sub>
+                if match_html_tag(&chars, i, "sub")
+                    && let Some(close) = find_close_html_tag(&chars, i + 5, "sub")
+                {
+                    if !current_text.is_empty() {
+                        inlines.push(Inline::Text(current_text.clone()));
+                        current_text.clear();
+                    }
+                    let inner: String = chars[i + 5..close].iter().collect();
+                    inlines.push(Inline::Subscript(self.parse_inline(&inner)));
+                    i = close + 6; // "</sub>" is 6 chars
+                    continue;
+                }
+
+                // <s>...</s>  (after <sub>/<sup> to avoid prefix conflict)
+                if match_html_tag(&chars, i, "s")
+                    && let Some(close) = find_close_html_tag(&chars, i + 3, "s")
+                {
+                    if !current_text.is_empty() {
+                        inlines.push(Inline::Text(current_text.clone()));
+                        current_text.clear();
+                    }
+                    let inner: String = chars[i + 3..close].iter().collect();
+                    inlines.push(Inline::Strikeout(self.parse_inline(&inner)));
+                    i = close + 4; // "</s>" is 4 chars
+                    continue;
+                }
+
+                // <u>...</u>
+                if match_html_tag(&chars, i, "u")
+                    && let Some(close) = find_close_html_tag(&chars, i + 3, "u")
+                {
+                    if !current_text.is_empty() {
+                        inlines.push(Inline::Text(current_text.clone()));
+                        current_text.clear();
+                    }
+                    let inner: String = chars[i + 3..close].iter().collect();
+                    inlines.push(Inline::Underline(self.parse_inline(&inner)));
+                    i = close + 4; // "</u>" is 4 chars
                     continue;
                 }
             }
