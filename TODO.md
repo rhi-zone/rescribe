@@ -11,6 +11,27 @@ This file describes milestones, format tiers, and cross-cutting work.
 
 ---
 
+## Near-term mode of working: finish one format before starting the next
+
+The codebase has wide coverage but shallow depth. The goal now is to go deep on each
+format in priority order — **do not move to the next format until the current one is done**.
+
+"Done" means all of the following:
+
+- **Comprehensive fixture suite**: every construct the format can express has at least one
+  fixture, including edge cases and adversarial inputs (empty files, deeply nested
+  structures, malformed/truncated input, unusual encodings, etc.)
+- **Pandoc/oracle harness at ≥90%** (where applicable)
+- **Fuzz clean**: both no-panic gate and roundtrip property, run until no failures
+- **Benchmarks**: at least one `cargo bench` target for the format's reader and writer,
+  measuring real-world throughput (use a corpus file or a generated large document)
+- **5-Production sign-off** in `docs/format-audit.md`
+
+Horizontal sweeps (adding one fixture per format, then looping) are explicitly out of
+scope. The measure of progress is finished verticals, not fixture count.
+
+---
+
 ## Completed
 
 - [x] CLI tool (`rescribe-cli`)
