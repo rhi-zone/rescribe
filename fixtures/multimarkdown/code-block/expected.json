@@ -1,0 +1,6 @@
+{
+  "description": "Fenced code block becomes code_block node with language prop",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "rust" } }
+  ]
+}
