@@ -233,7 +233,9 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Roundtrip fuzz target (`fuzz_muse_roundtrip`) — 1.15M runs clean (2026-03-21)
   - [x] Fixed OOM/infinite-loop bugs: unknown `<` tag and over-leveled `****** ` heading
   - [x] Fixed roundtrip italic-boundary loss: word-boundary guard in fuzz target
-  - [ ] 100% construct coverage — links, verse/quote blocks, definition lists, hr
+  - [x] Fixtures: blockquote, horizontal-rule, definition-list added (2026-03-21)
+  - [ ] Verse block fixture
+  - [ ] Table support (not in muse AST yet)
   - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
 - [x] `man-fmt` vertical — **4-Fuzz** (2026-03-21)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs

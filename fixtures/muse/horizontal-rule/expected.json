@@ -1,0 +1,8 @@
+{
+  "description": "Horizontal rule via 4+ dashes",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "horizontal_rule" },
+    { "path": "/2", "kind": "paragraph" }
+  ]
+}
