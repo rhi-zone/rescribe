@@ -1,0 +1,6 @@
+{
+  "description": "Display math via .. math:: directive",
+  "assertions": [
+    { "path": "/0", "kind": "math_display", "props": { "math:source": "E = mc^2" } }
+  ]
+}

@@ -189,13 +189,20 @@ Each Tier A format at 5-Production with a published standalone crate.
 - [ ] `rst-fmt` vertical — **4-Fuzz** (reader 1.3M clean, roundtrip 576K clean, 2026-03-20)
   - [x] No-panic fuzz gate (`fuzz_rst_reader`)
   - [x] Roundtrip fuzz target (`fuzz_rst_roundtrip`)
-  - [ ] 100% construct coverage — inline markup, links, code blocks, directives, footnotes, tables
+  - [x] Fixtures: superscript, subscript, math-inline, math-display added (2026-03-21)
+  - [ ] Table parsing (not in parser yet)
+  - [ ] Footnote parsing (FootnoteRef inline never created)
+  - [ ] Strikeout, Underline, SmallCaps inline (no parser support)
+  - [ ] HorizontalRule (no parser support)
 - [ ] `asciidoc` vertical — **4-Fuzz** (reader 1.9M clean, roundtrip 591K clean, 2026-03-20)
   - [x] No-panic fuzz gate (`fuzz_asciidoc_reader`)
   - [x] Roundtrip fuzz target (`fuzz_asciidoc_roundtrip`)
+  - [x] Fixtures: superscript, subscript, image, line-break added (2026-03-21)
   - [ ] Known roundtrip gap: [role]#text# syntax (Strikeout/Underline/SmallCaps emitted as
         [line-through]#text# / [underline]#text# / [small-caps]#text# but parsed back as Highlight)
-  - [ ] 100% construct coverage — tables, footnotes, math, admonitions, attributes
+  - [ ] Table parsing (not in parser yet)
+  - [ ] Footnote parsing (not in parser yet)
+  - [ ] Math parsing (not in parser yet)
 - [ ] `textile-fmt` vertical — **4-Fuzz** (2026-03-21)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
