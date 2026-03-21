@@ -1,0 +1,7 @@
+{
+  "description": "Image directive with alt text; width and height options present in source but not yet modeled in IR",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "image", "props": { "url": "banner.png", "alt": "Site banner" } }
+  ]
+}

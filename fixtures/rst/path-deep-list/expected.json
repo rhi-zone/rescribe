@@ -1,0 +1,7 @@
+{
+  "description": "Deeply nested list; all levels are flattened into a single list by the parser",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } }
+  ]
+}

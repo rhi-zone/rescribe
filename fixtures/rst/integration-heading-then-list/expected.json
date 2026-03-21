@@ -1,0 +1,14 @@
+{
+  "description": "Heading followed immediately by an unordered list (no paragraph between)",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Items" } },
+    { "path": "/1", "kind": "list", "props": { "ordered": false } },
+    { "path": "/1/0", "kind": "list_item" },
+    { "path": "/1/0/0", "kind": "paragraph" },
+    { "path": "/1/0/0/0", "kind": "text", "props": { "content": "alpha" } },
+    { "path": "/1/1", "kind": "list_item" },
+    { "path": "/1/2", "kind": "list_item" }
+  ]
+}

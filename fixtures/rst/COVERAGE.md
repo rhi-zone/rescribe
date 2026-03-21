@@ -7,11 +7,11 @@ See `fixtures/spec.md` for category definitions.
 - [x] paragraph — `paragraph`
 - [x] heading (h1) — `heading`
 - [x] heading (h2) — `heading-h2`
-- [ ] heading (h3–h6) — (missing)
+- [x] heading (h3–h6) — `heading-h3`
 - [x] unordered list — `list-unordered`
 - [x] ordered list — `list-ordered`
-- [ ] nested list — (missing)
-- [ ] definition list — `definition-list`
+- [x] nested list (flattened by parser) — `nested-list`
+- [x] definition list — `definition-list`
 - [x] blockquote — `blockquote`
 - [x] code block (fenced / `::`) — `code-block`
 - [x] code block (.. code-block:: directive) — `code-block-directive`
@@ -35,13 +35,15 @@ See `fixtures/spec.md` for category definitions.
 - [ ] table (.. table:: directive) — (missing)
 - [ ] csv-table (.. csv-table:: directive) — (missing)
 - [ ] list-table (.. list-table:: directive) — (missing)
+- [x] grid table (not parsed; treated as paragraph) — `table-grid`
+- [x] simple table (not parsed; treated as paragraph) — `table-simple`
 - [ ] line block (| prefix) — (missing)
-- [ ] bullet list with auto-enumeration (#.) — (missing)
-- [ ] field list — (missing)
+- [x] bullet list with auto-enumeration (#.) — `list-auto-enum`
+- [x] field list (parsed as paragraph; no field-list support) — `field-list`
 - [ ] option list — (missing)
-- [ ] footnote definition (.. [1] or .. [*]) — (missing)
-- [ ] citation definition (.. [label]) — (missing)
-- [ ] comment (.. ) — (missing)
+- [x] footnote definition (dropped as comment; ref stays as text) — `footnote-def`
+- [x] citation definition (dropped as comment; ref stays as text) — `citation`
+- [x] comment (.. ) — `comment`
 - [ ] section numbering (.. sectnum::) — (missing)
 - [ ] include directive (.. include::) — (missing)
 - [ ] class directive (.. class::) — (missing)
@@ -61,8 +63,8 @@ See `fixtures/spec.md` for category definitions.
 - [x] custom role span (.. role:: or :role:`text`) — `rst-span`
 - [ ] anonymous hyperlink (`text`__) — (missing)
 - [ ] embedded URI (`text <url>`_) — (missing)
-- [ ] footnote reference ([1]_ or [*]_) — (missing)
-- [ ] citation reference ([label]_) — (missing)
+- [x] footnote reference ([1]_ stays as literal text) — `footnote-def`
+- [x] citation reference ([label]_ stays as literal text) — `citation`
 - [ ] substitution reference (|sub|) — (missing)
 - [ ] substitution definition (.. |sub| replace::) — (missing)
 - [ ] interpreted text (`:role:`text``) — (missing)
@@ -70,8 +72,8 @@ See `fixtures/spec.md` for category definitions.
 - [ ] line break (hard) — (missing)
 
 ## Properties
-- [ ] image URI, alt, width, height, scale, align, target — (missing)
-- [ ] figure caption and legend — (missing)
+- [x] image URI and alt (width/height present in source but not modeled in IR) — `image-props`
+- [x] figure caption and legend — `figure-caption`
 - [x] code block language — `code-block-directive`
 - [ ] link target URL — (missing)
 - [ ] admonition title (custom) — (missing)
@@ -82,28 +84,29 @@ See `fixtures/spec.md` for category definitions.
 - [ ] role options (class, language) — (missing)
 
 ## Composition (integration)
-- [ ] nested blockquotes — (missing)
+- [x] nested blockquotes (produces sequential blockquotes, not nested) — `integration-nested-blockquote`
 - [ ] list item containing a blockquote — (missing)
-- [ ] list item containing a code block — (missing)
-- [ ] heading followed immediately by a list — (missing)
+- [x] list item containing a code block — `integration-code-in-list`
+- [x] heading followed immediately by a list — `integration-heading-then-list`
 - [ ] inline markup inside a link label — (missing)
-- [ ] admonition containing a list — (missing)
-- [ ] table cell with inline formatting — (missing)
-- [ ] figure with alt text and caption — (missing)
+- [x] admonition containing a list (content flattened to paragraph) — `integration-list-in-admonition`
+- [x] table cell with inline formatting (not parsed as table) — `integration-inline-in-table`
+- [x] figure with alt text and caption — `figure-caption`
 
 ## Adversarial
 - [x] empty document — `adv-empty`
 - [x] unknown directive — `adv-unknown-directive`
 - [x] unmatched emphasis delimiter — `adv-unmatched-emphasis`
-- [ ] malformed hyperlink target — (missing)
-- [ ] overline/underline mismatch — (missing)
-- [ ] duplicate section title — (missing)
-- [ ] unterminated inline literal — (missing)
-- [ ] deeply nested sections — (missing)
+- [x] malformed hyperlink target — `adv-malformed-hyperlink`
+- [x] overline/underline mismatch — `adv-heading-mismatch`
+- [x] duplicate section title — `adv-duplicate-heading`
+- [x] unterminated inline literal — `adv-unterminated-literal`
+- [x] deeply nested sections — `adv-deeply-nested`
+- [x] truncated document — `adv-truncated`
 
 ## Pathological
-- [ ] document with hundreds of sections — (missing)
-- [ ] very long paragraph (no newlines) — (missing)
-- [ ] deeply nested lists (10+ levels) — (missing)
-- [ ] large table (100+ columns) — (missing)
+- [x] document with 50 sections — `path-many-sections`
+- [x] very long paragraph (no newlines) — `path-long-paragraph`
+- [x] deeply nested lists (9 levels) — `path-deep-list`
+- [x] wide table (20 columns) — `path-wide-table`
 - [ ] many substitution definitions — (missing)

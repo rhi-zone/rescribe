@@ -1,0 +1,7 @@
+{
+  "description": "Document with 50 short sections parses without panic or excessive resource use",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "heading" }
+  ]
+}

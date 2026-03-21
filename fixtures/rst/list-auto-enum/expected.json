@@ -1,0 +1,16 @@
+{
+  "description": "Auto-enumerated list using #. prefix produces an ordered list",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": true } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "First item" } },
+    { "path": "/0/1", "kind": "list_item" },
+    { "path": "/0/1/0", "kind": "paragraph" },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Second item" } },
+    { "path": "/0/2", "kind": "list_item" },
+    { "path": "/0/2/0", "kind": "paragraph" },
+    { "path": "/0/2/0/0", "kind": "text", "props": { "content": "Third item" } }
+  ]
+}

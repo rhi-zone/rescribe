@@ -1,0 +1,8 @@
+{
+  "description": "Field list (:Name: value) is parsed as a single paragraph (no field-list support)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": ":Author: Jane Doe :Date: 2024-01-01" } }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "description": "Overline/underline length mismatch in heading decorations is handled gracefully without panic",
+  "category": "adversarial",
+  "assertions": []
+}

@@ -1,0 +1,10 @@
+{
+  "description": "Figure directive with alt text and caption child node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "figure" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "chart.png", "alt": "A bar chart" } },
+    { "path": "/0/1", "kind": "caption" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "This caption describes the figure." } }
+  ]
+}

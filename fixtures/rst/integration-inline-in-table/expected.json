@@ -1,0 +1,7 @@
+{
+  "description": "Table with inline formatting: not parsed as table, treated as paragraph with inline markup",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

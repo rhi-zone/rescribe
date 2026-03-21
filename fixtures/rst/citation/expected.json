@@ -1,0 +1,8 @@
+{
+  "description": "Citation definition (.. [label] text) treated as comment and dropped; reference stays as literal text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "See [Smith2020]_." } }
+  ]
+}

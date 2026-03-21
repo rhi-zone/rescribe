@@ -1,0 +1,9 @@
+{
+  "description": "List item followed by literal block: parser produces list, then blockquote, then another list",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/1", "kind": "blockquote" },
+    { "path": "/2", "kind": "list", "props": { "ordered": false } }
+  ]
+}

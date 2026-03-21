@@ -1,0 +1,8 @@
+{
+  "description": "Admonition containing list items; reader flattens content into a paragraph with inline markup",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "note" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

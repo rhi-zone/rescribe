@@ -1,0 +1,10 @@
+{
+  "description": "RST comment (.. without ::) is silently dropped; surrounding paragraphs survive",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Before comment." } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "After comment." } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Simple table (=== borders) is not parsed; treated as paragraph text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

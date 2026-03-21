@@ -1,0 +1,7 @@
+{
+  "description": "Single paragraph with 5000+ characters and no newlines parses without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

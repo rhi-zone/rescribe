@@ -1,0 +1,7 @@
+{
+  "description": "Unclosed inline literal (double backtick) is handled gracefully without panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

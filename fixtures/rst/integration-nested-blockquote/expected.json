@@ -1,0 +1,13 @@
+{
+  "description": "Two indentation levels produce two sequential blockquote nodes (parser flattens nesting)",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "blockquote" },
+    { "path": "/1/0", "kind": "paragraph" },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "First level quote." } },
+    { "path": "/2", "kind": "blockquote" },
+    { "path": "/2/0", "kind": "paragraph" },
+    { "path": "/2/0/0", "kind": "text", "props": { "content": "Second level quote." } }
+  ]
+}
