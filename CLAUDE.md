@@ -132,16 +132,32 @@ cd docs && bun dev # Local docs
 
 Pandoc fixtures at `~/git/pandoc/test/` can be used as local reference inputs (GPL - don't copy into repo). Run rescribe against them to validate parsing.
 
-## Long-term Goal: 100% Spec Coverage
+## The fixture suite is the primary deliverable
 
-The owned fixture suite (`fixtures/`) is the primary deliverable for correctness:
+**The `fixtures/` directory is the real product.** The Rust crates are the reference
+implementation that proves the fixtures are correct — but the fixture suite is what
+matters for the ecosystem. Any implementation in any language should be able to take
+`fixtures/{format}/{feature}/input.{ext}` + `expected.json` and use them as a complete
+correctness test. Passing 100% of fixtures for a format means you have correctly
+implemented that format — no gaps, no silent drops, no ambiguity.
 
-- **Language-agnostic**: any implementation in any language uses `fixtures/{format}/{feature}/input.{ext}` + `expected.json`
-- **100% pass rate = 100% implementation support** — rich enough that passing all fixtures means you have correctly implemented the format's full construct set
-- **Coverage definition**: one fixture per (format × construct) pair, including all block kinds, all inline kinds, all significant properties, and key composition cases
+This shapes what "done" means for a format:
+
+- **Coverage**: every construct the format can express has at least one fixture —
+  every block kind, inline kind, significant property, and composition case
+- **Edge cases and adversarial inputs**: empty files, deeply nested structures,
+  degenerate tables, malformed/truncated input, unusual but valid encodings —
+  anything a real implementation might get wrong
+- **Unambiguous**: each fixture has exactly one correct output; if a correct
+  alternative implementation would be uncertain what to produce, the fixture is
+  underspecified and must be strengthened
+- **Language-agnostic**: `fixtures/{format}/{feature}/input.{ext}` + `expected.json`;
+  no Rust-specific assumptions
 - **See `fixtures/spec.md`** for the fixture format spec
 
-When adding fixtures, always think: "would a correct alternative implementation of this format, reading this fixture, know exactly what to produce?" If not, the fixture is underspecified.
+When adding fixtures, always ask: "would a correct alternative implementation of this
+format, reading this fixture, know exactly what to produce?" If not, the fixture is
+underspecified.
 
 **When you add support for a new parsed construct, add a fixture for it in the same commit.**
 No new feature without a fixture. Use `transition_analysis` to verify the fixture closes

@@ -13,22 +13,28 @@ This file describes milestones, format tiers, and cross-cutting work.
 
 ## Near-term mode of working: finish one format before starting the next
 
-The codebase has wide coverage but shallow depth. The goal now is to go deep on each
-format in priority order — **do not move to the next format until the current one is done**.
+The fixture suite is the primary deliverable. A format's fixtures should be comprehensive
+enough that any implementation in any language could use them as a complete correctness
+test — every construct, every edge case, every adversarial input a real implementation
+might get wrong.
+
+Work one format at a time in priority order. **Do not move to the next format until the
+current one is done.**
 
 "Done" means all of the following:
 
-- **Comprehensive fixture suite**: every construct the format can express has at least one
-  fixture, including edge cases and adversarial inputs (empty files, deeply nested
-  structures, malformed/truncated input, unusual encodings, etc.)
+- **Comprehensive fixture suite** — every construct the format can express has at least
+  one fixture, including composition cases, edge cases, and adversarial inputs (empty
+  files, deeply nested structures, malformed/truncated input, unusual but valid encodings).
+  The bar: a correct reimplementation in any language, given only the fixtures, would know
+  exactly what to produce for every case.
 - **Pandoc/oracle harness at ≥90%** (where applicable)
 - **Fuzz clean**: both no-panic gate and roundtrip property, run until no failures
-- **Benchmarks**: at least one `cargo bench` target for the format's reader and writer,
-  measuring real-world throughput (use a corpus file or a generated large document)
+- **Benchmarks**: at least one `cargo bench` target measuring reader and writer throughput
 - **5-Production sign-off** in `docs/format-audit.md`
 
-Horizontal sweeps (adding one fixture per format, then looping) are explicitly out of
-scope. The measure of progress is finished verticals, not fixture count.
+Horizontal sweeps (one fixture per format, then loop) are explicitly out of scope.
+The measure of progress is finished verticals.
 
 ---
 
