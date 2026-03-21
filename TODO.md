@@ -59,7 +59,9 @@ Target: **2-Fixtures**.
 Creole, DokuWiki, VimWiki, ZimWiki, XWiki, TWiki, TikiWiki, Jira,
 ANSI, Haddock, Markua, Texinfo, POD
 (Fountain: advanced to 4-Fuzz 2026-03-21; Muse: 5-Production; t2t: 4-Fuzz;
-BBCode: advanced to 4-Fuzz 2026-03-21)
+BBCode: advanced to 4-Fuzz 2026-03-21;
+All 8 wiki formats advanced to 4-Fuzz 2026-03-21;
+csv-fmt, tsv-fmt, ris, texinfo advanced to 4-Fuzz 2026-03-21)
 
 ### Tier D — Output-only, low investment
 
