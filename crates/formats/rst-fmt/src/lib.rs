@@ -252,6 +252,11 @@ impl<'a> Parser<'a> {
             }
         }
 
+        // Check for horizontal rule (transition: 4+ underline chars, no following text)
+        if let Some(hr) = self.try_parse_horizontal_rule() {
+            return Some(hr);
+        }
+
         // Check for heading (text followed by underline)
         if let Some(heading) = self.try_parse_heading() {
             return Some(heading);
@@ -284,6 +289,19 @@ impl<'a> Parser<'a> {
 
         // Regular paragraph
         self.parse_paragraph()
+    }
+
+    fn try_parse_horizontal_rule(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+        // RST transitions: 4+ identical punctuation chars, next line blank or EOF
+        if line.len() >= 4 && self.is_underline(line) {
+            let next = self.peek_line();
+            if next.is_none() || next.unwrap().trim().is_empty() {
+                self.advance_line();
+                return Some(Block::HorizontalRule);
+            }
+        }
+        None
     }
 
     fn try_parse_heading(&mut self) -> Option<Block> {
