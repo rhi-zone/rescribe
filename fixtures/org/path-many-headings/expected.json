@@ -1,0 +1,9 @@
+{
+  "description": "Document with 100 headings at various levels; must not panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "",   "kind": "document", "children_count": 100 },
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/99", "kind": "heading" }
+  ]
+}

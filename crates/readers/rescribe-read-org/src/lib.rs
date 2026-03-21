@@ -5,7 +5,7 @@
 //! Delegates all parsing to `org-fmt`, then maps the `OrgDoc` AST into
 //! rescribe `Node`/`Document` types.
 
-use org_fmt::{Block, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc, TableRow};
+use org_fmt::{Block, CheckboxState, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc, TableRow};
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Severity, WarningKind,
 };
@@ -68,16 +68,31 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             Node::new(node::PARAGRAPH).children(convert_inlines(inlines))
         }
 
-        Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
-            .prop(prop::LEVEL, *level as i64)
-            .children(convert_inlines(inlines)),
+        Block::Heading { level, todo, priority, tags, inlines, .. } => {
+            let mut n = Node::new(node::HEADING)
+                .prop(prop::LEVEL, *level as i64)
+                .children(convert_inlines(inlines));
+            if let Some(kw) = todo {
+                n = n.prop("org:todo", kw.clone());
+            }
+            if let Some(p) = priority {
+                n = n.prop("org:priority", p.clone());
+            }
+            if !tags.is_empty() {
+                n = n.prop("org:tags", tags.join(":"));
+            }
+            n
+        }
 
         Block::CodeBlock {
-            language, content, ..
+            language, header_args, content, ..
         } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
+            }
+            if let Some(args) = header_args {
+                n = n.prop("org:header-args", args.clone());
             }
             n
         }
@@ -160,12 +175,24 @@ fn convert_list_item(item: &ListItem) -> Node {
     }
     // If we ended up with just one paragraph and it's what the parser produced,
     // unwrap it so list items have inline children directly (matching original behavior)
-    if children.len() == 1 && children[0].kind.as_str() == node::PARAGRAPH {
+    let mut node = if children.len() == 1 && children[0].kind.as_str() == node::PARAGRAPH {
         let para = children.remove(0);
         Node::new(node::LIST_ITEM).children(para.children)
     } else {
         Node::new(node::LIST_ITEM).children(children)
+    };
+
+    // Map checkbox state to a prop
+    if let Some(checkbox) = item.checkbox {
+        let val = match checkbox {
+            CheckboxState::Unchecked => "unchecked",
+            CheckboxState::Checked => "checked",
+            CheckboxState::Partial => "partial",
+        };
+        node = node.prop("checkbox", val);
     }
+
+    node
 }
 
 fn convert_table(rows: &[TableRow]) -> Node {
@@ -246,6 +273,14 @@ fn convert_inline(inline: &Inline) -> Node {
         Inline::MathInline { source, .. } => {
             Node::new("math_inline").prop("math:source", source.clone())
         }
+
+        Inline::Timestamp { active, value, .. } => Node::new(node::SPAN)
+            .prop("org:timestamp-active", *active)
+            .prop(prop::CONTENT, value.clone()),
+
+        Inline::ExportSnippet { backend, value, .. } => Node::new(node::RAW_INLINE)
+            .prop(prop::FORMAT, backend.clone())
+            .prop(prop::CONTENT, value.clone()),
     }
 }
 

@@ -1,0 +1,8 @@
+{
+  "description": "Nested unordered list: inner items are continuation of outer item (current behavior)",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "LaTeX fragment \\(...\\) produces math_inline node",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "math_inline", "props": { "math:source": "x^2 + 1 = 0" } }
+  ]
+}

@@ -1,7 +1,8 @@
 {
-  "description": "Unknown block types are skipped with a fidelity warning; must not panic",
+  "description": "Unknown block types are emitted as div nodes; must not panic",
   "category": "adversarial",
   "assertions": [
-    { "path": "/0", "kind": "paragraph" }
+    { "path": "/0", "kind": "div" },
+    { "path": "/1", "kind": "paragraph" }
   ]
 }

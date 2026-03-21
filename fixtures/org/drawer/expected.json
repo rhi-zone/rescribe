@@ -1,0 +1,7 @@
+{
+  "description": "Drawer (:LOGBOOK:...:END:) is dropped with a fidelity warning; paragraph after is preserved",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

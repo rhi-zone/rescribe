@@ -1,0 +1,8 @@
+{
+  "description": "Unordered list inside ordered list item; nested sub-list treated as continuation text (parser limitation); must not panic",
+  "assertions": [
+    { "path": "/0",   "kind": "list", "props": { "ordered": true } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}

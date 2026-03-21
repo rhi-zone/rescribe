@@ -1,0 +1,8 @@
+{
+  "description": "Export snippet @@backend:content@@ produces raw_inline node with format and content props",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "raw_inline", "props": { "format": "html", "content": "<b>" } },
+    { "path": "/0/2", "kind": "raw_inline", "props": { "format": "html", "content": "</b>" } }
+  ]
+}

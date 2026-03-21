@@ -1,0 +1,8 @@
+{
+  "description": "Non-special #+KEY: value keyword lines are stored as document metadata; paragraph is preserved",
+  "metadata": { "custom_key": "some value" },
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

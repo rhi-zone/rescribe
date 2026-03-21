@@ -1,0 +1,10 @@
+{
+  "description": "Table row missing closing | is still parsed without panic; row has two cells",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "table" },
+    { "path": "/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/1", "kind": "table_cell" }
+  ]
+}

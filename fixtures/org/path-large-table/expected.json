@@ -1,0 +1,9 @@
+{
+  "description": "Table with 20 columns and 50 data rows plus header; must not panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",     "kind": "table" },
+    { "path": "/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_header" }
+  ]
+}

@@ -1,0 +1,5 @@
+[[file:doc.org][File link]]
+
+[[id:abc123][ID link]]
+
+[[#custom-id][Custom ID link]]

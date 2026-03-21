@@ -1,0 +1,7 @@
+{
+  "description": "Comment lines starting with '# ' are silently dropped; paragraph after is preserved",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

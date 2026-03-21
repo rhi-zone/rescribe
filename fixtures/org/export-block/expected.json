@@ -1,0 +1,6 @@
+{
+  "description": "#+BEGIN_EXPORT html...#+END_EXPORT produces a raw_block with format=html",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "format": "html", "content": "<b>raw html</b>" } }
+  ]
+}

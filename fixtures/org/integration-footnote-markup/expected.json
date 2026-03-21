@@ -1,0 +1,8 @@
+{
+  "description": "Footnote definition whose content contains inline bold markup",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "footnote_def" },
+    { "path": "/0/1/0", "kind": "strong" }
+  ]
+}

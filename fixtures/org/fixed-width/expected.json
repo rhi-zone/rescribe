@@ -1,0 +1,6 @@
+{
+  "description": "Lines with ': ' prefix (fixed-width area) produce a code_block with the content",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "fixed width line one\nfixed width line two" } }
+  ]
+}

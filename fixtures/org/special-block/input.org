@@ -1,0 +1,5 @@
+#+BEGIN_MYBLOCK
+some content
+#+END_MYBLOCK
+
+After block.

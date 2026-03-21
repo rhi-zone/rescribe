@@ -1,0 +1,7 @@
+{
+  "description": "Inactive timestamp [YYYY-MM-DD Day] becomes a span node with org:timestamp-active=false",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "span", "props": { "org:timestamp-active": false, "content": "2024-01-15 Mon" } }
+  ]
+}

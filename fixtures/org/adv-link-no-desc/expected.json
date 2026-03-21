@@ -1,0 +1,8 @@
+{
+  "description": "Link with no description [[url]] produces a link node with the URL as display text; must not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } }
+  ]
+}

@@ -1,0 +1,7 @@
+Before comment.
+
+#+BEGIN_COMMENT
+This is ignored.
+#+END_COMMENT
+
+After comment.

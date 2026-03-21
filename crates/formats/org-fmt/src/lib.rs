@@ -9,8 +9,8 @@ pub mod parse;
 
 // Re-export everything callers need.
 pub use ast::{
-    Block, DefinitionItem, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc, OrgError,
-    Severity, Span, TableRow, merge_text_inlines,
+    Block, CheckboxState, DefinitionItem, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc,
+    OrgError, Severity, Span, TableRow, merge_text_inlines,
 };
 pub use emit::build;
 pub use parse::parse;
@@ -161,6 +161,9 @@ mod tests {
     fn test_build_heading() {
         let doc = simple_doc(Block::Heading {
             level: 1,
+            todo: None,
+            priority: None,
+            tags: vec![],
             inlines: vec![Inline::Text {
                 text: "Main Title".into(),
                 span: Span::NONE,
@@ -176,6 +179,9 @@ mod tests {
             blocks: vec![
                 Block::Heading {
                     level: 1,
+                    todo: None,
+                    priority: None,
+                    tags: vec![],
                     inlines: vec![Inline::Text {
                         text: "Level 1".into(),
                         span: Span::NONE,
@@ -184,6 +190,9 @@ mod tests {
                 },
                 Block::Heading {
                     level: 2,
+                    todo: None,
+                    priority: None,
+                    tags: vec![],
                     inlines: vec![Inline::Text {
                         text: "Level 2".into(),
                         span: Span::NONE,
@@ -192,6 +201,9 @@ mod tests {
                 },
                 Block::Heading {
                     level: 3,
+                    todo: None,
+                    priority: None,
+                    tags: vec![],
                     inlines: vec![Inline::Text {
                         text: "Level 3".into(),
                         span: Span::NONE,
@@ -263,12 +275,14 @@ mod tests {
                         text: "item 1".into(),
                         span: Span::NONE,
                     }])],
+                    checkbox: None,
                 },
                 ListItem {
                     children: vec![ListItemContent::Inline(vec![Inline::Text {
                         text: "item 2".into(),
                         span: Span::NONE,
                     }])],
+                    checkbox: None,
                 },
             ],
             span: Span::NONE,
@@ -288,12 +302,14 @@ mod tests {
                         text: "first".into(),
                         span: Span::NONE,
                     }])],
+                    checkbox: None,
                 },
                 ListItem {
                     children: vec![ListItemContent::Inline(vec![Inline::Text {
                         text: "second".into(),
                         span: Span::NONE,
                     }])],
+                    checkbox: None,
                 },
             ],
             span: Span::NONE,
@@ -307,6 +323,7 @@ mod tests {
     fn test_build_code_block() {
         let doc = simple_doc(Block::CodeBlock {
             language: Some("rust".into()),
+            header_args: None,
             content: "fn main() {}".into(),
             span: Span::NONE,
         });

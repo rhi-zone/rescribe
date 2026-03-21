@@ -22,23 +22,23 @@ See `fixtures/spec.md` for category definitions.
 - [x] footnote definition ([fn:1] def) — `footnote-def`
 - [x] footnote reference ([fn:1]) — `footnote-ref`
 - [x] metadata / document keywords (#+TITLE:, #+AUTHOR:, etc.) — `metadata`
-- [ ] verse block (#+BEGIN_VERSE … #+END_VERSE) — (missing)
-- [ ] comment block (#+BEGIN_COMMENT … #+END_COMMENT) — (missing)
-- [ ] export block (#+BEGIN_EXPORT … #+END_EXPORT) — (missing)
-- [ ] special block (#+BEGIN_{NAME}) — (missing)
-- [ ] drawer (:PROPERTIES: … :END:) — (missing)
+- [x] verse block (#+BEGIN_VERSE … #+END_VERSE) — `verse-block`
+- [x] comment block (#+BEGIN_COMMENT … #+END_COMMENT) — `comment-block`
+- [x] export block (#+BEGIN_EXPORT … #+END_EXPORT) — `export-block`
+- [x] special block (#+BEGIN_{NAME}) — `special-block`
+- [x] drawer (:LOGBOOK: … :END:) — `drawer`
 - [ ] property drawer (:PROPERTIES: … :END: under heading) — (missing)
 - [ ] dynamic block (#+BEGIN: name … #+END:) — (missing)
-- [ ] fixed-width area (: line) — (missing)
-- [ ] comment line (# comment) — (missing)
-- [ ] keyword line (#+KEY: value) — (missing)
+- [x] fixed-width area (: line) — `fixed-width`
+- [x] comment line (# comment) — `comment-line`
+- [x] keyword line (#+KEY: value) — `keyword-line`
 - [ ] horizontal rule (distinct from comment) — (missing; covered above)
-- [ ] list item with checkbox (- [ ] / - [X] / - [-]) — (missing)
+- [x] list item with checkbox (- [ ] / - [X] / - [-]) — `checkbox-list`
 - [ ] list item with tag (- tag :: description) — (missing; covered in definition-list)
 - [ ] ordered list with counter ([@3]) — (missing)
-- [ ] nested list — (missing)
-- [ ] table with alignment row (|---|) — (missing)
-- [ ] affiliated keyword (#+CAPTION:, #+NAME:, #+ATTR_HTML:) — (missing)
+- [x] nested list — `nested-list`
+- [x] table with alignment row (|---|) — `table-alignment`
+- [x] affiliated keyword (#+CAPTION: before table) — `affiliated-keyword`
 
 ## Inline constructs
 - [x] emphasis (*text*) — `emphasis`

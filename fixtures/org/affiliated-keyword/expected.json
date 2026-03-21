@@ -1,0 +1,10 @@
+{
+  "description": "#+CAPTION: before a table produces a caption node followed by the table node",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "caption" },
+    { "path": "/1", "kind": "table" },
+    { "path": "/1/0", "kind": "table_row" },
+    { "path": "/1/0/0", "kind": "table_header" }
+  ]
+}

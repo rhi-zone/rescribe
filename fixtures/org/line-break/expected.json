@@ -1,0 +1,9 @@
+{
+  "description": "Explicit line break: \\\\ at end of line produces line_break node",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "First line" } },
+    { "path": "/0/1", "kind": "line_break" },
+    { "path": "/0/2", "kind": "text", "props": { "content": "Second line" } }
+  ]
+}

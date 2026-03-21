@@ -1,0 +1,3 @@
+#+CAPTION: Summary data
+| Name  | Score |
+| Alice |    42 |

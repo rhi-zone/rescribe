@@ -1,0 +1,9 @@
+{
+  "description": "Document with 50 inline footnote definitions; must not panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "",    "kind": "document", "children_count": 50 },
+    { "path": "/0",  "kind": "paragraph" },
+    { "path": "/49", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Headings at levels 1–8; org supports arbitrary depth; must not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/1", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/2", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/3", "kind": "heading", "props": { "level": 4 } },
+    { "path": "/4", "kind": "heading", "props": { "level": 5 } },
+    { "path": "/5", "kind": "heading", "props": { "level": 6 } },
+    { "path": "/6", "kind": "heading", "props": { "level": 7 } },
+    { "path": "/7", "kind": "heading", "props": { "level": 8 } }
+  ]
+}

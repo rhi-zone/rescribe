@@ -1,0 +1,4 @@
+#+CAPTION: My Table
+| Col A | Col B |
+|-------+-------|
+| one   | two   |

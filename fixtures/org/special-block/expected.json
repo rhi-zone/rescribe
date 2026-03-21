@@ -1,0 +1,7 @@
+{
+  "description": "#+BEGIN_MYBLOCK...#+END_MYBLOCK (custom special block) produces a div",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

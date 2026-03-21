@@ -1,6 +1,6 @@
 //! Org-mode emitter (builder).
 
-use crate::ast::{Block, Inline, ListItem, ListItemContent, OrgDoc, TableRow};
+use crate::ast::{Block, CheckboxState, Inline, ListItem, ListItemContent, OrgDoc, TableRow};
 
 /// Build an Org-mode string from an [`OrgDoc`].
 pub fn build(doc: &OrgDoc) -> String {
@@ -68,21 +68,39 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.ensure_blank_line();
         }
 
-        Block::Heading { level, inlines, .. } => {
+        Block::Heading { level, todo, priority, tags, inlines, .. } => {
             ctx.ensure_newline();
             for _ in 0..*level {
                 ctx.write("*");
             }
             ctx.write(" ");
+            if let Some(kw) = todo {
+                ctx.write(kw);
+                ctx.write(" ");
+            }
+            if let Some(p) = priority {
+                ctx.write("[#");
+                ctx.write(p);
+                ctx.write("] ");
+            }
             build_inlines(inlines, ctx);
+            if !tags.is_empty() {
+                ctx.write("    :");
+                ctx.write(&tags.join(":"));
+                ctx.write(":");
+            }
             ctx.ensure_blank_line();
         }
 
-        Block::CodeBlock { language, content, .. } => {
+        Block::CodeBlock { language, header_args, content, .. } => {
             ctx.ensure_newline();
             if let Some(lang) = language {
                 ctx.write("#+BEGIN_SRC ");
                 ctx.write(lang);
+                if let Some(args) = header_args {
+                    ctx.write(" ");
+                    ctx.write(args);
+                }
                 ctx.write("\n");
             } else {
                 ctx.write("#+BEGIN_SRC\n");
@@ -177,6 +195,15 @@ fn build_list_item(
         *counter += 1;
     } else {
         ctx.write("- ");
+    }
+
+    // Emit checkbox prefix if present
+    if let Some(checkbox) = item.checkbox {
+        match checkbox {
+            CheckboxState::Unchecked => ctx.write("[ ] "),
+            CheckboxState::Checked => ctx.write("[X] "),
+            CheckboxState::Partial => ctx.write("[-] "),
+        }
     }
 
     let mut first = true;
@@ -374,6 +401,26 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("$");
             ctx.write(source);
             ctx.write("$");
+        }
+
+        Inline::Timestamp { active, value, .. } => {
+            if *active {
+                ctx.write("<");
+                ctx.write(value);
+                ctx.write(">");
+            } else {
+                ctx.write("[");
+                ctx.write(value);
+                ctx.write("]");
+            }
+        }
+
+        Inline::ExportSnippet { backend, value, .. } => {
+            ctx.write("@@");
+            ctx.write(backend);
+            ctx.write(":");
+            ctx.write(value);
+            ctx.write("@@");
         }
     }
 }

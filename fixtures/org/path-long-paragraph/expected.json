@@ -1,0 +1,8 @@
+{
+  "description": "Single paragraph with 5000 characters; must not panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "",   "kind": "document", "children_count": 1 },
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

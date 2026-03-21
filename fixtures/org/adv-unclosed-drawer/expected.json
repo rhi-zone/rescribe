@@ -1,0 +1,7 @@
+{
+  "description": "Drawer without closing :END: must not panic; drawer is skipped consuming to EOF",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 0 }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "description": "SRC block with header arguments: code_block node has org:header-args prop with the raw argument string",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "python", "org:header-args": ":results output" } }
+  ]
+}

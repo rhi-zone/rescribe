@@ -1,0 +1,7 @@
+{
+  "description": "Heading with DONE keyword: heading node has org:todo prop and title text is stripped of keyword",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2, "org:todo": "DONE" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Finished task" } }
+  ]
+}

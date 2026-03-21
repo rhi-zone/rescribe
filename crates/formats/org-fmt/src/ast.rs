@@ -82,11 +82,19 @@ pub enum Block {
     },
     Heading {
         level: usize,
+        /// Optional TODO/DONE keyword (e.g. "TODO", "DONE")
+        todo: Option<String>,
+        /// Optional priority cookie (e.g. "A", "B", "C")
+        priority: Option<String>,
+        /// Tags extracted from heading (e.g. ["tag1", "work"])
+        tags: Vec<String>,
         inlines: Vec<Inline>,
         span: Span,
     },
     CodeBlock {
         language: Option<String>,
+        /// Header arguments after language (e.g. ":results output")
+        header_args: Option<String>,
         content: String,
         span: Span,
     },
@@ -142,15 +150,19 @@ impl Block {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::Heading { level, inlines, .. } => Block::Heading {
+            Block::Heading { level, todo, priority, tags, inlines, .. } => Block::Heading {
                 level: *level,
+                todo: todo.clone(),
+                priority: priority.clone(),
+                tags: tags.clone(),
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
             Block::CodeBlock {
-                language, content, ..
+                language, header_args, content, ..
             } => Block::CodeBlock {
                 language: language.clone(),
+                header_args: header_args.clone(),
                 content: content.clone(),
                 span: Span::NONE,
             },
@@ -203,16 +215,30 @@ impl Block {
 
 // ── List / Table ──────────────────────────────────────────────────────────────
 
+/// Checkbox state for a list item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckboxState {
+    /// `[ ]` — not yet done.
+    Unchecked,
+    /// `[X]` — completed.
+    Checked,
+    /// `[-]` — partially done / in progress.
+    Partial,
+}
+
 /// A list item (may contain inline or block content).
 #[derive(Debug, Clone)]
 pub struct ListItem {
     pub children: Vec<ListItemContent>,
+    /// Optional checkbox marker (`[ ]`, `[X]`, `[-]`).
+    pub checkbox: Option<CheckboxState>,
 }
 
 impl ListItem {
     pub fn strip_spans(&self) -> Self {
         ListItem {
             children: self.children.iter().map(ListItemContent::strip_spans).collect(),
+            checkbox: self.checkbox,
         }
     }
 }
@@ -315,6 +341,18 @@ pub enum Inline {
         source: String,
         span: Span,
     },
+    /// Org timestamp: `<YYYY-MM-DD Day>` (active) or `[YYYY-MM-DD Day]` (inactive)
+    Timestamp {
+        active: bool,
+        value: String,
+        span: Span,
+    },
+    /// Export snippet: `@@backend:content@@`
+    ExportSnippet {
+        backend: String,
+        value: String,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -363,6 +401,16 @@ impl Inline {
             },
             Inline::MathInline { source, .. } => Inline::MathInline {
                 source: source.clone(),
+                span: Span::NONE,
+            },
+            Inline::Timestamp { active, value, .. } => Inline::Timestamp {
+                active: *active,
+                value: value.clone(),
+                span: Span::NONE,
+            },
+            Inline::ExportSnippet { backend, value, .. } => Inline::ExportSnippet {
+                backend: backend.clone(),
+                value: value.clone(),
                 span: Span::NONE,
             },
         }

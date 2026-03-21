@@ -82,6 +82,9 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             let level = n.props.get_int(prop::LEVEL).unwrap_or(1) as usize;
             Some(Block::Heading {
                 level,
+                todo: None,
+                priority: None,
+                tags: vec![],
                 inlines: convert_nodes_to_inlines(&n.children, warnings),
                 span: org_fmt::Span::NONE,
             })
@@ -92,6 +95,7 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             let language = n.props.get_str(prop::LANGUAGE).map(str::to_string);
             Some(Block::CodeBlock {
                 language,
+                header_args: None,
                 content,
                 span: org_fmt::Span::NONE,
             })
@@ -114,6 +118,7 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
                     } else {
                         convert_node(child, warnings).map(|b| ListItem {
                             children: vec![ListItemContent::Block(b)],
+                            checkbox: None,
                         })
                     }
                 })
@@ -282,7 +287,7 @@ fn convert_list_item(
         children.push(ListItemContent::Inline(vec![]));
     }
 
-    ListItem { children }
+    ListItem { children, checkbox: None }
 }
 
 fn convert_table(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Block {
@@ -554,6 +559,8 @@ fn collect_text(inlines: &[Inline]) -> String {
                 out.push_str(source);
                 out.push('$');
             }
+            Inline::Timestamp { value, .. } => out.push_str(value),
+            Inline::ExportSnippet { value, .. } => out.push_str(value),
         }
     }
     out

@@ -1,0 +1,5 @@
+:LOGBOOK:
+some log entry
+:END:
+
+Paragraph after drawer.

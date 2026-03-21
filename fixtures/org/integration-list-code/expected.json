@@ -1,0 +1,7 @@
+{
+  "description": "#+BEGIN_SRC inside a list item is treated as continuation text (parser limitation); must not panic",
+  "assertions": [
+    { "path": "/0",   "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" }
+  ]
+}

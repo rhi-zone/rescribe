@@ -1,8 +1,8 @@
 //! Org-mode parser.
 
 use crate::ast::{
-    Block, DefinitionItem, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc, Severity, Span,
-    TableRow,
+    Block, CheckboxState, DefinitionItem, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc,
+    Severity, Span, TableRow,
 };
 
 /// Parse an Org-mode string into an [`OrgDoc`].
@@ -55,9 +55,8 @@ impl<'a> OrgParser<'a> {
             // #+CAPTION: text followed by [[file:image]] → Figure block
             if line.to_uppercase().starts_with("#+CAPTION:") {
                 if !current_para.is_empty() {
-                    let content = current_para.join(" ");
                     blocks.push(Block::Paragraph {
-                        inlines: parse_inline_content(&content),
+                        inlines: parse_para_lines(&current_para),
                         span: Span::NONE,
                     });
                     current_para.clear();
@@ -117,9 +116,8 @@ impl<'a> OrgParser<'a> {
             // Blank line - end paragraph
             if line.trim().is_empty() {
                 if !current_para.is_empty() {
-                    let content = current_para.join(" ");
                     blocks.push(Block::Paragraph {
-                        inlines: parse_inline_content(&content),
+                        inlines: parse_para_lines(&current_para),
                         span: Span::NONE,
                     });
                     current_para.clear();
@@ -131,9 +129,8 @@ impl<'a> OrgParser<'a> {
             // Heading
             if line.starts_with('*') && line.chars().find(|&c| c != '*') == Some(' ') {
                 if !current_para.is_empty() {
-                    let content = current_para.join(" ");
                     blocks.push(Block::Paragraph {
-                        inlines: parse_inline_content(&content),
+                        inlines: parse_para_lines(&current_para),
                         span: Span::NONE,
                     });
                     current_para.clear();
@@ -145,9 +142,8 @@ impl<'a> OrgParser<'a> {
             // Block elements
             if line.to_uppercase().starts_with("#+BEGIN_") {
                 if !current_para.is_empty() {
-                    let content = current_para.join(" ");
                     blocks.push(Block::Paragraph {
-                        inlines: parse_inline_content(&content),
+                        inlines: parse_para_lines(&current_para),
                         span: Span::NONE,
                     });
                     current_para.clear();
@@ -161,9 +157,8 @@ impl<'a> OrgParser<'a> {
             // Definition list: - TERM :: DESCRIPTION
             if is_definition_list_item(line) {
                 if !current_para.is_empty() {
-                    let content = current_para.join(" ");
                     blocks.push(Block::Paragraph {
-                        inlines: parse_inline_content(&content),
+                        inlines: parse_para_lines(&current_para),
                         span: Span::NONE,
                     });
                     current_para.clear();
@@ -175,9 +170,8 @@ impl<'a> OrgParser<'a> {
             // List item
             if is_list_item(line) {
                 if !current_para.is_empty() {
-                    let content = current_para.join(" ");
                     blocks.push(Block::Paragraph {
-                        inlines: parse_inline_content(&content),
+                        inlines: parse_para_lines(&current_para),
                         span: Span::NONE,
                     });
                     current_para.clear();
@@ -189,9 +183,8 @@ impl<'a> OrgParser<'a> {
             // Table: lines starting with |
             if line.starts_with('|') {
                 if !current_para.is_empty() {
-                    let content = current_para.join(" ");
                     blocks.push(Block::Paragraph {
-                        inlines: parse_inline_content(&content),
+                        inlines: parse_para_lines(&current_para),
                         span: Span::NONE,
                     });
                     current_para.clear();
@@ -203,15 +196,55 @@ impl<'a> OrgParser<'a> {
             // Horizontal rule
             if line.trim() == "-----" || (line.chars().all(|c| c == '-') && line.len() >= 5) {
                 if !current_para.is_empty() {
-                    let content = current_para.join(" ");
                     blocks.push(Block::Paragraph {
-                        inlines: parse_inline_content(&content),
+                        inlines: parse_para_lines(&current_para),
                         span: Span::NONE,
                     });
                     current_para.clear();
                 }
                 blocks.push(Block::HorizontalRule { span: Span::NONE });
                 self.advance();
+                continue;
+            }
+
+            // Comment line: "# " (single hash + space, not "#+")
+            if (line.starts_with("# ") || line == "#") && !line.starts_with("#+") {
+                // Org comment lines are silently dropped
+                self.advance();
+                continue;
+            }
+
+            // Fixed-width area: ": " prefix (colon + space) or lone ":"
+            if line.starts_with(": ") || line == ":" {
+                if !current_para.is_empty() {
+                    blocks.push(Block::Paragraph {
+                        inlines: parse_para_lines(&current_para),
+                        span: Span::NONE,
+                    });
+                    current_para.clear();
+                }
+                let block = self.parse_fixed_width();
+                blocks.push(block);
+                continue;
+            }
+
+            // Drawer: ":NAME:" on its own line (colon-identifier-colon)
+            if is_drawer_start(line) {
+                if !current_para.is_empty() {
+                    blocks.push(Block::Paragraph {
+                        inlines: parse_para_lines(&current_para),
+                        span: Span::NONE,
+                    });
+                    current_para.clear();
+                }
+                let drawer_name = line.trim().trim_matches(':').to_string();
+                self.skip_drawer();
+                self.diagnostics.push(Diagnostic {
+                    span: Span::NONE,
+                    severity: Severity::Info,
+                    message: format!("Drawer :{}: dropped", drawer_name),
+                    code: "org:drawer-dropped",
+                });
                 continue;
             }
 
@@ -222,9 +255,8 @@ impl<'a> OrgParser<'a> {
 
         // Flush remaining paragraph
         if !current_para.is_empty() {
-            let content = current_para.join(" ");
             blocks.push(Block::Paragraph {
-                inlines: parse_inline_content(&content),
+                inlines: parse_para_lines(&current_para),
                 span: Span::NONE,
             });
         }
@@ -237,12 +269,15 @@ impl<'a> OrgParser<'a> {
         let level = line.chars().take_while(|&c| c == '*').count();
         let text = &line[level..];
         let text = text.trim();
-        let text = strip_heading_metadata(text);
+        let (todo, priority, tags, title) = parse_heading_metadata(text);
         self.advance();
 
         Block::Heading {
             level,
-            inlines: parse_inline_content(&text),
+            todo,
+            priority,
+            tags,
+            inlines: parse_inline_content(&title),
             span: Span::NONE,
         }
     }
@@ -265,20 +300,19 @@ impl<'a> OrgParser<'a> {
             }
         };
 
-        // Get language for SRC blocks
-        let lang = if block_type == "SRC" {
-            orig_line
-                .to_uppercase()
-                .strip_prefix("#+BEGIN_SRC")
-                .and_then(|s| s.split_whitespace().next())
-                .map(|s| {
-                    // Use original case from original line
-                    let upper_offset = "#+BEGIN_SRC".len();
-                    let rest = &orig_line[upper_offset..];
-                    rest.split_whitespace().next().unwrap_or(s).to_lowercase()
-                })
+        // Get language and header args for SRC blocks
+        let (lang, header_args) = if block_type == "SRC" {
+            let upper_offset = "#+BEGIN_SRC".len();
+            let rest = &orig_line[upper_offset..].trim_start();
+            let mut parts = rest.splitn(2, |c: char| c.is_whitespace());
+            let lang_str = parts.next().filter(|s| !s.is_empty()).map(|s| s.to_lowercase());
+            let args = parts.next().and_then(|s| {
+                let s = s.trim();
+                if s.is_empty() { None } else { Some(s.to_string()) }
+            });
+            (lang_str, args)
         } else {
-            None
+            (None, None)
         };
 
         self.advance();
@@ -301,6 +335,7 @@ impl<'a> OrgParser<'a> {
         match block_type.as_str() {
             "SRC" => Some(Block::CodeBlock {
                 language: lang.filter(|l| !l.is_empty()),
+                header_args,
                 content: content_str,
                 span: Span::NONE,
             }),
@@ -316,6 +351,7 @@ impl<'a> OrgParser<'a> {
             }
             "EXAMPLE" | "VERSE" => Some(Block::CodeBlock {
                 language: None,
+                header_args: None,
                 content: content_str,
                 span: Span::NONE,
             }),
@@ -323,14 +359,36 @@ impl<'a> OrgParser<'a> {
                 inlines: parse_inline_content(&content_str),
                 span: Span::NONE,
             }),
-            _ => {
-                self.diagnostics.push(Diagnostic {
-                    span: Span::NONE,
-                    severity: Severity::Warning,
-                    message: format!("Unknown block type: {}", block_type),
-                    code: "org:unknown-block",
-                });
+            "COMMENT" => {
+                // Comment blocks are silently dropped (no diagnostic)
                 None
+            }
+            "EXPORT" => {
+                // #+BEGIN_EXPORT format ... #+END_EXPORT → raw_block with format prop
+                let format = orig_line
+                    .to_uppercase()
+                    .strip_prefix("#+BEGIN_EXPORT")
+                    .and_then(|s| s.split_whitespace().next())
+                    .map(|s| {
+                        // Use original case
+                        let upper_offset = "#+BEGIN_EXPORT".len();
+                        let rest = &orig_line[upper_offset..];
+                        rest.split_whitespace().next().unwrap_or(s).to_lowercase()
+                    })
+                    .unwrap_or_else(|| "unknown".to_string());
+                Some(Block::RawBlock {
+                    format,
+                    content: content_str,
+                    span: Span::NONE,
+                })
+            }
+            _ => {
+                // Special block: #+BEGIN_NAME...#+END_NAME — emit as Div
+                // (unknown custom containers)
+                Some(Block::Div {
+                    inlines: parse_inline_content(&content_str),
+                    span: Span::NONE,
+                })
             }
         }
     }
@@ -396,32 +454,50 @@ impl<'a> OrgParser<'a> {
             }
         };
 
+        // Detect checkbox prefix: "[ ] ", "[X] ", "[-] "
+        let (checkbox, content) = parse_checkbox(content);
+
         self.advance();
 
-        // Collect continuation lines
-        let mut full_content = content.to_string();
+        // Collect content lines and sub-lists
+        let mut children: Vec<ListItemContent> = Vec::new();
+        let mut inline_lines: Vec<&str> = vec![content];
+
         while !self.is_eof() {
             let line = self.current_line().unwrap();
             if line.trim().is_empty() {
                 break;
             }
             let line_indent = line.len() - line.trim_start().len();
-            if line_indent <= base_indent && is_list_item(line) {
+            if line_indent <= base_indent {
                 break;
             }
-            if line_indent > base_indent {
-                full_content.push(' ');
-                full_content.push_str(line.trim());
+            // Indented sub-list
+            if is_list_item(line) && line_indent > base_indent {
+                // Flush accumulated inline text first
+                if !inline_lines.is_empty() {
+                    let full = inline_lines.join(" ");
+                    let inlines = parse_inline_content(&full);
+                    children.push(ListItemContent::Inline(inlines));
+                    inline_lines.clear();
+                }
+                children.push(ListItemContent::Block(self.parse_list()));
+            } else if line_indent > base_indent {
+                inline_lines.push(line.trim());
                 self.advance();
             } else {
                 break;
             }
         }
 
-        let inlines = parse_inline_content(&full_content);
-        ListItem {
-            children: vec![ListItemContent::Inline(inlines)],
+        // Flush any remaining inline text
+        if !inline_lines.is_empty() {
+            let full = inline_lines.join(" ");
+            let inlines = parse_inline_content(&full);
+            children.push(ListItemContent::Inline(inlines));
         }
+
+        ListItem { children, checkbox }
     }
 
     fn parse_table(&mut self) -> Block {
@@ -475,6 +551,38 @@ impl<'a> OrgParser<'a> {
 
         Block::DefinitionList { items, span: Span::NONE }
     }
+
+    /// Parse consecutive fixed-width lines (`: text`) into a CodeBlock.
+    fn parse_fixed_width(&mut self) -> Block {
+        let mut content_lines: Vec<&str> = Vec::new();
+        while !self.is_eof() {
+            let line = self.current_line().unwrap();
+            if let Some(stripped) = line.strip_prefix(": ") {
+                content_lines.push(stripped);
+                self.advance();
+            } else if line == ":" {
+                content_lines.push("");
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        let content = content_lines.join("\n");
+        Block::CodeBlock { language: None, header_args: None, content, span: Span::NONE }
+    }
+
+    /// Skip drawer content up to and including the `:END:` line.
+    fn skip_drawer(&mut self) {
+        // Advance past the `:NAME:` line
+        self.advance();
+        while !self.is_eof() {
+            let line = self.current_line().unwrap();
+            self.advance();
+            if line.trim().eq_ignore_ascii_case(":END:") {
+                break;
+            }
+        }
+    }
 }
 
 pub(crate) fn parse_metadata_line(line: &str) -> Option<(String, String)> {
@@ -483,24 +591,78 @@ pub(crate) fn parse_metadata_line(line: &str) -> Option<(String, String)> {
     Some((key.trim().to_lowercase(), value.trim().to_string()))
 }
 
-pub(crate) fn strip_heading_metadata(text: &str) -> String {
+/// Parse heading metadata: TODO keyword, priority cookie, tags, and remaining title.
+/// Returns `(todo, priority, tags, title)`.
+pub(crate) fn parse_heading_metadata(
+    text: &str,
+) -> (Option<String>, Option<String>, Vec<String>, String) {
     let text = text.trim();
 
-    // Remove TODO keywords
-    let text = if text.starts_with("TODO ") || text.starts_with("DONE ") {
-        &text[5..]
-    } else {
-        text
+    // Extract TODO/DONE keyword (known keywords followed by space, at start)
+    let (todo, text) = {
+        let words: Vec<&str> = text.splitn(2, ' ').collect();
+        if words.len() == 2 {
+            let w = words[0];
+            if w == "TODO" || w == "DONE" || w == "NEXT" || w == "WAITING"
+                || w == "CANCELLED" || w == "HOLD" || w == "STARTED"
+            {
+                (Some(w.to_string()), words[1])
+            } else {
+                (None, text)
+            }
+        } else {
+            (None, text)
+        }
     };
 
-    // Remove tags (like :tag1:tag2:)
-    if let Some(idx) = text.rfind(" :")
-        && text.ends_with(':')
-    {
-        return text[..idx].trim().to_string();
-    }
+    // Extract priority cookie [#A], [#B], etc.
+    let (priority, text) = if text.starts_with("[#") {
+        if let Some(end) = text.find(']') {
+            let p = text[2..end].to_string();
+            let rest = text[end + 1..].trim_start();
+            (Some(p), rest)
+        } else {
+            (None, text)
+        }
+    } else {
+        (None, text)
+    };
 
-    text.trim().to_string()
+    // Extract tags at end of line: "  :tag1:tag2:"
+    let (tags, text) = if text.ends_with(':') {
+        if let Some(idx) = text.rfind(" :") {
+            let tag_str = &text[idx + 2..text.len() - 1];
+            let tags: Vec<String> = tag_str.split(':').map(|t| t.to_string()).collect();
+            let title = text[..idx].trim();
+            (tags, title)
+        } else {
+            (vec![], text)
+        }
+    } else {
+        (vec![], text)
+    };
+
+    (todo, priority, tags, text.trim().to_string())
+}
+
+/// Parse a sequence of paragraph lines into inlines, inserting LineBreak nodes
+/// where lines end with `\\`.
+pub(crate) fn parse_para_lines(lines: &[String]) -> Vec<Inline> {
+    let mut result = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        let last = i == lines.len() - 1;
+        if line.ends_with("\\\\") {
+            let content = &line[..line.len() - 2];
+            result.extend(parse_inline_content(content));
+            result.push(Inline::LineBreak { span: Span::NONE });
+        } else {
+            result.extend(parse_inline_content(line));
+            if !last {
+                result.push(Inline::SoftBreak { span: Span::NONE });
+            }
+        }
+    }
+    result
 }
 
 pub(crate) fn is_list_item(line: &str) -> bool {
@@ -530,6 +692,35 @@ pub(crate) fn is_ordered_list_item(line: &str) -> bool {
 pub(crate) fn is_definition_list_item(line: &str) -> bool {
     let trimmed = line.trim_start();
     (trimmed.starts_with("- ") || trimmed.starts_with("+ ")) && trimmed.contains(" :: ")
+}
+
+/// Returns true if `line` looks like a drawer start: `:NAME:` (colon-word-colon).
+/// Must not match `:END:` (end marker) or fixed-width lines (`: text`).
+fn is_drawer_start(line: &str) -> bool {
+    let trimmed = line.trim();
+    if !trimmed.starts_with(':') || !trimmed.ends_with(':') || trimmed.len() < 3 {
+        return false;
+    }
+    if trimmed.eq_ignore_ascii_case(":END:") {
+        return false;
+    }
+    let inner = &trimmed[1..trimmed.len() - 1];
+    !inner.is_empty() && !inner.contains(' ') && !inner.contains(':')
+}
+
+/// Parse a `[ ]` / `[X]` / `[-]` checkbox prefix from the beginning of content.
+/// Returns `(checkbox_state, remaining_content)`.
+fn parse_checkbox(content: &str) -> (Option<CheckboxState>, &str) {
+    if let Some(rest) = content.strip_prefix("[ ] ") {
+        return (Some(CheckboxState::Unchecked), rest);
+    }
+    if let Some(rest) = content.strip_prefix("[X] ") {
+        return (Some(CheckboxState::Checked), rest);
+    }
+    if let Some(rest) = content.strip_prefix("[-] ") {
+        return (Some(CheckboxState::Partial), rest);
+    }
+    (None, content)
 }
 
 fn parse_table_row(line: &str) -> Vec<Vec<Inline>> {
@@ -656,6 +847,7 @@ pub(crate) fn parse_inline_content(text: &str) -> Vec<Inline> {
                 }
             }
             // Footnote ref: [fn:label]  /  Link: [[url]] or [[url][description]]
+            // Inactive timestamp: [YYYY-MM-DD ...]
             '[' => {
                 // Footnote reference: [fn:LABEL]
                 if chars[pos..].starts_with(&['[', 'f', 'n', ':'])
@@ -673,6 +865,52 @@ pub(crate) fn parse_inline_content(text: &str) -> Vec<Inline> {
                     nodes.push(link_inline);
                     pos = end;
                     continue;
+                }
+                // Inactive timestamp: [YYYY-MM-DD ...]
+                if let Some((ts, end)) = parse_timestamp_inactive(&chars, pos) {
+                    nodes.push(ts);
+                    pos = end;
+                    continue;
+                }
+            }
+            // Active timestamp: <YYYY-MM-DD ...>
+            '<' => {
+                if let Some((ts, end)) = parse_timestamp_active(&chars, pos) {
+                    nodes.push(ts);
+                    pos = end;
+                    continue;
+                }
+            }
+            // Export snippet: @@backend:content@@
+            '@' => {
+                if pos + 1 < chars.len()
+                    && chars[pos + 1] == '@'
+                    && let Some((snippet, end)) = parse_export_snippet(&chars, pos)
+                {
+                    nodes.push(snippet);
+                    pos = end;
+                    continue;
+                }
+            }
+            // LaTeX fragment: \(...\) or entity: \word
+            '\\' => {
+                if pos + 1 < chars.len() {
+                    // \(...\) inline math
+                    if chars[pos + 1] == '('
+                        && let Some((math, end)) = parse_latex_fragment(&chars, pos)
+                    {
+                        nodes.push(math);
+                        pos = end;
+                        continue;
+                    }
+                    // \word entity (letter start)
+                    if chars[pos + 1].is_alphabetic()
+                        && let Some((entity, end)) = parse_entity(&chars, pos)
+                    {
+                        nodes.push(entity);
+                        pos = end;
+                        continue;
+                    }
                 }
             }
             _ => {}
@@ -818,5 +1056,173 @@ fn parse_footnote_ref(chars: &[char], start: usize) -> Option<(Inline, usize)> {
         return None;
     }
     Some((Inline::FootnoteRef { label: inner, span: Span::NONE }, end_pos))
+}
+
+/// Parse active timestamp `<YYYY-MM-DD ...>` at `start`.
+fn parse_timestamp_active(chars: &[char], start: usize) -> Option<(Inline, usize)> {
+    debug_assert_eq!(chars[start], '<');
+    if start + 10 >= chars.len() {
+        return None;
+    }
+    // Must start with a digit (year)
+    if !chars[start + 1].is_ascii_digit() {
+        return None;
+    }
+    let close = chars[start + 1..].iter().position(|&c| c == '>')?;
+    let value: String = chars[start + 1..start + 1 + close].iter().collect();
+    if value.len() < 10 {
+        return None;
+    }
+    Some((
+        Inline::Timestamp { active: true, value, span: Span::NONE },
+        start + 1 + close + 1,
+    ))
+}
+
+/// Parse inactive timestamp `[YYYY-MM-DD ...]` at `start`.
+fn parse_timestamp_inactive(chars: &[char], start: usize) -> Option<(Inline, usize)> {
+    debug_assert_eq!(chars[start], '[');
+    // Must start with a digit after [
+    if start + 1 >= chars.len() || !chars[start + 1].is_ascii_digit() {
+        return None;
+    }
+    let close = chars[start + 1..].iter().position(|&c| c == ']')?;
+    let value: String = chars[start + 1..start + 1 + close].iter().collect();
+    if value.len() < 10 {
+        return None;
+    }
+    Some((
+        Inline::Timestamp { active: false, value, span: Span::NONE },
+        start + 1 + close + 1,
+    ))
+}
+
+/// Parse export snippet `@@backend:content@@` at `start`.
+fn parse_export_snippet(chars: &[char], start: usize) -> Option<(Inline, usize)> {
+    debug_assert!(chars[start] == '@' && chars.get(start + 1) == Some(&'@'));
+    let inner_start = start + 2;
+    let mut i = inner_start;
+    while i + 1 < chars.len() {
+        if chars[i] == '@' && chars[i + 1] == '@' {
+            let inner: String = chars[inner_start..i].iter().collect();
+            if let Some(colon) = inner.find(':') {
+                let backend = inner[..colon].to_string();
+                let value = inner[colon + 1..].to_string();
+                return Some((
+                    Inline::ExportSnippet { backend, value, span: Span::NONE },
+                    i + 2,
+                ));
+            }
+            return None;
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Parse LaTeX fragment `\(...\)` at `start`.
+fn parse_latex_fragment(chars: &[char], start: usize) -> Option<(Inline, usize)> {
+    debug_assert!(chars[start] == '\\' && chars.get(start + 1) == Some(&'('));
+    let inner_start = start + 2;
+    let mut i = inner_start;
+    while i + 1 < chars.len() {
+        if chars[i] == '\\' && chars[i + 1] == ')' {
+            let source: String = chars[inner_start..i].iter().collect();
+            return Some((Inline::MathInline { source, span: Span::NONE }, i + 2));
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Parse Org entity `\name` or `\name{}` at `start`. Returns a Text node with the Unicode expansion.
+fn parse_entity(chars: &[char], start: usize) -> Option<(Inline, usize)> {
+    debug_assert_eq!(chars[start], '\\');
+    let name_start = start + 1;
+    let mut end = name_start;
+    while end < chars.len() && chars[end].is_alphabetic() {
+        end += 1;
+    }
+    if end == name_start {
+        return None;
+    }
+    let name: String = chars[name_start..end].iter().collect();
+    // Optional trailing {} (e.g. \alpha{} to prevent letter-joining)
+    let end = if end + 1 < chars.len() && chars[end] == '{' && chars[end + 1] == '}' {
+        end + 2
+    } else {
+        end
+    };
+    let text = org_entity_to_unicode(&name).unwrap_or_else(|| format!("\\{}", name));
+    Some((Inline::Text { text, span: Span::NONE }, end))
+}
+
+/// Map common Org entity names to their Unicode representations.
+fn org_entity_to_unicode(name: &str) -> Option<String> {
+    Some(
+        match name {
+            "alpha" => "\u{03B1}",
+            "beta" => "\u{03B2}",
+            "gamma" => "\u{03B3}",
+            "delta" => "\u{03B4}",
+            "epsilon" => "\u{03B5}",
+            "zeta" => "\u{03B6}",
+            "eta" => "\u{03B7}",
+            "theta" => "\u{03B8}",
+            "iota" => "\u{03B9}",
+            "kappa" => "\u{03BA}",
+            "lambda" => "\u{03BB}",
+            "mu" => "\u{03BC}",
+            "nu" => "\u{03BD}",
+            "xi" => "\u{03BE}",
+            "pi" => "\u{03C0}",
+            "rho" => "\u{03C1}",
+            "sigma" => "\u{03C3}",
+            "tau" => "\u{03C4}",
+            "upsilon" => "\u{03C5}",
+            "phi" => "\u{03C6}",
+            "chi" => "\u{03C7}",
+            "psi" => "\u{03C8}",
+            "omega" => "\u{03C9}",
+            "Alpha" => "\u{0391}",
+            "Beta" => "\u{0392}",
+            "Gamma" => "\u{0393}",
+            "Delta" => "\u{0394}",
+            "Theta" => "\u{0398}",
+            "Lambda" => "\u{039B}",
+            "Pi" => "\u{03A0}",
+            "Sigma" => "\u{03A3}",
+            "Omega" => "\u{03A9}",
+            "nbsp" => "\u{00A0}",
+            "shy" => "\u{00AD}",
+            "copy" => "\u{00A9}",
+            "reg" => "\u{00AE}",
+            "trade" => "\u{2122}",
+            "mdash" => "\u{2014}",
+            "ndash" => "\u{2013}",
+            "laquo" => "\u{00AB}",
+            "raquo" => "\u{00BB}",
+            "ldquo" => "\u{201C}",
+            "rdquo" => "\u{201D}",
+            "lsquo" => "\u{2018}",
+            "rsquo" => "\u{2019}",
+            "hellip" => "\u{2026}",
+            "pound" => "\u{00A3}",
+            "euro" => "\u{20AC}",
+            "yen" => "\u{00A5}",
+            "deg" => "\u{00B0}",
+            "pm" => "\u{00B1}",
+            "times" => "\u{00D7}",
+            "div" => "\u{00F7}",
+            "infin" => "\u{221E}",
+            "rarr" => "\u{2192}",
+            "larr" => "\u{2190}",
+            "harr" => "\u{2194}",
+            "uarr" => "\u{2191}",
+            "darr" => "\u{2193}",
+            _ => return None,
+        }
+        .to_string(),
+    )
 }
 

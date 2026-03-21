@@ -1,0 +1,7 @@
+{
+  "description": "Heading with tags :tag1:work:: heading node has org:tags prop containing the colon-joined tags string",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1, "org:tags": "tag1:work" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "My Heading" } }
+  ]
+}

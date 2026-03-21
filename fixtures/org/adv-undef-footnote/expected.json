@@ -1,0 +1,8 @@
+{
+  "description": "[fn:missing] reference with no corresponding definition is parsed as footnote_ref without panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "missing" } }
+  ]
+}

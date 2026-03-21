@@ -1,0 +1,8 @@
+{
+  "description": "List nested 10 levels deep; parser collapses sub-items into continuation text; must not panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",   "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" }
+  ]
+}

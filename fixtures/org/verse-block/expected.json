@@ -1,0 +1,6 @@
+{
+  "description": "#+BEGIN_VERSE...#+END_VERSE produces a code_block preserving line structure",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "line one\nline two" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Heading with inline bold markup produces heading with strong child",
+  "assertions": [
+    { "path": "/0",   "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/1", "kind": "strong" }
+  ]
+}

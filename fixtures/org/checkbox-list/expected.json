@@ -1,0 +1,9 @@
+{
+  "description": "List items with [ ], [X], [-] checkbox markers produce list_item nodes with a checkbox prop",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 3 },
+    { "path": "/0/0", "kind": "list_item", "props": { "checkbox": "unchecked" } },
+    { "path": "/0/1", "kind": "list_item", "props": { "checkbox": "checked" } },
+    { "path": "/0/2", "kind": "list_item", "props": { "checkbox": "partial" } }
+  ]
+}

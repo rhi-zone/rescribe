@@ -1,0 +1,11 @@
+{
+  "description": "Various Org link types: file:, id:, and #-anchored links; url prop preserves the full target",
+  "assertions": [
+    { "path": "/0/0", "kind": "link", "props": { "url": "file:doc.org" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "File link" } },
+    { "path": "/1/0", "kind": "link", "props": { "url": "id:abc123" } },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "ID link" } },
+    { "path": "/2/0", "kind": "link", "props": { "url": "#custom-id" } },
+    { "path": "/2/0/0", "kind": "text", "props": { "content": "Custom ID link" } }
+  ]
+}

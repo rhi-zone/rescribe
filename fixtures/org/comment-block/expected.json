@@ -1,0 +1,8 @@
+{
+  "description": "#+BEGIN_COMMENT...#+END_COMMENT is silently dropped; surrounding paragraphs are preserved",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

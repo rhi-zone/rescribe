@@ -1,0 +1,7 @@
+{
+  "description": "Heading with priority cookie [#A]: heading node has org:priority prop and title text excludes cookie",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1, "org:priority": "A" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Important heading" } }
+  ]
+}
