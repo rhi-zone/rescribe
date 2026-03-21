@@ -53,60 +53,60 @@ See `fixtures/spec.md` for category definitions.
 - [x] bare URL link — `link-bare`
 - [x] image (inline [[file:img.png]]) — `image`
 - [x] footnote inline ([fn:: text]) — `footnote-ref`
-- [ ] line break (\ at end of line) — (missing)
-- [ ] timestamp (<YYYY-MM-DD>) — (missing)
-- [ ] inactive timestamp ([YYYY-MM-DD]) — (missing)
+- [x] line break (\ at end of line) — `line-break`
+- [x] timestamp (<YYYY-MM-DD>) — `timestamp-active`
+- [x] inactive timestamp ([YYYY-MM-DD]) — `timestamp-inactive`
 - [ ] date range (<date1>--<date2>) — (missing)
 - [ ] macro ({{{macro(arg)}}}) — (missing)
 - [ ] citation ([cite:@key]) — (missing)
 - [ ] target (<<target>>) — (missing)
 - [ ] radio target (<<<target>>>) — (missing)
-- [ ] entity (\alpha, \nbsp, etc.) — (missing)
-- [ ] LaTeX fragment (\(...\) or \[…\]) — (missing)
-- [ ] export snippet (@@backend:raw@@) — (missing)
+- [x] entity (\alpha, \nbsp, etc.) — `entity`
+- [x] LaTeX fragment (\(...\) or \[…\]) — `latex-fragment`
+- [x] export snippet (@@backend:raw@@) — `export-snippet`
 - [ ] inline babel call — (missing)
 
 ## Properties
 - [x] heading TODO keyword — `rare-heading-todo`
-- [ ] heading DONE keyword — (missing)
-- [ ] heading priority ([#A]) — (missing)
-- [ ] heading tags (:tag1:tag2:) — (missing)
+- [x] heading DONE keyword — `heading-done`
+- [x] heading priority ([#A]) — `heading-priority`
+- [x] heading tags (:tag1:tag2:) — `heading-tags`
 - [ ] heading comment keyword — (missing)
 - [ ] heading archived — (missing)
 - [x] code block language — `code-block`
-- [ ] code block header arguments (:results, :exports, :var) — (missing)
+- [x] code block header arguments (:results, :exports, :var) — `code-block-header`
 - [ ] code block name (#+NAME:) — (missing)
-- [ ] table column alignment — (missing)
-- [ ] link type (file:, http:, id:, custom-id:, fuzzy) — (missing)
+- [x] table column alignment — `table-alignment`
+- [x] link type (file:, http:, id:, custom-id:, fuzzy) — `link-types`
 - [ ] footnote labeled vs inline vs anonymous — (missing)
 - [ ] property drawer key/value pairs — (missing)
 - [ ] scheduled / deadline timestamps — (missing)
-- [ ] document metadata (#+TITLE, #+AUTHOR, #+DATE, #+EMAIL, #+LANGUAGE, #+OPTIONS) — `metadata`
+- [x] document metadata (#+TITLE, #+AUTHOR, #+DATE, #+EMAIL, #+LANGUAGE, #+OPTIONS) — `metadata`
 
 ## Composition (integration)
 - [x] nested markup — `rare-nested-markup`
-- [ ] heading with inline formatting — (missing)
-- [ ] table cell with inline formatting — (missing)
-- [ ] list item containing a code block — (missing)
-- [ ] blockquote containing a list — (missing)
-- [ ] footnote containing inline markup — (missing)
-- [ ] nested lists (unordered inside ordered) — (missing)
+- [x] heading with inline formatting — `integration-heading-inline`
+- [x] table cell with inline formatting — `integration-table-inline`
+- [x] list item containing a code block — `integration-list-code`
+- [x] blockquote containing a list — `integration-blockquote-list`
+- [x] footnote containing inline markup — `integration-footnote-markup`
+- [x] nested lists (unordered inside ordered) — `integration-nested-lists`
 - [ ] definition list inside a blockquote — (missing)
-- [ ] affiliated keyword before a table — (missing)
+- [x] affiliated keyword before a table — `integration-caption-table`
 
 ## Adversarial
 - [x] empty document — `adv-empty`
 - [x] unknown block type — `adv-unknown-block`
 - [x] unmatched markup delimiter — `adv-unmatched-markup`
-- [ ] malformed table (missing closing |) — (missing)
-- [ ] heading at max depth then deeper — (missing)
-- [ ] link with no description — (missing)
-- [ ] footnote reference to undefined label — (missing)
-- [ ] drawer without closing :END: — (missing)
+- [x] malformed table (missing closing |) — `adv-malformed-table`
+- [x] heading at max depth then deeper — `adv-deep-headings`
+- [x] link with no description — `adv-link-no-desc`
+- [x] footnote reference to undefined label — `adv-undef-footnote`
+- [x] drawer without closing :END: — `adv-unclosed-drawer`
 
 ## Pathological
-- [ ] document with hundreds of headings — (missing)
-- [ ] very large table — (missing)
-- [ ] deeply nested lists — (missing)
-- [ ] many footnotes — (missing)
-- [ ] very long paragraph — (missing)
+- [x] document with hundreds of headings — `path-many-headings`
+- [x] very large table — `path-large-table`
+- [x] deeply nested lists — `path-deep-list`
+- [x] many footnotes — `path-many-footnotes`
+- [x] very long paragraph — `path-long-paragraph`
