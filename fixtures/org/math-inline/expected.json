@@ -1,0 +1,7 @@
+{
+  "description": "Inline math via $...$ syntax",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "math_inline", "props": { "math:source": "E = mc^2" } }
+  ]
+}

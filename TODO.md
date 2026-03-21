@@ -210,14 +210,17 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Span/Diagnostic types; infallible parse() → (OrgDoc, Vec<Diagnostic>)
   - [x] strip_spans() on all AST types; merge_text_inlines() utility
   - [x] No-panic fuzz gate (`fuzz_org_reader`) — 1.25M runs clean (2026-03-21)
-  - [x] Roundtrip fuzz target (`fuzz_org_roundtrip`) — 274K runs clean (2026-03-21)
+  - [x] Roundtrip fuzz target (`fuzz_org_roundtrip`) — 81K runs clean (2026-03-21)
   - [x] Fixed parse_block() infinite loop on bare "#+BEGIN_" input
-  - [ ] Known construct gaps (reader silently drops):
-    - Superscript: builder emits `^{text}` but parser has no `^{` match arm
-    - Subscript: builder emits `_{text}` but parser has no `_{` match arm
-    - DefinitionList: parser has no dedicated `- term :: desc` handler
-    - Table: inline parser; no native table row parsing yet
-    - Blockquote nesting: content re-parsed as inline, structural loss
+  - [x] Superscript: `^{text}` parsed; fixture added (2026-03-21)
+  - [x] Subscript: `_{text}` parsed; fixture added (2026-03-21)
+  - [x] DefinitionList: `- term :: desc` parsed; fixture added (2026-03-21)
+  - [x] Table: `| cell |` rows parsed; header detection via separator lines; fixture added (2026-03-21)
+  - [x] Footnote ref: `[fn:label]` parsed; fixture added (2026-03-21)
+  - [x] Math inline: `$source$` parsed; fixture added (2026-03-21)
+  - [ ] Blockquote nesting: content re-parsed as inline, structural loss
+  - [ ] Figure/Caption blocks
+  - [ ] Footnote definitions: `[fn:label] text`
   - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
   - [ ] 100% construct coverage (→ 5-Production)
 - [x] `muse-fmt` vertical — **4-Fuzz** (2026-03-21)

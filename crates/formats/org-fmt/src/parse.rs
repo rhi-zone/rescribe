@@ -1,7 +1,8 @@
 //! Org-mode parser.
 
 use crate::ast::{
-    Block, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc, Severity, Span,
+    Block, DefinitionItem, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc, Severity, Span,
+    TableRow,
 };
 
 /// Parse an Org-mode string into an [`OrgDoc`].
@@ -104,6 +105,20 @@ impl<'a> OrgParser<'a> {
                 continue;
             }
 
+            // Definition list: - TERM :: DESCRIPTION
+            if is_definition_list_item(line) {
+                if !current_para.is_empty() {
+                    let content = current_para.join(" ");
+                    blocks.push(Block::Paragraph {
+                        inlines: parse_inline_content(&content),
+                        span: Span::NONE,
+                    });
+                    current_para.clear();
+                }
+                blocks.push(self.parse_definition_list());
+                continue;
+            }
+
             // List item
             if is_list_item(line) {
                 if !current_para.is_empty() {
@@ -115,6 +130,20 @@ impl<'a> OrgParser<'a> {
                     current_para.clear();
                 }
                 blocks.push(self.parse_list());
+                continue;
+            }
+
+            // Table: lines starting with |
+            if line.starts_with('|') {
+                if !current_para.is_empty() {
+                    let content = current_para.join(" ");
+                    blocks.push(Block::Paragraph {
+                        inlines: parse_inline_content(&content),
+                        span: Span::NONE,
+                    });
+                    current_para.clear();
+                }
+                blocks.push(self.parse_table());
                 continue;
             }
 
@@ -341,6 +370,58 @@ impl<'a> OrgParser<'a> {
             children: vec![ListItemContent::Inline(inlines)],
         }
     }
+
+    fn parse_table(&mut self) -> Block {
+        let mut rows = Vec::new();
+
+        while !self.is_eof() {
+            let line = self.current_line().unwrap();
+            if !line.starts_with('|') {
+                break;
+            }
+
+            // Separator line (|---+---|): mark previous row as header
+            let inner = line.trim_start_matches('|').trim_end_matches('|');
+            if !inner.is_empty() && inner.chars().all(|c| matches!(c, '-' | '+' | ' ')) {
+                if let Some(last) = rows.last_mut() {
+                    let last: &mut TableRow = last;
+                    last.is_header = true;
+                }
+                self.advance();
+                continue;
+            }
+
+            // Data row
+            let cells = parse_table_row(line);
+            rows.push(TableRow { cells, is_header: false });
+            self.advance();
+        }
+
+        Block::Table { rows, span: Span::NONE }
+    }
+
+    fn parse_definition_list(&mut self) -> Block {
+        let mut items = Vec::new();
+
+        while !self.is_eof() {
+            let line = self.current_line().unwrap();
+            if !is_definition_list_item(line) {
+                break;
+            }
+
+            let trimmed = line.trim_start();
+            // Strip leading "- "
+            let content = &trimmed[2..];
+            let (term_str, desc_str) = content.split_once(" :: ").unwrap_or((content, ""));
+            items.push(DefinitionItem {
+                term: parse_inline_content(term_str.trim()),
+                desc: parse_inline_content(desc_str.trim()),
+            });
+            self.advance();
+        }
+
+        Block::DefinitionList { items, span: Span::NONE }
+    }
 }
 
 pub(crate) fn parse_metadata_line(line: &str) -> Option<(String, String)> {
@@ -393,6 +474,43 @@ pub(crate) fn is_ordered_list_item(line: &str) -> bool {
     }
 }
 
+pub(crate) fn is_definition_list_item(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    (trimmed.starts_with("- ") || trimmed.starts_with("+ ")) && trimmed.contains(" :: ")
+}
+
+fn parse_table_row(line: &str) -> Vec<Vec<Inline>> {
+    let line = line.trim();
+    let line = line.strip_prefix('|').unwrap_or(line);
+    let line = line.strip_suffix('|').unwrap_or(line);
+    line.split('|')
+        .map(|cell| parse_inline_content(cell.trim()))
+        .collect()
+}
+
+/// Find the content inside `{...}` starting at `open` where `chars[open] == '{'`.
+/// Returns (content, index_of_closing_brace).
+fn find_brace_span(chars: &[char], open: usize) -> Option<(String, usize)> {
+    debug_assert!(chars.get(open) == Some(&'{'));
+    let mut depth = 1usize;
+    let mut i = open + 1;
+    while i < chars.len() {
+        match chars[i] {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    let content: String = chars[(open + 1)..i].iter().collect();
+                    return Some((content, i));
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
 pub(crate) fn parse_inline_content(text: &str) -> Vec<Inline> {
     let mut nodes = Vec::new();
     let mut pos = 0;
@@ -418,8 +536,19 @@ pub(crate) fn parse_inline_content(text: &str) -> Vec<Inline> {
                     continue;
                 }
             }
-            // Underline: _text_
+            // Subscript: _{text}  /  Underline: _text_
             '_' => {
+                if pos + 1 < chars.len()
+                    && chars[pos + 1] == '{'
+                    && let Some((content, end)) = find_brace_span(&chars, pos + 1)
+                {
+                    nodes.push(Inline::Subscript(
+                        parse_inline_content(&content),
+                        Span::NONE,
+                    ));
+                    pos = end + 1;
+                    continue;
+                }
                 if let Some((content, end)) = find_inline_span(&chars, pos, '_') {
                     nodes.push(Inline::Underline(
                         parse_inline_content(&content),
@@ -448,8 +577,42 @@ pub(crate) fn parse_inline_content(text: &str) -> Vec<Inline> {
                     continue;
                 }
             }
-            // Link: [[url]] or [[url][description]]
+            // Superscript: ^{text}
+            '^' => {
+                if pos + 1 < chars.len()
+                    && chars[pos + 1] == '{'
+                    && let Some((content, end)) = find_brace_span(&chars, pos + 1)
+                {
+                    nodes.push(Inline::Superscript(
+                        parse_inline_content(&content),
+                        Span::NONE,
+                    ));
+                    pos = end + 1;
+                    continue;
+                }
+            }
+            // Math inline: $source$
+            '$' => {
+                if let Some((content, end)) = find_inline_span(&chars, pos, '$') {
+                    nodes.push(Inline::MathInline {
+                        source: content,
+                        span: Span::NONE,
+                    });
+                    pos = end + 1;
+                    continue;
+                }
+            }
+            // Footnote ref: [fn:label]  /  Link: [[url]] or [[url][description]]
             '[' => {
+                // Footnote reference: [fn:LABEL]
+                if chars[pos..].starts_with(&['[', 'f', 'n', ':'])
+                    && let Some((footnote_inline, end)) = parse_footnote_ref(&chars, pos)
+                {
+                    nodes.push(footnote_inline);
+                    pos = end;
+                    continue;
+                }
+                // Link: [[url]] or [[url][description]]
                 if pos + 1 < chars.len()
                     && chars[pos + 1] == '['
                     && let Some((link_inline, end)) = parse_link(&chars, pos)
@@ -554,5 +717,21 @@ pub(crate) fn parse_link(chars: &[char], start: usize) -> Option<(Inline, usize)
     }
 
     None
+}
+
+/// Parse `[fn:LABEL]` at `start`. Returns (Inline::FootnoteRef, end_pos).
+fn parse_footnote_ref(chars: &[char], start: usize) -> Option<(Inline, usize)> {
+    // chars[start] == '[', chars[start+1..start+4] == "fn:"
+    debug_assert!(chars[start..].starts_with(&['[', 'f', 'n', ':']));
+    let label_start = start + 4; // after "[fn:"
+    let close = chars[label_start..].iter().position(|&c| c == ']')?;
+    let label: String = chars[label_start..(label_start + close)].iter().collect();
+    if label.is_empty() {
+        return None;
+    }
+    Some((
+        Inline::FootnoteRef { label, span: Span::NONE },
+        label_start + close + 1,
+    ))
 }
 

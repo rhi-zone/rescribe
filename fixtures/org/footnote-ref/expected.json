@@ -1,0 +1,7 @@
+{
+  "description": "Org footnote reference via [fn:label] syntax",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "1" } }
+  ]
+}

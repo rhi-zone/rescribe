@@ -333,4 +333,67 @@ mod tests {
         assert!(out.contains("A quote"));
         assert!(out.contains("#+END_QUOTE"));
     }
+
+    #[test]
+    fn test_parse_superscript() {
+        let doc = parse_ok("H^{2}O");
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines.iter().any(|n| matches!(n, Inline::Superscript(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_subscript() {
+        let doc = parse_ok("H_{2}O");
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines.iter().any(|n| matches!(n, Inline::Subscript(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_table() {
+        let doc = parse_ok("| Name | Age |\n|------+-----|\n| Alice | 30 |");
+        assert!(matches!(doc.blocks[0], Block::Table { .. }));
+        if let Block::Table { ref rows, .. } = doc.blocks[0] {
+            assert_eq!(rows.len(), 2);
+            assert!(rows[0].is_header);
+            assert!(!rows[1].is_header);
+            assert_eq!(rows[0].cells.len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_parse_definition_list() {
+        let doc = parse_ok("- Term :: Description");
+        assert!(matches!(doc.blocks[0], Block::DefinitionList { .. }));
+        if let Block::DefinitionList { ref items, .. } = doc.blocks[0] {
+            assert_eq!(items.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_parse_footnote_ref() {
+        let doc = parse_ok("See note [fn:1].");
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines
+                .iter()
+                .any(|n| matches!(n, Inline::FootnoteRef { label, .. } if label == "1")));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_math_inline() {
+        let doc = parse_ok("Solve $x^2 + y^2 = r^2$.");
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines.iter().any(|n| matches!(n, Inline::MathInline { .. })));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
 }
