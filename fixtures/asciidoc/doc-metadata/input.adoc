@@ -1,0 +1,4 @@
+= My Document
+:author: Jane Doe
+
+First paragraph.

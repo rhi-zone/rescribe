@@ -1,0 +1,7 @@
+{
+  "description": "AsciiDoc inline anchor [[id]] produces a span node with an id property",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "id": "my-anchor" } }
+  ]
+}

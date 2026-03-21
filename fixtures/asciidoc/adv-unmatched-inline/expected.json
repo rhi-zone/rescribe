@@ -1,0 +1,7 @@
+{
+  "description": "Unmatched opening * inline markup must not panic; treated as literal text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

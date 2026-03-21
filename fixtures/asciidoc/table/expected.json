@@ -1,0 +1,12 @@
+{
+  "description": "Simple table with a single row and two cells",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Cell A" } },
+    { "path": "/0/0/1", "kind": "table_cell" },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Cell B" } }
+  ]
+}

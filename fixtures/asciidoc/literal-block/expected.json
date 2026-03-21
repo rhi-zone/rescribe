@@ -1,0 +1,7 @@
+{
+  "description": "Literal block delimited by .... produces a code_block with no language",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "fixed width text" } }
+  ]
+}

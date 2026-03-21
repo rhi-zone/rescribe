@@ -1,0 +1,1 @@
+Go to menu:File[Open] to open a file.

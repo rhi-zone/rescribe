@@ -1,0 +1,5 @@
+{
+  "description": "Blocks nested 6+ levels deep must not panic; parsed gracefully",
+  "category": "adversarial",
+  "assertions": []
+}

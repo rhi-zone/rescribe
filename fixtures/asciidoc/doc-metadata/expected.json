@@ -1,0 +1,9 @@
+{
+  "description": "Document with title and author attribute; title is a level-1 heading",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "My Document" } },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

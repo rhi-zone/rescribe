@@ -1,0 +1,12 @@
+{
+  "description": "Checklist items with [x] and [ ] prefixes produce list_item nodes with asciidoc:checked prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 2 },
+    { "path": "/0/0", "kind": "list_item", "props": { "asciidoc:checked": true } },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "done" } },
+    { "path": "/0/1", "kind": "list_item", "props": { "asciidoc:checked": false } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "todo" } }
+  ]
+}

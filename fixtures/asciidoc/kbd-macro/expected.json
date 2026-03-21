@@ -1,0 +1,8 @@
+{
+  "description": "AsciiDoc kbd:[keys] macro produces a raw_inline node with asciidoc format",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "raw_inline", "props": { "format": "asciidoc", "content": "kbd:[Ctrl+C]" } }
+  ]
+}

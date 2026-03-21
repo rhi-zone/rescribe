@@ -40,6 +40,9 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
 
         node::PARAGRAPH => vec![Block::Paragraph {
             inlines: nodes_to_inlines(&node.children),
+            id: None,
+            role: None,
+            checked: None,
             span: asciidoc::Span::NONE,
         }],
 
@@ -48,6 +51,8 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
             vec![Block::Heading {
                 level,
                 inlines: nodes_to_inlines(&node.children),
+                id: None,
+                role: None,
                 span: asciidoc::Span::NONE,
             }]
         }
@@ -79,6 +84,7 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
             vec![Block::List {
                 ordered,
                 items,
+                style: None,
                 span: asciidoc::Span::NONE,
             }]
         }
@@ -168,6 +174,9 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                         source: source.to_string(),
                         span: asciidoc::Span::NONE,
                     }],
+                    id: None,
+                    role: None,
+                    checked: None,
                     span: asciidoc::Span::NONE,
                 }]
             } else {
@@ -183,6 +192,7 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
                 .to_uppercase();
             vec![Block::Div {
                 class: Some(format!("admonition {}", adm_type.to_lowercase())),
+                title: None,
                 children: nodes_to_blocks(&node.children),
                 span: asciidoc::Span::NONE,
             }]
@@ -200,6 +210,9 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
         | node::SUBSCRIPT => {
             vec![Block::Paragraph {
                 inlines: nodes_to_inlines(std::slice::from_ref(node)),
+                id: None,
+                role: None,
+                checked: None,
                 span: asciidoc::Span::NONE,
             }]
         }
@@ -292,6 +305,7 @@ fn node_to_inline(node: &Node) -> Inline {
             Inline::Link {
                 url,
                 children: nodes_to_inlines(&node.children),
+                target: None,
                 span: asciidoc::Span::NONE,
             }
         }

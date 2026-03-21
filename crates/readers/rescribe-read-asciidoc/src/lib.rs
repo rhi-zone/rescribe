@@ -30,13 +30,35 @@ fn doc_to_nodes(ast: &AsciiDoc) -> Vec<Node> {
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines, .. } => {
-            Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))
+        Block::Paragraph { inlines, id, role, .. } => {
+            let mut n = Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines));
+            if let Some(id) = id {
+                n = n.prop("id", id.clone());
+            }
+            if let Some(role) = role {
+                n = n.prop("role", role.clone());
+            }
+            n
         }
 
-        Block::Heading { level, inlines, .. } => Node::new(node::HEADING)
-            .prop(prop::LEVEL, *level as i64)
-            .children(inlines_to_nodes(inlines)),
+        Block::Heading {
+            level,
+            inlines,
+            id,
+            role,
+            ..
+        } => {
+            let mut n = Node::new(node::HEADING)
+                .prop(prop::LEVEL, *level as i64)
+                .children(inlines_to_nodes(inlines));
+            if let Some(id) = id {
+                n = n.prop("id", id.clone());
+            }
+            if let Some(role) = role {
+                n = n.prop("role", role.clone());
+            }
+            n
+        }
 
         Block::CodeBlock {
             content, language, ..
@@ -60,16 +82,31 @@ fn block_to_node(block: &Block) -> Node {
             n
         }
 
-        Block::List { ordered, items, .. } => {
+        Block::List {
+            ordered,
+            items,
+            style,
+            ..
+        } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_blocks| {
-                    Node::new(node::LIST_ITEM).children(item_blocks.iter().map(block_to_node))
+                    let mut li = Node::new(node::LIST_ITEM)
+                        .children(item_blocks.iter().map(block_to_node));
+                    // Propagate checklist state from first paragraph to the list_item
+                    if let Some(Block::Paragraph { checked: Some(c), .. }) = item_blocks.first() {
+                        li = li.prop("asciidoc:checked", *c);
+                    }
+                    li
                 })
                 .collect();
-            Node::new(node::LIST)
+            let mut n = Node::new(node::LIST)
                 .prop(prop::ORDERED, *ordered)
-                .children(list_items)
+                .children(list_items);
+            if let Some(s) = style {
+                n = n.prop("list:style", s.clone());
+            }
+            n
         }
 
         Block::DefinitionList { items, .. } => {
@@ -86,10 +123,13 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::FIGURE).children(vec![img])
         }
 
-        Block::Div { class, children, .. } => {
+        Block::Div { class, title, children, .. } => {
             let mut n = Node::new(node::DIV).children(children.iter().map(block_to_node));
             if let Some(cls) = class {
                 n = n.prop("class", cls.clone());
+            }
+            if let Some(t) = title {
+                n = n.prop("title", t.clone());
             }
             n
         }
@@ -118,7 +158,11 @@ fn table_row_to_node(row: &TableRow) -> Node {
         .iter()
         .map(|cell| Node::new(node::TABLE_CELL).children(inlines_to_nodes(cell)))
         .collect();
-    Node::new(node::TABLE_ROW).children(cells)
+    if row.is_header {
+        Node::new(node::TABLE_HEADER).children(cells)
+    } else {
+        Node::new(node::TABLE_ROW).children(cells)
+    }
 }
 
 fn image_data_to_node(img: &ImageData) -> Node {
@@ -191,9 +235,17 @@ fn inline_to_node(inline: &Inline) -> Node {
                 .children(inlines_to_nodes(children))
         }
 
-        Inline::Link { url, children, .. } => Node::new(node::LINK)
-            .prop(prop::URL, url.clone())
-            .children(inlines_to_nodes(children)),
+        Inline::Link {
+            url, children, target, ..
+        } => {
+            let mut n = Node::new(node::LINK)
+                .prop(prop::URL, url.clone())
+                .children(inlines_to_nodes(children));
+            if let Some(t) = target {
+                n = n.prop("target", t.clone());
+            }
+            n
+        }
 
         Inline::Image(img, _) => image_data_to_node(img),
 
@@ -224,6 +276,8 @@ fn inline_to_node(inline: &Inline) -> Node {
         } => Node::new(node::RAW_INLINE)
             .prop("format", format.clone())
             .prop(prop::CONTENT, content.clone()),
+
+        Inline::Anchor { id, .. } => Node::new(node::SPAN).prop("id", id.clone()),
     }
 }
 

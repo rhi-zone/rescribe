@@ -1,0 +1,8 @@
+{
+  "description": "Link macro with formatted (bold) text in the label",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } }
+  ]
+}

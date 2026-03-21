@@ -1,0 +1,7 @@
+{
+  "description": "Table with missing |=== closing delimiter must not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "table" }
+  ]
+}

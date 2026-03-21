@@ -1,0 +1,8 @@
+{
+  "description": "AsciiDoc link macro with window=_blank attribute sets target property on the link node",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "link", "props": { "url": "https://example.com", "target": "_blank" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "the site" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Single paragraph line with 5000+ characters must not panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "AsciiDoc pass:[content] macro produces a raw_inline node with html format",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "raw_inline", "props": { "format": "html", "content": "<b>raw HTML</b>" } }
+  ]
+}

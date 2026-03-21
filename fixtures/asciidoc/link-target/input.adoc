@@ -1,0 +1,1 @@
+Visit link:https://example.com[the site,window=_blank] for info.

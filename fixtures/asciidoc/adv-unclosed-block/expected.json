@@ -1,0 +1,5 @@
+{
+  "description": "Unclosed ==== delimiter block must not panic; content is parsed gracefully",
+  "category": "adversarial",
+  "assertions": []
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Document with 100 sections at various heading levels must not panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/1", "kind": "heading", "props": { "level": 2 } }
+  ]
+}

@@ -311,5 +311,11 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
                 ctx.write(content);
             }
         }
+
+        Inline::Anchor { id, .. } => {
+            ctx.write("[[");
+            ctx.write(id);
+            ctx.write("]]");
+        }
     }
 }

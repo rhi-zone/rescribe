@@ -1,0 +1,8 @@
+{
+  "description": "Document attribute definition does not produce a block; following paragraph is parsed normally",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Paragraph after attribute definition." } }
+  ]
+}

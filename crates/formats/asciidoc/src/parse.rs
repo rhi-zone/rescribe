@@ -28,6 +28,12 @@ pub(crate) struct Parser<'a> {
     line_idx: usize,
     attributes: std::collections::HashMap<String, String>,
     pub(crate) diagnostics: Vec<Diagnostic>,
+    /// Pending block id from `[#id]` — applied to the next block and cleared.
+    pending_id: Option<String>,
+    /// Pending block role from `[.role]` — applied to the next block and cleared.
+    pending_role: Option<String>,
+    /// Pending list style from `[loweralpha]` etc. — applied to the next list block and cleared.
+    pending_list_style: Option<String>,
 }
 
 impl<'a> Parser<'a> {
@@ -38,6 +44,9 @@ impl<'a> Parser<'a> {
             line_idx: 0,
             attributes: std::collections::HashMap::new(),
             diagnostics: Vec::new(),
+            pending_id: None,
+            pending_role: None,
+            pending_list_style: None,
         }
     }
 
@@ -116,6 +125,25 @@ impl<'a> Parser<'a> {
             return self.parse_delimited_block();
         }
 
+        // Table (|=== delimiter)
+        if line == "|===" {
+            return self.parse_table();
+        }
+
+        // Open block (--)
+        if line == "--" {
+            return self.parse_open_block();
+        }
+
+        // Block title (.Title before a block) — but not `. item` ordered list markers
+        if line.starts_with('.')
+            && line.len() > 1
+            && !line.starts_with("..")
+            && !line.starts_with(". ")
+        {
+            return self.parse_block_title();
+        }
+
         // Lists
         if let Some(list) = self.try_parse_list() {
             return Some(list);
@@ -175,7 +203,9 @@ impl<'a> Parser<'a> {
         }
 
         let rest = &line[level..];
-        if !rest.starts_with(' ') && !rest.is_empty() {
+        // Headings must have a space after the `=` characters: `== Title`.
+        // `====` (all `=`, no space) is a delimiter block, not a heading.
+        if !rest.starts_with(' ') {
             return None;
         }
 
@@ -183,9 +213,13 @@ impl<'a> Parser<'a> {
         self.advance_line();
 
         let inlines = parse_inline_content(title);
+        let id = self.pending_id.take();
+        let role = self.pending_role.take();
         Some(Block::Heading {
             level,
             inlines,
+            id,
+            role,
             span: Span::NONE,
         })
     }
@@ -202,6 +236,48 @@ impl<'a> Parser<'a> {
         // Check for admonition blocks
         let first_attr = attrs.first().map(|s| s.to_uppercase());
 
+        // Check for block id: [#my-id] or [#my-id, ...] and role: [.role]
+        // Also list style: [loweralpha], [upperroman], [arabic], etc.
+        let first = attrs.first().map(|s| s.as_ref()).unwrap_or("");
+
+        // Block id: starts with #
+        if let Some(id) = first.strip_prefix('#') {
+            self.pending_id = Some(id.trim().to_string());
+            // May also have role in subsequent attrs (e.g. [#id,.role])
+            for attr in attrs.iter().skip(1) {
+                if let Some(role) = attr.strip_prefix('.') {
+                    self.pending_role = Some(role.trim().to_string());
+                }
+            }
+            return self.try_parse_block();
+        }
+
+        // Block role: starts with .
+        if let Some(role) = first.strip_prefix('.') {
+            self.pending_role = Some(role.trim().to_string());
+            for attr in attrs.iter().skip(1) {
+                if let Some(id) = attr.strip_prefix('#') {
+                    self.pending_id = Some(id.trim().to_string());
+                }
+            }
+            return self.try_parse_block();
+        }
+
+        // List style keywords (loweralpha, upperalpha, lowerroman, upperroman, arabic, etc.)
+        let list_style_keywords = [
+            "arabic",
+            "decimal",
+            "loweralpha",
+            "upperalpha",
+            "lowerroman",
+            "upperroman",
+            "lowergreek",
+        ];
+        if list_style_keywords.contains(&first.to_lowercase().as_str()) {
+            self.pending_list_style = Some(first.to_string());
+            return self.try_parse_block();
+        }
+
         match first_attr.as_deref() {
             Some("NOTE") | Some("TIP") | Some("WARNING") | Some("IMPORTANT") | Some("CAUTION") => {
                 let admonition_type = first_attr.unwrap().to_lowercase();
@@ -209,8 +285,12 @@ impl<'a> Parser<'a> {
                 let inlines = parse_inline_content(&content);
                 Some(Block::Div {
                     class: Some(format!("admonition {}", admonition_type)),
+                    title: None,
                     children: vec![Block::Paragraph {
                         inlines,
+                        id: None,
+                        role: None,
+                        checked: None,
                         span: Span::NONE,
                     }],
                     span: Span::NONE,
@@ -248,6 +328,9 @@ impl<'a> Parser<'a> {
                 Some(Block::Blockquote {
                     children: vec![Block::Paragraph {
                         inlines,
+                        id: None,
+                        role: None,
+                        checked: None,
                         span: Span::NONE,
                     }],
                     attribution,
@@ -260,8 +343,12 @@ impl<'a> Parser<'a> {
                 let inlines = parse_inline_content(&content);
                 Some(Block::Div {
                     class: Some("example".to_string()),
+                    title: None,
                     children: vec![Block::Paragraph {
                         inlines,
+                        id: None,
+                        role: None,
+                        checked: None,
                         span: Span::NONE,
                     }],
                     span: Span::NONE,
@@ -273,8 +360,12 @@ impl<'a> Parser<'a> {
                 let inlines = parse_inline_content(&content);
                 Some(Block::Div {
                     class: Some("sidebar".to_string()),
+                    title: None,
                     children: vec![Block::Paragraph {
                         inlines,
+                        id: None,
+                        role: None,
+                        checked: None,
                         span: Span::NONE,
                     }],
                     span: Span::NONE,
@@ -292,7 +383,7 @@ impl<'a> Parser<'a> {
             return false;
         }
 
-        let patterns = ["----", "====", "****", "____", "++++", "...."];
+        let patterns = ["----", "====", "****", "____", "++++", "....", "////"];
 
         for pattern in patterns {
             if line.starts_with(pattern)
@@ -326,6 +417,11 @@ impl<'a> Parser<'a> {
 
         let content = content_lines.join("\n");
 
+        // Comment blocks (////) are dropped — content is not emitted
+        if delim_char == '/' {
+            return None;
+        }
+
         let block = match delim_char {
             '-' => Block::CodeBlock {
                 content,
@@ -336,8 +432,12 @@ impl<'a> Parser<'a> {
                 let inlines = parse_inline_content(&content);
                 Block::Div {
                     class: Some("example".to_string()),
+                    title: None,
                     children: vec![Block::Paragraph {
                         inlines,
+                        id: None,
+                        role: None,
+                        checked: None,
                         span: Span::NONE,
                     }],
                     span: Span::NONE,
@@ -347,8 +447,12 @@ impl<'a> Parser<'a> {
                 let inlines = parse_inline_content(&content);
                 Block::Div {
                     class: Some("sidebar".to_string()),
+                    title: None,
                     children: vec![Block::Paragraph {
                         inlines,
+                        id: None,
+                        role: None,
+                        checked: None,
                         span: Span::NONE,
                     }],
                     span: Span::NONE,
@@ -359,6 +463,9 @@ impl<'a> Parser<'a> {
                 Block::Blockquote {
                     children: vec![Block::Paragraph {
                         inlines,
+                        id: None,
+                        role: None,
+                        checked: None,
                         span: Span::NONE,
                     }],
                     attribution: None,
@@ -379,8 +486,12 @@ impl<'a> Parser<'a> {
                 let inlines = parse_inline_content(&content);
                 Block::Div {
                     class: None,
+                    title: None,
                     children: vec![Block::Paragraph {
                         inlines,
+                        id: None,
+                        role: None,
+                        checked: None,
                         span: Span::NONE,
                     }],
                     span: Span::NONE,
@@ -431,11 +542,22 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            // Check for start of new block
+            // Check for start of new block.
+            // Only treat `[...]` as a block boundary when the whole line is a block attribute
+            // (starts with `[` AND ends with `]`). Inline anchors `[[id]]text` must not break.
+            let is_block_attr_line = line.starts_with('[') && line.ends_with(']');
+            let trimmed_line = line.trim_start();
             if line.starts_with('=')
-                || line.starts_with('[')
+                || is_block_attr_line
                 || self.is_delimiter_line(line)
                 || line.starts_with("image::")
+                || line == "--"
+                || line == "|==="
+                || trimmed_line.starts_with("* ")
+                || trimmed_line.starts_with("** ")
+                || trimmed_line.starts_with("- ")
+                || trimmed_line.starts_with(". ")
+                || trimmed_line.starts_with(".. ")
             {
                 break;
             }
@@ -494,63 +616,112 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_unordered_list(&mut self, marker: &str, first_content: &str) -> Block {
+        // Determine the sub-list marker (one more level of '*')
+        let sub_marker: Option<&str> = if marker == "* " { Some("** ") } else { None };
+
         let mut items = Vec::new();
 
-        // First item
-        let inlines = parse_inline_content(first_content);
+        // First item — detect checklist prefix
+        let (checked, text) = parse_checklist_prefix(first_content);
+        let inlines = parse_inline_content(text);
         items.push(vec![Block::Paragraph {
             inlines,
+            id: None,
+            role: None,
+            checked,
             span: Span::NONE,
         }]);
         self.advance_line();
 
         // Subsequent items
-        while !self.is_eof() {
-            self.skip_blank_lines();
-            let Some(line) = self.current_line() else {
+        loop {
+            if self.is_eof() {
                 break;
-            };
+            }
+
+            let line = self.current_line().unwrap_or("");
+
+            // Skip blank lines between items, but detect `+` continuation
+            if line.trim().is_empty() {
+                self.advance_line();
+                let next = self.current_line().unwrap_or("");
+                let next_trimmed = next.trim_start();
+                if next_trimmed == "+" {
+                    // List continuation: consume `+`, attach next block to last item
+                    self.advance_line();
+                    if let Some(cont_block) = self.try_parse_block() {
+                        if let Some(last_item) = items.last_mut() {
+                            last_item.push(cont_block);
+                        }
+                    }
+                    continue;
+                }
+                // After blank, only continue if next line starts a same-level item
+                if next_trimmed.strip_prefix(marker).is_none() {
+                    break;
+                }
+                continue;
+            }
+
             let trimmed = line.trim_start();
 
+            // `+` continuation without preceding blank
+            if trimmed == "+" {
+                self.advance_line();
+                if let Some(cont_block) = self.try_parse_block() {
+                    if let Some(last_item) = items.last_mut() {
+                        last_item.push(cont_block);
+                    }
+                }
+                continue;
+            }
+
+            // Sub-list item (e.g. `** ` when current marker is `* `)
+            if let Some(sub) = sub_marker {
+                if let Some(sub_content) = trimmed.strip_prefix(sub) {
+                    let sub_list = self.parse_unordered_list(sub, sub_content);
+                    if let Some(last_item) = items.last_mut() {
+                        last_item.push(sub_list);
+                    }
+                    continue;
+                }
+            }
+
             if let Some(rest) = trimmed.strip_prefix(marker) {
-                let inlines = parse_inline_content(rest);
+                let (checked, text) = parse_checklist_prefix(rest);
+                let inlines = parse_inline_content(text);
                 items.push(vec![Block::Paragraph {
                     inlines,
+                    id: None,
+                    role: None,
+                    checked,
                     span: Span::NONE,
                 }]);
                 self.advance_line();
             } else {
-                // Check for continuation
-                if line.starts_with(' ') || line.starts_with('\t') {
-                    // Continuation - append to last item's last paragraph
-                    if let Some(last_item) = items.last_mut() {
-                        let more_inlines = parse_inline_content(trimmed);
-                        // Append to the last paragraph in the item
-                        if let Some(Block::Paragraph { inlines, .. }) = last_item.last_mut() {
-                            inlines.extend(more_inlines);
-                        }
-                    }
-                    self.advance_line();
-                } else {
-                    break;
-                }
+                break;
             }
         }
 
         Block::List {
             ordered: false,
             items,
+            style: None,
             span: Span::NONE,
         }
     }
 
     fn parse_ordered_list(&mut self, marker: &str, first_content: &str) -> Block {
+        let style = self.pending_list_style.take();
         let mut items = Vec::new();
 
         // First item
         let inlines = parse_inline_content(first_content);
         items.push(vec![Block::Paragraph {
             inlines,
+            id: None,
+            role: None,
+            checked: None,
             span: Span::NONE,
         }]);
         self.advance_line();
@@ -567,6 +738,9 @@ impl<'a> Parser<'a> {
                 let inlines = parse_inline_content(rest);
                 items.push(vec![Block::Paragraph {
                     inlines,
+                    id: None,
+                    role: None,
+                    checked: None,
                     span: Span::NONE,
                 }]);
                 self.advance_line();
@@ -578,17 +752,22 @@ impl<'a> Parser<'a> {
         Block::List {
             ordered: true,
             items,
+            style,
             span: Span::NONE,
         }
     }
 
     fn parse_ordered_list_numbered(&mut self, first_content: &str) -> Block {
+        let style = self.pending_list_style.take();
         let mut items = Vec::new();
 
         // First item
         let inlines = parse_inline_content(first_content);
         items.push(vec![Block::Paragraph {
             inlines,
+            id: None,
+            role: None,
+            checked: None,
             span: Span::NONE,
         }]);
         self.advance_line();
@@ -608,6 +787,9 @@ impl<'a> Parser<'a> {
                     let inlines = parse_inline_content(rest);
                     items.push(vec![Block::Paragraph {
                         inlines,
+                        id: None,
+                        role: None,
+                        checked: None,
                         span: Span::NONE,
                     }]);
                     self.advance_line();
@@ -620,6 +802,7 @@ impl<'a> Parser<'a> {
         Block::List {
             ordered: true,
             items,
+            style,
             span: Span::NONE,
         }
     }
@@ -736,11 +919,159 @@ impl<'a> Parser<'a> {
             return None;
         }
 
+        let id = self.pending_id.take();
+        let role = self.pending_role.take();
         let inlines = parse_inline_content(&content);
         Some(Block::Paragraph {
             inlines,
+            id,
+            role,
+            checked: None,
             span: Span::NONE,
         })
+    }
+
+    /// Parse `|===` table block.
+    ///
+    /// Supports the common AsciiDoc table syntax:
+    /// - One cell per line starting with `|`
+    /// - Multiple cells on the same line: `| A | B | C`
+    /// - Header row: first group of rows before the first blank line (when followed by more rows)
+    fn parse_table(&mut self) -> Option<Block> {
+        self.advance_line(); // consume |=== line
+
+        // Collect all logical rows as (cells, line_group_index) pairs.
+        // A blank line separates row groups; the first group becomes header rows
+        // if there are subsequent groups.
+        let mut row_groups: Vec<Vec<Vec<Vec<Inline>>>> = Vec::new(); // groups of rows of cells
+        let mut current_group: Vec<Vec<Vec<Inline>>> = Vec::new();
+        let mut current_row: Vec<Vec<Inline>> = Vec::new();
+
+        while !self.is_eof() {
+            let line = self.current_line().unwrap_or("");
+            if line == "|===" {
+                self.advance_line();
+                break;
+            }
+            if line.trim().is_empty() {
+                // Flush current row and group
+                if !current_row.is_empty() {
+                    current_group.push(std::mem::take(&mut current_row));
+                }
+                if !current_group.is_empty() {
+                    row_groups.push(std::mem::take(&mut current_group));
+                }
+                self.advance_line();
+                continue;
+            }
+            if line.starts_with('|') {
+                // Split on `|` — each `|` starts a new cell.
+                // `| A | B` → cells ["A", "B"]
+                // `|A|B` → cells ["A", "B"]
+                // `| A | B |` → cells ["A", "B", ""] (trailing empty dropped)
+                let parts: Vec<&str> = line.splitn(2, '|').collect();
+                let rest = if parts.len() > 1 { parts[1] } else { "" };
+                let cell_parts: Vec<&str> = rest.split('|').collect();
+                for (i, cell) in cell_parts.iter().enumerate() {
+                    let trimmed = cell.trim();
+                    // Drop trailing empty cell from `| A | B |`
+                    if i == cell_parts.len() - 1 && trimmed.is_empty() {
+                        continue;
+                    }
+                    current_row.push(parse_inline_content(trimmed));
+                }
+            }
+            self.advance_line();
+        }
+
+        // Flush remaining
+        if !current_row.is_empty() {
+            current_group.push(current_row);
+        }
+        if !current_group.is_empty() {
+            row_groups.push(current_group);
+        }
+
+        // If there are multiple groups, first group is header
+        let has_header = row_groups.len() >= 2;
+        let mut rows: Vec<crate::ast::TableRow> = Vec::new();
+        for (gi, group) in row_groups.into_iter().enumerate() {
+            let is_header = has_header && gi == 0;
+            for cells in group {
+                rows.push(crate::ast::TableRow { cells, is_header });
+            }
+        }
+
+        Some(Block::Table {
+            rows,
+            span: Span::NONE,
+        })
+    }
+
+    /// Parse `--` open block.
+    fn parse_open_block(&mut self) -> Option<Block> {
+        self.advance_line(); // skip opening --
+        let mut children = Vec::new();
+        while !self.is_eof() {
+            let line = self.current_line().unwrap_or("");
+            if line == "--" {
+                self.advance_line();
+                break;
+            }
+            if let Some(block) = self.try_parse_block() {
+                children.push(block);
+            } else {
+                self.advance_line();
+            }
+        }
+        Some(Block::Div {
+            class: Some("open".to_string()),
+            title: None,
+            children,
+            span: Span::NONE,
+        })
+    }
+
+    /// Parse `.Title` block title line — stores title and attaches it to the following block.
+    fn parse_block_title(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+        let title = line[1..].trim().to_string();
+        self.advance_line();
+        self.skip_blank_lines();
+        let block = self.try_parse_block()?;
+        let block = match block {
+            Block::Div {
+                class,
+                children,
+                span,
+                ..
+            } => Block::Div {
+                class,
+                title: Some(title),
+                children,
+                span,
+            },
+            other => other,
+        };
+        Some(block)
+    }
+}
+
+// ── Checklist helper ──────────────────────────────────────────────────────────
+
+/// Detect and strip a checklist prefix from list item content.
+///
+/// Returns `(checked_state, remaining_text)`:
+/// - `[x] ` or `[*] ` → `(Some(true), rest)`
+/// - `[ ] ` → `(Some(false), rest)`
+/// - anything else → `(None, original)`
+fn parse_checklist_prefix(content: &str) -> (Option<bool>, &str) {
+    if let Some(rest) = content.strip_prefix("[x] ").or_else(|| content.strip_prefix("[*] ")) {
+        (Some(true), rest)
+    } else if let Some(rest) = content.strip_prefix("[ ] ") {
+        (Some(false), rest)
+    } else {
+        (None, content)
     }
 }
 
@@ -837,8 +1168,22 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
             }
         }
 
-        // [role]#text# — semantic highlight/formatting roles
+        // [role]#text# or [[id]] anchor
         if chars[pos] == '[' {
+            // Inline anchor: [[id]] — must check before [role]#text# since [[...]] starts with [[
+            if chars.get(pos + 1) == Some(&'[') {
+                if let Some(end) = find_double_bracket_close(&chars, pos + 2) {
+                    let id: String = chars[pos + 2..end].iter().collect();
+                    nodes.push(Inline::Anchor {
+                        id: id.trim().to_string(),
+                        span: Span::NONE,
+                    });
+                    pos = end + 2; // skip closing ]]
+                    continue;
+                }
+            }
+
+            // [role]#text# — semantic highlight/formatting roles
             if let Some((role_end, role)) = find_closing_char(&chars, pos + 1, ']')
                 && chars.get(role_end + 1) == Some(&'#')
                 && let Some((text_end, text)) = find_closing_char(&chars, role_end + 2, '#')
@@ -917,7 +1262,109 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
             }
         }
 
-        // Line break: + at end of line
+        // Macro shortcuts: footnote:[...], kbd:[...], btn:[...], pass:[...], menu:...[...]
+        if chars[pos] == 'f' || chars[pos] == 'k' || chars[pos] == 'b' || chars[pos] == 'p' || chars[pos] == 'm' {
+            let remaining: String = chars[pos..].iter().take(12).collect();
+
+            // footnote:[text]
+            if remaining.starts_with("footnote:[") || remaining.starts_with("footnote::[") {
+                let skip = if remaining.starts_with("footnote::[") { 11 } else { 10 };
+                let content_start = pos + skip;
+                if let Some(close_pos) = find_matching_bracket(&chars, content_start) {
+                    let content: String = chars[content_start..close_pos].iter().collect();
+                    let label = format!("fn{}", nodes.len());
+                    let fn_inlines = parse_inline_content(&content);
+                    nodes.push(Inline::FootnoteRef {
+                        label: label.clone(),
+                        span: Span::NONE,
+                    });
+                    nodes.push(Inline::FootnoteDef {
+                        label,
+                        children: fn_inlines,
+                        span: Span::NONE,
+                    });
+                    pos = close_pos + 1;
+                    continue;
+                }
+            }
+
+            // kbd:[keys]
+            if remaining.starts_with("kbd:[") {
+                let content_start = pos + 5;
+                if let Some(close_pos) = find_matching_bracket(&chars, content_start) {
+                    let content: String = chars[content_start..close_pos].iter().collect();
+                    nodes.push(Inline::RawInline {
+                        format: "asciidoc".to_string(),
+                        content: format!("kbd:[{}]", content),
+                        span: Span::NONE,
+                    });
+                    pos = close_pos + 1;
+                    continue;
+                }
+            }
+
+            // btn:[label]
+            if remaining.starts_with("btn:[") {
+                let content_start = pos + 5;
+                if let Some(close_pos) = find_matching_bracket(&chars, content_start) {
+                    let content: String = chars[content_start..close_pos].iter().collect();
+                    nodes.push(Inline::RawInline {
+                        format: "asciidoc".to_string(),
+                        content: format!("btn:[{}]", content),
+                        span: Span::NONE,
+                    });
+                    pos = close_pos + 1;
+                    continue;
+                }
+            }
+
+            // pass:[content] — raw inline passthrough
+            if remaining.starts_with("pass:[") {
+                let content_start = pos + 6;
+                if let Some(close_pos) = find_matching_bracket(&chars, content_start) {
+                    let content: String = chars[content_start..close_pos].iter().collect();
+                    nodes.push(Inline::RawInline {
+                        format: "html".to_string(),
+                        content,
+                        span: Span::NONE,
+                    });
+                    pos = close_pos + 1;
+                    continue;
+                }
+            }
+
+            // menu:name[items]
+            if remaining.starts_with("menu:") {
+                if let Some((end, inline)) = parse_menu_macro(&chars, pos) {
+                    nodes.push(inline);
+                    pos = end;
+                    continue;
+                }
+            }
+        }
+
+        // Inline literal passthrough: +word+ (constrained — + followed immediately by non-space)
+        // Only matches when: next char after opening + is non-space, and there's a closing +
+        if chars[pos] == '+' {
+            let next = chars.get(pos + 1);
+            let is_line_break = next.is_none() || next == Some(&' ') || next == Some(&'\n');
+            if !is_line_break {
+                // Look for closing +
+                if let Some((end, text)) = find_closing_char(&chars, pos + 1, '+') {
+                    // Closing + must be followed by non-word char or end
+                    let after = chars.get(end + 1);
+                    let valid_close = after.is_none()
+                        || !after.unwrap().is_alphanumeric() && *after.unwrap() != '_';
+                    if valid_close {
+                        nodes.push(Inline::Code(text, Span::NONE));
+                        pos = end + 1;
+                        continue;
+                    }
+                }
+            }
+        }
+
+        // Line break: + at end of line (pos+1 is space or end)
         if chars[pos] == '+' && (pos + 1 >= chars.len() || chars[pos + 1] == ' ') {
             nodes.push(Inline::LineBreak { span: Span::NONE });
             pos += 1;
@@ -942,13 +1389,19 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
             {
                 break;
             }
-            // Check for image: or link:
-            if c == 'i' || c == 'l' || c == 'h' {
-                let remaining: String = chars[pos..].iter().take(8).collect();
+            // Check for macros: image:, link:, https://, http://, footnote:, kbd:, btn:, pass:, menu:
+            if c == 'i' || c == 'l' || c == 'h' || c == 'f' || c == 'k' || c == 'b' || c == 'p' || c == 'm' {
+                let remaining: String = chars[pos..].iter().take(12).collect();
                 if remaining.starts_with("image:")
                     || remaining.starts_with("link:")
                     || remaining.starts_with("https://")
                     || remaining.starts_with("http://")
+                    || remaining.starts_with("footnote:[")
+                    || remaining.starts_with("footnote::[")
+                    || remaining.starts_with("kbd:[")
+                    || remaining.starts_with("btn:[")
+                    || remaining.starts_with("pass:[")
+                    || remaining.starts_with("menu:")
                 {
                     break;
                 }
@@ -1081,6 +1534,7 @@ fn parse_url_link(chars: &[char], start: usize) -> Option<(usize, Inline)> {
             Inline::Link {
                 url,
                 children,
+                target: None,
                 span: Span::NONE,
             },
         ));
@@ -1096,13 +1550,14 @@ fn parse_url_link(chars: &[char], start: usize) -> Option<(usize, Inline)> {
         Inline::Link {
             url,
             children,
+            target: None,
             span: Span::NONE,
         },
     ))
 }
 
 fn parse_link_macro(chars: &[char], start: usize) -> Option<(usize, Inline)> {
-    // link:url[text]
+    // link:url[text] or link:url[text,window=_blank]
     let url_start = start + 5; // Skip "link:"
     let mut pos = url_start;
 
@@ -1120,13 +1575,15 @@ fn parse_link_macro(chars: &[char], start: usize) -> Option<(usize, Inline)> {
     while pos < chars.len() && chars[pos] != ']' {
         pos += 1;
     }
-    let link_text: String = chars[text_start..pos].iter().collect();
+    let link_attrs: String = chars[text_start..pos].iter().collect();
     pos += 1; // Skip ]
 
-    let text = if link_text.is_empty() {
+    // Parse display text and optional window= target from attrs
+    let (display_text, target) = parse_link_attr_list(&link_attrs);
+    let text = if display_text.is_empty() {
         url.clone()
     } else {
-        link_text
+        display_text
     };
 
     let children = vec![Inline::Text {
@@ -1138,9 +1595,33 @@ fn parse_link_macro(chars: &[char], start: usize) -> Option<(usize, Inline)> {
         Inline::Link {
             url,
             children,
+            target,
             span: Span::NONE,
         },
     ))
+}
+
+/// Parse AsciiDoc link attribute list: `"display text,window=_blank"`.
+/// Returns `(display_text, target)`.
+fn parse_link_attr_list(attrs: &str) -> (String, Option<String>) {
+    // Split on first comma: positional display text, then named attrs
+    let (display_part, named_part) = match attrs.find(',') {
+        Some(idx) => (&attrs[..idx], Some(&attrs[idx + 1..])),
+        None => (attrs, None),
+    };
+    let display_text = display_part.trim().to_string();
+    let mut target = None;
+
+    if let Some(named) = named_part {
+        for kv in named.split(',') {
+            let kv = kv.trim();
+            if let Some(v) = kv.strip_prefix("window=") {
+                target = Some(v.trim_matches('"').trim_matches('\'').to_string());
+            }
+        }
+    }
+
+    (display_text, target)
 }
 
 fn parse_xref(chars: &[char], start: usize) -> Option<(usize, Inline)> {
@@ -1178,9 +1659,82 @@ fn parse_xref(chars: &[char], start: usize) -> Option<(usize, Inline)> {
         Inline::Link {
             url,
             children,
+            target: None,
             span: Span::NONE,
         },
     ))
+}
+
+/// Find the closing `]]` for an inline anchor, starting after the opening `[[`.
+/// Returns the index of the first `]` of `]]`.
+fn find_double_bracket_close(chars: &[char], start: usize) -> Option<usize> {
+    let mut pos = start;
+    while pos + 1 < chars.len() {
+        if chars[pos] == ']' && chars[pos + 1] == ']' {
+            return Some(pos);
+        }
+        pos += 1;
+    }
+    None
+}
+
+/// Find the closing `]` for a macro bracket argument, starting after the `[`.
+/// Returns the index of `]`.
+fn find_matching_bracket(chars: &[char], start: usize) -> Option<usize> {
+    let mut pos = start;
+    let mut depth = 1usize;
+    while pos < chars.len() {
+        match chars[pos] {
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(pos);
+                }
+            }
+            _ => {}
+        }
+        pos += 1;
+    }
+    None
+}
+
+/// Parse `menu:Name[Item > SubItem]` inline macro.
+fn parse_menu_macro(chars: &[char], start: usize) -> Option<(usize, Inline)> {
+    // Advance past "menu:"
+    let name_start = start + 5;
+    let mut pos = name_start;
+
+    // Collect menu name (up to '[')
+    while pos < chars.len() && chars[pos] != '[' {
+        pos += 1;
+    }
+
+    if pos >= chars.len() {
+        return None;
+    }
+
+    let menu_name: String = chars[name_start..pos].iter().collect();
+    let attr_start = pos + 1;
+
+    if let Some(close_pos) = find_matching_bracket(chars, attr_start) {
+        let items: String = chars[attr_start..close_pos].iter().collect();
+        let content = if items.is_empty() {
+            menu_name
+        } else {
+            format!("{}>{}", menu_name, items)
+        };
+        Some((
+            close_pos + 1,
+            Inline::RawInline {
+                format: "asciidoc".to_string(),
+                content: format!("menu:{}", content),
+                span: Span::NONE,
+            },
+        ))
+    } else {
+        None
+    }
 }
 
 /// Merge adjacent text nodes.

@@ -1,0 +1,9 @@
+{
+  "description": "AsciiDoc [loweralpha] list style attribute sets list:style property on the ordered list",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": true, "list:style": "loweralpha" } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "First item" } }
+  ]
+}

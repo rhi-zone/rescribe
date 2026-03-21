@@ -1,0 +1,6 @@
+{
+  "description": "AsciiDoc [#id] block attribute attaches an id property to the following heading",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2, "id": "my-id" } }
+  ]
+}

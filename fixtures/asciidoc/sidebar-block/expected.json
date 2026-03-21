@@ -1,0 +1,9 @@
+{
+  "description": "Sidebar block delimited by **** produces a div with class sidebar",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "sidebar" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Sidebar content." } }
+  ]
+}

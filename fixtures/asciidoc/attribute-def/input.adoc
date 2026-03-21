@@ -1,0 +1,3 @@
+:myattr: myvalue
+
+Paragraph after attribute definition.

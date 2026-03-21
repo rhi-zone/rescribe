@@ -1,0 +1,9 @@
+{
+  "description": "[verse] attribute on ____ block produces a blockquote preserving line breaks in text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "line one\nline two" } }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "Heading with bold inline markup in the title text",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 }, "children_count": 3 },
+    { "path": "/0/0", "kind": "text", "props": { "content": "My " } },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Bold" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " Heading" } }
+  ]
+}

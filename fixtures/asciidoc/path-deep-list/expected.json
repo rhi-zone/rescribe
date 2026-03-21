@@ -1,0 +1,11 @@
+{
+  "description": "List with nested sub-lists must not panic; structure is preserved",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Level 1 item A" } },
+    { "path": "/0/0/1", "kind": "list", "props": { "ordered": false } }
+  ]
+}

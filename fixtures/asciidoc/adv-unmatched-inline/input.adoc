@@ -1,0 +1,1 @@
+*unclosed bold inline markup in a paragraph

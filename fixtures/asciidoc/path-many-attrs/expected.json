@@ -1,0 +1,8 @@
+{
+  "description": "Document with 50 attribute definitions must not panic; body content is preserved",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Document body paragraph." } }
+  ]
+}

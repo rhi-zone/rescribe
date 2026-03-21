@@ -7,10 +7,10 @@ See `fixtures/spec.md` for category definitions.
 - [x] paragraph — `paragraph`
 - [x] heading (h1 / = Title) — `heading`
 - [x] heading (h2 / == Section) — `heading-h2`
-- [ ] heading (h3–h6) — (missing)
+- [x] heading (h3–h6) — `heading-h3`
 - [x] unordered list (* or -) — `list-unordered`
 - [x] ordered list (. prefix) — `list-ordered`
-- [ ] nested list — (missing)
+- [x] nested list — `nested-list`
 - [x] description list (term:: description) — `rare-description-list`
 - [x] blockquote — `rare-blockquote`
 - [x] code block (---- or [source,...]) — `code-block`
@@ -20,25 +20,25 @@ See `fixtures/spec.md` for category definitions.
 - [x] image block (image:: macro) — `figure`
 - [x] admonition (NOTE:, TIP:, IMPORTANT:, WARNING:, CAUTION:) — `rare-admonition`
 - [x] raw passthrough block (++++) — `raw-block`
-- [ ] example block (====) — (missing)
-- [ ] sidebar block (**** ) — (missing)
-- [ ] quote block (____) — (missing)
-- [ ] verse block (____  with [verse]) — (missing)
-- [ ] literal block (.....) — (missing)
-- [ ] open block (--) — (missing)
-- [ ] comment block (////) — (missing)
-- [ ] table (|=== syntax) — (missing)
-- [ ] discrete heading ([discrete]) — (missing)
+- [x] example block (====) — `example-block`
+- [x] sidebar block (****) — `sidebar-block`
+- [x] quote block (____) — `quote-block`
+- [x] verse block (____  with [verse]) — `verse-block`
+- [x] literal block (.....) — `literal-block`
+- [x] open block (--) — `open-block`
+- [x] comment block (////) — `comment-block`
+- [x] table (|=== syntax) — `table`
+- [x] discrete heading ([discrete]) — `discrete-heading`
 - [ ] include directive (include::) — (missing)
 - [ ] conditional directives (ifdef::, ifndef::, ifeval::) — (missing)
-- [ ] attribute definition (:attr: value) — (missing)
-- [ ] block title (.Title) — (missing)
-- [ ] list continuation (+) — (missing)
+- [x] attribute definition (:attr: value) — `attribute-def`
+- [x] block title (.Title) — `block-title`
+- [x] list continuation (+) — `list-continuation`
 - [ ] ordered list start offset — (missing)
-- [ ] checklist (- [ ] / - [x]) — (missing)
+- [x] checklist (- [ ] / - [x]) — `checklist`
 - [ ] callout list (<1> ... <1> annotations) — (missing)
 - [ ] bibliography list (- [ref]) — (missing)
-- [ ] footnote block — (missing)
+- [x] footnote block — `footnote`
 
 ## Inline constructs
 - [x] italic (_text_ or __text__) — `italic`
@@ -54,53 +54,53 @@ See `fixtures/spec.md` for category definitions.
 - [x] xref macro (<<anchor>> or xref:) — `rare-link-macro`
 - [x] inline image (image:path[alt]) — `image`
 - [x] line break ( + at end of line) — `line-break`
-- [ ] footnote macro (footnote:[text]) — (missing)
-- [ ] anchor (([[id]])) — (missing)
+- [x] footnote macro (footnote:[text]) — `footnote`
+- [x] anchor ([[id]]) — `anchor`
 - [ ] bibliography ref (<<bib>>) — (missing)
-- [ ] keyboard macro (kbd:[Ctrl+C]) — (missing)
-- [ ] button macro (btn:[OK]) — (missing)
-- [ ] menu macro (menu:File[Open]) — (missing)
+- [x] keyboard macro (kbd:[Ctrl+C]) — `kbd-macro`
+- [x] button macro (btn:[OK]) — `btn-macro`
+- [x] menu macro (menu:File[Open]) — `menu-macro`
 - [ ] attribute reference ({attr}) — (missing)
 - [ ] indexterm macro ((((term)))) — (missing)
-- [ ] pass macro (pass:[raw]) — (missing)
-- [ ] inline literal passthrough (+raw+) — (missing)
+- [x] pass macro (pass:[raw]) — `pass-macro`
+- [x] inline literal passthrough (+raw+) — `inline-literal-pass`
 
 ## Properties
-- [ ] document title metadata (author, revnumber, revdate) — (missing)
+- [x] document title metadata (author, revnumber, revdate) — `doc-metadata`
 - [x] image alt text, width, height — `figure`
 - [x] code block language — `code-block-source`
 - [ ] table column spec (cols= attribute) — (missing)
-- [ ] table header row — (missing)
-- [ ] link window target — (missing)
-- [ ] block id ([#id]) — (missing)
-- [ ] block role ([.role]) — (missing)
+- [x] table header row — `table-header`
+- [x] link window target — `link-target`
+- [x] block id ([#id]) — `block-id`
+- [x] block role ([.role]) — `block-role`
 - [ ] block option ([%option]) — (missing)
-- [ ] list marker style (arabic, loweralpha, etc.) — (missing)
+- [x] list marker style (arabic, loweralpha, etc.) — `list-marker-style`
 - [ ] section numbering attribute — (missing)
 - [x] unknown attribute — `adv-unknown-attr`
 
 ## Composition (integration)
-- [ ] admonition containing a list — (missing)
-- [ ] table cell with inline formatting — (missing)
-- [ ] nested lists (unordered inside ordered) — (missing)
-- [ ] list continuation block — (missing)
-- [ ] example block containing a code block — (missing)
-- [ ] link with formatted text label — (missing)
-- [ ] heading with inline formatting — (missing)
+- [x] admonition containing a list — `integration-admonition-list`
+- [x] table cell with inline formatting — `integration-table-inline`
+- [x] nested lists (unordered inside ordered) — `integration-nested-lists`
+- [x] list continuation block — `list-continuation`
+- [x] example block containing a code block — `integration-example-code`
+- [x] link with formatted text label — `integration-link-formatted`
+- [x] heading with inline formatting — `integration-heading-inline`
 - [ ] callout annotation in code block — (missing)
 
 ## Adversarial
 - [x] empty document — `adv-empty`
 - [x] unknown attribute — `adv-unknown-attr`
-- [ ] unclosed delimiter block — (missing)
-- [ ] malformed table — (missing)
-- [ ] unmatched inline markup — (missing)
-- [ ] attribute reference to undefined attribute — (missing)
-- [ ] deeply nested blocks — (missing)
+- [x] unclosed delimiter block — `adv-unclosed-block`
+- [x] malformed table — `adv-malformed-table`
+- [x] unmatched inline markup — `adv-unmatched-inline`
+- [x] attribute reference to undefined attribute — `adv-undef-attr-ref`
+- [x] deeply nested blocks — `adv-deep-nesting`
 
 ## Pathological
-- [ ] document with hundreds of sections — (missing)
-- [ ] very large table — (missing)
-- [ ] deeply nested lists — (missing)
-- [ ] many attribute definitions — (missing)
-- [ ] very long line — (missing)
+- [x] document with hundreds of sections — `path-many-sections`
+- [x] very large table — `path-large-table`
+- [x] deeply nested lists — `path-deep-list`
+- [x] many attribute definitions — `path-many-attrs`
+- [x] very long line — `path-long-line`

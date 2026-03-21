@@ -1,0 +1,7 @@
+{
+  "description": "AsciiDoc [.role] block attribute attaches a role property to the following paragraph",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "role": "warning" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "This is a warning paragraph." } }
+  ]
+}

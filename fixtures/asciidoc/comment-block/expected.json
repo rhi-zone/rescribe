@@ -1,0 +1,5 @@
+{
+  "description": "Comment block delimited by //// produces no output nodes",
+  "category": "happy",
+  "assertions": []
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Open block delimited by -- produces a div with class open",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "open" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Open block content." } }
+  ]
+}

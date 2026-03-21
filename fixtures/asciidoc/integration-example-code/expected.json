@@ -1,0 +1,8 @@
+{
+  "description": "Example block containing a code block via [EXAMPLE] attribute prefix",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "example" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

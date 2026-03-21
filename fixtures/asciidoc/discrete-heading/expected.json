@@ -1,0 +1,8 @@
+{
+  "description": "[discrete] attribute before a heading produces a regular heading node (no section semantics in IR)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Not a Section" } }
+  ]
+}

@@ -79,11 +79,21 @@ impl AsciiDoc {
 pub enum Block {
     Paragraph {
         inlines: Vec<Inline>,
+        /// Block id from `[#id]` attribute list.
+        id: Option<String>,
+        /// Block role/CSS class from `[.role]` attribute list.
+        role: Option<String>,
+        /// Checklist item state: `Some(true)` = checked, `Some(false)` = unchecked, `None` = not a checklist item.
+        checked: Option<bool>,
         span: Span,
     },
     Heading {
         level: usize,
         inlines: Vec<Inline>,
+        /// Block id from `[#id]` attribute list.
+        id: Option<String>,
+        /// Block role from `[.role]` attribute list.
+        role: Option<String>,
         span: Span,
     },
     CodeBlock {
@@ -99,6 +109,8 @@ pub enum Block {
     List {
         ordered: bool,
         items: Vec<Vec<Block>>,
+        /// List marker style from `[loweralpha]`, `[upperroman]`, etc.
+        style: Option<String>,
         span: Span,
     },
     DefinitionList {
@@ -115,9 +127,11 @@ pub enum Block {
         image: ImageData,
         span: Span,
     },
-    /// A generic div block with an optional CSS class.
+    /// A generic div block with an optional CSS class and optional block title.
     Div {
         class: Option<String>,
+        /// Optional block title from `.Title` preceding the block.
+        title: Option<String>,
         children: Vec<Block>,
         span: Span,
     },
@@ -135,13 +149,18 @@ pub enum Block {
 impl Block {
     pub fn strip_spans(&self) -> Self {
         match self {
-            Block::Paragraph { inlines, .. } => Block::Paragraph {
+            Block::Paragraph { inlines, id, role, checked, .. } => Block::Paragraph {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
+                id: id.clone(),
+                role: role.clone(),
+                checked: *checked,
                 span: Span::NONE,
             },
-            Block::Heading { level, inlines, .. } => Block::Heading {
+            Block::Heading { level, inlines, id, role, .. } => Block::Heading {
                 level: *level,
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
+                id: id.clone(),
+                role: role.clone(),
                 span: Span::NONE,
             },
             Block::CodeBlock {
@@ -161,13 +180,14 @@ impl Block {
                 span: Span::NONE,
             },
             Block::List {
-                ordered, items, ..
+                ordered, items, style, ..
             } => Block::List {
                 ordered: *ordered,
                 items: items
                     .iter()
                     .map(|item| item.iter().map(Block::strip_spans).collect())
                     .collect(),
+                style: style.clone(),
                 span: Span::NONE,
             },
             Block::DefinitionList { items, .. } => Block::DefinitionList {
@@ -181,9 +201,10 @@ impl Block {
                 span: Span::NONE,
             },
             Block::Div {
-                class, children, ..
+                class, title, children, ..
             } => Block::Div {
                 class: class.clone(),
+                title: title.clone(),
                 children: children.iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
@@ -228,6 +249,8 @@ pub enum Inline {
     Link {
         url: String,
         children: Vec<Inline>,
+        /// Link window target (e.g. `_blank`) from `window=_blank` in the attr list.
+        target: Option<String>,
         span: Span,
     },
     Image(ImageData, Span),
@@ -257,6 +280,11 @@ pub enum Inline {
     RawInline {
         format: String,
         content: String,
+        span: Span,
+    },
+    /// Inline anchor `[[id]]` — an in-document target with no display text.
+    Anchor {
+        id: String,
         span: Span,
     },
 }
@@ -308,9 +336,12 @@ impl Inline {
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::Link { url, children, .. } => Inline::Link {
+            Inline::Link {
+                url, children, target, ..
+            } => Inline::Link {
                 url: url.clone(),
                 children: children.iter().map(Inline::strip_spans).collect(),
+                target: target.clone(),
                 span: Span::NONE,
             },
             Inline::Image(img, _) => Inline::Image(img.clone(), Span::NONE),
@@ -340,6 +371,10 @@ impl Inline {
             } => Inline::RawInline {
                 format: format.clone(),
                 content: content.clone(),
+                span: Span::NONE,
+            },
+            Inline::Anchor { id, .. } => Inline::Anchor {
+                id: id.clone(),
                 span: Span::NONE,
             },
         }

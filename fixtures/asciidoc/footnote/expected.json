@@ -1,0 +1,10 @@
+{
+  "description": "AsciiDoc inline footnote macro produces footnote_ref + footnote_def nodes",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "See " } },
+    { "path": "/0/1", "kind": "footnote_ref" },
+    { "path": "/0/2", "kind": "footnote_def" },
+    { "path": "/0/2/0", "kind": "text", "props": { "content": "Some footnote text" } }
+  ]
+}
