@@ -1,0 +1,6 @@
+{
+  "description": "LaTeX \\begin{quote} environment becomes blockquote node",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" }
+  ]
+}

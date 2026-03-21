@@ -1,0 +1,7 @@
+{
+  "description": "Unordered list becomes list node with ordered=false",
+  "assertions": [
+    { "path": "/0",   "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" }
+  ]
+}

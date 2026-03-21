@@ -1552,6 +1552,7 @@ dependencies = [
  "rescribe-read-bbcode",
  "rescribe-read-biblatex",
  "rescribe-read-bibtex",
+ "rescribe-read-commonmark",
  "rescribe-read-creole",
  "rescribe-read-csl-json",
  "rescribe-read-csv",

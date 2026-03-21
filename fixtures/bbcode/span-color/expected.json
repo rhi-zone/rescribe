@@ -1,0 +1,7 @@
+{
+  "description": "BBCode [color=red] becomes span node with style:color property",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:color": "red" } }
+  ]
+}

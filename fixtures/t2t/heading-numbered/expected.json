@@ -1,0 +1,6 @@
+{
+  "description": "t2t + Heading + becomes heading with numbered=true property",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1, "numbered": true } }
+  ]
+}
