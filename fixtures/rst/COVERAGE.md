@@ -61,34 +61,34 @@ See `fixtures/spec.md` for category definitions.
 - [x] small-caps — `small-caps`
 - [x] math inline (:math:`expr`) — `math-inline`
 - [x] custom role span (.. role:: or :role:`text`) — `rst-span`
-- [ ] anonymous hyperlink (`text`__) — (missing)
-- [ ] embedded URI (`text <url>`_) — (missing)
+- [x] anonymous hyperlink (`text`__) — `anonymous-link`
+- [x] embedded URI (`text <url>`_) — `link`
 - [x] footnote reference ([1]_ stays as literal text) — `footnote-def`
 - [x] citation reference ([label]_ stays as literal text) — `citation`
-- [ ] substitution reference (|sub|) — (missing)
-- [ ] substitution definition (.. |sub| replace::) — (missing)
+- [x] substitution reference (|sub|) — `substitution`
+- [x] substitution definition (.. |sub| replace::) — `substitution`
 - [ ] interpreted text (`:role:`text``) — (missing)
 - [ ] image inline (|image_sub|) — (missing)
-- [ ] line break (hard) — (missing)
+- [ ] line break (hard) — (missing; RST has no hard line break outside line blocks)
 
 ## Properties
 - [x] image URI and alt (width/height present in source but not modeled in IR) — `image-props`
 - [x] figure caption and legend — `figure-caption`
 - [x] code block language — `code-block-directive`
-- [ ] link target URL — (missing)
-- [ ] admonition title (custom) — (missing)
-- [ ] list item continuation — (missing)
-- [ ] heading overline style — (missing)
-- [ ] raw directive format attribute — (missing)
+- [x] link target URL — `link-target-url`
+- [x] admonition title (custom) — `admonition-custom-title`
+- [x] list item continuation (produces blockquote) — `integration-list-item-blockquote`
+- [x] heading overline style — `heading-overline`
+- [x] raw directive format attribute — `raw-format-attr`
 - [ ] table widths, header-rows, stub-columns — (missing)
 - [ ] role options (class, language) — (missing)
 
 ## Composition (integration)
 - [x] nested blockquotes (produces sequential blockquotes, not nested) — `integration-nested-blockquote`
-- [ ] list item containing a blockquote — (missing)
+- [x] list item containing a blockquote — `integration-list-item-blockquote`
 - [x] list item containing a code block — `integration-code-in-list`
 - [x] heading followed immediately by a list — `integration-heading-then-list`
-- [ ] inline markup inside a link label — (missing)
+- [x] inline markup inside a link label — `integration-inline-in-link`
 - [x] admonition containing a list (content flattened to paragraph) — `integration-list-in-admonition`
 - [x] table cell with inline formatting (not parsed as table) — `integration-inline-in-table`
 - [x] figure with alt text and caption — `figure-caption`

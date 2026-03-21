@@ -2647,30 +2647,3 @@ mod tests {
 }
 
 
-
-#[cfg(test)]
-#[test]
-fn test_new_features_quick() {
-    // Substitution
-    let doc = parse(".. |brand| replace:: Acme\n\nHello |brand| world.\n").unwrap();
-    if let Block::Paragraph { inlines } = &doc.blocks[0] {
-        let mut flat = String::new();
-        collect_text_from_inlines(inlines, &mut flat);
-        assert_eq!(flat, "Hello Acme world.", "substitution expansion");
-    }
-    // Anonymous link
-    let doc = parse("Visit `Example`__ for info.\n\n__ https://example.com\n").unwrap();
-    if let Block::Paragraph { inlines } = &doc.blocks[0] {
-        let link = inlines.iter().find(|i| matches!(i, Inline::Link { .. }));
-        assert!(link.is_some(), "anonymous link not found");
-        if let Some(Inline::Link { url, .. }) = link {
-            assert_eq!(url, "https://example.com", "anonymous link url");
-        }
-    }
-    // Custom admonition
-    let doc = parse(".. admonition:: My Title\n\n   Content here.\n").unwrap();
-    assert!(matches!(doc.blocks[0], Block::Admonition { .. }), "expected Admonition");
-    if let Block::Admonition { admonition_type, .. } = &doc.blocks[0] {
-        assert_eq!(admonition_type, "My Title");
-    }
-}

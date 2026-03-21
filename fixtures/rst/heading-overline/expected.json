@@ -1,0 +1,7 @@
+{
+  "description": "Overline+underline heading produces heading node at level 1 (same as underline-only)",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "My Title" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Custom admonition directive with title produces admonition node with admonition_type property",
+  "assertions": [
+    { "path": "/0", "kind": "admonition", "props": { "admonition_type": "My Title" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Content here." } }
+  ]
+}

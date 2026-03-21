@@ -1,0 +1,8 @@
+{
+  "description": "Named link target sets url property on the link node",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "My Site" } }
+  ]
+}

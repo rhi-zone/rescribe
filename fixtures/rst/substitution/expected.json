@@ -1,0 +1,7 @@
+{
+  "description": "Substitution definition expands inline reference |brand| to replacement text",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Hello Acme world." } }
+  ]
+}

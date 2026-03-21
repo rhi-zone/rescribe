@@ -1,0 +1,13 @@
+{
+  "description": "Indented paragraph after blank line inside list item is parsed as blockquote continuation",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "List item" } },
+    { "path": "/1", "kind": "blockquote" },
+    { "path": "/1/0", "kind": "paragraph" },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "Indented paragraph continuation" } }
+  ]
+}

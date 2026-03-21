@@ -1,0 +1,6 @@
+{
+  "description": "RST raw directive produces raw_block node with format and content properties",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "format": "html", "content": "<b>bold</b>" } }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Inline markup inside a link label is preserved as literal text (not parsed)",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "**bold** link" } }
+  ]
+}
