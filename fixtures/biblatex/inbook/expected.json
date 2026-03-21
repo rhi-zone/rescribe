@@ -1,0 +1,8 @@
+{
+  "description": "BibLaTeX @inbook entry becomes biblatex:entry with biblatex:type inbook",
+  "assertions": [
+    { "path": "/0",     "kind": "definition_list" },
+    { "path": "/0/0",   "kind": "biblatex:entry" },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "biblatex:type": "inbook" } }
+  ]
+}

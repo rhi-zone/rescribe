@@ -1,0 +1,7 @@
+{
+  "description": "RST unknown custom role becomes span with rst:role property",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "rst:role": "custom" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "FB2 code element becomes a code node",
+  "assertions": [
+    { "path": "/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/1", "kind": "code" }
+  ]
+}

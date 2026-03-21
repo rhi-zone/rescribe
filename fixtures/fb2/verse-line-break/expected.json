@@ -1,0 +1,9 @@
+{
+  "description": "FB2 verse lines (v elements) become spans with line_break nodes",
+  "assertions": [
+    { "path": "/0/0/0",       "kind": "div" },
+    { "path": "/0/0/0/0",     "kind": "div" },
+    { "path": "/0/0/0/0/0",   "kind": "span" },
+    { "path": "/0/0/0/0/0/1", "kind": "line_break" }
+  ]
+}
