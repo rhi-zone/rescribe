@@ -2,7 +2,7 @@
 //!
 //! Parses strict CommonMark (no extensions) into rescribe's document IR.
 
-use pulldown_cmark::{Event, Options, Parser, Tag};
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use rescribe_core::{ConversionResult, Document, ParseError, ParseOptions};
 use rescribe_std::{Node, node, prop};
 
@@ -31,9 +31,25 @@ pub fn parse_with_options(
 fn parse_events<'a>(parser: impl Iterator<Item = Event<'a>>) -> Result<Node, ParseError> {
     let mut doc = Node::new(node::DOCUMENT);
     let mut stack: Vec<Node> = vec![];
+    let mut html_block_buf: Option<String> = None;
 
     for event in parser {
         match event {
+            Event::Start(Tag::HtmlBlock) => {
+                html_block_buf = Some(String::new());
+            }
+            Event::End(TagEnd::HtmlBlock) => {
+                if let Some(content) = html_block_buf.take() {
+                    let raw = Node::new(node::RAW_BLOCK)
+                        .prop(prop::FORMAT, "html")
+                        .prop(prop::CONTENT, content);
+                    if let Some(parent) = stack.last_mut() {
+                        *parent = parent.clone().child(raw);
+                    } else {
+                        doc = doc.child(raw);
+                    }
+                }
+            }
             Event::Start(tag) => {
                 let node = match tag {
                     Tag::Paragraph => Node::new(node::PARAGRAPH),
@@ -112,20 +128,14 @@ fn parse_events<'a>(parser: impl Iterator<Item = Event<'a>>) -> Result<Node, Par
                 }
             }
             Event::Html(html) => {
-                // CommonMark includes raw HTML
-                let raw = Node::new(node::RAW_BLOCK)
-                    .prop(prop::CONTENT, html.to_string())
-                    .prop("format", "html");
-                if stack.is_empty() {
-                    doc = doc.child(raw);
-                } else if let Some(parent) = stack.last_mut() {
-                    *parent = parent.clone().child(raw);
+                if let Some(ref mut buf) = html_block_buf {
+                    buf.push_str(&html);
                 }
             }
             Event::InlineHtml(html) => {
                 let raw = Node::new(node::RAW_INLINE)
                     .prop(prop::CONTENT, html.to_string())
-                    .prop("format", "html");
+                    .prop(prop::FORMAT, "html");
                 if let Some(parent) = stack.last_mut() {
                     *parent = parent.clone().child(raw);
                 }
