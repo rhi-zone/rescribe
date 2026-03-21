@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Book Section">5</ref-type>
+      <contributors>
+        <authors>
+          <author>Jones, Carol</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>A Chapter Title</title>
+        <secondary-title>The Handbook</secondary-title>
+      </titles>
+      <dates>
+        <year>2021</year>
+      </dates>
+      <pages>100-120</pages>
+    </record>
+  </records>
+</xml>

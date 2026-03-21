@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Report">27</ref-type>
+      <contributors>
+        <authors>
+          <author>Brown, David</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>Annual Performance Report</title>
+      </titles>
+      <dates>
+        <year>2022</year>
+      </dates>
+    </record>
+  </records>
+</xml>
