@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc SoftBreak inline becomes soft_break node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "soft_break" }
+  ]
+}
