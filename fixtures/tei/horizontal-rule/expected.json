@@ -1,0 +1,6 @@
+{
+  "description": "TEI <pb/> (page break) becomes horizontal_rule node",
+  "assertions": [
+    { "path": "/0", "kind": "horizontal_rule" }
+  ]
+}

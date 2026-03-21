@@ -17,6 +17,7 @@ serde_json = { workspace = true }
 # (the default) lacks YAML frontmatter, footnotes, and other GFM extensions.
 rescribe-read-markdown = { workspace = true, features = ["pulldown"] }
 rescribe-read-commonmark = { workspace = true }
+rescribe-read-gfm = { workspace = true }
 rescribe-read-html = { workspace = true }
 
 # Pandoc corpus harness (tests/pandoc.rs)

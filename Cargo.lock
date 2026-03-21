@@ -1564,6 +1564,7 @@ dependencies = [
  "rescribe-read-epub",
  "rescribe-read-fb2",
  "rescribe-read-fountain",
+ "rescribe-read-gfm",
  "rescribe-read-haddock",
  "rescribe-read-html",
  "rescribe-read-ipynb",

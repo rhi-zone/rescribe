@@ -1,0 +1,6 @@
+{
+  "description": "Markua * * * scene break becomes horizontal_rule node",
+  "assertions": [
+    { "path": "/0", "kind": "horizontal_rule" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "DocBook <sbr> element becomes line_break node",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "line_break" }
+  ]
+}
