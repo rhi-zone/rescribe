@@ -1,0 +1,6 @@
+{
+  "description": "HTML pre>code with class=language-X sets language prop on code_block",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "rust" } }
+  ]
+}
