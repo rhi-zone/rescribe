@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc SmallCaps becomes small_caps node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "small_caps" }
+  ]
+}

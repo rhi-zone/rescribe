@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc InlineMath becomes math_inline node with math:source property",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "math_inline", "props": { "math:source": "x^2" } }
+  ]
+}

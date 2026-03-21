@@ -1,0 +1,7 @@
+{
+  "description": "Pandoc Note becomes footnote_def node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_def" }
+  ]
+}

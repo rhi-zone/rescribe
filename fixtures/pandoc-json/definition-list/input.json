@@ -1,0 +1,1 @@
+{"pandoc-api-version": [1, 23], "meta": {}, "blocks": [{"t": "DefinitionList", "c": [[[{"t": "Str", "c": "Nucleus"}], [[{"t": "Para", "c": [{"t": "Str", "c": "The core of an atom."}]}]]]]}]}
