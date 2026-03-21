@@ -1,0 +1,6 @@
+{
+  "description": "Muse <verse>...</verse> block becomes blockquote node",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" }
+  ]
+}
