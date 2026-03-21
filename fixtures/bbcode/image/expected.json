@@ -1,0 +1,6 @@
+{
+  "description": "Image via [img]url[/img] tag",
+  "assertions": [
+    { "path": "/0/0", "kind": "image", "props": { "url": "https://example.com/logo.png" } }
+  ]
+}
