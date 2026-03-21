@@ -59,9 +59,12 @@ The input extension matches the format (`.md`, `.html`, `.rst`, …).
 
 | Value | Meaning |
 |-------|---------|
-| `"happy"` | Standard valid input — tests correct recognition of the construct |
+| `"happy"` | Single construct in isolation — the minimal case that proves recognition works |
+| `"integration"` | Multiple constructs interacting — emphasis inside a list, table in a blockquote, etc. |
+| `"e2e"` | A realistic whole document — tests that a full document round-trips correctly |
 | `"rare"` | Valid but obscure or uncommon syntax — tests edge-case coverage |
-| `"adversarial"` | Malformed, truncated, or extreme input — tests robustness (must not panic) |
+| `"adversarial"` | Malformed, truncated, or invalid input — tests robustness (must not panic) |
+| `"pathological"` | Valid but stress-inducing — deeply nested structures, very long lines, large tables; tests that the parser doesn't blow up on unusual-but-legal input |
 
 ### Assertion fields
 
@@ -116,6 +119,64 @@ HTML `<meta>` tags). Keys and value semantics are identical to `props` assertion
   ]
 }
 ```
+
+## Fixture suite completeness
+
+A fixture suite for a format is **complete** when `fixtures/{format}/COVERAGE.md` has all
+items checked. That file is the source of truth for what's missing.
+
+The suite must cover all six test dimensions:
+
+| Dimension | What it tests |
+|-----------|---------------|
+| **Happy path** | Every construct the format defines, in isolation |
+| **Integration** | Constructs interacting — e.g., inline markup inside a table cell |
+| **End-to-end** | Realistic whole documents, not just isolated constructs |
+| **Rare** | Obscure but valid syntax that implementations often get wrong |
+| **Adversarial** | Malformed, truncated, or invalid input — parser must not panic |
+| **Pathological** | Valid but stress-inducing — deeply nested, very large, unusual but legal |
+
+A format's fixture suite is not complete until all six dimensions have meaningful coverage
+for all constructs. "One fixture per construct" is the floor, not the ceiling.
+
+### COVERAGE.md
+
+Each format has `fixtures/{format}/COVERAGE.md` listing every construct defined by the
+format spec, with checkboxes and fixture names. The done signal is all boxes checked.
+
+Template:
+
+```markdown
+# {Format} Fixture Coverage
+
+A fixture suite is complete when all items below are checked.
+See `fixtures/spec.md` for category definitions.
+
+## Block constructs
+- [ ] paragraph — `paragraph`
+- [ ] heading — `heading`
+
+## Inline constructs
+- [ ] emphasis — `emphasis`
+
+## Properties
+- [ ] language on code block — `code-block-lang`
+
+## Composition (integration)
+- [ ] emphasis inside list item — (missing)
+- [ ] table inside blockquote — (missing)
+
+## Adversarial
+- [ ] empty document — `adv-empty`
+- [ ] unclosed inline markup — (missing)
+
+## Pathological
+- [ ] 100-level deep nesting — (missing)
+- [ ] very long paragraph (>64 KB) — (missing)
+```
+
+Fixture names in parentheses marked `(missing)` are gaps. Add them before declaring the
+suite complete.
 
 ## Adversarial fixtures
 

@@ -23,11 +23,13 @@ current one is done.**
 
 "Done" means all of the following:
 
-- **Comprehensive fixture suite** — every construct the format can express has at least
-  one fixture, including composition cases, edge cases, and adversarial inputs (empty
-  files, deeply nested structures, malformed/truncated input, unusual but valid encodings).
-  The bar: a correct reimplementation in any language, given only the fixtures, would know
-  exactly what to produce for every case.
+- **Comprehensive fixture suite** — `fixtures/{format}/COVERAGE.md` exists and all items
+  are checked. Covers all six dimensions: happy path (every construct in isolation),
+  integration (constructs interacting), end-to-end (realistic whole documents), rare
+  (obscure valid syntax), adversarial (malformed/truncated, must not panic), pathological
+  (valid but stress-inducing — deep nesting, large inputs). The bar: a correct
+  reimplementation in any language, given only the fixtures, would know exactly what to
+  produce for every case.
 - **Pandoc/oracle harness at ≥90%** (where applicable)
 - **Fuzz clean**: both no-panic gate and roundtrip property, run until no failures
 - **Benchmarks**: at least one `cargo bench` target measuring reader and writer throughput

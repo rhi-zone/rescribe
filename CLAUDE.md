@@ -169,17 +169,16 @@ implemented that format — no gaps, no silent drops, no ambiguity.
 
 This shapes what "done" means for a format:
 
-- **Coverage**: every construct the format can express has at least one fixture —
-  every block kind, inline kind, significant property, and composition case
-- **Edge cases and adversarial inputs**: empty files, deeply nested structures,
-  degenerate tables, malformed/truncated input, unusual but valid encodings —
-  anything a real implementation might get wrong
+- **Coverage**: `fixtures/{format}/COVERAGE.md` has all boxes checked — every
+  construct the format defines, across all six test dimensions (happy path,
+  integration, end-to-end, rare, adversarial, pathological). That file is the
+  done signal; if it doesn't exist yet, create it before writing fixtures.
 - **Unambiguous**: each fixture has exactly one correct output; if a correct
   alternative implementation would be uncertain what to produce, the fixture is
   underspecified and must be strengthened
 - **Language-agnostic**: `fixtures/{format}/{feature}/input.{ext}` + `expected.json`;
   no Rust-specific assumptions
-- **See `fixtures/spec.md`** for the fixture format spec
+- **See `fixtures/spec.md`** for the fixture format spec and COVERAGE.md template
 
 When adding fixtures, always ask: "would a correct alternative implementation of this
 format, reading this fixture, know exactly what to produce?" If not, the fixture is
