@@ -1,0 +1,6 @@
+{
+  "description": "Four dashes becomes horizontal_rule",
+  "assertions": [
+    { "path": "/0", "kind": "horizontal_rule" }
+  ]
+}

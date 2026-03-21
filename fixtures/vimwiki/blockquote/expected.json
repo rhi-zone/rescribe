@@ -1,0 +1,6 @@
+{
+  "description": "Line starting with > becomes blockquote",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" }
+  ]
+}
