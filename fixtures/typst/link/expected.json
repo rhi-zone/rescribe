@@ -1,7 +1,7 @@
 {
   "description": "Link via #link(\"url\")[text]",
   "assertions": [
-    { "path": "/0", "kind": "paragraph" },
-    { "path": "/0/0", "kind": "link" }
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } }
   ]
 }

@@ -1,0 +1,6 @@
+{
+  "description": "Inline HTML tags produce raw_inline nodes with format=html",
+  "assertions": [
+    { "path": "/0/1", "kind": "raw_inline", "props": { "format": "html" } }
+  ]
+}
