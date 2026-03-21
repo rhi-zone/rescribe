@@ -1,0 +1,7 @@
+{
+  "description": "Strikeout text via :strike:`text` interpreted role",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "strikeout" }
+  ]
+}

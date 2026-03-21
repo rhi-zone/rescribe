@@ -1017,6 +1017,18 @@ fn parse_inline_content(
                                 children: vec![Inline::Text(text.clone())],
                             },
                             "math" => Inline::MathInline { source: text },
+                            "strike" | "strikethrough" | "del" => {
+                                let ch = parse_inline_content(&text, link_targets);
+                                Inline::Strikeout(ch)
+                            }
+                            "underline" | "u" => {
+                                let ch = parse_inline_content(&text, link_targets);
+                                Inline::Underline(ch)
+                            }
+                            "small-caps" | "smallcaps" | "sc" => {
+                                let ch = parse_inline_content(&text, link_targets);
+                                Inline::SmallCaps(ch)
+                            }
                             _ => {
                                 let ch = parse_inline_content(&text, link_targets);
                                 Inline::RstSpan { role, children: ch }
