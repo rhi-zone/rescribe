@@ -1,0 +1,6 @@
+{
+  "description": "disp-formula with tex-math becomes math_display node",
+  "assertions": [
+    { "path": "/0/0", "kind": "math_display" }
+  ]
+}

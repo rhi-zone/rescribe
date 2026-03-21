@@ -1,0 +1,7 @@
+{
+  "description": "underline element becomes underline node",
+  "assertions": [
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "underline" }
+  ]
+}

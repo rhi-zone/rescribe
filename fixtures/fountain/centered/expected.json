@@ -1,0 +1,6 @@
+{
+  "description": "Centered text via >text< becomes paragraph with fountain:type=centered",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "centered" } }
+  ]
+}

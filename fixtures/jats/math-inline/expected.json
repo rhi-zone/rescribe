@@ -1,0 +1,7 @@
+{
+  "description": "inline-formula with tex-math becomes math_inline node inside paragraph",
+  "assertions": [
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "math_inline" }
+  ]
+}

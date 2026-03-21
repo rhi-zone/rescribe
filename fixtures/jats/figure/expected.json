@@ -1,0 +1,8 @@
+{
+  "description": "fig with caption and graphic becomes figure > figcaption + image",
+  "assertions": [
+    { "path": "/0/0",   "kind": "figure" },
+    { "path": "/0/0/0", "kind": "figcaption" },
+    { "path": "/0/0/1", "kind": "image" }
+  ]
+}

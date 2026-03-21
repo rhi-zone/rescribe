@@ -1,0 +1,6 @@
+{
+  "description": "Note block via [[...]] becomes paragraph with fountain:type=note",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "note" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "sc element becomes small_caps node",
+  "assertions": [
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "small_caps" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "q element becomes quoted node with quote_type=double",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "quoted", "props": { "quote_type": "double" } }
+  ]
+}
