@@ -1,0 +1,7 @@
+{
+  "description": "HTML span element becomes span node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "span" }
+  ]
+}
