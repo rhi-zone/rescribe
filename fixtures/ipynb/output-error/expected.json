@@ -1,0 +1,7 @@
+{
+  "description": "Jupyter error output becomes code_block node with ipynb:output_type error",
+  "assertions": [
+    { "path": "/0",   "kind": "code_block" },
+    { "path": "/1",   "kind": "code_block", "props": { "ipynb:output_type": "error" } }
+  ]
+}

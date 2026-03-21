@@ -1,0 +1,8 @@
+[{
+  "id": "website2024",
+  "type": "webpage",
+  "author": [{"family": "Doe", "given": "Jane"}],
+  "title": "A Web Page Title",
+  "URL": "https://example.com/page",
+  "issued": {"date-parts": [[2024]]}
+}]

@@ -1,0 +1,7 @@
+{
+  "description": "BibLaTeX @phdthesis entry becomes biblatex:entry with biblatex:type thesis",
+  "assertions": [
+    { "path": "/0",     "kind": "definition_list" },
+    { "path": "/0/0",   "kind": "biblatex:entry" }
+  ]
+}

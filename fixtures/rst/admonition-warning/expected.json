@@ -1,0 +1,6 @@
+{
+  "description": "RST warning directive becomes div node with class warning",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "warning" } }
+  ]
+}

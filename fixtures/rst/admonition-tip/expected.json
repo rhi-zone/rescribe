@@ -1,0 +1,6 @@
+{
+  "description": "RST tip directive becomes div node with class tip",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "tip" } }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "description": "RST important directive becomes div node with class important",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "important" } }
+  ]
+}

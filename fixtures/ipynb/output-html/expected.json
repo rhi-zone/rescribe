@@ -1,0 +1,7 @@
+{
+  "description": "Jupyter display_data with text/html becomes raw_block node with format html",
+  "assertions": [
+    { "path": "/0",   "kind": "code_block" },
+    { "path": "/1",   "kind": "raw_block", "props": { "format": "html" } }
+  ]
+}
