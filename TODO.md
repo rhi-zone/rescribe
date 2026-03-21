@@ -204,7 +204,9 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] No-panic fuzz gate (`fuzz_textile_reader`) — 1.6M runs clean (2026-03-21)
   - [x] Roundtrip fuzz target (`fuzz_textile_roundtrip`) — 923K runs clean (2026-03-21)
   - [x] Fixed infinite loop bug: list parser on `** ` (level-2 marker with no level-1 items)
-  - [ ] 100% construct coverage — tables, images, blockquotes, superscript, subscript
+  - [x] Fixtures: table, image, superscript, subscript added (2026-03-21)
+  - [ ] Footnotes (no AST support yet)
+  - [ ] Definition lists (no AST support yet)
 - [ ] `org-fmt` vertical — **4-Fuzz** (2026-03-21); needs 5-Production
   - [x] Split lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span/Diagnostic types; infallible parse() → (OrgDoc, Vec<Diagnostic>)

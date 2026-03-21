@@ -1,0 +1,6 @@
+{
+  "description": "Image via !url(alt)! syntax",
+  "assertions": [
+    { "path": "/0/0", "kind": "image", "props": { "url": "logo.png", "alt": "Company logo" } }
+  ]
+}
