@@ -1,0 +1,7 @@
+{
+  "description": "csv-table with :header-rows: and :widths: options becomes a div with rst:directive=csv-table (options are not yet modeled in IR)",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "rst:directive": "csv-table" } }
+  ]
+}

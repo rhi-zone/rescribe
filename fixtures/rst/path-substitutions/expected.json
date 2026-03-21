@@ -1,0 +1,8 @@
+{
+  "description": "55 substitution definitions and references; all expand without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text" }
+  ]
+}

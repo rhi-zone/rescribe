@@ -1,0 +1,3 @@
+.. class:: special
+
+   Some content.

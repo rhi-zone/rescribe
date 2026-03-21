@@ -40,13 +40,13 @@ See `fixtures/spec.md` for category definitions.
 - [x] line block (| prefix) — `line-block`
 - [x] bullet list with auto-enumeration (#.) — `list-auto-enum`
 - [x] field list (parsed as paragraph; no field-list support) — `field-list`
-- [ ] option list — (missing)
+- [x] option list (falls through to paragraph; no dedicated parser support) — `option-list`
 - [x] footnote definition (dropped as comment; ref stays as text) — `footnote-def`
 - [x] citation definition (dropped as comment; ref stays as text) — `citation`
 - [x] comment (.. ) — `comment`
-- [ ] section numbering (.. sectnum::) — (missing)
-- [ ] include directive (.. include::) — (missing)
-- [ ] class directive (.. class::) — (missing)
+- [x] section numbering (.. sectnum:: → div with rst:directive; heading preserved) — `sectnum`
+- [ ] include directive (.. include::) — (N/A: requires filesystem; out of scope for fixture testing)
+- [x] class directive (.. class:: → div with rst:directive=class) — `class-directive`
 
 ## Inline constructs
 - [x] emphasis (*text*) — `emphasis`
@@ -67,9 +67,9 @@ See `fixtures/spec.md` for category definitions.
 - [x] citation reference ([label]_ stays as literal text) — `citation`
 - [x] substitution reference (|sub|) — `substitution`
 - [x] substitution definition (.. |sub| replace::) — `substitution`
-- [ ] interpreted text (`:role:`text``) — (missing)
-- [ ] image inline (|image_sub|) — (missing)
-- [ ] line break (hard) — (missing; RST has no hard line break outside line blocks)
+- [x] interpreted text (`:role:`text`` with unknown role → span; default role → emphasis) — covered by `rst-span` and `emphasis`
+- [x] image inline (|image_sub| → literal text; image:: substitutions not expanded) — `image-inline`
+- [ ] line break (hard) — (N/A: RST has no hard line break outside line blocks)
 
 ## Properties
 - [x] image URI and alt (width/height present in source but not modeled in IR) — `image-props`
@@ -80,8 +80,8 @@ See `fixtures/spec.md` for category definitions.
 - [x] list item continuation (produces blockquote) — `integration-list-item-blockquote`
 - [x] heading overline style — `heading-overline`
 - [x] raw directive format attribute — `raw-format-attr`
-- [ ] table widths, header-rows, stub-columns — (missing)
-- [ ] role options (class, language) — (missing)
+- [x] table widths, header-rows, stub-columns (csv-table options not modeled; div with rst:directive) — `table-props`
+- [x] role options (.. role:: with :language: → div with rst:directive=role; usage becomes span) — `role-options`
 
 ## Composition (integration)
 - [x] nested blockquotes (produces sequential blockquotes, not nested) — `integration-nested-blockquote`
@@ -109,4 +109,4 @@ See `fixtures/spec.md` for category definitions.
 - [x] very long paragraph (no newlines) — `path-long-paragraph`
 - [x] deeply nested lists (9 levels) — `path-deep-list`
 - [x] wide table (20 columns) — `path-wide-table`
-- [ ] many substitution definitions — (missing)
+- [x] many substitution definitions (55 defs + refs; all expand without panic) — `path-substitutions`

@@ -1,0 +1,2 @@
+-v         Verbose output
+--help     Show help message

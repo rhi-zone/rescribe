@@ -1,0 +1,8 @@
+{
+  "description": "Image substitution definition (.. |logo| image::) is not expanded inline; |logo| stays as literal text since only replace:: substitutions are supported",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text" }
+  ]
+}

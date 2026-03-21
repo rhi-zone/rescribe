@@ -1,0 +1,9 @@
+{
+  "description": ".. role:: directive with :language: option becomes a div with rst:directive=role; usage of the role produces a span with rst:role property",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "rst:directive": "role" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "span", "props": { "rst:role": "mycode" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": ".. class:: directive becomes a div with rst:directive=class; body content is preserved as child paragraph",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "rst:directive": "class" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

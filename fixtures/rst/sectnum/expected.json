@@ -1,0 +1,8 @@
+{
+  "description": ".. sectnum:: becomes a div with rst:directive=sectnum; subsequent heading is still present",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "rst:directive": "sectnum" } },
+    { "path": "/1", "kind": "heading", "props": { "level": 1 } }
+  ]
+}

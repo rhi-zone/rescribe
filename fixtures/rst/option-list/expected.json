@@ -1,0 +1,8 @@
+{
+  "description": "RST option list has no dedicated parser support; falls through to paragraph",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text" }
+  ]
+}
