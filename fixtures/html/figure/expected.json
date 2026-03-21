@@ -1,0 +1,8 @@
+{
+  "description": "HTML figure and figcaption become figure and caption nodes",
+  "assertions": [
+    { "path": "/0",   "kind": "figure" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "photo.jpg", "alt": "A photo" } },
+    { "path": "/0/1", "kind": "caption" }
+  ]
+}

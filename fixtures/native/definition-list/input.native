@@ -1,0 +1,17 @@
+Document {
+  content:
+  document() [
+    definition_list() [
+      definition_term() [
+        text( { content: "Term" })
+      ]
+      definition_desc() [
+        paragraph() [
+          text( { content: "The definition of the term." })
+        ]
+      ]
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Native code (inline) node round-trips correctly",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "code", "props": { "content": "var x = 1;" } }
+  ]
+}

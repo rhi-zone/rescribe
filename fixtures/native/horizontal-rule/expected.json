@@ -1,0 +1,8 @@
+{
+  "description": "Native horizontal_rule node round-trips correctly",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "horizontal_rule" },
+    { "path": "/2", "kind": "paragraph" }
+  ]
+}

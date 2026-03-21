@@ -1,0 +1,7 @@
+{
+  "description": "MediaWiki <br/> becomes line_break node inside paragraph",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "line_break" }
+  ]
+}

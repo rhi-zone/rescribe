@@ -1,0 +1,15 @@
+Document {
+  content:
+  document() [
+    paragraph() [
+      text( { content: "Text with a note" })
+      footnote_def() [
+        paragraph() [
+          text( { content: "The footnote content." })
+        ]
+      ]
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

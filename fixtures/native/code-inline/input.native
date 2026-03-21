@@ -1,0 +1,10 @@
+Document {
+  content:
+  document() [
+    paragraph() [
+      code( { content: "var x = 1;" })
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

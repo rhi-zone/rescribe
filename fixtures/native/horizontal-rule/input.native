@@ -1,0 +1,14 @@
+Document {
+  content:
+  document() [
+    paragraph() [
+      text( { content: "Before" })
+    ]
+    horizontal_rule()
+    paragraph() [
+      text( { content: "After" })
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

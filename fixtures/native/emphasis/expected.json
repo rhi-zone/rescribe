@@ -1,0 +1,7 @@
+{
+  "description": "Native emphasis node round-trips correctly",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "emphasis" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Native footnote_def node round-trips correctly",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "footnote_def" },
+    { "path": "/0/1/0", "kind": "paragraph" }
+  ]
+}
