@@ -1,0 +1,7 @@
+{
+  "description": "tip admonition becomes blockquote with docbook:type=tip",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "blockquote", "props": { "docbook:type": "tip" } }
+  ]
+}

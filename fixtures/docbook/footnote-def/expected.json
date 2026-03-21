@@ -1,0 +1,8 @@
+{
+  "description": "footnote element becomes footnote_def node",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "footnote_def" }
+  ]
+}

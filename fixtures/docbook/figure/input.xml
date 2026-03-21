@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <figure>
+    <caption><para>A landscape photo.</para></caption>
+    <mediaobject>
+      <imageobject>
+        <imagedata fileref="landscape.png"/>
+      </imageobject>
+    </mediaobject>
+  </figure>
+</article>

@@ -1,0 +1,7 @@
+{
+  "description": "warning admonition becomes blockquote with docbook:type=warning",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "blockquote", "props": { "docbook:type": "warning" } }
+  ]
+}

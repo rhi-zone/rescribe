@@ -1,0 +1,7 @@
+{
+  "description": "note admonition becomes blockquote with docbook:type=note",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "blockquote", "props": { "docbook:type": "note" } }
+  ]
+}

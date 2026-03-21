@@ -1,0 +1,9 @@
+{
+  "description": "figure with caption and mediaobject/imagedata becomes figure > figcaption + image",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "figure" },
+    { "path": "/0/0/0", "kind": "figcaption" },
+    { "path": "/0/0/1", "kind": "image" }
+  ]
+}

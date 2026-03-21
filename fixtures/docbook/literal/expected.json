@@ -1,0 +1,8 @@
+{
+  "description": "literal element becomes inline code node",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "code" }
+  ]
+}
