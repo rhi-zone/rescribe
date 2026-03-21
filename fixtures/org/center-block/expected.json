@@ -1,0 +1,6 @@
+{
+  "description": "Org #+BEGIN_CENTER block becomes a div node",
+  "assertions": [
+    { "path": "/0", "kind": "div" }
+  ]
+}
