@@ -1,0 +1,7 @@
+{
+  "description": "RIS THES type maps to phdthesis bibtex type",
+  "assertions": [
+    { "path": "/0",     "kind": "definition_list" },
+    { "path": "/0/0",   "kind": "ris:entry" }
+  ]
+}

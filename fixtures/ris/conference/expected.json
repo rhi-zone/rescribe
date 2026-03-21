@@ -1,0 +1,7 @@
+{
+  "description": "RIS CONF type entry produces ris:entry node",
+  "assertions": [
+    { "path": "/0",     "kind": "definition_list" },
+    { "path": "/0/0",   "kind": "ris:entry" }
+  ]
+}
