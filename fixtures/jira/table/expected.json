@@ -1,0 +1,9 @@
+{
+  "description": "Table with header row (|| header ||) and data row (| cell |)",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_head" },
+    { "path": "/0/0/0", "kind": "table_row" },
+    { "path": "/0/1", "kind": "table_row" }
+  ]
+}

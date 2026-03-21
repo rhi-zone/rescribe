@@ -75,6 +75,12 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            // Table (| cell | cell |)
+            if trimmed.starts_with('|') {
+                blocks.push(self.parse_table());
+                continue;
+            }
+
             // Regular paragraph
             blocks.push(self.parse_paragraph());
         }
@@ -244,6 +250,25 @@ impl<'a> Parser<'a> {
             items,
             span: Span::NONE,
         }
+    }
+
+    fn parse_table(&mut self) -> Block {
+        let mut rows = Vec::new();
+        while self.pos < self.lines.len() {
+            let line = self.lines[self.pos];
+            if !line.trim_start().starts_with('|') {
+                break;
+            }
+            let inner = line.trim().strip_prefix('|').unwrap_or(line.trim());
+            let inner = inner.strip_suffix('|').unwrap_or(inner);
+            let cells: Vec<Vec<Inline>> = inner
+                .split('|')
+                .map(|cell| parse_inline(cell.trim()))
+                .collect();
+            rows.push(TableRow { cells, span: Span::NONE });
+            self.pos += 1;
+        }
+        Block::Table { rows, span: Span::NONE }
     }
 
     fn parse_paragraph(&mut self) -> Block {
