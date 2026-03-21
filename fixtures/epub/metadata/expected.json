@@ -1,0 +1,7 @@
+{
+  "description": "EPUB metadata (title, author, language, publisher) extracted to document properties",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "title": "My Book Title", "author": "Jane Author", "language": "en", "publisher": "Test Publisher" } },
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,14 @@
+Document {
+  content:
+  document() [
+    paragraph() [
+      text( { content: "H" })
+      subscript() [
+        text( { content: "2" })
+      ]
+      text( { content: "O" })
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

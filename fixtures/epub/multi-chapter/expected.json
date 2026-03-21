@@ -1,0 +1,9 @@
+{
+  "description": "Multi-chapter EPUB generates heading nodes for each chapter title",
+  "assertions": [
+    { "path": "/0", "kind": "heading" },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/2", "kind": "heading" },
+    { "path": "/3", "kind": "paragraph" }
+  ]
+}

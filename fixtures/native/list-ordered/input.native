@@ -1,0 +1,15 @@
+Document {
+  content:
+  document() [
+    list( { ordered: true }) [
+      list_item() [
+        text( { content: "First item" })
+      ]
+      list_item() [
+        text( { content: "Second item" })
+      ]
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

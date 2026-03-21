@@ -1,0 +1,13 @@
+Document {
+  content:
+  document() [
+    paragraph() [
+      text( { content: "x" })
+      superscript() [
+        text( { content: "2" })
+      ]
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

@@ -1,0 +1,12 @@
+Document {
+  content:
+  document() [
+    paragraph() [
+      text( { content: "First line" })
+      soft_break()
+      text( { content: "Second line" })
+    ]
+  ]
+  metadata: {}
+  resources: {}
+}

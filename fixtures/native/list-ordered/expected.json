@@ -1,0 +1,7 @@
+{
+  "description": "Native ordered list becomes list node with ordered property",
+  "assertions": [
+    { "path": "/0",   "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" }
+  ]
+}
