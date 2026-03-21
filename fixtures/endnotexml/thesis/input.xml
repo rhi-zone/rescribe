@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Thesis">32</ref-type>
+      <contributors>
+        <authors>
+          <author>Jones, Alice</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>Novel Approaches to Problem Solving</title>
+        <secondary-title>MIT</secondary-title>
+      </titles>
+      <dates>
+        <year>2020</year>
+      </dates>
+      <rec-number>2</rec-number>
+      <foreign-keys>
+        <key app="EN" db-id="001">2</key>
+      </foreign-keys>
+    </record>
+  </records>
+</xml>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <records>
+    <record>
+      <ref-type name="Web Page">12</ref-type>
+      <contributors>
+        <authors>
+          <author>Admin</author>
+        </authors>
+      </contributors>
+      <titles>
+        <title>Example Website</title>
+      </titles>
+      <urls>
+        <related-urls>
+          <url>https://example.com</url>
+        </related-urls>
+      </urls>
+      <rec-number>4</rec-number>
+      <foreign-keys>
+        <key app="EN" db-id="001">4</key>
+      </foreign-keys>
+    </record>
+  </records>
+</xml>

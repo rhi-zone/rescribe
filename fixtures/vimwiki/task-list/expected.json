@@ -1,0 +1,8 @@
+{
+  "description": "Vimwiki [x] and [ ] task lists set checked property on list_item",
+  "assertions": [
+    { "path": "/0",   "kind": "list" },
+    { "path": "/0/0", "kind": "list_item", "props": { "checked": true } },
+    { "path": "/0/1", "kind": "list_item", "props": { "checked": false } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "EndNote Web Page type (12) maps to online",
+  "assertions": [
+    { "path": "/0",   "kind": "definition_list" },
+    { "path": "/0/0", "kind": "endnote:entry" },
+    { "path": "/0/0/1", "kind": "definition_desc", "props": { "endnote:type": "12" } }
+  ]
+}

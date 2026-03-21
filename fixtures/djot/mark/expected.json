@@ -1,0 +1,7 @@
+{
+  "description": "Djot {=text=} mark becomes span node with html:class=mark",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "span", "props": { "html:class": "mark" } }
+  ]
+}

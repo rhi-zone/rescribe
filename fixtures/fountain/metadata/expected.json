@@ -1,0 +1,10 @@
+{
+  "description": "Fountain title page sets fountain:title and fountain:author in document metadata",
+  "metadata": {
+    "fountain:title": "My Screenplay",
+    "fountain:author": "Jane Doe"
+  },
+  "assertions": [
+    { "path": "/0", "kind": "heading" }
+  ]
+}
