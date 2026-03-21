@@ -1,0 +1,7 @@
+{
+  "description": "Markdown backtick inline code becomes code node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "code" }
+  ]
+}

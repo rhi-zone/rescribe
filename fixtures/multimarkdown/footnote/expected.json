@@ -1,0 +1,8 @@
+{
+  "description": "Markdown [^1] footnote becomes footnote_ref and footnote_def nodes",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref" },
+    { "path": "/1",   "kind": "footnote_def" }
+  ]
+}

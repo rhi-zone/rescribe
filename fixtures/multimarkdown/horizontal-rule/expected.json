@@ -1,0 +1,7 @@
+{
+  "description": "Markdown --- becomes horizontal_rule node",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "horizontal_rule" }
+  ]
+}

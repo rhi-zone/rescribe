@@ -30,7 +30,9 @@ pub fn parse_with_options(
         | Options::ENABLE_HEADING_ATTRIBUTES
         | Options::ENABLE_DEFINITION_LIST
         | Options::ENABLE_MATH
-        | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS;
+        | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
+        | Options::ENABLE_SUPERSCRIPT
+        | Options::ENABLE_SUBSCRIPT;
 
     let parser = Parser::new_ext(input, options);
     let mut converter = Converter::new();

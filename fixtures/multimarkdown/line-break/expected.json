@@ -1,0 +1,7 @@
+{
+  "description": "Markdown two trailing spaces becomes line_break node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "line_break" }
+  ]
+}
