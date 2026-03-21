@@ -1,0 +1,7 @@
+{
+  "description": "Org citation syntax [cite:@key] is not modeled; it appears verbatim as literal text in the paragraph",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "See [cite:@smith2020] for details." } }
+  ]
+}

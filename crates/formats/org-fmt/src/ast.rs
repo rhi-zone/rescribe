@@ -88,6 +88,12 @@ pub enum Block {
         priority: Option<String>,
         /// Tags extracted from heading (e.g. ["tag1", "work"])
         tags: Vec<String>,
+        /// Key-value pairs from `:PROPERTIES:` drawer immediately following this heading.
+        properties: Vec<(String, String)>,
+        /// `SCHEDULED:` timestamp string (raw value inside `<...>` or `[...]`).
+        scheduled: Option<String>,
+        /// `DEADLINE:` timestamp string.
+        deadline: Option<String>,
         inlines: Vec<Inline>,
         span: Span,
     },
@@ -95,6 +101,8 @@ pub enum Block {
         language: Option<String>,
         /// Header arguments after language (e.g. ":results output")
         header_args: Option<String>,
+        /// Optional `#+NAME:` affiliated keyword value.
+        name: Option<String>,
         content: String,
         span: Span,
     },
@@ -104,6 +112,8 @@ pub enum Block {
     },
     List {
         ordered: bool,
+        /// Optional counter start value from `[@N]` cookie on the first ordered list item.
+        start: Option<u64>,
         items: Vec<ListItem>,
         span: Span,
     },
@@ -150,19 +160,23 @@ impl Block {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::Heading { level, todo, priority, tags, inlines, .. } => Block::Heading {
+            Block::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines, .. } => Block::Heading {
                 level: *level,
                 todo: todo.clone(),
                 priority: priority.clone(),
                 tags: tags.clone(),
+                properties: properties.clone(),
+                scheduled: scheduled.clone(),
+                deadline: deadline.clone(),
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
             Block::CodeBlock {
-                language, header_args, content, ..
+                language, header_args, name, content, ..
             } => Block::CodeBlock {
                 language: language.clone(),
                 header_args: header_args.clone(),
+                name: name.clone(),
                 content: content.clone(),
                 span: Span::NONE,
             },
@@ -171,9 +185,10 @@ impl Block {
                 span: Span::NONE,
             },
             Block::List {
-                ordered, items, ..
+                ordered, start, items, ..
             } => Block::List {
                 ordered: *ordered,
+                start: *start,
                 items: items.iter().map(ListItem::strip_spans).collect(),
                 span: Span::NONE,
             },

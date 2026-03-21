@@ -27,15 +27,15 @@ See `fixtures/spec.md` for category definitions.
 - [x] export block (#+BEGIN_EXPORT … #+END_EXPORT) — `export-block`
 - [x] special block (#+BEGIN_{NAME}) — `special-block`
 - [x] drawer (:LOGBOOK: … :END:) — `drawer`
-- [ ] property drawer (:PROPERTIES: … :END: under heading) — (missing)
-- [ ] dynamic block (#+BEGIN: name … #+END:) — (missing)
+- [x] property drawer (:PROPERTIES: … :END: under heading) — `property-drawer`
+- [x] dynamic block (#+BEGIN: name … #+END:) — `dynamic-block` (treated as paragraph; no distinct construct)
 - [x] fixed-width area (: line) — `fixed-width`
 - [x] comment line (# comment) — `comment-line`
 - [x] keyword line (#+KEY: value) — `keyword-line`
-- [ ] horizontal rule (distinct from comment) — (missing; covered above)
+- [x] horizontal rule (distinct from comment) — (covered by `horizontal-rule`)
 - [x] list item with checkbox (- [ ] / - [X] / - [-]) — `checkbox-list`
-- [ ] list item with tag (- tag :: description) — (missing; covered in definition-list)
-- [ ] ordered list with counter ([@3]) — (missing)
+- [x] list item with tag (- tag :: description) — (N/A: covered by `definition-list`)
+- [x] ordered list with counter ([@3]) — `ordered-list-counter`
 - [x] nested list — `nested-list`
 - [x] table with alignment row (|---|) — `table-alignment`
 - [x] affiliated keyword (#+CAPTION: before table) — `affiliated-keyword`
@@ -56,31 +56,31 @@ See `fixtures/spec.md` for category definitions.
 - [x] line break (\ at end of line) — `line-break`
 - [x] timestamp (<YYYY-MM-DD>) — `timestamp-active`
 - [x] inactive timestamp ([YYYY-MM-DD]) — `timestamp-inactive`
-- [ ] date range (<date1>--<date2>) — (missing)
-- [ ] macro ({{{macro(arg)}}}) — (missing)
-- [ ] citation ([cite:@key]) — (missing)
-- [ ] target (<<target>>) — (missing)
-- [ ] radio target (<<<target>>>) — (missing)
+- [x] date range (<date1>--<date2>) — `date-range` (two separate timestamp spans + literal "--")
+- [x] macro ({{{macro(arg)}}}) — `macro` (passes through as literal text)
+- [x] citation ([cite:@key]) — `citation` (passes through as literal text)
+- [x] target (<<target>>) — `target` (passes through as literal text)
+- [x] radio target (<<<target>>>) — `radio-target` (passes through as literal text)
 - [x] entity (\alpha, \nbsp, etc.) — `entity`
 - [x] LaTeX fragment (\(...\) or \[…\]) — `latex-fragment`
 - [x] export snippet (@@backend:raw@@) — `export-snippet`
-- [ ] inline babel call — (missing)
+- [x] inline babel call — (N/A: Babel evaluation out of scope)
 
 ## Properties
 - [x] heading TODO keyword — `rare-heading-todo`
 - [x] heading DONE keyword — `heading-done`
 - [x] heading priority ([#A]) — `heading-priority`
 - [x] heading tags (:tag1:tag2:) — `heading-tags`
-- [ ] heading comment keyword — (missing)
-- [ ] heading archived — (missing)
+- [x] heading comment keyword — `heading-comment` (COMMENT treated as todo keyword)
+- [x] heading archived — `heading-archived` (ARCHIVE tag extracted into org:tags)
 - [x] code block language — `code-block`
 - [x] code block header arguments (:results, :exports, :var) — `code-block-header`
-- [ ] code block name (#+NAME:) — (missing)
+- [x] code block name (#+NAME:) — `code-block-name`
 - [x] table column alignment — `table-alignment`
 - [x] link type (file:, http:, id:, custom-id:, fuzzy) — `link-types`
-- [ ] footnote labeled vs inline vs anonymous — (missing)
-- [ ] property drawer key/value pairs — (missing)
-- [ ] scheduled / deadline timestamps — (missing)
+- [x] footnote labeled vs inline vs anonymous — `footnote-variants`
+- [x] property drawer key/value pairs — `property-drawer`
+- [x] scheduled / deadline timestamps — `scheduled-deadline`
 - [x] document metadata (#+TITLE, #+AUTHOR, #+DATE, #+EMAIL, #+LANGUAGE, #+OPTIONS) — `metadata`
 
 ## Composition (integration)
@@ -91,7 +91,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] blockquote containing a list — `integration-blockquote-list`
 - [x] footnote containing inline markup — `integration-footnote-markup`
 - [x] nested lists (unordered inside ordered) — `integration-nested-lists`
-- [ ] definition list inside a blockquote — (missing)
+- [x] definition list inside a blockquote — `definition-in-blockquote` (parsed as literal text; block-recursive quote content not yet implemented)
 - [x] affiliated keyword before a table — `integration-caption-table`
 
 ## Adversarial

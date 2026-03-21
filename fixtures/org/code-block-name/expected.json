@@ -1,0 +1,6 @@
+{
+  "description": "#+NAME: affiliated keyword before #+BEGIN_SRC is attached to the code_block node as org:name prop",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "python", "org:name": "myblock", "content": "print('hello')" } }
+  ]
+}

@@ -164,6 +164,9 @@ mod tests {
             todo: None,
             priority: None,
             tags: vec![],
+            properties: vec![],
+            scheduled: None,
+            deadline: None,
             inlines: vec![Inline::Text {
                 text: "Main Title".into(),
                 span: Span::NONE,
@@ -182,6 +185,9 @@ mod tests {
                     todo: None,
                     priority: None,
                     tags: vec![],
+                    properties: vec![],
+                    scheduled: None,
+                    deadline: None,
                     inlines: vec![Inline::Text {
                         text: "Level 1".into(),
                         span: Span::NONE,
@@ -193,6 +199,9 @@ mod tests {
                     todo: None,
                     priority: None,
                     tags: vec![],
+                    properties: vec![],
+                    scheduled: None,
+                    deadline: None,
                     inlines: vec![Inline::Text {
                         text: "Level 2".into(),
                         span: Span::NONE,
@@ -204,6 +213,9 @@ mod tests {
                     todo: None,
                     priority: None,
                     tags: vec![],
+                    properties: vec![],
+                    scheduled: None,
+                    deadline: None,
                     inlines: vec![Inline::Text {
                         text: "Level 3".into(),
                         span: Span::NONE,
@@ -269,6 +281,7 @@ mod tests {
     fn test_build_unordered_list() {
         let doc = simple_doc(Block::List {
             ordered: false,
+            start: None,
             items: vec![
                 ListItem {
                     children: vec![ListItemContent::Inline(vec![Inline::Text {
@@ -296,6 +309,7 @@ mod tests {
     fn test_build_ordered_list() {
         let doc = simple_doc(Block::List {
             ordered: true,
+            start: None,
             items: vec![
                 ListItem {
                     children: vec![ListItemContent::Inline(vec![Inline::Text {
@@ -324,6 +338,7 @@ mod tests {
         let doc = simple_doc(Block::CodeBlock {
             language: Some("rust".into()),
             header_args: None,
+            name: None,
             content: "fn main() {}".into(),
             span: Span::NONE,
         });

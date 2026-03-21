@@ -48,6 +48,8 @@ impl<'a> OrgParser<'a> {
         let mut blocks = Vec::new();
         let mut metadata = Vec::new();
         let mut current_para: Vec<String> = Vec::new();
+        // Affiliated keyword #+NAME: carries over to the next block
+        let mut pending_name: Option<String> = None;
 
         while !self.is_eof() {
             let line = self.current_line().unwrap();
@@ -107,7 +109,12 @@ impl<'a> OrgParser<'a> {
             // Parse metadata (#+KEY: value) — not #+BEGIN_*
             if line.starts_with("#+") && !line.to_uppercase().starts_with("#+BEGIN") {
                 if let Some((key, value)) = parse_metadata_line(line) {
-                    metadata.push((key, value));
+                    if key == "name" {
+                        // #+NAME: is an affiliated keyword; carry it to the next block
+                        pending_name = Some(value);
+                    } else {
+                        metadata.push((key, value));
+                    }
                 }
                 self.advance();
                 continue;
@@ -148,8 +155,16 @@ impl<'a> OrgParser<'a> {
                     });
                     current_para.clear();
                 }
-                if let Some(block) = self.parse_block() {
+                if let Some(mut block) = self.parse_block() {
+                    // Attach #+NAME: affiliated keyword to the block
+                    if let Some(name) = pending_name.take()
+                        && let Block::CodeBlock { name: ref mut n, .. } = block
+                    {
+                        *n = Some(name);
+                    }
                     blocks.push(block);
+                } else {
+                    pending_name = None;
                 }
                 continue;
             }
@@ -272,11 +287,62 @@ impl<'a> OrgParser<'a> {
         let (todo, priority, tags, title) = parse_heading_metadata(text);
         self.advance();
 
+        // Look ahead: immediately after a heading, consume optional PROPERTIES drawer
+        // and/or SCHEDULED:/DEADLINE: planning lines.
+        let mut properties: Vec<(String, String)> = Vec::new();
+        let mut scheduled: Option<String> = None;
+        let mut deadline: Option<String> = None;
+
+        // Parse :PROPERTIES: drawer if present
+        if let Some(next) = self.current_line()
+            && next.trim().eq_ignore_ascii_case(":PROPERTIES:")
+        {
+            self.advance();
+            while !self.is_eof() {
+                let prop_line = self.current_line().unwrap();
+                if prop_line.trim().eq_ignore_ascii_case(":END:") {
+                    self.advance();
+                    break;
+                }
+                let prop_trimmed = prop_line.trim();
+                // :KEY: value
+                if let Some(rest) = prop_trimmed.strip_prefix(':')
+                    && let Some(colon2) = rest.find(':')
+                {
+                    let key = rest[..colon2].trim().to_string();
+                    let val = rest[colon2 + 1..].trim().to_string();
+                    if !key.is_empty() {
+                        properties.push((key, val));
+                    }
+                }
+                self.advance();
+            }
+        }
+
+        // Parse SCHEDULED: and DEADLINE: planning lines (may appear in any order)
+        loop {
+            match self.current_line() {
+                Some(line) if line.trim_start().starts_with("SCHEDULED:") || line.trim_start().starts_with("DEADLINE:") => {
+                    let trimmed = line.trim();
+                    if let Some(rest) = trimmed.strip_prefix("SCHEDULED:") {
+                        scheduled = Some(rest.trim().to_string());
+                    } else if let Some(rest) = trimmed.strip_prefix("DEADLINE:") {
+                        deadline = Some(rest.trim().to_string());
+                    }
+                    self.advance();
+                }
+                _ => break,
+            }
+        }
+
         Block::Heading {
             level,
             todo,
             priority,
             tags,
+            properties,
+            scheduled,
+            deadline,
             inlines: parse_inline_content(&title),
             span: Span::NONE,
         }
@@ -336,6 +402,7 @@ impl<'a> OrgParser<'a> {
             "SRC" => Some(Block::CodeBlock {
                 language: lang.filter(|l| !l.is_empty()),
                 header_args,
+                name: None, // filled by caller if #+NAME: was present
                 content: content_str,
                 span: Span::NONE,
             }),
@@ -352,6 +419,7 @@ impl<'a> OrgParser<'a> {
             "EXAMPLE" | "VERSE" => Some(Block::CodeBlock {
                 language: None,
                 header_args: None,
+                name: None,
                 content: content_str,
                 span: Span::NONE,
             }),
@@ -399,6 +467,8 @@ impl<'a> OrgParser<'a> {
         let ordered = is_ordered_list_item(first_line);
 
         let mut items = Vec::new();
+        let mut start: Option<u64> = None;
+        let mut first = true;
 
         while !self.is_eof() {
             let line = self.current_line().unwrap();
@@ -424,7 +494,13 @@ impl<'a> OrgParser<'a> {
             }
 
             if is_list_item(line) && line_indent == indent {
-                items.push(self.parse_list_item(indent));
+                let (item, counter) = self.parse_list_item_with_counter(indent);
+                // The counter cookie [@N] on the first item sets the list start
+                if first {
+                    start = counter;
+                    first = false;
+                }
+                items.push(item);
             } else {
                 break;
             }
@@ -432,12 +508,15 @@ impl<'a> OrgParser<'a> {
 
         Block::List {
             ordered,
+            start,
             items,
             span: Span::NONE,
         }
     }
 
-    fn parse_list_item(&mut self, base_indent: usize) -> ListItem {
+    /// Parse a list item, returning `(item, counter_start)` where `counter_start`
+    /// is `Some(n)` if the item had a `[@n]` counter cookie.
+    fn parse_list_item_with_counter(&mut self, base_indent: usize) -> (ListItem, Option<u64>) {
         let line = self.current_line().unwrap();
         let trimmed = line.trim_start();
 
@@ -453,6 +532,9 @@ impl<'a> OrgParser<'a> {
                 trimmed
             }
         };
+
+        // Strip counter cookie [@N] from ordered list items
+        let (counter, content) = parse_counter_cookie(content);
 
         // Detect checkbox prefix: "[ ] ", "[X] ", "[-] "
         let (checkbox, content) = parse_checkbox(content);
@@ -497,7 +579,7 @@ impl<'a> OrgParser<'a> {
             children.push(ListItemContent::Inline(inlines));
         }
 
-        ListItem { children, checkbox }
+        (ListItem { children, checkbox }, counter)
     }
 
     fn parse_table(&mut self) -> Block {
@@ -568,7 +650,7 @@ impl<'a> OrgParser<'a> {
             }
         }
         let content = content_lines.join("\n");
-        Block::CodeBlock { language: None, header_args: None, content, span: Span::NONE }
+        Block::CodeBlock { language: None, header_args: None, name: None, content, span: Span::NONE }
     }
 
     /// Skip drawer content up to and including the `:END:` line.
@@ -604,7 +686,7 @@ pub(crate) fn parse_heading_metadata(
         if words.len() == 2 {
             let w = words[0];
             if w == "TODO" || w == "DONE" || w == "NEXT" || w == "WAITING"
-                || w == "CANCELLED" || w == "HOLD" || w == "STARTED"
+                || w == "CANCELLED" || w == "HOLD" || w == "STARTED" || w == "COMMENT"
             {
                 (Some(w.to_string()), words[1])
             } else {
@@ -706,6 +788,21 @@ fn is_drawer_start(line: &str) -> bool {
     }
     let inner = &trimmed[1..trimmed.len() - 1];
     !inner.is_empty() && !inner.contains(' ') && !inner.contains(':')
+}
+
+/// Parse an optional `[@N]` counter cookie from the beginning of `content`.
+/// Returns `(counter_value, remaining_content)`.
+fn parse_counter_cookie(content: &str) -> (Option<u64>, &str) {
+    if let Some(rest) = content.strip_prefix("[@")
+        && let Some(close) = rest.find(']')
+    {
+        let num_str = &rest[..close];
+        if let Ok(n) = num_str.parse::<u64>() {
+            let after = rest[close + 1..].trim_start();
+            return (Some(n), after);
+        }
+    }
+    (None, content)
 }
 
 /// Parse a `[ ]` / `[X]` / `[-]` checkbox prefix from the beginning of content.

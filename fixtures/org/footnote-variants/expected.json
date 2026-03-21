@@ -1,0 +1,9 @@
+{
+  "description": "Three org footnote forms: [fn:label] ref, [fn:: inline def] anonymous inline, [fn:label: inline def] labeled inline; all three parsed inline in the paragraph",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "1" } },
+    { "path": "/0/3", "kind": "footnote_def", "props": { "label": "" } },
+    { "path": "/0/5", "kind": "footnote_def", "props": { "label": "note" } }
+  ]
+}

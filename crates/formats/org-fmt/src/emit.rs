@@ -68,7 +68,7 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.ensure_blank_line();
         }
 
-        Block::Heading { level, todo, priority, tags, inlines, .. } => {
+        Block::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines, .. } => {
             ctx.ensure_newline();
             for _ in 0..*level {
                 ctx.write("*");
@@ -89,11 +89,46 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
                 ctx.write(&tags.join(":"));
                 ctx.write(":");
             }
+            ctx.ensure_newline();
+            // Emit :PROPERTIES: drawer if present
+            if !properties.is_empty() {
+                ctx.write(":PROPERTIES:\n");
+                for (k, v) in properties {
+                    ctx.write(":");
+                    ctx.write(k);
+                    ctx.write(": ");
+                    ctx.write(v);
+                    ctx.write("\n");
+                }
+                ctx.write(":END:\n");
+            }
+            // Emit SCHEDULED:/DEADLINE: planning lines
+            if scheduled.is_some() || deadline.is_some() {
+                if let Some(s) = scheduled {
+                    ctx.write("SCHEDULED: ");
+                    ctx.write(s);
+                    if deadline.is_some() {
+                        ctx.write(" ");
+                    } else {
+                        ctx.write("\n");
+                    }
+                }
+                if let Some(d) = deadline {
+                    ctx.write("DEADLINE: ");
+                    ctx.write(d);
+                    ctx.write("\n");
+                }
+            }
             ctx.ensure_blank_line();
         }
 
-        Block::CodeBlock { language, header_args, content, .. } => {
+        Block::CodeBlock { language, header_args, name, content, .. } => {
             ctx.ensure_newline();
+            if let Some(nm) = name {
+                ctx.write("#+NAME: ");
+                ctx.write(nm);
+                ctx.write("\n");
+            }
             if let Some(lang) = language {
                 ctx.write("#+BEGIN_SRC ");
                 ctx.write(lang);
@@ -121,11 +156,14 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("#+END_QUOTE\n\n");
         }
 
-        Block::List { ordered, items, .. } => {
+        Block::List { ordered, start, items, .. } => {
             ctx.list_depth += 1;
-            let mut counter = 1i32;
+            let mut counter = start.map(|s| s as i32).unwrap_or(1);
+            let mut first_item = true;
             for item in items {
-                build_list_item(item, *ordered, &mut counter, ctx);
+                let emit_counter = if *ordered && first_item { *start } else { None };
+                build_list_item(item, *ordered, &mut counter, emit_counter, ctx);
+                first_item = false;
             }
             ctx.list_depth -= 1;
             if ctx.list_depth == 0 {
@@ -185,13 +223,18 @@ fn build_list_item(
     item: &ListItem,
     ordered: bool,
     counter: &mut i32,
+    emit_start_cookie: Option<u64>,
     ctx: &mut BuildContext,
 ) {
     let indent = "  ".repeat(ctx.list_depth - 1);
     ctx.write(&indent);
 
     if ordered {
-        ctx.write(&format!("{}. ", counter));
+        if let Some(start_n) = emit_start_cookie {
+            ctx.write(&format!("{}. [@{}] ", counter, start_n));
+        } else {
+            ctx.write(&format!("{}. ", counter));
+        }
         *counter += 1;
     } else {
         ctx.write("- ");

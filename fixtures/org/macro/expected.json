@@ -1,0 +1,7 @@
+{
+  "description": "Org macro invocations {{{name}}} and {{{name(arg)}}} are not expanded; they appear verbatim as literal text in the paragraph",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Title is {{{title}}} and arg {{{macro(arg)}}}." } }
+  ]
+}

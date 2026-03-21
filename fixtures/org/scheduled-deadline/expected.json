@@ -1,0 +1,9 @@
+{
+  "description": "SCHEDULED: and DEADLINE: planning lines after a heading are parsed and stored as org:scheduled and org:deadline props on the heading node; body paragraph follows",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "heading", "props": { "level": 1, "org:scheduled": "<2024-01-15 Mon>", "org:deadline": "<2024-01-20 Sat>" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "My Task" } },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

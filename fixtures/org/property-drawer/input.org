@@ -1,0 +1,7 @@
+* My Heading
+:PROPERTIES:
+:KEY: value
+:ANOTHER: val
+:END:
+
+Some text.

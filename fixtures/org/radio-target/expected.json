@@ -1,0 +1,7 @@
+{
+  "description": "Org radio target <<<target>>> is not modeled; it appears verbatim as literal text in the paragraph",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "This is a <<<radio>>> target." } }
+  ]
+}

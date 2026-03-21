@@ -1,0 +1,10 @@
+{
+  "description": "Date range <date1>--<date2> is parsed as two adjacent active timestamp span nodes separated by literal '--' text; the range relationship is not modeled as a single construct",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "A range " } },
+    { "path": "/0/1", "kind": "span", "props": { "org:timestamp-active": true, "content": "2024-01-01 Mon" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": "--" } },
+    { "path": "/0/3", "kind": "span", "props": { "org:timestamp-active": true, "content": "2024-01-07 Sun" } }
+  ]
+}

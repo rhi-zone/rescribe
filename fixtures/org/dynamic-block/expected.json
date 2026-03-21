@@ -1,0 +1,10 @@
+{
+  "description": "Dynamic blocks (#+BEGIN: name params ... #+END:) are not recognized as a distinct construct; the #+BEGIN: line and content are treated as paragraph text, #+END: is consumed as end-of-paragraph; content after is a separate paragraph",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "#+BEGIN: clocktable :maxlevel 2" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "After dynamic block." } }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "description": "Ordered list with [@3] counter cookie on the first item: list has start=3 prop; the cookie is stripped from item text",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": true, "start": 3 } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "First item" } },
+    { "path": "/0/1", "kind": "list_item" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Second item" } }
+  ]
+}

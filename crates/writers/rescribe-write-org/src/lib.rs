@@ -85,6 +85,9 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
                 todo: None,
                 priority: None,
                 tags: vec![],
+                properties: vec![],
+                scheduled: None,
+                deadline: None,
                 inlines: convert_nodes_to_inlines(&n.children, warnings),
                 span: org_fmt::Span::NONE,
             })
@@ -96,6 +99,7 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             Some(Block::CodeBlock {
                 language,
                 header_args: None,
+                name: None,
                 content,
                 span: org_fmt::Span::NONE,
             })
@@ -125,6 +129,7 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
                 .collect();
             Some(Block::List {
                 ordered,
+                start: None,
                 items,
                 span: org_fmt::Span::NONE,
             })
@@ -134,6 +139,7 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
             let mut counter = 1i32;
             Some(Block::List {
                 ordered: false,
+                start: None,
                 items: vec![convert_list_item(n, &mut counter, warnings)],
                 span: org_fmt::Span::NONE,
             })

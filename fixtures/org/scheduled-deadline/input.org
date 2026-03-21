@@ -1,0 +1,5 @@
+* My Task
+SCHEDULED: <2024-01-15 Mon>
+DEADLINE: <2024-01-20 Sat>
+
+Some body text.

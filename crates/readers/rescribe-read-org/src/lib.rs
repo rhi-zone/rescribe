@@ -68,7 +68,7 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             Node::new(node::PARAGRAPH).children(convert_inlines(inlines))
         }
 
-        Block::Heading { level, todo, priority, tags, inlines, .. } => {
+        Block::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines, .. } => {
             let mut n = Node::new(node::HEADING)
                 .prop(prop::LEVEL, *level as i64)
                 .children(convert_inlines(inlines));
@@ -81,11 +81,20 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             if !tags.is_empty() {
                 n = n.prop("org:tags", tags.join(":"));
             }
+            for (k, v) in properties {
+                n = n.prop(format!("org:prop:{}", k), v.clone());
+            }
+            if let Some(s) = scheduled {
+                n = n.prop("org:scheduled", s.clone());
+            }
+            if let Some(d) = deadline {
+                n = n.prop("org:deadline", d.clone());
+            }
             n
         }
 
         Block::CodeBlock {
-            language, header_args, content, ..
+            language, header_args, name, content, ..
         } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
@@ -93,6 +102,9 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             }
             if let Some(args) = header_args {
                 n = n.prop("org:header-args", args.clone());
+            }
+            if let Some(nm) = name {
+                n = n.prop("org:name", nm.clone());
             }
             n
         }
@@ -105,11 +117,15 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             Node::new(node::BLOCKQUOTE).children(child_nodes)
         }
 
-        Block::List { ordered, items, .. } => {
+        Block::List { ordered, start, items, .. } => {
             let item_nodes: Vec<Node> = items.iter().map(convert_list_item).collect();
-            Node::new(node::LIST)
+            let mut n = Node::new(node::LIST)
                 .prop(prop::ORDERED, *ordered)
-                .children(item_nodes)
+                .children(item_nodes);
+            if let Some(s) = start {
+                n = n.prop("start", *s as i64);
+            }
+            n
         }
 
         Block::Table { rows, .. } => convert_table(rows),

@@ -1,0 +1,7 @@
+{
+  "description": "Heading with :ARCHIVE: tag has the tag extracted into org:tags prop (same as regular tags); heading title does not include the tag string",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1, "org:tags": "ARCHIVE" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "My heading" } }
+  ]
+}

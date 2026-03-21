@@ -1,0 +1,7 @@
+{
+  "description": "COMMENT keyword at the start of a heading title is recognized as a todo keyword; heading gets org:todo=COMMENT and title text is stripped of the keyword",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1, "org:todo": "COMMENT" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "My heading" } }
+  ]
+}

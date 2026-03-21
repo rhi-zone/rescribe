@@ -1,0 +1,9 @@
+{
+  "description": ":PROPERTIES: drawer immediately after a heading is parsed; key-value pairs are stored as org:prop:KEY properties on the heading node",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 2 },
+    { "path": "/0", "kind": "heading", "props": { "level": 1, "org:prop:KEY": "value", "org:prop:ANOTHER": "val" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "My Heading" } },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

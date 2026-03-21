@@ -1,0 +1,5 @@
+#+BEGIN: clocktable :maxlevel 2
+some content
+#+END:
+
+After dynamic block.
