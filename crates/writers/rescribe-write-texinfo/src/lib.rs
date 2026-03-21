@@ -21,7 +21,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use texinfo::{Block, Inline, TexinfoDoc};
+use texinfo::{Block, Inline, Span, TexinfoDoc};
 
 /// Emit a document to Texinfo format.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -43,8 +43,8 @@ pub fn emit_with_options(
 
     let title = doc.metadata.get_str("title").map(|s| s.to_string());
 
-    let texinfo_doc = TexinfoDoc { title, blocks };
-    let output = texinfo::build(&texinfo_doc);
+    let texinfo_doc = TexinfoDoc { title, blocks, span: Span::NONE };
+    let output = texinfo::emit(&texinfo_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
 }
@@ -54,22 +54,22 @@ fn node_to_block(node: &Node) -> Option<Block> {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Some(Block::Heading { level, inlines })
+            Some(Block::Heading { level, inlines, span: Span::NONE })
         }
 
         node::PARAGRAPH => {
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Some(Block::Paragraph { inlines })
+            Some(Block::Paragraph { inlines, span: Span::NONE })
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Some(Block::CodeBlock { content })
+            Some(Block::CodeBlock { content, span: Span::NONE })
         }
 
         node::BLOCKQUOTE => {
             let children = node.children.iter().filter_map(node_to_block).collect();
-            Some(Block::Blockquote { children })
+            Some(Block::Blockquote { children, span: Span::NONE })
         }
 
         node::LIST => {
@@ -98,7 +98,7 @@ fn node_to_block(node: &Node) -> Option<Block> {
                     }
                 })
                 .collect();
-            Some(Block::List { ordered, items })
+            Some(Block::List { ordered, items, span: Span::NONE })
         }
 
         node::DEFINITION_LIST => {
@@ -122,10 +122,10 @@ fn node_to_block(node: &Node) -> Option<Block> {
                 }
                 i += 1;
             }
-            Some(Block::DefinitionList { items })
+            Some(Block::DefinitionList { items, span: Span::NONE })
         }
 
-        node::HORIZONTAL_RULE => Some(Block::HorizontalRule),
+        node::HORIZONTAL_RULE => Some(Block::HorizontalRule { span: Span::NONE }),
 
         node::DOCUMENT => {
             let children: Vec<_> = node.children.iter().filter_map(node_to_block).collect();
@@ -144,50 +144,50 @@ fn node_to_inline(node: &Node) -> Inline {
     match node.kind.as_str() {
         node::TEXT => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Text(content)
+            Inline::Text(content, Span::NONE)
         }
 
         node::STRONG => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Strong(children)
+            Inline::Strong(children, Span::NONE)
         }
 
         node::EMPHASIS => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Emphasis(children)
+            Inline::Emphasis(children, Span::NONE)
         }
 
         node::CODE => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Inline::Code(content)
+            Inline::Code(content, Span::NONE)
         }
 
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Link { url, children }
+            Inline::Link { url, children, span: Span::NONE }
         }
 
         node::SUPERSCRIPT => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Superscript(children)
+            Inline::Superscript(children, Span::NONE)
         }
 
         node::SUBSCRIPT => {
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Subscript(children)
+            Inline::Subscript(children, Span::NONE)
         }
 
-        node::LINE_BREAK => Inline::LineBreak,
+        node::LINE_BREAK => Inline::LineBreak { span: Span::NONE },
 
-        node::SOFT_BREAK => Inline::SoftBreak,
+        node::SOFT_BREAK => Inline::SoftBreak { span: Span::NONE },
 
         node::FOOTNOTE_DEF => {
             let content = node.children.iter().map(node_to_inline).collect();
-            Inline::FootnoteDef { content }
+            Inline::FootnoteDef { content, span: Span::NONE }
         }
 
-        _ => Inline::Text(String::new()),
+        _ => Inline::Text(String::new(), Span::NONE),
     }
 }
 

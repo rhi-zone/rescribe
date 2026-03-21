@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4).
 
 ## Maturity Pipeline
 
@@ -50,7 +50,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | markua | 4 | 2 | hand | fuzz | harness |
 | fountain | 4 | 2 | hand | – (harness N/A) | coverage |
 | typst | 1 | 2 | hand | partial→fixtures | harness |
-| texinfo | 2 | 2 | hand | – (harness N/A) | fuzz |
+| texinfo | 4 | 4 | hand | – (harness N/A) | production |
 | bbcode | 4 | 2 | hand | – (harness N/A; Pandoc cannot read BBCode) | coverage |
 | pod | 4 | 2 | hand | fuzz | harness |
 | haddock | 4 | 2 | hand | fuzz | harness |
@@ -108,15 +108,15 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | bibtex | 3† | 2† | biblatex | fuzz | harness |
 | biblatex | 3† | 2† | biblatex | fuzz | harness |
 | csl-json | 3† | 2† | serde_json | fuzz | harness |
-| ris | 2 | 2 | hand | – (harness N/A) | fuzz |
+| ris | 4 | 4 | hand | – (harness N/A) | production |
 | endnotexml | 2 | 2 | hand | – (harness N/A) | fuzz |
 
 ### Data / interchange
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| csv | 2 | 2 | hand | – (harness N/A) | fuzz |
-| tsv | 2 | 2 | hand | – (harness N/A) | fuzz |
+| csv | 4 | 4 | hand | – (harness N/A) | production |
+| tsv | 4 | 4 | hand | – (harness N/A) | production |
 | pandoc-json | 4† | 3† | serde_json | production | fuzz |
 | native | 3 | 2 | hand | fuzz | harness |
 
@@ -190,15 +190,15 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 | tikiwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_tikiwiki_reader (429K runs) fuzz_tikiwiki_roundtrip (425K runs) | – | – |
 | jira-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_jira_reader (416K runs) fuzz_jira_roundtrip (333K runs) | – | – |
 | typst (TBD) | | | | | |
-| texinfo | | | | | |
+| texinfo | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed unterminated-command panic + unknown-directive infinite loop | fuzz_texinfo_reader (1.5M runs) fuzz_texinfo_roundtrip (592K runs) | – | – |
 | bbcode-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_bbcode_reader (1.3M runs) fuzz_bbcode_roundtrip (348K runs) | – | – |
 | pod-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_pod_reader (863K runs) fuzz_pod_roundtrip (375K runs) | – | – |
 | haddock-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_haddock_reader (1.1M runs) fuzz_haddock_roundtrip (415K runs) | – | – |
 | ansi-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_ansi_reader + fuzz_ansi_roundtrip | – | – |
 | man-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse | fuzz_man_reader (2M runs) fuzz_man_roundtrip (855K runs) | – | – |
-| csv-fmt | | | | | |
-| tsv-fmt | | | | | |
-| ris | | | | | |
+| csv-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated | fuzz_csv_reader (807K runs) fuzz_csv_roundtrip (clean) | – | – |
+| tsv-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated; fixed whitespace-only row filter | fuzz_tsv_reader (1.1M runs) fuzz_tsv_roundtrip (670K runs) | – | – |
+| ris | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed char-boundary panic on multi-byte tag chars | fuzz_ris_reader (1.1M runs) fuzz_ris_roundtrip (241K runs) | – | – |
 
 ### Formats still needing a standalone crate
 

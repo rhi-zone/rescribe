@@ -15,37 +15,33 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let doc = tsv_fmt::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (doc, _diags) = tsv_fmt::parse(input);
 
     let mut table = Node::new(node::TABLE);
     let mut is_first_row = true;
 
-    for row_fields in &doc.rows {
-        let mut row = Node::new(node::TABLE_ROW);
+    for row in &doc.rows {
+        let mut table_row = Node::new(node::TABLE_ROW);
 
-        for field in row_fields {
-            let cell_kind = if is_first_row {
-                node::TABLE_HEADER
-            } else {
-                node::TABLE_CELL
-            };
-            let cell =
-                Node::new(cell_kind).child(Node::new(node::TEXT).prop(prop::CONTENT, field.trim()));
-            row = row.child(cell);
+        for cell in &row.cells {
+            let cell_kind = if is_first_row { node::TABLE_HEADER } else { node::TABLE_CELL };
+            let cell_node = Node::new(cell_kind)
+                .child(Node::new(node::TEXT).prop(prop::CONTENT, cell.value.trim()));
+            table_row = table_row.child(cell_node);
         }
 
-        table = table.child(row);
+        table = table.child(table_row);
         is_first_row = false;
     }
 
-    let doc = Document {
+    let result = Document {
         content: Node::new(node::DOCUMENT).child(table),
         resources: Default::default(),
         metadata: Default::default(),
         source: None,
     };
 
-    Ok(ConversionResult::ok(doc))
+    Ok(ConversionResult::ok(result))
 }
 
 #[cfg(test)]

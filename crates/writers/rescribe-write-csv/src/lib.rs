@@ -2,6 +2,7 @@
 //!
 //! Serializes rescribe's document IR tables to CSV format.
 
+use csv_fmt::{Cell, CsvDoc, Row, Span};
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
 
@@ -18,7 +19,7 @@ pub fn emit_with_options(
     // Find first table in document
     if let Some(table) = find_table(&doc.content) {
         let csv_doc = document_to_csv_doc(table);
-        let output = csv_fmt::build(&csv_doc);
+        let output = csv_fmt::emit(&csv_doc);
         Ok(ConversionResult::ok(output.into_bytes()))
     } else {
         Ok(ConversionResult::ok(Vec::new()))
@@ -37,15 +38,19 @@ fn find_table(node: &Node) -> Option<&Node> {
     None
 }
 
-fn document_to_csv_doc(table: &Node) -> csv_fmt::CsvDoc {
+fn document_to_csv_doc(table: &Node) -> CsvDoc {
     let mut rows = Vec::new();
     for row in &table.children {
         if row.kind.as_str() == node::TABLE_ROW {
-            let cells: Vec<String> = row.children.iter().map(get_text_content).collect();
-            rows.push(cells);
+            let cells: Vec<Cell> = row
+                .children
+                .iter()
+                .map(|n| Cell { value: get_text_content(n), span: Span::NONE })
+                .collect();
+            rows.push(Row { cells, span: Span::NONE });
         }
     }
-    csv_fmt::CsvDoc { rows }
+    CsvDoc { rows, span: Span::NONE }
 }
 
 fn get_text_content(node: &Node) -> String {

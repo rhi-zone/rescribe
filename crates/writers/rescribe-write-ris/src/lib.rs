@@ -103,8 +103,9 @@ fn emit_ris_entry(node: &Node, ctx: &mut EmitContext) {
         }
     }
 
-    let output = ris::build(&ris::RisDoc {
+    let output = ris::emit(&ris::RisDoc {
         entries: vec![entry],
+        span: ris::Span::NONE,
     });
     ctx.output.push_str(&output);
 }
@@ -117,8 +118,9 @@ fn emit_bibtex_entry(node: &Node, ctx: &mut EmitContext) {
     // Map bibtex fields to RIS tags
     emit_bibtex_fields(node, &mut entry);
 
-    let output = ris::build(&ris::RisDoc {
+    let output = ris::emit(&ris::RisDoc {
         entries: vec![entry],
+        span: ris::Span::NONE,
     });
     ctx.output.push_str(&output);
 }
@@ -178,8 +180,9 @@ fn emit_citation_entry(node: &Node, ctx: &mut EmitContext) {
         entry.add_field("AB", abs);
     }
 
-    let output = ris::build(&ris::RisDoc {
+    let output = ris::emit(&ris::RisDoc {
         entries: vec![entry],
+        span: ris::Span::NONE,
     });
     ctx.output.push_str(&output);
 }
@@ -231,8 +234,9 @@ fn emit_typed_entry(node: &Node, ctx: &mut EmitContext) {
         }
     }
 
-    let output = ris::build(&ris::RisDoc {
+    let output = ris::emit(&ris::RisDoc {
         entries: vec![entry],
+        span: ris::Span::NONE,
     });
     ctx.output.push_str(&output);
 }

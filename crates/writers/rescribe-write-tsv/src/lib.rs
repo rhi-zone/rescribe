@@ -4,6 +4,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
+use tsv_fmt::{Cell, Row, Span, TsvDoc};
 
 /// Emit a document to TSV.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -17,17 +18,19 @@ pub fn emit_with_options(
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     // Find first table in document
     if let Some(table) = find_table(&doc.content) {
-        // Convert rescribe nodes to TsvDoc
         let mut rows = Vec::new();
         for row in &table.children {
             if row.kind.as_str() == node::TABLE_ROW {
-                let cells: Vec<String> = row.children.iter().map(get_text_content).collect();
-                rows.push(cells);
+                let cells: Vec<Cell> = row
+                    .children
+                    .iter()
+                    .map(|n| Cell { value: get_text_content(n), span: Span::NONE })
+                    .collect();
+                rows.push(Row { cells, span: Span::NONE });
             }
         }
-
-        let tsv_doc = tsv_fmt::TsvDoc { rows };
-        let output = tsv_fmt::build(&tsv_doc);
+        let tsv_doc = TsvDoc { rows, span: Span::NONE };
+        let output = tsv_fmt::emit(&tsv_doc);
         Ok(ConversionResult::ok(output.into_bytes()))
     } else {
         // No table found; return empty TSV

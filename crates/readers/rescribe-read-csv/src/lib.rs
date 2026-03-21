@@ -15,14 +15,14 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let csv_doc = csv_fmt::parse(input)
-        .map_err(|e| ParseError::Invalid(format!("CSV parse error: {}", e)))?;
+    let (csv_doc, _diags) = csv_fmt::parse(input);
 
     let mut rows = Vec::new();
     let mut is_header = true;
 
     for row in &csv_doc.rows {
         let cell_nodes: Vec<Node> = row
+            .cells
             .iter()
             .map(|cell| {
                 let node_kind = if is_header {
@@ -30,7 +30,8 @@ pub fn parse_with_options(
                 } else {
                     node::TABLE_CELL
                 };
-                Node::new(node_kind).child(Node::new(node::TEXT).prop(prop::CONTENT, cell.as_str()))
+                Node::new(node_kind)
+                    .child(Node::new(node::TEXT).prop(prop::CONTENT, cell.value.as_str()))
             })
             .collect();
 

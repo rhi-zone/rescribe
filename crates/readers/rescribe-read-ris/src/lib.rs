@@ -26,7 +26,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &rescribe_core::ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let ris_doc = ris::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (ris_doc, _diags) = ris::parse(input);
 
     let mut entries = Vec::new();
 

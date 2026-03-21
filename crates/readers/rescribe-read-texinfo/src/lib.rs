@@ -31,7 +31,7 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let texinfo_doc = texinfo::parse(input).map_err(|e| ParseError::Invalid(e.to_string()))?;
+    let (texinfo_doc, _parse_diags) = texinfo::parse(input);
 
     let mut warnings: Vec<FidelityWarning> = Vec::new();
     let mut result_nodes = Vec::new();
@@ -57,23 +57,23 @@ pub fn parse_with_options(
 
 fn block_to_node(block: &Block, _warnings: &mut Vec<FidelityWarning>) -> Node {
     match block {
-        Block::Heading { level, inlines } => {
+        Block::Heading { level, inlines, .. } => {
             let inline_nodes = inlines_to_nodes(inlines);
             Node::new(node::HEADING)
                 .prop(prop::LEVEL, *level as i64)
                 .children(inline_nodes)
         }
 
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             let inline_nodes = inlines_to_nodes(inlines);
             Node::new(node::PARAGRAPH).children(inline_nodes)
         }
 
-        Block::CodeBlock { content } => {
+        Block::CodeBlock { content, .. } => {
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
         }
 
-        Block::Blockquote { children } => {
+        Block::Blockquote { children, .. } => {
             let block_nodes: Vec<_> = children
                 .iter()
                 .map(|b| block_to_node(b, _warnings))
@@ -81,7 +81,7 @@ fn block_to_node(block: &Block, _warnings: &mut Vec<FidelityWarning>) -> Node {
             Node::new(node::BLOCKQUOTE).children(block_nodes)
         }
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let list_items: Vec<_> = items
                 .iter()
                 .map(|item_inlines| {
@@ -95,7 +95,7 @@ fn block_to_node(block: &Block, _warnings: &mut Vec<FidelityWarning>) -> Node {
                 .children(list_items)
         }
 
-        Block::DefinitionList { items } => {
+        Block::DefinitionList { items, .. } => {
             let mut def_nodes = Vec::new();
             for (term_inlines, desc_blocks) in items {
                 let term_inline_nodes = inlines_to_nodes(term_inlines);
@@ -110,7 +110,7 @@ fn block_to_node(block: &Block, _warnings: &mut Vec<FidelityWarning>) -> Node {
             Node::new(node::DEFINITION_LIST).children(def_nodes)
         }
 
-        Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
     }
 }
 
@@ -120,42 +120,42 @@ fn inlines_to_nodes(inlines: &[Inline]) -> Vec<Node> {
 
 fn inline_to_node(inline: &Inline) -> Node {
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        Inline::Strong(children) => {
+        Inline::Strong(children, _) => {
             let inline_nodes = inlines_to_nodes(children);
             Node::new(node::STRONG).children(inline_nodes)
         }
 
-        Inline::Emphasis(children) => {
+        Inline::Emphasis(children, _) => {
             let inline_nodes = inlines_to_nodes(children);
             Node::new(node::EMPHASIS).children(inline_nodes)
         }
 
-        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        Inline::Link { url, children } => {
+        Inline::Link { url, children, .. } => {
             let inline_nodes = inlines_to_nodes(children);
             Node::new(node::LINK)
                 .prop(prop::URL, url.clone())
                 .children(inline_nodes)
         }
 
-        Inline::Superscript(children) => {
+        Inline::Superscript(children, _) => {
             let inline_nodes = inlines_to_nodes(children);
             Node::new(node::SUPERSCRIPT).children(inline_nodes)
         }
 
-        Inline::Subscript(children) => {
+        Inline::Subscript(children, _) => {
             let inline_nodes = inlines_to_nodes(children);
             Node::new(node::SUBSCRIPT).children(inline_nodes)
         }
 
-        Inline::LineBreak => Node::new(node::LINE_BREAK),
+        Inline::LineBreak { .. } => Node::new(node::LINE_BREAK),
 
-        Inline::SoftBreak => Node::new(node::SOFT_BREAK),
+        Inline::SoftBreak { .. } => Node::new(node::SOFT_BREAK),
 
-        Inline::FootnoteDef { content } => {
+        Inline::FootnoteDef { content, .. } => {
             let inline_nodes = inlines_to_nodes(content);
             Node::new(node::FOOTNOTE_DEF).children(inline_nodes)
         }

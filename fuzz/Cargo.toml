@@ -197,6 +197,18 @@ path = "../crates/rescribe-core"
 [dependencies.rescribe-std]
 path = "../crates/nodes/rescribe-std"
 
+[dependencies.csv-fmt]
+path = "../crates/formats/csv-fmt"
+
+[dependencies.tsv-fmt]
+path = "../crates/formats/tsv-fmt"
+
+[dependencies.ris]
+path = "../crates/formats/ris"
+
+[dependencies.texinfo]
+path = "../crates/formats/texinfo"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -613,6 +625,62 @@ bench = false
 [[bin]]
 name = "fuzz_jira_roundtrip"
 path = "fuzz_targets/jira_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_csv_reader"
+path = "fuzz_targets/csv_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_csv_roundtrip"
+path = "fuzz_targets/csv_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_tsv_reader"
+path = "fuzz_targets/tsv_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_tsv_roundtrip"
+path = "fuzz_targets/tsv_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ris_reader"
+path = "fuzz_targets/ris_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ris_roundtrip"
+path = "fuzz_targets/ris_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_texinfo_reader"
+path = "fuzz_targets/texinfo_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_texinfo_roundtrip"
+path = "fuzz_targets/texinfo_roundtrip.rs"
 test = false
 doc = false
 bench = false
