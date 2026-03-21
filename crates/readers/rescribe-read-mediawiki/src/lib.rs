@@ -18,7 +18,7 @@ use rescribe_std::{node, prop};
 
 /// Parse MediaWiki text into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let fmt_doc = parse_mediawiki(input).map_err(|e| ParseError::Invalid(e.0))?;
+    let (fmt_doc, _diags) = parse_mediawiki(input);
 
     let children: Vec<Node> = fmt_doc.blocks.iter().map(block_to_node).collect();
 
@@ -34,30 +34,30 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines } => {
+        Block::Paragraph { inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(inline_to_node).collect();
             Node::new(node::PARAGRAPH).children(children)
         }
 
-        Block::Heading { level, inlines } => {
+        Block::Heading { level, inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(inline_to_node).collect();
             Node::new(node::HEADING)
                 .prop(prop::LEVEL, *level as i64)
                 .children(children)
         }
 
-        Block::CodeBlock { content } => {
+        Block::CodeBlock { content, .. } => {
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
         }
 
-        Block::List { ordered, items } => {
+        Block::List { ordered, items, .. } => {
             let children: Vec<Node> = items
                 .iter()
                 .map(|item_blocks| {
                     let para_children: Vec<Node> = item_blocks
                         .iter()
                         .flat_map(|block| {
-                            if let Block::Paragraph { inlines } = block {
+                            if let Block::Paragraph { inlines, .. } = block {
                                 inlines.iter().map(inline_to_node).collect::<Vec<_>>()
                             } else {
                                 vec![block_to_node(block)]
@@ -77,7 +77,7 @@ fn block_to_node(block: &Block) -> Node {
 
         Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
 
-        Block::Table { rows } => {
+        Block::Table { rows, .. } => {
             let children: Vec<Node> = rows
                 .iter()
                 .map(|row| {

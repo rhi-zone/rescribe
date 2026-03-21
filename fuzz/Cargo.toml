@@ -209,6 +209,9 @@ path = "../crates/formats/ris"
 [dependencies.texinfo]
 path = "../crates/formats/texinfo"
 
+[dependencies.mediawiki-fmt]
+path = "../crates/formats/mediawiki-fmt"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -681,6 +684,18 @@ bench = false
 [[bin]]
 name = "fuzz_texinfo_roundtrip"
 path = "fuzz_targets/texinfo_roundtrip.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_mediawiki_reader"
+path = "fuzz_targets/mediawiki_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_mediawiki_roundtrip"
+path = "fuzz_targets/mediawiki_roundtrip.rs"
 test = false
 doc = false
 bench = false
