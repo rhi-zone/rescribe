@@ -50,7 +50,7 @@ impl<'a> Parser<'a> {
             if line.trim().starts_with("{{code") {
                 let (code_block, end) = self.parse_code_block();
                 result.push(code_block);
-                self.pos = end;
+                self.pos = end.max(self.pos + 1);
                 continue;
             }
 
@@ -58,7 +58,7 @@ impl<'a> Parser<'a> {
             if line.trim().starts_with('|') {
                 let (table_block, end) = self.parse_table();
                 result.push(table_block);
-                self.pos = end;
+                self.pos = end.max(self.pos + 1);
                 continue;
             }
 
@@ -66,7 +66,7 @@ impl<'a> Parser<'a> {
             if line.starts_with('*') || line.starts_with("1.") {
                 let (list_block, end) = self.parse_list();
                 result.push(list_block);
-                self.pos = end;
+                self.pos = end.max(self.pos + 1);
                 continue;
             }
 
@@ -85,7 +85,7 @@ impl<'a> Parser<'a> {
                     span: Span::NONE,
                 });
             }
-            self.pos = end;
+            self.pos = end.max(self.pos + 1);
         }
 
         Ok(result)

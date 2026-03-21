@@ -43,7 +43,7 @@ pub fn parse(input: &str) -> (TwikiDoc, Vec<Diagnostic>) {
         if line.trim().starts_with('|') && line.trim().ends_with('|') {
             let (table_node, end) = parse_table(&lines, i);
             result.push(table_node);
-            i = end;
+            i = end.max(i + 1);
             continue;
         }
 
@@ -53,7 +53,7 @@ pub fn parse(input: &str) -> (TwikiDoc, Vec<Diagnostic>) {
         {
             let (list_node, end) = parse_list(&lines, i);
             result.push(list_node);
-            i = end;
+            i = end.max(i + 1);
             continue;
         }
 
@@ -179,8 +179,9 @@ fn parse_table(lines: &[&str], start: usize) -> (Block, usize) {
             .split('|')
             .map(|cell| {
                 let cell = cell.trim();
-                // Header cells start and end with *
-                let is_header = cell.starts_with('*') && cell.ends_with('*');
+                // Header cells start and end with * (need at least 2 chars)
+                let is_header =
+                    cell.len() >= 2 && cell.starts_with('*') && cell.ends_with('*');
                 let content = if is_header {
                     &cell[1..cell.len() - 1]
                 } else {

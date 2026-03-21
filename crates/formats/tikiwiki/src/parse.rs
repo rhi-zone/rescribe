@@ -43,7 +43,7 @@ pub fn parse(input: &str) -> (TikiwikiDoc, Vec<Diagnostic>) {
         if line.trim().starts_with("||") {
             let (table_node, end) = parse_table(&lines, i);
             result.push(table_node);
-            i = end;
+            i = end.max(i + 1);
             continue;
         }
 
@@ -51,7 +51,7 @@ pub fn parse(input: &str) -> (TikiwikiDoc, Vec<Diagnostic>) {
         if line.starts_with('*') || line.starts_with('#') {
             let (list_node, end) = parse_list(&lines, i);
             result.push(list_node);
-            i = end;
+            i = end.max(i + 1);
             continue;
         }
 
@@ -70,7 +70,7 @@ pub fn parse(input: &str) -> (TikiwikiDoc, Vec<Diagnostic>) {
                 span: Span::NONE,
             });
         }
-        i = end;
+        i = end.max(i + 1);
     }
 
     (TikiwikiDoc { blocks: result, span: Span::NONE }, vec![])

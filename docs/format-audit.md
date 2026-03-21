@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21.
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4).
 
 ## Maturity Pipeline
 
@@ -64,14 +64,14 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
 | mediawiki | 3 | 2 | hand | fuzz | harness |
-| creole | 2 | 2 | hand | – (harness N/A) | fuzz |
-| dokuwiki | 2 | 2 | hand | – (harness N/A) | fuzz |
-| vimwiki | 2 | 2 | hand | – (harness N/A) | fuzz |
-| zimwiki | 2 | 2 | hand | – (harness N/A) | fuzz |
-| xwiki | 2 | 2 | hand | – (harness N/A) | fuzz |
-| twiki | 2 | 2 | hand | harness (79%) | harness |
-| tikiwiki | 2 | 2 | hand | harness | harness |
-| jira | 2 | 2 | hand | – (harness N/A) | fuzz |
+| creole | 4 | 2 | hand | production | harness |
+| dokuwiki | 4 | 2 | hand | production | harness |
+| vimwiki | 4 | 2 | hand | production | harness |
+| zimwiki | 4 | 2 | hand | production | harness |
+| xwiki | 4 | 2 | hand | production | harness |
+| twiki | 4 | 2 | hand | production | harness |
+| tikiwiki | 4 | 2 | hand | production | harness |
+| jira | 4 | 2 | hand | production | harness |
 
 ### Office / binary
 
@@ -181,14 +181,14 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 | markua | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_markua_reader (559K runs) fuzz_markua_roundtrip (759K runs) | – | – |
 | fountain-fmt | ✓ | | ✓ | | ✓ |
 | mediawiki-fmt | | | | | |
-| creole | | | | | |
-| dokuwiki | | | | | |
-| vimwiki-fmt | | | | | |
-| zimwiki | | | | | |
-| xwiki | | | | | |
-| twiki | | | | | |
-| tikiwiki | | | | | |
-| jira-fmt | | | | | |
+| creole | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_creole_reader (842K runs) fuzz_creole_roundtrip (403K runs) | – | – |
+| dokuwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_dokuwiki_reader (628K runs) fuzz_dokuwiki_roundtrip (378K runs) | – | – |
+| vimwiki-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_vimwiki_reader (610K runs) fuzz_vimwiki_roundtrip (361K runs) | – | – |
+| zimwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_zimwiki_reader (416K runs) fuzz_zimwiki_roundtrip (390K runs) | – | – |
+| xwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_xwiki_reader (489K runs) fuzz_xwiki_roundtrip (427K runs) | – | – |
+| twiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_twiki_reader (1017K runs) fuzz_twiki_roundtrip (442K runs) | – | – |
+| tikiwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_tikiwiki_reader (429K runs) fuzz_tikiwiki_roundtrip (425K runs) | – | – |
+| jira-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_jira_reader (416K runs) fuzz_jira_roundtrip (333K runs) | – | – |
 | typst (TBD) | | | | | |
 | texinfo | | | | | |
 | bbcode-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_bbcode_reader (1.3M runs) fuzz_bbcode_roundtrip (348K runs) | – | – |
