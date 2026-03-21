@@ -106,7 +106,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
 | bibtex | 4† | 2† | biblatex | production | harness |
-| biblatex | 3† | 2† | biblatex | fuzz | harness |
+| biblatex | 4† | 2† | biblatex | production | harness |
 | csl-json | 4† | 2† | serde_json | production | harness |
 | ris | 4 | 4 | hand | – (harness N/A) | production |
 | endnotexml | 2 | 2 | hand | – (harness N/A) | fuzz |

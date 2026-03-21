@@ -1150,6 +1150,7 @@ dependencies = [
  "rescribe-read-ansi",
  "rescribe-read-asciidoc",
  "rescribe-read-bbcode",
+ "rescribe-read-biblatex",
  "rescribe-read-bibtex",
  "rescribe-read-commonmark",
  "rescribe-read-creole",
@@ -1250,6 +1251,15 @@ name = "rescribe-read-bbcode"
 version = "0.1.0"
 dependencies = [
  "bbcode-fmt",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-biblatex"
+version = "0.1.0"
+dependencies = [
+ "biblatex",
  "rescribe-core",
  "rescribe-std",
 ]

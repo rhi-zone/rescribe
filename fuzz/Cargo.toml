@@ -254,6 +254,9 @@ path = "../crates/readers/rescribe-read-csl-json"
 [dependencies.rescribe-read-ipynb]
 path = "../crates/readers/rescribe-read-ipynb"
 
+[dependencies.rescribe-read-biblatex]
+path = "../crates/readers/rescribe-read-biblatex"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -823,5 +826,11 @@ doc = false
 [[bin]]
 name = "fuzz_ipynb_reader"
 path = "fuzz_targets/ipynb_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_biblatex_reader"
+path = "fuzz_targets/biblatex_reader.rs"
 test = false
 doc = false
