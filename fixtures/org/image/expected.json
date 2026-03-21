@@ -1,0 +1,7 @@
+{
+  "description": "Standalone image via [[file:photo.png]] becomes image node inside paragraph",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image" }
+  ]
+}

@@ -1,0 +1,2 @@
+#+CAPTION: A landscape photo
+[[file:landscape.png]]

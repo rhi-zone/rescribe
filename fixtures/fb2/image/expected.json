@@ -1,0 +1,8 @@
+{
+  "description": "image element inside section becomes image node with url property",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div" },
+    { "path": "/0/0/0", "kind": "image", "props": { "url": "cover" } }
+  ]
+}

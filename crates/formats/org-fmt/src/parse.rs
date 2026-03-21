@@ -52,6 +52,59 @@ impl<'a> OrgParser<'a> {
         while !self.is_eof() {
             let line = self.current_line().unwrap();
 
+            // #+CAPTION: text followed by [[file:image]] → Figure block
+            if line.to_uppercase().starts_with("#+CAPTION:") {
+                if !current_para.is_empty() {
+                    let content = current_para.join(" ");
+                    blocks.push(Block::Paragraph {
+                        inlines: parse_inline_content(&content),
+                        span: Span::NONE,
+                    });
+                    current_para.clear();
+                }
+                let caption_text = line["#+CAPTION:".len()..].trim().to_string();
+                self.advance();
+                // Skip blank lines between caption and image
+                while !self.is_eof() && self.current_line().unwrap().trim().is_empty() {
+                    self.advance();
+                }
+                // Check if next line is an image link
+                let mut made_figure = false;
+                if let Some(img_line) = self.current_line() {
+                    let trimmed = img_line.trim();
+                    if trimmed.starts_with("[[") {
+                        let img_chars: Vec<char> = trimmed.chars().collect();
+                        if let Some((Inline::Image { url, .. }, _)) = parse_link(&img_chars, 0) {
+                            let caption_inlines = parse_inline_content(&caption_text);
+                            let img_inline = Inline::Image { url, span: Span::NONE };
+                            blocks.push(Block::Figure {
+                                children: vec![
+                                    Block::Caption {
+                                        inlines: caption_inlines,
+                                        span: Span::NONE,
+                                    },
+                                    Block::Paragraph {
+                                        inlines: vec![img_inline],
+                                        span: Span::NONE,
+                                    },
+                                ],
+                                span: Span::NONE,
+                            });
+                            self.advance();
+                            made_figure = true;
+                        }
+                    }
+                }
+                if !made_figure {
+                    // No image follows — emit standalone caption
+                    blocks.push(Block::Caption {
+                        inlines: parse_inline_content(&caption_text),
+                        span: Span::NONE,
+                    });
+                }
+                continue;
+            }
+
             // Parse metadata (#+KEY: value) — not #+BEGIN_*
             if line.starts_with("#+") && !line.to_uppercase().starts_with("#+BEGIN") {
                 if let Some((key, value)) = parse_metadata_line(line) {
@@ -683,7 +736,10 @@ pub(crate) fn parse_link(chars: &[char], start: usize) -> Option<(Inline, usize)
         let c = chars[pos];
         if c == ']' {
             if pos + 1 < chars.len() && chars[pos + 1] == ']' {
-                // End of link
+                // End of link — check if URL is an image (no description)
+                if description.is_empty() && is_image_url(&url) {
+                    return Some((Inline::Image { url, span: Span::NONE }, pos + 2));
+                }
                 let children = if description.is_empty() {
                     vec![Inline::Text {
                         text: url.clone(),
@@ -719,19 +775,48 @@ pub(crate) fn parse_link(chars: &[char], start: usize) -> Option<(Inline, usize)
     None
 }
 
-/// Parse `[fn:LABEL]` at `start`. Returns (Inline::FootnoteRef, end_pos).
+/// Returns true if `url` looks like an image file reference.
+fn is_image_url(url: &str) -> bool {
+    let path = url.strip_prefix("file:").unwrap_or(url);
+    let lower = path.to_lowercase();
+    matches!(
+        std::path::Path::new(&lower)
+            .extension()
+            .and_then(|e| e.to_str()),
+        Some("png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "bmp" | "tiff")
+    )
+}
+
+/// Parse `[fn:LABEL]` or `[fn:LABEL: content]` at `start`.
+///
+/// - `[fn:label]` → `FootnoteRef`
+/// - `[fn:label: content]` or `[fn:: content]` → `FootnoteDefinition`
 fn parse_footnote_ref(chars: &[char], start: usize) -> Option<(Inline, usize)> {
     // chars[start] == '[', chars[start+1..start+4] == "fn:"
     debug_assert!(chars[start..].starts_with(&['[', 'f', 'n', ':']));
-    let label_start = start + 4; // after "[fn:"
-    let close = chars[label_start..].iter().position(|&c| c == ']')?;
-    let label: String = chars[label_start..(label_start + close)].iter().collect();
-    if label.is_empty() {
+    let inner_start = start + 4; // after "[fn:"
+    let close = chars[inner_start..].iter().position(|&c| c == ']')?;
+    let inner: String = chars[inner_start..(inner_start + close)].iter().collect();
+    let end_pos = inner_start + close + 1;
+
+    // Inline definition: [fn:label: content] or [fn:: content] (anonymous)
+    if let Some(colon_pos) = inner.find(':') {
+        let label = inner[..colon_pos].to_string();
+        let content = inner[colon_pos + 1..].trim_start().to_string();
+        return Some((
+            Inline::FootnoteDefinition {
+                label,
+                children: parse_inline_content(&content),
+                span: Span::NONE,
+            },
+            end_pos,
+        ));
+    }
+
+    // Regular reference: [fn:label]
+    if inner.is_empty() {
         return None;
     }
-    Some((
-        Inline::FootnoteRef { label, span: Span::NONE },
-        label_start + close + 1,
-    ))
+    Some((Inline::FootnoteRef { label: inner, span: Span::NONE }, end_pos))
 }
 

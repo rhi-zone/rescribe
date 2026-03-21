@@ -365,8 +365,9 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
         Inline::FootnoteDefinition { label, children, .. } => {
             ctx.write("[fn:");
             ctx.write(label);
-            ctx.write("] ");
+            ctx.write(": ");
             build_inlines(children, ctx);
+            ctx.write("]");
         }
 
         Inline::MathInline { source, .. } => {

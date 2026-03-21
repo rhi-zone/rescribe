@@ -1,0 +1,9 @@
+{
+  "description": "#+CAPTION: followed by image link becomes figure with caption and image",
+  "assertions": [
+    { "path": "/0",     "kind": "figure" },
+    { "path": "/0/0",   "kind": "caption" },
+    { "path": "/0/1",   "kind": "paragraph" },
+    { "path": "/0/1/0", "kind": "image" }
+  ]
+}

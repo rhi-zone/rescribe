@@ -1,0 +1,10 @@
+{
+  "description": "table/tr/td and th elements become table/table_row/table_cell and table_header nodes",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div" },
+    { "path": "/0/0/0",   "kind": "table" },
+    { "path": "/0/0/0/0", "kind": "table_row" },
+    { "path": "/0/0/0/1", "kind": "table_row" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Figure environment with image and caption",
+  "assertions": [
+    { "path": "/0",     "kind": "figure" },
+    { "path": "/0/0",   "kind": "image" },
+    { "path": "/0/1",   "kind": "caption" }
+  ]
+}
