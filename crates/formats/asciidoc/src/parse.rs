@@ -837,6 +837,31 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
             }
         }
 
+        // [role]#text# — semantic highlight/formatting roles
+        if chars[pos] == '[' {
+            if let Some((role_end, role)) = find_closing_char(&chars, pos + 1, ']')
+                && chars.get(role_end + 1) == Some(&'#')
+                && let Some((text_end, text)) = find_closing_char(&chars, role_end + 2, '#')
+            {
+                let children = parse_inline_content(&text);
+                let inline = match role.trim() {
+                    "line-through" | "line_through" | "strikethrough" => {
+                        Inline::Strikeout(children, Span::NONE)
+                    }
+                    "underline" => Inline::Underline(children, Span::NONE),
+                    "small-caps" | "small_caps" => Inline::SmallCaps(children, Span::NONE),
+                    _ => Inline::Highlight(children, Span::NONE),
+                };
+                nodes.push(inline);
+                pos = text_end + 1;
+                continue;
+            }
+            // Not a [role]#text# pattern — emit '[' as text
+            nodes.push(Inline::Text { text: "[".to_string(), span: Span::NONE });
+            pos += 1;
+            continue;
+        }
+
         // Highlight: #text#
         if chars[pos] == '#' {
             if let Some((end, text)) = find_closing_char(&chars, pos + 1, '#') {
@@ -913,6 +938,7 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
                 || c == '#'
                 || c == '+'
                 || c == '<'
+                || c == '['
             {
                 break;
             }

@@ -1,0 +1,7 @@
+{
+  "description": "Small caps text via [small-caps]#text# role syntax",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "small_caps" }
+  ]
+}
