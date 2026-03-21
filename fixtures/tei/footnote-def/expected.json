@@ -1,0 +1,7 @@
+{
+  "description": "note element inside paragraph becomes footnote_def",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_def" }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "description": "Standalone graphic element becomes image node",
+  "assertions": [
+    { "path": "/0", "kind": "image" }
+  ]
+}

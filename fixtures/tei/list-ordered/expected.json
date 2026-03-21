@@ -1,0 +1,8 @@
+{
+  "description": "list rend=numbered becomes ordered list",
+  "assertions": [
+    { "path": "/0",   "kind": "list", "props": { "ordered": true } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "lg/l elements become div with tei:type=verse containing line paragraphs",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "tei:type": "verse" } },
+    { "path": "/0/0", "kind": "paragraph", "props": { "tei:type": "line" } },
+    { "path": "/0/1", "kind": "paragraph", "props": { "tei:type": "line" } }
+  ]
+}

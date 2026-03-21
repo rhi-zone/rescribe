@@ -1,0 +1,8 @@
+{
+  "description": "gloss/term/def becomes definition_list with term and desc",
+  "assertions": [
+    { "path": "/0",   "kind": "definition_list" },
+    { "path": "/0/0", "kind": "definition_term" },
+    { "path": "/0/1", "kind": "definition_desc" }
+  ]
+}

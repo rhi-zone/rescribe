@@ -1,0 +1,7 @@
+{
+  "description": "quote element becomes blockquote node",
+  "assertions": [
+    { "path": "/0",   "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

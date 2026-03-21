@@ -1,0 +1,6 @@
+{
+  "description": "eg element becomes code_block node",
+  "assertions": [
+    { "path": "/0", "kind": "code_block" }
+  ]
+}

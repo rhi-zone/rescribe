@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <list rend="numbered">
+        <item>First item</item>
+        <item>Second item</item>
+      </list>
+    </body>
+  </text>
+</TEI>

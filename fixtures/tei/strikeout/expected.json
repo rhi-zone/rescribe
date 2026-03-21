@@ -1,0 +1,7 @@
+{
+  "description": "hi rend=strike becomes strikeout node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "strikeout" }
+  ]
+}

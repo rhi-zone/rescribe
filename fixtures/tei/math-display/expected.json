@@ -1,0 +1,6 @@
+{
+  "description": "formula element becomes math_display node",
+  "assertions": [
+    { "path": "/0", "kind": "math_display" }
+  ]
+}
