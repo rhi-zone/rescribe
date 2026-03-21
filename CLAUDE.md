@@ -53,6 +53,32 @@ rescribe is a universal document conversion library, inspired by Pandoc but with
 
 Part of the [rhi ecosystem](https://rhi.zone).
 
+## Priority hierarchy: broadest reach first
+
+Work should be prioritized by how many people benefit from a given deliverable:
+
+1. **All language ecosystems** — the `fixtures/` suite. A comprehensive, language-agnostic
+   test suite for a format benefits every implementation in every language. This is the
+   highest-leverage output: a Python, Go, or JS author implementing RST can use our
+   fixtures to verify correctness. Prioritize formats where no authoritative cross-language
+   fixture suite currently exists (RST, Org, AsciiDoc) over formats already well-served
+   (CommonMark has the spec suite; HTML has W3C).
+
+2. **Rust ecosystem (any consumer)** — the standalone format crates. A well-designed
+   `rst-fmt` crate with a clean public API benefits any Rust project that needs to parse
+   RST, entirely outside rescribe. Every format gets a proper standalone crate here.
+
+3. **Rust ecosystem (single consumer)** — completing the reader/writer API modes matrix
+   (AST / streaming / batch reader; streaming / builder writer). This benefits a specific
+   crate consumer who needs, say, a streaming reader. Lower priority than #1 and #2.
+
+4. **rescribe** — the IR adapter layer. The rescribe integration is the narrowest
+   beneficiary. It should be thin (≤300 lines per side) and not drive format crate design.
+
+**When choosing what to work on next, ask which level it serves.** A fixture that closes
+a coverage gap serves level 1. A new streaming API serves level 3. Don't invest in level
+3 or 4 while level 1 has gaps.
+
 ## The real goal: fix the Rust document ecosystem
 
 **rescribe itself may or may not take off. The standalone format libraries are the more
