@@ -1,0 +1,7 @@
+{
+  "description": "Blockquote element",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    { "path": "/0/0", "kind": "blockquote" }
+  ]
+}

@@ -1,0 +1,9 @@
+<article xmlns="http://docbook.org/ns/docbook">
+  <para>
+    <inlinemediaobject>
+      <imageobject>
+        <imagedata fileref="photo.png"/>
+      </imageobject>
+    </inlinemediaobject>
+  </para>
+</article>

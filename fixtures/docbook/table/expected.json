@@ -1,0 +1,8 @@
+{
+  "description": "Table via informaltable with thead/tbody",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    { "path": "/0/0", "kind": "table" },
+    { "path": "/0/0/0", "kind": "table_row" }
+  ]
+}

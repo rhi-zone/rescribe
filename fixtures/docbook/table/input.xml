@@ -1,0 +1,18 @@
+<article xmlns="http://docbook.org/ns/docbook">
+  <informaltable>
+    <tgroup cols="2">
+      <thead>
+        <row>
+          <th>Name</th>
+          <th>Age</th>
+        </row>
+      </thead>
+      <tbody>
+        <row>
+          <entry>Alice</entry>
+          <entry>30</entry>
+        </row>
+      </tbody>
+    </tgroup>
+  </informaltable>
+</article>

@@ -1,0 +1,9 @@
+{
+  "description": "Definition list via variablelist/varlistentry",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    { "path": "/0/0", "kind": "definition_list" },
+    { "path": "/0/0/0", "kind": "docbook:varlistentry" },
+    { "path": "/0/0/0/0", "kind": "definition_term" }
+  ]
+}

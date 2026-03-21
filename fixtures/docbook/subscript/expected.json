@@ -1,0 +1,8 @@
+{
+  "description": "Subscript via subscript element",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "subscript" }
+  ]
+}
