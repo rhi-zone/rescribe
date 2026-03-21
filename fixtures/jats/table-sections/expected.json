@@ -1,0 +1,11 @@
+{
+  "description": "JATS thead/tbody become table_head/table_body nodes",
+  "assertions": [
+    { "path": "/0/0",       "kind": "figure" },
+    { "path": "/0/0/0",     "kind": "table" },
+    { "path": "/0/0/0/0",   "kind": "table_head" },
+    { "path": "/0/0/0/0/0", "kind": "table_row" },
+    { "path": "/0/0/0/1",   "kind": "table_body" },
+    { "path": "/0/0/0/1/0", "kind": "table_row" }
+  ]
+}
