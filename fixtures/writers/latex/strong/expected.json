@@ -1,0 +1,4 @@
+{
+  "description": "Strong emits as \\textbf command",
+  "output_contains": ["\\textbf{bold}"]
+}

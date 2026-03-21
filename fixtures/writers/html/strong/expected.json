@@ -1,0 +1,4 @@
+{
+  "description": "Strong emits as <strong> element",
+  "output_contains": ["<strong>", "bold"]
+}

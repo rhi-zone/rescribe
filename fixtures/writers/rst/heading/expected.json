@@ -1,0 +1,4 @@
+{
+  "description": "Heading level 1 emits as setext heading with = underline",
+  "output_contains": ["Title", "====="]
+}

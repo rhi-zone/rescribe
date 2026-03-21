@@ -75,6 +75,16 @@ rescribe-read-rtf = { workspace = true }
 rescribe-write-djot = { workspace = true }
 rescribe-write-rtf = { workspace = true }
 
+# Major text format writer smoke tests
+rescribe-write-markdown = { workspace = true }
+rescribe-write-commonmark = { workspace = true }
+rescribe-write-gfm = { workspace = true }
+rescribe-write-html = { workspace = true }
+rescribe-write-latex = { workspace = true }
+rescribe-write-org = { workspace = true }
+rescribe-write-rst = { workspace = true }
+rescribe-write-asciidoc = { workspace = true }
+
 # Tier D presentation writers (tests/run.rs writer smoke tests)
 rescribe-write-beamer = { workspace = true }
 rescribe-write-revealjs = { workspace = true }

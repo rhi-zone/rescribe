@@ -1,0 +1,4 @@
+{
+  "description": "Paragraph emits as <p> element",
+  "output_contains": ["<p>", "Hello, world!"]
+}

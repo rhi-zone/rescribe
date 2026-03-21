@@ -1,0 +1,4 @@
+{
+  "description": "Emphasis emits with slash delimiters",
+  "output_contains": ["/italic/"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Strong emits with asterisk delimiters",
+  "output_contains": ["*bold*"]
+}

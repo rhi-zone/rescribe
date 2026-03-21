@@ -1,0 +1,4 @@
+{
+  "description": "Emphasis emits with underscore delimiters",
+  "output_contains": ["_italic_"]
+}

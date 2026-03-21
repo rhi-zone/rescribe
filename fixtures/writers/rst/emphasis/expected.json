@@ -1,0 +1,4 @@
+{
+  "description": "Emphasis emits with single asterisk delimiters",
+  "output_contains": ["*italic*"]
+}

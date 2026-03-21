@@ -1,0 +1,4 @@
+{
+  "description": "Emphasis emits as \\emph command",
+  "output_contains": ["\\emph{italic}"]
+}

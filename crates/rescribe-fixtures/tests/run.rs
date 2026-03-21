@@ -653,3 +653,79 @@ fn chunkedhtml_writer() {
             .map_err(|e| e.to_string())
     });
 }
+
+// ---------------------------------------------------------------------------
+// Major text format writer smoke tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn markdown_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "markdown", |doc| {
+        rescribe_write_markdown::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn commonmark_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "commonmark", |doc| {
+        rescribe_write_commonmark::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn gfm_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "gfm", |doc| {
+        rescribe_write_gfm::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn html_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "html", |doc| {
+        rescribe_write_html::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn latex_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "latex", |doc| {
+        rescribe_write_latex::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn org_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "org", |doc| {
+        rescribe_write_org::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn rst_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "rst", |doc| {
+        rescribe_write_rst::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
+
+#[test]
+fn asciidoc_writer() {
+    run_format_writer_fixtures(&fixtures_root(), "asciidoc", |doc| {
+        rescribe_write_asciidoc::emit(doc)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    });
+}
