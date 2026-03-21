@@ -1,0 +1,6 @@
+{
+  "description": "Image via [filename.ext] syntax in txt2tags",
+  "assertions": [
+    { "path": "/0/0", "kind": "image", "props": { "url": "logo.png" } }
+  ]
+}

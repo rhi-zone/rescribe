@@ -300,7 +300,8 @@ standalone library where the ecosystem gap justifies it.
   - [x] No-panic fuzz gate (`fuzz_t2t_reader`) — 2M runs clean (2026-03-21)
   - [x] Roundtrip fuzz target (`fuzz_t2t_roundtrip`) — 939K runs clean (2026-03-21)
   - [x] Fixed URL sanitiser: ':' filtered to prevent http: + //italic// combining into URL patterns
-  - [ ] 100% construct coverage — blockquotes, tables, images, horizontal rules, raw blocks
+  - [x] Fixtures: blockquote, table, image added (2026-03-21)
+  - [ ] 100% construct coverage — raw blocks; footnotes; definition lists
 - [ ] MOBI reader (boko as reference)
 - [ ] KFX reader/writer (Ion spec + boko)
 - [ ] Remaining Tier B/C formats: audit and bring to target stage
