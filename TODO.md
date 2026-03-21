@@ -11,32 +11,30 @@ This file describes milestones, format tiers, and cross-cutting work.
 
 ---
 
-## Near-term mode of working: finish one format before starting the next
+## Near-term mode of working: finish one vertical before starting the next
 
 The fixture suite is the primary deliverable. A format's fixtures should be comprehensive
 enough that any implementation in any language could use them as a complete correctness
 test — every construct, every edge case, every adversarial input a real implementation
 might get wrong.
 
-Work one format at a time in priority order. **Do not move to the next format until the
-current one is done.**
+Work **one format at a time**, completing the full vertical before touching the next.
+**Do not start a new format until the current one reaches 5-Production.**
 
-"Done" means all of the following:
+A vertical has these steps, in order — complete each before moving to the next:
 
-- **Comprehensive fixture suite** — `fixtures/{format}/COVERAGE.md` exists and all items
-  are checked. Covers all six dimensions: happy path (every construct in isolation),
-  integration (constructs interacting), end-to-end (realistic whole documents), rare
-  (obscure valid syntax), adversarial (malformed/truncated, must not panic), pathological
-  (valid but stress-inducing — deep nesting, large inputs). The bar: a correct
-  reimplementation in any language, given only the fixtures, would know exactly what to
-  produce for every case.
-- **Pandoc/oracle harness at ≥90%** (where applicable)
-- **Fuzz clean**: both no-panic gate and roundtrip property, run until no failures
-- **Benchmarks**: at least one `cargo bench` target measuring reader and writer throughput
-- **5-Production sign-off** in `docs/format-audit.md`
+1. **Fixture suite complete** — `fixtures/{format}/COVERAGE.md` all boxes checked. Covers
+   all six dimensions: happy path, integration, end-to-end, rare, adversarial, pathological.
+   Fixtures assert correct behavior; the Rust implementation is fixed to pass them (dogfooding).
+2. **Pandoc/oracle harness at ≥90%** (where applicable — skip for formats Pandoc can't read)
+3. **Fuzz clean** — both no-panic gate and roundtrip property, run until no failures
+4. **Benchmarks** — at least one `cargo bench` target measuring reader and writer throughput
+5. **5-Production sign-off** in `docs/format-audit.md`
 
-Horizontal sweeps (one fixture per format, then loop) are explicitly out of scope.
-The measure of progress is finished verticals.
+**The anti-pattern to avoid:** completing step 1 for format A, then starting format B at
+step 1. That's a horizontal sweep in disguise. Finish A through step 5 first.
+
+Horizontal sweeps are explicitly out of scope. The measure of progress is finished verticals.
 
 ---
 

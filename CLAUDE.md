@@ -350,6 +350,13 @@ A one-line entry is fine. The goal is that the next session doesn't repeat the m
 
 ### Recorded lessons (update this list, never delete entries)
 
+- **Fixture sweep ≠ vertical (2026-03-22):** Completed fixture suites for RST, Org, and
+  AsciiDoc in sequence without finishing any single vertical. That's a horizontal sweep —
+  the exact anti-pattern TODO.md prohibits. "Fixture suite complete" is step 1 of 5.
+  The next step for each of those formats is the Pandoc harness, then fuzz, then benchmarks.
+  When starting work, always check which format is the current vertical and pick up at its
+  current step — don't start a new format's fixtures until the current one is at 5-Production.
+
 - **XLSX cell-type inference (2026-03-03):** The XLSX writer used `.parse::<f64>()` on every
   text node to "auto-detect" numbers, converting `"007"` → `0.0` → `"7"`. This is wrong.
   The reader knows the actual cell type (`CellValue::Number` vs `CellValue::String`). The fix:
