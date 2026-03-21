@@ -212,6 +212,24 @@ path = "../crates/formats/texinfo"
 [dependencies.mediawiki-fmt]
 path = "../crates/formats/mediawiki-fmt"
 
+[dependencies.rescribe-read-odt]
+path = "../crates/readers/rescribe-read-odt"
+
+[dependencies.rescribe-read-fb2]
+path = "../crates/readers/rescribe-read-fb2"
+
+[dependencies.rescribe-read-docbook]
+path = "../crates/readers/rescribe-read-docbook"
+
+[dependencies.rescribe-read-jats]
+path = "../crates/readers/rescribe-read-jats"
+
+[dependencies.rescribe-read-opml]
+path = "../crates/readers/rescribe-read-opml"
+
+[dependencies.rescribe-read-tei]
+path = "../crates/readers/rescribe-read-tei"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -699,3 +717,39 @@ path = "fuzz_targets/mediawiki_roundtrip.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_odt_reader"
+path = "fuzz_targets/odt_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_fb2_reader"
+path = "fuzz_targets/fb2_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_docbook_reader"
+path = "fuzz_targets/docbook_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_jats_reader"
+path = "fuzz_targets/jats_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_opml_reader"
+path = "fuzz_targets/opml_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_tei_reader"
+path = "fuzz_targets/tei_reader.rs"
+test = false
+doc = false

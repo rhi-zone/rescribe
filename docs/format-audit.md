@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4).
 
 ## Maturity Pipeline
 
@@ -78,9 +78,9 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
 | docx | 5† | 4† | ooxml-wml | – | production |
-| odt | 3 | 2 | quick-xml / hand | fuzz | harness |
+| odt | 4 | 2 | quick-xml / hand | production | harness |
 | epub | 3† | 3† | epub / epub-builder | fuzz | fuzz |
-| fb2 | 3 | 2 | hand | fuzz | harness |
+| fb2 | 4 | 2 | hand | production | harness |
 | pptx | 4† | 3† | ooxml-pml | production | fuzz |
 | xlsx | 4† | 3† | ooxml-sml | production | fuzz |
 | pdf | 4† | – | pdf-extract | production | – |
@@ -94,10 +94,10 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
 | html | 4† | 3 | html5ever / hand | production | fuzz |
-| docbook | 3 | 2 | hand | fuzz | harness |
-| jats | 3 | 2 | hand | fuzz | harness |
-| tei | 3 | 2 | hand | fuzz | harness |
-| opml | 3 | 2 | hand | fuzz | harness |
+| docbook | 4 | 2 | hand | production | harness |
+| jats | 4 | 2 | hand | production | harness |
+| tei | 4 | 2 | hand | production | harness |
+| opml | 4 | 2 | hand | production | harness |
 | ipynb | 3† | 2† | serde_json | fuzz | harness |
 | latex | 4 | 2 | hand | production | harness |
 
