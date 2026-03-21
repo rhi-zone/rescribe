@@ -480,6 +480,11 @@ fn try_parse_inline_command(chars: &[char], start: usize) -> Option<(Inline, usi
         i += 1;
     }
 
+    // Handle no-brace commands (e.g. @*)
+    if cmd.is_empty() && i < chars.len() && chars[i] == '*' {
+        return Some((Inline::LineBreak { span: Span::NONE }, i + 1));
+    }
+
     // Check if followed by {
     if i >= chars.len() || chars[i] != '{' {
         return None;
@@ -509,6 +514,9 @@ fn try_parse_inline_command(chars: &[char], start: usize) -> Option<(Inline, usi
         "emph" | "i" => Inline::Emphasis(parse_inline(&content), Span::NONE),
 
         "strong" | "b" => Inline::Strong(parse_inline(&content), Span::NONE),
+
+        "sup" => Inline::Superscript(parse_inline(&content), Span::NONE),
+        "sub" => Inline::Subscript(parse_inline(&content), Span::NONE),
 
         "code" | "samp" | "kbd" | "key" | "file" | "command" | "option" | "env" => {
             Inline::Code(content, Span::NONE)

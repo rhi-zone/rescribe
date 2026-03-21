@@ -1,0 +1,4 @@
+@table @asis
+@item Term
+Description of the term.
+@end table

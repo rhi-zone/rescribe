@@ -1,0 +1,7 @@
+{
+  "description": "Inline footnote via @footnote{text}",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_def" }
+  ]
+}

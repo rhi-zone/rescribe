@@ -1,0 +1,1 @@
+Main text@footnote{This is a footnote.} continues.

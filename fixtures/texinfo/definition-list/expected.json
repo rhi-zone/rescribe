@@ -1,0 +1,7 @@
+{
+  "description": "Definition list via @table @asis / @item",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "definition_term" }
+  ]
+}
