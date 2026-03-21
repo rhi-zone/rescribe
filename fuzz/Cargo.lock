@@ -71,6 +71,19 @@ name = "bbcode-fmt"
 version = "0.1.0"
 
 [[package]]
+name = "biblatex"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53d0c374feba1b9a59042a7c1cf00ce7c34b977b9134fe7c42b08e5183729f66"
+dependencies = [
+ "paste",
+ "roman-numerals-rs",
+ "strum",
+ "unicode-normalization",
+ "unscanny",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -317,6 +330,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "epub"
+version = "2.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95518004c0a638e03a17589d2d336b7c936d92184d81bf1e66d3b1555de89f2d"
+dependencies = [
+ "percent-encoding",
+ "regex",
+ "thiserror",
+ "xml-rs",
+ "zip 3.0.0",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -410,6 +436,12 @@ name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
+
+[[package]]
+name = "heck"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hmac"
@@ -834,6 +866,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
 name = "pbkdf2"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -859,6 +897,12 @@ dependencies = [
  "type1-encoding-parser",
  "unicode-normalization",
 ]
+
+[[package]]
+name = "percent-encoding"
+version = "2.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "phf"
@@ -1106,17 +1150,21 @@ dependencies = [
  "rescribe-read-ansi",
  "rescribe-read-asciidoc",
  "rescribe-read-bbcode",
+ "rescribe-read-bibtex",
  "rescribe-read-commonmark",
  "rescribe-read-creole",
+ "rescribe-read-csl-json",
  "rescribe-read-djot",
  "rescribe-read-docbook",
  "rescribe-read-docx",
  "rescribe-read-dokuwiki",
+ "rescribe-read-epub",
  "rescribe-read-fb2",
  "rescribe-read-fountain",
  "rescribe-read-gfm",
  "rescribe-read-haddock",
  "rescribe-read-html",
+ "rescribe-read-ipynb",
  "rescribe-read-jats",
  "rescribe-read-jira",
  "rescribe-read-latex",
@@ -1207,6 +1255,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rescribe-read-bibtex"
+version = "0.1.0"
+dependencies = [
+ "biblatex",
+ "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
 name = "rescribe-read-commonmark"
 version = "0.1.0"
 dependencies = [
@@ -1222,6 +1279,16 @@ dependencies = [
  "creole",
  "rescribe-core",
  "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-csl-json"
+version = "0.1.0"
+dependencies = [
+ "rescribe-core",
+ "rescribe-std",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1258,6 +1325,16 @@ version = "0.1.0"
 dependencies = [
  "dokuwiki",
  "rescribe-core",
+ "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-epub"
+version = "0.1.0"
+dependencies = [
+ "epub",
+ "rescribe-core",
+ "rescribe-read-html",
  "rescribe-std",
 ]
 
@@ -1306,6 +1383,18 @@ dependencies = [
  "markup5ever_rcdom",
  "rescribe-core",
  "rescribe-std",
+]
+
+[[package]]
+name = "rescribe-read-ipynb"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "rescribe-core",
+ "rescribe-read-markdown",
+ "rescribe-std",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1816,6 +1905,12 @@ name = "ris"
 version = "0.1.0"
 
 [[package]]
+name = "roman-numerals-rs"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c85cd47a33a4510b1424fe796498e174c6a9cf94e606460ef022a19f3e4ff85e"
+
+[[package]]
 name = "rst-fmt"
 version = "0.1.0"
 
@@ -1983,6 +2078,27 @@ dependencies = [
  "unicode-bidi",
  "unicode-normalization",
  "unicode-properties",
+]
+
+[[package]]
+name = "strum"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
+dependencies = [
+ "strum_macros",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.27.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2195,6 +2311,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
+name = "unscanny"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9df2af067a7953e9c3831320f35c1cc0600c30d44d9f7a12b01db1cd88d6b47"
+
+[[package]]
 name = "utf-8"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2295,6 +2417,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7249219f66ced02969388cf2bb044a09756a083d0fab1e566056b04d9fbcaa5"
 
 [[package]]
+name = "xml"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8aa498d22c9bbaf482329839bc5620c46be275a19a812e9a22a2b07529a642a"
+
+[[package]]
+name = "xml-rs"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3a56132a0d6ecbe77352edc10232f788fc4ceefefff4cab784a98e0e16b6b51"
+dependencies = [
+ "xml",
+]
+
+[[package]]
 name = "xml5ever"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2389,6 +2526,20 @@ dependencies = [
  "zeroize",
  "zopfli",
  "zstd",
+]
+
+[[package]]
+name = "zip"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12598812502ed0105f607f941c386f43d441e00148fce9dec3ca5ffb0bde9308"
+dependencies = [
+ "arbitrary",
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "zopfli",
 ]
 
 [[package]]

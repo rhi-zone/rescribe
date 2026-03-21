@@ -242,6 +242,18 @@ path = "../crates/readers/rescribe-read-markdown-strict"
 [dependencies.rescribe-read-multimarkdown]
 path = "../crates/readers/rescribe-read-multimarkdown"
 
+[dependencies.rescribe-read-epub]
+path = "../crates/readers/rescribe-read-epub"
+
+[dependencies.rescribe-read-bibtex]
+path = "../crates/readers/rescribe-read-bibtex"
+
+[dependencies.rescribe-read-csl-json]
+path = "../crates/readers/rescribe-read-csl-json"
+
+[dependencies.rescribe-read-ipynb]
+path = "../crates/readers/rescribe-read-ipynb"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -787,5 +799,29 @@ doc = false
 [[bin]]
 name = "fuzz_multimarkdown_reader"
 path = "fuzz_targets/multimarkdown_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_epub_reader"
+path = "fuzz_targets/epub_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_bibtex_reader"
+path = "fuzz_targets/bibtex_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_csl_json_reader"
+path = "fuzz_targets/csl_json_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_ipynb_reader"
+path = "fuzz_targets/ipynb_reader.rs"
 test = false
 doc = false

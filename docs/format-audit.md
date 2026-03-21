@@ -79,7 +79,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 |--------|---|---|---------|--------|--------|
 | docx | 5† | 4† | ooxml-wml | – | production |
 | odt | 4 | 2 | quick-xml / hand | production | harness |
-| epub | 3† | 3† | epub / epub-builder | fuzz | fuzz |
+| epub | 4† | 3† | epub / epub-builder | production | fuzz |
 | fb2 | 4 | 2 | hand | production | harness |
 | pptx | 4† | 3† | ooxml-pml | production | fuzz |
 | xlsx | 4† | 3† | ooxml-sml | production | fuzz |
@@ -98,16 +98,16 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | jats | 4 | 2 | hand | production | harness |
 | tei | 4 | 2 | hand | production | harness |
 | opml | 4 | 2 | hand | production | harness |
-| ipynb | 3† | 2† | serde_json | fuzz | harness |
+| ipynb | 4† | 2† | serde_json | production | harness |
 | latex | 4 | 2 | hand | production | harness |
 
 ### Bibliographic
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| bibtex | 3† | 2† | biblatex | fuzz | harness |
+| bibtex | 4† | 2† | biblatex | production | harness |
 | biblatex | 3† | 2† | biblatex | fuzz | harness |
-| csl-json | 3† | 2† | serde_json | fuzz | harness |
+| csl-json | 4† | 2† | serde_json | production | harness |
 | ris | 4 | 4 | hand | – (harness N/A) | production |
 | endnotexml | 2 | 2 | hand | – (harness N/A) | fuzz |
 
