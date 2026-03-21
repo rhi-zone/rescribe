@@ -1,0 +1,11 @@
+{
+  "description": "Multi-sheet XLSX generates a heading for each sheet name",
+  "assertions": [
+    { "path": "/0",   "kind": "heading" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Sheet1" } },
+    { "path": "/1",   "kind": "table" },
+    { "path": "/2",   "kind": "heading" },
+    { "path": "/2/0", "kind": "text", "props": { "content": "Sheet2" } },
+    { "path": "/3",   "kind": "table" }
+  ]
+}
