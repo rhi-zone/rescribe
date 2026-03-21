@@ -1,0 +1,7 @@
+{
+  "description": "Subscript via #sub[text]",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "subscript" }
+  ]
+}
