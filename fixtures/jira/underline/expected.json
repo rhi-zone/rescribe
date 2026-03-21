@@ -1,0 +1,7 @@
+{
+  "description": "Jira +text+ becomes underline node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "underline" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Jira !url! becomes image node with url property",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "photo.jpg" } }
+  ]
+}
