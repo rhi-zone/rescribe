@@ -1,16 +1,11 @@
 {
-  "description": "Unordered list with indented sublist; parser flattens into single list",
+  "description": "Unordered list with indented sublist produces proper nesting",
   "category": "happy",
   "assertions": [
     { "path": "/0", "kind": "list", "props": { "ordered": false } },
     { "path": "/0/0", "kind": "list_item" },
     { "path": "/0/0/0", "kind": "paragraph" },
-    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Item one" } },
-    { "path": "/0/1", "kind": "list_item" },
-    { "path": "/0/1/0", "kind": "paragraph" },
-    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Nested item" } },
-    { "path": "/0/2", "kind": "list_item" },
-    { "path": "/0/2/0", "kind": "paragraph" },
-    { "path": "/0/2/0/0", "kind": "text", "props": { "content": "Item two" } }
+    { "path": "/0/0/1", "kind": "list" },
+    { "path": "/0/1", "kind": "list_item" }
   ]
 }

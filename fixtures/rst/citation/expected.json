@@ -1,8 +1,9 @@
 {
-  "description": "Citation definition (.. [label] text) treated as comment and dropped; reference stays as literal text",
+  "description": "Citation definition (.. [label] text) produces footnote_def block; reference [label]_ produces footnote_ref inline",
   "category": "happy",
   "assertions": [
     { "path": "/0", "kind": "paragraph" },
-    { "path": "/0/0", "kind": "text", "props": { "content": "See [Smith2020]_." } }
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "Smith2020" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "Smith2020" } }
   ]
 }

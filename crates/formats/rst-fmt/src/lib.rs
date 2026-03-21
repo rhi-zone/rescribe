@@ -267,9 +267,24 @@ impl<'a> Parser<'a> {
             return Some(directive);
         }
 
+        // Check for grid table (+---+)
+        if let Some(table) = self.try_parse_grid_table() {
+            return Some(table);
+        }
+
+        // Check for simple table (=== ===)
+        if let Some(table) = self.try_parse_simple_table() {
+            return Some(table);
+        }
+
         // Check for list
         if let Some(list) = self.try_parse_list() {
             return Some(list);
+        }
+
+        // Check for field list (:Name: value lines at column 0)
+        if let Some(fieldlist) = self.try_parse_field_list() {
+            return Some(fieldlist);
         }
 
         // Check for definition list
@@ -383,6 +398,51 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn try_parse_footnote_def(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+
+        // Pattern: .. [label] content
+        // label is alphanumeric (and may contain hyphens/underscores for citations)
+        if !line.starts_with(".. [") {
+            return None;
+        }
+        let rest = &line[4..]; // after ".. ["
+        let close_bracket = rest.find(']')?;
+        let label = &rest[..close_bracket];
+        // Label must be non-empty and followed by space+content or just end of line
+        if label.is_empty() {
+            return None;
+        }
+        // Must not be a directive like .. [label]:: (but that's unusual; safe to parse)
+        let after_bracket = rest[close_bracket + 1..].trim();
+
+        self.advance_line();
+
+        // Collect continuation lines (indented)
+        let mut content = after_bracket.to_string();
+        while !self.is_eof() {
+            let cont_line = self.current_line().unwrap_or("");
+            if cont_line.trim().is_empty() {
+                break;
+            }
+            if cont_line.starts_with(' ') || cont_line.starts_with('\t') {
+                if !content.is_empty() {
+                    content.push(' ');
+                }
+                content.push_str(cont_line.trim());
+                self.advance_line();
+            } else {
+                break;
+            }
+        }
+
+        let inlines = parse_inline_content(&content, &self.link_targets);
+        Some(Block::FootnoteDef {
+            label: label.to_string(),
+            inlines,
+        })
+    }
+
     fn try_parse_directive(&mut self) -> Option<Block> {
         let line = self.current_line()?;
 
@@ -391,6 +451,14 @@ impl<'a> Parser<'a> {
         }
 
         let rest = &line[3..];
+
+        // Check for footnote/citation definition: .. [label] content
+        // (before checking for ::, since these have no ::)
+        if rest.starts_with('[') {
+            if let Some(block) = self.try_parse_footnote_def() {
+                return Some(block);
+            }
+        }
 
         // Check for comment (just .. with optional text but no ::)
         if !rest.contains("::") {
@@ -535,6 +603,176 @@ impl<'a> Parser<'a> {
         Some(block)
     }
 
+    /// Detect and parse an RST grid table (+---+---+ borders).
+    fn try_parse_grid_table(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+
+        // Grid table starts with a border line: +...+
+        if !line.starts_with('+') || !line.ends_with('+') {
+            return None;
+        }
+        // Must be a valid border: only +, -, = characters
+        if !line.chars().all(|c| c == '+' || c == '-' || c == '=') {
+            return None;
+        }
+        if line.len() < 3 {
+            return None;
+        }
+
+        // Determine column boundaries from this border line
+        let col_boundaries = parse_grid_border(line);
+        if col_boundaries.len() < 2 {
+            return None;
+        }
+
+        // Consume the first border line
+        self.advance_line();
+
+        let mut rows: Vec<TableRow> = Vec::new();
+        // Track whether the *next* border will be the header separator
+        let mut pending_header = true; // first row is a header candidate
+        let mut current_row_cells: Vec<Vec<Inline>> = vec![Vec::new(); col_boundaries.len() - 1];
+        let num_cols = col_boundaries.len() - 1;
+
+        while !self.is_eof() {
+            let cur = self.current_line().unwrap_or("");
+
+            if cur.starts_with('+') && cur.ends_with('+') && cur.chars().all(|c| c == '+' || c == '-' || c == '=') {
+                // Border line: uses = for header separator
+                let header_sep = cur.contains('=');
+                // Finalize current row
+                let cells: Vec<Vec<Inline>> = current_row_cells
+                    .iter()
+                    .map(|c| {
+                        let text: String = c.iter().map(|i| match i {
+                            Inline::Text(s) => s.clone(),
+                            _ => String::new(),
+                        }).collect::<Vec<_>>().join("").trim().to_string();
+                        parse_inline_content(&text, &self.link_targets)
+                    })
+                    .collect();
+                if cells.iter().any(|c| !c.is_empty()) {
+                    let row_is_header = pending_header && header_sep;
+                    rows.push(TableRow { cells, is_header: row_is_header });
+                }
+                if header_sep {
+                    pending_header = false; // rows after header separator are body
+                }
+                current_row_cells = vec![Vec::new(); num_cols];
+                self.advance_line();
+                // Check if table ended (next line doesn't start with | or +)
+                if let Some(next) = self.current_line() {
+                    if !next.starts_with('|') && !next.starts_with('+') {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } else if cur.starts_with('|') {
+                // Content row: extract cell content based on column boundaries
+                for col in 0..num_cols {
+                    let start = col_boundaries[col] + 1;
+                    let end = col_boundaries[col + 1];
+                    if start < cur.len() && end <= cur.len() {
+                        let cell_text = cur[start..end].trim();
+                        if !cell_text.is_empty() {
+                            if !current_row_cells[col].is_empty() {
+                                current_row_cells[col].push(Inline::Text(" ".to_string()));
+                            }
+                            current_row_cells[col].push(Inline::Text(cell_text.to_string()));
+                        }
+                    }
+                }
+                self.advance_line();
+            } else {
+                break;
+            }
+        }
+
+        // If we accumulated any rows, return the table
+        if rows.is_empty() {
+            return None;
+        }
+
+        Some(Block::Table { rows })
+    }
+
+    /// Detect and parse an RST simple table (=== === borders).
+    fn try_parse_simple_table(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+
+        // Simple table starts with a line of `=` separated by spaces
+        if !is_simple_table_border(line) {
+            return None;
+        }
+
+        // Parse column positions from the border line
+        let col_spans = parse_simple_table_cols(line);
+        if col_spans.len() < 2 {
+            return None;
+        }
+
+        // Consume the opening border
+        self.advance_line();
+
+        let mut rows: Vec<TableRow> = Vec::new();
+        let mut header_done = false;
+
+        while !self.is_eof() {
+            let cur = self.current_line().unwrap_or("");
+
+            if cur.trim().is_empty() {
+                self.advance_line();
+                continue;
+            }
+
+            if is_simple_table_border(cur) {
+                // If we haven't seen the header separator yet, mark it
+                if !header_done && !rows.is_empty() {
+                    header_done = true;
+                }
+                self.advance_line();
+                // Check if the table ended (two borders in a row, or this was the closing border)
+                if let Some(next) = self.current_line() {
+                    if next.trim().is_empty() || is_simple_table_border(next) {
+                        // Consume closing border if present
+                        if is_simple_table_border(next) {
+                            self.advance_line();
+                        }
+                        break;
+                    }
+                } else {
+                    break;
+                }
+                continue;
+            }
+
+            // Content row
+            let mut cells = Vec::new();
+            for &(start, end) in &col_spans {
+                let cell_text = if end <= cur.len() {
+                    cur[start..end].trim().to_string()
+                } else if start < cur.len() {
+                    cur[start..].trim().to_string()
+                } else {
+                    String::new()
+                };
+                cells.push(parse_inline_content(&cell_text, &self.link_targets));
+            }
+            rows.push(TableRow {
+                cells,
+                is_header: !header_done,
+            });
+            self.advance_line();
+        }
+
+        if rows.is_empty() {
+            return None;
+        }
+
+        Some(Block::Table { rows })
+    }
+
     fn try_parse_list(&mut self) -> Option<Block> {
         let line = self.current_line()?;
         let trimmed = line.trim_start();
@@ -577,13 +815,17 @@ impl<'a> Parser<'a> {
                 let next_idx = self.line_idx + 1;
                 if next_idx < self.lines.len() {
                     let next_line = self.lines[next_idx];
+                    let next_indent = self.get_line_indent(next_line);
                     let next_trimmed = next_line.trim_start();
-                    if !next_trimmed.starts_with(&format!("{} ", bullet)) {
-                        break;
+                    // Continue if next item has same indent and same bullet
+                    if next_indent == indent
+                        && next_trimmed.starts_with(&format!("{} ", bullet))
+                    {
+                        self.advance_line();
+                        continue;
                     }
                 }
-                self.advance_line();
-                continue;
+                break;
             }
 
             if current_indent < indent && indent > 0 {
@@ -591,10 +833,10 @@ impl<'a> Parser<'a> {
             }
 
             if let Some(rest) = trimmed.strip_prefix(&format!("{} ", bullet)) {
-                let item = self.parse_list_item(rest);
-                items.push(vec![Block::Paragraph { inlines: item }]);
+                let item_blocks = self.parse_list_item_blocks(rest, indent);
+                items.push(item_blocks);
             } else if current_indent > indent {
-                // Continuation of previous item - skip for now
+                // Continuation of previous item (shouldn't normally happen here)
                 self.advance_line();
             } else {
                 break;
@@ -630,8 +872,8 @@ impl<'a> Parser<'a> {
                 let prefix = &trimmed[..idx];
                 if prefix.chars().all(|c| c.is_ascii_digit()) || prefix == "#" {
                     let rest = &trimmed[idx + 2..];
-                    let item = self.parse_list_item(rest);
-                    items.push(vec![Block::Paragraph { inlines: item }]);
+                    let item_blocks = self.parse_list_item_blocks(rest, indent);
+                    items.push(item_blocks);
                     continue;
                 }
             }
@@ -650,30 +892,81 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_list_item(&mut self, first_line: &str) -> Vec<Inline> {
+    /// Parse a list item's content into a Vec<Block>, supporting nested sublists.
+    /// `first_line` is the text after the bullet/number marker.
+    /// `list_indent` is the column of the parent list's bullet character.
+    fn parse_list_item_blocks(&mut self, first_line: &str, list_indent: usize) -> Vec<Block> {
         self.advance_line();
 
         let mut content = first_line.to_string();
+        let mut extra_blocks: Vec<Block> = Vec::new();
 
-        // Collect continuation lines
-        while !self.is_eof() {
+        // Collect continuation lines and detect nested sublists
+        loop {
+            if self.is_eof() {
+                break;
+            }
             let line = self.current_line().unwrap_or("");
+
             if line.trim().is_empty() {
+                // Blank line: check if followed by a nested list
+                let next_idx = self.line_idx + 1;
+                if next_idx < self.lines.len() {
+                    let next_line = self.lines[next_idx];
+                    let next_indent = self.get_line_indent(next_line);
+                    let next_trimmed = next_line.trim_start();
+                    // If the next line is indented more than the list bullet and is a sublist
+                    if next_indent > list_indent
+                        && (next_trimmed.starts_with("* ")
+                            || next_trimmed.starts_with("- ")
+                            || next_trimmed.starts_with("+ "))
+                    {
+                        self.advance_line(); // skip blank
+                        // Parse the nested sublist
+                        if let Some(sublist) = self.try_parse_list() {
+                            extra_blocks.push(sublist);
+                        }
+                        continue;
+                    }
+                }
                 break;
             }
-            // Check if it's a new list item
+
+            let current_indent = self.get_line_indent(line);
             let trimmed = line.trim_start();
-            if trimmed.starts_with("* ") || trimmed.starts_with("- ") || trimmed.starts_with("+ ") {
+
+            // If same or less indent than list bullet, stop
+            if current_indent <= list_indent && !line.trim().is_empty() {
                 break;
             }
-            if let Some(idx) = trimmed.find(". ") {
-                let prefix = &trimmed[..idx];
-                if prefix.chars().all(|c| c.is_ascii_digit()) || prefix == "#" {
-                    break;
+
+            // If indented more and it's a sublist, parse as nested list
+            if current_indent > list_indent
+                && (trimmed.starts_with("* ")
+                    || trimmed.starts_with("- ")
+                    || trimmed.starts_with("+ "))
+            {
+                if let Some(sublist) = self.try_parse_list() {
+                    extra_blocks.push(sublist);
+                }
+                continue;
+            }
+
+            // Numbered nested list
+            if current_indent > list_indent {
+                if let Some(idx) = trimmed.find(". ") {
+                    let prefix = &trimmed[..idx];
+                    if prefix.chars().all(|c| c.is_ascii_digit()) || prefix == "#" {
+                        if let Some(sublist) = self.try_parse_list() {
+                            extra_blocks.push(sublist);
+                            continue;
+                        }
+                    }
                 }
             }
-            // Check if indented (continuation)
-            if line.starts_with(' ') || line.starts_with('\t') {
+
+            // Regular continuation text (indented)
+            if current_indent > list_indent {
                 content.push(' ');
                 content.push_str(trimmed);
                 self.advance_line();
@@ -682,7 +975,86 @@ impl<'a> Parser<'a> {
             }
         }
 
-        parse_inline_content(&content, &self.link_targets)
+        let mut blocks = vec![Block::Paragraph {
+            inlines: parse_inline_content(&content, &self.link_targets),
+        }];
+        blocks.extend(extra_blocks);
+        blocks
+    }
+
+    fn try_parse_field_list(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+
+        // Field list: starts with `:FieldName:` at column 0
+        if !line.starts_with(':') {
+            return None;
+        }
+        // Find the closing colon of the field name
+        let rest = &line[1..];
+        let close_colon = rest.find(':')?;
+        let field_name = &rest[..close_colon];
+        // Field name must be non-empty and not contain spaces (avoid matching ::)
+        if field_name.is_empty() || field_name.contains(' ') {
+            return None;
+        }
+        // Make sure this isn't a role-based inline like :role:`text`
+        // A field list line at column 0 must have `:name: value` structure
+        let after_name_colon = &rest[close_colon + 1..];
+        if !after_name_colon.starts_with(' ') && !after_name_colon.is_empty() {
+            return None;
+        }
+
+        let mut items = Vec::new();
+
+        while !self.is_eof() {
+            let cur_line = self.current_line().unwrap_or("");
+
+            if cur_line.trim().is_empty() {
+                self.advance_line();
+                continue;
+            }
+
+            if !cur_line.starts_with(':') {
+                break;
+            }
+            let r = &cur_line[1..];
+            let Some(cc) = r.find(':') else { break };
+            let fname = &r[..cc];
+            if fname.is_empty() || fname.contains(' ') {
+                break;
+            }
+            let fvalue = r[cc + 1..].trim();
+
+            self.advance_line();
+
+            // Collect continuation lines (indented)
+            let mut value = fvalue.to_string();
+            while !self.is_eof() {
+                let cont = self.current_line().unwrap_or("");
+                if cont.trim().is_empty() {
+                    break;
+                }
+                if cont.starts_with(' ') || cont.starts_with('\t') {
+                    if !value.is_empty() {
+                        value.push(' ');
+                    }
+                    value.push_str(cont.trim());
+                    self.advance_line();
+                } else {
+                    break;
+                }
+            }
+
+            let term = vec![Inline::Text(fname.to_string())];
+            let desc = parse_inline_content(&value, &self.link_targets);
+            items.push(DefinitionItem { term, desc });
+        }
+
+        if items.is_empty() {
+            return None;
+        }
+
+        Some(Block::DefinitionList { items })
     }
 
     fn try_parse_definition_list(&mut self) -> Option<Block> {
@@ -1080,6 +1452,30 @@ fn parse_inline_content(
             }
         }
 
+        // Footnote/citation reference: [label]_
+        if chars[pos] == '[' {
+            let mut end = pos + 1;
+            while end < chars.len() && chars[end] != ']' && chars[end] != '\n' {
+                end += 1;
+            }
+            if end < chars.len()
+                && chars[end] == ']'
+                && end + 1 < chars.len()
+                && chars[end + 1] == '_'
+            {
+                let label: String = chars[pos + 1..end].iter().collect();
+                if !label.is_empty()
+                    && label
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                {
+                    nodes.push(Inline::FootnoteRef { label });
+                    pos = end + 2;
+                    continue;
+                }
+            }
+        }
+
         // Simple reference link: word_
         if chars[pos].is_alphanumeric() {
             let mut word_end = pos;
@@ -1192,6 +1588,43 @@ fn find_closing_char(chars: &[char], start: usize, close: char) -> Option<(usize
     }
 
     None
+}
+
+/// Return the column positions of `+` characters in a grid table border line.
+fn parse_grid_border(line: &str) -> Vec<usize> {
+    line.char_indices()
+        .filter(|(_, c)| *c == '+')
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// Return true if `line` is a simple-table border (one or more runs of `=` separated by spaces).
+fn is_simple_table_border(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    // Must start with '=' and consist only of '=' and ' '
+    trimmed.starts_with('=') && trimmed.chars().all(|c| c == '=' || c == ' ')
+}
+
+/// Parse column (start, end) byte offsets from a simple-table border line.
+fn parse_simple_table_cols(line: &str) -> Vec<(usize, usize)> {
+    let mut cols = Vec::new();
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'=' {
+            let start = i;
+            while i < bytes.len() && bytes[i] == b'=' {
+                i += 1;
+            }
+            cols.push((start, i));
+        } else {
+            i += 1;
+        }
+    }
+    cols
 }
 
 fn merge_text_nodes(nodes: &mut Vec<Inline>) {

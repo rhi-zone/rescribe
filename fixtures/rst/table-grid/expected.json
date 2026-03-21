@@ -1,7 +1,10 @@
 {
-  "description": "Grid table is not parsed; treated as paragraph text",
+  "description": "RST grid table produces a table node with rows and cells",
   "category": "happy",
   "assertions": [
-    { "path": "/0", "kind": "paragraph" }
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/1", "kind": "table_cell" }
   ]
 }

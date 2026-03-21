@@ -1,8 +1,10 @@
 {
-  "description": "Field list (:Name: value) is parsed as a single paragraph (no field-list support)",
+  "description": "Field list (:Name: value) is parsed as a definition_list",
   "category": "happy",
   "assertions": [
-    { "path": "/0", "kind": "paragraph" },
-    { "path": "/0/0", "kind": "text", "props": { "content": ":Author: Jane Doe :Date: 2024-01-01" } }
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Author" } },
+    { "path": "/0/1", "kind": "definition_desc" }
   ]
 }

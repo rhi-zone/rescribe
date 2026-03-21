@@ -1,7 +1,10 @@
 {
-  "description": "Table with inline formatting: not parsed as table, treated as paragraph with inline markup",
+  "description": "Grid table with inline formatting produces table with cells containing inline nodes",
   "category": "happy",
   "assertions": [
-    { "path": "/0", "kind": "paragraph" }
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/1", "kind": "table_cell" }
   ]
 }

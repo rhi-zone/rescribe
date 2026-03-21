@@ -1,8 +1,9 @@
 {
-  "description": "Footnote definition (.. [1] text) is treated as comment and dropped; reference [1]_ stays as literal text",
+  "description": "Footnote definition (.. [1] text) produces footnote_def block; reference [1]_ produces footnote_ref inline",
   "category": "happy",
   "assertions": [
     { "path": "/0", "kind": "paragraph" },
-    { "path": "/0/0", "kind": "text", "props": { "content": "See note [1]_." } }
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "1" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "1" } }
   ]
 }
