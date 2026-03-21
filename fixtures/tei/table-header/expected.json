@@ -1,0 +1,10 @@
+{
+  "description": "TEI cell rend=\"header\" becomes table_header; plain cell becomes table_cell",
+  "assertions": [
+    { "path": "/0",     "kind": "table" },
+    { "path": "/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_header" },
+    { "path": "/0/1",   "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" }
+  ]
+}

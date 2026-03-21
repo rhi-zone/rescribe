@@ -1,0 +1,6 @@
+{
+  "description": "Unknown Typst function call becomes raw_block node",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block" }
+  ]
+}
