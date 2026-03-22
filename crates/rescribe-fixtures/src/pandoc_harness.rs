@@ -208,6 +208,11 @@ pub const CORPUS: &[CorpusEntry] = &[
         filename: "org-select-tags.org",
     },
     CorpusEntry {
+        format: "org",
+        pandoc_from: "org",
+        filename: "writer.org",
+    },
+    CorpusEntry {
         format: "djot",
         pandoc_from: "djot",
         filename: "djot-reader.djot",

@@ -941,8 +941,16 @@ pub(crate) fn parse_inline_content(text: &str) -> Vec<Inline> {
                 }
             }
             // Math inline: $source$
+            // Per Org-mode spec: opening $ must not be immediately followed by a
+            // digit (that would be a currency sign like $20, not math).
             '$' => {
-                if let Some((content, end)) = find_inline_span(&chars, pos, '$') {
+                let next_is_digit = chars
+                    .get(pos + 1)
+                    .map(|c| c.is_ascii_digit())
+                    .unwrap_or(false);
+                if !next_is_digit
+                    && let Some((content, end)) = find_inline_span(&chars, pos, '$')
+                {
                     nodes.push(Inline::MathInline {
                         source: content,
                         span: Span::NONE,

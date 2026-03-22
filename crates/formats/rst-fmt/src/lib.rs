@@ -171,6 +171,9 @@ struct Parser<'a> {
     substitutions: std::collections::HashMap<String, String>,
     /// Anonymous link targets (__ url), in order of definition
     anon_targets: Vec<String>,
+    /// Holds a code block to be emitted immediately after the current block.
+    /// Used when "text::" emits a paragraph and defers the code block.
+    pending_block: Option<Block>,
 }
 
 impl<'a> Parser<'a> {
@@ -183,6 +186,7 @@ impl<'a> Parser<'a> {
             link_targets: std::collections::HashMap::new(),
             substitutions: std::collections::HashMap::new(),
             anon_targets: Vec::new(),
+            pending_block: None,
         }
     }
 
@@ -255,7 +259,16 @@ impl<'a> Parser<'a> {
 
         let mut blocks = Vec::new();
 
-        while !self.is_eof() {
+        loop {
+            // Drain any pending block first (e.g. code block deferred from "text::").
+            if let Some(pending) = self.pending_block.take() {
+                blocks.push(pending);
+                continue;
+            }
+
+            if self.is_eof() {
+                break;
+            }
             self.skip_blank_lines();
             if self.is_eof() {
                 break;
@@ -273,6 +286,11 @@ impl<'a> Parser<'a> {
     }
 
     fn try_parse_block(&mut self) -> Option<Block> {
+        // Drain any block deferred by the previous call (e.g. code block after "text::").
+        if let Some(pending) = self.pending_block.take() {
+            return Some(pending);
+        }
+
         // Skip preamble lines (link targets, substitution defs, anonymous targets)
         // using a loop instead of recursion to avoid stack overflow on long sequences.
         loop {
@@ -1243,22 +1261,30 @@ impl<'a> Parser<'a> {
     fn try_parse_literal_block(&mut self) -> Option<Block> {
         let line = self.current_line()?;
 
-        // Check for :: at end of line (paragraph ending with ::)
-        if line.trim_end().ends_with("::") {
+        // "text::" — emit the introductory paragraph, defer the code block.
+        // In RST, "Some text::" means: emit "Some text:" as a paragraph, then
+        // emit the following indented block as a literal code block.
+        if line.trim_end().ends_with("::") && line.trim_end().len() > 2 {
+            // Extract the paragraph text (strip trailing :: → single :, or remove
+            // entirely if text is just "::").
+            let trimmed = line.trim_end();
+            let intro_text = {
+                let without_dcolon = &trimmed[..trimmed.len() - 1]; // strip one ':'
+                without_dcolon.trim_end()
+            };
+            let inlines = self.inline_from(intro_text);
             self.advance_line();
             self.skip_blank_lines();
 
-            // Collect indented content
+            // Collect the following indented literal block.
             let mut content_lines: Vec<&str> = Vec::new();
             let base_indent = self.get_indent();
-
             while !self.is_eof() {
                 let content_line = self.current_line().unwrap_or("");
                 if content_line.trim().is_empty() {
                     content_lines.push("");
                     self.advance_line();
                 } else if self.get_line_indent(content_line) >= base_indent {
-                    // Remove base indentation
                     let dedented = if content_line.len() > base_indent {
                         &content_line[base_indent..]
                     } else {
@@ -1270,17 +1296,17 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-
-            // Trim trailing empty lines
             while content_lines.last() == Some(&"") {
                 content_lines.pop();
             }
 
-            let content = content_lines.join("\n");
-            return Some(Block::CodeBlock {
+            let code_content = content_lines.join("\n");
+            // Defer the code block; return the paragraph first.
+            self.pending_block = Some(Block::CodeBlock {
                 language: None,
-                content,
+                content: code_content,
             });
+            return Some(Block::Paragraph { inlines });
         }
 
         // Check for standalone :: on its own line
@@ -1565,9 +1591,11 @@ fn parse_inline_content(
                         if text.ends_with('>') {
                             let link_text = text[..angle_start].trim();
                             let url = &text[angle_start + 1..text.len() - 1];
+                            // When no explicit text, RST uses the URL as display text.
+                            let display = if link_text.is_empty() { url } else { link_text };
                             nodes.push(Inline::Link {
                                 url: url.to_string(),
-                                children: vec![Inline::Text(link_text.to_string())],
+                                children: vec![Inline::Text(display.to_string())],
                             });
                             pos = end + 3;
                             continue;
@@ -1589,9 +1617,11 @@ fn parse_inline_content(
                         if text.ends_with('>') {
                             let link_text = text[..angle_start].trim();
                             let url = &text[angle_start + 1..text.len() - 1];
+                            // When no explicit text, RST uses the URL as display text.
+                            let display = if link_text.is_empty() { url } else { link_text };
                             nodes.push(Inline::Link {
                                 url: url.to_string(),
-                                children: vec![Inline::Text(link_text.to_string())],
+                                children: vec![Inline::Text(display.to_string())],
                             });
                             pos = end + 2;
                             continue;

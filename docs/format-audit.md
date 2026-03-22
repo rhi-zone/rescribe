@@ -41,8 +41,8 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
 | djot | 4† | 4† | jotdown | production | production |
-| org | 5 | 2 | hand | – | harness ✓ fixtures (88) benchmarks ✓ |
-| rst | 5 | 2 | hand | – | harness ✓ fixtures (80) benchmarks ✓ |
+| org | 4 | 2 | hand | harness gaps | harness ✓ fixtures (88) benchmarks ✓ |
+| rst | 4 | 2 | hand | harness gaps | harness ✓ fixtures (80) benchmarks ✓ |
 | asciidoc | 5 | 2 | hand | – | harness N/A fixtures (84) benchmarks ✓ |
 | textile | 4 | 2 | hand | fuzz | harness |
 | muse | 4 | 2 | hand | production | harness |
