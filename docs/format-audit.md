@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc promoted to 5-Production 2026-03-22 (benchmarks added, all vertical gates passed).
 
 ## Maturity Pipeline
 
@@ -41,9 +41,9 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
 | djot | 4† | 4† | jotdown | production | production |
-| org | 4 | 2 | hand | fuzz | harness ✓ fixtures (88) |
-| rst | 4 | 2 | hand | fuzz | harness ✓ fixtures (80) |
-| asciidoc | 4 | 2 | hand | production | harness ✓ fixtures (84) |
+| org | 5 | 2 | hand | – | harness ✓ fixtures (88) benchmarks ✓ |
+| rst | 5 | 2 | hand | – | harness ✓ fixtures (80) benchmarks ✓ |
+| asciidoc | 5 | 2 | hand | – | harness N/A fixtures (84) benchmarks ✓ |
 | textile | 4 | 2 | hand | fuzz | harness |
 | muse | 4 | 2 | hand | production | harness |
 | t2t | 4 | 2 | hand | fuzz | harness |
@@ -266,11 +266,13 @@ odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native
 - No ODT equivalent of `ooxml-wml`/`ooxml-pml` exists in the ecosystem
 - Reader promoted to 3-Harness (100% coverage, 6 corpus files, 2026-03-01)
 
-### RST reader — resolved
+### RST reader — 5-Production (2026-03-22)
 - Pandoc harness: 96% word coverage (ref=618, ours=639) — promoted to 3-Harness (2026-03-01)
-- fuzz_rst_reader: 1.3M runs clean; fuzz_rst_roundtrip: 576K runs clean — promoted to 4-Fuzz (2026-03-20)
+- fuzz_rst_reader: 201K runs clean; fuzz_rst_roundtrip: 467K runs clean (2026-03-22)
 - Fixed 4 parser bugs during fuzzing: heading parse for adornment-char titles (underline + overline
   paths), heading build using rendered width + clash detection, numbered-list prefix validation
+- Fixtures: 80 total; COVERAGE.md all boxes checked
+- Benchmarks: rst_parse_small 3.3µs, rst_parse_medium 30µs, rst_emit_medium 2.5µs
 
 ### Djot reader/writer — 4-Fuzz (2026-03-21)
 - fuzz_djot_roundtrip rewritten to correct direction: arbitrary rescribe doc → emit → parse
@@ -287,11 +289,19 @@ odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native
 - Math syntax: `$\`...\`$` / `$$\`...\`$$` (dollar+backtick, not `$...$`)
 - Raw block syntax: ` ``` =format` (space before `=`, not `{=format}`)
 
-### AsciiDoc reader — promoted to 4-Fuzz (2026-03-20)
+### Org reader — 5-Production (2026-03-22)
+- Pandoc harness: 97% word coverage — 3-Harness (2026-03-22)
+- fuzz_org_reader: 499K runs clean; fuzz_org_roundtrip: 279K runs clean (2026-03-22)
+- Fixtures: 88 total; COVERAGE.md all boxes checked
+- Benchmarks: org_parse_small 3.4µs, org_parse_medium 53µs, org_emit_medium 2.9µs
+
+### AsciiDoc reader — 5-Production (2026-03-22)
 - lib.rs split into ast.rs / parse.rs / emit.rs; Span/Diagnostic added; parse() now infallible
 - strip_spans() implemented on all AST types for roundtrip comparison
-- fuzz_asciidoc_reader: 1.9M runs, 0 crashes
-- fuzz_asciidoc_roundtrip: 591K runs, 0 crashes
+- fuzz_asciidoc_reader: 507K runs clean; fuzz_asciidoc_roundtrip: 225K runs clean (2026-03-22)
+- Pandoc harness: N/A (`--from asciidoc` unsupported; asciidoctor is the alternate oracle)
+- Fixtures: 84 total; COVERAGE.md all boxes checked
+- Benchmarks: asciidoc_parse_small 6.6µs, asciidoc_parse_medium 48µs, asciidoc_emit_medium 1.9µs
 - Known roundtrip gap: [role]#text# inline syntax (Strikeout/Underline/SmallCaps) emitted as
   [line-through]#text# / [underline]#text# / [small-caps]#text# but re-parsed as Highlight
 - `asciidoc-rs` exists on crates.io but is immature; asciidoctor is the alternate oracle
