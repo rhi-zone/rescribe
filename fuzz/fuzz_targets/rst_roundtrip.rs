@@ -103,8 +103,18 @@ fn sanitise(s: &str) -> Option<String> {
             break;
         }
     }
+    // Reject text whose non-space content consists entirely of RST heading /
+    // transition adornment characters. Such text, when emitted as a paragraph,
+    // produces a line that the parser re-reads as an RST transition (horizontal
+    // rule) or simple-table border, discarding the text content.
+    // RST has no way to write a paragraph whose only non-space content is
+    // repeated adornment chars separated by spaces (e.g. "==== =====").
+    const RST_ADORNMENT: &[char] = &['=', '-', '~', '^', '"', '`', '#', '*', '+', '_'];
     let out = out.trim().to_string();
-    if out.is_empty() {
+    let only_adornment = !out.is_empty()
+        && out.chars().all(|c| c == ' ' || RST_ADORNMENT.contains(&c))
+        && out.chars().any(|c| RST_ADORNMENT.contains(&c));
+    if out.is_empty() || only_adornment {
         None
     } else {
         Some(out)

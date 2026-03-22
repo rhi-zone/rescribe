@@ -62,8 +62,8 @@ fn sanitise(s: &str) -> Option<String> {
     // ':' prevents '::' description list trigger (any line with '::' is a def list).
     // '-' prevents '---' horizontal rule (three dashes alone on a line).
     // '\'' prevents "'''" horizontal rule.
-    // '/' prevents accidental protocol patterns (http://, etc.) — ':' already blocks those
-    //      but '/' alone in certain positions can cause issues.
+    // '/' filtered to prevent '////' comment block delimiter (4+ slashes = comment block,
+    //      which the parser drops entirely — content lost in roundtrip).
     let out: String = s
         .chars()
         .filter(|c| {
@@ -82,6 +82,11 @@ fn sanitise(s: &str) -> Option<String> {
                     // '.' filtered to prevent '....' delimited block (4+ dots)
                     // and ordered list marker (". item")
                     | '.'
+                    // '/' filtered to prevent '////' comment block (4+ slashes = dropped comment)
+                    | '/'
+                    // '[' and ']' filtered to prevent inline link/xref/passthrough macro parsing:
+                    // [[anchor]], <<anchor>>, xref:[], link:[], pass[...], kbd:[] etc.
+                    | '[' | ']'
             )
         })
         .collect();

@@ -273,35 +273,40 @@ impl<'a> Parser<'a> {
     }
 
     fn try_parse_block(&mut self) -> Option<Block> {
-        // Skip link target definitions (already collected)
-        if let Some(line) = self.current_line() {
-            if line.starts_with(".. _") && line.contains(':') {
-                self.advance_line();
-                return self.try_parse_block();
-            }
-        }
-        // Skip substitution definitions (already collected in first pass)
-        if let Some(line) = self.current_line() {
-            if line.starts_with(".. |") && line.contains("::") {
-                self.advance_line();
-                // Skip indented continuation lines
-                while !self.is_eof() {
-                    let cont = self.current_line().unwrap_or("");
-                    if cont.starts_with(' ') || cont.starts_with('\t') {
-                        self.advance_line();
-                    } else {
-                        break;
-                    }
+        // Skip preamble lines (link targets, substitution defs, anonymous targets)
+        // using a loop instead of recursion to avoid stack overflow on long sequences.
+        loop {
+            // Skip link target definitions (already collected)
+            if let Some(line) = self.current_line() {
+                if line.starts_with(".. _") && line.contains(':') {
+                    self.advance_line();
+                    continue;
                 }
-                return self.try_parse_block();
             }
-        }
-        // Skip anonymous target lines (__ url)
-        if let Some(line) = self.current_line() {
-            if line.starts_with("__ ") {
-                self.advance_line();
-                return self.try_parse_block();
+            // Skip substitution definitions (already collected in first pass)
+            if let Some(line) = self.current_line() {
+                if line.starts_with(".. |") && line.contains("::") {
+                    self.advance_line();
+                    // Skip indented continuation lines
+                    while !self.is_eof() {
+                        let cont = self.current_line().unwrap_or("");
+                        if cont.starts_with(' ') || cont.starts_with('\t') {
+                            self.advance_line();
+                        } else {
+                            break;
+                        }
+                    }
+                    continue;
+                }
             }
+            // Skip anonymous target lines (__ url)
+            if let Some(line) = self.current_line() {
+                if line.starts_with("__ ") {
+                    self.advance_line();
+                    continue;
+                }
+            }
+            break;
         }
 
         // Check for horizontal rule (transition: 4+ underline chars, no following text)
@@ -765,12 +770,15 @@ impl<'a> Parser<'a> {
                     break;
                 }
             } else if cur.starts_with('|') {
-                // Content row: extract cell content based on column boundaries
+                // Content row: extract cell content based on column boundaries.
+                // Column positions are byte offsets from the ASCII border line; content
+                // rows may contain multi-byte UTF-8 chars, so use .get() to avoid
+                // panicking when positions fall inside a multi-byte char.
                 for col in 0..num_cols {
                     let start = col_boundaries[col] + 1;
                     let end = col_boundaries[col + 1];
                     if start < cur.len() && end <= cur.len() {
-                        let cell_text = cur[start..end].trim();
+                        let cell_text = cur.get(start..end).unwrap_or("").trim();
                         if !cell_text.is_empty() {
                             if !current_row_cells[col].is_empty() {
                                 current_row_cells[col].push(Inline::Text(" ".to_string()));
@@ -846,10 +854,13 @@ impl<'a> Parser<'a> {
             // Content row
             let mut cells = Vec::new();
             for &(start, end) in &col_spans {
+                // Column positions come from the ASCII border line; content rows may
+                // contain multi-byte UTF-8 characters, so byte positions may not
+                // align with char boundaries. Use .get() to avoid panics.
                 let cell_text = if end <= cur.len() {
-                    cur[start..end].trim().to_string()
+                    cur.get(start..end).unwrap_or("").trim().to_string()
                 } else if start < cur.len() {
-                    cur[start..].trim().to_string()
+                    cur.get(start..).unwrap_or("").trim().to_string()
                 } else {
                     String::new()
                 };
@@ -2642,6 +2653,33 @@ mod tests {
             } else {
                 panic!("expected Heading block, got {:?}", reparsed.blocks[0]);
             }
+        }
+    }
+
+    /// Long heading title consisting of grid-table border chars (4+ '+' chars)
+    /// must survive a build→parse roundtrip at all heading levels.
+    #[test]
+    fn test_heading_long_adornment_title_roundtrip() {
+        let title = "+".repeat(103);
+        for level in 1i64..=5 {
+            let doc = RstDoc {
+                blocks: vec![Block::Heading {
+                    level,
+                    inlines: vec![Inline::Text(title.clone())],
+                }],
+            };
+            let rst_output = build(&doc);
+            let reparsed = parse(&rst_output).expect("parse should not fail");
+            let mut text = String::new();
+            for block in &reparsed.blocks {
+                if let Block::Heading { inlines, .. } = block {
+                    collect_text_from_inlines(inlines, &mut text);
+                }
+            }
+            assert_eq!(
+                text, title,
+                "level {level} heading with 103-char '+' title lost after roundtrip\nRST:\n{rst_output}"
+            );
         }
     }
 }

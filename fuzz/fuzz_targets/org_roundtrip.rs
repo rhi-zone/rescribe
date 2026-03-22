@@ -89,6 +89,13 @@ fn sanitise(s: &str) -> Option<String> {
                     // '-' filtered to prevent "-----" horizontal rule trigger
                     // (Org: line of 5+ dashes = HorizontalRule)
                     | '-'
+                    // '@' filtered to prevent '@@backend:content@@' export snippet:
+                    // export snippet nodes are not TEXT nodes, so their content
+                    // is lost in extract_text.
+                    | '@'
+                    // ':' filtered to prevent '::' description-list separator and
+                    // ':key:' property drawer patterns from splitting/hiding content.
+                    | ':'
             )
         })
         .collect();
@@ -142,6 +149,12 @@ fn sanitise(s: &str) -> Option<String> {
         }
         if out.starts_with("DONE ") {
             out = out["DONE ".len()..].trim().to_string();
+        }
+
+        // Strip Org fixed-width block prefix (': text' — line starting with ': '
+        // is a fixed-width verbatim line, not a paragraph).
+        while out.starts_with(": ") {
+            out = out[2..].trim().to_string();
         }
 
         // Strip trailing ':' (prevents key: metadata patterns)

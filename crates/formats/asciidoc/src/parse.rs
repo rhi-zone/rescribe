@@ -97,16 +97,20 @@ impl<'a> Parser<'a> {
     }
 
     fn try_parse_block(&mut self) -> Option<Block> {
-        let line = self.current_line()?;
-
-        // Document attributes (:attr: value)
-        if line.starts_with(':') && line.len() > 1 {
-            if let Some((attr, value)) = self.try_parse_attribute(line) {
-                self.attributes.insert(attr, value);
-                self.advance_line();
-                return self.try_parse_block();
+        // Skip document attribute lines (:attr: value) iteratively to avoid
+        // stack overflow on documents with many consecutive attribute lines.
+        loop {
+            let line = self.current_line()?;
+            if line.starts_with(':') && line.len() > 1 {
+                if let Some((attr, value)) = self.try_parse_attribute(line) {
+                    self.attributes.insert(attr, value);
+                    self.advance_line();
+                    continue;
+                }
             }
+            break;
         }
+        let line = self.current_line()?;
 
         // Section titles (= Title, == Title, etc.)
         if line.starts_with('=') {

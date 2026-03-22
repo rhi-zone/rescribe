@@ -713,10 +713,18 @@ pub(crate) fn parse_heading_metadata(
     // Extract tags at end of line: "  :tag1:tag2:"
     let (tags, text) = if text.ends_with(':') {
         if let Some(idx) = text.rfind(" :") {
-            let tag_str = &text[idx + 2..text.len() - 1];
-            let tags: Vec<String> = tag_str.split(':').map(|t| t.to_string()).collect();
-            let title = text[..idx].trim();
-            (tags, title)
+            // Guard: idx + 2 must not exceed text.len() - 1 (the trailing ':').
+            // If the ' :' found by rfind IS the trailing ':', tag_str would be
+            // a backwards slice — treat as no tags in that case.
+            let tag_end = text.len() - 1;
+            if idx + 2 <= tag_end {
+                let tag_str = &text[idx + 2..tag_end];
+                let tags: Vec<String> = tag_str.split(':').map(|t| t.to_string()).collect();
+                let title = text[..idx].trim();
+                (tags, title)
+            } else {
+                (vec![], text)
+            }
         } else {
             (vec![], text)
         }
