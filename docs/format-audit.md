@@ -40,7 +40,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| djot | 4† | 4† | jotdown | production | production |
+| djot | 5 | 4† | jotdown | – | production |
 | org | 5 | 2 | hand | – | harness 100% (writer.org) fixtures (88) benchmarks ✓ |
 | rst | 5 | 2 | hand | – | harness 100% fixtures (80) benchmarks ✓ |
 | asciidoc | 5 | 2 | hand | – | harness N/A fixtures (84) benchmarks ✓ |
@@ -275,7 +275,14 @@ odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native
 - Fixtures: 80 total; COVERAGE.md all boxes checked
 - Benchmarks: rst_parse_small 3.3µs, rst_parse_medium 30µs, rst_emit_medium 2.5µs
 
-### Djot reader/writer — 4-Fuzz (2026-03-21)
+### Djot reader/writer — 5-Production (2026-03-23)
+- Pandoc harness: 100% word coverage on djot-reader.djot (ref=931, ours=930); single missing
+  word "html" is in a raw HTML block (Pandoc parses raw content text; we preserve verbatim — correct)
+- Reader fix: `push_text` now merges adjacent text nodes — jotdown emits smart-quote events
+  (RightSingleQuote etc.) as separate events between Str events; merging prevents "Here's" from
+  being split into ["Here", "\u{2019}", "s..."] and losing the joined word from harness coverage
+- Fixtures: 79 total; COVERAGE.md all boxes checked (60 new fixtures added 2026-03-22)
+- Benchmarks: djot_parse_small 7.8µs, djot_parse_medium 49µs, djot_emit_medium 9.8µs
 - fuzz_djot_roundtrip rewritten to correct direction: arbitrary rescribe doc → emit → parse
   (old direction was parse(bytes) → emit → parse, which is vacuous if reader drops constructs)
 - New fuzz target uses FuzzBlock/FuzzInline pattern (same as rst_roundtrip, asciidoc_roundtrip)
@@ -284,9 +291,6 @@ odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native
   marker reinterpretation. Code inlines excluded: adjacent code spans produce ```` `` ````
   delimiters that jotdown re-parses as a 2-backtick verbatim span (TODO: fix writer).
 - 1,005,513 fuzz runs clean (300s, 2026-03-21)
-- 14 new fixtures added: superscript, subscript, underline, image, table, footnote,
-  definition-list, raw-block, raw-inline, math, task-list, div, soft-break, line-break, span
-  (total: 29 fixtures)
 - Math syntax: `$\`...\`$` / `$$\`...\`$$` (dollar+backtick, not `$...$`)
 - Raw block syntax: ` ``` =format` (space before `=`, not `{=format}`)
 

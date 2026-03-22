@@ -10,3 +10,11 @@ description = "Djot reader for rescribe"
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
 jotdown = "0.9"
+
+[dev-dependencies]
+criterion = { workspace = true }
+rescribe-write-djot = { workspace = true }
+
+[[bench]]
+name = "bench"
+harness = false

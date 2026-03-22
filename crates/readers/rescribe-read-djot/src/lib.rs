@@ -396,8 +396,26 @@ impl Converter {
     }
 
     fn push_text(&mut self, text: &str) {
+        // Merge into the previous text node if the last child is already text.
+        let children = if let Some(frame) = self.stack.last_mut() {
+            &mut frame.children
+        } else {
+            &mut self.result
+        };
+        if let Some(last) = children.last_mut()
+            && last.kind.as_str() == node::TEXT
+            && let Some(existing) = last.props.get_str(prop::CONTENT)
+        {
+            let merged = format!("{existing}{text}");
+            last.props.set(prop::CONTENT, merged);
+            return;
+        }
         let node = Node::new(node::TEXT).prop(prop::CONTENT, text.to_string());
-        self.push_node(node);
+        if let Some(frame) = self.stack.last_mut() {
+            frame.children.push(node);
+        } else {
+            self.result.push(node);
+        }
     }
 }
 
