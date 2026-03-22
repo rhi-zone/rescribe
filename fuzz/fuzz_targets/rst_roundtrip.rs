@@ -99,6 +99,28 @@ fn sanitise(s: &str) -> Option<String> {
         while out.starts_with(".. ") {
             out = out[3..].trim().to_string();
         }
+        // RST ":word:" at start of a paragraph is a field list entry.
+        // Strip leading ":word: " until the paragraph no longer starts with one.
+        loop {
+            if !out.starts_with(':') {
+                break;
+            }
+            // Find the closing colon.
+            let rest = &out[1..];
+            if let Some(close) = rest.find(':') {
+                let field_name = &rest[..close];
+                // Only treat as field list if name is non-empty and contains no spaces.
+                if !field_name.is_empty() && !field_name.contains(' ') {
+                    // Strip ":word: " (or ":word:" if at end).
+                    let after = &rest[close + 1..];
+                    out = after.trim_start().to_string();
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
         if out == prev {
             break;
         }
