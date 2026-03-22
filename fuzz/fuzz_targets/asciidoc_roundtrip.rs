@@ -87,6 +87,9 @@ fn sanitise(s: &str) -> Option<String> {
                     // '[' and ']' filtered to prevent inline link/xref/passthrough macro parsing:
                     // [[anchor]], <<anchor>>, xref:[], link:[], pass[...], kbd:[] etc.
                     | '[' | ']'
+                    // '|' filtered to prevent '|===' table delimiter: a paragraph whose
+                    // text begins with '|===' is parsed as a table block opener, not text.
+                    | '|'
             )
         })
         .collect();
