@@ -41,8 +41,8 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
 | djot | 4† | 4† | jotdown | production | production |
-| org | 4 | 2 | hand | harness gaps | harness ✓ fixtures (88) benchmarks ✓ |
-| rst | 4 | 2 | hand | harness gaps | harness ✓ fixtures (80) benchmarks ✓ |
+| org | 5 | 2 | hand | – | harness 100% (writer.org) fixtures (88) benchmarks ✓ |
+| rst | 5 | 2 | hand | – | harness 100% fixtures (80) benchmarks ✓ |
 | asciidoc | 5 | 2 | hand | – | harness N/A fixtures (84) benchmarks ✓ |
 | textile | 4 | 2 | hand | fuzz | harness |
 | muse | 4 | 2 | hand | production | harness |
@@ -267,10 +267,11 @@ odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native
 - Reader promoted to 3-Harness (100% coverage, 6 corpus files, 2026-03-01)
 
 ### RST reader — 5-Production (2026-03-22)
-- Pandoc harness: 96% word coverage (ref=618, ours=639) — promoted to 3-Harness (2026-03-01)
+- Pandoc harness: 100% word coverage on rst-reader.rst (ref=618, ours=668)
 - fuzz_rst_reader: 201K runs clean; fuzz_rst_roundtrip: 467K runs clean (2026-03-22)
-- Fixed 4 parser bugs during fuzzing: heading parse for adornment-char titles (underline + overline
-  paths), heading build using rendered width + clash detection, numbered-list prefix validation
+- Parser fixes: "text::" introductory paragraph now emitted before code block (pending_block
+  pattern); `<url>`_ empty link text uses URL as display text; pending_block loop in main
+  parse avoids losing blocks at EOF
 - Fixtures: 80 total; COVERAGE.md all boxes checked
 - Benchmarks: rst_parse_small 3.3µs, rst_parse_medium 30µs, rst_emit_medium 2.5µs
 
@@ -290,8 +291,11 @@ odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native
 - Raw block syntax: ` ``` =format` (space before `=`, not `{=format}`)
 
 ### Org reader — 5-Production (2026-03-22)
-- Pandoc harness: 97% word coverage — 3-Harness (2026-03-22)
+- Pandoc harness: 100% word coverage on writer.org (ref=919, ours=995); org-select-tags.org
+  at 97% due to Pandoc applying select_tags document filtering (not a parsing gap)
 - fuzz_org_reader: 499K runs clean; fuzz_org_roundtrip: 279K runs clean (2026-03-22)
+- Parser fix: `$` math inline rejected when next char is digit (fixes $20 currency being
+  parsed as math and consuming surrounding words like "socks")
 - Fixtures: 88 total; COVERAGE.md all boxes checked
 - Benchmarks: org_parse_small 3.4µs, org_parse_medium 53µs, org_emit_medium 2.9µs
 
