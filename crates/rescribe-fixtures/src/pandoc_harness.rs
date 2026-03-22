@@ -139,6 +139,28 @@ pub fn word_coverage(reference: &[String], ours: &[String]) -> f64 {
     matched as f64 / reference.len() as f64
 }
 
+/// Returns words present in `reference` but missing (or undercounted) in `ours`,
+/// sorted by deficit descending.  Used for gap diagnosis.
+pub fn missing_words(reference: &[String], ours: &[String]) -> Vec<(String, usize)> {
+    let mut ref_counts: HashMap<&str, usize> = HashMap::new();
+    for w in reference {
+        *ref_counts.entry(w.as_str()).or_default() += 1;
+    }
+    let mut our_counts: HashMap<&str, usize> = HashMap::new();
+    for w in ours {
+        *our_counts.entry(w.as_str()).or_default() += 1;
+    }
+    let mut missing: Vec<(String, usize)> = ref_counts
+        .iter()
+        .filter_map(|(w, &rc)| {
+            let oc = *our_counts.get(*w).unwrap_or(&0);
+            if oc < rc { Some((w.to_string(), rc - oc)) } else { None }
+        })
+        .collect();
+    missing.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    missing
+}
+
 // ---------------------------------------------------------------------------
 // Per-format test descriptor
 // ---------------------------------------------------------------------------
@@ -330,6 +352,8 @@ pub struct RunResult {
     pub ref_words: usize,
     /// Our word count.
     pub our_words: usize,
+    /// Words in the pandoc reference that are absent or undercounted in our output.
+    pub missing: Vec<(String, usize)>,
 }
 
 impl RunResult {
@@ -366,6 +390,7 @@ pub fn run_entry(
                 coverage: None,
                 ref_words: 0,
                 our_words: 0,
+                missing: vec![],
             };
         }
     };
@@ -392,28 +417,30 @@ pub fn run_entry(
     };
 
     // Oracle: run pandoc and compare text.
-    let (coverage, ref_words, our_words) = if let (Some(pbin), Some(our)) = (pandoc, &our_doc) {
-        match pandoc_to_json(pbin, entry.pandoc_from, &file) {
-            None => (None, 0, 0),
-            Some(json) => {
-                let ref_doc = rescribe_read_pandoc_json::parse(&json)
-                    .map(|r| r.value)
-                    .ok();
-                match ref_doc {
-                    None => (None, 0, 0),
-                    Some(ref_doc) => {
-                        let ref_words = extract_words(&ref_doc);
-                        let our_words_v = extract_words(our);
-                        let cov = word_coverage(&ref_words, &our_words_v);
-                        (Some(cov), ref_words.len(), our_words_v.len())
+    let (coverage, ref_words, our_words, missing) =
+        if let (Some(pbin), Some(our)) = (pandoc, &our_doc) {
+            match pandoc_to_json(pbin, entry.pandoc_from, &file) {
+                None => (None, 0, 0, vec![]),
+                Some(json) => {
+                    let ref_doc = rescribe_read_pandoc_json::parse(&json)
+                        .map(|r| r.value)
+                        .ok();
+                    match ref_doc {
+                        None => (None, 0, 0, vec![]),
+                        Some(ref_doc) => {
+                            let ref_words = extract_words(&ref_doc);
+                            let our_words_v = extract_words(our);
+                            let cov = word_coverage(&ref_words, &our_words_v);
+                            let m = missing_words(&ref_words, &our_words_v);
+                            (Some(cov), ref_words.len(), our_words_v.len(), m)
+                        }
                     }
                 }
             }
-        }
-    } else {
-        let our_words = our_doc.as_ref().map_or(0, |d| extract_words(d).len());
-        (None, 0, our_words)
-    };
+        } else {
+            let our_words = our_doc.as_ref().map_or(0, |d| extract_words(d).len());
+            (None, 0, our_words, vec![])
+        };
 
     RunResult {
         format: entry.format,
@@ -423,6 +450,7 @@ pub fn run_entry(
         coverage,
         ref_words,
         our_words,
+        missing,
     }
 }
 
@@ -431,6 +459,9 @@ pub fn run_entry(
 // ---------------------------------------------------------------------------
 
 /// Print a summary table of results to stderr.
+///
+/// For any format with coverage <100%, the missing words are printed on the
+/// following lines so gaps can be diagnosed without a separate test run.
 pub fn print_report(results: &[RunResult], pandoc_available: bool) {
     eprintln!();
     eprintln!("{:<12} {:<38} {:<8} Coverage", "Format", "File", "Parse");
@@ -449,18 +480,32 @@ pub fn print_report(results: &[RunResult], pandoc_available: bool) {
         if let Some(ref e) = r.parse_error {
             eprintln!("             error: {e}");
         }
+        // Show missing words when coverage is not 100%.
+        if !r.missing.is_empty() {
+            let missing_str: Vec<String> = r
+                .missing
+                .iter()
+                .map(|(w, n)| if *n > 1 { format!("{w}(×{n})") } else { w.clone() })
+                .collect();
+            eprintln!("             missing: {}", missing_str.join(", "));
+        }
     }
     eprintln!("{}", "-".repeat(75));
 
     let total = results.len();
     let parsed = results.iter().filter(|r| r.parse_ok).count();
+    let perfect = results
+        .iter()
+        .filter(|r| r.coverage.is_some_and(|c| c >= 1.0))
+        .count();
     let high_cov = results
         .iter()
         .filter(|r| r.coverage.is_some_and(|c| c >= 0.9))
         .count();
     eprintln!("Parse: {parsed}/{total} OK");
     if pandoc_available {
-        eprintln!("Coverage ≥90%: {high_cov}/{total}");
+        let with_cov = results.iter().filter(|r| r.coverage.is_some()).count();
+        eprintln!("Coverage 100%: {perfect}/{with_cov}  ≥90%: {high_cov}/{with_cov}");
     }
     eprintln!();
 }
