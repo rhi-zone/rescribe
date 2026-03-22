@@ -1,0 +1,10 @@
+{
+  "description": "Footnote reference inside a list item, with definition following the list",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "a" } }
+  ]
+}

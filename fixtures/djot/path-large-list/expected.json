@@ -1,0 +1,7 @@
+{
+  "description": "List with 1000 items is parsed without panic or excessive resource use",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 1000 }
+  ]
+}

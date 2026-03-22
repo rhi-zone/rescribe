@@ -1,0 +1,10 @@
+{
+  "description": "Span with class attribute inside a heading is parsed correctly",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Title with " } },
+    { "path": "/0/1", "kind": "span" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "styled" } }
+  ]
+}

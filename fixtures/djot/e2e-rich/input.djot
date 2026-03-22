@@ -1,0 +1,21 @@
+# Rich Document
+
+::: note
+This div contains a [styled]{.highlight} span and inline math $`x^2`$.
+:::
+
+## References
+
+See [example site](https://example.com) for more.
+
+Definition list:
+
+: Term One
+  :: First definition with _emphasis_.
+
+: Term Two
+  :: Second definition.
+
+Footnote reference.[^ref]
+
+[^ref]: The reference content.

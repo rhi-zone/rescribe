@@ -10,7 +10,7 @@ with an unambiguous grammar and richer inline/block extensibility.
 - [x] paragraph — `paragraph`
 - [x] heading (ATX-style, levels 1–6) — `heading`
 - [x] heading h2 — `heading-h2`
-- [ ] heading h3–h6 individually — (missing)
+- [x] heading h3–h6 individually — `heading-h3`, `heading-h4`, `heading-h5`, `heading-h6`
 - [x] fenced code block — `code-block`
 - [x] blockquote (rare syntax `>`) — `rare-blockquote`
 - [x] unordered list — `list-unordered`
@@ -21,15 +21,15 @@ with an unambiguous grammar and richer inline/block extensibility.
 - [x] footnote definition — `footnote`
 - [x] div (fenced with `:::`) — `div`
 - [x] raw block — `raw-block`
-- [ ] definition list — `definition-list`
-- [ ] pipe table (alternative table syntax) — (missing)
-- [ ] block-level attributes (`{.class #id key=val}`) — (missing)
-- [ ] thematic break (alternative forms) — (missing)
+- [x] definition list — `definition-list`
+- [x] pipe table (alternative table syntax) — `table` (Djot table syntax is already pipe-table)
+- [x] block-level attributes (`{.class #id key=val}`) — `block-attributes`
+- [x] thematic break (alternative forms) — `thematic-break-alt`
 
 ## Inline constructs
 - [x] emphasis (italic, `_..._`) — `italic`
-- [x] strong (bold, `**...**`) — `bold`
-- [x] strikethrough (`{~~...~~}`) — `rare-strikeout`
+- [x] strong (bold, `*...*`) — `bold`
+- [x] strikethrough (`{-...-}`) — `rare-strikeout`
 - [x] underline (`{+...+}`) — `underline`
 - [x] mark / highlight (`{=...=}`) — `mark`
 - [x] subscript (`~...~`) — `subscript`
@@ -44,74 +44,74 @@ with an unambiguous grammar and richer inline/block extensibility.
 - [x] span (`[text]{attrs}`) — `span`
 - [x] math inline — `math`
 - [x] math display — `math-display`
-- [ ] autolink (`<url>`) — (missing)
-- [ ] smart punctuation (em-dash, en-dash, ellipsis, smart quotes) — (missing)
-- [ ] insert (`{++...++}`) — (missing)
-- [ ] delete (`{--...--}`) — (missing)
+- [x] autolink (`<url>`) — `autolink`
+- [x] smart punctuation (em-dash, en-dash, ellipsis, smart quotes) — `smart-punctuation`
+- [x] insert (`{+...+}`) — `insert`
+- [x] delete (`{-...-}`) — `delete`
 
 ## Properties
 - [x] fenced code block language — `code-block-lang`
-- [ ] heading level — `heading` (h1 and h2 covered; h3–h6 missing)
-- [ ] link title — (missing)
-- [ ] image alt text — `image`
-- [ ] image title — (missing)
-- [ ] task list item checked state — `task-list`
-- [ ] block-level class attribute — (missing)
-- [ ] block-level id attribute — (missing)
-- [ ] span class attribute — `span`
-- [ ] inline-level id attribute — (missing)
-- [ ] div class attribute — `div`
-- [ ] raw block format — `raw-block`
-- [ ] raw inline format — `raw-inline`
-- [ ] footnote reference label — `footnote`
-- [ ] table cell alignment — (missing)
-- [ ] ordered list style (decimal, roman, alpha) — (missing)
-- [ ] ordered list start number — (missing)
+- [x] heading level — `heading`, `heading-h2`, `heading-h3`, `heading-h4`, `heading-h5`, `heading-h6`
+- [x] link title — `link-title`
+- [x] image alt text — `image`
+- [x] image title — `image-title`
+- [x] task list item checked state — `task-list`
+- [x] block-level class attribute — `block-attributes`
+- [x] block-level id attribute — `block-attributes`
+- [x] span class attribute — `span`
+- [x] inline-level id attribute — `link-title`
+- [x] div class attribute — `div`
+- [x] raw block format — `raw-block`
+- [x] raw inline format — `raw-inline`
+- [x] footnote reference label — `footnote`
+- [x] table cell alignment — `table-alignment`
+- [x] ordered list style (decimal, roman, alpha) — `list-alpha`, `list-roman`
+- [x] ordered list start number — `list-ordered-start`
 
 ## Composition (integration)
-- [ ] emphasis inside table cell — (missing)
-- [ ] footnote inside list item — (missing)
-- [ ] math inside blockquote — (missing)
-- [ ] span with attributes inside heading — (missing)
-- [ ] div containing list and table — (missing)
-- [ ] nested lists — (missing)
-- [ ] raw block inside div — (missing)
-- [ ] strikethrough inside emphasis — (missing)
-- [ ] link inside strong — (missing)
+- [x] emphasis inside table cell — `emphasis-in-table`
+- [x] footnote inside list item — `footnote-in-list`
+- [x] math inside blockquote — `math-in-blockquote`
+- [x] span with attributes inside heading — `span-in-heading`
+- [x] div containing list and table — `div-with-list-and-table`
+- [x] nested lists — `nested-lists`
+- [x] raw block inside div — `raw-block-in-div`
+- [x] strikethrough inside emphasis — `strikethrough-in-emphasis`
+- [x] link inside strong — `link-in-strong`
 
 ## End-to-end
-- [ ] realistic multi-section document — (missing)
-- [ ] document using div, span, attributes, math, footnotes — (missing)
+- [x] realistic multi-section document — `e2e-multi-section`
+- [x] document using div, span, attributes, math, footnotes — `e2e-rich`
 
 ## Rare
 - [x] blockquote — `rare-blockquote`
 - [x] strikethrough — `rare-strikeout`
-- [ ] setext-style thematic break — (missing)
-- [ ] autolink — (missing)
-- [ ] smart punctuation — (missing)
-- [ ] insert / delete inline — (missing)
-- [ ] definition list — `definition-list`
-- [ ] ordered list with letter numbering — (missing)
-- [ ] ordered list with roman numerals — (missing)
-- [ ] nested spans with multiple attributes — (missing)
-- [ ] block attribute on fenced code block — (missing)
-- [ ] link reference definition — (missing)
+- [x] setext-style thematic break — `rare-thematic-break`
+- [x] autolink — `autolink`
+- [x] smart punctuation — `smart-punctuation`
+- [x] insert / delete inline — `rare-insert-delete`
+- [x] definition list — `definition-list`
+- [x] ordered list with letter numbering — `list-alpha`
+- [x] ordered list with roman numerals — `list-roman`
+- [x] nested spans with multiple attributes — `nested-spans`
+- [x] block attribute on fenced code block — `block-attr-on-code`
+- [x] link reference definition — `link-reference`
 
 ## Adversarial
 - [x] empty document — `adv-empty`
-- [ ] whitespace-only document — (missing)
-- [ ] unclosed fenced code block — (missing)
-- [ ] unclosed inline markup — (missing)
-- [ ] broken link (no closing paren) — (missing)
-- [ ] malformed attribute block (`{...` unclosed) — (missing)
-- [ ] malformed table — (missing)
-- [ ] footnote reference with no definition — (missing)
-- [ ] deeply nested divs — (missing)
+- [x] whitespace-only document — `adv-whitespace-only`
+- [x] unclosed fenced code block — `adv-unclosed-fence`
+- [x] unclosed inline markup — `adv-unclosed-inline`
+- [x] broken link (no closing paren) — `adv-broken-link`
+- [x] malformed attribute block (`{...` unclosed) — `adv-malformed-attr`
+- [x] malformed table — `adv-malformed-table`
+- [x] footnote reference with no definition — `adv-footnote-no-def`
+- [x] deeply nested divs — `adv-nested-divs`
 
 ## Pathological
-- [ ] 1000-item list — (missing)
-- [ ] deeply nested divs (100 levels) — (missing)
-- [ ] very long paragraph (>64 KB) — (missing)
-- [ ] large table (many rows/columns) — (missing)
-- [ ] many footnotes — (missing)
-- [ ] document with many span attributes — (missing)
+- [x] 1000-item list — `path-large-list`
+- [x] deeply nested divs (100 levels) — `path-deep-divs`
+- [x] very long paragraph (>64 KB) — `path-long-paragraph`
+- [x] large table (many rows/columns) — `path-large-table`
+- [x] many footnotes — `path-many-footnotes`
+- [x] document with many span attributes — `path-many-spans`

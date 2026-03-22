@@ -1,0 +1,8 @@
+{
+  "description": "Inline math inside a blockquote is parsed correctly",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

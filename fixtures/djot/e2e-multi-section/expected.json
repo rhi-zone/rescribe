@@ -1,0 +1,14 @@
+{
+  "description": "Realistic multi-section document with headings, paragraphs, list, table, and footnote",
+  "category": "e2e",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/2", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/3", "kind": "list", "props": { "ordered": false } },
+    { "path": "/4", "kind": "table" },
+    { "path": "/5", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/6", "kind": "paragraph" },
+    { "path": "/7", "kind": "footnote_def", "props": { "label": "1" } }
+  ]
+}

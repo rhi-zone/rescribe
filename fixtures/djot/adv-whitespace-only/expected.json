@@ -1,0 +1,7 @@
+{
+  "description": "Document containing only spaces and blank lines produces an empty document",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 0 }
+  ]
+}

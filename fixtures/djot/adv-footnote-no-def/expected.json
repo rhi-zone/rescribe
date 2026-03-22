@@ -1,0 +1,7 @@
+{
+  "description": "Footnote reference with no corresponding definition is handled gracefully without panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

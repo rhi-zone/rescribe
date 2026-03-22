@@ -1,0 +1,7 @@
+{
+  "description": "Smart punctuation: em-dash (---), en-dash (--), and ellipsis (...) are converted to Unicode characters",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

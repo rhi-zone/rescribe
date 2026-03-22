@@ -1,0 +1,15 @@
+{
+  "description": "Rich document using div, span, math, link, definition list, and footnote together",
+  "category": "e2e",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/1", "kind": "div" },
+    { "path": "/1/0", "kind": "paragraph" },
+    { "path": "/2", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/3", "kind": "paragraph" },
+    { "path": "/4", "kind": "paragraph" },
+    { "path": "/5", "kind": "definition_list" },
+    { "path": "/6", "kind": "paragraph" },
+    { "path": "/7", "kind": "footnote_def", "props": { "label": "ref" } }
+  ]
+}

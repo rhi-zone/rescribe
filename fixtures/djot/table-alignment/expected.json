@@ -1,0 +1,16 @@
+{
+  "description": "Table with left, center, and right column alignment specified via separator row colons; reader produces table_header and table_cell nodes",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_header" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Left" } },
+    { "path": "/0/0/1", "kind": "table_header" },
+    { "path": "/0/0/2", "kind": "table_header" },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" },
+    { "path": "/0/1/1", "kind": "table_cell" },
+    { "path": "/0/1/2", "kind": "table_cell" }
+  ]
+}

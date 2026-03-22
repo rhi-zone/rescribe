@@ -1,0 +1,7 @@
+{
+  "description": "Paragraph with 500 span elements each with a class attribute is parsed without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

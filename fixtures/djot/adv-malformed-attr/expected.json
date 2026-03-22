@@ -1,0 +1,5 @@
+{
+  "description": "Malformed attribute block with unclosed brace is handled gracefully without panic",
+  "category": "adversarial",
+  "assertions": []
+}

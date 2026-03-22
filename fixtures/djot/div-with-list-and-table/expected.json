@@ -1,0 +1,9 @@
+{
+  "description": "Div block containing both a list and a table as children",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    { "path": "/0/0", "kind": "list" },
+    { "path": "/0/1", "kind": "table" }
+  ]
+}

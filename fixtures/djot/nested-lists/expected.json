@@ -1,0 +1,9 @@
+{
+  "description": "Nested unordered list: inner list is a child of the outer list_item",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}

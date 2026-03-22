@@ -1,0 +1,9 @@
+{
+  "description": "Delete markup {-...-} maps to strikeout node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "strikeout" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "deleted content" } }
+  ]
+}

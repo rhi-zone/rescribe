@@ -1,0 +1,9 @@
+{
+  "description": "Table with 50 data rows and 20 columns is parsed without panic or excessive resource use",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_header" }
+  ]
+}

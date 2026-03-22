@@ -1,0 +1,8 @@
+{
+  "description": "Block-level attributes precede a block; reader currently passes attributes through jotdown's attrs parameter",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "This paragraph has block attributes." } }
+  ]
+}

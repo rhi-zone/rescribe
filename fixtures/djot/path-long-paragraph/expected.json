@@ -1,0 +1,7 @@
+{
+  "description": "Single paragraph containing more than 64 KB of text is parsed without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

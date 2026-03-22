@@ -1,0 +1,7 @@
+{
+  "description": "Block attribute before a fenced code block; reader produces code_block node",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "code_block" }
+  ]
+}

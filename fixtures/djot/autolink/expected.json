@@ -1,0 +1,8 @@
+{
+  "description": "Autolink <url> produces a link node with the URL",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "link", "props": { "url": "https://example.com" } }
+  ]
+}

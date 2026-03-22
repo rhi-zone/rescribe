@@ -1,0 +1,8 @@
+{
+  "description": "H3 heading has level 3 property",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Heading Level 3" } }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "description": "Table with no separator row (no header/alignment row) is handled gracefully without panic",
+  "category": "adversarial",
+  "assertions": []
+}

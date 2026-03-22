@@ -1,0 +1,10 @@
+{
+  "description": "Link node nested inside a strong node",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "strong" },
+    { "path": "/0/0/0", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "bold link" } }
+  ]
+}

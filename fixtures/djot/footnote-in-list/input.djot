@@ -1,0 +1,4 @@
+- Item with note.[^a]
+- Another item.
+
+[^a]: The footnote text.

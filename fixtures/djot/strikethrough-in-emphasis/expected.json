@@ -1,0 +1,10 @@
+{
+  "description": "Strikeout node (delete markup) nested inside emphasis node",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "emphasis" },
+    { "path": "/0/0/0", "kind": "strikeout" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "struck inside italic" } }
+  ]
+}

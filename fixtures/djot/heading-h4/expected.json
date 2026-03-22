@@ -1,0 +1,8 @@
+{
+  "description": "H4 heading has level 4 property",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 4 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Heading Level 4" } }
+  ]
+}

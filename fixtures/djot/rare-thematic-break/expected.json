@@ -1,0 +1,9 @@
+{
+  "description": "Thematic break using dash form (- - -) is an uncommon but valid Djot thematic break syntax",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "horizontal_rule" },
+    { "path": "/2", "kind": "paragraph" }
+  ]
+}

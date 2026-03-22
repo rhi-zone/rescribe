@@ -1,0 +1,20 @@
+# Introduction
+
+This document demonstrates multiple Djot constructs working together.
+
+## Features
+
+- Headings at multiple levels
+- Unordered lists
+- Tables with data
+
+| Feature | Status |
+|---------|--------|
+| Parsing | Done   |
+| Writing | Done   |
+
+## Notes
+
+See footnote for details.[^1]
+
+[^1]: This footnote provides additional context.

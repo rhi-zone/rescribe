@@ -1,0 +1,8 @@
+{
+  "description": "H6 heading has level 6 property",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 6 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Heading Level 6" } }
+  ]
+}

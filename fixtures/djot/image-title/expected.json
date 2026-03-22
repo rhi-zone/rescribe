@@ -1,0 +1,8 @@
+{
+  "description": "Image with alt text extracted from children and title via attribute; reader populates alt prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "logo.png", "alt": "A logo" } }
+  ]
+}

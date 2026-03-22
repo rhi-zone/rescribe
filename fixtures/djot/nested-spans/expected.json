@@ -1,0 +1,9 @@
+{
+  "description": "Nested spans with multiple class attributes: inner span nested inside outer span",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "span" },
+    { "path": "/0/1/1", "kind": "span" }
+  ]
+}

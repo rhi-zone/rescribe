@@ -1,0 +1,8 @@
+{
+  "description": "Raw block nested inside a div block",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    { "path": "/0/0", "kind": "raw_block", "props": { "format": "html" } }
+  ]
+}
