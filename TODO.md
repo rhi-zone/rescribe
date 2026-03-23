@@ -66,14 +66,33 @@ The formats people actually use for document authoring and conversion.
 Target: **5-Production**.
 
 Markdown family (commonmark, gfm, markdown, markdown-strict, multimarkdown), HTML,
-DOCX, EPUB, AZW3, Org, RST, AsciiDoc, LaTeX, Djot, ODT, PPTX, XLSX, PDF
+DOCX, EPUB, AZW3, Org, RST, AsciiDoc, Djot, ODT, PPTX, XLSX, PDF
+
+### Tier A (read-limited) — Production priority, last in queue
+
+Formats where the **write direction is high quality** (IR → LaTeX/Typst produces correct,
+well-structured output) but the **read direction is extraction-only**: the authoring
+language is Turing-complete, so arbitrary user-defined macros/functions cannot be resolved
+without full execution. Round-trip fidelity is architecturally impossible in the read
+direction; the write direction is fine.
+
+Read strategy: known constructs (standard packages/builtins) → IR; unknown constructs
+→ `raw_inline`/`raw_block` with a fidelity warning. No round-trip fuzz target (the read
+direction cannot guarantee it). Quality bar for reading is extraction fidelity for
+real-world documents using common packages.
+
+These are last in the Tier A queue because the reader surface area is enormous (just the
+common LaTeX packages — amsmath, biblatex, hyperref, geometry, listings — is months of
+work) and the reader quality ceiling is fundamentally lower than interchange formats.
+
+LaTeX, Typst
 
 ### Tier B — Correctness, not urgent
 
 Formats with real use cases but lower conversion frequency.
 Target: **3-Harness** (or 2-Fixtures where harness is N/A), fuzz as bandwidth allows.
 
-Typst, MediaWiki, DocBook, JATS, TEI, FB2, RTF, Man,
+MediaWiki, DocBook, JATS, TEI, FB2, RTF, Man,
 BibTeX, BibLaTeX, CSL-JSON, RIS, EndNote XML,
 CSV, TSV, OPML, iPynb, Pandoc JSON, Native,
 MOBI, KFX
@@ -182,12 +201,17 @@ The format tiers below determine priority order within this model.
 
 ### Vertical priority order (Tier A)
 
-1. `rtf-fmt` — highest risk, most isolated, no viable crate exists
-2. `rst-fmt` — large parser, complex spec, `docutils` is the reference
-3. `asciidoc` — similar scope; `asciidoctor` as oracle
-4. `org-fmt` — reader at 4-Fuzz (2026-03-21); writer still at 2-Fixtures; coverage gaps remain
-5. `djot-fmt` — jotdown has confirmed bugs; djot spec is clean and small
-6. Remaining Tier A formats (epub, odt, azw3) as bandwidth allows
+1. `rtf-fmt` — highest risk, most isolated, no viable crate exists ✓
+2. `rst-fmt` — large parser, complex spec, `docutils` is the reference ✓
+3. `asciidoc` — similar scope; `asciidoctor` as oracle ✓
+4. `org-fmt` — reader at 4-Fuzz (2026-03-21); writer still at 2-Fixtures; coverage gaps remain ✓
+5. `djot-fmt` — jotdown has confirmed bugs; djot spec is clean and small ✓
+6. `odt` — no library; hand-rolled; ODF is a real interchange format
+7. `epub` — library-backed (epub/epub-builder)
+8. `azw3` — not yet implemented
+9. LaTeX, Typst — read-limited; deferred until all other tiers complete; writer is
+   high quality but reader quality ceiling is bounded by package recognition.
+   See "Tier A (read-limited)" above.
 
 ### Milestone: M1 ✓
 
