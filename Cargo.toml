@@ -8,6 +8,7 @@ members = [
     "crates/formats/*",
     "crates/readers/*",
     "crates/writers/*",
+    "crates/tools/*",
     "crates/rescribe-transforms",
     "crates/rescribe-cli",
     "crates/rescribe-fixtures",
@@ -18,6 +19,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rhi-zone/rescribe"
+readme = "README.md"
 
 [workspace.dependencies]
 # Internal crates
@@ -179,12 +181,20 @@ rescribe = { path = "crates/rescribe" }
 # Test infrastructure
 rescribe-fixtures = { path = "crates/rescribe-fixtures" }
 
+# ooxml internal crates
+ooxml-opc = { path = "crates/formats/ooxml-opc" }
+ooxml-xml = { path = "crates/formats/ooxml-xml" }
+ooxml-dml = { path = "crates/formats/ooxml-dml" }
+ooxml-omml = { path = "crates/formats/ooxml-omml" }
+ooxml-wml = { path = "crates/formats/ooxml-wml" }
+ooxml-sml = { path = "crates/formats/ooxml-sml" }
+ooxml-pml = { path = "crates/formats/ooxml-pml" }
+ooxml-codegen = { path = "crates/tools/ooxml-codegen" }
+ooxml-corpus = { path = "crates/tools/ooxml-corpus" }
+ooxml-fixtures = { path = "crates/tools/ooxml-fixtures" }
+
 # External dependencies
 typst-syntax = "0.14"
-ooxml-wml = "0.1.1-alpha.2"
-ooxml-sml = "0.1.1-alpha.2"
-ooxml-pml = "0.1.1-alpha.2"
-ooxml-dml = "0.1.1-alpha.2"
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
@@ -194,8 +204,13 @@ pulldown-cmark = "0.13"
 html5ever = "0.36"
 markup5ever_rcdom = "0.36"
 pdf-extract = "0.10"
-quick-xml = "0.39"
+quick-xml = { version = "0.39", features = ["serialize"] }
 toml = "0.8"
+zip = "7"
+base64 = "0.22"
+rayon = "1"
+insta = "1"
+rusqlite = { version = "0.38", features = ["bundled"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [profile.dev]
