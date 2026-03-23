@@ -5,7 +5,7 @@ use std::fs;
 fn test_parse_sml() {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../spec/OfficeOpenXML-RELAXNG-Transitional/sml.rnc"
+        "/../../../spec/OfficeOpenXML-RELAXNG-Transitional/sml.rnc"
     );
     let input = fs::read_to_string(path).expect("failed to read sml.rnc");
 

@@ -5,7 +5,7 @@ use std::fs;
 fn test_parse_wml_rnc() {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc"
+        "/../../../spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc"
     );
     let input = fs::read_to_string(path).expect("failed to read wml.rnc");
 

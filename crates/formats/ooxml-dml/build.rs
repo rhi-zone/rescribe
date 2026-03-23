@@ -8,12 +8,12 @@ use std::path::Path;
 fn main() {
     let spec_dir = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../spec/OfficeOpenXML-RELAXNG-Transitional"
+        "/../../../spec/OfficeOpenXML-RELAXNG-Transitional"
     );
-    let names_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../spec/ooxml-names.yaml");
+    let names_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../spec/ooxml-names.yaml");
     let features_path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../spec/ooxml-features.yaml"
+        "/../../../spec/ooxml-features.yaml"
     );
 
     // Paths to schemas

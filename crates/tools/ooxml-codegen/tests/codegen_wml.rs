@@ -7,7 +7,7 @@ fn test_eg_definitions() {
 
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc"
+        "/../../../spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc"
     );
     let input = fs::read_to_string(path).expect("failed to read wml.rnc");
     let schema = parse_rnc(&input).expect("failed to parse wml.rnc");
@@ -47,7 +47,7 @@ fn is_direct_element(pattern: &ooxml_codegen::ast::Pattern) -> bool {
 fn test_generate_wml() {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc"
+        "/../../../spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc"
     );
     let input = fs::read_to_string(path).expect("failed to read wml.rnc");
 
