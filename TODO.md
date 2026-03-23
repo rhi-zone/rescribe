@@ -276,6 +276,59 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Benchmarks: djot_parse_small 7.8µs, djot_parse_medium 49µs, djot_emit_medium 9.8µs
   - [x] Fuzz: 1M+ runs clean (2026-03-21)
   - Note: writer still at 4-Fuzz (fuzz_djot_roundtrip 1M runs clean); writer to 5-Production deferred
+
+---
+
+## Standalone crate API completion (level 2 & 3)
+
+Goal: every format crate ships all five API modes as separate Cargo features (all on by
+default). This is the "Rust ecosystem (any consumer)" deliverable — useful entirely outside
+rescribe. See CLAUDE.md vertical completion checklist for the full spec.
+
+Five modes: `ast` · `stream` · `batch` · `w-stream` · `w-build`
+
+### `djot-fmt` — write from scratch (jotdown has confirmed bugs + unfriendly API)
+
+jotdown has a confirmed char-reordering bug (`\^` adjacent to span `^`) and emits smart
+punctuation as separate events rather than folding into text (unlike pulldown-cmark). A
+`djot-fmt` standalone crate is the correct ecosystem contribution; the Djot spec is clean
+and small.
+
+- [ ] Create `crates/formats/djot-fmt/` with `ast.rs` / `parse.rs` / `emit.rs` / `events.rs`
+- [ ] AST covering full Djot spec: all block types, all inline types, attributes, footnotes,
+  definition lists, math, raw blocks, task lists, tables
+- [ ] `parse(input: &str) -> (DjotDoc, Vec<Diagnostic>)` — infallible, Span on every node
+- [ ] `emit(ast: &DjotDoc) -> String` — builder writer
+- [ ] `events(input: &str) -> impl Iterator<Item = Event>` — streaming, no full AST,
+  smart punctuation folded into text (not separate variants)
+- [ ] `batch` chunk-driven parser
+- [ ] Streaming writer (`w-stream`)
+- [ ] Fuzz: `fuzz_djot_reader` (no-panic) + `fuzz_djot_roundtrip` (parse(emit(ast))==ast)
+- [ ] Update `rescribe-read-djot` to use `djot-fmt` instead of jotdown
+- [ ] Pandoc harness still 100% after migration
+- [ ] Benchmarks vs jotdown baseline
+
+### `rst-fmt` — API modes missing
+
+- [ ] `stream`: `events(input: &str) -> impl Iterator<Item = Event>` pull iterator
+- [ ] `batch`: chunk-driven `Parser` (feed/finish), O(working state)
+- [ ] `w-stream`: closure/visitor writer (currently has minimal `emit()` only)
+- [ ] `w-build`: `emit(ast: &RstDoc) -> String` (trivial wrapper over w-stream)
+- [ ] Parser gaps: table parsing, footnote parsing
+
+### `org-fmt` — API modes missing
+
+- [ ] `stream`: pull iterator
+- [ ] `batch`: chunk-driven parser
+- [ ] `w-stream`: closure/visitor writer
+- [ ] Parser/writer gaps: blockquote nesting, footnote definitions, figure/caption blocks
+
+### `asciidoc` — API modes missing
+
+- [ ] `stream`: pull iterator
+- [ ] `batch`: chunk-driven parser
+- [ ] `w-stream`: full streaming writer (currently minimal `emit()`)
+- [ ] Parser gaps: table parsing, footnote parsing, math parsing
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)
 - [ ] DOCX, PPTX, XLSX (ooxml-* backed; same) — DOCX reader at 5-Production (2026-03-03); others at 4-Fuzz; gaps below
