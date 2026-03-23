@@ -3,7 +3,7 @@
 use crate::Properties;
 
 /// A content node in the document tree.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Node {
     /// Node type (e.g., "paragraph", "heading", "table").
     pub kind: NodeKind,
@@ -62,6 +62,18 @@ impl Node {
     pub fn span(mut self, span: Span) -> Self {
         self.span = Some(span);
         self
+    }
+
+    /// Strip all source spans from this node and its descendants (in place).
+    ///
+    /// Useful for structural comparison: two trees produced by different parsers
+    /// may assign different byte ranges to the same construct; stripping spans
+    /// before `assert_eq!` gives a source-position-agnostic comparison.
+    pub fn strip_spans(&mut self) {
+        self.span = None;
+        for child in &mut self.children {
+            child.strip_spans();
+        }
     }
 }
 

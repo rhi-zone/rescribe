@@ -283,11 +283,7 @@ impl<'a> Converter<'a> {
                     // Extract text before this child (gap between current_pos and child_start)
                     if child_start > current_pos {
                         let gap_text = &self.source[offset + current_pos..offset + child_start];
-                        if !gap_text.is_empty() {
-                            nodes.push(
-                                Node::new(node::TEXT).prop(prop::CONTENT, gap_text.to_string()),
-                            );
-                        }
+                        push_gap_text(gap_text, &mut nodes);
                     }
 
                     // Process the child node
@@ -301,33 +297,23 @@ impl<'a> Converter<'a> {
                 // Extract text after the last child
                 if current_pos < root_end {
                     let gap_text = &self.source[offset + current_pos..offset + root_end];
-                    if !gap_text.is_empty() {
-                        nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, gap_text.to_string()));
-                    }
+                    push_gap_text(gap_text, &mut nodes);
                 }
             } else {
-                // Root has no children - extract text directly from the root node
-                // This happens for simple text content like "Hello World"
+                // Root has no children — extract text from the root, splitting on
+                // `\n` to emit soft_break nodes for any in-paragraph line breaks.
                 let text = self.inline_text(&root, offset).to_string();
-                if !text.is_empty() {
-                    nodes.push(self.with_inline_span(
-                        Node::new(node::TEXT).prop(prop::CONTENT, text),
-                        &root,
-                        offset,
-                    ));
-                }
+                push_gap_text(&text, &mut nodes);
             }
 
             merge_text_nodes(&mut nodes);
             nodes
         } else {
-            // Fallback: treat as plain text
+            // Fallback: treat as plain text, splitting on `\n` for soft breaks.
             let text = self.node_text(inline_block_node).to_string();
-            if text.is_empty() {
-                Vec::new()
-            } else {
-                vec![Node::new(node::TEXT).prop(prop::CONTENT, text)]
-            }
+            let mut nodes = Vec::new();
+            push_gap_text(&text, &mut nodes);
+            nodes
         }
     }
 
@@ -337,13 +323,8 @@ impl<'a> Converter<'a> {
         let kind = tsnode.kind();
 
         match kind {
-            "text" | "soft_line_break" => {
-                let text = self.inline_text(tsnode, offset);
-                let text = if kind == "soft_line_break" {
-                    " ".to_string()
-                } else {
-                    text.to_string()
-                };
+            "text" => {
+                let text = self.inline_text(tsnode, offset).to_string();
                 if text.is_empty() {
                     return None;
                 }
@@ -354,8 +335,22 @@ impl<'a> Converter<'a> {
                 ))
             }
 
+            "soft_line_break" => {
+                // Emit a soft_break node — the gap text extraction already handles
+                // bare `\n` in gaps; this covers explicit soft_line_break tree nodes.
+                Some(self.with_inline_span(Node::new(node::SOFT_BREAK), tsnode, offset))
+            }
+
             "hard_line_break" => {
-                Some(self.with_inline_span(Node::new(node::LINE_BREAK), tsnode, offset))
+                let mut n = Node::new(node::LINE_BREAK);
+                if self.preserve_spans {
+                    // Detect backslash vs two-space hard break from the source
+                    let start = offset + tsnode.start_byte();
+                    if self.source.as_bytes().get(start) == Some(&b'\\') {
+                        n = n.prop(prop::MD_BREAK_CHAR, "\\");
+                    }
+                }
+                Some(self.with_inline_span(n, tsnode, offset))
             }
 
             "emphasis" => {
@@ -392,7 +387,12 @@ impl<'a> Converter<'a> {
             }
 
             "strikethrough" => {
-                let children = self.process_inline_children(tsnode, offset);
+                let mut children = self.process_inline_children(tsnode, offset);
+                // tree-sitter-md nests ~~text~~ as strikethrough(strikethrough(text)).
+                // Flatten one level: if the only child is already a STRIKEOUT, use its children.
+                if children.len() == 1 && children[0].kind.as_str() == node::STRIKEOUT {
+                    children = children.remove(0).children;
+                }
                 Some(self.with_inline_span(
                     Node::new(node::STRIKEOUT).children(children),
                     tsnode,
@@ -728,48 +728,56 @@ impl<'a> Converter<'a> {
     }
 
     fn convert_list(&mut self, tsnode: &tree_sitter::Node) -> Option<Node> {
-        // Determine if ordered by checking first list item marker
+        // Determine if ordered and parse marker from first list item
         let mut ordered = false;
         let mut list_marker: Option<char> = None;
+        let mut start_num: Option<i64> = None;
         let mut cursor = tsnode.walk();
         for child in tsnode.children(&mut cursor) {
             if child.kind() == "list_item" {
-                // Check for list_marker_dot or list_marker_paren
                 let mut item_cursor = child.walk();
-                if let Some(item_child) = child.children(&mut item_cursor).next() {
+                // Use named_children to skip anonymous nodes (whitespace etc.)
+                if let Some(item_child) = child.named_children(&mut item_cursor).next() {
                     let marker_kind = item_child.kind();
                     let marker_text = self.node_text(&item_child);
                     if marker_kind.contains("dot") || marker_kind.contains("paren") {
-                        // Check if it starts with a digit
                         if marker_text
                             .chars()
                             .next()
                             .is_some_and(|c| c.is_ascii_digit())
                         {
                             ordered = true;
+                            // Parse the start number: collect leading digits (e.g. "3." → "3" → 3)
+                            let digits: String = marker_text
+                                .chars()
+                                .take_while(|c| c.is_ascii_digit())
+                                .collect();
+                            start_num = digits.parse::<i64>().ok();
                         }
-                    } else {
-                        // Unordered list - capture the marker character
-                        if let Some(c) = marker_text.chars().next()
-                            && (c == '-' || c == '*' || c == '+')
-                        {
-                            list_marker = Some(c);
-                        }
+                    } else if let Some(c) = marker_text.chars().next()
+                        && (c == '-' || c == '*' || c == '+')
+                    {
+                        list_marker = Some(c);
                     }
                 }
                 break;
             }
         }
 
+        // Detect tight vs loose: a blank line between any two items makes it loose
+        let tight = is_tight_list(tsnode, self.source);
+
         let children = self.convert_block_children(tsnode);
         let mut list = Node::new(node::LIST)
             .prop(prop::ORDERED, ordered)
+            .prop(prop::TIGHT, tight)
             .children(children);
 
-        if self.preserve_spans
-            && !ordered
-            && let Some(marker) = list_marker
-        {
+        if ordered {
+            if let Some(start) = start_num {
+                list = list.prop(prop::START, start);
+            }
+        } else if self.preserve_spans && let Some(marker) = list_marker {
             list = list.prop(prop::MD_LIST_MARKER, marker.to_string());
         }
 
@@ -824,14 +832,44 @@ impl<'a> Converter<'a> {
     }
 
     fn convert_table(&mut self, tsnode: &tree_sitter::Node) -> Option<Node> {
-        let mut rows = Vec::new();
+        let mut rows: Vec<Node> = Vec::new();
+        let mut col_alignments: Vec<&'static str> = Vec::new();
 
+        // First pass: collect alignment from delimiter row
         let mut cursor = tsnode.walk();
         for child in tsnode.children(&mut cursor) {
+            if child.kind() == "pipe_table_delimiter_row" {
+                let mut dc = child.walk();
+                for dc_child in child.children(&mut dc) {
+                    if dc_child.kind() == "pipe_table_delimiter_cell" {
+                        let text = self.node_text(&dc_child);
+                        let t = text.trim().trim_matches('|');
+                        let alignment = if t.starts_with(':') && t.ends_with(':') {
+                            "center"
+                        } else if t.starts_with(':') {
+                            "left"
+                        } else if t.ends_with(':') {
+                            "right"
+                        } else {
+                            "none"
+                        };
+                        col_alignments.push(alignment);
+                    }
+                }
+            }
+        }
+
+        // Second pass: build rows
+        let mut cursor2 = tsnode.walk();
+        for child in tsnode.children(&mut cursor2) {
             match child.kind() {
                 "pipe_table_header" => {
                     if let Some(row) = self.convert_table_row(&child) {
-                        rows.push(row);
+                        // Wrap the TABLE_ROW in a TABLE_HEAD so the IR matches
+                        // the pulldown structure: TABLE_HEAD → TABLE_ROW → TABLE_CELL
+                        let head =
+                            self.with_span(Node::new(node::TABLE_HEAD).child(row), &child);
+                        rows.push(head);
                     }
                 }
                 "pipe_table_row" => {
@@ -839,14 +877,16 @@ impl<'a> Converter<'a> {
                         rows.push(row);
                     }
                 }
-                "pipe_table_delimiter_row" => {
-                    // Skip delimiter row
-                }
+                "pipe_table_delimiter_row" => {} // handled above
                 _ => {}
             }
         }
 
-        Some(self.with_span(Node::new(node::TABLE).children(rows), tsnode))
+        let mut table = Node::new(node::TABLE).children(rows);
+        if !col_alignments.is_empty() {
+            table = table.prop("column_alignments", col_alignments.join(","));
+        }
+        Some(self.with_span(table, tsnode))
     }
 
     fn convert_table_row(&mut self, tsnode: &tree_sitter::Node) -> Option<Node> {
@@ -855,14 +895,84 @@ impl<'a> Converter<'a> {
         let mut cursor = tsnode.walk();
         for child in tsnode.children(&mut cursor) {
             if child.kind() == "pipe_table_cell" {
-                // Table cells have inline content
                 let content = self.convert_inline_from_block(&child);
+                // Trim leading/trailing whitespace from edge text nodes (pipe table formatting)
+                let content = trim_cell_content(content);
                 cells.push(self.with_span(Node::new(node::TABLE_CELL).children(content), &child));
             }
         }
 
         Some(self.with_span(Node::new(node::TABLE_ROW).children(cells), tsnode))
     }
+}
+
+/// A list is tight if no blank line appears between any two consecutive list items.
+fn is_tight_list(tsnode: &tree_sitter::Node, source: &str) -> bool {
+    let mut prev_end: Option<usize> = None;
+    let mut cursor = tsnode.walk();
+    for child in tsnode.children(&mut cursor) {
+        if child.kind() == "list_item" {
+            if let Some(prev) = prev_end {
+                let between = &source[prev..child.start_byte()];
+                if between.contains("\n\n") {
+                    return false;
+                }
+            }
+            prev_end = Some(child.end_byte());
+        }
+    }
+    true
+}
+
+/// Emit gap text between inline nodes, splitting on `\n` to produce soft_break nodes.
+///
+/// In tree-sitter-md's inline grammar, soft line breaks often appear as gaps between
+/// named nodes rather than as explicit `soft_line_break` nodes.  By splitting on `\n`
+/// we get consistent IR regardless of whether the break is explicit or implicit.
+fn push_gap_text(text: &str, nodes: &mut Vec<Node>) {
+    let mut first = true;
+    for part in text.split('\n') {
+        if !first {
+            nodes.push(Node::new(node::SOFT_BREAK));
+        }
+        if !part.is_empty() {
+            nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, part.to_string()));
+        }
+        first = false;
+    }
+}
+
+/// Trim leading/trailing whitespace from edge text nodes in a table cell.
+///
+/// GFM pipe tables pad cells with spaces for readability (`| A  |`).  The content
+/// `"A  "` should compare equal to `"A"` after normalization.
+fn trim_cell_content(mut nodes: Vec<Node>) -> Vec<Node> {
+    // Trim leading whitespace of the first text node
+    if let Some(first) = nodes.first_mut() && first.kind.as_str() == node::TEXT {
+        let s = first
+            .props
+            .get_str(prop::CONTENT)
+            .unwrap_or("")
+            .trim_start()
+            .to_string();
+        first.props.set(prop::CONTENT, s);
+    }
+    // Trim trailing whitespace of the last text node
+    if let Some(last) = nodes.last_mut() && last.kind.as_str() == node::TEXT {
+        let s = last
+            .props
+            .get_str(prop::CONTENT)
+            .unwrap_or("")
+            .trim_end()
+            .to_string();
+        last.props.set(prop::CONTENT, s);
+    }
+    // Drop any nodes that became empty strings
+    nodes.retain(|n| {
+        n.kind.as_str() != node::TEXT
+            || n.props.get_str(prop::CONTENT).is_none_or(|s| !s.is_empty())
+    });
+    nodes
 }
 
 /// Merge adjacent text nodes.

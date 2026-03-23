@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 /// A collection of properties (key-value pairs).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Properties(HashMap<String, PropValue>);
 
 /// A property value.

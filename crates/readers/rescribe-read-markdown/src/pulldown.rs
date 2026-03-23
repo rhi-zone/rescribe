@@ -187,6 +187,46 @@ fn parse_event(
     }
 }
 
+/// Normalize list item children so inline content is always wrapped in a paragraph.
+///
+/// pulldown-cmark omits paragraph wrappers for tight list items and emits bare
+/// inline nodes for mixed items like `- text\n  - sublist`. Wrapping keeps the
+/// IR uniform regardless of tight/loose status.
+fn normalize_item_children(mut children: Vec<Node>) -> Vec<Node> {
+    if children.is_empty() {
+        return children;
+    }
+    // Find the first block-level child
+    let first_block = children.iter().position(|n| {
+        matches!(
+            n.kind.as_str(),
+            node::PARAGRAPH
+                | node::CODE_BLOCK
+                | node::BLOCKQUOTE
+                | node::LIST
+                | node::TABLE
+                | node::HORIZONTAL_RULE
+                | node::DEFINITION_LIST
+                | node::FOOTNOTE_DEF
+        )
+    });
+    match first_block {
+        None => {
+            // All inline — wrap everything in a paragraph
+            vec![Node::new(node::PARAGRAPH).children(children)]
+        }
+        Some(0) => children, // Already starts with a block
+        Some(idx) => {
+            // Leading inline nodes before first block — wrap them in a paragraph
+            let rest: Vec<Node> = children.drain(idx..).collect();
+            let para = Node::new(node::PARAGRAPH).children(children);
+            let mut result = vec![para];
+            result.extend(rest);
+            result
+        }
+    }
+}
+
 /// Parse a tag and its contents.
 fn parse_tag(
     tag: Tag<'_>,
@@ -273,6 +313,9 @@ fn parse_tag(
                 .collect::<Vec<_>>()
                 .join("");
 
+            // Strip exactly one trailing newline: the newline before the closing
+            // fence is a formatting artifact, not part of the code content.
+            let content = content.strip_suffix('\n').map(str::to_string).unwrap_or(content);
             let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content);
             if let CodeBlockKind::Fenced(lang) = &kind {
                 let lang_str = lang.to_string();
@@ -333,36 +376,12 @@ fn parse_tag(
                 }
             });
 
-            // pulldown-cmark omits paragraph wrappers in tight list items.
-            // Normalize: if no block-level child, wrap inline content in a paragraph
-            // so the writer treats tight and loose list items uniformly.
-            let has_block = children.iter().any(|n| {
-                matches!(
-                    n.kind.as_str(),
-                    node::PARAGRAPH
-                        | node::CODE_BLOCK
-                        | node::BLOCKQUOTE
-                        | node::LIST
-                        | node::TABLE
-                )
-            });
-            let normalized_children = if !has_block && !children.is_empty() {
-                let content_span = children
-                    .first()
-                    .and_then(|n| n.span.as_ref())
-                    .zip(children.last().and_then(|n| n.span.as_ref()))
-                    .map(|(s, e)| s.start..e.end);
-                let mut para = Node::new(node::PARAGRAPH).children(children);
-                if preserve_spans && let Some(range) = content_span {
-                    para.span = Some(Span {
-                        start: range.start,
-                        end: range.end,
-                    });
-                }
-                vec![para]
-            } else {
-                children
-            };
+            // pulldown-cmark omits paragraph wrappers in tight list items, and
+            // for mixed items (e.g. "- text\n  - sublist") it emits the text
+            // as a bare inline node followed by the sublist block. Normalize:
+            // any leading inline run (before the first block child) gets wrapped
+            // in a paragraph so both tight and loose items have uniform structure.
+            let normalized_children = normalize_item_children(children);
 
             let mut item = Node::new(node::LIST_ITEM).children(normalized_children);
             if let Some(checked) = task_checked {
@@ -399,11 +418,17 @@ fn parse_tag(
             ))
         }
 
-        Tag::TableHead => Some(with_span(
-            Node::new(node::TABLE_HEAD).children(children),
-            &tag_range,
-            preserve_spans,
-        )),
+        Tag::TableHead => {
+            // pulldown-cmark emits TableCell events directly inside TableHead (no
+            // TableRow wrapper). Wrap them in a TABLE_ROW so the structure matches
+            // tree-sitter: TABLE_HEAD → TABLE_ROW → TABLE_CELL.
+            let row = Node::new(node::TABLE_ROW).children(children);
+            Some(with_span(
+                Node::new(node::TABLE_HEAD).child(row),
+                &tag_range,
+                preserve_spans,
+            ))
+        }
 
         Tag::TableRow => Some(with_span(
             Node::new(node::TABLE_ROW).children(children),
