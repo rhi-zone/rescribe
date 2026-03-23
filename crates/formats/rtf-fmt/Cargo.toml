@@ -5,3 +5,11 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "RTF (Rich Text Format) tokenizer, AST, and builder — no rescribe dependency"
+
+[features]
+default = ["ast", "streaming", "batch", "writer-streaming", "writer-builder"]
+ast = []
+streaming = []
+batch = []
+writer-streaming = []
+writer-builder = []
