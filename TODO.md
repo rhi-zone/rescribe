@@ -308,29 +308,31 @@ from scratch as a proper standalone library.
 - [x] Update `rescribe-read-djot` to use `djot-fmt` instead of jotdown
 - [x] Pandoc harness 100% after migration (ref=931, ours=943)
 - [x] Benchmarks: djot_parse_small 7.8µs, djot_parse_medium 49µs, djot_emit_medium 9.8µs
-- [ ] `batch` chunk-driven parser (level 3; deferred)
-- [ ] Streaming writer (`w-stream`) (level 3; deferred)
+- [x] `batch` chunk-driven parser (BatchParser + BatchSink) — 2026-03-23
+- [x] Streaming writer (`w-stream`) — Writer<W: Write> with write_event/finish — 2026-03-23
 
-### `rst-fmt` — API modes missing
+### `rst-fmt` — API modes complete (2026-03-23)
 
-- [ ] `stream`: `events(input: &str) -> impl Iterator<Item = Event>` pull iterator
-- [ ] `batch`: chunk-driven `Parser` (feed/finish), O(working state)
-- [ ] `w-stream`: closure/visitor writer (currently has minimal `emit()` only)
-- [ ] `w-build`: `emit(ast: &RstDoc) -> String` (trivial wrapper over w-stream)
+- [x] `stream`: `events(input: &str) -> EventIter` pull iterator
+- [x] `batch`: BatchParser (feed/finish) + BatchSink<F> callback style
+- [x] `w-stream`: Writer<W: Write> streaming writer
+- [x] Feature flags: ast, streaming, batch, writer-streaming, writer-builder
 - [ ] Parser gaps: table parsing, footnote parsing
 
-### `org-fmt` — API modes missing
+### `org-fmt` — API modes complete (2026-03-23)
 
-- [ ] `stream`: pull iterator
-- [ ] `batch`: chunk-driven parser
-- [ ] `w-stream`: closure/visitor writer
+- [x] `stream`: pull iterator (events())
+- [x] `batch`: BatchParser + BatchSink
+- [x] `w-stream`: Writer<W: Write> streaming writer
+- [x] Feature flags added
 - [ ] Parser/writer gaps: blockquote nesting, footnote definitions, figure/caption blocks
 
-### `asciidoc` — API modes missing
+### `asciidoc` — API modes complete (2026-03-23)
 
-- [ ] `stream`: pull iterator
-- [ ] `batch`: chunk-driven parser
-- [ ] `w-stream`: full streaming writer (currently minimal `emit()`)
+- [x] `stream`: pull iterator (events())
+- [x] `batch`: BatchParser + BatchSink
+- [x] `w-stream`: Writer<W: Write> streaming writer
+- [x] Feature flags added
 - [ ] Parser gaps: table parsing, footnote parsing, math parsing
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)
