@@ -38,6 +38,9 @@ path = "../crates/writers/rescribe-write-markdown"
 [dependencies.rescribe-write-html]
 path = "../crates/writers/rescribe-write-html"
 
+[dependencies.djot-fmt]
+path = "../crates/formats/djot-fmt"
+
 [dependencies.rescribe-read-djot]
 path = "../crates/readers/rescribe-read-djot"
 
@@ -362,6 +365,20 @@ bench = false
 [[bin]]
 name = "fuzz_djot_roundtrip"
 path = "fuzz_targets/djot_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_djot_fmt_reader"
+path = "fuzz_targets/djot_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_djot_fmt_roundtrip"
+path = "fuzz_targets/djot_fmt_roundtrip.rs"
 test = false
 doc = false
 bench = false

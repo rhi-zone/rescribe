@@ -308,6 +308,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "djot-fmt"
+version = "0.1.0"
+
+[[package]]
 name = "dokuwiki"
 version = "0.1.0"
 
@@ -501,12 +505,6 @@ dependencies = [
  "getrandom",
  "libc",
 ]
-
-[[package]]
-name = "jotdown"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "086b08ec7a274cd60cd575ed3651ba081ee72dec0d39a6210e8adcff9efe3880"
 
 [[package]]
 name = "js-sys"
@@ -1148,6 +1146,7 @@ version = "0.0.0"
 dependencies = [
  "arbitrary",
  "csv-fmt",
+ "djot-fmt",
  "libfuzzer-sys",
  "mediawiki-fmt",
  "rescribe-core",
@@ -1322,7 +1321,7 @@ dependencies = [
 name = "rescribe-read-djot"
 version = "0.1.0"
 dependencies = [
- "jotdown",
+ "djot-fmt",
  "rescribe-core",
  "rescribe-std",
 ]

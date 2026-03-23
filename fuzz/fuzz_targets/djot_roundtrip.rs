@@ -14,9 +14,6 @@
 //! as markup on the return trip. The sanitiser strips them so the corpus
 //! exercises structural variations rather than inline-markup edge cases.
 //!
-//! jotdown known quirk: `\^` adjacent to span `^` can reorder characters.
-//! We use multiset (sorted-char) equality as a workaround — detects additions/
-//! removals (real bugs) while tolerating the known reordering.
 
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
@@ -260,18 +257,9 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
     let norm_before: String = text_before.split_whitespace().collect::<Vec<_>>().join(" ");
     let norm_after: String = text_after.split_whitespace().collect::<Vec<_>>().join(" ");
 
-    // Use multiset (sorted-char) equality rather than strict string equality.
-    // jotdown has a span-delimiter adjacency quirk where e.g. `\^` immediately
-    // before a structural `^` can cause characters to be reordered across the
-    // roundtrip without any being added or removed. Sorting both strings
-    // detects additions/removals (real bugs) while tolerating reordering.
-    let mut chars_before: Vec<char> = norm_before.chars().collect();
-    let mut chars_after: Vec<char> = norm_after.chars().collect();
-    chars_before.sort_unstable();
-    chars_after.sort_unstable();
     assert_eq!(
-        chars_before,
-        chars_after,
+        norm_before,
+        norm_after,
         "Djot roundtrip lost text content\n  before: {norm_before:?}\n  after:  {norm_after:?}\n  djot: {_djot_for_debug:?}"
     );
 });

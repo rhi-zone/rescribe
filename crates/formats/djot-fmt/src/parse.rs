@@ -43,6 +43,11 @@ impl<'a> Parser<'a> {
             lines.push(line);
             offset += line.len() + 1; // +1 for the '\n'
         }
+        // Remove trailing empty line produced by a terminal '\n' — it's not a real blank line.
+        if lines.last().map(|l| l.is_empty()).unwrap_or(false) {
+            lines.pop();
+            offsets.pop();
+        }
         Parser {
             input,
             lines,
@@ -577,7 +582,8 @@ impl<'a> Parser<'a> {
             }
             let marker_str = m.marker_str();
             let item_start = self.line_start(self.pos);
-            let content_after_marker = trimmed[marker_str.len()..].trim_start();
+            let skip = marker_str.len().min(trimmed.len());
+            let content_after_marker = trimmed[skip..].trim_start();
             let checked = if m.is_task() {
                 parse_task_marker(content_after_marker)
             } else {
@@ -596,17 +602,24 @@ impl<'a> Parser<'a> {
             let mut item_lines = vec![first_line.to_string()];
             while let Some(next) = self.current_line() {
                 if next.trim().is_empty() {
-                    // Blank line inside item = loose list
-                    tight = false;
-                    item_lines.push(String::new());
+                    let blank_pos = self.pos;
                     self.advance();
-                    // Continue collecting if next non-blank line is indented
+                    // Continue collecting only if next non-blank line is indented
                     if let Some(after_blank) = self.current_line() {
                         if after_blank.starts_with("  ") || after_blank.starts_with('\t') {
+                            // Blank line between indented blocks = loose
+                            tight = false;
+                            item_lines.push(String::new());
                             // will be picked up next iteration
                         } else {
+                            // Blank line ends this item; restore so outer blank check can see it
+                            self.pos = blank_pos;
                             break;
                         }
+                    } else {
+                        // Blank at end-of-input; item ends here
+                        self.pos = blank_pos;
+                        break;
                     }
                 } else if next.starts_with("  ") || next.starts_with('\t') {
                     let stripped = if next.starts_with('\t') { &next[1..] } else { &next[2..] };
@@ -626,11 +639,28 @@ impl<'a> Parser<'a> {
                 span: Span { start: item_start, end: item_end },
             });
 
-            // Check for blank line between items
+            // Check for blank line between items.
+            // Only mark loose if the blank line is followed by another list item
+            // (not the end of the list or a non-item continuation).
             if let Some(next) = self.current_line() {
                 if next.trim().is_empty() {
-                    tight = false;
+                    let saved_pos = self.pos;
                     self.skip_blank_lines();
+                    // Peek at what follows
+                    if let Some(after) = self.current_line() {
+                        let after_trimmed = after.trim_start();
+                        let hint_ref = style_hint.as_ref();
+                        let is_next_item = detect_list_marker(after_trimmed).is_some()
+                            || detect_ordered_marker_with_hint(after_trimmed, hint_ref).is_some();
+                        if is_next_item {
+                            tight = false;
+                        } else {
+                            // Blank line ends the list — restore position so outer parser
+                            // sees the blank line and the following content.
+                            self.pos = saved_pos;
+                        }
+                    }
+                    // If nothing follows, the blank line is trailing — ignore, list stays tight.
                 }
             }
         }
@@ -1017,8 +1047,13 @@ impl<'a> InlineParser<'a> {
             });
         }
         // No closing found — emit backticks as text
+        let backtick_text: String = std::iter::repeat('`').take(n).collect();
         self.pos += n;
-        None
+        let end_offset = self.current_byte_offset();
+        Some(Inline::Text {
+            content: backtick_text,
+            span: Span { start: start_offset, end: end_offset },
+        })
     }
 
     fn try_post_verbatim_attr(&mut self) -> (Attr, Option<String>) {
@@ -2004,7 +2039,7 @@ mod tests {
         match &doc.blocks[0] {
             Block::CodeBlock { language, content, .. } => {
                 assert_eq!(language.as_deref(), Some("rust"));
-                assert_eq!(content, "fn main() {}");
+                assert_eq!(content, "fn main() {}\n");
             }
             other => panic!("expected code block, got {other:?}"),
         }
