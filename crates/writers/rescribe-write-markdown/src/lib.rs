@@ -717,12 +717,10 @@ mod tests {
 #[cfg(test)]
 mod roundtrip_tests {
     use rescribe_core::{EmitOptions, ParseOptions};
-    // Use the tree-sitter backend explicitly: it preserves formatting markers
-    // (emphasis char, strong marker, HR char, etc.) that the roundtrip tests
-    // verify. Using the default `parse_with_options` is wrong here because
-    // feature unification can activate the `pulldown` feature (e.g. from
-    // rescribe-fixtures), which routes `parse_with_options` to the pulldown
-    // backend that does not preserve these markers.
+    // Use the tree-sitter backend explicitly to avoid feature-unification
+    // surprises: if the `pulldown` feature is activated (e.g. by rescribe-fixtures
+    // in the workspace build), the default `parse_with_options` routes to pulldown.
+    // Both backends now preserve markers; this just pins the backend used here.
     use rescribe_read_markdown::backend_treesitter::parse_with_options as md_parse;
 
     use super::*;
