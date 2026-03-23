@@ -18,16 +18,15 @@ loss, even if it's "just layout."
 - Paragraph alignment → `style:align` property
 - Font size → `style:size` on a `span` node
 - Bold/italic/color → existing inline node kinds
-- Footnotes → `footnote_ref` + `footnote_def` node kinds (once implemented)
+- Footnotes → `footnote_ref` + `footnote_def` node kinds
 
 Semantic constructs that can't yet be modeled must emit a `ConversionResult` fidelity
 warning so the caller knows exactly what was lost.
 
 **Raw preservation** — construct is format-specific with no cross-format equivalent;
 capture it verbatim in a format-namespaced property so the writer can re-emit it:
-- RTF paragraph layout words (tab stops, indents, borders) → `rtf:para-props` string
-  property on the paragraph node, containing the raw RTF control words verbatim
-- RTF character layout words (baseline twips, char spacing) → `rtf:char-props` on a span
+- RTF paragraph layout words → `rtf:para-props` string property on the paragraph node
+- RTF character layout words → `rtf:char-props` on a span
 - Other formats follow the same pattern: `html:attr`, `docx:rpr`, etc.
 
 The IR supports this via:
@@ -39,8 +38,18 @@ The IR supports this via:
 
 A format reader is correct when `parse(emit(parse(input))) == parse(input)` for all inputs,
 where `emit` is the format writer and `parse` is the format reader. Every dropped construct
-breaks this. "Unknown control word: \tx720" in a diagnostic is acceptable only if `\tx720`
-is also in the IR somewhere that the writer will re-emit it.
+breaks this.
+
+### Fidelity warnings are not optional
+
+Silent drops are failures. Every format construct the reader encounters but cannot represent
+in the IR **must** emit a fidelity warning via `ConversionResult`. A reader that drops
+font colors, footnotes, or paragraph alignment without warning is incorrect, not "lossy by
+design." The goal is losslessness; where true losslessness is impossible, the loss must be
+tracked.
+
+**The ignored match arm is a debt list, not an exemption list.** Every arm that silently
+drops semantic content is a gap. Document gaps in TODO.md.
 
 ## Project Overview
 
@@ -55,46 +64,34 @@ Part of the [rhi ecosystem](https://rhi.zone).
 
 ## Priority hierarchy: broadest reach first
 
-Work should be prioritized by how many people benefit from a given deliverable:
+Work should be prioritized by how many people benefit:
 
-1. **All language ecosystems** — the `fixtures/` suite. A comprehensive, language-agnostic
-   test suite for a format benefits every implementation in every language. This is the
-   highest-leverage output: a Python, Go, or JS author implementing RST can use our
-   fixtures to verify correctness. Prioritize formats where no authoritative cross-language
-   fixture suite currently exists (RST, Org, AsciiDoc) over formats already well-served
-   (CommonMark has the spec suite; HTML has W3C).
+1. **All language ecosystems** — the `fixtures/` suite. Prioritize formats where no
+   authoritative cross-language fixture suite currently exists (RST, Org, AsciiDoc)
+   over formats already well-served (CommonMark has the spec suite; HTML has W3C).
 
 2. **Rust ecosystem (any consumer)** — the standalone format crates. A well-designed
-   `rst-fmt` crate with a clean public API benefits any Rust project that needs to parse
-   RST, entirely outside rescribe. Every format gets a proper standalone crate here.
+   `rst-fmt` crate benefits any Rust project that needs RST, entirely outside rescribe.
 
-3. **Rust ecosystem (single consumer)** — completing the reader/writer API modes matrix
-   (AST / streaming / batch reader; streaming / builder writer). This benefits a specific
-   crate consumer who needs, say, a streaming reader. Lower priority than #1 and #2.
+3. **Rust ecosystem (single consumer)** — completing the reader/writer API modes matrix.
 
-4. **rescribe** — the IR adapter layer. The rescribe integration is the narrowest
-   beneficiary. It should be thin (≤300 lines per side) and not drive format crate design.
+4. **rescribe** — the IR adapter layer. Thin (≤300 lines per side); doesn't drive
+   format crate design.
 
-**When choosing what to work on next, ask which level it serves.** A fixture that closes
-a coverage gap serves level 1. A new streaming API serves level 3. Don't invest in level
+**When choosing what to work on next, ask which level it serves.** Don't invest in level
 3 or 4 while level 1 has gaps.
+
+**Work one vertical to completion before starting the next.** Never do a horizontal sweep
+across formats (fixtures for RST + Org + AsciiDoc without finishing any one). "Fixture
+suite complete" is step 1 of 5. Pick up the current vertical at its current step.
 
 ## The real goal: fix the Rust document ecosystem
 
 **rescribe itself may or may not take off. The standalone format libraries are the more
-durable deliverable.** The Rust ecosystem is missing solid, well-designed crates for most
-document formats. We fix that by building them here as a byproduct — proper standalone
-libraries useful entirely outside rescribe.
-
-**Every format without a quality ecosystem crate gets one here.** The target state is that
-the API coverage matrix in `docs/format-audit.md` is all checkmarks: every standalone
-format crate ships AST, streaming (iterator), batch (chunk-driven), streaming writer, and
-builder writer — as separate Cargo features, all on by default. Third-party library-backed formats (pulldown-cmark, html5ever) are out of scope here — contribute
-upstream if gaps exist. The ooxml-* crates (ooxml-wml, ooxml-sml, ooxml-pml) are ours and held
-to the same standard; they're largely codegen'd so raising them to full API coverage is tractable.
-
-This is not a nice-to-have. It is the primary reason to build format crates as proper
-standalone libraries rather than internal rescribe adapters.
+durable deliverable.** Every format without a quality ecosystem crate gets one here. The
+target state is the API coverage matrix in `docs/format-audit.md` all checkmarks.
+Third-party library-backed formats (pulldown-cmark, html5ever) are out of scope — contribute
+upstream. The ooxml-* crates are ours and held to the same standard.
 
 ## Architecture
 
@@ -145,6 +142,17 @@ Inline: `text`, `emphasis`, `strong`, `strikeout`, `underline`, `subscript`, `su
 - Layout: `layout:page_break`, `layout:float`, etc.
 - Format-specific: `html:class`, `latex:env`, `docx:style`, etc.
 
+**IR span semantics must be explicitly defined, not implementation-defined.** A node's span
+covers the full syntactic construct including delimiters (`**bold**` strong spans the outer
+`**`…`**`). When two backends disagree on span boundaries, that is a bug in one of them —
+not a reason to strip spans. `strip_spans` is valid for structural-only tests; span
+correctness must be tested separately. Never paper over backend disagreement by stripping
+spans — that hides a design gap.
+
+**Never infer type from string content when the IR already carries the type.** If the
+reader tags a node with `xlsx:cell-type = "n"`, the writer reads that prop — it does not
+re-parse the string to guess whether it looks like a number.
+
 ## Development
 
 ```bash
@@ -156,37 +164,24 @@ cd docs && bun dev # Local docs
 
 ## Testing
 
-Pandoc fixtures at `~/git/pandoc/test/` can be used as local reference inputs (GPL - don't copy into repo). Run rescribe against them to validate parsing.
+Pandoc fixtures at `~/git/pandoc/test/` can be used as local reference inputs (GPL - don't copy into repo).
 
 ## The fixture suite is the primary deliverable
 
-**The `fixtures/` directory is the real product.** The Rust crates are the reference
-implementation that proves the fixtures are correct — but the fixture suite is what
-matters for the ecosystem. Any implementation in any language should be able to take
-`fixtures/{format}/{feature}/input.{ext}` + `expected.json` and use them as a complete
-correctness test. Passing 100% of fixtures for a format means you have correctly
-implemented that format — no gaps, no silent drops, no ambiguity.
+**The `fixtures/` directory is the real product.** Any implementation in any language
+should be able to take `fixtures/{format}/{feature}/input.{ext}` + `expected.json` and
+use them as a complete correctness test.
 
-This shapes what "done" means for a format:
-
-- **Coverage**: `fixtures/{format}/COVERAGE.md` has all boxes checked — every
-  construct the format defines, across all six test dimensions (happy path,
-  integration, end-to-end, rare, adversarial, pathological). That file is the
-  done signal; if it doesn't exist yet, create it before writing fixtures.
-- **Unambiguous**: each fixture has exactly one correct output; if a correct
-  alternative implementation would be uncertain what to produce, the fixture is
-  underspecified and must be strengthened
+- **Coverage**: `fixtures/{format}/COVERAGE.md` has all boxes checked — every construct
+  the format defines, across all six test dimensions. That file is the done signal.
+- **Unambiguous**: each fixture has exactly one correct output; if a correct alternative
+  implementation would be uncertain what to produce, the fixture is underspecified.
 - **Language-agnostic**: `fixtures/{format}/{feature}/input.{ext}` + `expected.json`;
-  no Rust-specific assumptions
-- **See `fixtures/spec.md`** for the fixture format spec and COVERAGE.md template
-
-When adding fixtures, always ask: "would a correct alternative implementation of this
-format, reading this fixture, know exactly what to produce?" If not, the fixture is
-underspecified.
+  no Rust-specific assumptions.
+- **See `fixtures/spec.md`** for the fixture format spec and COVERAGE.md template.
 
 **When you add support for a new parsed construct, add a fixture for it in the same commit.**
-No new feature without a fixture. Use `transition_analysis` to verify the fixture closes
-the gap. Fixtures that test new features should be added before calling a vertical "done."
+No new feature without a fixture.
 
 ## Conventions
 
@@ -201,84 +196,43 @@ the gap. Fixtures that test new features should be added before calling a vertic
 **5-Production requires 100% construct coverage — not "enough for common cases."**
 
 A format vertical is not production-grade until every construct the format can express is
-either modeled in the IR or raw-preserved. "Most documents work" is not the bar. The bar
-is: a correct alternative implementation reading the fixture suite would know exactly what
-to produce for every construct, including:
-
-- All block types (tables, lists, footnotes, code blocks, blockquotes, …)
-- All inline types (all formatting, hyperlinks, images, footnote refs, …)
-- All significant properties (font, color, alignment, language, size, …)
-- Structure (nested lists, table cells with formatting, footnote content, …)
-
-If a construct appears in real documents and the parser silently drops it — even if "most
-documents don't use it" — the vertical is not 5-Production. It should be marked 4-Fuzz
-(infrastructure solid, coverage incomplete) until every gap is closed.
-
-**The ignored match arm is a debt list, not an exemption list.** Every control word in
-the ignored arm that carries semantic content is a gap. Document them in TODO.md.
+either modeled in the IR or raw-preserved. It should be marked 4-Fuzz until every gap is
+closed.
 
 ## Vertical completion checklist
 
-Each standalone format crate (`crates/formats/{name}/`) must satisfy all of:
+Each standalone format crate must satisfy all of:
 
 **Reader:**
 - **AST** (`feature = "ast"`, default on): `parse(input: &[u8]) -> (Ast, Vec<Diagnostic>)` — full tree, infallible, Span on every node
-- **Streaming** (`feature = "streaming"`, default on): `events(input: &[u8]) -> impl Iterator<Item = Event>` — no full AST; full input in memory; can borrow slices, supports lookahead
-- **Batch** (`feature = "batch"`, default on): chunk-driven `Parser` (feed/finish) — O(working state) memory; handles files too large to load; cannot borrow across chunk boundaries
+- **Streaming** (`feature = "streaming"`, default on): `events(input: &[u8]) -> impl Iterator<Item = Event>`
+- **Batch** (`feature = "batch"`, default on): chunk-driven `Parser` (feed/finish)
 
 **Writer:**
-- **Streaming** (`feature = "writer-streaming"`, default on): closure/visitor API — emits bytes as closures execute, no full tree required, well-formedness enforced by types
-- **Builder** (`feature = "writer-builder"`, default on): `emit(ast: &Ast) -> Vec<u8>` — trivial wrapper over the streaming writer that walks the AST; ~20 lines
+- **Streaming** (`feature = "writer-streaming"`, default on): closure/visitor API
+- **Builder** (`feature = "writer-builder"`, default on): `emit(ast: &Ast) -> Vec<u8>`
 
-**Feature gating philosophy:** all features are on by default. Feature gating is not about
-binary size or compile time — it's about **contract scoping**. A consumer who enables only
-`features = ["ast"]` is explicitly signing up for that API and cannot accidentally couple
-to the streaming or batch APIs. `default-features = false` is a statement of intent.
+**Feature gating:** all on by default. Gating is about contract scoping, not binary size.
 
 **Fuzz:**
-- No-panic gate: arbitrary bytes must not panic — run until clean
-- Round-trip fuzz: `parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast` — run until clean
+- No-panic gate: arbitrary bytes must not panic
+- Round-trip fuzz: `parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast`
 
 **Rescribe integration:**
 - Thin adapter ≤300 lines each side
 - Fixture suite at 3-Harness
-- Rescribe-level round-trip fuzz: arbitrary rescribe `Document` → emit → parse → assert equal
-- **100% construct coverage** — no silently-dropped semantic constructs; see above
+- **100% construct coverage**
 
 See `docs/format-library-design.md` for the full spec.
-**A vertical is not done until both fuzz targets pass clean AND coverage is 100%.**
 
 ### Roundtrip direction matters
 
-There are two wrong directions and one right one.
+**Wrong:** `parse(emit(parse(bytes))) == parse(bytes)` — if the parser is lossy, the first
+parse already drops content; this only checks dropped content stays dropped.
 
-**Wrong (direction 1):** `parse(emit(parse(bytes))) == parse(bytes)`
-Tests parse→emit→parse consistency. If the parser is lossy, the first parse already drops
-content; the assertion only checks that dropped content stays dropped. "Zero roundtrip
-failures" here is not evidence of losslessness.
-
-**Also valid:** `parse(emit(arbitrary_rescribe_doc)) == arbitrary_rescribe_doc`
-rescribe's IR is open by design — `NodeKind` is a free string, `Properties` is an open
-bag, format-specific constructs live in `rtf:`/`html:`/etc. namespaces, and `raw_inline`/
-`raw_block` exist for anything else. An RTF field code can be `rtf:field`; a color run
-can carry `style:color`. So arbitrary IR generation CAN cover format-specific constructs
-— once the IR modeling is complete. If this roundtrip shows zero failures, that's not
-evidence of losslessness; it's evidence that constructs are being dropped instead of
-modeled. Anything dropped silently can't be generated, can't fail.
-
-**Correct:** `parse(emit(arbitrary_format_ast)) == arbitrary_format_ast`
-Start from an arbitrary instance of the *format crate's own `Ast` type*. The native AST
-is the ground truth for what the format can express. Emit it to wire bytes. Parse those
-bytes back. Assert equality. This is the definitive test for the standalone format crate:
-it covers the full surface area of the format regardless of IR modeling completeness.
-
-### Fidelity warnings are not optional
-
-Silent drops are failures. Every format construct the reader encounters but cannot represent
-in the IR **must** emit a fidelity warning via `ConversionResult`. A reader that drops
-font colors, footnotes, or paragraph alignment without warning is incorrect, not "lossy by
-design." The goal is losslessness; where true losslessness is impossible, the loss must be
-tracked.
+**Correct:** `parse(emit(arbitrary_format_ast)) == arbitrary_format_ast` — start from an
+arbitrary instance of the format crate's own `Ast` type. The native AST is the ground
+truth. This covers the full surface area regardless of IR modeling completeness.
 
 ## Marathon Mode
 
@@ -300,72 +254,31 @@ When working autonomously:
 
 **Separate niche from shared.** Don't bloat shared config with feature-specific data. Use separate files for specialized data.
 
-## Core Rule
+## Core Rules
 
-**Conversation is not memory.** Anything said in chat evaporates at session end. If it implies future behavior change, write it to CLAUDE.md or a memory file immediately — or it will not happen.
+**Conversation is not memory.** Anything said in chat evaporates at session end. If it implies a future behavior change, write it to CLAUDE.md immediately — or it will not happen.
 
 **Warning — these phrases mean something needs to be written down right now:**
 - "I won't do X again" / "I'll remember to..." / "I've learned that..."
 - "Next time I'll..." / "From now on I'll..."
-- Any acknowledgement of a recurring error without a corresponding CLAUDE.md or memory edit
+- Any acknowledgement of a recurring error without a corresponding CLAUDE.md edit
 
-**When the user corrects you:** Ask what rule would have prevented this, and write it before proceeding. **"The rule exists, I just didn't follow it" is never the diagnosis** — a rule that doesn't prevent the failure it describes is incomplete; fix the rule, not your behavior.
+**When the user corrects you:** Write the corrected rule to CLAUDE.md before proceeding.
+**"The rule exists, I just didn't follow it" is never the diagnosis** — a rule that doesn't
+prevent the failure it describes is incomplete; fix the rule.
 
-**Something unexpected is a signal, not noise.** Surprising output, anomalous numbers, files containing what they shouldn't — stop and ask why before continuing. Don't accept anomalies and move on.
+**Something unexpected is a signal, not noise.** Surprising output, anomalous numbers,
+files containing what they shouldn't — stop and ask why before continuing.
 
-## When something goes wrong: update CLAUDE.md first
-
-When you discover a design mistake, a wrong mental model, a subtle gotcha, or a case where
-the obvious approach is wrong — **stop and update CLAUDE.md before continuing**. Don't
-leave the lesson in conversation history; it will be lost. CLAUDE.md is the only memory
-that survives across sessions.
-
-This applies to:
-- A test that passes for the wrong reason (like a lossless-looking roundtrip on a lossy parser)
-- A framing that sounded right but isn't (like "start from IR to test losslessness")
-- A constraint that wasn't written down and caused a mistake (like silent drops being treated as acceptable)
-- Any time the user corrects a design assumption
-
-The rule: **lesson learned → CLAUDE.md updated → then continue**. Never the other way.
-
-### Why "I'll write it down" isn't enough
-
-The instruction above already says to update CLAUDE.md. That alone hasn't been sufficient —
-past sessions have explained mistakes conversationally and moved on without recording them,
-leaving the same traps for the next session.
-
-**The enforcement mechanism:** When the user pushes back on something you said or did,
-treat it as a mandatory CLAUDE.md edit gate. You may not write another line of code or
-explanation until the lesson is captured in CLAUDE.md. Not "I'll add it at the end of the
-session." Not "I'll update memory." Right now, as the first response to the pushback.
-
-Concrete triggers — stop and update CLAUDE.md immediately when:
-- The user says "why did you do X" and X was wrong
-- The user says "that's wrong" or "that's not right"
-- The user asks a clarifying question that reveals your mental model was off
-- You realize mid-explanation that the explanation implies a design flaw you introduced
-
-The update must capture: what was wrong, why it was wrong, and what the correct approach is.
-A one-line entry is fine. The goal is that the next session doesn't repeat the mistake.
-
-### Recorded lessons (update this list, never delete entries)
-
-- **Fixture sweep ≠ vertical (2026-03-22):** Completed fixture suites for RST, Org, and
-  AsciiDoc in sequence without finishing any single vertical. That's a horizontal sweep —
-  the exact anti-pattern TODO.md prohibits. "Fixture suite complete" is step 1 of 5.
-  The next step for each of those formats is the Pandoc harness, then fuzz, then benchmarks.
-  When starting work, always check which format is the current vertical and pick up at its
-  current step — don't start a new format's fixtures until the current one is at 5-Production.
-
-- **XLSX cell-type inference (2026-03-03):** The XLSX writer used `.parse::<f64>()` on every
-  text node to "auto-detect" numbers, converting `"007"` → `0.0` → `"7"`. This is wrong.
-  The reader knows the actual cell type (`CellValue::Number` vs `CellValue::String`). The fix:
-  reader tags `xlsx:cell-type = "n"/"s"/"b"/"e"` on each paragraph; writer reads that prop
-  instead of guessing. Never infer type from string content when the IR already carries the type.
+**Note things down immediately:**
+- Problems, tech debt, issues → TODO.md now, in the same response
+- Design decisions, key insights → CLAUDE.md
+- Future/deferred scope → TODO.md **before** writing any code
 
 ## Negative Constraints
 
 Do not:
+- Use Claude Code's auto-memory system (`~/.claude/projects/.../memory/`) — it is unversioned, invisible to the user, and can't be diffed or backed up. Write behavioral changes and project context to CLAUDE.md instead
 - Announce actions ("I will now...") - just do them
 - Leave work uncommitted
 - Use interactive git commands (`git add -p`, `git add -i`, `git rebase -i`) — these block on stdin and hang in non-interactive shells; stage files by name instead
@@ -383,9 +296,9 @@ After editing multiple files, run the full check once — not after each edit. F
 
 **When making the same change across multiple crates**, edit all files first, then build once.
 
-**Minimize file churn.** When editing a file, read it once, plan all changes, and apply them in one pass. Avoid read-edit-build-fail-read-fix cycles by thinking through the complete change before starting.
+**Minimize file churn.** When editing a file, read it once, plan all changes, and apply them in one pass.
 
-**Always commit completed work.** After tests pass, commit immediately — don't wait to be asked. When a plan has multiple phases, commit after each phase passes. Do not accumulate changes across phases. Uncommitted work is lost work.
+**Always commit completed work.** After tests pass, commit immediately. When a plan has multiple phases, commit after each phase passes.
 
 **Use `normalize view` for structural exploration:**
 ```bash
@@ -395,14 +308,14 @@ After editing multiple files, run the full check once — not after each edit. F
 
 ## Context Management
 
-**Use subagents to protect the main context window.** For broad exploration or mechanical multi-file work, delegate to an Explore or general-purpose subagent rather than running searches inline. The subagent returns a distilled summary; raw tool output stays out of the main context.
+**Use subagents to protect the main context window.** For broad exploration or mechanical multi-file work, delegate to an Explore or general-purpose subagent.
 
 Rules of thumb:
-- Research tasks (investigating a question, surveying patterns) → subagent; don't pollute main context with exploratory noise
+- Research tasks → subagent
 - Searching >5 files or running >3 rounds of grep/read → use a subagent
-- Codebase-wide analysis (architecture, patterns, cross-file survey) → always subagent
-- Mechanical work across many files (applying the same change everywhere) → parallel subagents
-- Single targeted lookup (one file, one symbol) → inline is fine
+- Codebase-wide analysis → always subagent
+- Mechanical work across many files → parallel subagents
+- Single targeted lookup → inline is fine
 
 ## Session Handoff
 
@@ -411,11 +324,11 @@ Use plan mode as a handoff mechanism when:
 - The session has drifted from its original purpose
 - Context has accumulated enough that a fresh start would help
 
-**For handoffs:** enter plan mode, write a short plan pointing at TODO.md, and ExitPlanMode. **Do NOT investigate first** — the session is context-heavy and about to be discarded. The fresh session investigates after approval.
+**For handoffs:** enter plan mode, write a plan containing only: next tasks, blocked/pending items, and what was done this session (only if it directly affects what comes next). Nothing else — no commands, no build steps, no context summaries. Those belong in CLAUDE.md or TODO.md. The next session reads both fresh. **Do NOT investigate first** — the session is context-heavy and about to be discarded.
 
 **For mid-session planning** on a different topic: investigating inside plan mode is fine — context isn't being thrown away.
 
-Before the handoff plan, update TODO.md and memory files with anything worth preserving.
+**TODO.md is the lossless record.** Flush any new items to TODO.md before the handoff.
 
 ## Commit Convention
 
