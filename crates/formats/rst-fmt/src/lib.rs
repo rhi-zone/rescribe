@@ -5,6 +5,13 @@
 
 #![allow(clippy::collapsible_if)]
 
+pub mod events;
+pub mod writer;
+pub mod batch;
+pub use events::{EventIter, OwnedEvent};
+pub use writer::Writer;
+pub use batch::{BatchParser, BatchSink};
+
 // ── Error ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
@@ -2712,4 +2719,13 @@ mod tests {
             );
         }
     }
+}
+
+// ── Public streaming API ──────────────────────────────────────────────────────
+
+/// Parse `input` as RST and return a streaming [`EventIter`].
+///
+/// On parse error, returns an iterator over an empty document.
+pub fn events(input: &str) -> EventIter {
+    events::events(input)
 }

@@ -4,16 +4,27 @@
 //! Used by `rescribe-read-org` and `rescribe-write-org` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
 // Re-export everything callers need.
 pub use ast::{
     Block, CheckboxState, DefinitionItem, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc,
     OrgError, Severity, Span, TableRow, merge_text_inlines,
 };
+pub use batch::{BatchParser, BatchSink};
 pub use emit::build;
+pub use events::{EventIter, OwnedEvent};
 pub use parse::parse;
+pub use writer::Writer;
+
+/// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
+pub fn events(input: &str) -> events::EventIter {
+    events::events(input)
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

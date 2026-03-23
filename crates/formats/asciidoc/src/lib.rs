@@ -6,8 +6,11 @@
 #![allow(clippy::collapsible_if)]
 
 mod ast;
+pub mod batch;
 mod emit;
+mod events;
 mod parse;
+pub mod writer;
 
 // Re-exports
 pub use ast::{
@@ -15,7 +18,15 @@ pub use ast::{
     Severity, Span, TableRow,
 };
 pub use emit::build;
+pub use batch::{BatchParser, BatchSink};
+pub use events::{EventIter, OwnedEvent};
+pub use writer::Writer;
 pub use parse::{parse, parse_inline_content};
+
+/// Return a streaming event iterator over the AsciiDoc source.
+pub fn events(input: &str) -> EventIter {
+    events::EventIter::new(input)
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

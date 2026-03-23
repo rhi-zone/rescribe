@@ -6,6 +6,14 @@ license.workspace = true
 repository.workspace = true
 description = "AsciiDoc parser, AST, and builder — no rescribe dependency"
 
+[features]
+default = ["ast", "streaming", "batch", "writer-streaming", "writer-builder"]
+ast = []
+streaming = ["ast"]
+batch = []
+writer-streaming = []
+writer-builder = ["ast", "writer-streaming"]
+
 [dev-dependencies]
 criterion.workspace = true
 

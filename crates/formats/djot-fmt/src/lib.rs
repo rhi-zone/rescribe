@@ -7,12 +7,24 @@
 //! # API layers
 //!
 //! ```text
-//! // Low-level: streaming events (parse then iterate)
+//! // AST reader
+//! pub fn parse(input: &str) -> (DjotDoc, Vec<Diagnostic>);
+//!
+//! // Streaming reader — iterator over owned events
 //! pub fn events(input: &str) -> impl Iterator<Item = EventOwned> + '_;
 //!
-//! // High-level: owned AST
-//! pub fn parse(input: &str) -> (DjotDoc, Vec<Diagnostic>);
+//! // Batch reader — chunk-driven
+//! let mut p = BatchParser::new();
+//! p.feed(chunk); // repeat
+//! let (doc, diags) = p.finish();
+//!
+//! // Builder writer — emit from AST
 //! pub fn emit(doc: &DjotDoc) -> String;
+//!
+//! // Streaming writer — emit from events
+//! let mut w = Writer::new(sink);
+//! w.write_event(event); // repeat
+//! w.finish(); // flushes to sink
 //! ```
 //!
 //! # Round-trip
@@ -24,6 +36,8 @@ mod ast;
 mod emit;
 mod events;
 mod parse;
+pub mod batch;
+pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────
 
@@ -34,6 +48,8 @@ pub use ast::{
 pub use emit::emit;
 pub use events::{EventIter, EventOwned};
 pub use parse::parse;
+pub use writer::Writer;
+pub use batch::{BatchParser, BatchSink};
 
 /// Return a streaming event iterator over the parsed document.
 ///
