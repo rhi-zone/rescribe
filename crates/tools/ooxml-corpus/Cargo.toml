@@ -1,0 +1,28 @@
+[package]
+name = "ooxml-corpus"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Corpus analysis tools for OOXML documents"
+publish = false
+
+[lib]
+name = "ooxml_corpus"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ooxml-corpus"
+path = "src/main.rs"
+
+[dependencies]
+ooxml-opc.workspace = true
+ooxml-wml.workspace = true
+zip.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+rayon.workspace = true
+rusqlite.workspace = true
+clap.workspace = true
+quick-xml.workspace = true

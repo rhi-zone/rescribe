@@ -1,0 +1,15 @@
+[package]
+name = "ooxml-opc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core OOXML library: OPC packaging, relationships, and shared types"
+readme.workspace = true
+keywords = ["ooxml", "opc", "docx", "xlsx", "pptx"]
+categories = ["encoding", "parser-implementations"]
+
+[dependencies]
+zip.workspace = true
+quick-xml.workspace = true
+thiserror.workspace = true

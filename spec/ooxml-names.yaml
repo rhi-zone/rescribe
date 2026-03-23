@@ -1,0 +1,1178 @@
+# OOXML Type and Field Name Mappings
+#
+# This file maps ECMA-376 schema names to nicer Rust names.
+# Used by ooxml-codegen to generate readable code.
+#
+# Schema:
+#   <module>:
+#     types:
+#       <SpecTypeName>: <RustTypeName>
+#     fields:
+#       <spec_field>: <rust_field>
+#     variants:
+#       <specVariant>: <RustVariant>
+
+# Shared types used across all modules
+shared:
+  types:
+    # Simple types (ST_*)
+    ST_Lang: Language
+    ST_Xstring: XmlString
+    ST_OnOff: OnOff
+    ST_TrueFalse: TrueFalse
+    ST_HexColorRGB: HexColorRgb
+    ST_Panose: Panose
+    ST_CalendarType: CalendarType
+    ST_Guid: Guid
+
+  fields:
+    # Common abbreviated fields
+    val: value
+    r: reference
+    w: width
+    h: height
+
+# SpreadsheetML (Excel)
+sml:
+  types:
+    # Complex types (CT_*)
+    CT_Workbook: Workbook
+    CT_Worksheet: Worksheet
+    CT_SheetData: SheetData
+    CT_Row: Row
+    CT_Cell: Cell
+    CT_CellFormula: CellFormula
+    CT_CellValue: CellValue
+    CT_Cols: Columns
+    CT_Col: Column
+    CT_SheetFormatPr: SheetFormat
+    CT_SheetPr: SheetProperties
+    CT_SheetViews: SheetViews
+    CT_SheetView: SheetView
+    CT_Selection: Selection
+    CT_Pane: Pane
+    CT_MergeCell: MergedCell
+    CT_MergeCells: MergedCells
+    CT_Hyperlink: Hyperlink
+    CT_Hyperlinks: Hyperlinks
+    CT_PageMargins: PageMargins
+    CT_PageSetup: PageSetup
+    CT_HeaderFooter: HeaderFooter
+    CT_AutoFilter: AutoFilter
+    CT_FilterColumn: FilterColumn
+    CT_Filters: Filters
+    CT_Filter: Filter
+    CT_SortState: SortState
+    CT_SortCondition: SortCondition
+    CT_ConditionalFormatting: ConditionalFormatting
+    CT_CfRule: ConditionalRule
+    CT_ColorScale: ColorScale
+    CT_DataBar: DataBar
+    CT_IconSet: IconSet
+    CT_Cfvo: ConditionalFormatValue
+    CT_DataValidation: DataValidation
+    CT_DataValidations: DataValidations
+    CT_Comment: Comment
+    CT_Comments: Comments
+    CT_Authors: Authors
+    CT_CommentList: CommentList
+    CT_Rst: RichString
+    CT_Sst: SharedStrings
+    CT_Si: StringItem
+    CT_Stylesheet: Stylesheet
+    CT_Fonts: Fonts
+    CT_Font: Font
+    CT_Fills: Fills
+    CT_Fill: Fill
+    CT_Borders: Borders
+    CT_Border: Border
+    CT_BorderPr: BorderProperties
+    CT_CellXfs: CellFormats
+    CT_CellStyleXfs: CellStyleFormats
+    CT_Xf: Format
+    CT_CellAlignment: CellAlignment
+    CT_CellProtection: CellProtection
+    CT_NumFmts: NumberFormats
+    CT_NumFmt: NumberFormat
+    CT_CellStyles: CellStyles
+    CT_CellStyle: CellStyle
+    CT_Dxfs: DifferentialFormats
+    CT_Dxf: DifferentialFormat
+    CT_TableStyles: TableStyles
+    CT_TableStyle: TableStyle
+    CT_Colors: Colors
+    CT_Color: Color
+    CT_DefinedNames: DefinedNames
+    CT_DefinedName: DefinedName
+    CT_Chart: Chart
+    CT_Charts: Charts
+    CT_Drawing: Drawing
+    CT_Picture: Picture
+    CT_SheetProtection: SheetProtection
+    CT_WorkbookPr: WorkbookProperties
+    CT_BookViews: BookViews
+    CT_BookView: BookView
+    CT_Sheets: Sheets
+    CT_Sheet: Sheet
+    CT_ExternalReferences: ExternalReferences
+    CT_PivotCaches: PivotCaches
+    CT_CalcPr: CalculationProperties
+
+    # Filter types
+    CT_CustomFilter: CustomFilter
+    CT_CustomFilters: CustomFilters
+    CT_Top10: Top10Filter
+    CT_ColorFilter: ColorFilter
+    CT_IconFilter: IconFilter
+    CT_DynamicFilter: DynamicFilter
+    CT_DateGroupItem: DateGroupItem
+
+    # Page layout
+    CT_Break: PageBreak
+    CT_PageBreak: PageBreaks
+    CT_PrintOptions: PrintOptions
+    CT_PageSetUpPr: PageSetupProperties
+    CT_OutlinePr: OutlineProperties
+
+    # Sheet structure
+    CT_SheetDimension: SheetDimension
+    CT_SheetCalcPr: SheetCalcProperties
+    CT_DrawingHF: DrawingHeaderFooter
+    CT_LegacyDrawing: LegacyDrawing
+    CT_SheetBackgroundPicture: SheetBackgroundPicture
+    CT_OleObjects: OleObjects
+    CT_OleObject: OleObject
+    CT_Controls: Controls
+    CT_Control: Control
+
+    # Error handling
+    CT_IgnoredError: IgnoredError
+    CT_IgnoredErrors: IgnoredErrors
+
+    # Smart tags
+    CT_SmartTags: SmartTags
+    CT_CellSmartTags: CellSmartTags
+    CT_CellSmartTag: CellSmartTag
+
+    # Cell watches
+    CT_CellWatch: CellWatch
+    CT_CellWatches: CellWatches
+
+    # Custom views
+    CT_CustomSheetView: CustomSheetView
+    CT_CustomSheetViews: CustomSheetViews
+    CT_CustomWorkbookView: CustomWorkbookView
+    CT_CustomWorkbookViews: CustomWorkbookViews
+
+    # Protected ranges
+    CT_ProtectedRange: ProtectedRange
+    CT_ProtectedRanges: ProtectedRanges
+
+    # Scenarios
+    CT_Scenario: Scenario
+    CT_Scenarios: Scenarios
+    CT_InputCells: InputCells
+
+    # Tables
+    CT_Table: Table
+    CT_TableColumn: TableColumn
+    CT_TableColumns: TableColumns
+    CT_TablePart: TablePart
+    CT_TableParts: TableParts
+    CT_TableStyleInfo: TableStyleInfo
+    CT_TableStyleElement: TableStyleElement
+    CT_TableFormula: TableFormula
+
+    # Web publishing
+    CT_WebPublishing: WebPublishing
+    CT_WebPublishItem: WebPublishItem
+    CT_WebPublishItems: WebPublishItems
+
+    # Rich text elements
+    CT_RElt: RichTextElement
+    CT_RPrElt: RichTextRunProperties
+    CT_PhoneticRun: PhoneticRun
+    CT_PhoneticPr: PhoneticProperties
+
+    # Font properties
+    CT_FontName: FontName
+    CT_FontSize: FontSize
+    CT_FontFamily: FontFamily
+    CT_FontScheme: FontSchemeProperty
+    CT_BooleanProperty: BooleanProperty
+    CT_IntProperty: IntProperty
+    CT_UnderlineProperty: UnderlineProperty
+    CT_VerticalAlignFontProperty: VerticalAlignFontProperty
+
+    # Fill types
+    CT_PatternFill: PatternFill
+    CT_GradientFill: GradientFill
+    CT_GradientStop: GradientStop
+
+    # Extension list
+    CT_ExtensionList: ExtensionList
+    CT_Extension: Extension
+
+    # Calculation chain
+    CT_CalcChain: CalcChain
+    CT_CalcCell: CalcCell
+
+    # External links
+    CT_ExternalLink: ExternalLink
+    CT_ExternalBook: ExternalBook
+    CT_ExternalReference: ExternalReference
+    CT_ExternalSheetData: ExternalSheetData
+    CT_ExternalSheetDataSet: ExternalSheetDataSet
+    CT_ExternalRow: ExternalRow
+    CT_ExternalCell: ExternalCell
+
+    # Data connections
+    CT_Connection: Connection
+    CT_Connections: Connections
+    CT_DbPr: DatabaseProperties
+    CT_OlapPr: OlapProperties
+    CT_WebPr: WebQueryProperties
+    CT_TextPr: TextImportProperties
+    CT_Parameter: Parameter
+    CT_Parameters: Parameters
+    CT_Tables: DataTables
+    CT_TableMissing: TableMissing
+    CT_TextField: TextField
+    CT_TextFields: TextFields
+
+    # Metadata
+    CT_Metadata: Metadata
+    CT_MetadataTypes: MetadataTypes
+    CT_MetadataType: MetadataType
+    CT_MetadataStrings: MetadataStrings
+    CT_MetadataBlocks: MetadataBlocks
+    CT_MetadataBlock: MetadataBlock
+    CT_MetadataRecord: MetadataRecord
+
+    # Chartsheet
+    CT_Chartsheet: Chartsheet
+    CT_ChartsheetPr: ChartsheetProperties
+    CT_ChartsheetViews: ChartsheetViews
+    CT_ChartsheetView: ChartsheetView
+    CT_ChartsheetProtection: ChartsheetProtection
+    CT_CsPageSetup: ChartsheetPageSetup
+    CT_CustomChartsheetView: CustomChartsheetView
+    CT_CustomChartsheetViews: CustomChartsheetViews
+
+    # Object anchors
+    CT_ObjectAnchor: ObjectAnchor
+    CT_ObjectPr: ObjectProperties
+
+    # File properties
+    CT_FileVersion: FileVersion
+    CT_FileSharing: FileSharing
+    CT_FileRecoveryPr: FileRecoveryProperties
+    CT_WorkbookProtection: WorkbookProtection
+
+    # Indexed colors
+    CT_IndexedColors: IndexedColors
+    CT_RgbColor: RgbColor
+    CT_MRUColors: MostRecentColors
+
+    # Xml mapping
+    CT_MapInfo: MapInfo
+    CT_Map: XmlMap
+    CT_Schema: XmlSchema
+    CT_DataBinding: DataBinding
+    CT_SingleXmlCell: SingleXmlCell
+    CT_SingleXmlCells: SingleXmlCells
+    CT_XmlCellPr: XmlCellProperties
+    CT_XmlColumnPr: XmlColumnProperties
+    CT_XmlPr: XmlProperties
+
+    # Pivot table types (commonly referenced)
+    CT_PivotTableDefinition: PivotTableDefinition
+    CT_PivotCacheDefinition: PivotCacheDefinition
+    CT_PivotCacheRecords: PivotCacheRecords
+    CT_PivotField: PivotField
+    CT_PivotFields: PivotFields
+    CT_PivotArea: PivotArea
+    CT_PivotAreas: PivotAreas
+    CT_PivotFilter: PivotFilter
+    CT_PivotFilters: PivotFilters
+    CT_Location: PivotLocation
+    CT_DataField: DataField
+    CT_DataFields: DataFields
+    CT_RowFields: RowFields
+    CT_ColFields: ColFields
+    CT_PageField: PageField
+    CT_PageFields: PageFields
+    CT_RowItems: RowItems
+    CT_ColItems: ColItems
+    CT_Item: PivotItem
+    CT_Items: PivotItems
+    CT_CacheField: CacheField
+    CT_CacheFields: CacheFields
+    CT_CacheSource: CacheSource
+    CT_WorksheetSource: WorksheetSource
+    CT_Consolidation: Consolidation
+    CT_SharedItems: SharedItems
+    CT_GroupItems: GroupItems
+    CT_FieldGroup: FieldGroup
+
+    # DDE links
+    CT_DdeLink: DdeLink
+    CT_DdeItem: DdeItem
+    CT_DdeItems: DdeItems
+
+    # OLE links
+    CT_OleLink: OleLink
+    CT_OleItem: OleItem
+    CT_OleItems: OleItems
+
+    # Query tables
+    CT_QueryTable: QueryTable
+    CT_QueryTableField: QueryTableField
+    CT_QueryTableFields: QueryTableFields
+    CT_QueryTableRefresh: QueryTableRefresh
+    CT_QueryTableDeletedFields: QueryTableDeletedFields
+
+    # Revisions (track changes)
+    CT_RevisionHeaders: RevisionHeaders
+    CT_RevisionHeader: RevisionHeader
+    CT_Revisions: Revisions
+    CT_RevisionCellChange: RevisionCellChange
+    CT_RevisionRowColumn: RevisionRowColumn
+    CT_RevisionMove: RevisionMove
+    CT_RevisionFormatting: RevisionFormatting
+    CT_RevisionComment: RevisionComment
+    CT_RevisionDefinedName: RevisionDefinedName
+    CT_RevisionInsertSheet: RevisionInsertSheet
+    CT_RevisionSheetRename: RevisionSheetRename
+    CT_RevisionConflict: RevisionConflict
+    CT_RevisionCustomView: RevisionCustomView
+    CT_RevisionAutoFormatting: RevisionAutoFormatting
+    CT_RevisionQueryTableField: RevisionQueryTableField
+    CT_UndoInfo: UndoInfo
+    CT_ReviewedRevisions: ReviewedRevisions
+    CT_Reviewed: Reviewed
+    CT_Users: Users
+    CT_SharedUser: SharedUser
+
+    # Simple types (ST_*)
+    ST_CellRef: CellRef
+    ST_Ref: Reference
+    ST_Sqref: SquareRef
+    ST_CellType: CellType
+    ST_CellFormulaType: FormulaType
+    ST_CellSpans: CellSpans
+    ST_DataValidationType: ValidationType
+    ST_DataValidationOperator: ValidationOperator
+    ST_DataValidationErrorStyle: ValidationErrorStyle
+    ST_ConditionalFormattingOperator: ConditionalOperator
+    ST_CfType: ConditionalType
+    ST_CfvoType: ConditionalValueType
+    ST_IconSetType: IconSetType
+    ST_SortBy: SortBy
+    ST_SortMethod: SortMethod
+    ST_FilterOperator: FilterOperator
+    ST_DynamicFilterType: DynamicFilterType
+    ST_HorizontalAlignment: HorizontalAlignment
+    ST_VerticalAlignment: VerticalAlignment
+    ST_BorderStyle: BorderStyle
+    ST_PatternType: PatternType
+    ST_GradientType: GradientType
+    ST_FontScheme: FontScheme
+    ST_UnderlineValues: UnderlineStyle
+    ST_VerticalAlignRun: VerticalAlignRun
+    ST_Pane: PaneType
+    ST_PaneState: PaneState
+    ST_SheetState: SheetState
+    ST_SheetViewType: SheetViewType
+    ST_UpdateLinks: UpdateLinks
+    ST_Visibility: Visibility
+    ST_CalcMode: CalculationMode
+    ST_RefMode: ReferenceMode
+    ST_Comments: CommentVisibility
+    ST_Objects: ObjectVisibility
+
+    # CT_* wrapper types: using "Element" suffix to avoid name collision
+    # with same-named ST_* type aliases
+    CT_AutoSortScope: AutoSortScopeElement
+    CT_DataBinding_any: DataBindingAnyElement
+    CT_Extension_any: ExtensionAnyElement
+    CT_Schema_any: SchemaAnyElement
+  fields:
+    # Cell/Row fields
+    r: reference         # row number or cell reference
+    c: cells             # cells in a row
+    s: style_index       # style reference
+    t: cell_type         # cell type (s/n/b/e)
+    v: value             # cell value
+    f: formula           # cell formula
+
+    # Column fields
+    min: start_column
+    max: end_column
+
+    # Row attributes
+    ht: height
+    spans: cell_spans
+    ph: placeholder
+
+    # Style fields
+    numFmtId: number_format_id
+    fontId: font_id
+    fillId: fill_id
+    borderId: border_id
+    xfId: format_id
+
+    # Common attributes
+    ref: reference
+    sqref: square_reference
+    colId: column_id
+
+    # Sheet structure
+    sheetData: sheet_data
+    sheetPr: sheet_properties
+    sheetViews: sheet_views
+    sheetFormatPr: sheet_format
+    mergeCells: merged_cells
+    conditionalFormatting: conditional_formatting
+    dataValidations: data_validations
+    pageMargins: page_margins
+    pageSetup: page_setup
+    headerFooter: header_footer
+    autoFilter: auto_filter
+    extLst: extension_list
+
+  variants:
+    # CellType (ST_CellType) - t attribute values
+    s: SharedString
+    b: Boolean
+    n: Number
+    e: Error
+    str: String
+    inlineStr: InlineString
+
+    # FormulaType (ST_CellFormulaType)
+    normal: Normal
+    array: Array
+    dataTable: DataTable
+    shared: Shared
+
+    # HorizontalAlignment (ST_HorizontalAlignment)
+    general: General
+    left: Left
+    center: Center
+    right: Right
+    fill: Fill
+    justify: Justify
+    centerContinuous: CenterContinuous
+    distributed: Distributed
+
+    # VerticalAlignment (ST_VerticalAlignment)
+    top: Top
+    bottom: Bottom
+    # center already defined above
+
+    # BorderStyle (ST_BorderStyle)
+    none: None
+    thin: Thin
+    medium: Medium
+    dashed: Dashed
+    dotted: Dotted
+    thick: Thick
+    double: Double
+    hair: Hair
+    mediumDashed: MediumDashed
+    dashDot: DashDot
+    mediumDashDot: MediumDashDot
+    dashDotDot: DashDotDot
+    mediumDashDotDot: MediumDashDotDot
+    slantDashDot: SlantDashDot
+
+    # PatternType (ST_PatternType)
+    solid: Solid
+    darkGray: DarkGray
+    mediumGray: MediumGray
+    lightGray: LightGray
+    gray125: Gray125
+    gray0625: Gray0625
+    darkHorizontal: DarkHorizontal
+    darkVertical: DarkVertical
+    darkDown: DarkDown
+    darkUp: DarkUp
+    darkGrid: DarkGrid
+    darkTrellis: DarkTrellis
+    lightHorizontal: LightHorizontal
+    lightVertical: LightVertical
+    lightDown: LightDown
+    lightUp: LightUp
+    lightGrid: LightGrid
+    lightTrellis: LightTrellis
+
+    # PaneType (ST_Pane)
+    bottomRight: BottomRight
+    topRight: TopRight
+    bottomLeft: BottomLeft
+    topLeft: TopLeft
+
+    # PaneState (ST_PaneState)
+    split: Split
+    frozen: Frozen
+    frozenSplit: FrozenSplit
+
+    # SheetState (ST_SheetState)
+    visible: Visible
+    hidden: Hidden
+    veryHidden: VeryHidden
+
+  # XML element names for serde serialization
+  # Maps Rust type name → XML element name
+  elements:
+    # Root elements
+    Worksheet: worksheet
+    Workbook: workbook
+    SharedStrings: sst
+    Stylesheet: styleSheet
+    Comments: comments
+    CalcChain: calcChain
+
+    # Major structural elements
+    SheetData: sheetData
+    Row: row
+    Cell: c
+    SheetViews: sheetViews
+    SheetView: sheetView
+    SheetFormat: sheetFormatPr
+    SheetProperties: sheetPr
+    SheetDimension: dimension
+    Columns: cols
+    Column: col
+    MergedCells: mergeCells
+    MergedCell: mergeCell
+
+    # Pane and selection
+    Pane: pane
+    Selection: selection
+
+    # Filtering
+    AutoFilter: autoFilter
+    FilterColumn: filterColumn
+    Filters: filters
+    Filter: filter
+    SortState: sortState
+    SortCondition: sortCondition
+
+    # Data validation
+    DataValidations: dataValidations
+    DataValidation: dataValidation
+
+    # Conditional formatting
+    ConditionalFormatting: conditionalFormatting
+    ConditionalRule: cfRule
+    ColorScale: colorScale
+    DataBar: dataBar
+    IconSet: iconSet
+    ConditionalFormatValue: cfvo
+
+    # Hyperlinks
+    Hyperlinks: hyperlinks
+    Hyperlink: hyperlink
+
+    # Page layout
+    PageMargins: pageMargins
+    PageSetup: pageSetup
+    PrintOptions: printOptions
+    HeaderFooter: headerFooter
+    PageBreaks: rowBreaks
+
+    # Formulas and values
+    CellFormula: f
+    CellValue: v
+    RichString: is
+    StringItem: si
+
+    # Fonts and styling
+    Fonts: fonts
+    Font: font
+    Fills: fills
+    Fill: fill
+    Borders: borders
+    Border: border
+    BorderProperties: left
+    CellFormats: cellXfs
+    CellStyleFormats: cellStyleXfs
+    Format: xf
+    CellAlignment: alignment
+    CellProtection: protection
+    NumberFormats: numFmts
+    NumberFormat: numFmt
+    CellStyles: cellStyles
+    CellStyle: cellStyle
+    DifferentialFormats: dxfs
+    DifferentialFormat: dxf
+
+    # Colors
+    Color: color
+    Colors: colors
+
+    # Fill types
+    PatternFill: patternFill
+    GradientFill: gradientFill
+    GradientStop: stop
+
+    # Rich text
+    RichTextElement: r
+    RichTextRunProperties: rPr
+
+    # Workbook elements
+    Sheets: sheets
+    Sheet: sheet
+    DefinedNames: definedNames
+    DefinedName: definedName
+    BookViews: bookViews
+    BookView: workbookView
+    WorkbookProperties: workbookPr
+    CalculationProperties: calcPr
+
+    # Protection
+    SheetProtection: sheetProtection
+    WorkbookProtection: workbookProtection
+    ProtectedRanges: protectedRanges
+    ProtectedRange: protectedRange
+
+    # Tables
+    Table: table
+    TableColumns: tableColumns
+    TableColumn: tableColumn
+    TableParts: tableParts
+    TablePart: tablePart
+
+    # Extension list
+    ExtensionList: extLst
+    Extension: ext
+
+    # Comments
+    CommentList: commentList
+    Comment: comment
+    Authors: authors
+
+# WordprocessingML (Word)
+wml:
+  types:
+    CT_Document: Document
+    CT_Body: Body
+    CT_P: Paragraph
+    CT_R: Run
+    CT_Text: Text
+    CT_PPr: ParagraphProperties
+    CT_RPr: RunProperties
+    CT_Tbl: Table
+    CT_TblPr: TableProperties
+    CT_TblGrid: TableGrid
+    CT_TblGridCol: TableGridColumn
+    CT_Tr: TableRow
+    CT_TrPr: TableRowProperties
+    CT_Tc: TableCell
+    CT_TcPr: TableCellProperties
+    CT_Hyperlink: Hyperlink
+    CT_Bookmark: Bookmark
+    CT_BookmarkStart: BookmarkStart
+    CT_BookmarkEnd: BookmarkEnd
+    CT_Comment: Comment
+    CT_Comments: Comments
+    CT_Footnote: Footnote
+    CT_Footnotes: Footnotes
+    CT_Endnote: Endnote
+    CT_Endnotes: Endnotes
+    CT_Styles: Styles
+    CT_Style: Style
+    CT_Fonts: Fonts
+    CT_Font: Font
+    CT_Numbering: Numbering
+    CT_Num: NumberingInstance
+    CT_AbstractNum: AbstractNumbering
+    CT_Lvl: Level
+    CT_SectPr: SectionProperties
+    CT_PageSz: PageSize
+    CT_PageMar: PageMargins
+    CT_Columns: Columns
+    CT_DocGrid: DocumentGrid
+    CT_Hdr: Header
+    CT_Ftr: Footer
+    CT_HdrRef: HeaderReference
+    CT_FtrRef: FooterReference
+    CT_Settings: Settings
+    CT_Compat: Compatibility
+    CT_NumPr: NumberingProperties
+    CT_TblStylePr: TableStyleProperties
+    CT_LsdException: LatentStyleException
+    CT_LatentStyles: LatentStyles
+    CT_DocDefaults: DocumentDefaults
+    CT_PPrDefault: ParagraphPropertiesDefault
+    CT_RPrDefault: RunPropertiesDefault
+    CT_DrawingML: Drawing
+    CT_Inline: InlineDrawing
+    CT_Anchor: AnchoredDrawing
+    # EG_* element group enums
+    EG_BlockLevelElts: BlockContent
+    EG_ContentBlockContent: BlockContentChoice
+    EG_PContent: ParagraphContent
+    EG_PContentBase: ParagraphContentBase
+    EG_ContentRunContent: RunContentChoice
+    EG_ContentRunContentBase: RunContentBase
+    EG_RunInnerContent: RunContent
+    EG_RunLevelElts: RunLevelContent
+    EG_ContentRowContent: RowContent
+    EG_ContentCellContent: CellContent
+    EG_RangeMarkupElements: RangeMarkup
+    EG_HdrFtrReferences: HeaderFooterRef
+    EG_CellMarkupElements: CellMarkup
+    EG_RPrMath: MathRunProperties
+    EG_RubyContent: RubyContent
+    EG_PContentMath: MathContent
+    # Additional CT_* types
+    CT_HdrFtr: HeaderFooter
+    CT_FtnEdn: FootnoteEndnote
+    CT_FtnEdnRef: FootnoteEndnoteRef
+    CT_HdrFtrRef: HeaderFooterReference
+    # CT_* wrapper types: using "Element" suffix to avoid name collision
+    # with same-named ST_* type aliases (e.g., CT_OnOff contains val: OnOff string)
+    CT_OnOff: OnOffElement
+    CT_HpsMeasure: HpsMeasureElement
+    CT_SignedHpsMeasure: SignedHpsMeasureElement
+    CT_TwipsMeasure: TwipsMeasureElement
+    CT_SignedTwipsMeasure: SignedTwipsMeasureElement
+    CT_TextScale: TextScaleElement
+    CT_UnsignedDecimalNumber: UnsignedDecimalNumberElement
+    CT_DocType: DocTypeElement
+    CT_FFName: FFNameElement
+    CT_Guid: GuidElement
+    CT_Language: LanguageElement
+    CT_LongHexNumber: LongHexNumberElement
+    CT_MacroName: MacroNameElement
+    CT_MailMergeDataType: MailMergeDataTypeElement
+    CT_Panose: PanoseElement
+    CT_PixelsMeasure: PixelsMeasureElement
+    CT_Placeholder: PlaceholderElement
+
+  fields:
+    val: value
+    w: width
+    h: height
+    sz: size
+    szCs: size_complex_script
+    b: bold
+    i: italic
+    u: underline
+    strike: strikethrough
+    color: color
+    highlight: highlight
+    rFonts: fonts
+    pStyle: paragraph_style
+    rStyle: run_style
+    jc: justification
+    ind: indentation
+    spacing: spacing
+    pBdr: paragraph_border
+    shd: shading
+    tblPr: table_properties
+    trPr: row_properties
+    tcPr: cell_properties
+    gridSpan: grid_span
+    vMerge: vertical_merge
+    hMerge: horizontal_merge
+    # EG_* field names (key = stripped EG_ prefix, value = desired field name)
+    BlockLevelElts: block_content
+    PContent: paragraph_content
+    RunInnerContent: run_content
+    ContentRowContent: rows
+    ContentCellContent: cells
+    ContentBlockContent: block_content
+    ContentRunContent: run_content
+    RangeMarkupElements: range_markup
+    HdrFtrReferences: header_footer_refs
+    CellMarkupElements: cell_markup
+    RPrMath: math_run_props
+    RunLevelElts: run_level_content
+
+# PresentationML (PowerPoint)
+pml:
+  types:
+    CT_Presentation: Presentation
+    CT_Slide: Slide
+    CT_SlideMaster: SlideMaster
+    CT_SlideLayout: SlideLayout
+    CT_SlideIdList: SlideIdList
+    CT_SlideId: SlideId
+    CT_CommonSlideData: CommonSlideData
+    CT_Shape: Shape
+    CT_ShapeProperties: ShapeProperties
+    CT_ShapeNonVisual: ShapeNonVisual
+    CT_TextBody: TextBody
+    CT_TextParagraph: TextParagraph
+    CT_TextRun: TextRun
+    CT_TextCharacterProperties: TextCharacterProperties
+    CT_TextParagraphProperties: TextParagraphProperties
+    CT_Picture: Picture
+    CT_GroupShape: GroupShape
+    CT_Connector: Connector
+    CT_GraphicalObjectFrame: GraphicalObjectFrame
+    CT_Table: Table
+    CT_TableRow: TableRow
+    CT_TableCell: TableCell
+    CT_Transition: Transition
+    CT_SlideTransition: SlideTransition
+    CT_SlideTiming: SlideTiming
+    CT_NotesSlide: NotesSlide
+    CT_NotesMaster: NotesMaster
+    CT_HandoutMaster: HandoutMaster
+
+    # CT_* wrapper types: using "Element" suffix to avoid name collision
+    # with same-named ST_* type aliases
+    CT_Extension_any: ExtensionAnyElement
+    CT_TLTimeNodeExclusive: TLTimeNodeExclusiveElement
+    CT_TLTimeNodeParallel: TLTimeNodeParallelElement
+  fields:
+    cSld: common_slide_data
+    spTree: shape_tree
+    sp: shape
+    pic: picture
+    cxnSp: connector
+    grpSp: group_shape
+    txBody: text_body
+    nvSpPr: non_visual_properties
+    spPr: shape_properties
+    nvPicPr: non_visual_picture_properties
+    blipFill: blip_fill
+    nvCxnSpPr: non_visual_connector_properties
+    nvGrpSpPr: non_visual_group_properties
+
+# DrawingML (shared)
+dml:
+  types:
+    CT_Transform2D: Transform2D
+    CT_Point2D: Point2D
+    CT_PositiveSize2D: PositiveSize2D
+    CT_Blip: Blip
+    CT_BlipFillProperties: BlipFillProperties
+    CT_SolidColorFillProperties: SolidColorFill
+    CT_GradientFillProperties: GradientFill
+    CT_PatternFillProperties: PatternFill
+    CT_NoFillProperties: NoFill
+    CT_LineProperties: LineProperties
+    CT_ShapeStyle: ShapeStyle
+    CT_EffectList: EffectList
+    CT_EffectContainer: EffectContainer
+    CT_TextBody: TextBody
+    CT_TextParagraph: TextParagraph
+    CT_RegularTextRun: TextRun
+    CT_TextCharacterProperties: TextCharacterProperties
+    CT_TextParagraphProperties: TextParagraphProperties
+    CT_TextFont: TextFont
+    CT_SchemeColor: SchemeColor
+    CT_SRgbColor: SrgbColor
+    CT_HslColor: HslColor
+    CT_PresetColor: PresetColor
+    CT_SystemColor: SystemColor
+    CT_Theme: Theme
+    CT_ColorScheme: ColorScheme
+    CT_FontScheme: FontScheme
+    CT_FormatScheme: FormatScheme
+    # Chart types (ECMA-376 §21.2, dml-chart.rnc)
+    CT_Chart: Chart
+    CT_ChartSpace: ChartSpace
+    CT_PlotArea: PlotArea
+    CT_Legend: Legend
+    CT_Title: ChartTitle
+    CT_Series: Series
+    CT_BarChart: BarChart
+    CT_LineChart: LineChart
+    CT_PieChart: PieChart
+    CT_ScatterChart: ScatterChart
+    CT_AreaChart: AreaChart
+    CT_BubbleChart: BubbleChart
+    CT_DoughnutChart: DoughnutChart
+    CT_RadarChart: RadarChart
+    CT_StockChart: StockChart
+    CT_SurfaceChart: SurfaceChart
+    CT_Line3DChart: Line3DChart
+    CT_Bar3DChart: Bar3DChart
+    CT_Area3DChart: Area3DChart
+    CT_Pie3DChart: Pie3DChart
+    CT_Surface3DChart: Surface3DChart
+    CT_OfPieChart: OfPieChart
+    CT_BarSer: BarSeries
+    CT_LineSer: LineSeries
+    CT_PieSer: PieSeries
+    CT_ScatterSer: ScatterSeries
+    CT_AreaSer: AreaSeries
+    CT_BubbleSer: BubbleSeries
+    CT_RadarSer: RadarSeries
+    CT_SurfaceSer: SurfaceSeries
+    CT_CatAx: CategoryAxis
+    CT_ValAx: ValueAxis
+    CT_DateAx: DateAxis
+    CT_SerAx: SeriesAxis
+    CT_NumRef: NumericReference
+    CT_NumData: NumericData
+    CT_StrRef: StringReference
+    CT_StrData: StringData
+    CT_NumVal: NumericValue
+    CT_StrVal: StringValue
+    CT_DLbl: DataLabel
+    CT_DLbls: DataLabels
+    CT_Marker: ChartMarker
+    CT_NumFmt: ChartNumFmt
+    CT_Layout: ChartLayout
+    CT_ManualLayout: ManualLayout
+    CT_View3D: View3D
+    CT_ErrBars: ErrorBars
+    CT_Trendline: Trendline
+    CT_Scaling: AxisScaling
+    CT_AxDataSource: AxisDataSource
+    CT_SerTx: SeriesText
+    CT_Tx: ChartText
+    CT_NumDataSource: NumericDataSource
+    CT_LayoutTarget: LayoutTarget
+    CT_LayoutMode: LayoutMode
+    CT_DispUnits: DisplayUnits
+    CT_DispUnitsLbl: DisplayUnitsLabel
+    CT_UpDownBars: UpDownBars
+    CT_UpDownBar: UpDownBar
+    CT_DPt: DataPoint
+    CT_TrendlineLbl: TrendlineLabel
+    CT_ChartLines: ChartLines
+    CT_BandFmt: BandFormat
+    CT_BandFmts: BandFormats
+    CT_LegendEntry: LegendEntry
+    CT_PivotFmt: PivotFormat
+    CT_PivotFmts: PivotFormats
+    CT_PivotSource: PivotSource
+    CT_DTable: DataTable
+    CT_Surface: ChartSurface
+    CT_CustSplit: CustomSplit
+    CT_PictureOptions: PictureOptions
+    CT_Protection: ChartProtection
+    CT_HeaderFooter: ChartHeaderFooter
+    CT_PageMargins: ChartPageMargins
+    CT_PageSetup: ChartPageSetup
+    CT_PrintSettings: PrintSettings
+    CT_ExternalData: ExternalData
+    CT_Extension: ChartExtension
+    CT_ExtensionList: ChartExtensionList
+    CT_Lvl: MultiLevelStrLevel
+    CT_MultiLvlStrData: MultiLevelStrData
+    CT_MultiLvlStrRef: MultiLevelStrRef
+    CT_TextLanguageID: TextLanguageId
+    CT_RelId: ChartRelId
+    CT_GapAmount: GapAmount
+    CT_Overlap: OverlapAmount
+    CT_BubbleScale: BubbleScale
+    CT_SizeRepresents: SizeRepresents
+    CT_FirstSliceAng: FirstSliceAngle
+    CT_HoleSize: HoleSize
+    CT_SplitType: SplitType
+    CT_SecondPieSize: SecondPieSize
+    CT_LblAlgn: LabelAlignment
+    CT_DLblPos: DataLabelPosition
+    CT_MarkerStyle: ChartMarkerStyle
+    CT_MarkerSize: ChartMarkerSize
+    CT_TrendlineType: TrendlineType
+    CT_Order: TrendlineOrder
+    CT_Period: TrendlinePeriod
+    CT_ErrDir: ErrorDirection
+    CT_ErrBarType: ErrorBarType
+    CT_ErrValType: ErrorValueType
+    CT_Grouping: ChartGrouping
+    CT_ScatterStyle: ScatterStyle
+    CT_RadarStyle: RadarStyle
+    CT_BarGrouping: BarGrouping
+    CT_BarDir: BarDirection
+    CT_Shape: BarShape
+    CT_OfPieType: OfPieType
+    CT_Thickness: ChartThickness
+    CT_HPercent: HPercent
+    CT_RotX: RotX
+    CT_RotY: RotY
+    CT_DepthPercent: DepthPercent
+    CT_Perspective: Perspective
+    CT_AxPos: AxisPosition
+    CT_Crosses: AxisCrosses
+    CT_CrossBetween: CrossBetween
+    CT_TickMark: TickMark
+    CT_TickLblPos: TickLabelPosition
+    CT_Skip: AxisSkip
+    CT_TimeUnit: TimeUnit
+    CT_AxisUnit: AxisUnit
+    CT_BuiltInUnit: BuiltInUnit
+    CT_PictureFormat: ChartPictureFormat
+    CT_PictureStackUnit: PictureStackUnit
+    CT_LblOffset: LabelOffset
+    CT_LogBase: LogBase
+    CT_Orientation: AxisOrientation
+    CT_LegendPos: LegendPosition
+    CT_DispBlanksAs: DisplayBlanksAs
+    CT_Style: ChartStyle
+
+    # ST_ chart enum types
+    ST_LayoutTarget: LayoutTargetType
+    ST_LayoutMode: LayoutModeType
+    ST_Grouping: GroupingType
+    ST_ScatterStyle: ScatterStyleType
+    ST_RadarStyle: RadarStyleType
+    ST_BarGrouping: BarGroupingType
+    ST_BarDir: BarDirectionType
+    ST_Shape: BarShapeType
+    ST_OfPieType: OfPieTypeValue
+    ST_AxPos: AxisPositionType
+    ST_Crosses: AxisCrossesType
+    ST_CrossBetween: CrossBetweenType
+    ST_TickMark: TickMarkType
+    ST_TickLblPos: TickLabelPositionType
+    ST_TimeUnit: TimeUnitType
+    ST_BuiltInUnit: BuiltInUnitType
+    ST_PictureFormat: PictureFormatType
+    ST_Orientation: AxisOrientationType
+    ST_LegendPos: LegendPositionType
+    ST_DispBlanksAs: DisplayBlanksAsType
+    ST_LblAlgn: LabelAlignType
+    ST_DLblPos: DataLabelPositionType
+    ST_MarkerStyle: MarkerStyleType
+    ST_TrendlineType: TrendlineTypeValue
+    ST_ErrDir: ErrorDirectionType
+    ST_ErrBarType: ErrorBarTypeValue
+    ST_ErrValType: ErrorValueTypeValue
+    ST_SizeRepresents: SizeRepresentsType
+    ST_SplitType: SplitTypeValue
+    ST_PageSetupOrientation: ChartPageOrientation
+    ST_Style: ChartStyleValue
+    ST_RotX: RotXValue
+    ST_HPercent: HPercentValue
+    ST_HPercentWithSymbol: HPercentWithSymbol
+    ST_HPercentUShort: HPercentUShort
+    ST_RotY: RotYValue
+    ST_DepthPercent: DepthPercentValue
+    ST_DepthPercentWithSymbol: DepthPercentWithSymbol
+    ST_DepthPercentUShort: DepthPercentUShort
+    ST_Perspective: PerspectiveValue
+    ST_Thickness: ChartThicknessValue
+    ST_ThicknessPercent: ThicknessPercentStr
+    ST_GapAmount: GapAmountValue
+    ST_GapAmountPercent: GapAmountPercent
+    ST_GapAmountUShort: GapAmountUShort
+    ST_Overlap: OverlapValue
+    ST_OverlapPercent: OverlapPercent
+    ST_OverlapByte: OverlapByte
+    ST_BubbleScale: BubbleScaleValue
+    ST_BubbleScalePercent: BubbleScalePercent
+    ST_BubbleScaleUInt: BubbleScaleUInt
+    ST_FirstSliceAng: FirstSliceAngValue
+    ST_HoleSize: HoleSizeValue
+    ST_HoleSizePercent: HoleSizePercent
+    ST_HoleSizeUByte: HoleSizeUByte
+    ST_SecondPieSize: SecondPieSizeValue
+    ST_SecondPieSizePercent: SecondPieSizePercent
+    ST_SecondPieSizeUShort: SecondPieSizeUShort
+    ST_MarkerSize: MarkerSizeValue
+    ST_Order: TrendlineOrderValue
+    ST_Period: TrendlinePeriodValue
+    ST_Skip: AxisSkipValue
+    ST_AxisUnit: AxisUnitValue
+    ST_PictureStackUnit: PictureStackUnitValue
+    ST_LblOffset: LabelOffsetValue
+    ST_LblOffsetPercent: LabelOffsetPercent
+    ST_LblOffsetUShort: LabelOffsetUShort
+    ST_LogBase: LogBaseValue
+
+    # Diagram/SmartArt types (ECMA-376 §21.4, dml-diagram.rnc)
+    CT_DataModel: DataModel
+    CT_Pt: DiagramPoint
+    CT_PtList: DiagramPointList
+    CT_Cxn: DiagramConnection
+    CT_CxnList: DiagramConnectionList
+    CT_ElemPropSet: DiagramElementProperties
+    CT_RelIds: DiagramRelationshipIds
+    CT_DiagramDefinition: DiagramDefinition
+    CT_DiagramDefinitionHeader: DiagramDefinitionHeader
+    CT_DiagramDefinitionHeaderLst: DiagramDefinitionHeaderList
+    CT_LayoutNode: LayoutNode
+    CT_Algorithm: LayoutAlgorithm
+    CT_Parameter: AlgorithmParameter
+    CT_Shape: DiagramShape
+    CT_ForEach: LayoutForEach
+    CT_Choose: LayoutChoose
+    CT_When: LayoutWhen
+    CT_Otherwise: LayoutOtherwise
+    CT_Adj: LayoutAdjustment
+    CT_AdjLst: LayoutAdjustmentList
+    CT_ColorTransform: DiagramColorTransform
+    CT_ColorTransformHeader: DiagramColorTransformHeader
+    CT_ColorTransformHeaderLst: DiagramColorTransformHeaderList
+    CT_Colors: DiagramColors
+    CT_CTStyleLabel: DiagramColorStyleLabel
+    CT_CTCategory: DiagramColorCategory
+    CT_CTCategories: DiagramColorCategories
+    CT_StyleDefinition: DiagramStyleDefinition
+    CT_StyleDefinitionHeader: DiagramStyleDefinitionHeader
+    CT_StyleDefinitionHeaderLst: DiagramStyleDefinitionHeaderList
+    CT_StyleLabel: DiagramStyleLabel
+    CT_SDCategory: DiagramStyleCategory
+    CT_SDCategories: DiagramStyleCategories
+    CT_TextProps: DiagramTextProperties
+    CT_LayoutVariablePropertySet: LayoutVariableProperties
+    CT_OrgChart: OrgChartProperties
+    CT_Direction: LayoutDirection
+    CT_HierBranchStyle: HierarchyBranchStyle
+    CT_AnimOne: AnimateOneByOne
+    CT_AnimLvl: AnimateLevel
+    CT_BulletEnabled: BulletEnabled
+    CT_ResizeHandles: ResizeHandles
+    CT_Constraint: LayoutConstraint
+    CT_Constraints: LayoutConstraints
+    CT_NumericRule: NumericRule
+    CT_Rules: LayoutRules
+    CT_PresentationOf: PresentationOf
+    CT_Name: DiagramName
+    CT_Description: DiagramDescription
+    CT_Category: DiagramCategory
+    CT_Categories: DiagramCategories
+    CT_CTName: ColorTransformName
+    CT_CTDescription: ColorTransformDescription
+    CT_SDName: StyleDefinitionName
+    CT_SDDescription: StyleDefinitionDescription
+    CT_SampleData: DiagramSampleData
+    CT_ChildMax: ChildMaximum
+    CT_ChildPref: ChildPreference
+
+    # CT_* wrapper types: using "Element" suffix to avoid name collision
+    # with same-named ST_* type aliases
+    CT_FixedPercentage: FixedPercentageElement
+    CT_PositiveFixedPercentage: PositiveFixedPercentageElement
+    CT_PositivePercentage: PositivePercentageElement
+    CT_TextBulletSizePercent: TextBulletSizePercentElement
+    CT_AlphaModulateEffect: AlphaModulateEffectElement
+    CT_GraphicalObject: GraphicalObjectElement
+    CT_GraphicalObjectData_any: GraphicalObjectDataAnyElement
+    CT_OfficeArtExtension_any: OfficeArtExtensionAnyElement
+    CT_Path2DLineTo: Path2DLineToElement
+    CT_Path2DMoveTo: Path2DMoveToElement
+    CT_TextBlipBullet: TextBlipBulletElement
+  fields:
+    off: offset
+    ext: extents
+    chOff: child_offset
+    chExt: child_extents
+    xfrm: transform
+    prst: preset
+    ln: line
+    solidFill: solid_fill
+    gradFill: gradient_fill
+    pattFill: pattern_fill
+    noFill: no_fill
+    effectLst: effect_list
+    a: anchor
+    r: relationship_id
+    cNvPr: common_non_visual_properties
+    cNvSpPr: common_non_visual_shape_properties
+    cNvPicPr: common_non_visual_picture_properties
+  variants:
+    # Diagram axis/relationship types use "self" which is a Rust keyword
+    self: SelfNode

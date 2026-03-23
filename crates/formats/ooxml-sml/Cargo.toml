@@ -1,0 +1,77 @@
+[package]
+name = "ooxml-sml"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "SpreadsheetML (XLSX) support for the ooxml library"
+readme.workspace = true
+keywords = ["xlsx", "ooxml", "excel", "spreadsheet", "office"]
+categories = ["encoding", "parser-implementations"]
+
+[features]
+default = ["full"]
+# Enable all optional features
+full = [
+    "sml-styling", "sml-structure", "sml-formulas", "sml-formulas-advanced",
+    "sml-layout", "sml-protection", "sml-filtering", "sml-validation",
+    "sml-comments", "sml-charts", "sml-drawings", "sml-hyperlinks",
+    "sml-metadata", "sml-i18n", "sml-pivot", "sml-tables", "sml-extensions",
+    "sml-revisions", "sml-external",
+    "extra-attrs", "extra-children"
+]
+# Roundtrip fidelity features
+extra-attrs = []              # Capture unknown attributes for roundtrip
+extra-children = []  # Capture unknown child elements for roundtrip
+# Individual feature flags (see spec/ooxml-features.yaml for field mappings)
+sml-styling = []              # Fonts, colors, formatting
+sml-structure = []            # Grouping, hiding, outlines, freeze panes
+sml-formulas = []             # Basic formula support
+sml-formulas-advanced = []    # Array formulas, data tables
+sml-layout = []               # Page setup, margins, print
+sml-protection = []           # Sheet/cell protection
+sml-filtering = []            # AutoFilter, sorting
+sml-validation = []           # Data validation
+sml-comments = []             # Cell comments/notes
+sml-charts = []               # Embedded charts
+sml-drawings = []             # Images, shapes
+sml-hyperlinks = []           # Links
+sml-metadata = []             # Cell metadata
+sml-i18n = []                 # Phonetic text, CJK
+sml-pivot = []                # Pivot tables
+sml-tables = []               # Structured tables
+sml-extensions = []           # Extension lists
+sml-revisions = []            # Track changes
+sml-external = []             # External references
+
+[dependencies]
+ooxml-opc.workspace = true
+ooxml-xml.workspace = true
+quick-xml.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+ooxml-corpus.workspace = true
+zip.workspace = true
+
+[build-dependencies]
+ooxml-codegen.workspace = true
+
+[[bench]]
+name = "parse_benchmark"
+harness = false
+
+[[example]]
+name = "resolved_sheet"
+required-features = ["full"]
+
+[[example]]
+name = "bench_throughput"
+required-features = ["full"]
+
+[[example]]
+name = "create_xlsx"
+required-features = ["full"]

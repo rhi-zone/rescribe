@@ -1,0 +1,61 @@
+[package]
+name = "ooxml-pml"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "PresentationML (PPTX) support for the ooxml library"
+readme.workspace = true
+keywords = ["pptx", "ooxml", "powerpoint", "presentation", "office"]
+categories = ["encoding", "parser-implementations"]
+
+[features]
+default = ["full"]
+full = [
+    "pml-transitions",
+    "pml-animations",
+    "pml-notes",
+    "pml-comments",
+    "pml-styling",
+    "pml-masters",
+    "pml-hyperlinks",
+    "pml-media",
+    "pml-external",
+    "pml-extensions",
+    "pml-charts",
+    "dml-fills",
+    "extra-attrs",
+    "extra-children",
+    "dml-tables",
+]
+# Individual feature flags (see spec/ooxml-features.yaml)
+pml-transitions = []     # Slide transitions
+pml-charts = ["ooxml-dml/dml-charts", "ooxml-dml/dml-diagrams"]  # Chart and SmartArt reading
+dml-tables = ["ooxml-dml/dml-tables"]  # DML table support
+dml-fills = ["ooxml-dml/dml-fills"]   # DML fill properties (blip crop rect, etc.)
+pml-animations = []      # Slide timing/animations
+pml-notes = []           # Speaker notes
+pml-comments = []        # Slide comments
+pml-styling = []         # Backgrounds, colors, styles
+pml-masters = []         # Slide masters and layouts
+pml-hyperlinks = []      # Hyperlinks
+pml-media = []           # Audio/video content
+pml-external = []        # OLE objects, external refs
+pml-extensions = []      # Extension lists
+extra-attrs = []
+extra-children = []
+
+[dependencies]
+ooxml-opc.workspace = true
+ooxml-dml.workspace = true
+ooxml-xml.workspace = true
+quick-xml.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+zip.workspace = true
+
+[build-dependencies]
+ooxml-codegen.workspace = true

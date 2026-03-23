@@ -1,0 +1,3849 @@
+# OOXML Feature Tags
+#
+# Maps every element + attribute to feature tags for conditional compilation.
+# Used by ooxml-codegen to generate #[cfg(feature = "...")] attributes.
+#
+# Schema:
+#   <module>:
+#     <ElementName>:
+#       <attribute_or_child>: [tag1, tag2, ...]
+#
+# Tags:
+#   core       - Essential for basic reading/writing (always included)
+#   styling    - Fonts, colors, formatting, appearance
+#   structure  - Grouping, hiding, outlines, freeze panes
+#   formulas   - Basic formula support (shared formulas, etc.)
+#   formulas-advanced - Array formulas, data tables, iteration
+#   layout     - Page setup, margins, print options
+#   protection - Sheet/cell protection, permissions
+#   filtering  - AutoFilter, sorting
+#   validation - Data validation, dropdowns
+#   comments   - Cell comments/notes
+#   charts     - Embedded charts
+#   drawings   - Images, shapes
+#   hyperlinks - Links to URLs, other sheets
+#   metadata   - Cell metadata, custom properties
+#   i18n       - Phonetic text, CJK support
+#   pivot      - Pivot tables and caches
+#   tables     - Structured tables
+#   extensions - Extension lists (extLst)
+#   revisions  - Track changes
+#   external   - External references, links
+
+# =============================================================================
+# SpreadsheetML (Excel)
+# =============================================================================
+sml:
+  # ---------------------------------------------------------------------------
+  # Core worksheet elements
+  # ---------------------------------------------------------------------------
+  Worksheet:
+    # Attributes (none commonly used)
+    # Children
+    sheetPr: [styling, structure]
+    dimension: [core]
+    sheetViews: [core]
+    sheetFormatPr: [styling]
+    cols: [styling]
+    sheetData: [core]
+    sheetCalcPr: [formulas]
+    sheetProtection: [protection]
+    protectedRanges: [protection]
+    scenarios: [formulas-advanced]
+    autoFilter: [filtering]
+    sortState: [filtering]
+    dataConsolidate: [formulas-advanced]
+    customSheetViews: [structure]
+    mergeCells: [core]
+    phoneticPr: [i18n]
+    conditionalFormatting: [styling]
+    dataValidations: [validation]
+    hyperlinks: [hyperlinks]
+    printOptions: [layout]
+    pageMargins: [layout]
+    pageSetup: [layout]
+    headerFooter: [layout]
+    rowBreaks: [layout]
+    colBreaks: [layout]
+    customProperties: [metadata]
+    cellWatches: [formulas-advanced]
+    ignoredErrors: [validation]
+    smartTags: [metadata]
+    drawing: [drawings]
+    drawingHF: [drawings, layout]
+    picture: [drawings]
+    oleObjects: [external]
+    controls: [external]
+    webPublishItems: [external]
+    tableParts: [tables]
+    extLst: [extensions]
+    legacyDrawing: [comments, drawings]
+    legacyDrawingHF: [layout, drawings]
+
+  SheetData:
+    row: [core]
+
+  # ---------------------------------------------------------------------------
+  # Row element
+  # ---------------------------------------------------------------------------
+  Row:
+    # Attributes
+    r: [core]                    # Row number (required)
+    spans: [core]                # Cell span hints for performance
+    s: [core, styling]           # Style index
+    customFormat: [styling]      # Custom format applied
+    ht: [styling]                # Row height
+    hidden: [structure]          # Row is hidden
+    customHeight: [styling]      # Height is custom (not auto)
+    outlineLevel: [structure]    # Outline grouping level
+    collapsed: [structure]       # Outline group collapsed
+    thickTop: [styling]          # Thick top border
+    thickBot: [styling]          # Thick bottom border
+    ph: [i18n]                   # Show phonetic
+    # Children
+    c: [core]                    # Cells
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Cell element
+  # ---------------------------------------------------------------------------
+  Cell:
+    # Attributes
+    r: [core]                    # Cell reference (e.g., "A1")
+    s: [core, styling]           # Style index
+    t: [core]                    # Cell type (s/n/b/e/str/inlineStr)
+    cm: [metadata]               # Cell metadata index
+    vm: [metadata]               # Value metadata index
+    ph: [i18n]                   # Show phonetic
+    # Children
+    f: [core, formulas]          # Formula
+    v: [core]                    # Value
+    is: [core]                   # Inline string (rich text)
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Formula element
+  # ---------------------------------------------------------------------------
+  CellFormula:
+    # Content
+    text: [core]                 # Formula text
+    # Attributes
+    t: [core]                    # Formula type (normal/shared/array/dataTable)
+    si: [core]                   # Shared formula index
+    ref: [core]                  # Reference for shared/array formula master
+    aca: [formulas-advanced]     # Always calculate array
+    dt2D: [formulas-advanced]    # 2D data table
+    dtr: [formulas-advanced]     # Data table row input
+    del1: [formulas-advanced]    # Data table input 1 deleted
+    del2: [formulas-advanced]    # Data table input 2 deleted
+    r1: [formulas-advanced]      # Data table row 1
+    r2: [formulas-advanced]      # Data table row 2
+    ca: [formulas-advanced]      # Calculate cell always (volatile)
+    bx: [formulas-advanced]      # Assigns value to name
+
+  # ---------------------------------------------------------------------------
+  # Column definitions
+  # ---------------------------------------------------------------------------
+  Column:
+    min: [styling]               # First column of range
+    max: [styling]               # Last column of range
+    width: [styling]             # Column width
+    style: [styling]             # Default style for column
+    hidden: [structure]          # Column is hidden
+    customWidth: [styling]       # Width is custom
+    outlineLevel: [structure]    # Outline level
+    collapsed: [structure]       # Collapsed
+    bestFit: [styling]           # Best fit width
+    phonetic: [i18n]             # Show phonetic
+
+  # ---------------------------------------------------------------------------
+  # Sheet views
+  # ---------------------------------------------------------------------------
+  SheetView:
+    windowProtection: [protection]
+    showFormulas: [formulas]
+    showGridLines: [styling]
+    showRowColHeaders: [styling]
+    showZeros: [styling]
+    rightToLeft: [i18n]
+    tabSelected: [core]
+    showRuler: [layout]
+    showOutlineSymbols: [structure]
+    defaultGridColor: [styling]
+    showWhiteSpace: [layout]
+    view: [core]
+    topLeftCell: [core]
+    colorId: [styling]
+    zoomScale: [core]
+    zoomScaleNormal: [core]
+    zoomScaleSheetLayoutView: [layout]
+    zoomScalePageLayoutView: [layout]
+    workbookViewId: [core]
+    # Children
+    pane: [structure]
+    selection: [core]
+    pivotSelection: [pivot]
+    extLst: [extensions]
+
+  Pane:
+    xSplit: [structure]          # Columns frozen/split
+    ySplit: [structure]          # Rows frozen/split
+    topLeftCell: [structure]     # Top-left cell of bottom-right pane
+    activePane: [structure]      # Active pane
+    state: [structure]           # frozen/frozenSplit/split
+
+  # ---------------------------------------------------------------------------
+  # Merged cells
+  # ---------------------------------------------------------------------------
+  MergedCell:
+    ref: [core]                  # Range reference (e.g., "A1:B2")
+
+  # ---------------------------------------------------------------------------
+  # Conditional formatting
+  # ---------------------------------------------------------------------------
+  ConditionalFormatting:
+    sqref: [styling]             # Cell ranges
+    pivot: [pivot, styling]      # Applies to pivot table
+    # Children
+    cfRule: [styling]
+    extLst: [extensions]
+
+  ConditionalRule:
+    type: [styling]              # Rule type
+    dxfId: [styling]             # Differential format ID
+    priority: [styling]          # Priority
+    stopIfTrue: [styling]        # Stop if true
+    aboveAverage: [styling]      # Above average params
+    percent: [styling]           # Percent params
+    bottom: [styling]            # Bottom N params
+    operator: [styling]          # Operator
+    text: [styling]              # Text for contains/etc
+    timePeriod: [styling]        # Time period
+    rank: [styling]              # Rank
+    stdDev: [styling]            # Std deviation
+    equalAverage: [styling]      # Equal average
+    # Children
+    formula: [styling]
+    colorScale: [styling]
+    dataBar: [styling]
+    iconSet: [styling]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Data validation
+  # ---------------------------------------------------------------------------
+  DataValidation:
+    type: [validation]           # Validation type
+    errorStyle: [validation]     # Error alert style
+    imeMode: [validation, i18n]  # IME mode
+    operator: [validation]       # Comparison operator
+    allowBlank: [validation]     # Allow blank
+    showDropDown: [validation]   # Show dropdown (inverted!)
+    showInputMessage: [validation]
+    showErrorMessage: [validation]
+    errorTitle: [validation]
+    error: [validation]
+    promptTitle: [validation]
+    prompt: [validation]
+    sqref: [validation]          # Cell ranges
+    # Children
+    formula1: [validation]
+    formula2: [validation]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # AutoFilter
+  # ---------------------------------------------------------------------------
+  AutoFilter:
+    ref: [filtering]             # Filter range
+    # Children
+    filterColumn: [filtering]
+    sortState: [filtering]
+    extLst: [extensions]
+
+  FilterColumn:
+    colId: [filtering]           # Column index
+    hiddenButton: [filtering]    # Hide dropdown button
+    showButton: [filtering]      # Show dropdown button
+    # Children
+    filters: [filtering]
+    top10: [filtering]
+    customFilters: [filtering]
+    dynamicFilter: [filtering]
+    colorFilter: [filtering]
+    iconFilter: [filtering]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Comments
+  # ---------------------------------------------------------------------------
+  Comment:
+    ref: [comments]              # Cell reference
+    authorId: [comments]         # Author index
+    guid: [comments]             # GUID
+    shapeId: [comments]          # Shape ID
+    # Children
+    text: [comments]             # Comment text (rich string)
+
+  # ---------------------------------------------------------------------------
+  # Hyperlinks
+  # ---------------------------------------------------------------------------
+  Hyperlink:
+    ref: [hyperlinks]            # Cell reference
+    location: [hyperlinks]       # Location within document
+    tooltip: [hyperlinks]        # Tooltip text
+    display: [hyperlinks]        # Display text
+    r_id: [hyperlinks]           # Relationship ID for external
+
+  # ---------------------------------------------------------------------------
+  # Page layout
+  # ---------------------------------------------------------------------------
+  PageMargins:
+    left: [layout]
+    right: [layout]
+    top: [layout]
+    bottom: [layout]
+    header: [layout]
+    footer: [layout]
+
+  PageSetup:
+    paperSize: [layout]
+    paperHeight: [layout]
+    paperWidth: [layout]
+    scale: [layout]
+    firstPageNumber: [layout]
+    fitToWidth: [layout]
+    fitToHeight: [layout]
+    pageOrder: [layout]
+    orientation: [layout]
+    usePrinterDefaults: [layout]
+    blackAndWhite: [layout]
+    draft: [layout]
+    cellComments: [layout, comments]
+    useFirstPageNumber: [layout]
+    errors: [layout]
+    horizontalDpi: [layout]
+    verticalDpi: [layout]
+    copies: [layout]
+    r_id: [layout]               # Relationship to printer settings
+
+  HeaderFooter:
+    differentOddEven: [layout]
+    differentFirst: [layout]
+    scaleWithDoc: [layout]
+    alignWithMargins: [layout]
+    # Children
+    oddHeader: [layout]
+    oddFooter: [layout]
+    evenHeader: [layout]
+    evenFooter: [layout]
+    firstHeader: [layout]
+    firstFooter: [layout]
+
+  # ---------------------------------------------------------------------------
+  # Styles (Stylesheet)
+  # ---------------------------------------------------------------------------
+  Stylesheet:
+    numFmts: [styling]
+    fonts: [styling]
+    fills: [styling]
+    borders: [styling]
+    cellStyleXfs: [styling]
+    cellXfs: [styling]
+    cellStyles: [styling]
+    dxfs: [styling]
+    tableStyles: [styling, tables]
+    colors: [styling]
+    extLst: [extensions]
+
+  Font:
+    name: [styling]
+    charset: [styling, i18n]
+    family: [styling]
+    b: [styling]                 # Bold
+    i: [styling]                 # Italic
+    strike: [styling]            # Strikethrough
+    outline: [styling]
+    shadow: [styling]
+    condense: [styling]
+    extend: [styling]
+    color: [styling]
+    sz: [styling]                # Size
+    u: [styling]                 # Underline
+    vertAlign: [styling]
+    scheme: [styling]
+
+  Fill:
+    patternFill: [styling]
+    gradientFill: [styling]
+
+  Border:
+    left: [styling]
+    right: [styling]
+    top: [styling]
+    bottom: [styling]
+    diagonal: [styling]
+    vertical: [styling]
+    horizontal: [styling]
+    diagonalUp: [styling]
+    diagonalDown: [styling]
+    outline: [styling]
+
+  Format:  # CT_Xf / CellFormat
+    numFmtId: [styling]
+    fontId: [styling]
+    fillId: [styling]
+    borderId: [styling]
+    xfId: [styling]
+    quotePrefix: [styling]
+    pivotButton: [pivot, styling]
+    applyNumberFormat: [styling]
+    applyFont: [styling]
+    applyFill: [styling]
+    applyBorder: [styling]
+    applyAlignment: [styling]
+    applyProtection: [styling, protection]
+    # Children
+    alignment: [styling]
+    protection: [protection]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Shared strings
+  # ---------------------------------------------------------------------------
+  SharedStrings:
+    count: [core]
+    uniqueCount: [core]
+    # Children
+    si: [core]                   # String items
+
+  StringItem:
+    t: [core]                    # Plain text
+    r: [core]                    # Rich text runs
+    rPh: [i18n]                  # Phonetic runs
+    phoneticPr: [i18n]           # Phonetic properties
+
+  # ---------------------------------------------------------------------------
+  # Workbook
+  # ---------------------------------------------------------------------------
+  Workbook:
+    fileVersion: [core]
+    fileSharing: [protection]
+    workbookPr: [core]
+    workbookProtection: [protection]
+    bookViews: [core]
+    sheets: [core]
+    functionGroups: [formulas-advanced]
+    externalReferences: [external]
+    definedNames: [core, formulas]
+    calcPr: [formulas]
+    oleSize: [external]
+    customWorkbookViews: [structure]
+    pivotCaches: [pivot]
+    smartTagPr: [metadata]
+    smartTagTypes: [metadata]
+    webPublishing: [external]
+    fileRecoveryPr: [core]
+    webPublishObjects: [external]
+    extLst: [extensions]
+
+  Sheet:  # Sheet reference in workbook
+    name: [core]
+    sheetId: [core]
+    state: [structure]           # visible/hidden/veryHidden
+    r_id: [core]                 # Relationship ID
+
+  DefinedName:
+    name: [core, formulas]
+    comment: [core]
+    customMenu: [formulas-advanced]
+    description: [core]
+    help: [formulas-advanced]
+    statusBar: [formulas-advanced]
+    localSheetId: [core, formulas]
+    hidden: [structure]
+    function: [formulas-advanced]
+    vbProcedure: [formulas-advanced]
+    xlm: [formulas-advanced]
+    functionGroupId: [formulas-advanced]
+    shortcutKey: [formulas-advanced]
+    publishToServer: [external]
+    workbookParameter: [formulas-advanced]
+    # Content
+    text: [core, formulas]       # The formula/reference
+
+  # ---------------------------------------------------------------------------
+  # Tables
+  # ---------------------------------------------------------------------------
+  Table:
+    id: [tables]
+    name: [tables]
+    displayName: [tables]
+    comment: [tables]
+    ref: [tables]
+    tableType: [tables]
+    headerRowCount: [tables]
+    insertRow: [tables]
+    insertRowShift: [tables]
+    totalsRowCount: [tables]
+    totalsRowShown: [tables]
+    published: [tables]
+    headerRowDxfId: [tables, styling]
+    dataDxfId: [tables, styling]
+    totalsRowDxfId: [tables, styling]
+    headerRowBorderDxfId: [tables, styling]
+    tableBorderDxfId: [tables, styling]
+    totalsRowBorderDxfId: [tables, styling]
+    headerRowCellStyle: [tables, styling]
+    dataCellStyle: [tables, styling]
+    totalsRowCellStyle: [tables, styling]
+    connectionId: [tables, external]
+    # Children
+    autoFilter: [tables, filtering]
+    sortState: [tables, filtering]
+    tableColumns: [tables]
+    tableStyleInfo: [tables, styling]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Charts (basic - full chart support is in DML)
+  # ---------------------------------------------------------------------------
+  ChartSheet:
+    sheetPr: [charts]
+    sheetViews: [charts]
+    sheetProtection: [charts, protection]
+    customSheetViews: [charts]
+    pageMargins: [charts, layout]
+    pageSetup: [charts, layout]
+    headerFooter: [charts, layout]
+    drawing: [charts]
+    drawingHF: [charts, layout]
+    picture: [charts, drawings]
+    webPublishItems: [charts, external]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Workbook views
+  # ---------------------------------------------------------------------------
+  BookView:
+    visibility: [structure]
+    minimized: [structure]
+    showHorizontalScroll: [structure]
+    showVerticalScroll: [structure]
+    showSheetTabs: [structure]
+    xWindow: [structure]
+    yWindow: [structure]
+    windowWidth: [structure]
+    windowHeight: [structure]
+    tabRatio: [structure]
+    firstSheet: [structure]
+    activeTab: [core]
+    autoFilterDateGrouping: [filtering]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Cell formatting details
+  # ---------------------------------------------------------------------------
+  CellAlignment:
+    horizontal: [styling]
+    vertical: [styling]
+    textRotation: [styling]
+    wrapText: [styling]
+    indent: [styling]
+    relativeIndent: [styling]
+    justifyLastLine: [styling]
+    shrinkToFit: [styling]
+    readingOrder: [styling, i18n]
+
+  CellProtection:
+    locked: [protection]
+    hidden: [protection]
+
+  NumberFormat:
+    numFmtId: [styling]
+    formatCode: [styling]
+
+  # ---------------------------------------------------------------------------
+  # Color palette
+  # ---------------------------------------------------------------------------
+  Color:
+    auto: [styling]
+    indexed: [styling]
+    rgb: [styling]
+    theme: [styling]
+    tint: [styling]
+
+  Colors:
+    indexedColors: [styling]
+    mruColors: [styling]
+
+  # ---------------------------------------------------------------------------
+  # Sheet properties
+  # ---------------------------------------------------------------------------
+  SheetProperties:
+    syncHorizontal: [structure]
+    syncVertical: [structure]
+    syncRef: [structure]
+    transitionEvaluation: [formulas]
+    transitionEntry: [formulas]
+    published: [external]
+    codeName: [structure]
+    filterMode: [filtering]
+    enableFormatConditionsCalculation: [styling]
+    # Children
+    tabColor: [styling]
+    outlinePr: [structure]
+    pageSetUpPr: [layout]
+
+  SheetFormatProperties:
+    baseColWidth: [styling]
+    defaultColWidth: [styling]
+    defaultRowHeight: [styling]
+    customHeight: [styling]
+    zeroHeight: [styling]
+    thickTop: [styling]
+    thickBottom: [styling]
+    outlineLevelRow: [structure]
+    outlineLevelCol: [structure]
+
+  # ---------------------------------------------------------------------------
+  # Selection state
+  # ---------------------------------------------------------------------------
+  Selection:
+    pane: [core]
+    activeCell: [core]
+    activeCellId: [core]
+    sqref: [core]
+
+  # ---------------------------------------------------------------------------
+  # Page breaks
+  # ---------------------------------------------------------------------------
+  PageBreaks:
+    count: [layout]
+    manualBreakCount: [layout]
+    # Children
+    brk: [layout]
+
+  Break:
+    id: [layout]
+    min: [layout]
+    max: [layout]
+    man: [layout]
+    pt: [layout]
+
+  # ---------------------------------------------------------------------------
+  # Calculation chain
+  # ---------------------------------------------------------------------------
+  CalcChain:
+    c: [formulas]
+    extLst: [extensions]
+
+  CalcCell:
+    r: [formulas]                # Cell reference
+    i: [formulas]                # Sheet index
+    s: [formulas]                # Child chain
+    l: [formulas]                # New level dependency
+    t: [formulas]                # New thread
+    a: [formulas]                # Array formula
+
+  CalculationProperties:
+    calcId: [formulas]
+    calcMode: [formulas]
+    fullCalcOnLoad: [formulas]
+    refMode: [formulas]
+    iterate: [formulas-advanced]
+    iterateCount: [formulas-advanced]
+    iterateDelta: [formulas-advanced]
+    fullPrecision: [formulas]
+    calcCompleted: [formulas]
+    calcOnSave: [formulas]
+    concurrentCalc: [formulas-advanced]
+    concurrentManualCount: [formulas-advanced]
+    forceFullCalc: [formulas]
+
+  # ---------------------------------------------------------------------------
+  # Conditional formatting details
+  # ---------------------------------------------------------------------------
+  ColorScale:
+    cfvo: [styling]
+    color: [styling]
+
+  DataBar:
+    minLength: [styling]
+    maxLength: [styling]
+    showValue: [styling]
+    # Children
+    cfvo: [styling]
+    color: [styling]
+
+  IconSet:
+    iconSet: [styling]
+    showValue: [styling]
+    percent: [styling]
+    reverse: [styling]
+    # Children
+    cfvo: [styling]
+
+  ConditionalFormatValue:
+    type: [styling]
+    val: [styling]
+    gte: [styling]
+
+# =============================================================================
+# WordprocessingML (Word)
+# =============================================================================
+wml:
+  # ---------------------------------------------------------------------------
+  # Top-level
+  # ---------------------------------------------------------------------------
+  Document:
+    body: [core]
+    background: [styling]
+    conformance: [core]
+
+  Body:
+    # block_level_elts omitted — EG_* content, always included
+    sectPr: [layout]
+
+  # ---------------------------------------------------------------------------
+  # Paragraph
+  # ---------------------------------------------------------------------------
+  Paragraph:
+    rsidRPr: [track-changes]
+    rsidR: [track-changes]
+    rsidDel: [track-changes]
+    rsidP: [track-changes]
+    rsidRDefault: [track-changes]
+    pPr: [styling]
+    # p_content omitted — EG_* content, always included
+
+  ParagraphProperties:
+    pStyle: [core]
+    keepNext: [layout]
+    keepLines: [layout]
+    pageBreakBefore: [layout]
+    framePr: [layout]
+    widowControl: [layout]
+    numPr: [numbering]
+    suppressLineNumbers: [layout]
+    pBdr: [styling]
+    shd: [styling]
+    tabs: [styling]
+    suppressAutoHyphens: [styling]
+    kinsoku: [styling]
+    wordWrap: [styling]
+    overflowPunct: [styling]
+    topLinePunct: [styling]
+    autoSpaceDE: [styling]
+    autoSpaceDN: [styling]
+    bidi: [styling]
+    adjustRightInd: [styling]
+    snapToGrid: [layout]
+    spacing: [styling]
+    ind: [styling]
+    contextualSpacing: [styling]
+    mirrorIndents: [styling]
+    suppressOverlap: [layout]
+    jc: [styling]
+    textDirection: [styling]
+    textAlignment: [styling]
+    textboxTightWrap: [styling]
+    outlineLvl: [styling]
+    divId: [styling]
+    cnfStyle: [styling]
+    rPr: [styling]
+    sectPr: [layout]
+    pPrChange: [track-changes]
+
+  # ---------------------------------------------------------------------------
+  # Run
+  # ---------------------------------------------------------------------------
+  Run:
+    rsidRPr: [track-changes]
+    rsidDel: [track-changes]
+    rsidR: [track-changes]
+    rPr: [styling]
+    # run_inner_content omitted — EG_* content, always included
+
+  RunProperties:
+    rStyle: [core]
+    rFonts: [styling]
+    b: [styling]
+    bCs: [styling]
+    i: [styling]
+    iCs: [styling]
+    caps: [styling]
+    smallCaps: [styling]
+    strike: [styling]
+    dstrike: [styling]
+    outline: [styling]
+    shadow: [styling]
+    emboss: [styling]
+    imprint: [styling]
+    noProof: [styling]
+    snapToGrid: [styling]
+    vanish: [styling]
+    webHidden: [styling]
+    color: [styling]
+    spacing: [styling]
+    w: [styling]
+    kern: [styling]
+    position: [styling]
+    sz: [styling]
+    szCs: [styling]
+    highlight: [styling]
+    u: [styling]
+    effect: [styling]
+    bdr: [styling]
+    shd: [styling]
+    fitText: [styling]
+    vertAlign: [styling]
+    rtl: [styling]
+    cs: [styling]
+    em: [styling]
+    lang: [styling]
+    eastAsianLayout: [styling]
+    specVanish: [styling]
+    oMath: [styling]
+    rPrChange: [track-changes]
+
+  # ---------------------------------------------------------------------------
+  # Section
+  # ---------------------------------------------------------------------------
+  SectionProperties:
+    rsidRPr: [track-changes]
+    rsidDel: [track-changes]
+    rsidR: [track-changes]
+    rsidSect: [track-changes]
+    # hdr_ftr_references omitted — EG_* content, always included
+    footnotePr: [comments]
+    endnotePr: [comments]
+    type: [layout]
+    pgSz: [layout]
+    pgMar: [layout]
+    paperSrc: [layout]
+    pgBorders: [layout]
+    lnNumType: [layout]
+    pgNumType: [layout]
+    cols: [layout]
+    formProt: [layout]
+    vAlign: [layout]
+    noEndnote: [comments]
+    titlePg: [layout]
+    textDirection: [layout]
+    bidi: [layout]
+    rtlGutter: [layout]
+    docGrid: [layout]
+    printerSettings: [layout]
+    sectPrChange: [track-changes]
+
+  # ---------------------------------------------------------------------------
+  # Table structure
+  # ---------------------------------------------------------------------------
+  Table:
+    # range_markup_elements, content_row_content omitted — EG_* content
+    tblPr: [core]
+    tblGrid: [core]
+
+  CTRow:
+    rsidRPr: [track-changes]
+    rsidR: [track-changes]
+    rsidDel: [track-changes]
+    rsidTr: [track-changes]
+    tblPrEx: [tables]
+    trPr: [tables]
+    # content_cell_content omitted — EG_* content
+
+  TableCell:
+    id: [tables]
+    tcPr: [tables]
+    # block_level_elts omitted — EG_* content
+
+  TableProperties:
+    tblStyle: [styling]
+    tblpPr: [tables]
+    tblOverlap: [tables]
+    bidiVisual: [tables]
+    tblStyleRowBandSize: [styling]
+    tblStyleColBandSize: [styling]
+    tblW: [tables]
+    jc: [tables]
+    tblCellSpacing: [tables]
+    tblInd: [tables]
+    tblBorders: [tables]
+    shd: [tables]
+    tblLayout: [tables]
+    tblCellMar: [tables]
+    tblLook: [tables]
+    tblCaption: [tables]
+    tblDescription: [tables]
+    tblPrChange: [track-changes]
+
+  TableCellProperties:
+    cnfStyle: [styling]
+    tcW: [tables]
+    gridSpan: [tables]
+    hMerge: [tables]
+    vMerge: [tables]
+    tcBorders: [tables]
+    shd: [tables]
+    noWrap: [tables]
+    tcMar: [tables]
+    textDirection: [tables]
+    tcFitText: [tables]
+    vAlign: [tables]
+    hideMark: [tables]
+    headers: [tables]
+    tcPrChange: [track-changes]
+
+  TableRowProperties:
+    cnfStyle: [styling]
+    divId: [settings]
+    gridBefore: [tables]
+    gridAfter: [tables]
+    wBefore: [tables]
+    wAfter: [tables]
+    cantSplit: [tables]
+    trHeight: [tables]
+    tblHeader: [tables]
+    tblCellSpacing: [tables]
+    jc: [tables]
+    hidden: [tables]
+    ins: [track-changes]
+    del: [track-changes]
+    trPrChange: [track-changes]
+
+  # ---------------------------------------------------------------------------
+  # Styles
+  # ---------------------------------------------------------------------------
+  Style:
+    type: [core]
+    styleId: [core]
+    default: [core]
+    customStyle: [core]
+    name: [core]
+    aliases: [core]
+    basedOn: [core]
+    next: [styling]
+    link: [styling]
+    autoRedefine: [styling]
+    hidden: [styling]
+    uiPriority: [styling]
+    semiHidden: [styling]
+    unhideWhenUsed: [styling]
+    qFormat: [styling]
+    locked: [settings]
+    personal: [settings]
+    personalCompose: [settings]
+    personalReply: [settings]
+    rsid: [track-changes]
+    pPr: [styling]
+    rPr: [styling]
+    tblPr: [styling]
+    trPr: [styling]
+    tcPr: [styling]
+    tblStylePr: [styling]
+
+  Styles:
+    docDefaults: [core]
+    latentStyles: [styling]
+    style: [core]
+
+  # ---------------------------------------------------------------------------
+  # Settings
+  # ---------------------------------------------------------------------------
+  Settings:
+    writeProtection: [settings]
+    view: [settings]
+    zoom: [settings]
+    removePersonalInformation: [settings]
+    removeDateAndTime: [settings]
+    doNotDisplayPageBoundaries: [settings]
+    displayBackgroundShape: [settings]
+    printPostScriptOverText: [settings]
+    printFractionalCharacterWidth: [settings]
+    printFormsData: [settings]
+    embedTrueTypeFonts: [settings]
+    embedSystemFonts: [settings]
+    saveSubsetFonts: [settings]
+    saveFormsData: [settings]
+    mirrorMargins: [settings]
+    alignBordersAndEdges: [settings]
+    bordersDoNotSurroundHeader: [settings]
+    bordersDoNotSurroundFooter: [settings]
+    gutterAtTop: [settings]
+    hideSpellingErrors: [settings]
+    hideGrammaticalErrors: [settings]
+    activeWritingStyle: [settings]
+    proofState: [settings]
+    formsDesign: [settings]
+    attachedTemplate: [settings]
+    linkStyles: [settings]
+    stylePaneFormatFilter: [settings]
+    stylePaneSortMethod: [settings]
+    documentType: [settings]
+    mailMerge: [settings]
+    revisionView: [settings, track-changes]
+    trackRevisions: [settings, track-changes]
+    doNotTrackMoves: [track-changes]
+    doNotTrackFormatting: [track-changes]
+    documentProtection: [settings]
+    autoFormatOverride: [settings]
+    styleLockTheme: [settings]
+    styleLockQFSet: [settings]
+    defaultTabStop: [settings]
+    autoHyphenation: [settings]
+    consecutiveHyphenLimit: [settings]
+    hyphenationZone: [settings]
+    doNotHyphenateCaps: [settings]
+    showEnvelope: [settings]
+    summaryLength: [settings]
+    clickAndTypeStyle: [settings]
+    defaultTableStyle: [settings]
+    evenAndOddHeaders: [settings]
+    bookFoldRevPrinting: [settings]
+    bookFoldPrinting: [settings]
+    bookFoldPrintingSheets: [settings]
+    drawingGridHorizontalSpacing: [settings]
+    drawingGridVerticalSpacing: [settings]
+    displayHorizontalDrawingGridEvery: [settings]
+    displayVerticalDrawingGridEvery: [settings]
+    doNotUseMarginsForDrawingGridOrigin: [settings]
+    drawingGridHorizontalOrigin: [settings]
+    drawingGridVerticalOrigin: [settings]
+    doNotShadeFormData: [settings]
+    noPunctuationKerning: [settings]
+    characterSpacingControl: [settings]
+    printTwoOnOne: [settings]
+    strictFirstAndLastChars: [settings]
+    noLineBreaksAfter: [settings]
+    noLineBreaksBefore: [settings]
+    savePreviewPicture: [settings]
+    doNotValidateAgainstSchema: [settings]
+    saveInvalidXml: [settings]
+    ignoreMixedContent: [settings]
+    alwaysShowPlaceholderText: [settings]
+    doNotDemarcateInvalidXml: [settings]
+    saveXmlDataOnly: [settings]
+    useXSLTWhenSaving: [settings]
+    saveThroughXslt: [settings]
+    showXMLTags: [settings]
+    alwaysMergeEmptyNamespace: [settings]
+    updateFields: [settings]
+    hdrShapeDefaults: [drawings]
+    footnotePr: [comments]
+    endnotePr: [comments]
+    compat: [settings]
+    docVars: [settings]
+    rsids: [settings]
+    attachedSchema: [settings]
+    themeFontLang: [settings]
+    clrSchemeMapping: [settings]
+    doNotIncludeSubdocsInStats: [settings]
+    doNotAutoCompressPictures: [settings]
+    forceUpgrade: [settings]
+    captions: [settings]
+    readModeInkLockDown: [settings]
+    smartTagType: [settings]
+    shapeDefaults: [drawings]
+    doNotEmbedSmartTags: [settings]
+    decimalSymbol: [settings]
+    listSeparator: [settings]
+
+  # ---------------------------------------------------------------------------
+  # Numbering
+  # ---------------------------------------------------------------------------
+  Numbering:
+    numPicBullet: [numbering]
+    abstractNum: [core]
+    num: [core]
+    numIdMacAtCleanup: [numbering]
+
+  AbstractNumbering:
+    abstractNumId: [core]
+    nsid: [numbering]
+    multiLevelType: [numbering]
+    tmpl: [numbering]
+    name: [numbering]
+    styleLink: [numbering]
+    numStyleLink: [numbering]
+    lvl: [core]
+
+  Level:
+    ilvl: [core]
+    tplc: [numbering]
+    tentative: [numbering]
+    start: [numbering]
+    numFmt: [numbering]
+    lvlRestart: [numbering]
+    pStyle: [numbering]
+    isLgl: [numbering]
+    suff: [numbering]
+    lvlText: [numbering]
+    lvlPicBulletId: [numbering]
+    legacy: [numbering]
+    lvlJc: [numbering]
+    pPr: [numbering]
+    rPr: [numbering]
+
+  NumberingInstance:
+    numId: [core]
+    abstractNumId: [core]
+    lvlOverride: [numbering]
+
+  # ---------------------------------------------------------------------------
+  # Comments
+  # ---------------------------------------------------------------------------
+  Comment:
+    id: [core]
+    author: [core]
+    date: [comments]
+    initials: [comments]
+
+  Comments:
+    comment: [core]
+
+  # ---------------------------------------------------------------------------
+  # Footnotes / Endnotes
+  # ---------------------------------------------------------------------------
+  FootnoteEndnote:
+    type: [comments]
+    id: [core]
+
+  Footnotes:
+    footnote: [core]
+
+  Endnotes:
+    endnote: [core]
+
+  # ---------------------------------------------------------------------------
+  # Hyperlinks
+  # ---------------------------------------------------------------------------
+  Hyperlink:
+    tgtFrame: [hyperlinks]
+    tooltip: [hyperlinks]
+    docLocation: [hyperlinks]
+    history: [hyperlinks]
+    anchor: [hyperlinks]
+    id: [hyperlinks]
+
+  # ---------------------------------------------------------------------------
+  # Bookmarks
+  # ---------------------------------------------------------------------------
+  Bookmark:
+    id: [core]
+    displacedByCustomXml: [settings]
+    colFirst: [tables]
+    colLast: [tables]
+    name: [core]
+
+  # ---------------------------------------------------------------------------
+  # Fonts (CT_RFonts)
+  # ---------------------------------------------------------------------------
+  Fonts:
+    hint: [styling]
+    ascii: [styling]
+    hAnsi: [styling]
+    eastAsia: [styling]
+    cs: [styling]
+    asciiTheme: [styling]
+    hAnsiTheme: [styling]
+    eastAsiaTheme: [styling]
+    cstheme: [styling]
+
+  # ---------------------------------------------------------------------------
+  # Header / Footer
+  # ---------------------------------------------------------------------------
+  HeaderFooterReference:
+    id: [core]
+    type: [core]
+
+  TableGrid:
+    gridCol: [core]
+    tblGridChange: [track-changes]
+
+  TableGridColumn:
+    w: [core]
+
+  # ---------------------------------------------------------------------------
+  # Compatibility (all fields → settings)
+  # ---------------------------------------------------------------------------
+  Compatibility:
+    "*": [settings]
+
+  CTCompatSetting:
+    "*": [core]
+
+  # ---------------------------------------------------------------------------
+  # Document defaults, styles containers
+  # ---------------------------------------------------------------------------
+  DocumentDefaults:
+    pPrDefault: [core]
+    rPrDefault: [core]
+
+  ParagraphPropertiesDefault:
+    pPr: [core]
+
+  RunPropertiesDefault:
+    rPr: [core]
+
+  LatentStyles:
+    count: [styling]
+    defLockedState: [styling]
+    defQFormat: [styling]
+    defSemiHidden: [styling]
+    defUIPriority: [styling]
+    defUnhideWhenUsed: [styling]
+    lsdException: [core]
+
+  LatentStyleException:
+    locked: [styling]
+    name: [core]
+    qFormat: [styling]
+    semiHidden: [styling]
+    uiPriority: [styling]
+    unhideWhenUsed: [styling]
+
+  TableStyleProperties:
+    type: [core]
+    pPr: [styling]
+    rPr: [styling]
+    tblPr: [styling]
+    tcPr: [styling]
+    trPr: [styling]
+
+  NumberingProperties:
+    ilvl: [numbering]
+    ins: [track-changes]
+    numberingChange: [track-changes]
+    numId: [numbering]
+
+  # ---------------------------------------------------------------------------
+  # Font definition (CT_Font)
+  # ---------------------------------------------------------------------------
+  Font:
+    name: [core]
+    altName: [styling]
+    panose1: [styling]
+    charset: [styling]
+    family: [styling]
+    notTrueType: [styling]
+    pitch: [styling]
+    sig: [styling]
+    embedRegular: [styling]
+    embedBold: [styling]
+    embedItalic: [styling]
+    embedBoldItalic: [styling]
+
+  # ---------------------------------------------------------------------------
+  # Page layout types
+  # ---------------------------------------------------------------------------
+  PageSize:
+    w: [layout]
+    h: [layout]
+    orient: [layout]
+    code: [layout]
+
+  PageMargins:
+    top: [layout]
+    right: [layout]
+    bottom: [layout]
+    left: [layout]
+    header: [layout]
+    footer: [layout]
+    gutter: [layout]
+
+  DocumentGrid:
+    type: [layout]
+    linePitch: [layout]
+    charSpace: [layout]
+
+  Columns:
+    num: [layout]
+    space: [layout]
+    sep: [layout]
+    equalWidth: [layout]
+    col: [layout]
+
+  CTColumn:
+    w: [layout]
+    space: [layout]
+
+  CTPageBorders:
+    display: [layout]
+    offsetFrom: [layout]
+    zOrder: [layout]
+    top: [layout]
+    left: [layout]
+    bottom: [layout]
+    right: [layout]
+
+  CTPageBorder:
+    id: [layout]
+
+  CTBottomPageBorder:
+    bottomLeft: [layout]
+    bottomRight: [layout]
+
+  CTTopPageBorder:
+    topLeft: [layout]
+    topRight: [layout]
+
+  CTPageNumber:
+    fmt: [layout]
+    start: [layout]
+    chapStyle: [layout]
+    chapSep: [layout]
+
+  CTPaperSource:
+    first: [layout]
+    other: [layout]
+
+  CTLineNumber:
+    countBy: [layout]
+    start: [layout]
+    distance: [layout]
+    restart: [layout]
+
+  # ---------------------------------------------------------------------------
+  # Property base types (used by change tracking *Change elements)
+  # ---------------------------------------------------------------------------
+  CTPPrBase:
+    pStyle: [core]
+    keepNext: [layout]
+    keepLines: [layout]
+    pageBreakBefore: [layout]
+    framePr: [layout]
+    widowControl: [layout]
+    numPr: [numbering]
+    suppressLineNumbers: [layout]
+    pBdr: [styling]
+    shd: [styling]
+    tabs: [styling]
+    suppressAutoHyphens: [styling]
+    kinsoku: [styling]
+    wordWrap: [styling]
+    overflowPunct: [styling]
+    topLinePunct: [styling]
+    autoSpaceDE: [styling]
+    autoSpaceDN: [styling]
+    bidi: [styling]
+    adjustRightInd: [styling]
+    snapToGrid: [layout]
+    spacing: [styling]
+    ind: [styling]
+    contextualSpacing: [styling]
+    mirrorIndents: [styling]
+    suppressOverlap: [layout]
+    jc: [styling]
+    textDirection: [styling]
+    textAlignment: [styling]
+    textboxTightWrap: [styling]
+    outlineLvl: [styling]
+    divId: [styling]
+    cnfStyle: [styling]
+
+  CTPPrGeneral:
+    pPrChange: [track-changes]
+
+  CTPPrChange:
+    pPr: [track-changes]
+
+  CTTblPrBase:
+    tblStyle: [styling]
+    tblpPr: [tables]
+    tblOverlap: [tables]
+    bidiVisual: [tables]
+    tblStyleRowBandSize: [styling]
+    tblStyleColBandSize: [styling]
+    tblW: [tables]
+    jc: [tables]
+    tblCellSpacing: [tables]
+    tblInd: [tables]
+    tblBorders: [tables]
+    shd: [tables]
+    tblLayout: [tables]
+    tblCellMar: [tables]
+    tblLook: [tables]
+    tblCaption: [tables]
+    tblDescription: [tables]
+
+  CTTblPrChange:
+    tblPr: [track-changes]
+
+  CTTcPrBase:
+    cnfStyle: [styling]
+    tcW: [tables]
+    gridSpan: [tables]
+    hMerge: [tables]
+    vMerge: [tables]
+    tcBorders: [tables]
+    shd: [tables]
+    noWrap: [tables]
+    tcMar: [tables]
+    textDirection: [tables]
+    tcFitText: [tables]
+    vAlign: [tables]
+    hideMark: [tables]
+    headers: [tables]
+
+  CTTcPrInner:
+    tcPrChange: [track-changes]
+
+  CTTcPrChange:
+    tcPr: [track-changes]
+
+  CTTrPrBase:
+    cnfStyle: [styling]
+    divId: [settings]
+    gridBefore: [tables]
+    gridAfter: [tables]
+    wBefore: [tables]
+    wAfter: [tables]
+    cantSplit: [tables]
+    trHeight: [tables]
+    tblHeader: [tables]
+    tblCellSpacing: [tables]
+    jc: [tables]
+    hidden: [tables]
+
+  CTTrPrChange:
+    trPr: [track-changes]
+
+  CTSectPrBase:
+    rsidDel: [track-changes]
+    rsidR: [track-changes]
+    rsidRPr: [track-changes]
+    rsidSect: [track-changes]
+
+  CTSectPrChange:
+    sectPr: [track-changes]
+
+  CTTblPrExBase:
+    tblW: [tables]
+    jc: [tables]
+    tblCellSpacing: [tables]
+    tblInd: [tables]
+    tblBorders: [tables]
+    shd: [tables]
+    tblLayout: [tables]
+    tblLook: [tables]
+    tblCellMar: [tables]
+
+  CTTblPrEx:
+    tblPrExChange: [track-changes]
+
+  CTTblPrExChange:
+    tblPrEx: [track-changes]
+
+  CTTblGridBase:
+    gridCol: [core]
+
+  CTTblGridChange:
+    tblGrid: [track-changes]
+
+  # ---------------------------------------------------------------------------
+  # Styling leaf types (borders, shading, spacing, etc.)
+  # ---------------------------------------------------------------------------
+  CTBorder:
+    val: [core]
+    color: [styling]
+    themeColor: [styling]
+    themeTint: [styling]
+    themeShade: [styling]
+    sz: [styling]
+    space: [styling]
+    shadow: [styling]
+    frame: [styling]
+
+  CTColor:
+    val: [core]
+    themeColor: [styling]
+    themeTint: [styling]
+    themeShade: [styling]
+
+  CTUnderline:
+    val: [core]
+    color: [styling]
+    themeColor: [styling]
+    themeTint: [styling]
+    themeShade: [styling]
+
+  CTShd:
+    val: [core]
+    color: [styling]
+    fill: [styling]
+    themeColor: [styling]
+    themeFill: [styling]
+    themeTint: [styling]
+    themeShade: [styling]
+    themeFillTint: [styling]
+    themeFillShade: [styling]
+
+  CTSpacing:
+    before: [styling]
+    beforeLines: [styling]
+    beforeAutospacing: [styling]
+    after: [styling]
+    afterLines: [styling]
+    afterAutospacing: [styling]
+    line: [styling]
+    lineRule: [styling]
+
+  CTInd:
+    left: [styling]
+    leftChars: [styling]
+    right: [styling]
+    rightChars: [styling]
+    hanging: [styling]
+    hangingChars: [styling]
+    firstLine: [styling]
+    firstLineChars: [styling]
+    start: [styling]
+    startChars: [styling]
+    end: [styling]
+    endChars: [styling]
+
+  CTTabs:
+    tab: [core]
+
+  CTTabStop:
+    val: [core]
+    pos: [core]
+    leader: [styling]
+
+  CTPBdr:
+    top: [styling]
+    left: [styling]
+    bottom: [styling]
+    right: [styling]
+    between: [styling]
+    bar: [styling]
+
+  CTLang:
+    val: [core]
+
+  CTLanguage:
+    val: [styling]
+    eastAsia: [styling]
+    bidi: [styling]
+
+  CTCnf:
+    val: [styling]
+    firstRow: [styling]
+    lastRow: [styling]
+    firstColumn: [styling]
+    lastColumn: [styling]
+    oddHBand: [styling]
+    evenHBand: [styling]
+    oddVBand: [styling]
+    evenVBand: [styling]
+    firstRowFirstColumn: [styling]
+    firstRowLastColumn: [styling]
+    lastRowFirstColumn: [styling]
+    lastRowLastColumn: [styling]
+
+  # ---------------------------------------------------------------------------
+  # Table detail types
+  # ---------------------------------------------------------------------------
+  CTTblBorders:
+    top: [tables]
+    left: [tables]
+    start: [tables]
+    bottom: [tables]
+    right: [tables]
+    end: [tables]
+    insideH: [tables]
+    insideV: [tables]
+
+  CTTblCellMar:
+    top: [tables]
+    left: [tables]
+    start: [tables]
+    bottom: [tables]
+    right: [tables]
+    end: [tables]
+
+  CTTblWidth:
+    w: [core]
+    type: [core]
+
+  CTTblLook:
+    val: [tables]
+    firstRow: [tables]
+    lastRow: [tables]
+    firstColumn: [tables]
+    lastColumn: [tables]
+    noHBand: [tables]
+    noVBand: [tables]
+
+  CTTblPPr:
+    leftFromText: [tables]
+    rightFromText: [tables]
+    topFromText: [tables]
+    bottomFromText: [tables]
+    vertAnchor: [tables]
+    horzAnchor: [tables]
+    tblpXSpec: [tables]
+    tblpX: [tables]
+    tblpYSpec: [tables]
+    tblpY: [tables]
+
+  CTTblLayoutType:
+    type: [core]
+
+  CTTblOverlap:
+    val: [core]
+
+  CTHeight:
+    val: [core]
+    hRule: [tables]
+
+  CTTcBorders:
+    top: [tables]
+    left: [tables]
+    start: [tables]
+    bottom: [tables]
+    right: [tables]
+    end: [tables]
+    insideH: [tables]
+    insideV: [tables]
+    tl2br: [tables]
+    tr2bl: [tables]
+
+  CTTcMar:
+    top: [tables]
+    left: [tables]
+    start: [tables]
+    bottom: [tables]
+    right: [tables]
+    end: [tables]
+
+  CTVMerge:
+    val: [core]
+
+  CTHMerge:
+    val: [core]
+
+  CTHeaders:
+    header: [core]
+
+  # ---------------------------------------------------------------------------
+  # Simple value wrapper types
+  # ---------------------------------------------------------------------------
+  CTOnOff:
+    val: [core]
+
+  CTString:
+    val: [core]
+
+  CTDecimalNumber:
+    val: [core]
+
+  CTUnsignedDecimalNumber:
+    val: [core]
+
+  CTTwipsMeasure:
+    val: [core]
+
+  CTSignedTwipsMeasure:
+    val: [core]
+
+  CTHpsMeasure:
+    val: [core]
+
+  CTSignedHpsMeasure:
+    val: [core]
+
+  CTLongHexNumber:
+    val: [core]
+
+  CTBase64Binary:
+    val: [core]
+
+  CTTextScale:
+    val: [core]
+
+  CTHighlight:
+    val: [core]
+
+  CTJc:
+    val: [core]
+
+  CTJcTable:
+    val: [core]
+
+  CTVerticalAlignRun:
+    val: [core]
+
+  CTVerticalJc:
+    val: [core]
+
+  CTTextAlignment:
+    val: [core]
+
+  CTTextboxTightWrap:
+    val: [core]
+
+  CTTextDirection:
+    val: [core]
+
+  CTTextEffect:
+    val: [core]
+
+  CTEm:
+    val: [core]
+
+  CTLock:
+    val: [core]
+
+  CTCharacterSpacing:
+    val: [core]
+
+  CTRubyAlign:
+    val: [core]
+
+  CTCalendarType:
+    val: [core]
+
+  CTSectType:
+    val: [core]
+
+  CTDocType:
+    val: [core]
+
+  CTGuid:
+    val: [core]
+
+  CTMacroName:
+    val: [core]
+
+  CTLevelSuffix:
+    val: [core]
+
+  CTMultiLevelType:
+    val: [core]
+
+  CTNumRestart:
+    val: [core]
+
+  CTDecimalNumberOrPrecent:
+    val: [core]
+
+  CTPanose:
+    val: [core]
+
+  CTPitch:
+    val: [core]
+
+  CTFontFamily:
+    val: [core]
+
+  CTCharset:
+    val: [core]
+    characterSet: [styling]
+
+  CTFrameLayout:
+    val: [core]
+
+  CTFrameScrollbar:
+    val: [core]
+
+  CTView:
+    val: [core]
+
+  CTStyleSort:
+    val: [core]
+
+  CTZoom:
+    val: [settings]
+    percent: [core]
+
+  CTPixelsMeasure:
+    val: [core]
+
+  CTTargetScreenSz:
+    val: [core]
+
+  CTFtnPos:
+    val: [core]
+
+  CTEdnPos:
+    val: [core]
+
+  CTNumFmt:
+    val: [core]
+    format: [numbering]
+
+  CTLevelText:
+    val: [core]
+    null: [numbering]
+
+  CTLvlLegacy:
+    legacy: [numbering]
+    legacySpace: [numbering]
+    legacyIndent: [numbering]
+
+  # ---------------------------------------------------------------------------
+  # Track changes and markup
+  # ---------------------------------------------------------------------------
+  CTMarkup:
+    id: [core]
+
+  CTTrackChange:
+    author: [core]
+    date: [track-changes]
+
+  CTTrackChangeRange:
+    displacedByCustomXml: [settings]
+
+  CTTrackChangesView:
+    markup: [settings]
+    comments: [settings]
+    insDel: [settings]
+    formatting: [settings]
+    inkAnnotations: [settings]
+
+  CTTrackChangeNumbering:
+    original: [track-changes]
+
+  CTCellMergeTrackChange:
+    vMerge: [track-changes]
+    vMergeOrig: [track-changes]
+
+  CTMoveBookmark:
+    author: [track-changes]
+    date: [track-changes]
+
+  CTMarkupRange:
+    displacedByCustomXml: [settings]
+
+  CTBookmarkRange:
+    colFirst: [tables]
+    colLast: [tables]
+
+  CTDocRsids:
+    rsidRoot: [track-changes]
+    rsid: [track-changes]
+
+  CTRPrChange:
+    rPr: [track-changes]
+
+  CTParaRPr:
+    rPrChange: [track-changes]
+
+  CTParaRPrChange:
+    rPr: [track-changes]
+
+  CTRunTrackChange:
+    "*": [track-changes]
+
+  # ---------------------------------------------------------------------------
+  # Fields
+  # ---------------------------------------------------------------------------
+  CTSimpleField:
+    instr: [core]
+    fldLock: [fields]
+    dirty: [fields]
+    fldData: [fields]
+
+  CTFldChar:
+    fldCharType: [core]
+    fldLock: [fields]
+    dirty: [fields]
+    fldData: [fields]
+    ffData: [fields]
+    numberingChange: [track-changes]
+
+  # ---------------------------------------------------------------------------
+  # Footnote/endnote properties
+  # ---------------------------------------------------------------------------
+  CTFtnProps:
+    pos: [comments]
+    numFmt: [comments]
+
+  CTEdnProps:
+    pos: [comments]
+    numFmt: [comments]
+
+  CTFtnDocProps:
+    footnote: [comments]
+
+  CTEdnDocProps:
+    endnote: [comments]
+
+  CTFtnEdnSepRef:
+    id: [core]
+
+  FootnoteEndnoteRef:
+    customMarkFollows: [comments]
+    id: [core]
+
+  # ---------------------------------------------------------------------------
+  # Numbering detail types
+  # ---------------------------------------------------------------------------
+  CTNumLvl:
+    ilvl: [core]
+    startOverride: [numbering]
+    lvl: [numbering]
+
+  CTNumPicBullet:
+    numPicBulletId: [core]
+    pict: [numbering]
+    drawing: [numbering]
+
+  # ---------------------------------------------------------------------------
+  # Misc structural types
+  # ---------------------------------------------------------------------------
+  CTBackground:
+    color: [styling]
+    themeColor: [styling]
+    themeTint: [styling]
+    themeShade: [styling]
+    drawing: [drawings]
+
+  CTBr:
+    type: [core]
+    clear: [core]
+
+  CTRel:
+    id: [core]
+
+  CTPerm:
+    id: [core]
+    displacedByCustomXml: [settings]
+
+  CTPermStart:
+    ed: [settings]
+    edGrp: [settings]
+    colFirst: [tables]
+    colLast: [tables]
+
+  CTFramePr:
+    dropCap: [layout]
+    lines: [layout]
+    w: [layout]
+    h: [layout]
+    hSpace: [layout]
+    vSpace: [layout]
+    wrap: [layout]
+    hAnchor: [layout]
+    vAnchor: [layout]
+    x: [layout]
+    xAlign: [layout]
+    y: [layout]
+    yAlign: [layout]
+    hRule: [layout]
+    anchorLock: [layout]
+
+  CTEastAsianLayout:
+    "*": [styling]
+
+  CTFitText:
+    val: [styling]
+    id: [styling]
+
+  CTRubyPr:
+    "*": [styling]
+
+  CTRuby:
+    rubyPr: [styling]
+    rt: [core]
+    rubyBase: [core]
+
+  CTSym:
+    font: [styling]
+    char: [core]
+
+  CTPTab:
+    alignment: [core]
+    relativeTo: [core]
+    leader: [styling]
+
+  CTKinsoku:
+    lang: [styling]
+    val: [styling]
+
+  CTProofErr:
+    type: [core]
+
+  CTProof:
+    spelling: [settings]
+    grammar: [settings]
+
+  # ---------------------------------------------------------------------------
+  # Settings detail types
+  # ---------------------------------------------------------------------------
+  CTDocProtect:
+    "*": [settings]
+
+  CTWriteProtection:
+    "*": [settings]
+
+  CTWritingStyle:
+    "*": [settings]
+
+  CTReadingModeInkLockDown:
+    "*": [settings]
+
+  CTColorSchemeMapping:
+    "*": [settings]
+
+  CTStylePaneFilter:
+    "*": [settings]
+
+  CTSaveThroughXslt:
+    "*": [settings]
+
+  CTCaptions:
+    "*": [settings]
+
+  CTCaption:
+    "*": [settings]
+
+  CTAutoCaptions:
+    autoCaption: [settings]
+
+  CTAutoCaption:
+    "*": [settings]
+
+  CTDocVars:
+    docVar: [settings]
+
+  CTDocVar:
+    name: [core]
+    val: [core]
+
+  CTSmartTagType:
+    "*": [settings]
+
+  CTOptimizeForBrowser:
+    target: [settings]
+
+  CTFontSig:
+    "*": [styling]
+
+  CTFontRel:
+    "*": [styling]
+
+  # ---------------------------------------------------------------------------
+  # Web settings
+  # ---------------------------------------------------------------------------
+  CTWebSettings:
+    "*": [settings]
+
+  CTDiv:
+    "*": [settings]
+
+  CTDivs:
+    div: [settings]
+
+  CTDivBdr:
+    "*": [settings]
+
+  CTFrameset:
+    "*": [settings]
+
+  CTFramesetSplitbar:
+    "*": [settings]
+
+  CTFrame:
+    "*": [settings]
+
+  # ---------------------------------------------------------------------------
+  # Object and picture
+  # ---------------------------------------------------------------------------
+  CTObject:
+    "*": [drawings]
+
+  CTObjectEmbed:
+    "*": [drawings]
+
+  CTObjectLink:
+    "*": [drawings]
+
+  CTPicture:
+    "*": [drawings]
+
+  CTControl:
+    "*": [drawings]
+
+  CTDrawing:
+    "*": [drawings]
+
+  # ---------------------------------------------------------------------------
+  # Structured document tags (content controls)
+  # ---------------------------------------------------------------------------
+  CTSdtPr:
+    "*": [settings]
+
+  CTSdtBlock:
+    sdtPr: [settings]
+    sdtEndPr: [settings]
+    sdtContent: [core]
+
+  CTSdtRun:
+    sdtPr: [settings]
+    sdtEndPr: [settings]
+    sdtContent: [core]
+
+  CTSdtCell:
+    sdtPr: [settings]
+    sdtEndPr: [settings]
+    sdtContent: [core]
+
+  CTSdtRow:
+    sdtPr: [settings]
+    sdtEndPr: [settings]
+    sdtContent: [core]
+
+  CTSdtEndPr:
+    rPr: [styling]
+
+  CTSdtComboBox:
+    "*": [settings]
+
+  CTSdtDropDownList:
+    "*": [settings]
+
+  CTSdtDate:
+    "*": [settings]
+
+  CTSdtDateMappingType:
+    val: [core]
+
+  CTSdtDocPart:
+    "*": [settings]
+
+  CTSdtListItem:
+    displayText: [core]
+    value: [core]
+
+  CTSdtText:
+    multiLine: [settings]
+
+  CTDataBinding:
+    "*": [settings]
+
+  CTPlaceholder:
+    docPart: [settings]
+
+  # ---------------------------------------------------------------------------
+  # Custom XML
+  # ---------------------------------------------------------------------------
+  CTCustomXmlBlock:
+    uri: [settings]
+    element: [settings]
+    customXmlPr: [settings]
+
+  CTCustomXmlRun:
+    uri: [settings]
+    element: [settings]
+    customXmlPr: [settings]
+
+  CTCustomXmlCell:
+    uri: [settings]
+    element: [settings]
+    customXmlPr: [settings]
+
+  CTCustomXmlRow:
+    uri: [settings]
+    element: [settings]
+    customXmlPr: [settings]
+
+  CTCustomXmlPr:
+    placeholder: [settings]
+    attr: [settings]
+
+  CTSmartTagRun:
+    uri: [settings]
+    element: [settings]
+    smartTagPr: [settings]
+
+  CTSmartTagPr:
+    attr: [settings]
+
+  CTAttr:
+    "*": [core]
+
+  # ---------------------------------------------------------------------------
+  # Mail merge
+  # ---------------------------------------------------------------------------
+  CTMailMerge:
+    "*": [settings]
+
+  CTMailMergeDataType:
+    val: [core]
+
+  CTMailMergeDest:
+    val: [core]
+
+  CTMailMergeDocType:
+    val: [core]
+
+  CTMailMergeSourceType:
+    val: [core]
+
+  CTMailMergeOdsoFMDFieldType:
+    val: [core]
+
+  CTOdso:
+    "*": [settings]
+
+  CTOdsoFieldMapData:
+    "*": [settings]
+
+  CTRecipientData:
+    "*": [settings]
+
+  CTRecipients:
+    recipientData: [settings]
+
+  # ---------------------------------------------------------------------------
+  # Document parts / glossary
+  # ---------------------------------------------------------------------------
+  CTDocParts:
+    docPart: [settings]
+
+  CTDocPart:
+    docPartPr: [settings]
+    docPartBody: [settings]
+
+  CTDocPartPr:
+    "*": [settings]
+
+  CTDocPartName:
+    val: [core]
+    decorated: [settings]
+
+  CTDocPartBehaviors:
+    behavior: [settings]
+
+  CTDocPartBehavior:
+    val: [core]
+
+  CTDocPartCategory:
+    name: [core]
+    gallery: [settings]
+
+  CTDocPartGallery:
+    val: [core]
+
+  CTDocPartTypes:
+    all: [settings]
+    type: [settings]
+
+  CTDocPartType:
+    val: [core]
+
+  CTGlossaryDocument:
+    docParts: [settings]
+
+  # ---------------------------------------------------------------------------
+  # Form fields
+  # ---------------------------------------------------------------------------
+  CTFFData:
+    "*": [fields]
+
+  CTFFTextType:
+    val: [core]
+
+  CTFFName:
+    val: [core]
+
+  CTFFHelpText:
+    type: [core]
+    val: [core]
+
+  CTFFStatusText:
+    type: [core]
+    val: [core]
+
+  CTFFCheckBox:
+    "*": [fields]
+
+  CTFFDDList:
+    "*": [fields]
+
+  CTFFTextInput:
+    "*": [fields]
+
+  # ---------------------------------------------------------------------------
+  # Misc/rare types
+  # ---------------------------------------------------------------------------
+  CTDocumentBase:
+    background: [styling]
+
+  CTAltChunk:
+    id: [core]
+    altChunkPr: [settings]
+
+  CTAltChunkPr:
+    matchSrc: [settings]
+
+  CTBdoContentRun:
+    val: [core]
+
+  CTDirContentRun:
+    val: [core]
+
+  CTShapeDefaults:
+    "*": [drawings]
+
+  CTFontsList:
+    font: [core]
+
+  CTMathCtrlDel:
+    rPr: [styling]
+
+  CTMathCtrlIns:
+    del: [track-changes]
+    rPr: [styling]
+
+  MathRunProperties:
+    del: [track-changes]
+    ins: [track-changes]
+
+  # ---------------------------------------------------------------------------
+  # EG_* content types (mapped for completeness, always included)
+  # ---------------------------------------------------------------------------
+  BlockContent:
+    altChunk: [settings]
+
+  BlockContentChoice:
+    p: [core]
+    tbl: [core]
+    customXml: [settings]
+    sdt: [settings]
+
+  ParagraphContent:
+    hyperlink: [hyperlinks]
+    fldSimple: [fields]
+    subDoc: [settings]
+
+  ParagraphContentBase:
+    customXml: [settings]
+    fldSimple: [fields]
+    hyperlink: [hyperlinks]
+
+  RunContentChoice:
+    r: [core]
+    customXml: [settings]
+    sdt: [settings]
+    smartTag: [settings]
+    bdo: [core]
+    dir: [core]
+
+  RunContentBase:
+    sdt: [settings]
+    smartTag: [settings]
+
+  RunContent:
+    t: [core]
+    br: [core]
+    cr: [core]
+    tab: [core]
+    noBreakHyphen: [core]
+    softHyphen: [core]
+    sym: [styling]
+    drawing: [drawings]
+    pict: [drawings]
+    object: [drawings]
+    ruby: [styling]
+    ptab: [core]
+    annotationRef: [comments]
+    commentReference: [comments]
+    footnoteReference: [comments]
+    footnoteRef: [comments]
+    endnoteReference: [comments]
+    endnoteRef: [comments]
+    fldChar: [fields]
+    instrText: [fields]
+    delInstrText: [fields]
+    delText: [track-changes]
+    separator: [core]
+    continuationSeparator: [core]
+    lastRenderedPageBreak: [core]
+    pgNum: [core]
+    dayShort: [fields]
+    monthShort: [fields]
+    yearShort: [fields]
+    dayLong: [fields]
+    monthLong: [fields]
+    yearLong: [fields]
+    contentPart: [core]
+
+  RunLevelContent:
+    proofErr: [core]
+    permStart: [settings]
+    permEnd: [settings]
+    ins: [track-changes]
+    del: [track-changes]
+    moveFrom: [track-changes]
+    moveTo: [track-changes]
+
+  RowContent:
+    tr: [core]
+    customXml: [settings]
+    sdt: [settings]
+
+  CellContent:
+    tc: [core]
+    customXml: [settings]
+    sdt: [settings]
+
+  CellMarkup:
+    cellIns: [track-changes]
+    cellDel: [track-changes]
+    cellMerge: [track-changes]
+
+  RubyContent:
+    r: [core]
+
+  HeaderFooterRef:
+    headerReference: [core]
+    footerReference: [core]
+
+# =============================================================================
+# PresentationML (PowerPoint) - TODO: expand
+# =============================================================================
+pml:
+  # ---------------------------------------------------------------------------
+  # Presentation (root document)
+  # ---------------------------------------------------------------------------
+  Presentation:
+    # Attributes
+    serverZoom: [styling]
+    firstSlideNum: [core]
+    showSpecialPlsOnTitleSld: [styling]
+    rtl: [styling]
+    removePersonalInfoOnSave: [core]
+    compatMode: [core]
+    strictFirstAndLastChars: [styling]
+    embedTrueTypeFonts: [styling]
+    saveSubsetFonts: [styling]
+    autoCompressPictures: [styling]
+    bookmarkIdSeed: [core]
+    conformance: [core]
+    # Children
+    sldMasterIdLst: [core]
+    notesMasterIdLst: [notes]
+    handoutMasterIdLst: [masters]
+    sldIdLst: [core]
+    sldSz: [core]
+    notesSz: [notes]
+    smartTags: [external]
+    embeddedFontLst: [styling]
+    custShowLst: [core]
+    photoAlbum: [media]
+    custDataLst: [external]
+    kinsoku: [styling]
+    defaultTextStyle: [styling]
+    modifyVerifier: [core]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Slide
+  # ---------------------------------------------------------------------------
+  Slide:
+    # Attributes
+    showMasterSp: [masters]
+    showMasterPhAnim: [masters, animations]
+    show: [core]
+    # Children
+    cSld: [core]
+    clrMapOvr: [styling]
+    transition: [transitions]
+    timing: [animations]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Common slide data (shared by slide, layout, master)
+  # ---------------------------------------------------------------------------
+  CommonSlideData:
+    name: [core]
+    # Children
+    bg: [styling]
+    spTree: [core]
+    custDataLst: [external]
+    controls: [external]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Shapes
+  # ---------------------------------------------------------------------------
+  Shape:
+    useBgFill: [styling]
+    # Children
+    nvSpPr: [core]
+    spPr: [core]
+    style: [styling]
+    txBody: [core]
+    extLst: [extensions]
+
+  Picture:
+    # Children
+    nvPicPr: [core]
+    blipFill: [core]
+    spPr: [core]
+    style: [styling]
+    extLst: [extensions]
+
+  Connector:
+    # Children
+    nvCxnSpPr: [core]
+    spPr: [core]
+    style: [styling]
+    extLst: [extensions]
+
+  GraphicalObjectFrame:
+    bwMode: [styling]
+    # Children
+    nvGraphicFramePr: [core]
+    xfrm: [core]
+    extLst: [extensions]
+
+  GroupShape:
+    # Children
+    nvGrpSpPr: [core]
+    grpSpPr: [core]
+    sp: [core]
+    grpSp: [core]
+    graphicFrame: [core]
+    cxnSp: [core]
+    pic: [core]
+    contentPart: [external]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Slide transitions
+  # ---------------------------------------------------------------------------
+  SlideTransition:
+    spd: [transitions]
+    advClick: [transitions]
+    advTm: [transitions]
+    # All transition type children
+    blinds: [transitions]
+    checker: [transitions]
+    circle: [transitions]
+    dissolve: [transitions]
+    comb: [transitions]
+    cover: [transitions]
+    cut: [transitions]
+    diamond: [transitions]
+    fade: [transitions]
+    newsflash: [transitions]
+    plus: [transitions]
+    pull: [transitions]
+    push: [transitions]
+    random: [transitions]
+    randomBar: [transitions]
+    split: [transitions]
+    strips: [transitions]
+    wedge: [transitions]
+    wheel: [transitions]
+    wipe: [transitions]
+    zoom: [transitions]
+    sndAc: [transitions, media]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Slide timing/animations
+  # ---------------------------------------------------------------------------
+  SlideTiming:
+    tnLst: [animations]
+    bldLst: [animations]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Slide layouts and masters
+  # ---------------------------------------------------------------------------
+  SlideLayout:
+    # Attributes
+    showMasterSp: [masters]
+    showMasterPhAnim: [masters, animations]
+    matchingName: [masters]
+    type: [masters]
+    preserve: [masters]
+    userDrawn: [masters]
+    # Children
+    cSld: [core]
+    clrMapOvr: [styling]
+    transition: [transitions]
+    timing: [animations]
+    hf: [masters]
+    extLst: [extensions]
+
+  SlideMaster:
+    preserve: [masters]
+    # Children
+    cSld: [core]
+    clrMap: [core]
+    sldLayoutIdLst: [masters]
+    transition: [transitions]
+    timing: [animations]
+    hf: [masters]
+    txStyles: [styling]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Notes
+  # ---------------------------------------------------------------------------
+  NotesSlide:
+    showMasterSp: [notes, masters]
+    showMasterPhAnim: [notes, masters, animations]
+    # Children
+    cSld: [core]
+    clrMapOvr: [styling]
+    extLst: [extensions]
+
+  NotesMaster:
+    # Children
+    cSld: [core]
+    clrMap: [core]
+    hf: [notes]
+    notesStyle: [styling]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Handout master
+  # ---------------------------------------------------------------------------
+  HandoutMaster:
+    # Children
+    cSld: [core]
+    clrMap: [core]
+    hf: [masters]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Comments
+  # ---------------------------------------------------------------------------
+  CTComment:
+    authorId: [comments]
+    dt: [comments]
+    idx: [comments]
+    # Children
+    pos: [comments]
+    text: [comments]
+    extLst: [extensions]
+
+  CTCommentAuthor:
+    id: [comments]
+    name: [comments]
+    initials: [comments]
+    lastIdx: [comments]
+    clrIdx: [comments]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Backgrounds
+  # ---------------------------------------------------------------------------
+  CTBackground:
+    bwMode: [styling]
+    # Children
+    bgPr: [styling]
+    bgRef: [styling]
+
+  # ---------------------------------------------------------------------------
+  # Header/footer
+  # ---------------------------------------------------------------------------
+  CTHeaderFooter:
+    sldNum: [masters]
+    hdr: [masters]
+    ftr: [masters]
+    dt: [masters]
+
+  # ---------------------------------------------------------------------------
+  # Placeholder
+  # ---------------------------------------------------------------------------
+  CTPlaceholder:
+    type: [core]
+    orient: [core]
+    sz: [core]
+    idx: [core]
+    hasCustomPrompt: [core]
+
+  # ---------------------------------------------------------------------------
+  # View properties
+  # ---------------------------------------------------------------------------
+  CTViewProperties:
+    lastView: [core]
+    showComments: [comments]
+    # Children
+    normalViewPr: [core]
+    slideViewPr: [core]
+    outlineViewPr: [core]
+    notesTextViewPr: [notes]
+    sorterViewPr: [core]
+    notesViewPr: [notes]
+    gridSpacing: [core]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Presentation properties
+  # ---------------------------------------------------------------------------
+  CTPresentationProperties:
+    # Children
+    htmlPubPr: [external]
+    webPr: [external]
+    prnPr: [core]
+    showPr: [core]
+    clrMru: [styling]
+    extLst: [extensions]
+
+# =============================================================================
+# DrawingML (shared) - TODO: expand
+# =============================================================================
+dml:
+  # ---------------------------------------------------------------------------
+  # Colors
+  # ---------------------------------------------------------------------------
+  ColorScheme:
+    name: [themes]
+    dk1: [colors]
+    lt1: [colors]
+    dk2: [colors]
+    lt2: [colors]
+    accent1: [colors]
+    accent2: [colors]
+    accent3: [colors]
+    accent4: [colors]
+    accent5: [colors]
+    accent6: [colors]
+    hlink: [colors]
+    folHlink: [colors]
+    extLst: [extensions]
+
+  SrgbColor:
+    val: [colors]
+    # Children - color transforms
+    tint: [colors]
+    shade: [colors]
+    comp: [colors]
+    inv: [colors]
+    gray: [colors]
+    alpha: [colors]
+    alphaOff: [colors]
+    alphaMod: [colors]
+    hue: [colors]
+    hueOff: [colors]
+    hueMod: [colors]
+    sat: [colors]
+    satOff: [colors]
+    satMod: [colors]
+    lum: [colors]
+    lumOff: [colors]
+    lumMod: [colors]
+    red: [colors]
+    redOff: [colors]
+    redMod: [colors]
+    green: [colors]
+    greenOff: [colors]
+    greenMod: [colors]
+    blue: [colors]
+    blueOff: [colors]
+    blueMod: [colors]
+    gamma: [colors]
+    invGamma: [colors]
+
+  HslColor:
+    hue: [colors]
+    sat: [colors]
+    lum: [colors]
+
+  SchemeColor:
+    val: [colors]
+
+  CTColorMappingOverride:
+    masterClrMapping: [colors]
+    overrideClrMapping: [colors]
+
+  # ---------------------------------------------------------------------------
+  # Fills
+  # ---------------------------------------------------------------------------
+  BlipFillProperties:
+    dpi: [fills]
+    rotWithShape: [fills]
+    # Children
+    blip: [fills]
+    srcRect: [fills]
+    tile: [fills]
+    stretch: [fills]
+
+  GradientFill:
+    flip: [fills]
+    rotWithShape: [fills]
+    # Children
+    gsLst: [fills]
+    lin: [fills]
+    path: [fills]
+    tileRect: [fills]
+
+  PatternFill:
+    prst: [fills]
+    # Children
+    fgClr: [fills]
+    bgClr: [fills]
+
+  SolidFill:
+    # Color choice children handled by EG_ColorChoice
+
+  Blip:
+    embed: [fills]
+    link: [fills]
+    cstate: [fills]
+    # Children
+    alphaBiLevel: [fills, effects]
+    alphaCeiling: [fills, effects]
+    alphaFloor: [fills, effects]
+    alphaInv: [fills, effects]
+    alphaMod: [fills, effects]
+    alphaModFix: [fills, effects]
+    alphaRepl: [fills, effects]
+    biLevel: [fills, effects]
+    blur: [fills, effects]
+    clrChange: [fills, effects]
+    clrRepl: [fills, effects]
+    duotone: [fills, effects]
+    fillOverlay: [fills, effects]
+    grayscl: [fills, effects]
+    hsl: [fills, effects]
+    lum: [fills, effects]
+    tint: [fills, effects]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Lines
+  # ---------------------------------------------------------------------------
+  LineProperties:
+    w: [lines]
+    cap: [lines]
+    cmpd: [lines]
+    algn: [lines]
+    # Children (fill, dash, join handled by EG groups)
+    headEnd: [lines]
+    tailEnd: [lines]
+    extLst: [extensions]
+
+  CTLineEndProperties:
+    type: [lines]
+    w: [lines]
+    len: [lines]
+
+  CTDashStop:
+    d: [lines]
+    sp: [lines]
+
+  CTPresetLineDashProperties:
+    val: [lines]
+
+  # ---------------------------------------------------------------------------
+  # Effects
+  # ---------------------------------------------------------------------------
+  EffectList:
+    blur: [effects]
+    fillOverlay: [effects]
+    glow: [effects]
+    innerShdw: [effects]
+    outerShdw: [effects]
+    prstShdw: [effects]
+    reflection: [effects]
+    softEdge: [effects]
+
+  CTBlurEffect:
+    rad: [effects]
+    grow: [effects]
+
+  CTGlowEffect:
+    rad: [effects]
+
+  CTInnerShadowEffect:
+    blurRad: [effects]
+    dist: [effects]
+    dir: [effects]
+
+  CTOuterShadowEffect:
+    blurRad: [effects]
+    dist: [effects]
+    dir: [effects]
+    sx: [effects]
+    sy: [effects]
+    kx: [effects]
+    ky: [effects]
+    algn: [effects]
+    rotWithShape: [effects]
+
+  CTReflectionEffect:
+    blurRad: [effects]
+    stA: [effects]
+    stPos: [effects]
+    endA: [effects]
+    endPos: [effects]
+    dist: [effects]
+    dir: [effects]
+    fadeDir: [effects]
+    sx: [effects]
+    sy: [effects]
+    kx: [effects]
+    ky: [effects]
+    algn: [effects]
+    rotWithShape: [effects]
+
+  CTSoftEdgesEffect:
+    rad: [effects]
+
+  # ---------------------------------------------------------------------------
+  # Shapes
+  # ---------------------------------------------------------------------------
+  CTShapeProperties:
+    bwMode: [shapes]
+    # Children
+    xfrm: [core]
+    custGeom: [shapes]
+    prstGeom: [shapes]
+    ln: [lines]
+    scene3d: [3d]
+    sp3d: [3d]
+    extLst: [extensions]
+
+  CTGroupShapeProperties:
+    bwMode: [shapes]
+    # Children
+    xfrm: [core]
+    scene3d: [3d]
+    extLst: [extensions]
+
+  Transform2D:
+    rot: [core]
+    flipH: [core]
+    flipV: [core]
+    # Children
+    off: [core]
+    ext: [core]
+
+  CTPresetGeometry:
+    prst: [shapes]
+    # Children
+    avLst: [shapes]
+
+  CTCustomGeometry:
+    # Children
+    avLst: [shapes]
+    gdLst: [shapes]
+    ahLst: [shapes]
+    cxnLst: [shapes]
+    rect: [shapes]
+    pathLst: [shapes]
+
+  ShapeStyle:
+    # Children
+    lnRef: [shapes, themes]
+    fillRef: [shapes, themes]
+    effectRef: [shapes, themes]
+    fontRef: [shapes, themes]
+
+  # ---------------------------------------------------------------------------
+  # Text
+  # ---------------------------------------------------------------------------
+  TextBody:
+    # Children
+    bodyPr: [text]
+    lstStyle: [text]
+    p: [text]
+
+  CTTextBodyProperties:
+    rot: [text]
+    spcFirstLastPara: [text]
+    vertOverflow: [text]
+    horzOverflow: [text]
+    vert: [text]
+    wrap: [text]
+    lIns: [text]
+    tIns: [text]
+    rIns: [text]
+    bIns: [text]
+    numCol: [text]
+    spcCol: [text]
+    rtlCol: [text]
+    fromWordArt: [text]
+    anchor: [text]
+    anchorCtr: [text]
+    forceAA: [text]
+    upright: [text]
+    compatLnSpc: [text]
+    # Children
+    prstTxWarp: [text]
+    noAutofit: [text]
+    normAutofit: [text]
+    spAutoFit: [text]
+    scene3d: [3d]
+    sp3d: [3d]
+    flatTx: [text]
+    extLst: [extensions]
+
+  TextParagraph:
+    # Children
+    pPr: [text]
+    r: [text]
+    br: [text]
+    fld: [text]
+    endParaRPr: [text]
+
+  TextParagraphProperties:
+    marL: [text]
+    marR: [text]
+    lvl: [text]
+    indent: [text]
+    algn: [text]
+    defTabSz: [text]
+    rtl: [text]
+    eaLnBrk: [text]
+    fontAlgn: [text]
+    latinLnBrk: [text]
+    hangingPunct: [text]
+    # Children
+    lnSpc: [text]
+    spcBef: [text]
+    spcAft: [text]
+    buClrTx: [text]
+    buClr: [text]
+    buSzTx: [text]
+    buSzPct: [text]
+    buSzPts: [text]
+    buFontTx: [text]
+    buFont: [text]
+    buNone: [text]
+    buAutoNum: [text]
+    buChar: [text]
+    buBlip: [text]
+    tabLst: [text]
+    defRPr: [text]
+    extLst: [extensions]
+
+  TextCharacterProperties:
+    kumimoji: [text]
+    lang: [text]
+    altLang: [text]
+    sz: [text]
+    b: [text]
+    i: [text]
+    u: [text]
+    strike: [text]
+    kern: [text]
+    cap: [text]
+    spc: [text]
+    normalizeH: [text]
+    baseline: [text]
+    noProof: [text]
+    dirty: [text]
+    err: [text]
+    smtClean: [text]
+    smtId: [text]
+    bmk: [text]
+    # Children
+    ln: [text, lines]
+    highlight: [text]
+    latin: [text]
+    ea: [text]
+    cs: [text]
+    sym: [text]
+    hlinkClick: [text]
+    hlinkMouseOver: [text]
+    rtl: [text]
+    extLst: [extensions]
+
+  TextRun:
+    # Children
+    rPr: [text]
+    t: [text]
+
+  TextFont:
+    typeface: [text]
+    panose: [text]
+    pitchFamily: [text]
+    charset: [text]
+
+  # ---------------------------------------------------------------------------
+  # Tables
+  # ---------------------------------------------------------------------------
+  CTTable:
+    # Children
+    tblPr: [tables]
+    tblGrid: [tables]
+    tr: [tables]
+
+  CTTableProperties:
+    rtl: [tables]
+    firstRow: [tables]
+    firstCol: [tables]
+    lastRow: [tables]
+    lastCol: [tables]
+    bandRow: [tables]
+    bandCol: [tables]
+    # Children (fill handled by EG)
+    tableStyleId: [tables, themes]
+    extLst: [extensions]
+
+  CTTableRow:
+    h: [tables]
+    # Children
+    tc: [tables]
+    extLst: [extensions]
+
+  CTTableCell:
+    rowSpan: [tables]
+    gridSpan: [tables]
+    hMerge: [tables]
+    vMerge: [tables]
+    # Children
+    txBody: [tables, text]
+    tcPr: [tables]
+    extLst: [extensions]
+
+  CTTableCellProperties:
+    marL: [tables]
+    marR: [tables]
+    marT: [tables]
+    marB: [tables]
+    vert: [tables]
+    anchor: [tables]
+    anchorCtr: [tables]
+    horzOverflow: [tables]
+    # Children
+    lnL: [tables, lines]
+    lnR: [tables, lines]
+    lnT: [tables, lines]
+    lnB: [tables, lines]
+    lnTlToBr: [tables, lines]
+    lnBlToTr: [tables, lines]
+    cell3D: [tables, 3d]
+    extLst: [extensions]
+
+  CTTableGrid:
+    # Children
+    gridCol: [tables]
+
+  # ---------------------------------------------------------------------------
+  # Themes
+  # ---------------------------------------------------------------------------
+  CTOfficeStyleSheet:
+    name: [themes]
+    # Children
+    themeElements: [themes]
+    objectDefaults: [themes]
+    extraClrSchemeLst: [themes]
+    custClrLst: [themes]
+    extLst: [extensions]
+
+  CTBaseStyles:
+    # Children
+    clrScheme: [colors, themes]
+    fontScheme: [themes]
+    fmtScheme: [themes]
+    extLst: [extensions]
+
+  FontScheme:
+    name: [themes]
+    # Children
+    majorFont: [themes]
+    minorFont: [themes]
+    extLst: [extensions]
+
+  CTStyleMatrix:
+    name: [themes]
+    # Children
+    fillStyleLst: [themes, fills]
+    lnStyleLst: [themes, lines]
+    effectStyleLst: [themes, effects]
+    bgFillStyleLst: [themes, fills]
+
+  CTStyleMatrixReference:
+    idx: [themes]
+    # Color choice children
+
+  CTFontReference:
+    idx: [themes]
+    # Color choice children
+
+  # ---------------------------------------------------------------------------
+  # 3D Effects
+  # ---------------------------------------------------------------------------
+  CTScene3D:
+    # Children
+    camera: [3d]
+    lightRig: [3d]
+    backdrop: [3d]
+    extLst: [extensions]
+
+  CTCamera:
+    prst: [3d]
+    fov: [3d]
+    zoom: [3d]
+    # Children
+    rot: [3d]
+
+  CTLightRig:
+    rig: [3d]
+    dir: [3d]
+    # Children
+    rot: [3d]
+
+  CTShape3D:
+    z: [3d]
+    extrusionH: [3d]
+    contourW: [3d]
+    prstMaterial: [3d]
+    # Children
+    bevelT: [3d]
+    bevelB: [3d]
+    extrusionClr: [3d]
+    contourClr: [3d]
+    extLst: [extensions]
+
+  CTBevel:
+    w: [3d]
+    h: [3d]
+    prst: [3d]
+
+  # ---------------------------------------------------------------------------
+  # Media
+  # ---------------------------------------------------------------------------
+  CTAudioFile:
+    link: [media]
+    contentType: [media]
+
+  CTVideoFile:
+    link: [media]
+    contentType: [media]
+
+  # ---------------------------------------------------------------------------
+  # Hyperlinks
+  # ---------------------------------------------------------------------------
+  CTHyperlink:
+    id: [text]
+    invalidUrl: [text]
+    action: [text]
+    tgtFrame: [text]
+    tooltip: [text]
+    history: [text]
+    highlightClick: [text]
+    endSnd: [text]
+    # Children
+    snd: [text, media]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Non-visual properties
+  # ---------------------------------------------------------------------------
+  CTNonVisualDrawingProps:
+    id: [core]
+    name: [core]
+    descr: [core]
+    hidden: [core]
+    title: [core]
+    # Children
+    hlinkClick: [text]
+    hlinkHover: [text]
+    extLst: [extensions]
+
+  CTNonVisualPictureProperties:
+    preferRelativeResize: [shapes]
+    # Children
+    picLocks: [shapes]
+    extLst: [extensions]
+
+  CTNonVisualConnectorProperties:
+    # Children
+    cxnSpLocks: [shapes]
+    stCxn: [shapes]
+    endCxn: [shapes]
+    extLst: [extensions]
+
+  CTNonVisualGraphicFrameProperties:
+    # Children
+    graphicFrameLocks: [shapes]
+    extLst: [extensions]
+
+  CTNonVisualGroupDrawingShapeProps:
+    # Children
+    grpSpLocks: [shapes]
+    extLst: [extensions]
+
+  # ---------------------------------------------------------------------------
+  # Charts (ECMA-376 §21.2, dml-chart.rnc)
+  # ---------------------------------------------------------------------------
+  ChartSpace:
+    "*": [charts]
+
+  Chart:
+    "*": [charts]
+
+  PlotArea:
+    "*": [charts]
+
+  ChartTitle:
+    "*": [charts]
+
+  Legend:
+    "*": [charts]
+
+  LegendEntry:
+    "*": [charts]
+
+  LegendPosition:
+    "*": [charts]
+
+  View3D:
+    "*": [charts]
+
+  BarChart:
+    "*": [charts]
+
+  Bar3DChart:
+    "*": [charts]
+
+  LineChart:
+    "*": [charts]
+
+  Line3DChart:
+    "*": [charts]
+
+  PieChart:
+    "*": [charts]
+
+  Pie3DChart:
+    "*": [charts]
+
+  DoughnutChart:
+    "*": [charts]
+
+  ScatterChart:
+    "*": [charts]
+
+  AreaChart:
+    "*": [charts]
+
+  Area3DChart:
+    "*": [charts]
+
+  RadarChart:
+    "*": [charts]
+
+  BubbleChart:
+    "*": [charts]
+
+  StockChart:
+    "*": [charts]
+
+  SurfaceChart:
+    "*": [charts]
+
+  Surface3DChart:
+    "*": [charts]
+
+  OfPieChart:
+    "*": [charts]
+
+  BarSeries:
+    "*": [charts]
+
+  LineSeries:
+    "*": [charts]
+
+  PieSeries:
+    "*": [charts]
+
+  ScatterSeries:
+    "*": [charts]
+
+  AreaSeries:
+    "*": [charts]
+
+  BubbleSeries:
+    "*": [charts]
+
+  RadarSeries:
+    "*": [charts]
+
+  SurfaceSeries:
+    "*": [charts]
+
+  CategoryAxis:
+    "*": [charts]
+
+  ValueAxis:
+    "*": [charts]
+
+  DateAxis:
+    "*": [charts]
+
+  SeriesAxis:
+    "*": [charts]
+
+  NumericReference:
+    "*": [charts]
+
+  NumericData:
+    "*": [charts]
+
+  NumericValue:
+    "*": [charts]
+
+  StringReference:
+    "*": [charts]
+
+  StringData:
+    "*": [charts]
+
+  StringValue:
+    "*": [charts]
+
+  DataLabel:
+    "*": [charts]
+
+  DataLabels:
+    "*": [charts]
+
+  DataPoint:
+    "*": [charts]
+
+  ChartMarker:
+    "*": [charts]
+
+  ChartNumFmt:
+    "*": [charts]
+
+  ChartLayout:
+    "*": [charts]
+
+  ManualLayout:
+    "*": [charts]
+
+  AxisScaling:
+    "*": [charts]
+
+  AxisDataSource:
+    "*": [charts]
+
+  SeriesText:
+    "*": [charts]
+
+  ChartText:
+    "*": [charts]
+
+  NumericDataSource:
+    "*": [charts]
+
+  LayoutTarget:
+    "*": [charts]
+
+  LayoutMode:
+    "*": [charts]
+
+  DisplayUnits:
+    "*": [charts]
+
+  DisplayUnitsLabel:
+    "*": [charts]
+
+  UpDownBars:
+    "*": [charts]
+
+  UpDownBar:
+    "*": [charts]
+
+  TrendlineLabel:
+    "*": [charts]
+
+  Trendline:
+    "*": [charts]
+
+  ErrorBars:
+    "*": [charts]
+
+  ChartLines:
+    "*": [charts]
+
+  BandFormat:
+    "*": [charts]
+
+  BandFormats:
+    "*": [charts]
+
+  PivotFormat:
+    "*": [charts]
+
+  PivotFormats:
+    "*": [charts]
+
+  PivotSource:
+    "*": [charts]
+
+  DataTable:
+    "*": [charts]
+
+  ChartSurface:
+    "*": [charts]
+
+  CustomSplit:
+    "*": [charts]
+
+  PictureOptions:
+    "*": [charts]
+
+  ChartProtection:
+    "*": [charts]
+
+  ChartHeaderFooter:
+    "*": [charts]
+
+  ChartPageMargins:
+    "*": [charts]
+
+  ChartPageSetup:
+    "*": [charts]
+
+  PrintSettings:
+    "*": [charts]
+
+  ExternalData:
+    "*": [charts]
+
+  ChartExtension:
+    "*": [charts]
+
+  ChartExtensionList:
+    "*": [charts]
+
+  MultiLevelStrLevel:
+    "*": [charts]
+
+  MultiLevelStrData:
+    "*": [charts]
+
+  MultiLevelStrRef:
+    "*": [charts]
+
+  TextLanguageId:
+    "*": [charts]
+
+  ChartRelId:
+    "*": [charts]
+
+  GapAmount:
+    "*": [charts]
+
+  OverlapAmount:
+    "*": [charts]
+
+  BubbleScale:
+    "*": [charts]
+
+  SizeRepresents:
+    "*": [charts]
+
+  FirstSliceAngle:
+    "*": [charts]
+
+  HoleSize:
+    "*": [charts]
+
+  SplitType:
+    "*": [charts]
+
+  SecondPieSize:
+    "*": [charts]
+
+  LabelAlignment:
+    "*": [charts]
+
+  DataLabelPosition:
+    "*": [charts]
+
+  ChartMarkerStyle:
+    "*": [charts]
+
+  ChartMarkerSize:
+    "*": [charts]
+
+  TrendlineType:
+    "*": [charts]
+
+  TrendlineOrder:
+    "*": [charts]
+
+  TrendlinePeriod:
+    "*": [charts]
+
+  ErrorDirection:
+    "*": [charts]
+
+  ErrorBarType:
+    "*": [charts]
+
+  ErrorValueType:
+    "*": [charts]
+
+  ChartGrouping:
+    "*": [charts]
+
+  ScatterStyle:
+    "*": [charts]
+
+  RadarStyle:
+    "*": [charts]
+
+  BarGrouping:
+    "*": [charts]
+
+  BarDirection:
+    "*": [charts]
+
+  BarShape:
+    "*": [charts]
+
+  OfPieType:
+    "*": [charts]
+
+  ChartThickness:
+    "*": [charts]
+
+  HPercent:
+    "*": [charts]
+
+  RotX:
+    "*": [charts]
+
+  RotY:
+    "*": [charts]
+
+  DepthPercent:
+    "*": [charts]
+
+  Perspective:
+    "*": [charts]
+
+  AxisPosition:
+    "*": [charts]
+
+  AxisCrosses:
+    "*": [charts]
+
+  CrossBetween:
+    "*": [charts]
+
+  TickMark:
+    "*": [charts]
+
+  TickLabelPosition:
+    "*": [charts]
+
+  AxisSkip:
+    "*": [charts]
+
+  TimeUnit:
+    "*": [charts]
+
+  AxisUnit:
+    "*": [charts]
+
+  BuiltInUnit:
+    "*": [charts]
+
+  ChartPictureFormat:
+    "*": [charts]
+
+  PictureStackUnit:
+    "*": [charts]
+
+  LabelOffset:
+    "*": [charts]
+
+  LogBase:
+    "*": [charts]
+
+  AxisOrientation:
+    "*": [charts]
+
+  DisplayBlanksAs:
+    "*": [charts]
+
+  ChartStyle:
+    "*": [charts]
+
+  # ---------------------------------------------------------------------------
+  # Diagrams/SmartArt (ECMA-376 §21.4, dml-diagram.rnc)
+  # ---------------------------------------------------------------------------
+  DataModel:
+    "*": [diagrams]
+
+  DiagramPoint:
+    "*": [diagrams]
+
+  DiagramPointList:
+    "*": [diagrams]
+
+  DiagramConnection:
+    "*": [diagrams]
+
+  DiagramConnectionList:
+    "*": [diagrams]
+
+  DiagramElementProperties:
+    "*": [diagrams]
+
+  DiagramRelationshipIds:
+    "*": [diagrams]
+
+  DiagramDefinition:
+    "*": [diagrams]
+
+  DiagramDefinitionHeader:
+    "*": [diagrams]
+
+  DiagramDefinitionHeaderList:
+    "*": [diagrams]
+
+  LayoutNode:
+    "*": [diagrams]
+
+  LayoutAlgorithm:
+    "*": [diagrams]
+
+  AlgorithmParameter:
+    "*": [diagrams]
+
+  DiagramShape:
+    "*": [diagrams]
+
+  LayoutForEach:
+    "*": [diagrams]
+
+  LayoutChoose:
+    "*": [diagrams]
+
+  LayoutWhen:
+    "*": [diagrams]
+
+  LayoutOtherwise:
+    "*": [diagrams]
+
+  LayoutAdjustment:
+    "*": [diagrams]
+
+  LayoutAdjustmentList:
+    "*": [diagrams]
+
+  DiagramColorTransform:
+    "*": [diagrams]
+
+  DiagramColorTransformHeader:
+    "*": [diagrams]
+
+  DiagramColorTransformHeaderList:
+    "*": [diagrams]
+
+  DiagramColors:
+    "*": [diagrams]
+
+  DiagramColorStyleLabel:
+    "*": [diagrams]
+
+  DiagramColorCategory:
+    "*": [diagrams]
+
+  DiagramColorCategories:
+    "*": [diagrams]
+
+  DiagramStyleDefinition:
+    "*": [diagrams]
+
+  DiagramStyleDefinitionHeader:
+    "*": [diagrams]
+
+  DiagramStyleDefinitionHeaderList:
+    "*": [diagrams]
+
+  DiagramStyleLabel:
+    "*": [diagrams]
+
+  DiagramStyleCategory:
+    "*": [diagrams]
+
+  DiagramStyleCategories:
+    "*": [diagrams]
+
+  DiagramTextProperties:
+    "*": [diagrams]
+
+  LayoutVariableProperties:
+    "*": [diagrams]
+
+  OrgChartProperties:
+    "*": [diagrams]
+
+  LayoutDirection:
+    "*": [diagrams]
+
+  HierarchyBranchStyle:
+    "*": [diagrams]
+
+  AnimateOneByOne:
+    "*": [diagrams]
+
+  AnimateLevel:
+    "*": [diagrams]
+
+  BulletEnabled:
+    "*": [diagrams]
+
+  ResizeHandles:
+    "*": [diagrams]
+
+  LayoutConstraint:
+    "*": [diagrams]
+
+  LayoutConstraints:
+    "*": [diagrams]
+
+  NumericRule:
+    "*": [diagrams]
+
+  LayoutRules:
+    "*": [diagrams]
+
+  PresentationOf:
+    "*": [diagrams]
+
+  DiagramName:
+    "*": [diagrams]
+
+  DiagramDescription:
+    "*": [diagrams]
+
+  DiagramCategory:
+    "*": [diagrams]
+
+  DiagramCategories:
+    "*": [diagrams]
+
+  ColorTransformName:
+    "*": [diagrams]
+
+  ColorTransformDescription:
+    "*": [diagrams]
+
+  StyleDefinitionName:
+    "*": [diagrams]
+
+  StyleDefinitionDescription:
+    "*": [diagrams]
+
+  DiagramSampleData:
+    "*": [diagrams]
+
+  ChildMaximum:
+    "*": [diagrams]
+
+  ChildPreference:
+    "*": [diagrams]

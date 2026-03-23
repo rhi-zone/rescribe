@@ -1,0 +1,56 @@
+[package]
+name = "ooxml-dml"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "DrawingML support for the ooxml library (shared by Word, Excel, PowerPoint)"
+readme.workspace = true
+keywords = ["ooxml", "drawingml", "office", "docx", "xlsx"]
+categories = ["encoding", "parser-implementations"]
+
+[features]
+default = ["full"]
+full = [
+    "dml-colors",
+    "dml-fills",
+    "dml-lines",
+    "dml-effects",
+    "dml-shapes",
+    "dml-text",
+    "dml-tables",
+    "dml-themes",
+    "dml-3d",
+    "dml-media",
+    "dml-extensions",
+    "dml-charts",
+    "dml-diagrams",
+    "extra-attrs",
+    "extra-children",
+]
+# Individual feature flags (see spec/ooxml-features.yaml)
+dml-colors = []        # Color schemes, color definitions
+dml-fills = []         # Fill properties (solid, gradient, pattern, blip)
+dml-lines = []         # Line properties, dashes, ends
+dml-effects = []       # Visual effects (shadows, blur, glow)
+dml-shapes = []        # Shape properties and geometry
+dml-text = []          # Text body, paragraphs, character properties
+dml-tables = []        # Table properties
+dml-themes = []        # Office themes and style matrices
+dml-3d = []            # 3D effects, scenes, lighting
+dml-media = []         # Audio/video content
+dml-extensions = []    # Extension lists
+dml-charts = []        # Chart types (ECMA-376 §21.2)
+dml-diagrams = []      # SmartArt/Diagram types (ECMA-376 §21.4)
+extra-attrs = []
+extra-children = []
+
+[dependencies]
+ooxml-xml.workspace = true
+quick-xml.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+base64.workspace = true
+
+[build-dependencies]
+ooxml-codegen.workspace = true
