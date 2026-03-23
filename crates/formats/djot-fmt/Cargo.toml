@@ -1,0 +1,11 @@
+[package]
+name = "djot-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Djot tokenizer, AST, and builder — no rescribe dependency"
+
+[dependencies]
+
+[dev-dependencies]

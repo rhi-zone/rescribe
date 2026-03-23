@@ -545,6 +545,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "djot-fmt"
+version = "0.1.0"
+
+[[package]]
 name = "dokuwiki"
 version = "0.1.0"
 
