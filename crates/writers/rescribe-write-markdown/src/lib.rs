@@ -867,6 +867,104 @@ mod roundtrip_tests {
     }
 }
 
+/// Roundtrip tests using the pulldown backend — verifies it preserves formatting markers.
+#[cfg(test)]
+#[cfg(feature = "pulldown")]
+mod roundtrip_pulldown_tests {
+    use rescribe_core::{EmitOptions, ParseOptions};
+    use rescribe_read_markdown::backend_pulldown::parse_with_options as md_parse;
+
+    use super::*;
+
+    fn roundtrip(input: &str) -> String {
+        let parse_opts = ParseOptions {
+            preserve_source_info: true,
+            ..Default::default()
+        };
+        let emit_opts = EmitOptions {
+            use_source_info: true,
+            ..Default::default()
+        };
+        let doc = md_parse(input, &parse_opts).unwrap().value;
+        let result = emit_with_options(&doc, &emit_opts).unwrap();
+        String::from_utf8(result.value).unwrap()
+    }
+
+    #[test]
+    fn test_roundtrip_emphasis_asterisk() {
+        assert_eq!(roundtrip("*italic*\n"), "*italic*\n");
+    }
+
+    #[test]
+    fn test_roundtrip_emphasis_underscore() {
+        assert_eq!(roundtrip("_italic_\n"), "_italic_\n");
+    }
+
+    #[test]
+    fn test_roundtrip_strong_asterisk() {
+        assert_eq!(roundtrip("**bold**\n"), "**bold**\n");
+    }
+
+    #[test]
+    fn test_roundtrip_strong_underscore() {
+        assert_eq!(roundtrip("__bold__\n"), "__bold__\n");
+    }
+
+    #[test]
+    fn test_roundtrip_list_dash() {
+        assert_eq!(roundtrip("- item 1\n- item 2\n"), "- item 1\n- item 2\n");
+    }
+
+    #[test]
+    fn test_roundtrip_list_asterisk() {
+        assert_eq!(roundtrip("* item 1\n* item 2\n"), "* item 1\n* item 2\n");
+    }
+
+    #[test]
+    fn test_roundtrip_list_plus() {
+        assert_eq!(roundtrip("+ item 1\n+ item 2\n"), "+ item 1\n+ item 2\n");
+    }
+
+    #[test]
+    fn test_roundtrip_code_fence_backtick() {
+        let input = "```rust\nfn main() {}\n```\n";
+        assert_eq!(roundtrip(input), input);
+    }
+
+    #[test]
+    fn test_roundtrip_code_fence_tilde() {
+        let input = "~~~rust\nfn main() {}\n~~~\n";
+        assert_eq!(roundtrip(input), input);
+    }
+
+    #[test]
+    fn test_roundtrip_hr_dash() {
+        assert_eq!(roundtrip("---\n"), "---\n");
+    }
+
+    #[test]
+    fn test_roundtrip_hr_asterisk() {
+        assert_eq!(roundtrip("***\n"), "***\n");
+    }
+
+    #[test]
+    fn test_roundtrip_hr_underscore() {
+        assert_eq!(roundtrip("___\n"), "___\n");
+    }
+
+    #[test]
+    fn test_roundtrip_atx_heading() {
+        assert_eq!(roundtrip("# Heading 1\n"), "# Heading 1\n");
+    }
+
+    #[test]
+    fn test_roundtrip_setext_heading() {
+        let output = roundtrip("Heading 1\n=========\n");
+        assert!(output.contains("Heading 1\n"));
+        assert!(output.contains("==="));
+    }
+}
+
 #[cfg(test)]
 mod escape_tests {
     use super::escape_markdown;

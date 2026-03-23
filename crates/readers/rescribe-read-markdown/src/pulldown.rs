@@ -39,6 +39,7 @@ pub fn parse_with_options(
 
     let children = parse_events(
         &events,
+        input,
         &mut warnings,
         &mut metadata,
         options.preserve_source_info,
@@ -53,6 +54,7 @@ pub fn parse_with_options(
 /// Parse a slice of events into nodes.
 fn parse_events(
     events: &[(Event<'_>, Range<usize>)],
+    input: &str,
     warnings: &mut Vec<FidelityWarning>,
     metadata: &mut Properties,
     preserve_spans: bool,
@@ -61,7 +63,8 @@ fn parse_events(
     let mut idx = 0;
 
     while idx < events.len() {
-        let (node, consumed) = parse_event(&events[idx..], warnings, metadata, preserve_spans);
+        let (node, consumed) =
+            parse_event(&events[idx..], input, warnings, metadata, preserve_spans);
         if let Some(n) = node {
             nodes.push(n);
         }
@@ -85,13 +88,16 @@ fn with_span(mut node: Node, range: &Range<usize>, preserve_spans: bool) -> Node
 /// Parse a single event or matched tag pair, returning the node and events consumed.
 fn parse_event(
     events: &[(Event<'_>, Range<usize>)],
+    input: &str,
     warnings: &mut Vec<FidelityWarning>,
     metadata: &mut Properties,
     preserve_spans: bool,
 ) -> (Option<Node>, usize) {
     let (event, range) = &events[0];
     match event {
-        Event::Start(tag) => parse_tag(tag.clone(), events, warnings, metadata, preserve_spans),
+        Event::Start(tag) => {
+            parse_tag(tag.clone(), events, input, warnings, metadata, preserve_spans)
+        }
         Event::Text(text) => (
             Some(with_span(
                 Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()),
@@ -116,22 +122,32 @@ fn parse_event(
             )),
             1,
         ),
-        Event::HardBreak => (
-            Some(with_span(
-                Node::new(node::LINE_BREAK),
-                range,
-                preserve_spans,
-            )),
-            1,
-        ),
-        Event::Rule => (
-            Some(with_span(
-                Node::new(node::HORIZONTAL_RULE),
-                range,
-                preserve_spans,
-            )),
-            1,
-        ),
+        Event::HardBreak => {
+            let mut n = Node::new(node::LINE_BREAK);
+            if preserve_spans {
+                // Detect backslash vs two-space hard break
+                if range.start < input.len() && input.as_bytes()[range.start] == b'\\' {
+                    n = n.prop(prop::MD_BREAK_CHAR, "\\");
+                }
+                // Two-space break: no property needed (default); only set for backslash
+            }
+            (Some(with_span(n, range, preserve_spans)), 1)
+        }
+        Event::Rule => {
+            let mut n = Node::new(node::HORIZONTAL_RULE);
+            if preserve_spans && let Some(&first_byte) = input.as_bytes().get(range.start) {
+                let marker = match first_byte {
+                    b'-' => "-",
+                    b'*' => "*",
+                    b'_' => "_",
+                    _ => "",
+                };
+                if !marker.is_empty() {
+                    n = n.prop(prop::MD_BREAK_CHAR, marker);
+                }
+            }
+            (Some(with_span(n, range, preserve_spans)), 1)
+        }
         Event::End(_) => (None, 1), // Handled by parent
         Event::Html(html) => {
             // Raw HTML block
@@ -175,6 +191,7 @@ fn parse_event(
 fn parse_tag(
     tag: Tag<'_>,
     events: &[(Event<'_>, Range<usize>)],
+    input: &str,
     warnings: &mut Vec<FidelityWarning>,
     metadata: &mut Properties,
     preserve_spans: bool,
@@ -182,7 +199,7 @@ fn parse_tag(
     // Find the matching end tag
     let end_idx = find_matching_end(&events[1..], &tag);
     let inner_events = &events[1..=end_idx];
-    let children = parse_events(inner_events, warnings, metadata, preserve_spans);
+    let children = parse_events(inner_events, input, warnings, metadata, preserve_spans);
     let consumed = end_idx + 2; // +1 for start, +1 for end
 
     // Calculate span from start of first event to end of last event
@@ -214,6 +231,25 @@ fn parse_tag(
             if let Some(id) = id {
                 h = h.prop(prop::ID, id.to_string());
             }
+            if preserve_spans {
+                // Setext headings use `=` (H1) or `-` (H2) underlines; ATX uses `#`.
+                // pulldown's heading range covers the full block; detect setext by
+                // finding the first `\n` in the range and checking the char after it.
+                let end = tag_range.end.min(input.len());
+                let range_text = &input[tag_range.start..end];
+                let style = if let Some(nl_pos) = range_text.find('\n') {
+                    let after = range_text.as_bytes().get(nl_pos + 1).copied();
+                    if after == Some(b'=') || after == Some(b'-')
+                    {
+                        "setext"
+                    } else {
+                        "atx"
+                    }
+                } else {
+                    "atx"
+                };
+                h = h.prop(prop::MD_HEADING_STYLE, style);
+            }
             Some(with_span(h, &tag_range, preserve_spans))
         }
 
@@ -238,10 +274,20 @@ fn parse_tag(
                 .join("");
 
             let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content);
-            if let CodeBlockKind::Fenced(lang) = kind {
+            if let CodeBlockKind::Fenced(lang) = &kind {
                 let lang_str = lang.to_string();
                 if !lang_str.is_empty() {
                     node = node.prop(prop::LANGUAGE, lang_str);
+                }
+                if preserve_spans && let Some(&fence_byte) = input.as_bytes().get(tag_range.start) {
+                    let fence_char = if fence_byte == b'~' { "~" } else { "`" };
+                    node = node.prop(prop::MD_FENCE_CHAR, fence_char);
+                    // Count fence length
+                    let fence_len = input[tag_range.start..]
+                        .bytes()
+                        .take_while(|&b| b == fence_byte)
+                        .count();
+                    node = node.prop(prop::MD_FENCE_LENGTH, fence_len as i64);
                 }
             }
             Some(with_span(node, &tag_range, preserve_spans))
@@ -249,11 +295,30 @@ fn parse_tag(
 
         Tag::List(start) => {
             let ordered = start.is_some();
+            // Detect tight vs loose: tight items don't wrap content in paragraphs.
+            let tight = !inner_events
+                .iter()
+                .any(|(e, _)| matches!(e, Event::Start(Tag::Paragraph)));
             let mut list = Node::new(node::LIST)
                 .prop(prop::ORDERED, ordered)
+                .prop(prop::TIGHT, tight)
                 .children(children);
             if let Some(start_num) = start {
                 list = list.prop(prop::START, start_num as i64);
+            }
+            if preserve_spans && start.is_none() {
+                // Unordered list: detect marker character
+                if let Some(&marker_byte) = input.as_bytes().get(tag_range.start) {
+                    let marker = match marker_byte {
+                        b'-' => "-",
+                        b'*' => "*",
+                        b'+' => "+",
+                        _ => "",
+                    };
+                    if !marker.is_empty() {
+                        list = list.prop(prop::MD_LIST_MARKER, marker);
+                    }
+                }
             }
             Some(with_span(list, &tag_range, preserve_spans))
         }
@@ -268,7 +333,38 @@ fn parse_tag(
                 }
             });
 
-            let mut item = Node::new(node::LIST_ITEM).children(children);
+            // pulldown-cmark omits paragraph wrappers in tight list items.
+            // Normalize: if no block-level child, wrap inline content in a paragraph
+            // so the writer treats tight and loose list items uniformly.
+            let has_block = children.iter().any(|n| {
+                matches!(
+                    n.kind.as_str(),
+                    node::PARAGRAPH
+                        | node::CODE_BLOCK
+                        | node::BLOCKQUOTE
+                        | node::LIST
+                        | node::TABLE
+                )
+            });
+            let normalized_children = if !has_block && !children.is_empty() {
+                let content_span = children
+                    .first()
+                    .and_then(|n| n.span.as_ref())
+                    .zip(children.last().and_then(|n| n.span.as_ref()))
+                    .map(|(s, e)| s.start..e.end);
+                let mut para = Node::new(node::PARAGRAPH).children(children);
+                if preserve_spans && let Some(range) = content_span {
+                    para.span = Some(Span {
+                        start: range.start,
+                        end: range.end,
+                    });
+                }
+                vec![para]
+            } else {
+                children
+            };
+
+            let mut item = Node::new(node::LIST_ITEM).children(normalized_children);
             if let Some(checked) = task_checked {
                 item = item.prop(prop::CHECKED, checked);
             }
@@ -321,17 +417,23 @@ fn parse_tag(
             preserve_spans,
         )),
 
-        Tag::Emphasis => Some(with_span(
-            Node::new(node::EMPHASIS).children(children),
-            &tag_range,
-            preserve_spans,
-        )),
+        Tag::Emphasis => {
+            let mut n = Node::new(node::EMPHASIS).children(children);
+            if preserve_spans && let Some(&marker_byte) = input.as_bytes().get(tag_range.start) {
+                let marker = if marker_byte == b'_' { "_" } else { "*" };
+                n = n.prop(prop::MD_EMPHASIS_MARKER, marker);
+            }
+            Some(with_span(n, &tag_range, preserve_spans))
+        }
 
-        Tag::Strong => Some(with_span(
-            Node::new(node::STRONG).children(children),
-            &tag_range,
-            preserve_spans,
-        )),
+        Tag::Strong => {
+            let mut n = Node::new(node::STRONG).children(children);
+            if preserve_spans && let Some(&marker_byte) = input.as_bytes().get(tag_range.start) {
+                let marker = if marker_byte == b'_' { "__" } else { "**" };
+                n = n.prop(prop::MD_STRONG_MARKER, marker);
+            }
+            Some(with_span(n, &tag_range, preserve_spans))
+        }
 
         Tag::Strikethrough => Some(with_span(
             Node::new(node::STRIKEOUT).children(children),
