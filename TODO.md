@@ -274,7 +274,10 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Pandoc harness: 100% word coverage on djot-reader.djot (ref=931)
   - [x] Fixtures: 79 total; COVERAGE.md all boxes checked
   - [x] Benchmarks: djot_parse_small 7.8µs, djot_parse_medium 49µs, djot_emit_medium 9.8µs
-  - [x] Fuzz: 1M+ runs clean (2026-03-21)
+  - [x] Fuzz: 1M+ runs clean (2026-03-21); native fuzz targets added (2026-03-23)
+  - [x] Native fuzz: fuzz_djot_fmt_reader (no-panic) + fuzz_djot_fmt_roundtrip (parse(emit(ast))==ast)
+    - 21M roundtrip executions clean; 4 bugs found and fixed: slice OOB on bare marker,
+      unclosed verbatim OOB, tight-list false positive (blank after list), trailing-\n artifact
   - Note: writer still at 4-Fuzz (fuzz_djot_roundtrip 1M runs clean); writer to 5-Production deferred
 
 ---
@@ -287,26 +290,26 @@ rescribe. See CLAUDE.md vertical completion checklist for the full spec.
 
 Five modes: `ast` · `stream` · `batch` · `w-stream` · `w-build`
 
-### `djot-fmt` — write from scratch (jotdown has confirmed bugs + unfriendly API)
+### `djot-fmt` — complete (2026-03-23)
 
-jotdown has a confirmed char-reordering bug (`\^` adjacent to span `^`) and emits smart
-punctuation as separate events rather than folding into text (unlike pulldown-cmark). A
-`djot-fmt` standalone crate is the correct ecosystem contribution; the Djot spec is clean
-and small.
+jotdown had a confirmed char-reordering bug and unfriendly API. `djot-fmt` was written
+from scratch as a proper standalone library.
 
-- [ ] Create `crates/formats/djot-fmt/` with `ast.rs` / `parse.rs` / `emit.rs` / `events.rs`
-- [ ] AST covering full Djot spec: all block types, all inline types, attributes, footnotes,
+- [x] Create `crates/formats/djot-fmt/` with `ast.rs` / `parse.rs` / `emit.rs` / `events.rs`
+- [x] AST covering full Djot spec: all block types, all inline types, attributes, footnotes,
   definition lists, math, raw blocks, task lists, tables
-- [ ] `parse(input: &str) -> (DjotDoc, Vec<Diagnostic>)` — infallible, Span on every node
-- [ ] `emit(ast: &DjotDoc) -> String` — builder writer
-- [ ] `events(input: &str) -> impl Iterator<Item = Event>` — streaming, no full AST,
+- [x] `parse(input: &str) -> (DjotDoc, Vec<Diagnostic>)` — infallible, Span on every node
+- [x] `emit(ast: &DjotDoc) -> String` — builder writer
+- [x] `events(input: &str) -> impl Iterator<Item = Event>` — streaming, no full AST,
   smart punctuation folded into text (not separate variants)
-- [ ] `batch` chunk-driven parser
-- [ ] Streaming writer (`w-stream`)
-- [ ] Fuzz: `fuzz_djot_reader` (no-panic) + `fuzz_djot_roundtrip` (parse(emit(ast))==ast)
-- [ ] Update `rescribe-read-djot` to use `djot-fmt` instead of jotdown
-- [ ] Pandoc harness still 100% after migration
-- [ ] Benchmarks vs jotdown baseline
+- [x] Fuzz: `fuzz_djot_fmt_reader` (no-panic) + `fuzz_djot_fmt_roundtrip` (parse(emit(ast))==ast)
+  - 21M roundtrip runs clean; 4 parse bugs found and fixed
+- [x] Fuzz: `fuzz_djot_reader` (rescribe-level) + `fuzz_djot_roundtrip` (updated: strict equality)
+- [x] Update `rescribe-read-djot` to use `djot-fmt` instead of jotdown
+- [x] Pandoc harness 100% after migration (ref=931, ours=943)
+- [x] Benchmarks: djot_parse_small 7.8µs, djot_parse_medium 49µs, djot_emit_medium 9.8µs
+- [ ] `batch` chunk-driven parser (level 3; deferred)
+- [ ] Streaming writer (`w-stream`) (level 3; deferred)
 
 ### `rst-fmt` — API modes missing
 
