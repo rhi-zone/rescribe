@@ -9,14 +9,22 @@ pub fn emit(doc: &DjotDoc) -> String {
 
     // Emit footnote definitions
     for fn_def in &doc.footnotes {
+        out.blank_line();
         out.newline_if_needed();
         out.emit_footnote_def(fn_def);
+        if !out.buf.ends_with('\n') {
+            out.newline();
+        }
     }
 
     // Emit link definitions
     for link_def in &doc.link_defs {
+        out.blank_line();
         out.newline_if_needed();
         out.emit_link_def(link_def);
+        if !out.buf.ends_with('\n') {
+            out.newline();
+        }
     }
 
     out.finish()
@@ -70,6 +78,10 @@ impl Emitter {
             }
             self.newline_if_needed();
             self.emit_block(block);
+            // Each block ends with a newline so inter-block blank lines work correctly.
+            if !self.buf.ends_with('\n') {
+                self.newline();
+            }
         }
     }
 

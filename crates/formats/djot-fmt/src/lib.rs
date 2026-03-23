@@ -42,3 +42,27 @@ pub use parse::parse;
 pub fn events(input: &str) -> EventIter {
     EventIter::new(input)
 }
+
+#[cfg(test)]
+mod smoke {
+    use super::*;
+    #[test]
+    fn smoke_roundtrip() {
+        let input = "# Hello *World*\n\nHere's a paragraph with _emphasis_, *strong*, and `code`.\n\n- Item one\n- Item two\n\n1. First\n2. Second\n\n> A blockquote\n\n```rust\nfn main() {}\n```\n\nHere is a footnote.[^fn1]\n\n[^fn1]: The footnote content.\n\n[link]: https://example.com\n";
+        let (doc, diags) = parse(input);
+        assert!(diags.is_empty(), "diagnostics: {diags:?}");
+        assert!(doc.blocks.len() >= 6, "expected >=6 blocks, got {}", doc.blocks.len());
+        assert_eq!(doc.footnotes.len(), 1);
+        assert_eq!(doc.link_defs.len(), 1);
+        let emitted = emit(&doc);
+        let (doc2, _) = parse(&emitted);
+        assert_eq!(doc.strip_spans(), doc2.strip_spans(), "roundtrip mismatch");
+    }
+    #[test]
+    fn smoke_events() {
+        let input = "# Hello\n\nA paragraph.\n";
+        let evts: Vec<_> = events(input).collect();
+        assert!(!evts.is_empty());
+    }
+}
+
