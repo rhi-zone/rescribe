@@ -9,7 +9,7 @@ description = "Djot reader for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
-jotdown = "0.9"
+djot-fmt = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

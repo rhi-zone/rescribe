@@ -862,12 +862,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jotdown"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "086b08ec7a274cd60cd575ed3651ba081ee72dec0d39a6210e8adcff9efe3880"
-
-[[package]]
 name = "js-sys"
 version = "0.3.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1880,7 +1874,7 @@ name = "rescribe-read-djot"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "jotdown",
+ "djot-fmt",
  "rescribe-core",
  "rescribe-std",
  "rescribe-write-djot",

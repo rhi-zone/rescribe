@@ -346,16 +346,23 @@ impl<'a> Parser<'a> {
         }
         let end = self.line_start(self.pos);
         let attr = self.take_pending_attr();
-        let content = content_lines.join("\n");
+        let raw_content = content_lines.join("\n");
 
         if let Some(fmt) = info.strip_prefix('=') {
+            // Raw blocks: no trailing newline (content passed verbatim)
             Some(Block::RawBlock {
                 format: fmt.to_string(),
-                content,
+                content: raw_content,
                 attr,
                 span: Span { start, end },
             })
         } else {
+            // Code blocks: trailing newline (Pandoc convention)
+            let content = if raw_content.is_empty() {
+                String::new()
+            } else {
+                format!("{raw_content}\n")
+            };
             let language = if info.is_empty() { None } else { Some(info.to_string()) };
             Some(Block::CodeBlock {
                 language,
@@ -389,38 +396,42 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_blocks_until_div_end(&mut self) -> Vec<Block> {
-        let mut blocks = Vec::new();
-        while let Some(line) = self.current_line() {
-            let trimmed = line.trim_start();
-            if trimmed == ":::" {
+        // Find the matching closing `:::` line, respecting nesting.
+        // We scan forward to find it so that parse_blocks knows where to stop,
+        // preventing the closing marker from being consumed as a new div.
+        let close_line = self.find_div_close(self.pos);
+        let blocks = self.parse_blocks(close_line);
+        // Consume the closing `:::` line if present.
+        if self.pos < self.lines.len() {
+            let trimmed = self.lines[self.pos].trim_start();
+            if trimmed.starts_with(":::") && trimmed[3..].trim().is_empty() {
                 self.advance();
-                break;
-            }
-            let prev_pos = self.pos;
-            self.skip_blank_lines();
-            if let Some(line2) = self.current_line() {
-                let t2 = line2.trim_start();
-                if t2 == ":::" {
-                    self.advance();
-                    break;
-                }
-            }
-            if self.pos == prev_pos {
-                // Parse one block
-                let end_line = self.lines.len();
-                let old_pos = self.pos;
-                let inner = self.parse_blocks(end_line);
-                if self.pos == old_pos {
-                    // No progress — skip line to prevent infinite loop
-                    self.advance();
-                } else {
-                    blocks.extend(inner);
-                }
-            } else if self.at_end() {
-                break;
             }
         }
         blocks
+    }
+
+    /// Scan forward from `start` to find the line index of the matching `:::`
+    /// closer, respecting nested divs. Returns `self.lines.len()` if not found.
+    fn find_div_close(&self, start: usize) -> usize {
+        let mut depth = 0usize;
+        for i in start..self.lines.len() {
+            let t = self.lines[i].trim_start();
+            if t.starts_with(":::") {
+                let rest = t[3..].trim();
+                if rest.is_empty() {
+                    // Potential closer
+                    if depth == 0 {
+                        return i;
+                    }
+                    depth -= 1;
+                } else {
+                    // Opener of nested div
+                    depth += 1;
+                }
+            }
+        }
+        self.lines.len()
     }
 
     fn parse_blockquote(&mut self) -> Option<Block> {
@@ -536,72 +547,91 @@ impl<'a> Parser<'a> {
         let mut items: Vec<ListItem> = Vec::new();
         let mut tight = true;
 
+        // Extract style hint for disambiguation (roman vs alpha single chars)
+        let style_hint = if let ListMarker::Ordered { ref style, .. } = marker {
+            Some(style.clone())
+        } else {
+            None
+        };
+
         while let Some(line) = self.current_line() {
             let trimmed = line.trim_start();
-            if let Some(m) = detect_list_marker(trimmed) {
-                if !m.compatible_with(&marker) {
+            // Re-detect with style hint so ambiguous tokens (e.g. `c` in roman/alpha)
+            // are resolved in favor of the established list style.
+            let m = if let Some(ref hint) = style_hint {
+                // Try hint-aware ordered detection first
+                if let Some(om) = detect_ordered_marker_with_hint(trimmed, Some(hint)) {
+                    om
+                } else if let Some(bm) = detect_list_marker(trimmed) {
+                    bm
+                } else {
                     break;
                 }
-                let marker_str = m.marker_str();
-                let item_start = self.line_start(self.pos);
-                let content_after_marker = trimmed[marker_str.len()..].trim_start();
-                let checked = if m.is_task() {
-                    parse_task_marker(content_after_marker)
-                } else {
-                    None
-                };
-                let first_line = if checked.is_some() {
-                    // strip the `[ ]` or `[x]` prefix
-                    skip_task_marker(content_after_marker)
-                } else {
-                    content_after_marker
-                };
-
-                self.advance();
-
-                // Collect continuation lines (indented)
-                let mut item_lines = vec![first_line.to_string()];
-                while let Some(next) = self.current_line() {
-                    if next.trim().is_empty() {
-                        // Blank line inside item = loose list
-                        tight = false;
-                        item_lines.push(String::new());
-                        self.advance();
-                        // Continue collecting if next non-blank line is indented
-                        if let Some(after_blank) = self.current_line() {
-                            if after_blank.starts_with("  ") || after_blank.starts_with('\t') {
-                                // will be picked up next iteration
-                            } else {
-                                break;
-                            }
-                        }
-                    } else if next.starts_with("  ") || next.starts_with('\t') {
-                        let stripped = if next.starts_with('\t') { &next[1..] } else { &next[2..] };
-                        item_lines.push(stripped.to_string());
-                        self.advance();
-                    } else {
-                        break;
-                    }
-                }
-
-                let item_content = item_lines.join("\n");
-                let (inner_doc, _) = parse(&item_content);
-                let item_end = self.line_start(self.pos);
-                items.push(ListItem {
-                    blocks: inner_doc.blocks,
-                    checked,
-                    span: Span { start: item_start, end: item_end },
-                });
-
-                // Check for blank line between items
-                if let Some(next) = self.current_line() {
-                    if next.trim().is_empty() {
-                        tight = false;
-                        self.skip_blank_lines();
-                    }
-                }
+            } else if let Some(bm) = detect_list_marker(trimmed) {
+                bm
             } else {
                 break;
+            };
+            if !m.compatible_with(&marker) {
+                break;
+            }
+            let marker_str = m.marker_str();
+            let item_start = self.line_start(self.pos);
+            let content_after_marker = trimmed[marker_str.len()..].trim_start();
+            let checked = if m.is_task() {
+                parse_task_marker(content_after_marker)
+            } else {
+                None
+            };
+            let first_line = if checked.is_some() {
+                // strip the `[ ]` or `[x]` prefix
+                skip_task_marker(content_after_marker)
+            } else {
+                content_after_marker
+            };
+
+            self.advance();
+
+            // Collect continuation lines (indented)
+            let mut item_lines = vec![first_line.to_string()];
+            while let Some(next) = self.current_line() {
+                if next.trim().is_empty() {
+                    // Blank line inside item = loose list
+                    tight = false;
+                    item_lines.push(String::new());
+                    self.advance();
+                    // Continue collecting if next non-blank line is indented
+                    if let Some(after_blank) = self.current_line() {
+                        if after_blank.starts_with("  ") || after_blank.starts_with('\t') {
+                            // will be picked up next iteration
+                        } else {
+                            break;
+                        }
+                    }
+                } else if next.starts_with("  ") || next.starts_with('\t') {
+                    let stripped = if next.starts_with('\t') { &next[1..] } else { &next[2..] };
+                    item_lines.push(stripped.to_string());
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+
+            let item_content = item_lines.join("\n");
+            let (inner_doc, _) = parse(&item_content);
+            let item_end = self.line_start(self.pos);
+            items.push(ListItem {
+                blocks: inner_doc.blocks,
+                checked,
+                span: Span { start: item_start, end: item_end },
+            });
+
+            // Check for blank line between items
+            if let Some(next) = self.current_line() {
+                if next.trim().is_empty() {
+                    tight = false;
+                    self.skip_blank_lines();
+                }
             }
         }
 
@@ -1701,19 +1731,23 @@ fn detect_list_marker(s: &str) -> Option<ListMarker> {
 }
 
 fn detect_ordered_marker(s: &str) -> Option<ListMarker> {
+    detect_ordered_marker_with_hint(s, None)
+}
+
+fn detect_ordered_marker_with_hint(s: &str, hint: Option<&OrderedStyle>) -> Option<ListMarker> {
     // Try enclosed: `(N) `
     if s.starts_with('(') {
         let close = s.find(')')?;
         let inner = &s[1..close];
         let after = &s[close + 1..];
-        if !after.starts_with(' ') && !after.is_empty() {
-            // must be followed by space
-        } else if let Some((style, number)) = parse_ordered_token(inner) {
-            return Some(ListMarker::Ordered {
-                style,
-                delimiter: OrderedDelimiter::Enclosed,
-                number,
-            });
+        if after.starts_with(' ') || after.is_empty() {
+            if let Some((style, number)) = parse_ordered_token_with_hint(inner, hint) {
+                return Some(ListMarker::Ordered {
+                    style,
+                    delimiter: OrderedDelimiter::Enclosed,
+                    number,
+                });
+            }
         }
     }
 
@@ -1724,7 +1758,7 @@ fn detect_ordered_marker(s: &str) -> Option<ListMarker> {
         let delim_char = s.chars().nth(dp).unwrap_or('.');
         let after = &s[dp + 1..];
         if (after.starts_with(' ') || after.is_empty()) && !token.is_empty() {
-            if let Some((style, number)) = parse_ordered_token(token) {
+            if let Some((style, number)) = parse_ordered_token_with_hint(token, hint) {
                 let delimiter = if delim_char == '.' {
                     OrderedDelimiter::Period
                 } else {
@@ -1738,7 +1772,18 @@ fn detect_ordered_marker(s: &str) -> Option<ListMarker> {
     None
 }
 
+#[allow(dead_code)]
 fn parse_ordered_token(s: &str) -> Option<(OrderedStyle, u32)> {
+    parse_ordered_token_with_hint(s, None)
+}
+
+/// Parse an ordered list token with an optional style hint (the established list style).
+/// When the token is ambiguous (e.g. `c` is both roman-C=100 and alpha-c=3), the hint
+/// resolves the ambiguity: if the list is already LowerAlpha, treat `c` as alpha(3).
+fn parse_ordered_token_with_hint(
+    s: &str,
+    hint: Option<&OrderedStyle>,
+) -> Option<(OrderedStyle, u32)> {
     if s.is_empty() {
         return None;
     }
@@ -1746,22 +1791,55 @@ fn parse_ordered_token(s: &str) -> Option<(OrderedStyle, u32)> {
     if let Ok(n) = s.parse::<u32>() {
         return Some((OrderedStyle::Decimal, n));
     }
-    // Single letter
-    if s.len() == 1 {
+    let is_all_roman = s
+        .chars()
+        .all(|c| matches!(c, 'i' | 'v' | 'x' | 'l' | 'c' | 'd' | 'm' | 'I' | 'V' | 'X' | 'L' | 'C' | 'D' | 'M'));
+    let is_single_char = s.len() == 1;
+
+    // If the token is a single char that's a valid roman char, it's ambiguous.
+    // Resolve using hint: if list is already alpha, keep it alpha.
+    if is_single_char && is_all_roman {
+        let c = s.chars().next().unwrap();
+        let prefer_alpha = matches!(
+            hint,
+            Some(OrderedStyle::LowerAlpha) | Some(OrderedStyle::UpperAlpha)
+        );
+        if prefer_alpha {
+            if c.is_ascii_lowercase() {
+                return Some((OrderedStyle::LowerAlpha, (c as u32) - ('a' as u32) + 1));
+            } else {
+                return Some((OrderedStyle::UpperAlpha, (c as u32) - ('A' as u32) + 1));
+            }
+        }
+        // No hint or roman hint: treat as roman (e.g. `i)` starting a roman list)
+        if let Some(n) = from_roman(s) {
+            if c.is_ascii_lowercase() {
+                return Some((OrderedStyle::LowerRoman, n));
+            } else {
+                return Some((OrderedStyle::UpperRoman, n));
+            }
+        }
+    }
+
+    // Multi-char all-roman token → unambiguously roman
+    if !is_single_char && is_all_roman {
+        if let Some(n) = from_roman(s) {
+            if s.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false) {
+                return Some((OrderedStyle::LowerRoman, n));
+            } else {
+                return Some((OrderedStyle::UpperRoman, n));
+            }
+        }
+    }
+
+    // Single letter (non-roman chars like a, b, e, f, g, h, j, k, n, o, p...)
+    if is_single_char {
         let c = s.chars().next().unwrap();
         if c.is_ascii_lowercase() {
             return Some((OrderedStyle::LowerAlpha, (c as u32) - ('a' as u32) + 1));
         }
         if c.is_ascii_uppercase() {
             return Some((OrderedStyle::UpperAlpha, (c as u32) - ('A' as u32) + 1));
-        }
-    }
-    // Roman numerals (lower or upper)
-    if let Some(n) = from_roman(s) {
-        if s.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false) {
-            return Some((OrderedStyle::LowerRoman, n));
-        } else {
-            return Some((OrderedStyle::UpperRoman, n));
         }
     }
     None

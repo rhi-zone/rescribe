@@ -66,3 +66,18 @@ mod smoke {
     }
 }
 
+
+#[cfg(test)]
+mod debug_e2e {
+    use super::*;
+    #[test]
+    fn debug_e2e_rich() {
+        let input = "# Rich Document\n\n::: note\nThis div contains a [styled]{.highlight} span and inline math $`x^2`$.\n:::\n\n## References\n\nSee [example site](https://example.com) for more.\n\nDefinition list:\n\n: Term One\n  :: First definition with _emphasis_.\n\n: Term Two\n  :: Second definition.\n\nFootnote reference.[^ref]\n\n[^ref]: The reference content.\n";
+        let (doc, diags) = parse(input);
+        for (i, b) in doc.blocks.iter().enumerate() {
+            eprintln!("{i}: {:?}", std::mem::discriminant(b));
+        }
+        eprintln!("footnotes: {}", doc.footnotes.len());
+        eprintln!("diags: {diags:?}");
+    }
+}
