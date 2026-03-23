@@ -23,7 +23,7 @@ type SmlWorkbook = Workbook<Cursor<Vec<u8>>>;
 
 fn fixtures_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    Path::new(manifest_dir).join("../../fixtures/sml")
+    Path::new(manifest_dir).join("../../../fixtures/ooxml/sml")
 }
 
 fn find_json_files(dir: &Path) -> Vec<PathBuf> {

@@ -25,7 +25,7 @@ type WmlDoc = Document<Cursor<Vec<u8>>>;
 
 fn fixtures_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    Path::new(manifest_dir).join("../../fixtures/wml")
+    Path::new(manifest_dir).join("../../../fixtures/ooxml/wml")
 }
 
 fn find_json_files(dir: &Path) -> Vec<PathBuf> {
