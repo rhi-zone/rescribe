@@ -402,6 +402,21 @@ from scratch as a proper standalone library.
 - [ ] AZW3 reader/writer (boko as reference, MIT attribution)
 - [ ] PDF reader (pdf-extract backed; already at 4)
 
+### ooxml consolidation (post-merge housekeeping)
+
+The ooxml crates were merged from a separate repo (2026-03-24). They live in
+`crates/formats/ooxml-{opc,xml,dml,omml,wml,sml,pml}/` as separate crates.
+The eventual plan is to consolidate into a single `ooxml-fmt` crate with feature
+flags (`wml`, `sml`, `pml`, `dml`, `omml`; `opc`/`xml` always-on infrastructure).
+
+- [ ] **Consolidate into `ooxml-fmt`** — merge the 7 format crates into one with
+  feature flags. Shared infrastructure (opc, xml) always compiled; dml/omml/wml/sml/pml
+  feature-gated. `crates/tools/ooxml-codegen` stays separate (build tool).
+- [ ] **Publish `ooxml-fmt` to crates.io** — replaces the individual published crates.
+- [ ] **Deprecate individual crates** — bump ooxml-wml/sml/pml/dml/omml/opc/xml to
+  a final version with a deprecation notice in each README pointing to `ooxml-fmt`.
+  Keep them compiling but mark `#[deprecated]` on the re-exported API surface.
+
 ### Milestone: M3 — Tier B/C verticals
 
 Tier B formats at 3-Harness or 2-Fixtures (where harness is N/A), each with a
