@@ -472,7 +472,7 @@ mod tests {
     fn test_writer_roundtrip_via_events() {
         let input = "Section\n=======\n\nA paragraph with *emphasis* text.\n\n- item one\n- item two\n";
         let doc = crate::parse(input).unwrap();
-        let evts: Vec<_> = crate::events::EventIter::new(input).collect();
+        let evts: Vec<_> = crate::Parser::new_iter(input).collect();
         let mut w = Writer::new(Vec::<u8>::new());
         for e in evts {
             w.write_event(e);

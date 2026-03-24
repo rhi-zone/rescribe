@@ -162,12 +162,12 @@ const HEADING_CHARS: &[char] = &['=', '-', '~', '^', '"', '`', '#', '*', '+', '_
 
 /// Parse an RST string into an [`RstDoc`].
 pub fn parse(input: &str) -> Result<RstDoc, RstError> {
-    let mut iter = events::EventIter::new(input);
+    let mut iter = Parser::new_iter(input);
     let blocks = events::collect_doc_from_iter(&mut iter);
     Ok(RstDoc { blocks })
 }
 
-pub(crate) struct Parser<'a> {
+pub struct Parser<'a> {
     pub(crate) lines: Vec<&'a str>,
     pub(crate) line_idx: usize,
     /// Maps underline character to heading level (assigned in order of appearance).
@@ -181,6 +181,11 @@ pub(crate) struct Parser<'a> {
     /// Holds a code block to be emitted immediately after the current block.
     /// Used when "text::" emits a paragraph and defers the code block.
     pub(crate) pending_block: Option<Block>,
+    // ── Iterator state (used when Parser is driven as an Iterator) ────────────
+    /// Buffered events from the most recently parsed block.
+    pub(crate) event_buf: std::collections::VecDeque<events::OwnedEvent>,
+    /// Set to true once the parser has reached EOF during iteration.
+    pub(crate) iter_done: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -194,7 +199,18 @@ impl<'a> Parser<'a> {
             substitutions: std::collections::HashMap::new(),
             anon_targets: Vec::new(),
             pending_block: None,
+            event_buf: std::collections::VecDeque::new(),
+            iter_done: false,
         }
+    }
+
+    /// Construct a `Parser` that is ready to be used as an `Iterator`.
+    ///
+    /// Runs the link-target pre-scan so that `next()` calls produce correct events.
+    pub fn new_iter(input: &'a str) -> Self {
+        let mut p = Self::new(input);
+        p.collect_link_targets();
+        p
     }
 
     pub(crate) fn current_line(&self) -> Option<&'a str> {
@@ -2689,9 +2705,53 @@ mod tests {
     }
 }
 
+// ── Iterator implementation ───────────────────────────────────────────────────
+
+impl Iterator for Parser<'_> {
+    type Item = events::OwnedEvent;
+
+    fn next(&mut self) -> Option<events::OwnedEvent> {
+        // Drain any events buffered from the previous block.
+        if let Some(ev) = self.event_buf.pop_front() {
+            return Some(ev);
+        }
+        if self.iter_done {
+            return None;
+        }
+        // Advance the parser until a block produces events or we hit EOF.
+        loop {
+            // Drain a pending block (e.g. deferred code block after "text::") before
+            // checking EOF, because the pending block may have been set on the last line.
+            if let Some(pending) = self.pending_block.take() {
+                events::collect_block_events(&pending, &mut self.event_buf);
+                if let Some(ev) = self.event_buf.pop_front() {
+                    return Some(ev);
+                }
+                continue;
+            }
+            self.skip_blank_lines();
+            if self.is_eof() {
+                break;
+            }
+            if let Some(block) = self.try_parse_block() {
+                events::collect_block_events(&block, &mut self.event_buf);
+                if let Some(ev) = self.event_buf.pop_front() {
+                    return Some(ev);
+                }
+                // Block produced no events (shouldn't happen) — keep looping.
+            } else {
+                // Fallback: advance to prevent infinite loop.
+                self.advance_line();
+            }
+        }
+        self.iter_done = true;
+        None
+    }
+}
+
 // ── Public streaming API ──────────────────────────────────────────────────────
 
 /// Parse `input` as RST and return a streaming [`EventIter`].
 pub fn events(input: &str) -> EventIter<'_> {
-    events::EventIter::new(input)
+    Parser::new_iter(input)
 }

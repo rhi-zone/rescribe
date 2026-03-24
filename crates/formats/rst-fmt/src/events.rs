@@ -82,67 +82,12 @@ pub enum OwnedEvent {
     EndRstSpan,
 }
 
-/// A public event iterator that yields [`OwnedEvent`] items lazily — one block at a time.
-pub struct EventIter<'a> {
-    parser: crate::Parser<'a>,
-    event_buf: VecDeque<OwnedEvent>,
-    done: bool,
-}
+/// A streaming event iterator over a parsed RST document.
+///
+/// This is a type alias for [`crate::Parser`], which implements
+/// [`Iterator<Item = OwnedEvent>`] directly.
+pub type EventIter<'a> = crate::Parser<'a>;
 
-impl<'a> EventIter<'a> {
-    pub(crate) fn new(input: &'a str) -> Self {
-        let mut parser = crate::Parser::new(input);
-        // Pre-scan: collect link targets, substitutions, anonymous targets.
-        parser.collect_link_targets();
-        EventIter {
-            parser,
-            event_buf: VecDeque::new(),
-            done: false,
-        }
-    }
-}
-
-impl Iterator for EventIter<'_> {
-    type Item = OwnedEvent;
-
-    fn next(&mut self) -> Option<OwnedEvent> {
-        // Drain any events buffered from the previous block.
-        if let Some(ev) = self.event_buf.pop_front() {
-            return Some(ev);
-        }
-        if self.done {
-            return None;
-        }
-        // Advance the parser until a block produces events or we hit EOF.
-        loop {
-            // Drain a pending block (e.g. deferred code block after "text::") before
-            // checking EOF, because the pending block may have been set on the last line.
-            if let Some(pending) = self.parser.pending_block.take() {
-                collect_block_events(&pending, &mut self.event_buf);
-                if let Some(ev) = self.event_buf.pop_front() {
-                    return Some(ev);
-                }
-                continue;
-            }
-            self.parser.skip_blank_lines();
-            if self.parser.is_eof() {
-                break;
-            }
-            if let Some(block) = self.parser.try_parse_block() {
-                collect_block_events(&block, &mut self.event_buf);
-                if let Some(ev) = self.event_buf.pop_front() {
-                    return Some(ev);
-                }
-                // Block produced no events (shouldn't happen) — keep looping.
-            } else {
-                // Fallback: advance to prevent infinite loop.
-                self.parser.advance_line();
-            }
-        }
-        self.done = true;
-        None
-    }
-}
 
 /// Collect all blocks from an [`EventIter`] into a `Vec<Block>`.
 ///
