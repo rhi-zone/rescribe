@@ -43,6 +43,12 @@ pub mod emit;
 #[cfg(feature = "ast")]
 pub mod parse;
 
+#[cfg(feature = "streaming")]
+pub mod events;
+
+#[cfg(feature = "batch")]
+pub mod batch;
+
 #[cfg(feature = "ast")]
 pub use ast::{
     Block, CmDoc, Diagnostic, Inline, LinkDef, ListItem, ListKind, OrderedMarker, Severity, Span,
@@ -51,3 +57,9 @@ pub use ast::{
 pub use emit::emit;
 #[cfg(feature = "ast")]
 pub use parse::parse;
+
+#[cfg(feature = "streaming")]
+pub use events::{Event, EventIter, OwnedEvent, events, events_str};
+
+#[cfg(feature = "batch")]
+pub use batch::{Handler, StreamingParser};
