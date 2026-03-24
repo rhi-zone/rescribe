@@ -144,6 +144,11 @@ parity!(newline_bs_newline_vt_u_bs_paren_lt, "\n\\\n\x0bu\\(<");
 
 parity!(bracket_newline_bracket, "[\n]");
 
+// pipe_dash_newline_pipe_dash (|-\n|-): excluded — pulldown's GFM table extension
+// recognises |-\n|- as a minimal table (header row with content "-", delimiter row)
+// but tree-sitter-md's block grammar produces paragraph instead. Inputs where every
+// pipe-containing line is delimiter-only (|, -, :, space) are skipped in parity fuzz.
+
 // double_tilde_underscore_tilde_underscore (~~_~_): excluded — contains a lone ~
 // at position 3 which causes single-tilde divergence; covered by the fuzz skip
 // "strip ~~ pairs and check if ~ remains".

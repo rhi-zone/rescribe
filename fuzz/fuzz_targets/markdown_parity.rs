@@ -41,6 +41,21 @@ fuzz_target!(|data: &[u8]| {
         }
     }
 
+    // Skip inputs where every pipe-containing line consists only of |, -, :, and
+    // whitespace: pulldown-cmark's GFM table extension recognises these as minimal
+    // tables (e.g. |-\n|-) but tree-sitter-md's block grammar does not. Inputs
+    // with at least one pipe-line that contains non-delimiter characters are fine
+    // (tree-sitter handles fully-formed tables correctly).
+    if s.contains('|') {
+        let all_pipe_lines_delimiter_only = s
+            .lines()
+            .filter(|line| line.contains('|'))
+            .all(|line| line.bytes().all(|b| matches!(b, b'|' | b'-' | b':' | b' ' | b'\t')));
+        if all_pipe_lines_delimiter_only {
+            return;
+        }
+    }
+
     let opts = ParseOptions {
         preserve_source_info: false,
         ..Default::default()
