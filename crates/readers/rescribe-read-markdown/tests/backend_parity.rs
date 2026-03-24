@@ -137,3 +137,5 @@ parity!(tilde_dollar_tilde_g, "~$~G");
 // rules) parse this as text("[") + strikeout(text("[")). The divergence is in the
 // inline grammar and cannot be fixed at the IR adapter level.
 // Single-tilde inputs are skipped in the parity fuzz target.
+
+parity!(asterisk_a_bracket_caret_asterisk_bracket, "*a[^*[");

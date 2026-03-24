@@ -611,6 +611,8 @@ impl<'a> Converter<'a> {
             }
         }
 
+        // Merge adjacent text nodes (gap text and named text nodes may be adjacent)
+        merge_text_nodes(&mut nodes);
         nodes
     }
 
