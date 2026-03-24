@@ -3,6 +3,15 @@
 use crate::ast::*;
 use std::collections::VecDeque;
 
+pub use crate::parse::Parser;
+
+/// `EventIter<'a>` is a type alias for [`Parser<'a>`].
+///
+/// [`Parser<'a>`] implements `Iterator<Item = OwnedEvent>` directly,
+/// matching the pulldown-cmark architecture where the parser struct is
+/// also the iterator.
+pub type EventIter<'a> = Parser<'a>;
+
 /// An owned event from an AsciiDoc document.
 #[derive(Debug)]
 pub enum OwnedEvent {
@@ -78,63 +87,10 @@ pub enum OwnedEvent {
     Anchor { id: String },
 }
 
-/// Public iterator that yields `OwnedEvent` items lazily — one block at a time.
-pub struct EventIter<'a> {
-    parser: crate::parse::Parser<'a>,
-    event_buf: VecDeque<OwnedEvent>,
-    started: bool,
-    done: bool,
-}
-
-impl<'a> EventIter<'a> {
-    pub(crate) fn new(input: &'a str) -> Self {
-        EventIter {
-            parser: crate::parse::Parser::new(input),
-            event_buf: VecDeque::new(),
-            started: false,
-            done: false,
-        }
-    }
-}
-
-impl Iterator for EventIter<'_> {
-    type Item = OwnedEvent;
-
-    fn next(&mut self) -> Option<OwnedEvent> {
-        if let Some(ev) = self.event_buf.pop_front() {
-            return Some(ev);
-        }
-        if self.done {
-            return None;
-        }
-        if !self.started {
-            self.started = true;
-            return Some(OwnedEvent::StartDocument);
-        }
-        loop {
-            self.parser.skip_blank_lines();
-            if self.parser.is_eof() {
-                break;
-            }
-            if let Some(block) = self.parser.try_parse_block() {
-                collect_block_events(&block, &mut self.event_buf);
-                if let Some(ev) = self.event_buf.pop_front() {
-                    return Some(ev);
-                }
-                // No events produced (shouldn't happen) — keep looping
-            } else {
-                self.parser.advance_line();
-            }
-        }
-        self.done = true;
-        Some(OwnedEvent::EndDocument)
-    }
-}
-
-/// Collect a complete AsciiDoc from an EventIter.
+/// Collect a complete AsciiDoc from a [`Parser`] used as an event iterator.
 /// Called by `parse::parse()` to reconstruct the AST from events.
 pub(crate) fn collect_doc_from_iter(
-    iter: &mut EventIter<'_>,
+    iter: &mut Parser<'_>,
 ) -> (Vec<Block>, std::collections::HashMap<String, String>, Vec<Diagnostic>) {
     let mut block_stack: Vec<BlockFrame> = vec![BlockFrame::Document { blocks: Vec::new() }];
     let mut inline_ctx: Vec<InlineFrame> = Vec::new();
@@ -143,8 +99,8 @@ pub(crate) fn collect_doc_from_iter(
         handle_event(event, &mut block_stack, &mut inline_ctx);
     }
 
-    let attributes = iter.parser.take_attributes();
-    let diagnostics = std::mem::take(&mut iter.parser.diagnostics);
+    let attributes = iter.take_attributes();
+    let diagnostics = std::mem::take(&mut iter.diagnostics);
 
     let blocks = match block_stack.pop() {
         Some(BlockFrame::Document { blocks }) => blocks,
@@ -513,7 +469,7 @@ fn handle_event(event: OwnedEvent, block_stack: &mut Vec<BlockFrame>, inline_ctx
     }
 }
 
-fn collect_block_events(block: &Block, queue: &mut VecDeque<OwnedEvent>) {
+pub(crate) fn collect_block_events(block: &Block, queue: &mut VecDeque<OwnedEvent>) {
     match block {
         Block::Paragraph { inlines, id, role, checked, .. } => {
             queue.push_back(OwnedEvent::StartParagraph {

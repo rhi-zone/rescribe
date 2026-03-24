@@ -3,6 +3,8 @@
 use crate::ast::{
     AsciiDoc, Block, DefinitionItem, Diagnostic, ImageData, Inline, Span,
 };
+use crate::events::{collect_block_events, OwnedEvent};
+use std::collections::VecDeque;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -11,7 +13,7 @@ use crate::ast::{
 /// Parsing is always infallible: malformed constructs produce diagnostics
 /// rather than errors.
 pub fn parse(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
-    let mut iter = crate::events::EventIter::new(input);
+    let mut iter = Parser::new(input);
     let (blocks, attributes, diagnostics) = crate::events::collect_doc_from_iter(&mut iter);
     let doc = AsciiDoc { blocks, attributes, span: Span::NONE };
     (doc, diagnostics)
@@ -19,10 +21,10 @@ pub fn parse(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
-pub(crate) struct Parser<'a> {
+pub struct Parser<'a> {
     lines: Vec<&'a str>,
     line_idx: usize,
-    attributes: std::collections::HashMap<String, String>,
+    pub(crate) attributes: std::collections::HashMap<String, String>,
     pub(crate) diagnostics: Vec<Diagnostic>,
     /// Pending block id from `[#id]` — applied to the next block and cleared.
     pending_id: Option<String>,
@@ -30,10 +32,14 @@ pub(crate) struct Parser<'a> {
     pending_role: Option<String>,
     /// Pending list style from `[loweralpha]` etc. — applied to the next list block and cleared.
     pending_list_style: Option<String>,
+    // ── Iterator state ────────────────────────────────────────────────────────
+    pub(crate) event_buf: VecDeque<OwnedEvent>,
+    iter_started: bool,
+    iter_done: bool,
 }
 
 impl<'a> Parser<'a> {
-    pub(crate) fn new(input: &'a str) -> Self {
+    pub fn new(input: &'a str) -> Self {
         let lines: Vec<&str> = input.lines().collect();
         Self {
             lines,
@@ -43,6 +49,9 @@ impl<'a> Parser<'a> {
             pending_id: None,
             pending_role: None,
             pending_list_style: None,
+            event_buf: VecDeque::new(),
+            iter_started: false,
+            iter_done: false,
         }
     }
 
@@ -1036,6 +1045,42 @@ impl<'a> Parser<'a> {
             other => other,
         };
         Some(block)
+    }
+}
+
+// ── Iterator impl ─────────────────────────────────────────────────────────────
+
+impl Iterator for Parser<'_> {
+    type Item = OwnedEvent;
+
+    fn next(&mut self) -> Option<OwnedEvent> {
+        if let Some(ev) = self.event_buf.pop_front() {
+            return Some(ev);
+        }
+        if self.iter_done {
+            return None;
+        }
+        if !self.iter_started {
+            self.iter_started = true;
+            return Some(OwnedEvent::StartDocument);
+        }
+        loop {
+            self.skip_blank_lines();
+            if self.is_eof() {
+                break;
+            }
+            if let Some(block) = self.try_parse_block() {
+                collect_block_events(&block, &mut self.event_buf);
+                if let Some(ev) = self.event_buf.pop_front() {
+                    return Some(ev);
+                }
+                // No events produced (shouldn't happen) — keep looping
+            } else {
+                self.advance_line();
+            }
+        }
+        self.iter_done = true;
+        Some(OwnedEvent::EndDocument)
     }
 }
 
