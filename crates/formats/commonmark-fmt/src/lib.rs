@@ -39,11 +39,15 @@
 #[cfg(feature = "ast")]
 pub mod ast;
 #[cfg(feature = "ast")]
+pub mod emit;
+#[cfg(feature = "ast")]
 pub mod parse;
 
 #[cfg(feature = "ast")]
 pub use ast::{
     Block, CmDoc, Diagnostic, Inline, LinkDef, ListItem, ListKind, OrderedMarker, Severity, Span,
 };
+#[cfg(feature = "ast")]
+pub use emit::emit;
 #[cfg(feature = "ast")]
 pub use parse::parse;
