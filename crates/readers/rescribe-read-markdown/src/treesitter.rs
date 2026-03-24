@@ -459,12 +459,27 @@ impl<'a> Converter<'a> {
             }
 
             "strikethrough" => {
-                let mut children = self.process_inline_children(tsnode, offset);
-                // tree-sitter-md nests ~~text~~ as strikethrough(strikethrough(text)).
-                // Flatten one level: if the only child is already a STRIKEOUT, use its children.
-                if children.len() == 1 && children[0].kind.as_str() == node::STRIKEOUT {
-                    children = children.remove(0).children;
+                let text = self.inline_text(tsnode, offset);
+                // GFM strikethrough requires double tildes (~~text~~).
+                // tree-sitter-md also matches single ~text~, but pulldown-cmark
+                // only accepts double tildes. Demote single-tilde to raw text.
+                if !text.starts_with("~~") {
+                    return Some(self.with_inline_span(
+                        Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()),
+                        tsnode,
+                        offset,
+                    ));
                 }
+                // tree-sitter-md nests ~~text~~ as strikethrough(strikethrough(text)).
+                // Find the inner strikethrough and extract ITS children directly
+                // (the inner's emphasis_delimiters are excluded; only content comes through).
+                let mut cursor = tsnode.walk();
+                let inner = tsnode.children(&mut cursor).find(|c| c.kind() == "strikethrough");
+                let children = if let Some(inner) = inner {
+                    self.process_inline_children(&inner, offset)
+                } else {
+                    self.process_inline_children(tsnode, offset)
+                };
                 Some(self.with_inline_span(
                     Node::new(node::STRIKEOUT).children(children),
                     tsnode,

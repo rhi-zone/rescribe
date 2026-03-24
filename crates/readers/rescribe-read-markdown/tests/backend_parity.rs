@@ -123,3 +123,5 @@ parity!(y_vt_newline_c, "y\x0b\nC");
 parity!(bracket_backslash_bracket, "[\\[");
 
 parity!(comma_dollar_comma_dollar, ",$,$");
+
+parity!(tilde_dollar_tilde_g, "~$~G");
