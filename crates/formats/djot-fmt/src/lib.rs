@@ -55,7 +55,7 @@ pub use batch::{BatchParser, BatchSink};
 ///
 /// Parses the input first, then walks the AST yielding owned events.
 /// For details on the event types, see [`EventOwned`].
-pub fn events(input: &str) -> EventIter {
+pub fn events(input: &str) -> EventIter<'_> {
     EventIter::new(input)
 }
 

@@ -16,25 +16,24 @@ use crate::ast::*;
 
 /// Parse a Djot string into a `DjotDoc` and diagnostics. Infallible.
 pub fn parse(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
-    let mut parser = Parser::new(input);
-    parser.parse_doc()
+    crate::events::collect_doc_from_iter(input)
 }
 
-struct Parser<'a> {
+pub(crate) struct Parser<'a> {
     input: &'a str,
     lines: Vec<&'a str>,
     /// Byte offset of the start of each line.
     line_offsets: Vec<usize>,
     pos: usize, // current line index
-    diagnostics: Vec<Diagnostic>,
-    link_defs: Vec<LinkDef>,
-    footnote_defs: Vec<FootnoteDef>,
+    pub(crate) diagnostics: Vec<Diagnostic>,
+    pub(crate) link_defs: Vec<LinkDef>,
+    pub(crate) footnote_defs: Vec<FootnoteDef>,
     /// Pending block attribute from `{...}` line before a block.
     pending_attr: Option<Attr>,
 }
 
 impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
+    pub(crate) fn new(input: &'a str) -> Self {
         let mut lines = Vec::new();
         let mut offsets = Vec::new();
         let mut offset = 0;
@@ -72,7 +71,7 @@ impl<'a> Parser<'a> {
         self.pos += 1;
     }
 
-    fn at_end(&self) -> bool {
+    pub(crate) fn at_end(&self) -> bool {
         self.pos >= self.lines.len()
     }
 
@@ -89,6 +88,7 @@ impl<'a> Parser<'a> {
         self.pos > start
     }
 
+    #[allow(dead_code)]
     fn parse_doc(&mut self) -> (DjotDoc, Vec<Diagnostic>) {
         // First pass: collect link defs and footnote defs positions.
         self.pre_scan();
@@ -106,7 +106,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Pre-scan to collect link definitions and footnote definitions.
-    fn pre_scan(&mut self) {
+    pub(crate) fn pre_scan(&mut self) {
         let n = self.lines.len();
         let mut i = 0;
         while i < n {
@@ -167,15 +167,28 @@ impl<'a> Parser<'a> {
 
     fn parse_blocks(&mut self, end_line: usize) -> Vec<Block> {
         let mut blocks = Vec::new();
-        while self.pos < end_line && !self.at_end() {
+        while let Some(block) = self.parse_one_block_until(end_line) {
+            blocks.push(block);
+        }
+        blocks
+    }
+
+    /// Parse the next single top-level block, up to `end_line`.
+    /// Returns `None` when there are no more blocks to parse.
+    pub(crate) fn parse_one_block(&mut self) -> Option<Block> {
+        self.parse_one_block_until(self.lines.len())
+    }
+
+    fn parse_one_block_until(&mut self, end_line: usize) -> Option<Block> {
+        loop {
+            if self.pos >= end_line || self.at_end() {
+                return None;
+            }
             self.skip_blank_lines();
             if self.pos >= end_line || self.at_end() {
-                break;
+                return None;
             }
-            let line = match self.current_line() {
-                Some(l) => l,
-                None => break,
-            };
+            let line = self.current_line()?;
             let trimmed = line.trim_start();
 
             // Skip link defs and footnote defs (already pre-scanned)
@@ -212,8 +225,7 @@ impl<'a> Parser<'a> {
             // Heading
             if trimmed.starts_with('#') {
                 if let Some(b) = self.parse_heading() {
-                    blocks.push(b);
-                    continue;
+                    return Some(b);
                 }
             }
 
@@ -222,67 +234,62 @@ impl<'a> Parser<'a> {
                 let start = self.line_start(self.pos);
                 self.advance();
                 let attr = self.pending_attr.take().unwrap_or_default();
-                blocks.push(Block::ThematicBreak {
+                return Some(Block::ThematicBreak {
                     attr,
                     span: Span { start, end: self.line_start(self.pos) },
                 });
-                continue;
             }
 
             // Fenced code/raw block
             if trimmed.starts_with("```") {
                 if let Some(b) = self.parse_fenced_code() {
-                    blocks.push(b);
-                    continue;
+                    return Some(b);
                 }
             }
 
             // Div block :::
             if trimmed.starts_with(":::") {
                 if let Some(b) = self.parse_div() {
-                    blocks.push(b);
-                    continue;
+                    return Some(b);
                 }
             }
 
             // Blockquote
             if trimmed.starts_with("> ") || trimmed == ">" {
                 if let Some(b) = self.parse_blockquote() {
-                    blocks.push(b);
-                    continue;
+                    return Some(b);
                 }
             }
 
             // Table
             if trimmed.starts_with('|') {
                 if let Some(b) = self.parse_table() {
-                    blocks.push(b);
-                    continue;
+                    return Some(b);
                 }
             }
 
             // List items
             if let Some(list_marker) = detect_list_marker(trimmed) {
                 if let Some(b) = self.parse_list(list_marker) {
-                    blocks.push(b);
-                    continue;
+                    return Some(b);
                 }
             }
 
             // Definition list (`: ` marker)
             if trimmed.starts_with(": ") || trimmed == ":" {
                 if let Some(b) = self.parse_definition_list() {
-                    blocks.push(b);
-                    continue;
+                    return Some(b);
                 }
             }
 
             // Paragraph (fallback)
             if let Some(b) = self.parse_paragraph() {
-                blocks.push(b);
+                return Some(b);
             }
+
+            // Nothing parsed — advance to avoid infinite loop
+            self.advance();
         }
-        blocks
     }
 
     fn take_pending_attr(&mut self) -> Attr {
