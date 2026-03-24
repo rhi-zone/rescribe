@@ -379,7 +379,7 @@ impl<'a> Converter<'a> {
             }
 
             merge_text_nodes(&mut nodes);
-            nodes
+            expand_text_newlines(nodes)
         } else {
             // Fallback: treat as plain text, splitting on `\n` for soft breaks.
             let text = self.node_text(inline_block_node).to_string();
@@ -569,11 +569,9 @@ impl<'a> Converter<'a> {
         let mut nodes = Vec::new();
 
         if parent.child_count() == 0 {
-            // No children - extract text directly
-            let text = self.inline_text(parent, offset).to_string();
-            if !text.is_empty() {
-                nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, text));
-            }
+            // No children - extract text directly, splitting on newlines for soft_breaks
+            let text = self.inline_text(parent, offset);
+            push_gap_text(text, &mut nodes);
             return nodes;
         }
 
@@ -590,9 +588,7 @@ impl<'a> Converter<'a> {
             // Extract text before this child (gap between current_pos and child_start)
             if child_start > current_pos {
                 let gap_text = &self.source[offset + current_pos..offset + child_start];
-                if !gap_text.is_empty() {
-                    nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, gap_text.to_string()));
-                }
+                push_gap_text(gap_text, &mut nodes);
             }
 
             // Process the child node
@@ -606,14 +602,13 @@ impl<'a> Converter<'a> {
         // Extract text after the last child
         if current_pos < parent_end {
             let gap_text = &self.source[offset + current_pos..offset + parent_end];
-            if !gap_text.is_empty() {
-                nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, gap_text.to_string()));
-            }
+            push_gap_text(gap_text, &mut nodes);
         }
 
         // Merge adjacent text nodes (gap text and named text nodes may be adjacent)
         merge_text_nodes(&mut nodes);
-        nodes
+        // Expand any text nodes with embedded newlines into (text, soft_break, ...) sequences
+        expand_text_newlines(nodes)
     }
 
     fn process_link(&self, tsnode: &tree_sitter::Node, offset: usize) -> Option<Node> {
@@ -1060,6 +1055,25 @@ fn push_gap_text(text: &str, nodes: &mut Vec<Node>) {
         }
         first = false;
     }
+}
+
+/// Split text nodes that contain embedded newlines into (text, soft_break, ...) sequences.
+///
+/// Some code paths (e.g. reference link demoting) produce text nodes with literal `\n`
+/// characters. CommonMark requires these to be soft breaks, not embedded newlines.
+fn expand_text_newlines(nodes: Vec<Node>) -> Vec<Node> {
+    let mut result = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        if node.kind.as_str() == node::TEXT {
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            if content.contains('\n') {
+                push_gap_text(&content, &mut result);
+                continue;
+            }
+        }
+        result.push(node);
+    }
+    result
 }
 
 /// Trim leading/trailing whitespace from edge text nodes in a table cell.
