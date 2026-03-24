@@ -22,7 +22,7 @@ pub use parse::parse;
 pub use writer::Writer;
 
 /// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
-pub fn events(input: &str) -> events::EventIter {
+pub fn events(input: &str) -> events::EventIter<'_> {
     events::events(input)
 }
 

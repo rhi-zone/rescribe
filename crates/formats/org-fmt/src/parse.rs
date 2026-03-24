@@ -10,29 +10,37 @@ use crate::ast::{
 /// Parsing is infallible — unknown constructs produce [`Diagnostic`]s instead
 /// of hard errors.
 pub fn parse(input: &str) -> (OrgDoc, Vec<Diagnostic>) {
-    let mut p = OrgParser::new(input);
-    let (blocks, metadata) = p.parse_document();
-    let diagnostics = p.diagnostics;
+    let mut iter = crate::events::EventIter::new(input);
+    let (blocks, metadata, diagnostics) = crate::events::collect_doc_from_iter(&mut iter);
     (OrgDoc { blocks, metadata }, diagnostics)
 }
 
-struct OrgParser<'a> {
+pub(crate) struct OrgParser<'a> {
     lines: Vec<&'a str>,
     pos: usize,
     pub diagnostics: Vec<Diagnostic>,
+    /// Paragraph lines being accumulated across calls to `parse_next_block`.
+    pub(crate) current_para: Vec<String>,
+    /// Pending #+NAME: affiliated keyword to attach to the next block.
+    pub(crate) pending_name: Option<String>,
+    /// Accumulated document-level metadata (#+KEY: value lines).
+    pub(crate) metadata: Vec<(String, String)>,
 }
 
 impl<'a> OrgParser<'a> {
-    fn new(input: &'a str) -> Self {
+    pub(crate) fn new(input: &'a str) -> Self {
         let lines: Vec<&str> = input.lines().collect();
         Self {
             lines,
             pos: 0,
             diagnostics: Vec::new(),
+            current_para: Vec::new(),
+            pending_name: None,
+            metadata: Vec::new(),
         }
     }
 
-    fn is_eof(&self) -> bool {
+    pub(crate) fn is_eof(&self) -> bool {
         self.pos >= self.lines.len()
     }
 
@@ -44,24 +52,38 @@ impl<'a> OrgParser<'a> {
         self.pos += 1;
     }
 
-    fn parse_document(&mut self) -> (Vec<Block>, Vec<(String, String)>) {
-        let mut blocks = Vec::new();
-        let mut metadata = Vec::new();
-        let mut current_para: Vec<String> = Vec::new();
-        // Affiliated keyword #+NAME: carries over to the next block
-        let mut pending_name: Option<String> = None;
+    /// Take the accumulated document-level metadata out of the parser.
+    pub(crate) fn take_metadata(&mut self) -> Vec<(String, String)> {
+        std::mem::take(&mut self.metadata)
+    }
 
-        while !self.is_eof() {
+    /// Parse the next top-level block from the document, returning `None` at EOF.
+    ///
+    /// Lines that don't produce a block (blank lines, comments, metadata) are
+    /// consumed transparently; the method loops until it has a block or reaches
+    /// EOF.  A partially-accumulated paragraph is flushed when EOF is reached.
+    pub(crate) fn parse_next_block(&mut self) -> Option<Block> {
+        loop {
+            if self.is_eof() {
+                // Flush any trailing paragraph
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                }
+                return None;
+            }
+
             let line = self.current_line().unwrap();
 
             // #+CAPTION: text followed by [[file:image]] → Figure block
             if line.to_uppercase().starts_with("#+CAPTION:") {
-                if !current_para.is_empty() {
-                    blocks.push(Block::Paragraph {
-                        inlines: parse_para_lines(&current_para),
-                        span: Span::NONE,
-                    });
-                    current_para.clear();
+                // Flush any pending paragraph first
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    // We'll re-process this line next time around; don't advance.
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
                 }
                 let caption_text = line["#+CAPTION:".len()..].trim().to_string();
                 self.advance();
@@ -70,15 +92,15 @@ impl<'a> OrgParser<'a> {
                     self.advance();
                 }
                 // Check if next line is an image link
-                let mut made_figure = false;
-                if let Some(img_line) = self.current_line() {
+                let made_figure = if let Some(img_line) = self.current_line() {
                     let trimmed = img_line.trim();
                     if trimmed.starts_with("[[") {
                         let img_chars: Vec<char> = trimmed.chars().collect();
                         if let Some((Inline::Image { url, .. }, _)) = parse_link(&img_chars, 0) {
                             let caption_inlines = parse_inline_content(&caption_text);
                             let img_inline = Inline::Image { url, span: Span::NONE };
-                            blocks.push(Block::Figure {
+                            self.advance();
+                            return Some(Block::Figure {
                                 children: vec![
                                     Block::Caption {
                                         inlines: caption_inlines,
@@ -91,14 +113,12 @@ impl<'a> OrgParser<'a> {
                                 ],
                                 span: Span::NONE,
                             });
-                            self.advance();
-                            made_figure = true;
-                        }
-                    }
-                }
+                        } else { false }
+                    } else { false }
+                } else { false };
                 if !made_figure {
                     // No image follows — emit standalone caption
-                    blocks.push(Block::Caption {
+                    return Some(Block::Caption {
                         inlines: parse_inline_content(&caption_text),
                         span: Span::NONE,
                     });
@@ -111,9 +131,9 @@ impl<'a> OrgParser<'a> {
                 if let Some((key, value)) = parse_metadata_line(line) {
                     if key == "name" {
                         // #+NAME: is an affiliated keyword; carry it to the next block
-                        pending_name = Some(value);
+                        self.pending_name = Some(value);
                     } else {
-                        metadata.push((key, value));
+                        self.metadata.push((key, value));
                     }
                 }
                 self.advance();
@@ -122,12 +142,11 @@ impl<'a> OrgParser<'a> {
 
             // Blank line - end paragraph
             if line.trim().is_empty() {
-                if !current_para.is_empty() {
-                    blocks.push(Block::Paragraph {
-                        inlines: parse_para_lines(&current_para),
-                        span: Span::NONE,
-                    });
-                    current_para.clear();
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    self.advance();
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
                 }
                 self.advance();
                 continue;
@@ -135,91 +154,76 @@ impl<'a> OrgParser<'a> {
 
             // Heading
             if line.starts_with('*') && line.chars().find(|&c| c != '*') == Some(' ') {
-                if !current_para.is_empty() {
-                    blocks.push(Block::Paragraph {
-                        inlines: parse_para_lines(&current_para),
-                        span: Span::NONE,
-                    });
-                    current_para.clear();
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    // Re-process the heading line on the next call.
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
                 }
-                blocks.push(self.parse_heading());
-                continue;
+                return Some(self.parse_heading());
             }
 
             // Block elements
             if line.to_uppercase().starts_with("#+BEGIN_") {
-                if !current_para.is_empty() {
-                    blocks.push(Block::Paragraph {
-                        inlines: parse_para_lines(&current_para),
-                        span: Span::NONE,
-                    });
-                    current_para.clear();
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    // Re-process the BEGIN line on the next call.
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
                 }
                 if let Some(mut block) = self.parse_block() {
                     // Attach #+NAME: affiliated keyword to the block
-                    if let Some(name) = pending_name.take()
+                    if let Some(name) = self.pending_name.take()
                         && let Block::CodeBlock { name: ref mut n, .. } = block
                     {
                         *n = Some(name);
                     }
-                    blocks.push(block);
+                    return Some(block);
                 } else {
-                    pending_name = None;
+                    self.pending_name = None;
                 }
                 continue;
             }
 
             // Definition list: - TERM :: DESCRIPTION
             if is_definition_list_item(line) {
-                if !current_para.is_empty() {
-                    blocks.push(Block::Paragraph {
-                        inlines: parse_para_lines(&current_para),
-                        span: Span::NONE,
-                    });
-                    current_para.clear();
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
                 }
-                blocks.push(self.parse_definition_list());
-                continue;
+                return Some(self.parse_definition_list());
             }
 
             // List item
             if is_list_item(line) {
-                if !current_para.is_empty() {
-                    blocks.push(Block::Paragraph {
-                        inlines: parse_para_lines(&current_para),
-                        span: Span::NONE,
-                    });
-                    current_para.clear();
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
                 }
-                blocks.push(self.parse_list());
-                continue;
+                return Some(self.parse_list());
             }
 
             // Table: lines starting with |
             if line.starts_with('|') {
-                if !current_para.is_empty() {
-                    blocks.push(Block::Paragraph {
-                        inlines: parse_para_lines(&current_para),
-                        span: Span::NONE,
-                    });
-                    current_para.clear();
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
                 }
-                blocks.push(self.parse_table());
-                continue;
+                return Some(self.parse_table());
             }
 
             // Horizontal rule
             if line.trim() == "-----" || (line.chars().all(|c| c == '-') && line.len() >= 5) {
-                if !current_para.is_empty() {
-                    blocks.push(Block::Paragraph {
-                        inlines: parse_para_lines(&current_para),
-                        span: Span::NONE,
-                    });
-                    current_para.clear();
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
                 }
-                blocks.push(Block::HorizontalRule { span: Span::NONE });
                 self.advance();
-                continue;
+                return Some(Block::HorizontalRule { span: Span::NONE });
             }
 
             // Comment line: "# " (single hash + space, not "#+")
@@ -231,26 +235,20 @@ impl<'a> OrgParser<'a> {
 
             // Fixed-width area: ": " prefix (colon + space) or lone ":"
             if line.starts_with(": ") || line == ":" {
-                if !current_para.is_empty() {
-                    blocks.push(Block::Paragraph {
-                        inlines: parse_para_lines(&current_para),
-                        span: Span::NONE,
-                    });
-                    current_para.clear();
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
                 }
-                let block = self.parse_fixed_width();
-                blocks.push(block);
-                continue;
+                return Some(self.parse_fixed_width());
             }
 
             // Drawer: ":NAME:" on its own line (colon-identifier-colon)
             if is_drawer_start(line) {
-                if !current_para.is_empty() {
-                    blocks.push(Block::Paragraph {
-                        inlines: parse_para_lines(&current_para),
-                        span: Span::NONE,
-                    });
-                    current_para.clear();
+                if !self.current_para.is_empty() {
+                    let inlines = parse_para_lines(&self.current_para);
+                    self.current_para.clear();
+                    return Some(Block::Paragraph { inlines, span: Span::NONE });
                 }
                 let drawer_name = line.trim().trim_matches(':').to_string();
                 self.skip_drawer();
@@ -264,19 +262,9 @@ impl<'a> OrgParser<'a> {
             }
 
             // Regular text - accumulate into current paragraph
-            current_para.push(line.to_string());
+            self.current_para.push(line.to_string());
             self.advance();
         }
-
-        // Flush remaining paragraph
-        if !current_para.is_empty() {
-            blocks.push(Block::Paragraph {
-                inlines: parse_para_lines(&current_para),
-                span: Span::NONE,
-            });
-        }
-
-        (blocks, metadata)
     }
 
     fn parse_heading(&mut self) -> Block {
