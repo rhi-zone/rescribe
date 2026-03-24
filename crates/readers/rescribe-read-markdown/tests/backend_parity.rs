@@ -151,6 +151,8 @@ parity!(bracket_newline_bracket, "[\n]");
 
 parity!(asterisk_dc4_double_asterisk_dc4, "*\x14**\x14");
 
+parity!(double_asterisk_a_asterisk_a, "**a*a");
+
 // double_tilde_underscore_tilde_underscore (~~_~_): excluded — contains a lone ~
 // at position 3 which causes single-tilde divergence; covered by the fuzz skip
 // "strip ~~ pairs and check if ~ remains".
