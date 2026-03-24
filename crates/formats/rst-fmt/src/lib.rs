@@ -162,29 +162,29 @@ const HEADING_CHARS: &[char] = &['=', '-', '~', '^', '"', '`', '#', '*', '+', '_
 
 /// Parse an RST string into an [`RstDoc`].
 pub fn parse(input: &str) -> Result<RstDoc, RstError> {
-    let mut p = Parser::new(input);
-    let blocks = p.parse_document();
+    let mut iter = events::EventIter::new(input);
+    let blocks = events::collect_doc_from_iter(&mut iter);
     Ok(RstDoc { blocks })
 }
 
-struct Parser<'a> {
-    lines: Vec<&'a str>,
-    line_idx: usize,
+pub(crate) struct Parser<'a> {
+    pub(crate) lines: Vec<&'a str>,
+    pub(crate) line_idx: usize,
     /// Maps underline character to heading level (assigned in order of appearance).
-    heading_levels: Vec<char>,
+    pub(crate) heading_levels: Vec<char>,
     /// Link targets: name -> url
-    link_targets: std::collections::HashMap<String, String>,
+    pub(crate) link_targets: std::collections::HashMap<String, String>,
     /// Substitution definitions: |name| -> replacement text
-    substitutions: std::collections::HashMap<String, String>,
+    pub(crate) substitutions: std::collections::HashMap<String, String>,
     /// Anonymous link targets (__ url), in order of definition
-    anon_targets: Vec<String>,
+    pub(crate) anon_targets: Vec<String>,
     /// Holds a code block to be emitted immediately after the current block.
     /// Used when "text::" emits a paragraph and defers the code block.
-    pending_block: Option<Block>,
+    pub(crate) pending_block: Option<Block>,
 }
 
 impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
+    pub(crate) fn new(input: &'a str) -> Self {
         let lines: Vec<&str> = input.lines().collect();
         Self {
             lines,
@@ -197,36 +197,36 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn current_line(&self) -> Option<&'a str> {
+    pub(crate) fn current_line(&self) -> Option<&'a str> {
         self.lines.get(self.line_idx).copied()
     }
 
-    fn peek_line(&self) -> Option<&'a str> {
+    pub(crate) fn peek_line(&self) -> Option<&'a str> {
         self.lines.get(self.line_idx + 1).copied()
     }
 
-    fn advance_line(&mut self) {
+    pub(crate) fn advance_line(&mut self) {
         self.line_idx += 1;
     }
 
-    fn is_eof(&self) -> bool {
+    pub(crate) fn is_eof(&self) -> bool {
         self.line_idx >= self.lines.len()
     }
 
-    fn is_blank_line(&self) -> bool {
+    pub(crate) fn is_blank_line(&self) -> bool {
         self.current_line()
             .map(|l| l.trim().is_empty())
             .unwrap_or(true)
     }
 
-    fn skip_blank_lines(&mut self) {
+    pub(crate) fn skip_blank_lines(&mut self) {
         while !self.is_eof() && self.is_blank_line() {
             self.advance_line();
         }
     }
 
     /// First pass: collect link targets (.. _name: url), substitution defs, and anonymous targets
-    fn collect_link_targets(&mut self) {
+    pub(crate) fn collect_link_targets(&mut self) {
         let mut idx = 0;
         while idx < self.lines.len() {
             let line = self.lines[idx];
@@ -260,39 +260,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_document(&mut self) -> Vec<Block> {
-        // First pass: collect link targets
-        self.collect_link_targets();
-
-        let mut blocks = Vec::new();
-
-        loop {
-            // Drain any pending block first (e.g. code block deferred from "text::").
-            if let Some(pending) = self.pending_block.take() {
-                blocks.push(pending);
-                continue;
-            }
-
-            if self.is_eof() {
-                break;
-            }
-            self.skip_blank_lines();
-            if self.is_eof() {
-                break;
-            }
-
-            if let Some(block) = self.try_parse_block() {
-                blocks.push(block);
-            } else {
-                // Fallback: skip line to prevent infinite loop
-                self.advance_line();
-            }
-        }
-
-        blocks
-    }
-
-    fn try_parse_block(&mut self) -> Option<Block> {
+    pub(crate) fn try_parse_block(&mut self) -> Option<Block> {
         // Drain any block deferred by the previous call (e.g. code block after "text::").
         if let Some(pending) = self.pending_block.take() {
             return Some(pending);
@@ -2724,8 +2692,6 @@ mod tests {
 // ── Public streaming API ──────────────────────────────────────────────────────
 
 /// Parse `input` as RST and return a streaming [`EventIter`].
-///
-/// On parse error, returns an iterator over an empty document.
-pub fn events(input: &str) -> EventIter {
-    events::events(input)
+pub fn events(input: &str) -> EventIter<'_> {
+    events::EventIter::new(input)
 }
