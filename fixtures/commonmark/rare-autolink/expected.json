@@ -1,0 +1,10 @@
+{
+  "description": "Autolinks <url> and <email> become link nodes where url equals display text",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/1",   "kind": "paragraph" },
+    { "path": "/1/0", "kind": "link", "props": { "url": "mailto:user@example.com" } }
+  ]
+}

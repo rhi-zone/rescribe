@@ -1,0 +1,8 @@
+{
+  "description": "Fenced code block inside a blockquote — block constructs nest inside blockquotes",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",   "kind": "blockquote" },
+    { "path": "/0/1", "kind": "code_block", "props": { "language": "python" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Unclosed emphasis delimiter — parser must not panic; asterisk is treated as literal text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

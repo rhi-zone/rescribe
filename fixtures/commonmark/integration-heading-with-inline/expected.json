@@ -1,0 +1,9 @@
+{
+  "description": "Heading containing bold and italic inline markup — inline nodes are children of heading",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",   "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/3", "kind": "emphasis" }
+  ]
+}

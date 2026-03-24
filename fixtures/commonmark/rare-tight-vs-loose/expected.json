@@ -1,0 +1,10 @@
+{
+  "description": "Tight and loose lists in the same document — each becomes a separate list node",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "list", "props": { "ordered": false } },
+    { "path": "/1",   "kind": "list", "props": { "ordered": false } },
+    { "path": "/1/0", "kind": "list_item" },
+    { "path": "/1/0/0", "kind": "paragraph" }
+  ]
+}

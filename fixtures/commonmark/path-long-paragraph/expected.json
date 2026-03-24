@@ -1,0 +1,7 @@
+{
+  "description": "Very long single-line paragraph (500 words) — parser must handle long lines without blowing up",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Four-space indented block becomes code_block with no language",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": null } }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "description": "Backslash-escaped punctuation produces literal text characters, not markup",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "*not emphasis*" } },
+    { "path": "/1",   "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "[not a link]" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Blockquote nested inside a blockquote — block containers nest recursively",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",   "kind": "blockquote" },
+    { "path": "/0/1", "kind": "blockquote" }
+  ]
+}

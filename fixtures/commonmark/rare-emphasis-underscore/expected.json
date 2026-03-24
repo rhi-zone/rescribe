@@ -1,0 +1,9 @@
+{
+  "description": "Underscore-delimited emphasis _text_ produces the same emphasis node as *text*",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "emphasis" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "italic with underscores" } }
+  ]
+}

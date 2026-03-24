@@ -1,0 +1,8 @@
+{
+  "description": "Two trailing spaces produce a hard line break (line_break node) between lines",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "line_break" }
+  ]
+}

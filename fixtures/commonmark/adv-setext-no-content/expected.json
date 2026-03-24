@@ -1,0 +1,5 @@
+{
+  "description": "Setext underline with no content above — not a heading; parser must not panic",
+  "category": "adversarial",
+  "assertions": []
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Tight list (no blank lines) — list items contain inline nodes directly, not paragraphs",
+  "assertions": [
+    { "path": "/0",   "kind": "list", "props": { "ordered": false, "tight": true } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" },
+    { "path": "/0/2", "kind": "list_item" }
+  ]
+}

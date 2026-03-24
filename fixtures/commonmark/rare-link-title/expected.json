@@ -1,0 +1,9 @@
+{
+  "description": "Inline link with title attribute produces link node with both url and title props",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com", "title": "Link Title" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "link text" } }
+  ]
+}

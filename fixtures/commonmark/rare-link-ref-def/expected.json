@@ -1,0 +1,8 @@
+{
+  "description": "Link reference definition resolves to a link node with url and title from the definition",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com", "title": "Example Title" } }
+  ]
+}

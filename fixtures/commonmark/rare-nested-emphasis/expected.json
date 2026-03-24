@@ -1,0 +1,9 @@
+{
+  "description": "Emphasis nested inside strong — **bold _italic_ bold** produces strong with emphasis child",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "strong" },
+    { "path": "/0/0/1", "kind": "emphasis" }
+  ]
+}

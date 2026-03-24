@@ -1,0 +1,8 @@
+{
+  "description": "GFM table inside a blockquote — block constructs nest inside blockquotes (requires GFM table extension)",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "table" }
+  ]
+}

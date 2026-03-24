@@ -1,0 +1,7 @@
+{
+  "description": "Empty document — parser must not panic and must return a document node",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 0 }
+  ]
+}

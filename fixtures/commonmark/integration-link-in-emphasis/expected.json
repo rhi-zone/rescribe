@@ -1,0 +1,9 @@
+{
+  "description": "Link nested inside emphasis — inline constructs can nest arbitrarily",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "emphasis" },
+    { "path": "/0/0/1", "kind": "link", "props": { "url": "https://example.com" } }
+  ]
+}

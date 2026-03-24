@@ -1,0 +1,8 @@
+{
+  "description": "Reference-style image ![alt][ref] resolves to image node with url and title from the definition",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "photo.jpg", "alt": "alt text", "title": "Photo Title" } }
+  ]
+}

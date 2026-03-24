@@ -1,0 +1,8 @@
+{
+  "description": "Collapsed reference link [label][] uses the label text as both display text and reference",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } }
+  ]
+}

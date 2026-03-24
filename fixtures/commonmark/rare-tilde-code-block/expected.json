@@ -1,0 +1,7 @@
+{
+  "description": "Tilde-fenced code block (~~~) is equivalent to backtick-fenced code block",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "python" } }
+  ]
+}

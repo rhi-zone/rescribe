@@ -1,0 +1,9 @@
+{
+  "description": "Blank line inside a blockquote separates paragraphs within the blockquote",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "paragraph" }
+  ]
+}

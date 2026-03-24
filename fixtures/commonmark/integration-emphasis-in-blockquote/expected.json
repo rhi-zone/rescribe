@@ -1,0 +1,10 @@
+{
+  "description": "Emphasis inside a blockquote — inline markup is parsed within block containers",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",       "kind": "blockquote" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/1",   "kind": "emphasis" },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "emphasized" } }
+  ]
+}

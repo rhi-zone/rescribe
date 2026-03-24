@@ -1,0 +1,9 @@
+{
+  "description": "HTML entity references (named, decimal, hex) are decoded to their Unicode characters",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/2", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Setext-style headings (underline with = or -) produce heading nodes with correct levels",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/1", "kind": "heading", "props": { "level": 2 } }
+  ]
+}

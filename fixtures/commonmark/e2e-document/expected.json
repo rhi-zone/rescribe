@@ -1,0 +1,19 @@
+{
+  "description": "Realistic multi-section document with headings, paragraphs, code blocks, lists, blockquote, and link",
+  "category": "e2e",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/2", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/3", "kind": "paragraph" },
+    { "path": "/4", "kind": "code_block", "props": { "language": "bash" } },
+    { "path": "/5", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/6", "kind": "paragraph" },
+    { "path": "/7", "kind": "list", "props": { "ordered": true } },
+    { "path": "/8", "kind": "paragraph" },
+    { "path": "/9", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/10", "kind": "blockquote" },
+    { "path": "/11", "kind": "horizontal_rule" },
+    { "path": "/12", "kind": "paragraph" }
+  ]
+}

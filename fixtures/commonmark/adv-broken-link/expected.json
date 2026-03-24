@@ -1,0 +1,7 @@
+{
+  "description": "Broken link syntax (no closing bracket) — parser must not panic; treated as literal text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

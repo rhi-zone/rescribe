@@ -1,0 +1,7 @@
+{
+  "description": "Whitespace-only document — parser must not panic; result is an empty document",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 0 }
+  ]
+}

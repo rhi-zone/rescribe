@@ -1,0 +1,8 @@
+{
+  "description": "1000-item unordered list — parser must not blow up on very long lists",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0", "children_count": 1000 }
+  ]
+}

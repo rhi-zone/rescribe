@@ -1,0 +1,9 @@
+{
+  "description": "Image inside a link — the link wraps an image node (linked image pattern)",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0", "kind": "image", "props": { "url": "photo.jpg", "alt": "alt text" } }
+  ]
+}

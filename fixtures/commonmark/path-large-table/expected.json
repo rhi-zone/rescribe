@@ -1,0 +1,7 @@
+{
+  "description": "50-row 10-column GFM table — parser must handle large tables without blowing up",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "table" }
+  ]
+}

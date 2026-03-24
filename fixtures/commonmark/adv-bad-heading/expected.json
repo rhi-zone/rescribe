@@ -1,0 +1,7 @@
+{
+  "description": "Seven or more hashes are not a valid ATX heading — treated as a paragraph",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

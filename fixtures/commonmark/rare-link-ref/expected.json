@@ -1,0 +1,9 @@
+{
+  "description": "Reference-style link [text][label] resolves to a link node with the url from the definition",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "link text" } }
+  ]
+}

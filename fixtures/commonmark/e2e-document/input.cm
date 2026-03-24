@@ -1,0 +1,29 @@
+# Getting Started
+
+Welcome to the **quick start guide**. This document covers the basics.
+
+## Installation
+
+Install the package with the following command:
+
+```bash
+npm install mypackage
+```
+
+## Usage
+
+Here is a simple example:
+
+1. Import the module
+2. Create an instance
+3. Call the method
+
+For more information, visit [the documentation](https://docs.example.com "Docs").
+
+## Notes
+
+> **Note:** This is an early release. Some features may change.
+
+---
+
+See also `README.md` for background.

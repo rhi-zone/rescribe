@@ -1,0 +1,7 @@
+{
+  "description": "Unclosed fenced code block — CommonMark spec requires treating remainder as code block",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "code_block" }
+  ]
+}

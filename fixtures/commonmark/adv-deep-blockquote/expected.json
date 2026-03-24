@@ -1,0 +1,7 @@
+{
+  "description": "Six levels of nested blockquotes — parser must not panic or stack overflow",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "List item with multiple paragraphs — each paragraph is a child of the list_item",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",     "kind": "list" },
+    { "path": "/0/0",   "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "list_item" }
+  ]
+}
