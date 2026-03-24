@@ -1934,7 +1934,7 @@ dependencies = [
 name = "rescribe-read-commonmark"
 version = "0.1.0"
 dependencies = [
- "pulldown-cmark 0.12.2",
+ "commonmark-fmt",
  "rescribe-core",
  "rescribe-std",
 ]

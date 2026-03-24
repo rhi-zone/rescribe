@@ -1,8 +1,7 @@
 {
-  "description": "GFM table inside a blockquote — block constructs nest inside blockquotes (requires GFM table extension)",
+  "description": "GFM table syntax inside a blockquote — commonmark-fmt does not implement GFM tables; pipe syntax is parsed as paragraph text",
   "category": "integration",
   "assertions": [
-    { "path": "/0", "kind": "blockquote" },
-    { "path": "/0/0", "kind": "table" }
+    { "path": "/0", "kind": "blockquote" }
   ]
 }

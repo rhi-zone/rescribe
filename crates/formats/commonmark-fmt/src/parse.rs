@@ -121,8 +121,15 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
             Event::Start(Tag::Strikethrough) => {
                 stack.push(Frame::Strikethrough { inlines: vec![], start });
             }
-            Event::Start(Tag::Link { dest_url, title, .. }) => {
-                let url = dest_url.into_string();
+            Event::Start(Tag::Link { link_type, dest_url, title, .. }) => {
+                let raw_url = dest_url.into_string();
+                let url = if link_type == pulldown_cmark::LinkType::Email
+                    && !raw_url.starts_with("mailto:")
+                {
+                    format!("mailto:{raw_url}")
+                } else {
+                    raw_url
+                };
                 let title = if title.is_empty() { None } else { Some(title.into_string()) };
                 stack.push(Frame::Link { inlines: vec![], url, title, start });
             }
@@ -335,24 +342,29 @@ fn push_block(stack: &mut [Frame], block: Block) {
 /// `Frame::Item::tight_inlines` and wrap them in a `Block::Paragraph` at `End(Item)`.
 fn push_inline(stack: &mut [Frame], inline: Inline) {
     for frame in stack.iter_mut().rev() {
-        match frame {
+        let target: &mut Vec<Inline> = match frame {
             Frame::Paragraph { inlines, .. }
             | Frame::Heading { inlines, .. }
             | Frame::Emphasis { inlines, .. }
             | Frame::Strong { inlines, .. }
             | Frame::Strikethrough { inlines, .. }
-            | Frame::Link { inlines, .. } => {
-                inlines.push(inline);
-                return;
-            }
+            | Frame::Link { inlines, .. } => inlines,
             // Tight list item: accumulate inlines for later wrapping in a paragraph.
-            Frame::Item { tight_inlines, .. } => {
-                tight_inlines.push(inline);
+            Frame::Item { tight_inlines, .. } => tight_inlines,
+            // Image alt text is handled before push_inline is called.
+            _ => continue,
+        };
+        // Merge consecutive Text nodes — pulldown-cmark can split a single logical
+        // text run into multiple Text events (e.g. backslash escapes).
+        if let Inline::Text { content: new_content, span: new_span } = &inline {
+            if let Some(Inline::Text { content, span }) = target.last_mut() {
+                content.push_str(new_content);
+                span.end = new_span.end;
                 return;
             }
-            // Image alt text is handled before push_inline is called.
-            _ => {}
         }
+        target.push(inline);
+        return;
     }
 }
 
