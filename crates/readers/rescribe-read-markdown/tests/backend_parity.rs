@@ -129,3 +129,11 @@ parity!(tilde_dollar_tilde_g, "~$~G");
 // asterisk_null_bracket_asterisk (*\x00]*\x00]): excluded — null bytes produce U+FFFD
 // which causes emphasis detection divergence between CommonMark and tree-sitter-md.
 // Covered by no-panic fuzz target; parity target skips null-containing inputs.
+
+
+// bracket_tilde_bracket_tilde ([~[~): excluded — tree-sitter-md inline grammar
+// produces an empty inline node for [~[~, falling back to raw text("[~[~"), but
+// pulldown-cmark's single-tilde strikethrough rules (following CommonMark flanking
+// rules) parse this as text("[") + strikeout(text("[")). The divergence is in the
+// inline grammar and cannot be fixed at the IR adapter level.
+// Single-tilde inputs are skipped in the parity fuzz target.
