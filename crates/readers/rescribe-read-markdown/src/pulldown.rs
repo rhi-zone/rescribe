@@ -24,6 +24,26 @@ pub fn parse_with_options(
     let mut warnings = Vec::new();
     let mut metadata = Properties::new();
 
+    // CommonMark spec normalization:
+    // - U+0000 → U+FFFD (security requirement)
+    // - VT (\x0b) / FF (\x0c) → space (CommonMark whitespace characters)
+    // - \r\n → \n, bare \r → \n (CommonMark line ending normalization)
+    let normalized_input;
+    let input = if input.contains('\x00')
+        || input.contains('\x0b')
+        || input.contains('\x0c')
+        || input.contains('\r')
+    {
+        normalized_input = input
+            .replace('\x00', "\u{FFFD}")
+            .replace(['\x0b', '\x0c'], " ")
+            .replace("\r\n", "\n")
+            .replace('\r', "\n");
+        normalized_input.as_str()
+    } else {
+        input
+    };
+
     // Enable common extensions including full GFM support
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_TABLES);
@@ -71,7 +91,33 @@ fn parse_events(
         idx += consumed.max(1);
     }
 
-    nodes
+    merge_text_nodes(nodes)
+}
+
+/// Merge consecutive text nodes into one.
+///
+/// pulldown-cmark can emit multiple adjacent Text events for what is logically
+/// a single run of text (e.g. `])` → Text("]") + Text(")")). Merging here
+/// keeps the IR consistent with the tree-sitter backend.
+fn merge_text_nodes(nodes: Vec<Node>) -> Vec<Node> {
+    let mut out: Vec<Node> = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        if node.kind.as_str() == node::TEXT
+            && let Some(last) = out.last_mut()
+            && last.kind.as_str() == node::TEXT
+            && matches!((last.span, node.span), (None, None) | (Some(_), Some(_)))
+        {
+            let prev = last.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            let next = node.props.get_str(prop::CONTENT).unwrap_or("");
+            last.props.set(prop::CONTENT, format!("{prev}{next}"));
+            if let (Some(a), Some(b)) = (last.span.as_mut(), node.span) {
+                a.end = b.end;
+            }
+            continue;
+        }
+        out.push(node);
+    }
+    out
 }
 
 /// Helper to optionally add span to a node.

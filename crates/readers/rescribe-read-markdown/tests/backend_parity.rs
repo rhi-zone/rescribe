@@ -81,3 +81,35 @@ parity!(hard_line_break_backslash, "line 1\\\nline 2\n");
 parity!(soft_break, "line 1\nline 2\n");
 parity!(mixed_inline, "**bold** and *italic* and `code`\n");
 parity!(emphasis_inside_strong, "***triple***\n");
+
+parity!(close_bracket_paren, "])\n");
+
+parity!(newlines_vtab, "\n\n\n\x0b");
+
+parity!(null_stx, "\x00\x02");
+
+parity!(bs_vt_bs, "\x08\x0b\x08");
+
+parity!(newline_vt_cc, "\n\x0bCC");
+
+parity!(leading_space_para, "\n CC");
+
+parity!(bracket_caret_brackets, "[^]]");
+
+#[test]
+fn treesitter_deep_blockquote_no_panic() {
+    let input = ">".repeat(270) + "Bb";
+    let _ = rescribe_read_markdown::backend_treesitter::parse(&input);
+}
+
+parity!(cr_bracket_cr_bracket, "\r]\r]");
+
+#[test]
+fn treesitter_deep_blockquote_with_nulls_no_panic() {
+    let mut input = String::from("++]\n\x00\x1f;\n\n+ \n");
+    input.push_str(&">".repeat(1100));
+    input.push_str("\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+    let _ = rescribe_read_markdown::backend_treesitter::parse(&input);
+}
+
+parity!(tab_z, "\tz");

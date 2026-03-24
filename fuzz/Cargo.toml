@@ -13,6 +13,7 @@ arbitrary = { version = "1", features = ["derive"] }
 
 [dependencies.rescribe-read-markdown]
 path = "../crates/readers/rescribe-read-markdown"
+features = ["pulldown"]
 
 [dependencies.rescribe-read-html]
 path = "../crates/readers/rescribe-read-html"
@@ -344,6 +345,20 @@ bench = false
 [[bin]]
 name = "fuzz_markdown_roundtrip"
 path = "fuzz_targets/markdown_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_markdown_treesitter_reader"
+path = "fuzz_targets/markdown_treesitter_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_markdown_parity"
+path = "fuzz_targets/markdown_parity.rs"
 test = false
 doc = false
 bench = false

@@ -61,8 +61,58 @@ pub fn parse_with_options(
     input: &str,
     options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    // tree-sitter-md requires trailing newline for proper parsing
-    let normalized = if input.ends_with('\n') {
+    // Normalize input for spec compliance and tree-sitter-md compatibility:
+    // - U+0000 → U+FFFD  (CommonMark security requirement)
+    // - VT (\x0b) / FF (\x0c) → space  (CommonMark whitespace; tree-sitter-md doesn't know them)
+    // - Cap blockquote nesting to 100 levels per line: tree-sitter-md's external scanner
+    //   serializes state as ~4 bytes/level; beyond ~256 levels it aborts with
+    //   "Assertion 'length <= 1024' failed". 100 levels is far beyond any real document.
+    // - Ensure trailing newline (tree-sitter-md requires it for proper parsing)
+    // Tree-sitter-md's external scanner serializes ~4 bytes/blockquote-level; beyond
+    // ~256 levels it aborts with "Assertion 'length <= 1024' failed". Cap at 50 to
+    // be well clear of any threshold. Note: depth is the total count of '>' chars on
+    // a line (not just leading) since CommonMark allows `> > > text` and ` >>>text`.
+    const MAX_BLOCKQUOTE_DEPTH: usize = 50;
+    let needs_norm = input.contains('\x00')
+        || input.contains('\x0b')
+        || input.contains('\x0c')
+        || input.contains('\r')
+        || input.lines().any(|l| l.chars().filter(|&c| c == '>').count() > MAX_BLOCKQUOTE_DEPTH);
+    let normalized: std::borrow::Cow<str> = if needs_norm {
+        let s: String = input
+            .lines()
+            .map(|line| {
+                let total_gt = line.chars().filter(|&c| c == '>').count();
+                if total_gt > MAX_BLOCKQUOTE_DEPTH {
+                    // Keep only the first MAX_BLOCKQUOTE_DEPTH '>' chars and drop the rest.
+                    let mut kept = 0usize;
+                    let mut out = String::with_capacity(line.len());
+                    for ch in line.chars() {
+                        if ch == '>' {
+                            if kept < MAX_BLOCKQUOTE_DEPTH {
+                                out.push(ch);
+                                kept += 1;
+                            }
+                            // drop excess '>' chars
+                        } else {
+                            out.push(ch);
+                        }
+                    }
+                    out
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let s = s
+            .replace('\x00', "\u{FFFD}")
+            .replace(['\x0b', '\x0c'], " ")
+            .replace("\r\n", "\n")
+            .replace('\r', "\n");
+        let s = if s.ends_with('\n') { s } else { format!("{s}\n") };
+        std::borrow::Cow::Owned(s)
+    } else if input.ends_with('\n') {
         std::borrow::Cow::Borrowed(input)
     } else {
         std::borrow::Cow::Owned(format!("{}\n", input))
@@ -516,7 +566,7 @@ impl<'a> Converter<'a> {
     }
 
     fn process_link(&self, tsnode: &tree_sitter::Node, offset: usize) -> Option<Node> {
-        let mut url = String::new();
+        let mut url: Option<String> = None;
         let mut title = String::new();
         let mut children = Vec::new();
 
@@ -527,11 +577,12 @@ impl<'a> Converter<'a> {
                     children = self.process_inline_children(&child, offset);
                 }
                 "link_destination" => {
-                    url = self
-                        .inline_text(&child, offset)
-                        .trim_start_matches('<')
-                        .trim_end_matches('>')
-                        .to_string();
+                    url = Some(
+                        self.inline_text(&child, offset)
+                            .trim_start_matches('<')
+                            .trim_end_matches('>')
+                            .to_string(),
+                    );
                 }
                 "link_title" => {
                     let t = self.inline_text(&child, offset);
@@ -543,6 +594,22 @@ impl<'a> Converter<'a> {
                 _ => {}
             }
         }
+
+        // Reference links (shortcut/collapsed/full) without a matching definition
+        // have no link_destination child. tree-sitter-md still parses them as link
+        // nodes but pulldown-cmark correctly treats them as plain text since there's
+        // no reference to resolve. Demote to a text node using the original source.
+        let is_reference_link = matches!(
+            tsnode.kind(),
+            "shortcut_link" | "collapsed_reference_link" | "full_reference_link"
+        );
+        let Some(url) = url else {
+            if is_reference_link {
+                let src = self.inline_text(tsnode, offset);
+                return Some(Node::new(node::TEXT).prop(prop::CONTENT, src));
+            }
+            return None;
+        };
 
         let mut link = Node::new(node::LINK)
             .prop(prop::URL, url)
@@ -653,6 +720,8 @@ impl<'a> Converter<'a> {
                 children.extend(self.convert_inline_from_block(&child));
             }
         }
+        // CommonMark: paragraph raw content has initial/final whitespace stripped.
+        let children = trim_cell_content(children);
         if children.is_empty() {
             return None;
         }
@@ -712,7 +781,12 @@ impl<'a> Converter<'a> {
         let text = self.node_text(tsnode);
         let content: String = text
             .lines()
-            .map(|line| line.strip_prefix("    ").unwrap_or(line))
+            .map(|line| {
+                // CommonMark: 4-space or 1-tab indent is stripped from indented code lines
+                line.strip_prefix("    ")
+                    .or_else(|| line.strip_prefix('\t'))
+                    .unwrap_or(line)
+            })
             .collect::<Vec<_>>()
             .join("\n");
 
