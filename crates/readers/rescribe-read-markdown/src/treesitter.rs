@@ -781,12 +781,7 @@ impl<'a> Converter<'a> {
         let text = self.node_text(tsnode);
         let content: String = text
             .lines()
-            .map(|line| {
-                // CommonMark: 4-space or 1-tab indent is stripped from indented code lines
-                line.strip_prefix("    ")
-                    .or_else(|| line.strip_prefix('\t'))
-                    .unwrap_or(line)
-            })
+            .map(strip_code_indent)
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -1020,6 +1015,38 @@ fn push_gap_text(text: &str, nodes: &mut Vec<Node>) {
 ///
 /// GFM pipe tables pad cells with spaces for readability (`| A  |`).  The content
 /// `"A  "` should compare equal to `"A"` after normalization.
+/// Strip the indented-code-block indent from a line.
+///
+/// CommonMark: the indent is the first 4 columns of whitespace, where a tab
+/// expands to the next multiple-of-4 tab stop. For example:
+/// - `    text`  → `text`  (4 spaces)
+/// - `\ttext`    → `text`  (tab to col 4)
+/// - ` \ttext`   → `text`  (1 space + tab to col 4 = 4 columns)
+/// - `  \ttext`  → `text`  (2 spaces + tab to col 4 = 4 columns)
+/// - `   \ttext` → `text`  (3 spaces + tab to col 4 = 4 columns)
+fn strip_code_indent(line: &str) -> &str {
+    let mut col = 0usize;
+    let mut byte_pos = 0usize;
+    for ch in line.chars() {
+        match ch {
+            ' ' if col < 4 => {
+                col += 1;
+                byte_pos += 1;
+            }
+            '\t' if col < 4 => {
+                // Tab expands to next multiple of 4
+                col = (col / 4 + 1) * 4;
+                byte_pos += 1;
+                if col >= 4 {
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+    if col >= 4 { &line[byte_pos..] } else { line }
+}
+
 fn trim_cell_content(mut nodes: Vec<Node>) -> Vec<Node> {
     // Trim leading whitespace of the first text node
     if let Some(first) = nodes.first_mut() && first.kind.as_str() == node::TEXT {
