@@ -1,0 +1,16 @@
+{
+  "description": "Document combining table, task list, and strikethrough in a realistic scenario",
+  "category": "e2e",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/1", "kind": "table" },
+    { "path": "/1/0", "kind": "table_row" },
+    { "path": "/1/0/0", "kind": "table_header" },
+    { "path": "/1/1", "kind": "table_row" },
+    { "path": "/1/2/1/0", "kind": "strikeout" },
+    { "path": "/2", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/3", "kind": "list" },
+    { "path": "/3/0", "kind": "list_item", "props": { "checked": true } },
+    { "path": "/3/1", "kind": "list_item", "props": { "checked": false } }
+  ]
+}

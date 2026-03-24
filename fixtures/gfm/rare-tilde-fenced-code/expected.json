@@ -1,0 +1,7 @@
+{
+  "description": "Tilde-fenced code block produces code_block node with language prop",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "python" } }
+  ]
+}

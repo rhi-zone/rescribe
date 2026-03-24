@@ -1,0 +1,8 @@
+{
+  "description": "GFM disallowed raw HTML tags are still emitted as raw_block nodes",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "format": "html" } },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

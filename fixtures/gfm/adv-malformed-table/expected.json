@@ -1,0 +1,5 @@
+{
+  "description": "Malformed table with mismatched column counts is handled without panic",
+  "category": "adversarial",
+  "assertions": []
+}

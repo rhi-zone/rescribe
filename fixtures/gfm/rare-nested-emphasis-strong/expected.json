@@ -1,0 +1,9 @@
+{
+  "description": "Triple asterisks produce nested strong and emphasis nodes",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "emphasis" },
+    { "path": "/0/0/0", "kind": "strong" }
+  ]
+}

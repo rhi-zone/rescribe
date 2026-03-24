@@ -1,0 +1,8 @@
+{
+  "description": "Backslash escapes produce literal text without markup",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Deeply nested blockquotes (8 levels) are handled without panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" }
+  ]
+}

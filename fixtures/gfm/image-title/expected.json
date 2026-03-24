@@ -1,0 +1,8 @@
+{
+  "description": "Image with title produces image node; title is not tracked in IR",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "image.png" } }
+  ]
+}

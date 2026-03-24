@@ -1,0 +1,7 @@
+{
+  "description": "Broken/incomplete link syntax is handled without panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

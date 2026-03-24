@@ -1,0 +1,12 @@
+## Task Status
+
+| Task | Status |
+|------|--------|
+| Build | Done |
+| Test | ~~skipped~~ |
+
+## Todo
+
+- [x] Write the code
+- [ ] Write the tests
+- [x] Deploy

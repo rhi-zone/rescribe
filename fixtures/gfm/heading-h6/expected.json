@@ -1,0 +1,7 @@
+{
+  "description": "ATX heading level 6 becomes heading node with level=6",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 6 } }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "description": "Loose unordered list (blank lines between items) wraps content in paragraphs",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "list_item" },
+    { "path": "/0/1/0", "kind": "paragraph" },
+    { "path": "/0/2", "kind": "list_item" },
+    { "path": "/0/2/0", "kind": "paragraph" }
+  ]
+}

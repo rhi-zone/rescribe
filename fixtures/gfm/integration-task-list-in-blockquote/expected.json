@@ -1,0 +1,10 @@
+{
+  "description": "Task list inside blockquote produces list inside blockquote node",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "list" },
+    { "path": "/0/0/0", "kind": "list_item", "props": { "checked": true } },
+    { "path": "/0/0/1", "kind": "list_item", "props": { "checked": false } }
+  ]
+}

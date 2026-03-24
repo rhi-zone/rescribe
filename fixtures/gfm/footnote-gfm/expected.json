@@ -1,0 +1,7 @@
+{
+  "description": "GFM footnote syntax produces a paragraph (footnotes not in GFM spec)",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

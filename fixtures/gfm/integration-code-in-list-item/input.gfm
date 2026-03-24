@@ -1,0 +1,2 @@
+- Use `cargo test` to run tests
+- Use `cargo build` to build

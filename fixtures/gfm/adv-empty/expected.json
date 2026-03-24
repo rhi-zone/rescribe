@@ -1,0 +1,5 @@
+{
+  "description": "Empty document produces no content nodes",
+  "category": "adversarial",
+  "assertions": []
+}

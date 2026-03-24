@@ -1,0 +1,7 @@
+{
+  "description": "50-row table is parsed without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "table" }
+  ]
+}

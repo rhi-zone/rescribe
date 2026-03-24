@@ -1,0 +1,11 @@
+{
+  "description": "Inline code inside list items produces code nodes nested in list_item",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/1", "kind": "code" },
+    { "path": "/0/1", "kind": "list_item" },
+    { "path": "/0/1/1", "kind": "code" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Unclosed emphasis marker is treated as literal text in a paragraph",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "HTML entity references decode to their text characters",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Link with title produces link node; title is not tracked in IR",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } }
+  ]
+}

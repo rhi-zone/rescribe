@@ -1,0 +1,21 @@
+# Introduction
+
+This is the first paragraph with **bold** and *italic* text.
+
+## Features
+
+- Fast performance
+- Easy to use
+- Well documented
+
+## Usage
+
+Run the following command:
+
+```bash
+cargo run
+```
+
+## Conclusion
+
+Visit [the docs](https://example.com) for more information.

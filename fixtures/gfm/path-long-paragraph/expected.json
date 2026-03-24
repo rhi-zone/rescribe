@@ -1,0 +1,7 @@
+{
+  "description": "Very long paragraph (>40KB) is parsed without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

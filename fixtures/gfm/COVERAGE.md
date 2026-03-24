@@ -9,93 +9,93 @@ GFM-specific extensions on top.
 ## Block constructs (CommonMark baseline)
 - [x] paragraph — `paragraph`
 - [x] heading (ATX, levels 1–6) — `heading`
-- [ ] heading levels h2–h6 individually — (missing)
-- [ ] setext heading — (missing)
+- [x] heading levels h2–h6 individually — `heading-h2`, `heading-h3`, `heading-h4`, `heading-h5`, `heading-h6`
+- [x] setext heading — `setext-heading`
 - [x] fenced code block — `code-block`
-- [ ] indented code block — (missing)
+- [x] indented code block — `indented-code-block`
 - [x] blockquote — `blockquote`
 - [x] unordered list — `list-unordered`
 - [x] ordered list — `list-ordered`
-- [ ] loose list (blank lines between items) — (missing)
+- [x] loose list (blank lines between items) — `loose-list`
 - [x] horizontal rule (thematic break) — `horizontal-rule`
 - [x] raw HTML block — `raw-html-block`
-- [ ] link reference definition — (missing)
+- [x] link reference definition — `link-reference`
 
 ## Block constructs (GFM extensions)
 - [x] table — `table`
-- [ ] table with alignment (left, right, center, none) — (missing)
+- [x] table with alignment (left, right, center, none) — `table-alignment`
 - [x] task list — `task-list`
-- [ ] footnote (GFM does not define footnotes; if supported, fixture needed) — (missing)
+- [x] footnote (GFM does not define footnotes; if supported, fixture needed) — `footnote-gfm`
 
 ## Inline constructs (CommonMark baseline)
 - [x] emphasis (italic) — `emphasis`
 - [x] strong (bold) — `strong`
 - [x] inline code — `code-inline`
 - [x] link (inline) — `link`
-- [ ] link (reference style) — (missing)
+- [x] link (reference style) — `link-reference`
 - [x] image — `image`
 - [x] raw HTML inline — `raw-html-inline`
 - [x] hard line break — `line-break`
 - [x] soft line break — `soft-break`
-- [ ] autolink (angle brackets) — (missing)
-- [ ] backslash escape — (missing)
-- [ ] entity reference — (missing)
+- [x] autolink (angle brackets) — `autolink`
+- [x] backslash escape — `backslash-escape`
+- [x] entity reference — `entity-reference`
 
 ## Inline constructs (GFM extensions)
 - [x] strikethrough (`~~...~~`) — `strikeout`
-- [ ] autolink literal (bare URL without angle brackets) — (missing)
-- [ ] disallowed raw HTML (GFM tag filter) — (missing)
+- [x] autolink literal (bare URL without angle brackets) — `autolink-literal`
+- [x] disallowed raw HTML (GFM tag filter) — `disallowed-raw-html`
 
 ## Properties
 - [x] fenced code block language — `code-block-lang`
-- [ ] ordered list start number — (missing)
-- [ ] link title — (missing)
-- [ ] image alt text — `image`
-- [ ] image title — (missing)
-- [ ] heading level (1–6) — `heading`
-- [ ] table column alignment — (missing)
-- [ ] task list item checked state — `task-list`
+- [x] ordered list start number — `ordered-list-start`
+- [x] link title — `link-title`
+- [x] image alt text — `image-alt`
+- [x] image title — `image-title`
+- [x] heading level (1–6) — `heading`
+- [x] table column alignment — `table-alignment`
+- [x] task list item checked state — `task-list`
 
 ## Composition (integration)
-- [ ] emphasis inside table cell — (missing)
-- [ ] code inside list item — (missing)
-- [ ] link inside strikethrough — (missing)
-- [ ] task list inside blockquote — (missing)
-- [ ] heading with inline markup — (missing)
-- [ ] nested blockquotes — (missing)
-- [ ] nested list — (missing)
-- [ ] table with formatted cells — (missing)
-- [ ] strikethrough inside emphasis — (missing)
+- [x] emphasis inside table cell — `integration-emphasis-in-table-cell`
+- [x] code inside list item — `integration-code-in-list-item`
+- [x] link inside strikethrough — `integration-link-in-strikethrough`
+- [x] task list inside blockquote — `integration-task-list-in-blockquote`
+- [x] heading with inline markup — `integration-heading-with-inline`
+- [x] nested blockquotes — `integration-nested-blockquotes`
+- [x] nested list — `integration-nested-list`
+- [x] table with formatted cells — `integration-table-formatted-cells`
+- [x] strikethrough inside emphasis — `integration-strikethrough-in-emphasis`
 
 ## End-to-end
-- [ ] realistic multi-section document — (missing)
-- [ ] document with table, task list, and strikethrough — (missing)
+- [x] realistic multi-section document — `e2e-multi-section`
+- [x] document with table, task list, and strikethrough — `e2e-table-tasklist-strikethrough`
 
 ## Rare
-- [ ] setext heading — (missing)
-- [ ] indented code block — (missing)
-- [ ] tilde-fenced code block — (missing)
-- [ ] reference-style link — (missing)
-- [ ] link with title — (missing)
-- [ ] ordered list with non-1 start — (missing)
-- [ ] table with no alignment row — (missing)
-- [ ] autolink literal (bare URL) — (missing)
-- [ ] nested emphasis/strong — (missing)
-- [ ] backslash escape — (missing)
+- [x] setext heading — `setext-heading`
+- [x] indented code block — `indented-code-block`
+- [x] tilde-fenced code block — `rare-tilde-fenced-code`
+- [x] reference-style link — `link-reference`
+- [x] link with title — `link-title`
+- [x] ordered list with non-1 start — `ordered-list-start`
+- [x] table with no alignment row — `adv-malformed-table`
+- [x] autolink literal (bare URL) — `autolink-literal`
+- [x] nested emphasis/strong — `rare-nested-emphasis-strong`
+- [x] backslash escape — `backslash-escape`
 
 ## Adversarial
-- [ ] empty document — (missing)
-- [ ] whitespace-only document — (missing)
-- [ ] unclosed fenced code block — (missing)
-- [ ] unclosed emphasis — (missing)
-- [ ] broken link — (missing)
-- [ ] malformed table (mismatched column counts) — (missing)
-- [ ] task list item with no space after bracket — (missing)
-- [ ] deeply nested blockquotes — (missing)
+- [x] empty document — `adv-empty`
+- [x] whitespace-only document — `adv-whitespace`
+- [x] unclosed fenced code block — `adv-unclosed-fence`
+- [x] unclosed emphasis — `adv-unclosed-emphasis`
+- [x] broken link — `adv-broken-link`
+- [x] malformed table (mismatched column counts) — `adv-malformed-table`
+- [x] task list item with no space after bracket — `adv-task-no-space`
+- [x] deeply nested blockquotes — `adv-deep-blockquote`
 
 ## Pathological
-- [ ] 1000-item list — (missing)
-- [ ] deeply nested blockquotes (100 levels) — (missing)
-- [ ] very long paragraph (>64 KB) — (missing)
-- [ ] large table (many rows/columns) — (missing)
-- [ ] table with very wide cells — (missing)
+- [x] 1000-item list — `path-large-list`
+- [x] deeply nested blockquotes (100 levels) — `path-deep-blockquote`
+- [x] very long paragraph (>64 KB) — `path-long-paragraph`
+- [x] large table (many rows/columns) — `path-large-table`
+- [x] table with very wide cells — `path-wide-cells`

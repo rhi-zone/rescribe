@@ -1,0 +1,8 @@
+{
+  "description": "Task list item with no space after bracket is not recognized as task list",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" }
+  ]
+}

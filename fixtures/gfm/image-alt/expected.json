@@ -1,0 +1,9 @@
+{
+  "description": "Image with alt text produces image node with url prop; alt text is a child text node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "image.png" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "My alt text" } }
+  ]
+}

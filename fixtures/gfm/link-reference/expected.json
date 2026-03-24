@@ -1,0 +1,8 @@
+{
+  "description": "Reference-style link resolves to link node with url prop",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "link", "props": { "url": "https://example.com" } }
+  ]
+}

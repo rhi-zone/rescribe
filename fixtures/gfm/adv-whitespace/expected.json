@@ -1,0 +1,5 @@
+{
+  "description": "Whitespace-only document produces no content nodes",
+  "category": "adversarial",
+  "assertions": []
+}

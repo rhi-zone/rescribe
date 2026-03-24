@@ -1,0 +1,7 @@
+{
+  "description": "1000-item list is parsed without panic or stack overflow",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list" }
+  ]
+}

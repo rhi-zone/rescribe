@@ -1,0 +1,7 @@
+{
+  "description": "GFM bare URL autolinks become link nodes without angle brackets",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

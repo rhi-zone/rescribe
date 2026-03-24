@@ -1,0 +1,8 @@
+{
+  "description": "Nested blockquotes produce blockquote nodes nested inside each other",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/1", "kind": "blockquote" }
+  ]
+}

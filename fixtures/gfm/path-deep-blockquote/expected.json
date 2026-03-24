@@ -1,0 +1,7 @@
+{
+  "description": "100-level nested blockquote is parsed without panic or stack overflow",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" }
+  ]
+}

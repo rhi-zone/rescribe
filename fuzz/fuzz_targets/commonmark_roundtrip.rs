@@ -112,7 +112,28 @@ impl<'a> Gen<'a> {
         let raw: Vec<Inline> = (0..count).map(|_| self.inline(depth)).collect();
         // Merge adjacent Text nodes — roundtrip collapses them:
         // [Text "a", Text "b"] → [Text "ab"]
-        merge_text(raw)
+        let merged = merge_text(raw);
+        // HardBreaks at the boundaries of inline content don't roundtrip:
+        // - Leading HardBreak: emits "  \n" with nothing before it, which
+        //   the parser treats as a blank line and drops.
+        // - Trailing HardBreak: CommonMark §6.7 says a hard break at the end
+        //   of a block is just ignored trailing whitespace; it gets dropped.
+        // Fix by wrapping boundary HardBreaks with Text nodes.
+        let needs_prefix = matches!(merged.first(), Some(Inline::HardBreak { .. }));
+        let needs_suffix = matches!(merged.last(), Some(Inline::HardBreak { .. }));
+        if needs_prefix || needs_suffix {
+            let mut out = Vec::new();
+            if needs_prefix {
+                out.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
+            }
+            out.extend(merged);
+            if needs_suffix {
+                out.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
+            }
+            merge_text(out)
+        } else {
+            merged
+        }
     }
 
     fn block(&mut self, depth: u8) -> Block {

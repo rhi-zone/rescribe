@@ -1,0 +1,11 @@
+{
+  "description": "Nested unordered list produces list nodes nested inside list_item",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/1", "kind": "list" },
+    { "path": "/0/0/1/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}

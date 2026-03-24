@@ -1,0 +1,10 @@
+{
+  "description": "Heading containing emphasis, strong, and code produces inline nodes as children",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/1", "kind": "emphasis" },
+    { "path": "/0/3", "kind": "strong" },
+    { "path": "/0/5", "kind": "code" }
+  ]
+}
