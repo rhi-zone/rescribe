@@ -346,19 +346,63 @@ impl<'a> Converter<'a> {
             if root.child_count() > 0 {
                 let mut current_pos = 0usize;
                 let root_end = root.end_byte();
+                // Tracks inline-content-relative end of a corrected code span; nodes
+                // whose start is before this are consumed and must be skipped.
+                let mut skip_until_byte = 0usize;
 
                 let mut cursor = root.walk();
                 for child in root.children(&mut cursor) {
                     let child_start = child.start_byte();
                     let child_end = child.end_byte();
 
-                    // Extract text before this child (gap between current_pos and child_start)
-                    if child_start > current_pos {
-                        let gap_text = &self.source[offset + current_pos..offset + child_start];
+                    // Skip nodes consumed by a previously corrected code span.
+                    if child_start < skip_until_byte {
+                        continue;
+                    }
+
+                    // Extract gap text, starting from where we actually are.
+                    let gap_from = current_pos.max(skip_until_byte);
+                    if child_start > gap_from {
+                        let gap_text = &self.source[offset + gap_from..offset + child_start];
                         push_gap_text(gap_text, &mut nodes);
                     }
 
-                    // Process the child node
+                    // Detect tree-sitter code span that incorrectly closes inside a
+                    // longer backtick run (CommonMark requires exact run-length match).
+                    if child.kind() == "code_span" {
+                        let abs_start = offset + child_start;
+                        let abs_end = offset + child_end;
+                        let src = self.source.as_bytes();
+                        let open_run = src[abs_start..].iter().take_while(|&&b| b == b'`').count();
+                        // Check whether the closing backtick run has the wrong length.
+                        // tree-sitter sometimes closes a single-backtick span inside a
+                        // multi-backtick run (e.g. `\t``\t` → TS produces `\t`` as the span,
+                        // closing at the second backtick of the ```` `` ```` run). CommonMark
+                        // requires exact run-length match. Detect by counting the trailing
+                        // backtick run inside the TS-reported span.
+                        let close_run_len = src[..abs_end]
+                            .iter()
+                            .rev()
+                            .take_while(|&&b| b == b'`')
+                            .count();
+                        if close_run_len != open_run && close_run_len > 0 {
+                            // tree-sitter closed in the wrong place.
+                            if let Some(correct_abs_end) =
+                                correct_code_span_end(src, abs_start, open_run)
+                            {
+                                let content = normalize_code_span(
+                                    &self.source[abs_start + open_run..correct_abs_end - open_run],
+                                );
+                                nodes.push(Node::new(node::CODE).prop(prop::CONTENT, content));
+                                let correct_rel_end = correct_abs_end - offset;
+                                skip_until_byte = correct_rel_end;
+                                current_pos = correct_rel_end;
+                                continue;
+                            }
+                        }
+                    }
+
+                    // Process the child node normally.
                     if let Some(n) = self.process_inline_node(&child, offset) {
                         nodes.push(n);
                     }
@@ -367,8 +411,9 @@ impl<'a> Converter<'a> {
                 }
 
                 // Extract text after the last child
-                if current_pos < root_end {
-                    let gap_text = &self.source[offset + current_pos..offset + root_end];
+                let tail_from = current_pos.max(skip_until_byte);
+                if tail_from < root_end {
+                    let gap_text = &self.source[offset + tail_from..offset + root_end];
                     push_gap_text(gap_text, &mut nodes);
                 }
             } else {
@@ -521,18 +566,7 @@ impl<'a> Converter<'a> {
                 let text = self.inline_text(tsnode, offset);
                 // Strip the backtick fence (one or more backticks on each side).
                 let inner = text.trim_start_matches('`').trim_end_matches('`');
-                // CommonMark: line endings in code spans are treated as spaces.
-                let with_spaces = inner.replace('\n', " ");
-                // CommonMark: if the result begins AND ends with a space (but is not
-                // all spaces), strip one leading and one trailing space.
-                let content = if with_spaces.starts_with(' ')
-                    && with_spaces.ends_with(' ')
-                    && !with_spaces.chars().all(|c| c == ' ')
-                {
-                    with_spaces[1..with_spaces.len() - 1].to_string()
-                } else {
-                    with_spaces
-                };
+                let content = normalize_code_span(inner);
                 Some(self.with_inline_span(
                     Node::new(node::CODE).prop(prop::CONTENT, content),
                     tsnode,
@@ -1094,6 +1128,44 @@ fn push_gap_text(text: &str, nodes: &mut Vec<Node>) {
             nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, part.to_string()));
         }
         first = false;
+    }
+}
+
+/// Find the correct CommonMark closing position for an inline code span.
+///
+/// Scans forward from `open_start + open_run` looking for the first backtick run of
+/// exactly `open_run` length.  Returns the absolute byte position *after* the closing
+/// backtick string, or `None` if the input has no matching close.
+fn correct_code_span_end(src: &[u8], open_start: usize, open_run: usize) -> Option<usize> {
+    let mut i = open_start + open_run; // start of content
+    while i < src.len() {
+        if src[i] == b'`' {
+            let run_len = src[i..].iter().take_while(|&&b| b == b'`').count();
+            if run_len == open_run {
+                return Some(i + run_len);
+            }
+            i += run_len;
+        } else {
+            i += 1;
+        }
+    }
+    None
+}
+
+/// Apply CommonMark inline code span normalisation to raw content (the string between the
+/// opening and closing backtick strings):
+/// 1. Replace newlines with spaces.
+/// 2. Strip one leading and one trailing space if the content starts and ends with a space
+///    but is not entirely spaces.
+fn normalize_code_span(raw: &str) -> String {
+    let with_spaces = raw.replace('\n', " ");
+    if with_spaces.starts_with(' ')
+        && with_spaces.ends_with(' ')
+        && !with_spaces.chars().all(|c| c == ' ')
+    {
+        with_spaces[1..with_spaces.len() - 1].to_string()
+    } else {
+        with_spaces
     }
 }
 
