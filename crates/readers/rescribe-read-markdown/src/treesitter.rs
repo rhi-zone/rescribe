@@ -533,6 +533,18 @@ impl<'a> Converter<'a> {
                 if children.len() == 1 {
                     return Some(children.into_iter().next().unwrap());
                 }
+                // Multi-child unknown node (e.g. latex_block `$...$`): pulldown
+                // doesn't know about these constructs, so emit the raw source text.
+                if children.len() > 1 {
+                    let text = self.inline_text(tsnode, offset).to_string();
+                    if !text.is_empty() {
+                        return Some(self.with_inline_span(
+                            Node::new(node::TEXT).prop(prop::CONTENT, text),
+                            tsnode,
+                            offset,
+                        ));
+                    }
+                }
                 None
             }
         }
