@@ -6,7 +6,7 @@ use crate::ast::{
     Block, CheckboxState, DefinitionItem, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc,
     Severity, Span, TableRow,
 };
-use crate::events::OwnedEvent;
+use crate::events::Event;
 
 /// Parse an Org-mode string into an [`OrgDoc`].
 ///
@@ -29,7 +29,7 @@ pub struct EventIter<'a> {
     /// Accumulated document-level metadata (#+KEY: value lines).
     pub(crate) metadata: Vec<(String, String)>,
     /// Buffer of events for the current block being drained (Iterator impl).
-    pub(crate) event_buf: VecDeque<OwnedEvent>,
+    pub(crate) event_buf: VecDeque<Event<'static>>,
     /// True once the parser has returned `None` and the buffer is empty (Iterator impl).
     pub(crate) done: bool,
 }
@@ -664,10 +664,10 @@ impl<'a> EventIter<'a> {
     }
 }
 
-impl Iterator for EventIter<'_> {
-    type Item = OwnedEvent;
+impl<'a> Iterator for EventIter<'a> {
+    type Item = Event<'a>;
 
-    fn next(&mut self) -> Option<OwnedEvent> {
+    fn next(&mut self) -> Option<Event<'a>> {
         // Drain buffered events from the previous block first.
         if let Some(ev) = self.event_buf.pop_front() {
             return Some(ev);

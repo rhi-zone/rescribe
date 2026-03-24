@@ -13,7 +13,7 @@
 )]
 
 use crate::ast::*;
-use crate::events::{collect_block_events, OwnedEvent};
+use crate::events::{collect_block_events, Event};
 use std::collections::VecDeque;
 
 /// Parse a Djot string into a `DjotDoc` and diagnostics. Infallible.
@@ -44,7 +44,7 @@ pub struct EventIter<'a> {
     /// Pending block attribute from `{...}` line before a block.
     pending_attr: Option<Attr>,
     // ── Iterator state ────────────────────────────────────────────────────
-    event_buf: VecDeque<OwnedEvent>,
+    event_buf: VecDeque<Event<'static>>,
     phase: Phase,
 }
 
@@ -769,10 +769,10 @@ impl<'a> EventIter<'a> {
     }
 }
 
-impl Iterator for EventIter<'_> {
-    type Item = OwnedEvent;
+impl<'a> Iterator for EventIter<'a> {
+    type Item = Event<'a>;
 
-    fn next(&mut self) -> Option<OwnedEvent> {
+    fn next(&mut self) -> Option<Event<'a>> {
         // Return buffered events first.
         if let Some(ev) = self.event_buf.pop_front() {
             return Some(ev);
@@ -806,11 +806,11 @@ impl Iterator for EventIter<'_> {
                     }
                     self.phase = Phase::Footnotes(i + 1);
                     let fn_def = &self.footnote_defs[i];
-                    self.event_buf.push_back(OwnedEvent::StartFootnoteDef { label: fn_def.label.clone() });
+                    self.event_buf.push_back(Event::StartFootnoteDef { label: fn_def.label.clone() });
                     for block in &fn_def.blocks.clone() {
                         collect_block_events(block, &mut self.event_buf);
                     }
-                    self.event_buf.push_back(OwnedEvent::EndFootnoteDef);
+                    self.event_buf.push_back(Event::EndFootnoteDef);
                     if let Some(ev) = self.event_buf.pop_front() {
                         return Some(ev);
                     }

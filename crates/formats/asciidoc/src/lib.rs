@@ -19,7 +19,7 @@ pub use ast::{
 };
 pub use emit::build;
 pub use batch::{BatchParser, BatchSink};
-pub use events::{EventIter, OwnedEvent};
+pub use events::{Event, EventIter, OwnedEvent};
 pub use writer::Writer;
 pub use parse::{parse, parse_inline_content};
 

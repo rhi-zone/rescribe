@@ -3,7 +3,7 @@
 use crate::ast::{
     AsciiDoc, Block, DefinitionItem, Diagnostic, ImageData, Inline, Span,
 };
-use crate::events::{collect_block_events, OwnedEvent};
+use crate::events::{collect_block_events, Event};
 use std::collections::VecDeque;
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ pub struct EventIter<'a> {
     /// Pending list style from `[loweralpha]` etc. — applied to the next list block and cleared.
     pending_list_style: Option<String>,
     // ── Iterator state ────────────────────────────────────────────────────────
-    pub(crate) event_buf: VecDeque<OwnedEvent>,
+    pub(crate) event_buf: VecDeque<Event<'static>>,
     iter_started: bool,
     iter_done: bool,
 }
@@ -1050,10 +1050,10 @@ impl<'a> EventIter<'a> {
 
 // ── Iterator impl ─────────────────────────────────────────────────────────────
 
-impl Iterator for EventIter<'_> {
-    type Item = OwnedEvent;
+impl<'a> Iterator for EventIter<'a> {
+    type Item = Event<'a>;
 
-    fn next(&mut self) -> Option<OwnedEvent> {
+    fn next(&mut self) -> Option<Event<'a>> {
         if let Some(ev) = self.event_buf.pop_front() {
             return Some(ev);
         }
@@ -1062,7 +1062,7 @@ impl Iterator for EventIter<'_> {
         }
         if !self.iter_started {
             self.iter_started = true;
-            return Some(OwnedEvent::StartDocument);
+            return Some(Event::StartDocument);
         }
         loop {
             self.skip_blank_lines();
@@ -1080,7 +1080,7 @@ impl Iterator for EventIter<'_> {
             }
         }
         self.iter_done = true;
-        Some(OwnedEvent::EndDocument)
+        Some(Event::EndDocument)
     }
 }
 

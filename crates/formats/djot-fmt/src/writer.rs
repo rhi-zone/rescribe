@@ -7,17 +7,18 @@
 //! # Example
 //! ```no_run
 //! use djot_fmt::writer::Writer;
-//! use djot_fmt::EventOwned;
+//! use djot_fmt::OwnedEvent;
+//! use std::borrow::Cow;
 //!
 //! let mut w = Writer::new(Vec::<u8>::new());
-//! w.write_event(EventOwned::StartHeading { level: 1, id: None, classes: vec![], kv: vec![] });
-//! w.write_event(EventOwned::Text("Hello".to_string()));
-//! w.write_event(EventOwned::EndHeading);
+//! w.write_event(OwnedEvent::StartHeading { level: 1, id: None, classes: vec![], kv: vec![] });
+//! w.write_event(OwnedEvent::Text(Cow::Owned("Hello".to_string())));
+//! w.write_event(OwnedEvent::EndHeading);
 //! let bytes = w.finish();
 //! ```
 
 use crate::ast::*;
-use crate::events::OwnedEvent;
+use crate::events::{Event, OwnedEvent};
 use std::io::Write;
 
 /// Streaming Djot writer.
@@ -36,8 +37,8 @@ impl<W: Write> Writer<W> {
     }
 
     /// Feed one event to the writer.
-    pub fn write_event(&mut self, event: OwnedEvent) {
-        self.events.push(event);
+    pub fn write_event(&mut self, event: Event<'_>) {
+        self.events.push(event.into_owned());
     }
 
     /// Flush all buffered events as Djot text and return the sink.
@@ -156,9 +157,9 @@ impl DocBuilder {
                     attr: Attr { id, classes, kv },
                 });
             }
-            OwnedEvent::CodeBlockContent(content) => {
+            OwnedEvent::CodeBlockContent(cow) => {
                 if let Some(Frame::CodeBlock { content: buf, .. }) = self.stack.last_mut() {
-                    buf.push_str(&content);
+                    buf.push_str(&cow);
                 }
             }
             OwnedEvent::EndCodeBlock => {
@@ -249,8 +250,8 @@ impl DocBuilder {
             }
 
             // ── Inline events ──────────────────────────────────────────────────
-            OwnedEvent::Text(content) => {
-                self.push_inline(Inline::Text { content, span: Span::NONE });
+            OwnedEvent::Text(cow) => {
+                self.push_inline(Inline::Text { content: cow.into_owned(), span: Span::NONE });
             }
             OwnedEvent::SoftBreak => {
                 self.push_inline(Inline::SoftBreak { span: Span::NONE });
@@ -315,13 +316,13 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::Verbatim { content, id, classes, kv } => {
-                self.push_inline(Inline::Verbatim { content, attr: Attr { id, classes, kv }, span: Span::NONE });
+                self.push_inline(Inline::Verbatim { content: content.into_owned(), attr: Attr { id, classes, kv }, span: Span::NONE });
             }
-            OwnedEvent::MathInline(content) => {
-                self.push_inline(Inline::MathInline { content, span: Span::NONE });
+            OwnedEvent::MathInline(cow) => {
+                self.push_inline(Inline::MathInline { content: cow.into_owned(), span: Span::NONE });
             }
-            OwnedEvent::MathDisplay(content) => {
-                self.push_inline(Inline::MathDisplay { content, span: Span::NONE });
+            OwnedEvent::MathDisplay(cow) => {
+                self.push_inline(Inline::MathDisplay { content: cow.into_owned(), span: Span::NONE });
             }
             OwnedEvent::RawInline { format, content } => {
                 self.push_inline(Inline::RawInline { format, content, span: Span::NONE });
@@ -416,7 +417,7 @@ mod tests {
             classes: vec![],
             kv: vec![],
         });
-        w.write_event(OwnedEvent::Text("Hello".to_string()));
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("Hello".to_string())));
         w.write_event(OwnedEvent::EndHeading);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();
@@ -427,7 +428,7 @@ mod tests {
     fn test_writer_paragraph() {
         let mut w = Writer::new(Vec::<u8>::new());
         w.write_event(OwnedEvent::StartParagraph { id: None, classes: vec![], kv: vec![] });
-        w.write_event(OwnedEvent::Text("World".to_string()));
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("World".to_string())));
         w.write_event(OwnedEvent::EndParagraph);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();

@@ -1,88 +1,25 @@
 //! Streaming event iterator over a Djot document.
 //!
 //! `EventIter<'a>` is the concrete struct (defined in `parse.rs`) that
-//! implements `Iterator<Item = OwnedEvent>` directly. Events are yielded
+//! implements `Iterator<Item = Event<'a>>` directly. Events are yielded
 //! lazily, one block at a time, via `parse_one_block()`. No full AST is
 //! built internally. `parse()` reconstructs a `DjotDoc` from an `EventIter`
 //! via a stack-based tree builder in `collect_doc_from_iter()`.
 
 use crate::ast::*;
+use std::borrow::Cow;
 use std::collections::VecDeque;
 
 // ── Public event types ────────────────────────────────────────────────────────
 
-/// A borrowed streaming event (kept for reference; not used by the iterator).
-#[allow(dead_code)]
+/// A streaming event from a Djot document.
+///
+/// Raw text content fields use `Cow<'a, str>` so that future optimisations can
+/// yield borrowed slices of the input without changing the public API.
+/// For the common case of fully-owned events (e.g. batch mode) use the
+/// [`OwnedEvent`] type alias.
 #[derive(Debug)]
 pub enum Event<'a> {
-    // Block events
-    StartParagraph { attr: &'a Attr },
-    EndParagraph,
-    StartHeading { level: u8, attr: &'a Attr },
-    EndHeading,
-    StartBlockquote { attr: &'a Attr },
-    EndBlockquote,
-    StartList { kind: &'a ListKind, tight: bool, attr: &'a Attr },
-    EndList,
-    StartListItem { checked: Option<bool> },
-    EndListItem,
-    StartCodeBlock { language: Option<&'a str>, attr: &'a Attr },
-    EndCodeBlock,
-    CodeBlockContent(&'a str),
-    RawBlock { format: &'a str, content: &'a str },
-    StartDiv { class: Option<&'a str>, attr: &'a Attr },
-    EndDiv,
-    StartTable,
-    EndTable,
-    StartTableRow { is_header: bool },
-    EndTableRow,
-    StartTableCell { alignment: Alignment },
-    EndTableCell,
-    ThematicBreak { attr: &'a Attr },
-    StartDefinitionList { attr: &'a Attr },
-    EndDefinitionList,
-    StartDefinitionTerm,
-    EndDefinitionTerm,
-    StartDefinitionDesc,
-    EndDefinitionDesc,
-    StartFootnoteDef { label: &'a str },
-    EndFootnoteDef,
-    // Inline events
-    Text(&'a str),
-    SoftBreak,
-    HardBreak,
-    StartEmphasis { attr: &'a Attr },
-    EndEmphasis,
-    StartStrong { attr: &'a Attr },
-    EndStrong,
-    StartDelete { attr: &'a Attr },
-    EndDelete,
-    StartInsert { attr: &'a Attr },
-    EndInsert,
-    StartHighlight { attr: &'a Attr },
-    EndHighlight,
-    StartSubscript { attr: &'a Attr },
-    EndSubscript,
-    StartSuperscript { attr: &'a Attr },
-    EndSuperscript,
-    Verbatim { content: &'a str, attr: &'a Attr },
-    MathInline(&'a str),
-    MathDisplay(&'a str),
-    RawInline { format: &'a str, content: &'a str },
-    StartLink { url: &'a str, title: Option<&'a str>, attr: &'a Attr },
-    EndLink,
-    StartImage { url: &'a str, title: Option<&'a str>, attr: &'a Attr },
-    EndImage,
-    StartSpan { attr: &'a Attr },
-    EndSpan,
-    FootnoteRef(&'a str),
-    Symbol(&'a str),
-    Autolink { url: &'a str, is_email: bool },
-}
-
-/// Owned event (no lifetime) yielded by `EventIter`.
-#[derive(Debug)]
-pub enum OwnedEvent {
     StartParagraph { id: Option<String>, classes: Vec<String>, kv: Vec<(String, String)> },
     EndParagraph,
     StartHeading { level: u8, id: Option<String>, classes: Vec<String>, kv: Vec<(String, String)> },
@@ -95,7 +32,7 @@ pub enum OwnedEvent {
     EndListItem,
     StartCodeBlock { language: Option<String>, id: Option<String>, classes: Vec<String>, kv: Vec<(String, String)> },
     EndCodeBlock,
-    CodeBlockContent(String),
+    CodeBlockContent(Cow<'a, str>),
     RawBlock { format: String, content: String },
     StartDiv { class: Option<String>, id: Option<String>, classes: Vec<String>, kv: Vec<(String, String)> },
     EndDiv,
@@ -114,7 +51,7 @@ pub enum OwnedEvent {
     EndDefinitionDesc,
     StartFootnoteDef { label: String },
     EndFootnoteDef,
-    Text(String),
+    Text(Cow<'a, str>),
     SoftBreak,
     HardBreak,
     StartEmphasis { id: Option<String>, classes: Vec<String>, kv: Vec<(String, String)> },
@@ -131,9 +68,9 @@ pub enum OwnedEvent {
     EndSubscript,
     StartSuperscript { id: Option<String>, classes: Vec<String>, kv: Vec<(String, String)> },
     EndSuperscript,
-    Verbatim { content: String, id: Option<String>, classes: Vec<String>, kv: Vec<(String, String)> },
-    MathInline(String),
-    MathDisplay(String),
+    Verbatim { content: Cow<'a, str>, id: Option<String>, classes: Vec<String>, kv: Vec<(String, String)> },
+    MathInline(Cow<'a, str>),
+    MathDisplay(Cow<'a, str>),
     RawInline { format: String, content: String },
     StartLink { url: String, title: Option<String>, id: Option<String>, classes: Vec<String>, kv: Vec<(String, String)> },
     EndLink,
@@ -144,6 +81,29 @@ pub enum OwnedEvent {
     FootnoteRef(String),
     Symbol(String),
     Autolink { url: String, is_email: bool },
+}
+
+/// Backwards-compatible alias for batch mode (all text is owned).
+pub type OwnedEvent = Event<'static>;
+
+impl<'a> Event<'a> {
+    /// Convert to an owned event (all `Cow::Borrowed` text fields become `Cow::Owned`).
+    pub fn into_owned(self) -> OwnedEvent {
+        match self {
+            Event::Text(cow) => Event::Text(Cow::Owned(cow.into_owned())),
+            Event::CodeBlockContent(cow) => Event::CodeBlockContent(Cow::Owned(cow.into_owned())),
+            Event::Verbatim { content, id, classes, kv } => Event::Verbatim {
+                content: Cow::Owned(content.into_owned()),
+                id,
+                classes,
+                kv,
+            },
+            Event::MathInline(cow) => Event::MathInline(Cow::Owned(cow.into_owned())),
+            Event::MathDisplay(cow) => Event::MathDisplay(Cow::Owned(cow.into_owned())),
+            // Safety: all other variants contain only String/'static fields.
+            other => unsafe { std::mem::transmute::<Event<'a>, Event<'static>>(other) },
+        }
+    }
 }
 
 // ── True pull iterator ────────────────────────────────────────────────────────
@@ -261,253 +221,253 @@ fn push_block_to_ctx(block: Block, block_stack: &mut [BlockFrame]) {
     }
 }
 
-fn handle_event(event: OwnedEvent, block_stack: &mut Vec<BlockFrame>, inline_stack: &mut Vec<InlineFrame>) {
+fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_stack: &mut Vec<InlineFrame>) {
     match event {
         // ── Block start events ─────────────────────────────────────────────
-        OwnedEvent::StartParagraph { id, classes, kv } => {
+        Event::StartParagraph { id, classes, kv } => {
             block_stack.push(BlockFrame::Paragraph { inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartHeading { level, id, classes, kv } => {
+        Event::StartHeading { level, id, classes, kv } => {
             block_stack.push(BlockFrame::Heading { level, inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartBlockquote { id, classes, kv } => {
+        Event::StartBlockquote { id, classes, kv } => {
             block_stack.push(BlockFrame::Blockquote { blocks: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartList { kind, tight, id, classes, kv } => {
+        Event::StartList { kind, tight, id, classes, kv } => {
             block_stack.push(BlockFrame::List { kind, tight, items: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartListItem { checked } => {
+        Event::StartListItem { checked } => {
             block_stack.push(BlockFrame::ListItem { blocks: Vec::new(), checked });
         }
-        OwnedEvent::StartCodeBlock { language, id, classes, kv } => {
+        Event::StartCodeBlock { language, id, classes, kv } => {
             block_stack.push(BlockFrame::CodeBlock { language, content: String::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::CodeBlockContent(content) => {
+        Event::CodeBlockContent(cow) => {
             if let Some(BlockFrame::CodeBlock { content: c, .. }) = block_stack.last_mut() {
-                *c = content;
+                *c = cow.into_owned();
             }
         }
-        OwnedEvent::StartDiv { class, id, classes, kv } => {
+        Event::StartDiv { class, id, classes, kv } => {
             block_stack.push(BlockFrame::Div { class, blocks: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartTable => {
+        Event::StartTable => {
             block_stack.push(BlockFrame::Table { rows: Vec::new() });
         }
-        OwnedEvent::StartTableRow { is_header } => {
+        Event::StartTableRow { is_header } => {
             block_stack.push(BlockFrame::TableRow { is_header, cells: Vec::new() });
         }
-        OwnedEvent::StartTableCell { alignment } => {
+        Event::StartTableCell { alignment } => {
             block_stack.push(BlockFrame::TableCell { inlines: Vec::new(), alignment });
         }
-        OwnedEvent::StartDefinitionList { id, classes, kv } => {
+        Event::StartDefinitionList { id, classes, kv } => {
             block_stack.push(BlockFrame::DefinitionList { items: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartDefinitionTerm => {
+        Event::StartDefinitionTerm => {
             block_stack.push(BlockFrame::DefinitionTerm { inlines: Vec::new() });
         }
-        OwnedEvent::StartDefinitionDesc => {
+        Event::StartDefinitionDesc => {
             block_stack.push(BlockFrame::DefinitionDesc { blocks: Vec::new() });
         }
-        OwnedEvent::StartFootnoteDef { label } => {
+        Event::StartFootnoteDef { label } => {
             block_stack.push(BlockFrame::FootnoteDef { label, blocks: Vec::new() });
         }
 
         // ── Block end events ───────────────────────────────────────────────
-        OwnedEvent::EndParagraph => {
+        Event::EndParagraph => {
             if let Some(BlockFrame::Paragraph { inlines, attr }) = block_stack.pop() {
                 push_block_to_ctx(Block::Paragraph { inlines, attr, span: Span::NONE }, block_stack);
             }
         }
-        OwnedEvent::EndHeading => {
+        Event::EndHeading => {
             if let Some(BlockFrame::Heading { level, inlines, attr }) = block_stack.pop() {
                 push_block_to_ctx(Block::Heading { level, inlines, attr, span: Span::NONE }, block_stack);
             }
         }
-        OwnedEvent::EndBlockquote => {
+        Event::EndBlockquote => {
             if let Some(BlockFrame::Blockquote { blocks, attr }) = block_stack.pop() {
                 push_block_to_ctx(Block::Blockquote { blocks, attr, span: Span::NONE }, block_stack);
             }
         }
-        OwnedEvent::EndList => {
+        Event::EndList => {
             if let Some(BlockFrame::List { kind, tight, items, attr }) = block_stack.pop() {
                 push_block_to_ctx(Block::List { kind, tight, items, attr, span: Span::NONE }, block_stack);
             }
         }
-        OwnedEvent::EndListItem => {
+        Event::EndListItem => {
             if let Some(BlockFrame::ListItem { blocks, checked }) = block_stack.pop()
                 && let Some(BlockFrame::List { items, .. }) = block_stack.last_mut() {
                 items.push(ListItem { blocks, checked, span: Span::NONE });
             }
         }
-        OwnedEvent::EndCodeBlock => {
+        Event::EndCodeBlock => {
             if let Some(BlockFrame::CodeBlock { language, content, attr }) = block_stack.pop() {
                 push_block_to_ctx(Block::CodeBlock { language, content, attr, span: Span::NONE }, block_stack);
             }
         }
-        OwnedEvent::RawBlock { format, content } => {
+        Event::RawBlock { format, content } => {
             push_block_to_ctx(Block::RawBlock { format, content, attr: Attr::default(), span: Span::NONE }, block_stack);
         }
-        OwnedEvent::EndDiv => {
+        Event::EndDiv => {
             if let Some(BlockFrame::Div { class, blocks, attr }) = block_stack.pop() {
                 push_block_to_ctx(Block::Div { class, blocks, attr, span: Span::NONE }, block_stack);
             }
         }
-        OwnedEvent::EndTable => {
+        Event::EndTable => {
             if let Some(BlockFrame::Table { rows }) = block_stack.pop() {
                 push_block_to_ctx(Block::Table { caption: None, rows, span: Span::NONE }, block_stack);
             }
         }
-        OwnedEvent::EndTableRow => {
+        Event::EndTableRow => {
             if let Some(BlockFrame::TableRow { is_header, cells }) = block_stack.pop()
                 && let Some(BlockFrame::Table { rows }) = block_stack.last_mut() {
                 rows.push(TableRow { cells, is_header, span: Span::NONE });
             }
         }
-        OwnedEvent::EndTableCell => {
+        Event::EndTableCell => {
             if let Some(BlockFrame::TableCell { inlines, alignment }) = block_stack.pop()
                 && let Some(BlockFrame::TableRow { cells, .. }) = block_stack.last_mut() {
                 cells.push(TableCell { inlines, alignment, span: Span::NONE });
             }
         }
-        OwnedEvent::EndDefinitionList => {
+        Event::EndDefinitionList => {
             if let Some(BlockFrame::DefinitionList { items, attr }) = block_stack.pop() {
                 push_block_to_ctx(Block::DefinitionList { items, attr, span: Span::NONE }, block_stack);
             }
         }
-        OwnedEvent::EndDefinitionTerm => {
+        Event::EndDefinitionTerm => {
             if let Some(BlockFrame::DefinitionTerm { inlines }) = block_stack.pop()
                 && let Some(BlockFrame::DefinitionList { items, .. }) = block_stack.last_mut() {
                 items.push(DefItem { term: inlines, definitions: Vec::new(), span: Span::NONE });
             }
         }
-        OwnedEvent::EndDefinitionDesc => {
+        Event::EndDefinitionDesc => {
             if let Some(BlockFrame::DefinitionDesc { blocks }) = block_stack.pop()
                 && let Some(BlockFrame::DefinitionList { items, .. }) = block_stack.last_mut()
                 && let Some(last) = items.last_mut() {
                 last.definitions = blocks;
             }
         }
-        OwnedEvent::EndFootnoteDef => {
+        Event::EndFootnoteDef => {
             if let Some(BlockFrame::FootnoteDef { label, blocks }) = block_stack.pop()
                 && let Some(BlockFrame::Document { footnotes, .. }) = block_stack.last_mut() {
                 footnotes.push(FootnoteDef { label, blocks, span: Span::NONE });
             }
         }
-        OwnedEvent::ThematicBreak { id, classes, kv } => {
+        Event::ThematicBreak { id, classes, kv } => {
             push_block_to_ctx(Block::ThematicBreak { attr: make_attr(id, classes, kv), span: Span::NONE }, block_stack);
         }
 
         // ── Inline leaf events ─────────────────────────────────────────────
-        OwnedEvent::Text(content) => {
-            push_inline_to_ctx(Inline::Text { content, span: Span::NONE }, block_stack, inline_stack);
+        Event::Text(cow) => {
+            push_inline_to_ctx(Inline::Text { content: cow.into_owned(), span: Span::NONE }, block_stack, inline_stack);
         }
-        OwnedEvent::SoftBreak => {
+        Event::SoftBreak => {
             push_inline_to_ctx(Inline::SoftBreak { span: Span::NONE }, block_stack, inline_stack);
         }
-        OwnedEvent::HardBreak => {
+        Event::HardBreak => {
             push_inline_to_ctx(Inline::HardBreak { span: Span::NONE }, block_stack, inline_stack);
         }
-        OwnedEvent::Verbatim { content, id, classes, kv } => {
-            push_inline_to_ctx(Inline::Verbatim { content, attr: make_attr(id, classes, kv), span: Span::NONE }, block_stack, inline_stack);
+        Event::Verbatim { content, id, classes, kv } => {
+            push_inline_to_ctx(Inline::Verbatim { content: content.into_owned(), attr: make_attr(id, classes, kv), span: Span::NONE }, block_stack, inline_stack);
         }
-        OwnedEvent::MathInline(content) => {
-            push_inline_to_ctx(Inline::MathInline { content, span: Span::NONE }, block_stack, inline_stack);
+        Event::MathInline(cow) => {
+            push_inline_to_ctx(Inline::MathInline { content: cow.into_owned(), span: Span::NONE }, block_stack, inline_stack);
         }
-        OwnedEvent::MathDisplay(content) => {
-            push_inline_to_ctx(Inline::MathDisplay { content, span: Span::NONE }, block_stack, inline_stack);
+        Event::MathDisplay(cow) => {
+            push_inline_to_ctx(Inline::MathDisplay { content: cow.into_owned(), span: Span::NONE }, block_stack, inline_stack);
         }
-        OwnedEvent::RawInline { format, content } => {
+        Event::RawInline { format, content } => {
             push_inline_to_ctx(Inline::RawInline { format, content, span: Span::NONE }, block_stack, inline_stack);
         }
-        OwnedEvent::FootnoteRef(label) => {
+        Event::FootnoteRef(label) => {
             push_inline_to_ctx(Inline::FootnoteRef { label, span: Span::NONE }, block_stack, inline_stack);
         }
-        OwnedEvent::Symbol(name) => {
+        Event::Symbol(name) => {
             push_inline_to_ctx(Inline::Symbol { name, span: Span::NONE }, block_stack, inline_stack);
         }
-        OwnedEvent::Autolink { url, is_email } => {
+        Event::Autolink { url, is_email } => {
             push_inline_to_ctx(Inline::Autolink { url, is_email, span: Span::NONE }, block_stack, inline_stack);
         }
 
         // ── Inline container start events ──────────────────────────────────
-        OwnedEvent::StartEmphasis { id, classes, kv } => {
+        Event::StartEmphasis { id, classes, kv } => {
             inline_stack.push(InlineFrame::Emphasis { inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartStrong { id, classes, kv } => {
+        Event::StartStrong { id, classes, kv } => {
             inline_stack.push(InlineFrame::Strong { inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartDelete { id, classes, kv } => {
+        Event::StartDelete { id, classes, kv } => {
             inline_stack.push(InlineFrame::Delete { inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartInsert { id, classes, kv } => {
+        Event::StartInsert { id, classes, kv } => {
             inline_stack.push(InlineFrame::Insert { inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartHighlight { id, classes, kv } => {
+        Event::StartHighlight { id, classes, kv } => {
             inline_stack.push(InlineFrame::Highlight { inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartSubscript { id, classes, kv } => {
+        Event::StartSubscript { id, classes, kv } => {
             inline_stack.push(InlineFrame::Subscript { inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartSuperscript { id, classes, kv } => {
+        Event::StartSuperscript { id, classes, kv } => {
             inline_stack.push(InlineFrame::Superscript { inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartLink { url, title, id, classes, kv } => {
+        Event::StartLink { url, title, id, classes, kv } => {
             inline_stack.push(InlineFrame::Link { url, title, inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartImage { url, title, id, classes, kv } => {
+        Event::StartImage { url, title, id, classes, kv } => {
             inline_stack.push(InlineFrame::Image { url, title, inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
-        OwnedEvent::StartSpan { id, classes, kv } => {
+        Event::StartSpan { id, classes, kv } => {
             inline_stack.push(InlineFrame::Span { inlines: Vec::new(), attr: make_attr(id, classes, kv) });
         }
 
         // ── Inline container end events ────────────────────────────────────
-        OwnedEvent::EndEmphasis => {
+        Event::EndEmphasis => {
             if let Some(InlineFrame::Emphasis { inlines, attr }) = inline_stack.pop() {
                 push_inline_to_ctx(Inline::Emphasis { inlines, attr, span: Span::NONE }, block_stack, inline_stack);
             }
         }
-        OwnedEvent::EndStrong => {
+        Event::EndStrong => {
             if let Some(InlineFrame::Strong { inlines, attr }) = inline_stack.pop() {
                 push_inline_to_ctx(Inline::Strong { inlines, attr, span: Span::NONE }, block_stack, inline_stack);
             }
         }
-        OwnedEvent::EndDelete => {
+        Event::EndDelete => {
             if let Some(InlineFrame::Delete { inlines, attr }) = inline_stack.pop() {
                 push_inline_to_ctx(Inline::Delete { inlines, attr, span: Span::NONE }, block_stack, inline_stack);
             }
         }
-        OwnedEvent::EndInsert => {
+        Event::EndInsert => {
             if let Some(InlineFrame::Insert { inlines, attr }) = inline_stack.pop() {
                 push_inline_to_ctx(Inline::Insert { inlines, attr, span: Span::NONE }, block_stack, inline_stack);
             }
         }
-        OwnedEvent::EndHighlight => {
+        Event::EndHighlight => {
             if let Some(InlineFrame::Highlight { inlines, attr }) = inline_stack.pop() {
                 push_inline_to_ctx(Inline::Highlight { inlines, attr, span: Span::NONE }, block_stack, inline_stack);
             }
         }
-        OwnedEvent::EndSubscript => {
+        Event::EndSubscript => {
             if let Some(InlineFrame::Subscript { inlines, attr }) = inline_stack.pop() {
                 push_inline_to_ctx(Inline::Subscript { inlines, attr, span: Span::NONE }, block_stack, inline_stack);
             }
         }
-        OwnedEvent::EndSuperscript => {
+        Event::EndSuperscript => {
             if let Some(InlineFrame::Superscript { inlines, attr }) = inline_stack.pop() {
                 push_inline_to_ctx(Inline::Superscript { inlines, attr, span: Span::NONE }, block_stack, inline_stack);
             }
         }
-        OwnedEvent::EndLink => {
+        Event::EndLink => {
             if let Some(InlineFrame::Link { url, title, inlines, attr }) = inline_stack.pop() {
                 push_inline_to_ctx(Inline::Link { url, title, inlines, attr, span: Span::NONE }, block_stack, inline_stack);
             }
         }
-        OwnedEvent::EndImage => {
+        Event::EndImage => {
             if let Some(InlineFrame::Image { url, title, inlines, attr }) = inline_stack.pop() {
                 push_inline_to_ctx(Inline::Image { url, title, inlines, attr, span: Span::NONE }, block_stack, inline_stack);
             }
         }
-        OwnedEvent::EndSpan => {
+        Event::EndSpan => {
             if let Some(InlineFrame::Span { inlines, attr }) = inline_stack.pop() {
                 push_inline_to_ctx(Inline::Span { inlines, attr, span: Span::NONE }, block_stack, inline_stack);
             }
@@ -517,7 +477,7 @@ fn handle_event(event: OwnedEvent, block_stack: &mut Vec<BlockFrame>, inline_sta
 
 // ── Block-to-events serializer ────────────────────────────────────────────────
 
-pub(crate) fn collect_block_events(block: &Block, queue: &mut VecDeque<OwnedEvent>) {
+pub(crate) fn collect_block_events(block: &Block, queue: &mut VecDeque<Event<'static>>) {
     match block {
         Block::Paragraph { inlines, attr, .. } => {
             queue.push_back(OwnedEvent::StartParagraph {
@@ -569,7 +529,7 @@ pub(crate) fn collect_block_events(block: &Block, queue: &mut VecDeque<OwnedEven
                 classes: attr.classes.clone(),
                 kv: attr.kv.clone(),
             });
-            queue.push_back(OwnedEvent::CodeBlockContent(content.clone()));
+            queue.push_back(Event::CodeBlockContent(Cow::Owned(content.clone())));
             queue.push_back(OwnedEvent::EndCodeBlock);
         }
         Block::RawBlock { format, content, .. } => {
@@ -627,22 +587,22 @@ pub(crate) fn collect_block_events(block: &Block, queue: &mut VecDeque<OwnedEven
     }
 }
 
-fn collect_blocks_events(blocks: &[Block], queue: &mut VecDeque<OwnedEvent>) {
+fn collect_blocks_events(blocks: &[Block], queue: &mut VecDeque<Event<'static>>) {
     for block in blocks {
         collect_block_events(block, queue);
     }
 }
 
-fn collect_inlines_events(inlines: &[Inline], queue: &mut VecDeque<OwnedEvent>) {
+fn collect_inlines_events(inlines: &[Inline], queue: &mut VecDeque<Event<'static>>) {
     for inline in inlines {
         collect_inline_event(inline, queue);
     }
 }
 
-fn collect_inline_event(inline: &Inline, queue: &mut VecDeque<OwnedEvent>) {
+fn collect_inline_event(inline: &Inline, queue: &mut VecDeque<Event<'static>>) {
     match inline {
         Inline::Text { content, .. } => {
-            queue.push_back(OwnedEvent::Text(content.clone()));
+            queue.push_back(Event::Text(Cow::Owned(content.clone())));
         }
         Inline::SoftBreak { .. } => {
             queue.push_back(OwnedEvent::SoftBreak);
@@ -714,18 +674,18 @@ fn collect_inline_event(inline: &Inline, queue: &mut VecDeque<OwnedEvent>) {
             queue.push_back(OwnedEvent::EndSuperscript);
         }
         Inline::Verbatim { content, attr, .. } => {
-            queue.push_back(OwnedEvent::Verbatim {
-                content: content.clone(),
+            queue.push_back(Event::Verbatim {
+                content: Cow::Owned(content.clone()),
                 id: attr.id.clone(),
                 classes: attr.classes.clone(),
                 kv: attr.kv.clone(),
             });
         }
         Inline::MathInline { content, .. } => {
-            queue.push_back(OwnedEvent::MathInline(content.clone()));
+            queue.push_back(Event::MathInline(Cow::Owned(content.clone())));
         }
         Inline::MathDisplay { content, .. } => {
-            queue.push_back(OwnedEvent::MathDisplay(content.clone()));
+            queue.push_back(Event::MathDisplay(Cow::Owned(content.clone())));
         }
         Inline::RawInline { format, content, .. } => {
             queue.push_back(OwnedEvent::RawInline {

@@ -46,7 +46,7 @@ pub use ast::{
     LinkDef, ListItem, ListKind, OrderedDelimiter, OrderedStyle, Span, TableCell, TableRow,
 };
 pub use emit::emit;
-pub use events::{EventIter, EventOwned};
+pub use events::{Event, EventIter, EventOwned, OwnedEvent};
 pub use parse::parse;
 pub use writer::Writer;
 pub use batch::{BatchParser, BatchSink};

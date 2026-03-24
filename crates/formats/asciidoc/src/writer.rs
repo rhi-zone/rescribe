@@ -8,16 +8,17 @@
 //! ```no_run
 //! use asciidoc::writer::Writer;
 //! use asciidoc::OwnedEvent;
+//! use std::borrow::Cow;
 //!
 //! let mut w = Writer::new(Vec::<u8>::new());
 //! w.write_event(OwnedEvent::StartHeading { level: 1, id: None, role: None });
-//! w.write_event(OwnedEvent::Text("Hello".to_string()));
+//! w.write_event(OwnedEvent::Text(Cow::Owned("Hello".to_string())));
 //! w.write_event(OwnedEvent::EndHeading);
 //! let bytes = w.finish();
 //! ```
 
 use crate::ast::*;
-use crate::events::OwnedEvent;
+use crate::events::{Event, OwnedEvent};
 use std::io::Write;
 
 /// Streaming AsciiDoc writer.
@@ -36,8 +37,8 @@ impl<W: Write> Writer<W> {
     }
 
     /// Feed one event to the writer.
-    pub fn write_event(&mut self, event: OwnedEvent) {
-        self.events.push(event);
+    pub fn write_event(&mut self, event: Event<'_>) {
+        self.events.push(event.into_owned());
     }
 
     /// Flush all buffered events as AsciiDoc text and return the sink.
@@ -258,8 +259,8 @@ impl DocBuilder {
             }
 
             // ── Inline events ─────────────────────────────────────────────────
-            OwnedEvent::Text(text) => {
-                self.push_inline(Inline::Text { text, span: Span::NONE });
+            OwnedEvent::Text(cow) => {
+                self.push_inline(Inline::Text { text: cow.into_owned(), span: Span::NONE });
             }
             OwnedEvent::SoftBreak => {
                 self.push_inline(Inline::SoftBreak { span: Span::NONE });
@@ -283,8 +284,8 @@ impl DocBuilder {
                     self.push_inline(Inline::Emphasis(inlines, Span::NONE));
                 }
             }
-            OwnedEvent::Code(content) => {
-                self.push_inline(Inline::Code(content, Span::NONE));
+            OwnedEvent::Code(cow) => {
+                self.push_inline(Inline::Code(cow.into_owned(), Span::NONE));
             }
             OwnedEvent::StartSuperscript => {
                 self.stack.push(Frame::Superscript { inlines: vec![] });
@@ -449,7 +450,7 @@ mod tests {
     fn test_writer_heading() {
         let mut w = Writer::new(Vec::<u8>::new());
         w.write_event(OwnedEvent::StartHeading { level: 1, id: None, role: None });
-        w.write_event(OwnedEvent::Text("Hello".to_string()));
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("Hello".to_string())));
         w.write_event(OwnedEvent::EndHeading);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();
@@ -460,7 +461,7 @@ mod tests {
     fn test_writer_paragraph() {
         let mut w = Writer::new(Vec::<u8>::new());
         w.write_event(OwnedEvent::StartParagraph { id: None, role: None, checked: None });
-        w.write_event(OwnedEvent::Text("World".to_string()));
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("World".to_string())));
         w.write_event(OwnedEvent::EndParagraph);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();

@@ -8,7 +8,7 @@
 pub mod events;
 pub mod writer;
 pub mod batch;
-pub use events::OwnedEvent;
+pub use events::{Event, OwnedEvent};
 pub use writer::Writer;
 pub use batch::{BatchParser, BatchSink};
 
@@ -183,7 +183,7 @@ pub struct EventIter<'a> {
     pub(crate) pending_block: Option<Block>,
     // ── Iterator state (used when EventIter is driven as an Iterator) ────────────
     /// Buffered events from the most recently parsed block.
-    pub(crate) event_buf: std::collections::VecDeque<events::OwnedEvent>,
+    pub(crate) event_buf: std::collections::VecDeque<events::Event<'static>>,
     /// Set to true once the parser has reached EOF during iteration.
     pub(crate) iter_done: bool,
 }
@@ -2707,10 +2707,10 @@ mod tests {
 
 // ── Iterator implementation ───────────────────────────────────────────────────
 
-impl Iterator for EventIter<'_> {
-    type Item = events::OwnedEvent;
+impl<'a> Iterator for EventIter<'a> {
+    type Item = events::Event<'a>;
 
-    fn next(&mut self) -> Option<events::OwnedEvent> {
+    fn next(&mut self) -> Option<events::Event<'a>> {
         // Drain any events buffered from the previous block.
         if let Some(ev) = self.event_buf.pop_front() {
             return Some(ev);
