@@ -163,6 +163,12 @@ parity!(sub_asterisk_tab_vt_newline_bracket, "\x1a*\t\x0b\n[");
 
 parity!(triple_backtick_newline_vt, "```\n\x0b");
 
+// us_double_tilde_dash_double_tilde (\x1f~~-~~): excluded — pulldown-cmark uses GFM's
+// simple strikethrough rule (opens ~~ if not preceded by whitespace), while tree-sitter-md
+// treats ASCII control chars (e.g. U+001F Unit Separator) as whitespace and refuses to
+// open strikethrough. This is an upstream tree-sitter-md GFM rule divergence; inputs where
+// ~~ is immediately preceded by a non-whitespace control char are skipped in the fuzz target.
+
 // asterisk_dollar_asterisk_dollar (*$*$): excluded — tree-sitter-md's inline grammar
 // does not implement CommonMark flanking Rule 2b: a `*` that is left-flanking only
 // because it is preceded by whitespace/start AND followed by ASCII punctuation (e.g.

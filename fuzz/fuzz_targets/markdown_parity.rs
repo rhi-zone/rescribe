@@ -41,6 +41,25 @@ fuzz_target!(|data: &[u8]| {
         }
     }
 
+    // Skip inputs where ~~ is immediately preceded by a non-whitespace ASCII control
+    // character (U+0001..U+0008, U+000E..U+001F, U+007F): pulldown-cmark uses GFM's
+    // simple strikethrough rule (not preceded by whitespace), while tree-sitter-md
+    // treats these control chars as whitespace and does not open strikethrough.
+    // E.g. \x1f~~-~~: pulldown → strikeout; tree-sitter → plain text.
+    {
+        let bytes = s.as_bytes();
+        for i in 0..bytes.len().saturating_sub(1) {
+            if bytes[i] == b'~' && bytes.get(i + 1) == Some(&b'~') {
+                if let Some(&prev) = i.checked_sub(1).and_then(|j| bytes.get(j)) {
+                    let is_ctrl_non_ws = matches!(prev, 0x01..=0x08 | 0x0e..=0x1f | 0x7f);
+                    if is_ctrl_non_ws {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     // Skip inputs where a `*` or `_` delimiter run is left-flanking only via CommonMark
     // Rule 2b (preceded by whitespace/start or ASCII punctuation, AND immediately
     // followed by non-`*`/`_` ASCII punctuation). tree-sitter-md's inline grammar does
