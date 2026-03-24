@@ -22,9 +22,11 @@ fn fixtures_root() -> PathBuf {
 
 #[test]
 fn markdown() {
+    // Use the pulldown backend which supports GFM extensions (tables, task lists,
+    // footnotes, YAML frontmatter) tested by these fixtures.
     run_format_fixtures(&fixtures_root(), "markdown", |input| {
         let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-        rescribe_read_markdown::parse(s)
+        rescribe_read_markdown::backend_pulldown::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string())
     });

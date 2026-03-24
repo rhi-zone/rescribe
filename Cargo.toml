@@ -85,6 +85,7 @@ rescribe-read-muse = { path = "crates/readers/rescribe-read-muse" }
 rescribe-write-muse = { path = "crates/writers/rescribe-write-muse" }
 rescribe-read-t2t = { path = "crates/readers/rescribe-read-t2t" }
 rescribe-write-t2t = { path = "crates/writers/rescribe-write-t2t" }
+commonmark-fmt = { path = "crates/formats/commonmark-fmt" }
 djot-fmt = { path = "crates/formats/djot-fmt" }
 rtf-fmt = { path = "crates/formats/rtf-fmt" }
 rst-fmt = { path = "crates/formats/rst-fmt" }

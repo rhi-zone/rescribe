@@ -69,7 +69,7 @@ enum Frame {
     Heading { level: u8, inlines: Vec<Inline> },
     Blockquote { blocks: Vec<Block> },
     List { ordered: bool, start: u64, tight: bool, items: Vec<ListItem> },
-    ListItem { blocks: Vec<Block> },
+    ListItem { blocks: Vec<Block>, tight_inlines: Vec<Inline> },
     // Inline spans
     Emphasis { inlines: Vec<Inline> },
     Strong { inlines: Vec<Inline> },
@@ -132,12 +132,19 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartItem => {
-                self.stack.push(Frame::ListItem { blocks: vec![] });
+                self.stack.push(Frame::ListItem { blocks: vec![], tight_inlines: vec![] });
             }
             OwnedEvent::EndItem => {
-                if let Some(Frame::ListItem { blocks }) = self.stack.pop()
+                if let Some(Frame::ListItem { mut blocks, tight_inlines }) = self.stack.pop()
                     && let Some(Frame::List { items, .. }) = self.stack.last_mut()
                 {
+                    // Flush any tight-item inlines as an implicit paragraph.
+                    if !tight_inlines.is_empty() {
+                        blocks.push(Block::Paragraph {
+                            inlines: tight_inlines,
+                            span: Span::NONE,
+                        });
+                    }
                     items.push(ListItem { blocks, span: Span::NONE });
                 }
             }
@@ -236,7 +243,7 @@ impl DocBuilder {
         match self.stack.last_mut() {
             Some(Frame::Document { blocks }) => blocks.push(block),
             Some(Frame::Blockquote { blocks }) => blocks.push(block),
-            Some(Frame::ListItem { blocks }) => blocks.push(block),
+            Some(Frame::ListItem { blocks, .. }) => blocks.push(block),
             _ => {} // unexpected context — discard
         }
     }
@@ -249,6 +256,8 @@ impl DocBuilder {
             Some(Frame::Strong { inlines }) => inlines.push(inline),
             Some(Frame::Strikethrough { inlines }) => inlines.push(inline),
             Some(Frame::Link { inlines, .. }) => inlines.push(inline),
+            // Tight list item: no Paragraph frame exists; accumulate for wrapping at EndItem.
+            Some(Frame::ListItem { tight_inlines, .. }) => tight_inlines.push(inline),
             // For images we only collect the alt text via StartImage; Text events
             // between StartImage/EndImage are already captured in the alt field
             // of StartImage. We discard them here to avoid double-counting.

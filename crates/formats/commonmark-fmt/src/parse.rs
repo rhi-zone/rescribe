@@ -13,7 +13,7 @@ enum Frame {
     Doc { blocks: Vec<Block> },
     Blockquote { blocks: Vec<Block>, start: usize },
     List { kind: ListKind, items: Vec<ListItem>, tight: bool, start: usize },
-    Item { blocks: Vec<Block>, tight_para: bool, start: usize },
+    Item { blocks: Vec<Block>, tight_para: bool, tight_inlines: Vec<Inline>, start: usize },
     Paragraph { inlines: Vec<Inline>, start: usize },
     Heading { level: u8, inlines: Vec<Inline>, start: usize },
     Emphasis { inlines: Vec<Inline>, start: usize },
@@ -100,7 +100,12 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
                 stack.push(Frame::List { kind, items: vec![], tight: true, start });
             }
             Event::Start(Tag::Item) => {
-                stack.push(Frame::Item { blocks: vec![], tight_para: false, start });
+                stack.push(Frame::Item {
+                    blocks: vec![],
+                    tight_para: false,
+                    tight_inlines: vec![],
+                    start,
+                });
             }
             Event::Start(Tag::HtmlBlock) => {
                 stack.push(Frame::HtmlBlock { content: String::new(), start });
@@ -172,7 +177,16 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
             }
             Event::End(TagEnd::Item) => {
                 let frame = stack.pop();
-                if let Some(Frame::Item { blocks, tight_para, start: s }) = frame {
+                if let Some(Frame::Item { mut blocks, tight_para, tight_inlines, start: s }) = frame {
+                    // Tight list items accumulate inlines directly (no Paragraph wrapper
+                    // from pulldown). Wrap them in an implicit paragraph so every item
+                    // always has Block children — consistent with loose items.
+                    if !tight_inlines.is_empty() {
+                        blocks.push(Block::Paragraph {
+                            inlines: tight_inlines,
+                            span: Span { start: s, end },
+                        });
+                    }
                     let item = ListItem { blocks, span: Span { start: s, end } };
                     // If this item had explicit paragraphs, mark the parent list as loose.
                     if tight_para
@@ -315,6 +329,10 @@ fn push_block(stack: &mut [Frame], block: Block) {
 }
 
 /// Push a completed inline onto the nearest inline-accepting frame.
+///
+/// For tight list items, pulldown-cmark does not emit `Start/End(Paragraph)` events;
+/// inlines arrive with only `Frame::Item` on the stack. We accumulate them in
+/// `Frame::Item::tight_inlines` and wrap them in a `Block::Paragraph` at `End(Item)`.
 fn push_inline(stack: &mut [Frame], inline: Inline) {
     for frame in stack.iter_mut().rev() {
         match frame {
@@ -325,6 +343,11 @@ fn push_inline(stack: &mut [Frame], inline: Inline) {
             | Frame::Strikethrough { inlines, .. }
             | Frame::Link { inlines, .. } => {
                 inlines.push(inline);
+                return;
+            }
+            // Tight list item: accumulate inlines for later wrapping in a paragraph.
+            Frame::Item { tight_inlines, .. } => {
+                tight_inlines.push(inline);
                 return;
             }
             // Image alt text is handled before push_inline is called.

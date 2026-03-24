@@ -1,54 +1,40 @@
 //! Markdown reader for rescribe.
 //!
-//! Parses CommonMark (with extensions) into rescribe's document IR.
+//! Parses CommonMark (with GFM strikethrough extension) into rescribe's document IR
+//! using the `commonmark-fmt` crate as the default backend.
 //!
-//! This crate supports multiple parser backends:
-//! - `pulldown` (default) - Uses pulldown-cmark, pure Rust, CommonMark compliant
-//! - `tree-sitter` - Uses tree-sitter-md, better error recovery and precise spans
+//! An optional `pulldown` feature enables the legacy pulldown-cmark backend
+//! (with YAML/TOML frontmatter, tables, footnotes, etc.) under `backend_pulldown`.
 
 use rescribe_core::{ConversionResult, Document, ParseError, ParseOptions};
+
+mod commonmark;
 
 #[cfg(feature = "pulldown")]
 mod pulldown;
 
-#[cfg(feature = "tree-sitter")]
-mod treesitter;
-
 /// Parse markdown text into a rescribe Document.
 ///
-/// Uses the default parser backend (pulldown-cmark if available, else tree-sitter).
+/// Uses the `commonmark-fmt` backend (CommonMark + GFM strikethrough).
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
     parse_with_options(input, &ParseOptions::default())
 }
 
 /// Parse markdown with custom options.
-#[cfg(feature = "pulldown")]
 pub fn parse_with_options(
     input: &str,
-    options: &ParseOptions,
+    opts: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    pulldown::parse_with_options(input, options)
+    Ok(commonmark::parse_with_options(input.as_bytes(), opts))
 }
 
-/// Parse markdown with custom options.
-#[cfg(all(feature = "tree-sitter", not(feature = "pulldown")))]
-pub fn parse_with_options(
-    input: &str,
-    options: &ParseOptions,
-) -> Result<ConversionResult<Document>, ParseError> {
-    treesitter::parse_with_options(input, options)
-}
-
-/// Parse using specifically the pulldown-cmark backend.
+/// Parse using specifically the pulldown-cmark backend (legacy; requires the `pulldown` feature).
+///
+/// The pulldown backend supports additional extensions: YAML/TOML frontmatter, GFM tables,
+/// footnotes, task lists, and math. Enable with `features = ["pulldown"]`.
 #[cfg(feature = "pulldown")]
 pub mod backend_pulldown {
     pub use crate::pulldown::{parse, parse_with_options};
-}
-
-/// Parse using specifically the tree-sitter backend.
-#[cfg(feature = "tree-sitter")]
-pub mod backend_treesitter {
-    pub use crate::treesitter::{parse, parse_with_options};
 }
 
 #[cfg(test)]
@@ -153,14 +139,13 @@ tags:
 # Hello
 
 Content here."#;
-        let result = parse(input).unwrap();
+        let result = backend_pulldown::parse(input).unwrap();
         let doc = result.value;
 
         assert_eq!(doc.metadata.get_str("title"), Some("My Document"));
         assert_eq!(doc.metadata.get_str("author"), Some("John Doe"));
         assert_eq!(doc.metadata.get_str("date"), Some("2024-01-15"));
         assert_eq!(doc.metadata.get_bool("draft"), Some(true));
-        // Tags should be a list now
         let tags = doc.metadata.get("tags");
         assert!(tags.is_some());
         if let Some(rescribe_core::PropValue::List(items)) = tags {
@@ -183,7 +168,7 @@ author:
 ---
 
 # Hello"#;
-        let result = parse(input).unwrap();
+        let result = backend_pulldown::parse(input).unwrap();
         let doc = result.value;
 
         assert_eq!(doc.metadata.get_str("title"), Some("My Document"));
@@ -196,12 +181,9 @@ author:
 
     #[test]
     fn test_preserve_source_info() {
+        // commonmark-fmt always records spans; check that spans are present.
         let input = "# Hello\n\nWorld!";
-        let options = ParseOptions {
-            preserve_source_info: true,
-            ..Default::default()
-        };
-        let result = parse_with_options(input, &options).unwrap();
+        let result = parse(input).unwrap();
         let doc = result.value;
         let children = root_children(&doc);
 
@@ -216,31 +198,14 @@ author:
     }
 
     #[test]
-    fn test_no_spans_by_default() {
-        let input = "# Hello";
-        let result = parse(input).unwrap();
-        let doc = result.value;
-        let children = root_children(&doc);
-        assert!(children[0].span.is_none());
-    }
-
-    #[test]
     fn test_parse_task_list() {
+        // Task list markers are not modeled by commonmark-fmt (they're a GFM extension).
+        // This test just checks that task-list syntax parses without panic.
         let result = parse("- [ ] unchecked\n- [x] checked").unwrap();
         let doc = result.value;
         let children = root_children(&doc);
         let list = &children[0];
         assert_eq!(list.kind.as_str(), node::LIST);
         assert_eq!(list.children.len(), 2);
-
-        // First item should be unchecked
-        let item1 = &list.children[0];
-        assert_eq!(item1.kind.as_str(), node::LIST_ITEM);
-        assert_eq!(item1.props.get_bool(prop::CHECKED), Some(false));
-
-        // Second item should be checked
-        let item2 = &list.children[1];
-        assert_eq!(item2.kind.as_str(), node::LIST_ITEM);
-        assert_eq!(item2.props.get_bool(prop::CHECKED), Some(true));
     }
 }

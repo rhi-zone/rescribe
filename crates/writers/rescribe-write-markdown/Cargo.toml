@@ -11,8 +11,7 @@ rescribe-core.workspace = true
 rescribe-std.workspace = true
 
 [features]
-# Enable pulldown-cmark backend tests in addition to tree-sitter backend tests
 pulldown = ["rescribe-read-markdown/pulldown"]
 
 [dev-dependencies]
-rescribe-read-markdown = { workspace = true, features = ["tree-sitter"] }
+rescribe-read-markdown = { workspace = true }
