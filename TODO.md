@@ -246,17 +246,17 @@ Depends on pulldown-cmark. No rescribe dependency. Exposes:
   pulldown-cmark is a non-goal; see `docs/format-library-design.md`.
 
 **Build order:**
-1. [ ] Complete `fixtures/commonmark/` — all COVERAGE.md boxes checked
-2. [ ] `ast.rs` — Block/Inline enums with Span on every node (own types, no pulldown/rescribe)
-3. [ ] `parse.rs` — `pulldown_cmark::Parser::new_ext(...).into_offset_iter()` → Ast via TreeBuilder
-4. [ ] `emit.rs` — Ast → bytes, round-trip guarantee
-5. [ ] `events.rs` — `Event<'a>` with `Cow<'a, str>`; `EventIter` wraps pulldown iterator
-6. [ ] `batch.rs` — `StreamingParser<H>` buffering wrapper; `Handler` trait; document limitation
-7. [ ] `writer.rs` — `Writer<W: Write>` streaming writer
-8. [ ] No-panic fuzz gate (`fuzz_commonmark_reader`)
-9. [ ] Round-trip fuzz (`fuzz_commonmark_roundtrip`) — clean
-10. [ ] `rescribe-read-markdown`: drop tree-sitter backend; thin adapter on commonmark-fmt
-11. [ ] 5-Production sign-off
+1. [x] Complete `fixtures/commonmark/` — all 74 COVERAGE.md boxes checked (2026-03-25)
+2. [x] `ast.rs` — Block/Inline enums with Span on every node (2026-03-25)
+3. [x] `parse.rs` — TreeBuilder over pulldown offset iterator (2026-03-25)
+4. [x] `emit.rs` — Ast → bytes, round-trip guarantee (2026-03-25)
+5. [x] `events.rs` — `Event<'a>` with `Cow<'a, str>`; `EventIter` wraps pulldown iterator (2026-03-25)
+6. [x] `batch.rs` — `StreamingParser<H>` buffering wrapper; `Handler` trait; limitation documented (2026-03-25)
+7. [x] `writer.rs` — `Writer<W: Write>` streaming writer (2026-03-25)
+8. [x] No-panic fuzz gate (`fuzz_commonmark_reader`) (2026-03-25)
+9. [x] Round-trip fuzz (`fuzz_commonmark_roundtrip`) — compile-verified (2026-03-25)
+10. [x] `rescribe-read-markdown` + `rescribe-read-commonmark`: tree-sitter backend dropped; both now use commonmark-fmt (2026-03-25)
+11. [ ] 5-Production sign-off — pending fuzz run (needs `cargo fuzz run fuzz_commonmark_reader` + roundtrip)
 
 **GFM extensions** (after base complete):
 Tables, strikethrough (`~~text~~`), task list items (`- [x]`), extended autolinks
