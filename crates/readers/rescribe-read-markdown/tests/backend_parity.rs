@@ -115,3 +115,5 @@ fn treesitter_deep_blockquote_with_nulls_no_panic() {
 parity!(tab_z, "\tz");
 
 parity!(space_tab_bracket, " \t[");
+
+parity!(c_newline_tab_caret, "C\n\t^");

@@ -1048,15 +1048,30 @@ fn strip_code_indent(line: &str) -> &str {
 }
 
 fn trim_cell_content(mut nodes: Vec<Node>) -> Vec<Node> {
-    // Trim leading whitespace of the first text node
-    if let Some(first) = nodes.first_mut() && first.kind.as_str() == node::TEXT {
-        let s = first
-            .props
-            .get_str(prop::CONTENT)
-            .unwrap_or("")
-            .trim_start()
-            .to_string();
-        first.props.set(prop::CONTENT, s);
+    // Trim leading whitespace of text nodes at line starts:
+    // - the first node (start of the content)
+    // - any text node immediately following a soft_break (continuation lines)
+    // CommonMark: paragraph continuation lines have their initial whitespace stripped.
+    let mut trim_next = true; // first node is always a line start
+    for node in &mut nodes {
+        match node.kind.as_str() {
+            k if k == node::SOFT_BREAK => {
+                trim_next = true;
+            }
+            k if k == node::TEXT && trim_next => {
+                let s = node
+                    .props
+                    .get_str(prop::CONTENT)
+                    .unwrap_or("")
+                    .trim_start()
+                    .to_string();
+                node.props.set(prop::CONTENT, s);
+                trim_next = false;
+            }
+            _ => {
+                trim_next = false;
+            }
+        }
     }
     // Trim trailing whitespace of the last text node
     if let Some(last) = nodes.last_mut() && last.kind.as_str() == node::TEXT {
