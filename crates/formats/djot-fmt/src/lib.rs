@@ -49,7 +49,7 @@ pub use emit::emit;
 pub use events::{Event, EventIter, EventOwned, OwnedEvent};
 pub use parse::parse;
 pub use writer::Writer;
-pub use batch::{BatchParser, BatchSink};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 
 /// Return a streaming event iterator over the parsed document.
 ///

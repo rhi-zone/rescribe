@@ -10,7 +10,7 @@ pub mod writer;
 pub mod batch;
 pub use events::{Event, OwnedEvent};
 pub use writer::Writer;
-pub use batch::{BatchParser, BatchSink};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 

@@ -15,7 +15,7 @@ pub use ast::{
     Block, CheckboxState, DefinitionItem, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc,
     OrgError, Severity, Span, TableRow, merge_text_inlines,
 };
-pub use batch::{BatchParser, BatchSink};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::build;
 pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;

@@ -383,6 +383,8 @@ from scratch as a proper standalone library.
 - [x] `batch` chunk-driven parser (BatchParser + BatchSink) — 2026-03-23
 - [x] Streaming writer (`w-stream`) — Writer<W: Write> with write_event/finish — 2026-03-23
 - [x] Fix events() — now a true pull iterator (2026-03-24)
+- [x] StreamingParser<H: Handler> + Handler trait — 2026-03-25
+- [ ] events() frame-stack fix — O(nesting depth), not O(block subtree)
 
 ### DEBT: Streaming architecture — five hand-rolled crates need upgrade
 
@@ -402,11 +404,12 @@ is not the correct streaming model.
 top frame, yields the appropriate event, and advances the cursor — O(depth) memory,
 one event per `next()` call, no intermediate `Block` allocation.
 
-**`StreamingParser<H: Handler>` — missing entirely:**
-None of the five crates have a chunked-input streaming API. The `BatchParser`
-(`feed(chunk)` + `finish()`) buffers all input and parses on `finish()` — it is
-not a real streaming parser. See `docs/format-library-design.md` for the correct
-`StreamingParser<H>` + `Handler` design with `SourceBuffer` compaction.
+**`StreamingParser<H: Handler>` — added (2026-03-25):**
+All four hand-rolled crates now have `StreamingParser<H: Handler>` + `Handler` trait
+in their `batch.rs`. The implementation buffers all input until `finish()` — same
+behaviour as the old `BatchSink`, but with the correct design-doc API surface. True
+incremental chunked streaming requires the frame-stack events() fix (item 1 above).
+`BatchSink` is kept for backwards compatibility.
 
 **`parse()` — should be independent of `events()`:**
 Currently `parse()` calls `events().collect()` via a stack-based tree builder.
@@ -426,33 +429,39 @@ Priority order within the upgrade:
 1. `events()` frame-stack fix — highest impact, enables correct memory profile
 2. `Cow::Borrowed` for zero-copy text — pure performance win, no API change
 3. `parse()` direct recursive descent — low priority, behaviour is already correct
-4. `StreamingParser<H>` — new API, needed before 5-Production for any of the five
+4. [x] `StreamingParser<H>` — added 2026-03-25; buffers all input (consistent API surface)
 
 ### `rst-fmt` — API modes complete (2026-03-23)
 
 - [x] `stream`: `events(input: &str) -> EventIter` pull iterator
 - [x] `batch`: BatchParser (feed/finish) + BatchSink<F> callback style
+- [x] `batch`: StreamingParser<H: Handler> + Handler trait (2026-03-25)
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags: ast, streaming, batch, writer-streaming, writer-builder
 - [x] Fix events() — now a true pull iterator (2026-03-24)
+- [ ] events() frame-stack fix — O(nesting depth), not O(block subtree)
 - [ ] Parser gaps: table parsing, footnote parsing
 
 ### `org-fmt` — API modes complete (2026-03-23)
 
 - [x] `stream`: pull iterator (events())
 - [x] `batch`: BatchParser + BatchSink
+- [x] `batch`: StreamingParser<H: Handler> + Handler trait (2026-03-25)
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags added
 - [x] Fix events() — now a true pull iterator (2026-03-24)
+- [ ] events() frame-stack fix — O(nesting depth), not O(block subtree)
 - [ ] Parser/writer gaps: blockquote nesting, footnote definitions, figure/caption blocks
 
 ### `asciidoc` — API modes complete (2026-03-23)
 
 - [x] `stream`: pull iterator (events())
 - [x] `batch`: BatchParser + BatchSink
+- [x] `batch`: StreamingParser<H: Handler> + Handler trait (2026-03-25)
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags added
 - [x] Fix events() — now a true pull iterator (2026-03-24)
+- [ ] events() frame-stack fix — O(nesting depth), not O(block subtree)
 - [ ] Parser gaps: table parsing, footnote parsing, math parsing
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)
