@@ -13,8 +13,10 @@ streaming = []
 batch = []
 writer-streaming = []
 writer-builder = ["writer-streaming"]
+arbitrary = ["dep:arbitrary"]
 
 [dependencies]
 pulldown-cmark = { version = "0.13", default-features = false }
+arbitrary = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]

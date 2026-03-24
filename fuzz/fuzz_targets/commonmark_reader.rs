@@ -1,8 +1,15 @@
 #![no_main]
+
+//! commonmark-fmt no-panic gate.
+//!
+//! Feeds arbitrary bytes to commonmark_fmt::parse and commonmark_fmt::events.
+//! Must not panic regardless of input.
+
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
-    if let Ok(s) = std::str::from_utf8(data) {
-        let _ = rescribe_read_commonmark::parse(s);
+    let _ = commonmark_fmt::parse(data);
+    if let Some(iter) = commonmark_fmt::events(data) {
+        for _ in iter {}
     }
 });

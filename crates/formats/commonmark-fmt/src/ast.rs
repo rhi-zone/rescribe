@@ -2,6 +2,7 @@
 
 /// Byte-offset span into the source input.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -19,6 +20,7 @@ impl Default for Span {
 
 /// A parsed CommonMark document.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct CmDoc {
     pub blocks: Vec<Block>,
     /// Reference-style link definitions collected during parsing.
@@ -38,6 +40,7 @@ impl CmDoc {
 
 /// A block-level node.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum Block {
     Paragraph {
         inlines: Vec<Inline>,
@@ -111,6 +114,7 @@ impl Block {
 
 /// Distinguishes ordered from unordered lists.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum ListKind {
     Unordered {
         /// The marker character used: `-`, `*`, or `+`.
@@ -127,6 +131,7 @@ pub enum ListKind {
 
 /// The punctuation that follows an ordered-list number.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum OrderedMarker {
     /// Items like `1.`
     Period,
@@ -136,6 +141,7 @@ pub enum OrderedMarker {
 
 /// A single item in a list.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct ListItem {
     pub blocks: Vec<Block>,
     pub span: Span,
@@ -153,6 +159,7 @@ impl ListItem {
 
 /// An inline node.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum Inline {
     Text {
         content: String,
@@ -249,6 +256,7 @@ impl Inline {
 
 /// A reference-style link definition (`[label]: url "title"`).
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct LinkDef {
     pub label: String,
     pub url: String,

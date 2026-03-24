@@ -234,6 +234,10 @@ path = "../crates/readers/rescribe-read-opml"
 [dependencies.rescribe-read-tei]
 path = "../crates/readers/rescribe-read-tei"
 
+[dependencies.commonmark-fmt]
+path = "../crates/formats/commonmark-fmt"
+features = ["arbitrary"]
+
 [dependencies.rescribe-read-commonmark]
 path = "../crates/readers/rescribe-read-commonmark"
 
@@ -855,6 +859,12 @@ doc = false
 [[bin]]
 name = "fuzz_commonmark_reader"
 path = "fuzz_targets/commonmark_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_commonmark_roundtrip"
+path = "fuzz_targets/commonmark_roundtrip.rs"
 test = false
 doc = false
 
