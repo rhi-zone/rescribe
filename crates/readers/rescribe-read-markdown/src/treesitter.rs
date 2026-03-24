@@ -453,8 +453,24 @@ impl<'a> Converter<'a> {
             }
 
             "soft_line_break" => {
-                // Emit a soft_break node — the gap text extraction already handles
-                // bare `\n` in gaps; this covers explicit soft_line_break tree nodes.
+                // tree-sitter emits soft_line_break when the trailing whitespace before
+                // the newline has fewer than 2 literal space characters (0x20). But
+                // pulldown-cmark counts the total number of trailing whitespace
+                // characters (spaces + tabs), not just spaces. If there are ≥ 2
+                // trailing whitespace chars in the source, promote to line_break.
+                // Look backward from the node start (in the normalized source) for
+                // trailing whitespace on the same line.
+                let abs_start = offset + tsnode.start_byte();
+                let trailing_ws = self.source.as_bytes()[..abs_start]
+                    .iter()
+                    .rev()
+                    .take_while(|&&b| b == b' ' || b == b'\t')
+                    .count();
+                if trailing_ws >= 2 {
+                    return Some(
+                        self.with_inline_span(Node::new(node::LINE_BREAK), tsnode, offset),
+                    );
+                }
                 Some(self.with_inline_span(Node::new(node::SOFT_BREAK), tsnode, offset))
             }
 
@@ -1137,15 +1153,27 @@ fn is_tight_list(tsnode: &tree_sitter::Node, source: &str) -> bool {
 /// named nodes rather than as explicit `soft_line_break` nodes.  By splitting on `\n`
 /// we get consistent IR regardless of whether the break is explicit or implicit.
 fn push_gap_text(text: &str, nodes: &mut Vec<Node>) {
-    let mut first = true;
-    for part in text.split('\n') {
-        if !first {
-            nodes.push(Node::new(node::SOFT_BREAK));
+    let parts: Vec<&str> = text.split('\n').collect();
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            // Determine whether the preceding line's trailing whitespace constitutes a
+            // hard line break. pulldown-cmark counts *any* trailing whitespace character
+            // (space or tab) when deciding hard vs soft break; 2+ chars → hard break.
+            let prev = parts[i - 1];
+            let trailing = prev
+                .bytes()
+                .rev()
+                .take_while(|&b| b == b' ' || b == b'\t')
+                .count();
+            if trailing >= 2 {
+                nodes.push(Node::new(node::LINE_BREAK));
+            } else {
+                nodes.push(Node::new(node::SOFT_BREAK));
+            }
         }
         if !part.is_empty() {
             nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, part.to_string()));
         }
-        first = false;
     }
 }
 
@@ -1352,9 +1380,10 @@ fn trim_cell_content(mut nodes: Vec<Node>) -> Vec<Node> {
             continue;
         }
         let at_line_end = i + 1 == nodes.len()
-            || nodes
-                .get(i + 1)
-                .is_some_and(|n| n.kind.as_str() == node::SOFT_BREAK);
+            || nodes.get(i + 1).is_some_and(|n| {
+                let k = n.kind.as_str();
+                k == node::SOFT_BREAK || k == node::LINE_BREAK
+            });
         if at_line_end {
             let s = nodes[i]
                 .props
