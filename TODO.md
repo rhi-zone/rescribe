@@ -371,6 +371,28 @@ from scratch as a proper standalone library.
 - [x] Benchmarks: djot_parse_small 7.8µs, djot_parse_medium 49µs, djot_emit_medium 9.8µs
 - [x] `batch` chunk-driven parser (BatchParser + BatchSink) — 2026-03-23
 - [x] Streaming writer (`w-stream`) — Writer<W: Write> with write_event/finish — 2026-03-23
+- [ ] Fix hollow events() — currently calls parse() internally (see DEBT section below)
+
+### DEBT: True streaming in all format crates
+
+**All four hand-rolled format crates (rst-fmt, asciidoc, djot-fmt, org-fmt) have a
+hollow `events()` implementation.** They call `parse()` internally and drain a
+`VecDeque` — delivering zero streaming benefits. This violates the API contract
+documented in `docs/format-library-design.md` and CLAUDE.md.
+
+The correct implementation (per rtf-fmt): `events()` is the primary state machine;
+`parse()` is implemented as `events().collect()`.
+
+- [ ] Fix `rst-fmt/src/parse.rs` — true pull parser in EventIter::next(); parse() = events().collect()
+- [ ] Fix `asciidoc/src/parse.rs` — same
+- [ ] Fix `djot-fmt/src/parse.rs` — same
+- [ ] Fix `org-fmt/src/parse.rs` — same
+
+Reference implementation: `rtf-fmt/src/events.rs` (or `parse.rs` depending on layout)
+
+**This is not cosmetic.** Callers that depend on incremental processing, memory
+efficiency, or event-driven pipelines get none of those benefits from the current
+implementation. It is a silent API contract violation.
 
 ### `rst-fmt` — API modes complete (2026-03-23)
 
@@ -379,6 +401,7 @@ from scratch as a proper standalone library.
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags: ast, streaming, batch, writer-streaming, writer-builder
 - [ ] Parser gaps: table parsing, footnote parsing
+- [ ] Fix hollow events() — currently calls parse() internally (see DEBT section above)
 
 ### `org-fmt` — API modes complete (2026-03-23)
 
@@ -386,6 +409,7 @@ from scratch as a proper standalone library.
 - [x] `batch`: BatchParser + BatchSink
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags added
+- [ ] Fix hollow events() — currently calls parse() internally (see DEBT section above)
 - [ ] Parser/writer gaps: blockquote nesting, footnote definitions, figure/caption blocks
 
 ### `asciidoc` — API modes complete (2026-03-23)
@@ -394,6 +418,7 @@ from scratch as a proper standalone library.
 - [x] `batch`: BatchParser + BatchSink
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags added
+- [ ] Fix hollow events() — currently calls parse() internally (see DEBT section above)
 - [ ] Parser gaps: table parsing, footnote parsing, math parsing
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)

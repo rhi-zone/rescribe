@@ -62,6 +62,38 @@ rescribe is a universal document conversion library, inspired by Pandoc but with
 
 Part of the [rhi ecosystem](https://rhi.zone).
 
+## The -fmt crates are not rescribe internals
+
+**This is the most important thing to understand about this codebase.**
+
+`rst-fmt`, `asciidoc`, `djot-fmt`, `org-fmt`, `rtf-fmt`, and every other standalone
+format crate are **first-class Rust ecosystem libraries**. They are not helpers for
+rescribe's document conversion pipeline. rescribe's IR adapter is a thin consumer of
+them — one of many possible consumers.
+
+Someone will use `rst-fmt` to build a documentation site generator. Someone else will
+use it for a language server, a search indexer, a linter, a syntax highlighter, a
+corpus analysis tool. These use cases exist whether rescribe does or not.
+
+**Consequences:**
+
+- Never evaluate a design decision through the lens of "what does rescribe need?" or
+  "is this good enough for document conversion?" That is always the wrong question.
+  Ask: "what does a general-purpose user of this format library need?"
+
+- A fake streaming API (one that builds the full AST internally then wraps it) is a
+  broken API. It fails silently for any caller that needs true incremental processing,
+  low-memory operation, or event-driven pipelines. **"Good enough for conversion" is
+  not a valid reason to ship a hollow streaming interface.**
+
+- The API contract is: `events()` is a true pull iterator — state machine advances on
+  each `next()` call, no AST built internally. `parse()` is implemented as
+  `events().collect()`. If you implement `events()` by calling `parse()` first, you
+  have built the wrong thing. rtf-fmt is the correct model.
+
+- Format crate design decisions (AST shape, event types, error model, span semantics)
+  must be made for the widest plausible user, not the narrowest known consumer.
+
 ## Priority hierarchy: broadest reach first
 
 Work should be prioritized by how many people benefit:

@@ -38,6 +38,12 @@ Variants 2 and 3 are distinct because streaming (full input in memory) can
 optimise in ways batch cannot: borrowed slices into the input, single-pass
 forward-reference resolution, unbounded lookahead.
 
+**`events()` implementation contract:** The iterator must be a true pull parser —
+a state machine that advances on each `next()` call with no AST built internally.
+`parse()` is then implemented as `events(input).collect()`. If `events()` calls
+`parse()` first and drains a `VecDeque`, it delivers zero streaming benefits
+(memory, latency, composability) and is a broken API. rtf-fmt is the correct model.
+
 `events()` is a valid starting point to get event shapes right. The chunk-driven
 `Parser` is the target — without it the library is useless for GB-scale corpora.
 
