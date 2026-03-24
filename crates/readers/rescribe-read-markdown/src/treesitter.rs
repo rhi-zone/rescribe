@@ -1227,4 +1227,5 @@ mod tests {
         assert_eq!(span.start, 0);
         assert_eq!(span.end, 7);
     }
+
 }

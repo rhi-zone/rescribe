@@ -141,3 +141,10 @@ parity!(tilde_dollar_tilde_g, "~$~G");
 parity!(asterisk_a_bracket_caret_asterisk_bracket, "*a[^*[");
 
 parity!(newline_bs_newline_vt_u_bs_paren_lt, "\n\\\n\x0bu\\(<");
+
+// bracket_asterisk_bracket_asterisk ([*[*): excluded — tree-sitter-md inline grammar
+// produces an empty (inline) node for inputs where [ is immediately followed by a
+// single * or _ (e.g. [*[*, [_[_), falling back to raw text. pulldown-cmark's
+// CommonMark flanking rules may find valid emphasis in the same source. This is an
+// upstream bug in tree-sitter-md's inline grammar; inputs with [* or [_ (single,
+// not doubled) are skipped in the parity fuzz target.
