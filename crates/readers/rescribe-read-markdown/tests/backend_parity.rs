@@ -117,3 +117,7 @@ parity!(tab_z, "\tz");
 parity!(space_tab_bracket, " \t[");
 
 parity!(c_newline_tab_caret, "C\n\t^");
+
+parity!(y_vt_newline_c, "y\x0b\nC");
+
+parity!(bracket_backslash_bracket, "[\\[");

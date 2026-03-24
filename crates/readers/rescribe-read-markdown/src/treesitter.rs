@@ -43,6 +43,16 @@ fn collect_inline_nodes(
         if let Some(inline_tree) = inline_parser.parse(inline_source, None) {
             trees.insert((start, end), inline_tree);
         }
+    } else if node.kind() == "ERROR" {
+        // ERROR nodes are block-grammar failures (e.g. `[\[` triggers a failed
+        // link-reference-definition parse). Treat the whole span as inline content
+        // so backslash escapes and other inline markup are processed correctly.
+        let start = node.start_byte();
+        let end = node.end_byte();
+        let inline_source = &source[start..end];
+        if let Some(inline_tree) = inline_parser.parse(inline_source, None) {
+            trees.insert((start, end), inline_tree);
+        }
     }
 
     let mut cursor = node.walk();
@@ -284,6 +294,18 @@ impl<'a> Converter<'a> {
 
             // Table elements
             "pipe_table" => self.convert_table(tsnode),
+
+            // ERROR: block grammar failed to parse a construct (e.g. `[\[` triggers
+            // a failed link-reference-definition parse). Treat as a paragraph of
+            // inline content — the inline tree was pre-computed in collect_inline_nodes.
+            "ERROR" => {
+                let children = self.convert_inline_from_block(tsnode);
+                let children = trim_cell_content(children);
+                if children.is_empty() {
+                    return None;
+                }
+                Some(self.with_span(Node::new(node::PARAGRAPH).children(children), tsnode))
+            }
 
             // Skip certain nodes
             "link_destination" | "link_title" | "code_fence_content" | "info_string" => None,
@@ -1073,21 +1095,35 @@ fn trim_cell_content(mut nodes: Vec<Node>) -> Vec<Node> {
             }
         }
     }
-    // Trim trailing whitespace of the last text node
-    if let Some(last) = nodes.last_mut() && last.kind.as_str() == node::TEXT {
-        let s = last
-            .props
-            .get_str(prop::CONTENT)
-            .unwrap_or("")
-            .trim_end()
-            .to_string();
-        last.props.set(prop::CONTENT, s);
+    // Trim trailing whitespace of text nodes before soft_break or at end of content.
+    // CommonMark strips trailing spaces from each source line.
+    for i in 0..nodes.len() {
+        if nodes[i].kind.as_str() != node::TEXT {
+            continue;
+        }
+        let at_line_end = i + 1 == nodes.len()
+            || nodes
+                .get(i + 1)
+                .is_some_and(|n| n.kind.as_str() == node::SOFT_BREAK);
+        if at_line_end {
+            let s = nodes[i]
+                .props
+                .get_str(prop::CONTENT)
+                .unwrap_or("")
+                .trim_end()
+                .to_string();
+            nodes[i].props.set(prop::CONTENT, s);
+        }
     }
     // Drop any nodes that became empty strings
     nodes.retain(|n| {
         n.kind.as_str() != node::TEXT
             || n.props.get_str(prop::CONTENT).is_none_or(|s| !s.is_empty())
     });
+    // Drop trailing soft_break nodes (a paragraph never ends with a line break)
+    while nodes.last().is_some_and(|n| n.kind.as_str() == node::SOFT_BREAK) {
+        nodes.pop();
+    }
     nodes
 }
 
