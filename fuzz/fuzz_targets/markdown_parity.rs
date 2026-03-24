@@ -136,18 +136,22 @@ fuzz_target!(|data: &[u8]| {
         }
     }
 
-    // Skip inputs where every pipe-containing line consists only of |, -, :, and
-    // whitespace: pulldown-cmark's GFM table extension recognises these as minimal
-    // tables (e.g. |-\n|-) but tree-sitter-md's block grammar does not. Inputs
-    // with at least one pipe-line that contains non-delimiter characters are fine
-    // (tree-sitter handles fully-formed tables correctly).
+    // Skip inputs that contain a GFM table delimiter row immediately following a line
+    // with a pipe: pulldown-cmark recognises any pipe line followed by a
+    // |---|---|…-style delimiter row as a table (header + delimiter); tree-sitter-md
+    // does not recognise minimal or non-standard table forms (e.g. |-)\n|-, |-\n|-).
+    // Detection: if two consecutive lines exist where line N contains '|' and line N+1
+    // consists only of |, -, :, and whitespace with at least one '-', skip.
     if s.contains('|') {
-        let all_pipe_lines_delimiter_only = s
-            .lines()
-            .filter(|line| line.contains('|'))
-            .all(|line| line.bytes().all(|b| matches!(b, b'|' | b'-' | b':' | b' ' | b'\t')));
-        if all_pipe_lines_delimiter_only {
-            return;
+        let lines: Vec<&str> = s.lines().collect();
+        for i in 0..lines.len().saturating_sub(1) {
+            let next = lines[i + 1];
+            let next_is_delim = next.contains('|')
+                && next.contains('-')
+                && next.bytes().all(|b| matches!(b, b'|' | b'-' | b':' | b' ' | b'\t'));
+            if next_is_delim && lines[i].contains('|') {
+                return;
+            }
         }
     }
 

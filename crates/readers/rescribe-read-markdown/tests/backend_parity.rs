@@ -163,6 +163,11 @@ parity!(sub_asterisk_tab_vt_newline_bracket, "\x1a*\t\x0b\n[");
 
 parity!(triple_backtick_newline_vt, "```\n\x0b");
 
+// pipe_dash_paren_newline_pipe_dash (|-)\n|-): excluded — pulldown-cmark's GFM table
+// extension recognises |-)\n|- as a minimal table (header |-), delimiter |-) but
+// tree-sitter-md's block grammar does not. Inputs where a pipe line is followed by a
+// delimiter-only pipe line are skipped in the parity fuzz target.
+
 // us_double_tilde_dash_double_tilde (\x1f~~-~~): excluded — pulldown-cmark uses GFM's
 // simple strikethrough rule (opens ~~ if not preceded by whitespace), while tree-sitter-md
 // treats ASCII control chars (e.g. U+001F Unit Separator) as whitespace and refuses to
