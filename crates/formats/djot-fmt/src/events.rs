@@ -1,7 +1,8 @@
 //! Streaming event iterator over a Djot document.
 //!
-//! `EventIter<'a>` holds a `Parser<'a>` and yields events lazily, one block
-//! at a time, via `parse_one_block()`. No full AST is built internally.
+//! `EventIter<'a>` is a type alias for `Parser<'a>`, which implements
+//! `Iterator<Item = OwnedEvent>` directly. Events are yielded lazily, one
+//! block at a time, via `parse_one_block()`. No full AST is built internally.
 //! `parse()` reconstructs a `DjotDoc` from an `EventIter` via a stack-based
 //! tree builder in `collect_doc_from_iter()`.
 
@@ -147,86 +148,11 @@ pub enum OwnedEvent {
 
 // ── True pull iterator ────────────────────────────────────────────────────────
 
-/// Phase tracker for `EventIter::next()`.
-#[derive(PartialEq)]
-enum Phase {
-    /// Parsing top-level blocks.
-    Blocks,
-    /// Emitting footnote-def events (index into parser.footnote_defs).
-    Footnotes(usize),
-    /// All done.
-    Done,
-}
-
 /// Public iterator that lazily yields `OwnedEvent` items — one block at a time.
 ///
-/// `Parser::pre_scan()` is called once at construction; thereafter `next()`
-/// calls `parser.parse_one_block()` for each block without building the full
-/// AST upfront.
-pub struct EventIter<'a> {
-    pub(crate) parser: crate::parse::Parser<'a>,
-    event_buf: VecDeque<OwnedEvent>,
-    phase: Phase,
-}
-
-impl<'a> EventIter<'a> {
-    pub(crate) fn new(input: &'a str) -> Self {
-        let mut parser = crate::parse::Parser::new(input);
-        parser.pre_scan();
-        EventIter { parser, event_buf: VecDeque::new(), phase: Phase::Blocks }
-    }
-}
-
-impl Iterator for EventIter<'_> {
-    type Item = OwnedEvent;
-
-    fn next(&mut self) -> Option<OwnedEvent> {
-        // Return buffered events first.
-        if let Some(ev) = self.event_buf.pop_front() {
-            return Some(ev);
-        }
-
-        loop {
-            match &self.phase {
-                Phase::Done => return None,
-
-                Phase::Blocks => {
-                    match self.parser.parse_one_block() {
-                        Some(block) => {
-                            collect_block_events(&block, &mut self.event_buf);
-                            if let Some(ev) = self.event_buf.pop_front() {
-                                return Some(ev);
-                            }
-                            // block produced no events — keep going
-                        }
-                        None => {
-                            // All top-level blocks consumed; switch to footnotes.
-                            self.phase = Phase::Footnotes(0);
-                        }
-                    }
-                }
-
-                Phase::Footnotes(idx) => {
-                    let i = *idx;
-                    if i >= self.parser.footnote_defs.len() {
-                        self.phase = Phase::Done;
-                        return None;
-                    }
-                    self.phase = Phase::Footnotes(i + 1);
-                    let fn_def = &self.parser.footnote_defs[i];
-                    self.event_buf.push_back(OwnedEvent::StartFootnoteDef { label: fn_def.label.clone() });
-                    for block in &fn_def.blocks {
-                        collect_block_events(block, &mut self.event_buf);
-                    }
-                    self.event_buf.push_back(OwnedEvent::EndFootnoteDef);
-                    if let Some(ev) = self.event_buf.pop_front() {
-                        return Some(ev);
-                    }
-                }
-            }
-        }
-    }
-}
+/// `Parser` implements `Iterator<Item = OwnedEvent>` directly. This type alias
+/// preserves the public API name.
+pub type EventIter<'a> = crate::parse::Parser<'a>;
 
 // ── Tree builder: reconstruct DjotDoc from EventIter ─────────────────────────
 
@@ -245,8 +171,8 @@ pub(crate) fn collect_doc_from_iter(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
         handle_event(event, &mut block_stack, &mut inline_stack);
     }
 
-    let diagnostics = std::mem::take(&mut iter.parser.diagnostics);
-    let link_defs = std::mem::take(&mut iter.parser.link_defs);
+    let diagnostics = std::mem::take(&mut iter.diagnostics);
+    let link_defs = std::mem::take(&mut iter.link_defs);
 
     let (blocks, footnotes) = match block_stack.pop() {
         Some(BlockFrame::Document { blocks, footnotes }) => (blocks, footnotes),

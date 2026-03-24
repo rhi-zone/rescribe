@@ -13,13 +13,26 @@
 )]
 
 use crate::ast::*;
+use crate::events::{collect_block_events, OwnedEvent};
+use std::collections::VecDeque;
 
 /// Parse a Djot string into a `DjotDoc` and diagnostics. Infallible.
 pub fn parse(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
     crate::events::collect_doc_from_iter(input)
 }
 
-pub(crate) struct Parser<'a> {
+/// Phase tracker for `Parser`'s `Iterator` implementation.
+#[derive(PartialEq)]
+pub(crate) enum Phase {
+    /// Parsing top-level blocks.
+    Blocks,
+    /// Emitting footnote-def events (index into parser.footnote_defs).
+    Footnotes(usize),
+    /// All done.
+    Done,
+}
+
+pub struct Parser<'a> {
     input: &'a str,
     lines: Vec<&'a str>,
     /// Byte offset of the start of each line.
@@ -30,10 +43,13 @@ pub(crate) struct Parser<'a> {
     pub(crate) footnote_defs: Vec<FootnoteDef>,
     /// Pending block attribute from `{...}` line before a block.
     pending_attr: Option<Attr>,
+    // ── Iterator state ────────────────────────────────────────────────────
+    event_buf: VecDeque<OwnedEvent>,
+    phase: Phase,
 }
 
 impl<'a> Parser<'a> {
-    pub(crate) fn new(input: &'a str) -> Self {
+    pub fn new(input: &'a str) -> Self {
         let mut lines = Vec::new();
         let mut offsets = Vec::new();
         let mut offset = 0;
@@ -47,7 +63,7 @@ impl<'a> Parser<'a> {
             lines.pop();
             offsets.pop();
         }
-        Parser {
+        let mut parser = Parser {
             input,
             lines,
             line_offsets: offsets,
@@ -56,7 +72,11 @@ impl<'a> Parser<'a> {
             link_defs: Vec::new(),
             footnote_defs: Vec::new(),
             pending_attr: None,
-        }
+            event_buf: VecDeque::new(),
+            phase: Phase::Blocks,
+        };
+        parser.pre_scan();
+        parser
     }
 
     fn line_start(&self, idx: usize) -> usize {
@@ -88,25 +108,8 @@ impl<'a> Parser<'a> {
         self.pos > start
     }
 
-    #[allow(dead_code)]
-    fn parse_doc(&mut self) -> (DjotDoc, Vec<Diagnostic>) {
-        // First pass: collect link defs and footnote defs positions.
-        self.pre_scan();
-
-        // Second pass: parse blocks.
-        let blocks = self.parse_blocks(self.lines.len());
-
-        let doc = DjotDoc {
-            blocks,
-            footnotes: std::mem::take(&mut self.footnote_defs),
-            link_defs: std::mem::take(&mut self.link_defs),
-        };
-        let diags = std::mem::take(&mut self.diagnostics);
-        (doc, diags)
-    }
-
     /// Pre-scan to collect link definitions and footnote definitions.
-    pub(crate) fn pre_scan(&mut self) {
+    fn pre_scan(&mut self) {
         let n = self.lines.len();
         let mut i = 0;
         while i < n {
@@ -763,6 +766,57 @@ impl<'a> Parser<'a> {
         let inlines = parse_inlines(&content, start, &self.link_defs);
         let end = self.line_start(self.pos);
         Some(Block::Paragraph { inlines, attr, span: Span { start, end } })
+    }
+}
+
+impl Iterator for Parser<'_> {
+    type Item = OwnedEvent;
+
+    fn next(&mut self) -> Option<OwnedEvent> {
+        // Return buffered events first.
+        if let Some(ev) = self.event_buf.pop_front() {
+            return Some(ev);
+        }
+
+        loop {
+            match &self.phase {
+                Phase::Done => return None,
+
+                Phase::Blocks => {
+                    match self.parse_one_block() {
+                        Some(block) => {
+                            collect_block_events(&block, &mut self.event_buf);
+                            if let Some(ev) = self.event_buf.pop_front() {
+                                return Some(ev);
+                            }
+                            // block produced no events — keep going
+                        }
+                        None => {
+                            // All top-level blocks consumed; switch to footnotes.
+                            self.phase = Phase::Footnotes(0);
+                        }
+                    }
+                }
+
+                Phase::Footnotes(idx) => {
+                    let i = *idx;
+                    if i >= self.footnote_defs.len() {
+                        self.phase = Phase::Done;
+                        return None;
+                    }
+                    self.phase = Phase::Footnotes(i + 1);
+                    let fn_def = &self.footnote_defs[i];
+                    self.event_buf.push_back(OwnedEvent::StartFootnoteDef { label: fn_def.label.clone() });
+                    for block in &fn_def.blocks.clone() {
+                        collect_block_events(block, &mut self.event_buf);
+                    }
+                    self.event_buf.push_back(OwnedEvent::EndFootnoteDef);
+                    if let Some(ev) = self.event_buf.pop_front() {
+                        return Some(ev);
+                    }
+                }
+            }
+        }
     }
 }
 
