@@ -161,6 +161,8 @@ parity!(dot_tab_newline_dc3, ".\t\n\x13");
 
 parity!(sub_asterisk_tab_vt_newline_bracket, "\x1a*\t\x0b\n[");
 
+parity!(triple_backtick_newline_vt, "```\n\x0b");
+
 // asterisk_dollar_asterisk_dollar (*$*$): excluded — tree-sitter-md's inline grammar
 // does not implement CommonMark flanking Rule 2b: a `*` that is left-flanking only
 // because it is preceded by whitespace/start AND followed by ASCII punctuation (e.g.

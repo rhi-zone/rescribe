@@ -117,9 +117,33 @@ pub fn parse_with_options(
             .join("\n");
         let s = s
             .replace('\x00', "\u{FFFD}")
-            .replace(['\x0b', '\x0c'], " ")
             .replace("\r\n", "\n")
             .replace('\r', "\n");
+        // VT (U+000B) and FF (U+000C): pulldown-cmark treats them as line endings, so
+        // a VT at the start of a line (position 0 or immediately after '\n') acts as an
+        // empty line.  Mid-line VT/FF is treated as a space-like separator.  Preserve
+        // this distinction: drop VT/FF that appear at a line start; replace mid-line
+        // VT/FF with a space.
+        let s = {
+            let mut result = String::with_capacity(s.len());
+            let mut at_line_start = true;
+            for ch in s.chars() {
+                if ch == '\x0b' || ch == '\x0c' {
+                    if !at_line_start {
+                        result.push(' ');
+                    }
+                    // at_line_start remains true if we drop, or stays false if mid-line
+                    // (dropping VT at line start = treating it as an empty line already consumed)
+                } else if ch == '\n' {
+                    result.push('\n');
+                    at_line_start = true;
+                } else {
+                    result.push(ch);
+                    at_line_start = false;
+                }
+            }
+            result
+        };
         let s = if s.ends_with('\n') { s } else { format!("{s}\n") };
         std::borrow::Cow::Owned(s)
     } else if input.ends_with('\n') {
