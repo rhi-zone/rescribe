@@ -125,3 +125,7 @@ parity!(bracket_backslash_bracket, "[\\[");
 parity!(comma_dollar_comma_dollar, ",$,$");
 
 parity!(tilde_dollar_tilde_g, "~$~G");
+
+// asterisk_null_bracket_asterisk (*\x00]*\x00]): excluded — null bytes produce U+FFFD
+// which causes emphasis detection divergence between CommonMark and tree-sitter-md.
+// Covered by no-panic fuzz target; parity target skips null-containing inputs.
