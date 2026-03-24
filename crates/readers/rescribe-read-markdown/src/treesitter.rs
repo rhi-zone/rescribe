@@ -519,10 +519,20 @@ impl<'a> Converter<'a> {
 
             "code_span" => {
                 let text = self.inline_text(tsnode, offset);
-                let content = text
-                    .trim_start_matches('`')
-                    .trim_end_matches('`')
-                    .to_string();
+                // Strip the backtick fence (one or more backticks on each side).
+                let inner = text.trim_start_matches('`').trim_end_matches('`');
+                // CommonMark: line endings in code spans are treated as spaces.
+                let with_spaces = inner.replace('\n', " ");
+                // CommonMark: if the result begins AND ends with a space (but is not
+                // all spaces), strip one leading and one trailing space.
+                let content = if with_spaces.starts_with(' ')
+                    && with_spaces.ends_with(' ')
+                    && !with_spaces.chars().all(|c| c == ' ')
+                {
+                    with_spaces[1..with_spaces.len() - 1].to_string()
+                } else {
+                    with_spaces
+                };
                 Some(self.with_inline_span(
                     Node::new(node::CODE).prop(prop::CONTENT, content),
                     tsnode,
