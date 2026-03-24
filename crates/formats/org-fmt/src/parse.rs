@@ -1,21 +1,24 @@
 //! Org-mode parser.
 
+use std::collections::VecDeque;
+
 use crate::ast::{
     Block, CheckboxState, DefinitionItem, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc,
     Severity, Span, TableRow,
 };
+use crate::events::OwnedEvent;
 
 /// Parse an Org-mode string into an [`OrgDoc`].
 ///
 /// Parsing is infallible — unknown constructs produce [`Diagnostic`]s instead
 /// of hard errors.
 pub fn parse(input: &str) -> (OrgDoc, Vec<Diagnostic>) {
-    let mut iter = crate::events::EventIter::new(input);
+    let mut iter = OrgParser::new(input);
     let (blocks, metadata, diagnostics) = crate::events::collect_doc_from_iter(&mut iter);
     (OrgDoc { blocks, metadata }, diagnostics)
 }
 
-pub(crate) struct OrgParser<'a> {
+pub struct OrgParser<'a> {
     lines: Vec<&'a str>,
     pos: usize,
     pub diagnostics: Vec<Diagnostic>,
@@ -25,10 +28,14 @@ pub(crate) struct OrgParser<'a> {
     pub(crate) pending_name: Option<String>,
     /// Accumulated document-level metadata (#+KEY: value lines).
     pub(crate) metadata: Vec<(String, String)>,
+    /// Buffer of events for the current block being drained (Iterator impl).
+    pub(crate) event_buf: VecDeque<OwnedEvent>,
+    /// True once the parser has returned `None` and the buffer is empty (Iterator impl).
+    pub(crate) done: bool,
 }
 
 impl<'a> OrgParser<'a> {
-    pub(crate) fn new(input: &'a str) -> Self {
+    pub fn new(input: &'a str) -> Self {
         let lines: Vec<&str> = input.lines().collect();
         Self {
             lines,
@@ -37,6 +44,8 @@ impl<'a> OrgParser<'a> {
             current_para: Vec::new(),
             pending_name: None,
             metadata: Vec::new(),
+            event_buf: VecDeque::new(),
+            done: false,
         }
     }
 
@@ -650,6 +659,36 @@ impl<'a> OrgParser<'a> {
             self.advance();
             if line.trim().eq_ignore_ascii_case(":END:") {
                 break;
+            }
+        }
+    }
+}
+
+impl Iterator for OrgParser<'_> {
+    type Item = OwnedEvent;
+
+    fn next(&mut self) -> Option<OwnedEvent> {
+        // Drain buffered events from the previous block first.
+        if let Some(ev) = self.event_buf.pop_front() {
+            return Some(ev);
+        }
+        if self.done {
+            return None;
+        }
+        // Ask the parser for the next block, looping past any that produce no events.
+        loop {
+            match self.parse_next_block() {
+                None => {
+                    self.done = true;
+                    return None;
+                }
+                Some(block) => {
+                    crate::events::collect_block_events(&block, &mut self.event_buf);
+                    if let Some(ev) = self.event_buf.pop_front() {
+                        return Some(ev);
+                    }
+                    // Block produced no events (e.g. a dropped COMMENT block) — keep going.
+                }
             }
         }
     }

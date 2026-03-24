@@ -3,6 +3,7 @@
 use std::collections::VecDeque;
 
 use crate::ast::*;
+use crate::parse::OrgParser;
 
 /// An owned event from an Org-mode document (no borrowed data).
 #[derive(Debug)]
@@ -121,57 +122,9 @@ pub enum OwnedEvent {
 
 /// Public streaming event iterator over an Org-mode document.
 ///
-/// Holds an [`crate::parse::OrgParser`] directly and lazily produces events one
-/// block at a time.  No full AST is allocated inside `events()`.
-///
-/// Constructed via [`events`] or [`EventIter::new`].  Yields [`OwnedEvent`] items.
-pub struct EventIter<'a> {
-    parser: crate::parse::OrgParser<'a>,
-    /// Buffer of events for the current block being drained.
-    event_buf: VecDeque<OwnedEvent>,
-    /// True once the parser has returned `None` and the buffer is empty.
-    done: bool,
-}
-
-impl<'a> EventIter<'a> {
-    pub(crate) fn new(input: &'a str) -> Self {
-        EventIter {
-            parser: crate::parse::OrgParser::new(input),
-            event_buf: VecDeque::new(),
-            done: false,
-        }
-    }
-}
-
-impl Iterator for EventIter<'_> {
-    type Item = OwnedEvent;
-
-    fn next(&mut self) -> Option<OwnedEvent> {
-        // Drain buffered events from the previous block first.
-        if let Some(ev) = self.event_buf.pop_front() {
-            return Some(ev);
-        }
-        if self.done {
-            return None;
-        }
-        // Ask the parser for the next block, looping past any that produce no events.
-        loop {
-            match self.parser.parse_next_block() {
-                None => {
-                    self.done = true;
-                    return None;
-                }
-                Some(block) => {
-                    collect_block_events(&block, &mut self.event_buf);
-                    if let Some(ev) = self.event_buf.pop_front() {
-                        return Some(ev);
-                    }
-                    // Block produced no events (e.g. a dropped COMMENT block) — keep going.
-                }
-            }
-        }
-    }
-}
+/// `OrgParser<'a>` implements `Iterator<Item = OwnedEvent>` directly.
+/// This alias exists for backwards compatibility.
+pub type EventIter<'a> = OrgParser<'a>;
 
 // ── Tree builder (inverse of the collect_* functions) ────────────────────────
 
@@ -187,8 +140,8 @@ pub(crate) fn collect_doc_from_iter(
         handle_event(event, &mut block_stack, &mut inline_ctx);
     }
 
-    let metadata = iter.parser.take_metadata();
-    let diagnostics = std::mem::take(&mut iter.parser.diagnostics);
+    let metadata = iter.take_metadata();
+    let diagnostics = std::mem::take(&mut iter.diagnostics);
 
     let blocks = match block_stack.pop() {
         Some(BlockFrame::Document { blocks }) => blocks,
@@ -539,7 +492,7 @@ fn handle_event(event: OwnedEvent, block_stack: &mut Vec<BlockFrame>, inline_ctx
 
 // ── collect_block_events (used by EventIter::next to fill its buffer) ─────────
 
-fn collect_block_events(block: &Block, q: &mut VecDeque<OwnedEvent>) {
+pub(crate) fn collect_block_events(block: &Block, q: &mut VecDeque<OwnedEvent>) {
     match block {
         Block::Paragraph { inlines, .. } => {
             q.push_back(OwnedEvent::StartParagraph);
@@ -730,7 +683,7 @@ fn collect_inline_events(inline: &Inline, q: &mut VecDeque<OwnedEvent>) {
 
 /// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
 pub fn events(input: &str) -> EventIter<'_> {
-    EventIter::new(input)
+    OrgParser::new(input)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
