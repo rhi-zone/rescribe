@@ -86,10 +86,41 @@ corpus analysis tool. These use cases exist whether rescribe does or not.
   low-memory operation, or event-driven pipelines. **"Good enough for conversion" is
   not a valid reason to ship a hollow streaming interface.**
 
-- The API contract is: `events()` is a true pull iterator — state machine advances on
-  each `next()` call, no AST built internally. `parse()` is implemented as
-  `events().collect()`. If you implement `events()` by calling `parse()` first, you
-  have built the wrong thing. rtf-fmt is the correct model.
+- **The three APIs are independent implementations, not derived from one another.**
+  `parse()`, `events()`, and `StreamingParser<H>` each have their own optimal
+  implementation. They share state-transition logic as functions — not a common
+  primitive type. See `docs/format-library-design.md` for the full architecture.
+
+- **`parse()` = direct recursive descent into the AST.** No events, no intermediate
+  representation. Fastest path to a materialized tree.
+
+- **`events()` = the parser IS the iterator.** `EventIter` holds the parser state;
+  `next()` advances it and returns one event. `Cow::Borrowed` slices from the input
+  `&[u8]` where the format allows zero-copy (no escape sequences in the span).
+  Input must be fully in memory. Standard `Iterator` trait.
+
+- **`StreamingParser<H: Handler>` = callback model for chunked input.** `feed(chunk)`
+  advances the state machine, calling `handler.handle(event)` for each event produced.
+  The `handle()` call is stack-scoped: `Event<'_>` borrows from the internal source
+  buffer window, drops when `handle()` returns, allowing the buffer to compact.
+  Memory: O(largest token + nesting depth). This is the right API for files too large
+  to load into memory and for network/pipe inputs.
+
+- **`parse()` is NOT `events().collect()`.** That formulation sacrifices performance
+  for code elegance: it forces materialization through the event dispatch layer and
+  prevents direct struct construction. The behavior must be equivalent; the
+  implementation should not be.
+
+- **`commonmark-fmt` wraps pulldown-cmark.** `events()` and `parse()` are at max perf.
+  `StreamingParser` buffers all input before parsing (pulldown requires full `&str`).
+  This limitation is documented explicitly in the crate. Superseding pulldown-cmark
+  (77M+ weekly downloads) is a non-goal. Callers needing true chunked CommonMark
+  streaming should use pulldown-cmark directly or wait for a future native parser.
+
+- **`ooxml-fmt` is the priority target for the full three-API architecture.** DOCX,
+  XLSX, and PPTX routinely exceed RAM on large corpora; `StreamingParser` is not
+  optional there. The ooxml-fmt rework (after commonmark-fmt and the five hand-rolled
+  crate upgrades) is the most important streaming work in the queue.
 
 - Format crate design decisions (AST shape, event types, error model, span semantics)
   must be made for the widest plausible user, not the narrowest known consumer.

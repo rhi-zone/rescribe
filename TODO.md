@@ -236,16 +236,27 @@ Depends on pulldown-cmark. No rescribe dependency. Exposes:
 - `events(&[u8]) -> impl Iterator<Item = Event>` — thin re-export of pulldown events
 - Feature flags: ast, streaming, batch, writer-streaming, writer-builder (all default=true)
 
+**Architecture:** `commonmark-fmt` wraps pulldown-cmark. The three reader APIs:
+- `parse()` — `TreeBuilder` over pulldown's `into_offset_iter()`. Direct and fast.
+- `events()` — thin wrapper over pulldown's iterator; translates `pulldown_cmark::Event`
+  to `commonmark_fmt::Event<'_>` with `Cow::Borrowed` slices from the input. Standard
+  `Iterator`. Max perf — pulldown IS a true pull parser.
+- `StreamingParser<H>` — buffers all chunks, runs pulldown on `finish()`. **Known
+  limitation: not true chunked streaming.** Documented in the crate. Superseding
+  pulldown-cmark is a non-goal; see `docs/format-library-design.md`.
+
 **Build order:**
 1. [ ] Complete `fixtures/commonmark/` — all COVERAGE.md boxes checked
 2. [ ] `ast.rs` — Block/Inline enums with Span on every node (own types, no pulldown/rescribe)
-3. [ ] `parse.rs` — `pulldown_cmark::Parser::new_ext(...).into_offset_iter()` → Ast
+3. [ ] `parse.rs` — `pulldown_cmark::Parser::new_ext(...).into_offset_iter()` → Ast via TreeBuilder
 4. [ ] `emit.rs` — Ast → bytes, round-trip guarantee
-5. [ ] `events.rs` — streaming iterator
-6. [ ] No-panic fuzz gate (`fuzz_commonmark_reader`)
-7. [ ] Round-trip fuzz (`fuzz_commonmark_roundtrip`) — clean
-8. [ ] `rescribe-read-markdown`: drop tree-sitter backend; thin adapter on commonmark-fmt
-9. [ ] 5-Production sign-off
+5. [ ] `events.rs` — `Event<'a>` with `Cow<'a, str>`; `EventIter` wraps pulldown iterator
+6. [ ] `batch.rs` — `StreamingParser<H>` buffering wrapper; `Handler` trait; document limitation
+7. [ ] `writer.rs` — `Writer<W: Write>` streaming writer
+8. [ ] No-panic fuzz gate (`fuzz_commonmark_reader`)
+9. [ ] Round-trip fuzz (`fuzz_commonmark_roundtrip`) — clean
+10. [ ] `rescribe-read-markdown`: drop tree-sitter backend; thin adapter on commonmark-fmt
+11. [ ] 5-Production sign-off
 
 **GFM extensions** (after base complete):
 Tables, strikethrough (`~~text~~`), task list items (`- [x]`), extended autolinks
@@ -373,17 +384,49 @@ from scratch as a proper standalone library.
 - [x] Streaming writer (`w-stream`) — Writer<W: Write> with write_event/finish — 2026-03-23
 - [x] Fix events() — now a true pull iterator (2026-03-24)
 
-### ~~DEBT~~: True streaming — FIXED (2026-03-24)
+### DEBT: Streaming architecture — five hand-rolled crates need upgrade
 
-All four hand-rolled format crates now have correct `events()` implementations.
-`EventIter<'a>` holds the Parser directly; `next()` lazily produces events
-one block at a time; `parse()` collects from `EventIter` via a stack-based
-tree builder. No full AST is allocated inside `events()`.
+The four hand-rolled crates (`rst-fmt`, `asciidoc`, `djot-fmt`, `org-fmt`) plus
+`rtf-fmt` do not yet match the architecture in `docs/format-library-design.md`.
+Current state and gaps:
 
-- [x] Fix `rst-fmt` — EventIter<'a> holds Parser, parse() = events().collect()
-- [x] Fix `asciidoc` — same
-- [x] Fix `djot-fmt` — same (pre_scan runs once on construction)
-- [x] Fix `org-fmt` — same
+**`events()` — block-granular, not event-granular:**
+All four still use `collect_block_events(block, &mut VecDeque)` — they parse one
+`Block` value, then buffer *all* of that block's events before returning the first.
+For a deeply nested construct (blockquote → list → list_item → paragraph), the
+entire subtree is buffered. Memory is O(subtree size), not O(nesting depth). This
+is not the correct streaming model.
+
+**Correct target:** `EventIter` IS the state machine. A frame stack
+`Vec<(BlockKind, child_cursor)>` replaces `VecDeque<Event>`. `next()` peeks at the
+top frame, yields the appropriate event, and advances the cursor — O(depth) memory,
+one event per `next()` call, no intermediate `Block` allocation.
+
+**`StreamingParser<H: Handler>` — missing entirely:**
+None of the five crates have a chunked-input streaming API. The `BatchParser`
+(`feed(chunk)` + `finish()`) buffers all input and parses on `finish()` — it is
+not a real streaming parser. See `docs/format-library-design.md` for the correct
+`StreamingParser<H>` + `Handler` design with `SourceBuffer` compaction.
+
+**`parse()` — should be independent of `events()`:**
+Currently `parse()` calls `events().collect()` via a stack-based tree builder.
+This is correct for behaviour but suboptimal: it forces materialisation through
+the event dispatch layer and prevents direct struct construction. For max perf,
+`parse()` should be direct recursive descent.
+
+**`Cow::Borrowed` — not used:**
+All `Cow` text fields are `Owned`. The zero-copy path (borrowed slices from the
+input `&[u8]`) is not wired up. This is the easiest win: identify runs with no
+escape sequences and yield `Cow::Borrowed` from `events()`.
+
+**Schedule:** After `commonmark-fmt` vertical is complete. Address all five crates
+in one pass (not one at a time — the changes are mechanical and parallel).
+
+Priority order within the upgrade:
+1. `events()` frame-stack fix — highest impact, enables correct memory profile
+2. `Cow::Borrowed` for zero-copy text — pure performance win, no API change
+3. `parse()` direct recursive descent — low priority, behaviour is already correct
+4. `StreamingParser<H>` — new API, needed before 5-Production for any of the five
 
 ### `rst-fmt` — API modes complete (2026-03-23)
 
@@ -455,20 +498,44 @@ tree builder. No full AST is allocated inside `events()`.
 - [ ] AZW3 reader/writer (boko as reference, MIT attribution)
 - [ ] PDF reader (pdf-extract backed; already at 4)
 
-### ooxml consolidation (post-merge housekeeping)
+### ooxml-fmt rework (major milestone — after five-crate streaming upgrade)
 
-The ooxml crates were merged from a separate repo (2026-03-24). They live in
-`crates/formats/ooxml-{opc,xml,dml,omml,wml,sml,pml}/` as separate crates.
-The eventual plan is to consolidate into a single `ooxml-fmt` crate with feature
-flags (`wml`, `sml`, `pml`, `dml`, `omml`; `opc`/`xml` always-on infrastructure).
+The ooxml-* crates are our biggest value proposition: no other Rust ecosystem library
+handles DOCX/XLSX/PPTX at production quality. The rework consolidates them and adds
+the full three-API streaming architecture from `docs/format-library-design.md`.
 
-- [ ] **Consolidate into `ooxml-fmt`** — merge the 7 format crates into one with
-  feature flags. Shared infrastructure (opc, xml) always compiled; dml/omml/wml/sml/pml
+**Why streaming is non-optional for OOXML:**
+DOCX/XLSX/PPTX files in legal discovery, academic corpora, and enterprise search
+routinely exceed available RAM. A library that requires the full file in memory before
+parsing starts is unusable for these workloads. `StreamingParser<H>` with O(nesting
+depth + largest token) memory is the primary use case, not an afterthought.
+
+**Architecture targets:**
+- OPC layer: chunked ZIP entry streaming — decompress one entry at a time, never the
+  full archive. The ZIP central directory is parsed first (it's at the end of the file,
+  so this requires two passes or a seekable source); entries are decompressed on demand.
+- XML layer: SAX-style events from `quick-xml` fed directly to the format state machine.
+  No intermediate DOM allocation.
+- Format layer (`wml`, `sml`, `pml`): `StreamingParser<H>` translates XML events to
+  format-level events. The handler receives `Event::StartParagraph`, `Event::Text(cow)`,
+  etc. — no intermediate `Block` allocation.
+- `parse()`: direct tree construction from the SAX stream. No events() indirection.
+- `events()`: format-level pull iterator over a fully-loaded `&[u8]`. Wraps the same
+  state machine as `StreamingParser` but driven by `Iterator::next()`.
+
+**Consolidation:**
+- [ ] Merge `ooxml-wml`, `ooxml-sml`, `ooxml-pml`, `ooxml-dml`, `ooxml-omml`,
+  `ooxml-opc`, `ooxml-xml` into a single `ooxml-fmt` crate with feature flags.
+  Shared infrastructure (`opc`, `xml`) always compiled; `wml`/`sml`/`pml`/`dml`/`omml`
   feature-gated. `crates/tools/ooxml-codegen` stays separate (build tool).
-- [ ] **Publish `ooxml-fmt` to crates.io** — replaces the individual published crates.
-- [ ] **Deprecate individual crates** — bump ooxml-wml/sml/pml/dml/omml/opc/xml to
-  a final version with a deprecation notice in each README pointing to `ooxml-fmt`.
-  Keep them compiling but mark `#[deprecated]` on the re-exported API surface.
+- [ ] Implement `StreamingParser<H>` for DOCX (wml) first — largest user base.
+- [ ] Implement `StreamingParser<H>` for XLSX (sml) — critical for data pipelines.
+- [ ] Implement `StreamingParser<H>` for PPTX (pml).
+- [ ] `parse()` as direct recursive descent (independent of events()).
+- [ ] `events()` as true pull iterator (frame-stack, no block-granular buffering).
+- [ ] Publish `ooxml-fmt` to crates.io.
+- [ ] Deprecate individual crates — final version with deprecation notice pointing to
+  `ooxml-fmt`. Keep compiling; mark `#[deprecated]` on the re-exported API surface.
 
 ### Milestone: M3 — Tier B/C verticals
 
