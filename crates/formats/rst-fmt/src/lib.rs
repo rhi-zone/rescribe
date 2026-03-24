@@ -8,7 +8,7 @@
 pub mod events;
 pub mod writer;
 pub mod batch;
-pub use events::{EventIter, OwnedEvent};
+pub use events::OwnedEvent;
 pub use writer::Writer;
 pub use batch::{BatchParser, BatchSink};
 
@@ -162,12 +162,12 @@ const HEADING_CHARS: &[char] = &['=', '-', '~', '^', '"', '`', '#', '*', '+', '_
 
 /// Parse an RST string into an [`RstDoc`].
 pub fn parse(input: &str) -> Result<RstDoc, RstError> {
-    let mut iter = Parser::new_iter(input);
+    let mut iter = EventIter::new(input);
     let blocks = events::collect_doc_from_iter(&mut iter);
     Ok(RstDoc { blocks })
 }
 
-pub struct Parser<'a> {
+pub struct EventIter<'a> {
     pub(crate) lines: Vec<&'a str>,
     pub(crate) line_idx: usize,
     /// Maps underline character to heading level (assigned in order of appearance).
@@ -181,15 +181,15 @@ pub struct Parser<'a> {
     /// Holds a code block to be emitted immediately after the current block.
     /// Used when "text::" emits a paragraph and defers the code block.
     pub(crate) pending_block: Option<Block>,
-    // ── Iterator state (used when Parser is driven as an Iterator) ────────────
+    // ── Iterator state (used when EventIter is driven as an Iterator) ────────────
     /// Buffered events from the most recently parsed block.
     pub(crate) event_buf: std::collections::VecDeque<events::OwnedEvent>,
     /// Set to true once the parser has reached EOF during iteration.
     pub(crate) iter_done: bool,
 }
 
-impl<'a> Parser<'a> {
-    pub(crate) fn new(input: &'a str) -> Self {
+impl<'a> EventIter<'a> {
+    fn new_uninit(input: &'a str) -> Self {
         let lines: Vec<&str> = input.lines().collect();
         Self {
             lines,
@@ -204,11 +204,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Construct a `Parser` that is ready to be used as an `Iterator`.
+    /// Construct an `EventIter` ready to be used as an `Iterator`.
     ///
     /// Runs the link-target pre-scan so that `next()` calls produce correct events.
-    pub fn new_iter(input: &'a str) -> Self {
-        let mut p = Self::new(input);
+    pub fn new(input: &'a str) -> Self {
+        let mut p = Self::new_uninit(input);
         p.collect_link_targets();
         p
     }
@@ -2707,7 +2707,7 @@ mod tests {
 
 // ── Iterator implementation ───────────────────────────────────────────────────
 
-impl Iterator for Parser<'_> {
+impl Iterator for EventIter<'_> {
     type Item = events::OwnedEvent;
 
     fn next(&mut self) -> Option<events::OwnedEvent> {
@@ -2753,5 +2753,5 @@ impl Iterator for Parser<'_> {
 
 /// Parse `input` as RST and return a streaming [`EventIter`].
 pub fn events(input: &str) -> EventIter<'_> {
-    Parser::new_iter(input)
+    EventIter::new(input)
 }

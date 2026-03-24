@@ -3,14 +3,7 @@
 use crate::ast::*;
 use std::collections::VecDeque;
 
-pub use crate::parse::Parser;
-
-/// `EventIter<'a>` is a type alias for [`Parser<'a>`].
-///
-/// [`Parser<'a>`] implements `Iterator<Item = OwnedEvent>` directly,
-/// matching the pulldown-cmark architecture where the parser struct is
-/// also the iterator.
-pub type EventIter<'a> = Parser<'a>;
+pub use crate::parse::EventIter;
 
 /// An owned event from an AsciiDoc document.
 #[derive(Debug)]
@@ -87,10 +80,10 @@ pub enum OwnedEvent {
     Anchor { id: String },
 }
 
-/// Collect a complete AsciiDoc from a [`Parser`] used as an event iterator.
+/// Collect a complete AsciiDoc from an [`EventIter`] used as an event iterator.
 /// Called by `parse::parse()` to reconstruct the AST from events.
 pub(crate) fn collect_doc_from_iter(
-    iter: &mut Parser<'_>,
+    iter: &mut EventIter<'_>,
 ) -> (Vec<Block>, std::collections::HashMap<String, String>, Vec<Diagnostic>) {
     let mut block_stack: Vec<BlockFrame> = vec![BlockFrame::Document { blocks: Vec::new() }];
     let mut inline_ctx: Vec<InlineFrame> = Vec::new();

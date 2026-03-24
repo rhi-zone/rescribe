@@ -21,7 +21,7 @@ pub fn parse(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
     crate::events::collect_doc_from_iter(input)
 }
 
-/// Phase tracker for `Parser`'s `Iterator` implementation.
+/// Phase tracker for `EventIter`'s `Iterator` implementation.
 #[derive(PartialEq)]
 pub(crate) enum Phase {
     /// Parsing top-level blocks.
@@ -32,7 +32,7 @@ pub(crate) enum Phase {
     Done,
 }
 
-pub struct Parser<'a> {
+pub struct EventIter<'a> {
     input: &'a str,
     lines: Vec<&'a str>,
     /// Byte offset of the start of each line.
@@ -48,7 +48,7 @@ pub struct Parser<'a> {
     phase: Phase,
 }
 
-impl<'a> Parser<'a> {
+impl<'a> EventIter<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut lines = Vec::new();
         let mut offsets = Vec::new();
@@ -63,7 +63,7 @@ impl<'a> Parser<'a> {
             lines.pop();
             offsets.pop();
         }
-        let mut parser = Parser {
+        let mut parser = EventIter {
             input,
             lines,
             line_offsets: offsets,
@@ -769,7 +769,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-impl Iterator for Parser<'_> {
+impl Iterator for EventIter<'_> {
     type Item = OwnedEvent;
 
     fn next(&mut self) -> Option<OwnedEvent> {

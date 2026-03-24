@@ -3,7 +3,6 @@
 use std::collections::VecDeque;
 
 use crate::ast::*;
-use crate::parse::OrgParser;
 
 /// An owned event from an Org-mode document (no borrowed data).
 #[derive(Debug)]
@@ -120,11 +119,7 @@ pub enum OwnedEvent {
 
 // ── True pull iterator ────────────────────────────────────────────────────────
 
-/// Public streaming event iterator over an Org-mode document.
-///
-/// `OrgParser<'a>` implements `Iterator<Item = OwnedEvent>` directly.
-/// This alias exists for backwards compatibility.
-pub type EventIter<'a> = OrgParser<'a>;
+pub use crate::parse::EventIter;
 
 // ── Tree builder (inverse of the collect_* functions) ────────────────────────
 
@@ -683,7 +678,7 @@ fn collect_inline_events(inline: &Inline, q: &mut VecDeque<OwnedEvent>) {
 
 /// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
 pub fn events(input: &str) -> EventIter<'_> {
-    OrgParser::new(input)
+    EventIter::new(input)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

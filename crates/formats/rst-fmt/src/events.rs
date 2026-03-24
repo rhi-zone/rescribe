@@ -82,11 +82,7 @@ pub enum OwnedEvent {
     EndRstSpan,
 }
 
-/// A streaming event iterator over a parsed RST document.
-///
-/// This is a type alias for [`crate::Parser`], which implements
-/// [`Iterator<Item = OwnedEvent>`] directly.
-pub type EventIter<'a> = crate::Parser<'a>;
+pub use crate::EventIter;
 
 
 /// Collect all blocks from an [`EventIter`] into a `Vec<Block>`.

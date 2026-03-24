@@ -25,7 +25,7 @@ pub use parse::{parse, parse_inline_content};
 
 /// Return a streaming event iterator over the AsciiDoc source.
 pub fn events(input: &str) -> EventIter<'_> {
-    parse::Parser::new(input)
+    parse::EventIter::new(input)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

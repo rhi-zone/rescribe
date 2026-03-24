@@ -1,10 +1,10 @@
 //! Streaming event iterator over a Djot document.
 //!
-//! `EventIter<'a>` is a type alias for `Parser<'a>`, which implements
-//! `Iterator<Item = OwnedEvent>` directly. Events are yielded lazily, one
-//! block at a time, via `parse_one_block()`. No full AST is built internally.
-//! `parse()` reconstructs a `DjotDoc` from an `EventIter` via a stack-based
-//! tree builder in `collect_doc_from_iter()`.
+//! `EventIter<'a>` is the concrete struct (defined in `parse.rs`) that
+//! implements `Iterator<Item = OwnedEvent>` directly. Events are yielded
+//! lazily, one block at a time, via `parse_one_block()`. No full AST is
+//! built internally. `parse()` reconstructs a `DjotDoc` from an `EventIter`
+//! via a stack-based tree builder in `collect_doc_from_iter()`.
 
 use crate::ast::*;
 use std::collections::VecDeque;
@@ -148,11 +148,7 @@ pub enum OwnedEvent {
 
 // ── True pull iterator ────────────────────────────────────────────────────────
 
-/// Public iterator that lazily yields `OwnedEvent` items — one block at a time.
-///
-/// `Parser` implements `Iterator<Item = OwnedEvent>` directly. This type alias
-/// preserves the public API name.
-pub type EventIter<'a> = crate::parse::Parser<'a>;
+pub use crate::parse::EventIter;
 
 // ── Tree builder: reconstruct DjotDoc from EventIter ─────────────────────────
 

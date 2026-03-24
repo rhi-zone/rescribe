@@ -13,12 +13,12 @@ use crate::events::OwnedEvent;
 /// Parsing is infallible — unknown constructs produce [`Diagnostic`]s instead
 /// of hard errors.
 pub fn parse(input: &str) -> (OrgDoc, Vec<Diagnostic>) {
-    let mut iter = OrgParser::new(input);
+    let mut iter = EventIter::new(input);
     let (blocks, metadata, diagnostics) = crate::events::collect_doc_from_iter(&mut iter);
     (OrgDoc { blocks, metadata }, diagnostics)
 }
 
-pub struct OrgParser<'a> {
+pub struct EventIter<'a> {
     lines: Vec<&'a str>,
     pos: usize,
     pub diagnostics: Vec<Diagnostic>,
@@ -34,7 +34,7 @@ pub struct OrgParser<'a> {
     pub(crate) done: bool,
 }
 
-impl<'a> OrgParser<'a> {
+impl<'a> EventIter<'a> {
     pub fn new(input: &'a str) -> Self {
         let lines: Vec<&str> = input.lines().collect();
         Self {
@@ -664,7 +664,7 @@ impl<'a> OrgParser<'a> {
     }
 }
 
-impl Iterator for OrgParser<'_> {
+impl Iterator for EventIter<'_> {
     type Item = OwnedEvent;
 
     fn next(&mut self) -> Option<OwnedEvent> {

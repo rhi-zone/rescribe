@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 /// Parsing is always infallible: malformed constructs produce diagnostics
 /// rather than errors.
 pub fn parse(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
-    let mut iter = Parser::new(input);
+    let mut iter = EventIter::new(input);
     let (blocks, attributes, diagnostics) = crate::events::collect_doc_from_iter(&mut iter);
     let doc = AsciiDoc { blocks, attributes, span: Span::NONE };
     (doc, diagnostics)
@@ -21,7 +21,7 @@ pub fn parse(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
-pub struct Parser<'a> {
+pub struct EventIter<'a> {
     lines: Vec<&'a str>,
     line_idx: usize,
     pub(crate) attributes: std::collections::HashMap<String, String>,
@@ -38,7 +38,7 @@ pub struct Parser<'a> {
     iter_done: bool,
 }
 
-impl<'a> Parser<'a> {
+impl<'a> EventIter<'a> {
     pub fn new(input: &'a str) -> Self {
         let lines: Vec<&str> = input.lines().collect();
         Self {
@@ -1050,7 +1050,7 @@ impl<'a> Parser<'a> {
 
 // ── Iterator impl ─────────────────────────────────────────────────────────────
 
-impl Iterator for Parser<'_> {
+impl Iterator for EventIter<'_> {
     type Item = OwnedEvent;
 
     fn next(&mut self) -> Option<OwnedEvent> {
