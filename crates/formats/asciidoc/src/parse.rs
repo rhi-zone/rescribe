@@ -11,14 +11,10 @@ use crate::ast::{
 /// Parsing is always infallible: malformed constructs produce diagnostics
 /// rather than errors.
 pub fn parse(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
-    let mut p = Parser::new(input);
-    let (blocks, attributes) = p.parse_document();
-    let doc = AsciiDoc {
-        blocks,
-        attributes,
-        span: Span::NONE,
-    };
-    (doc, p.diagnostics)
+    let mut iter = crate::events::EventIter::new(input);
+    let (blocks, attributes, diagnostics) = crate::events::collect_doc_from_iter(&mut iter);
+    let doc = AsciiDoc { blocks, attributes, span: Span::NONE };
+    (doc, diagnostics)
 }
 
 // ── Parser ────────────────────────────────────────────────────────────────────
@@ -54,11 +50,11 @@ impl<'a> Parser<'a> {
         self.lines.get(self.line_idx).copied()
     }
 
-    fn advance_line(&mut self) {
+    pub(crate) fn advance_line(&mut self) {
         self.line_idx += 1;
     }
 
-    fn is_eof(&self) -> bool {
+    pub(crate) fn is_eof(&self) -> bool {
         self.line_idx >= self.lines.len()
     }
 
@@ -68,35 +64,17 @@ impl<'a> Parser<'a> {
             .unwrap_or(true)
     }
 
-    fn skip_blank_lines(&mut self) {
+    pub(crate) fn skip_blank_lines(&mut self) {
         while !self.is_eof() && self.is_blank_line() {
             self.advance_line();
         }
     }
 
-    pub(crate) fn parse_document(
-        &mut self,
-    ) -> (Vec<Block>, std::collections::HashMap<String, String>) {
-        let mut blocks = Vec::new();
-
-        while !self.is_eof() {
-            self.skip_blank_lines();
-            if self.is_eof() {
-                break;
-            }
-
-            if let Some(block) = self.try_parse_block() {
-                blocks.push(block);
-            } else {
-                // Fallback: skip line to prevent infinite loop
-                self.advance_line();
-            }
-        }
-
-        (blocks, std::mem::take(&mut self.attributes))
+    pub(crate) fn take_attributes(&mut self) -> std::collections::HashMap<String, String> {
+        std::mem::take(&mut self.attributes)
     }
 
-    fn try_parse_block(&mut self) -> Option<Block> {
+    pub(crate) fn try_parse_block(&mut self) -> Option<Block> {
         // Skip document attribute lines (:attr: value) iteratively to avoid
         // stack overflow on documents with many consecutive attribute lines.
         loop {
