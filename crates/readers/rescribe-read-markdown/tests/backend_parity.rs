@@ -192,3 +192,32 @@ parity!(triple_backtick_newline_vt, "```\n\x0b");
 // CommonMark flanking rules may find valid emphasis in the same source. This is an
 // upstream bug in tree-sitter-md's inline grammar; inputs with [* or [_ (single,
 // not doubled) are skipped in the parity fuzz target.
+
+// Reference images without a matching link definition: tree-sitter-md parses
+// shortcut/collapsed/full reference images as image nodes even when no definition
+// exists. The adapter now demotes these to text using the inline source, matching
+// pulldown-cmark's behaviour (which also falls back to text when no ref is found).
+parity!(image_ref_shortcut_no_def, "![alt]");
+parity!(image_ref_with_tab_newline, "![\tq\t\n]");
+parity!(image_ref_with_ctrl_after, "![\tq\t\n]\x19\n]");
+
+// *a*a*a: tree-sitter-md does not implement CommonMark's left-to-right opener
+// precedence ("earliest first") for emphasis. pulldown picks the first valid
+// opener+closer pair (*a*), tree-sitter picks a later pair (*a*). This is an
+// upstream tree-sitter-md bug; inputs where ≥3 single `*`/`_` delimiter runs
+// appear with alphanumeric chars on both sides of the middle delimiters are
+// skipped in the parity fuzz target.
+
+// \x0cR*\x14**: pulldown-cmark and tree-sitter-md differ in how non-whitespace
+// ASCII control characters (e.g. U+0014 DC4) adjacent to `*`/`_` affect emphasis
+// flanking analysis. Inputs where any `*` or `_` is immediately preceded by or
+// followed by a byte in range 0x01-0x08 or 0x0e-0x1f or 0x7f are skipped in the
+// parity fuzz target.
+
+// *a-*a-*a: tree-sitter-md incorrectly uses a `*` preceded by ASCII punctuation
+// and followed by a non-delimiter, non-whitespace character as an emphasis closer
+// even though CommonMark's flanking rules make it not right-flanking (condition
+// 2b fails: preceded by punctuation but NOT followed by whitespace or punctuation).
+// pulldown-cmark correctly produces plain text when no right-flanking closer exists.
+// Inputs where any `*`/`_` is preceded by non-delimiter ASCII punctuation AND
+// followed by a non-whitespace, non-punctuation character are skipped in parity fuzz.

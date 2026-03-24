@@ -799,7 +799,7 @@ impl<'a> Converter<'a> {
     }
 
     fn process_image(&self, tsnode: &tree_sitter::Node, offset: usize) -> Option<Node> {
-        let mut url = String::new();
+        let mut url: Option<String> = None;
         let mut alt = String::new();
         let mut title = String::new();
 
@@ -814,11 +814,12 @@ impl<'a> Converter<'a> {
                         .to_string();
                 }
                 "link_destination" => {
-                    url = self
-                        .inline_text(&child, offset)
-                        .trim_start_matches('<')
-                        .trim_end_matches('>')
-                        .to_string();
+                    url = Some(
+                        self.inline_text(&child, offset)
+                            .trim_start_matches('<')
+                            .trim_end_matches('>')
+                            .to_string(),
+                    );
                 }
                 "link_title" => {
                     let t = self.inline_text(&child, offset);
@@ -830,6 +831,26 @@ impl<'a> Converter<'a> {
                 _ => {}
             }
         }
+
+        // Reference images (shortcut/collapsed/full) without a matching definition
+        // have no link_destination child. tree-sitter-md still parses them as image
+        // nodes but pulldown-cmark correctly treats them as plain text since there's
+        // no reference to resolve. Detect by checking whether the image node ends with
+        // `)` (inline image with explicit URL) or `]` (reference image). If reference,
+        // demote to a text node using the original source.
+        let abs_end = offset + tsnode.end_byte();
+        let is_inline_image = self
+            .source
+            .as_bytes()
+            .get(abs_end.saturating_sub(1))
+            .copied()
+            == Some(b')');
+        let url = if is_inline_image {
+            url.unwrap_or_default()
+        } else {
+            let src = self.inline_text(tsnode, offset).to_string();
+            return Some(Node::new(node::TEXT).prop(prop::CONTENT, src));
+        };
 
         let mut img = Node::new(node::IMAGE)
             .prop(prop::URL, url)

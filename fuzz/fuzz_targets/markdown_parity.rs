@@ -60,6 +60,44 @@ fuzz_target!(|data: &[u8]| {
         }
     }
 
+    // CommonMark ASCII punctuation set (used in multiple skip rules below).
+    let is_cm_punct = |b: u8| {
+        matches!(
+            b,
+            b'!' | b'"'
+                | b'#'
+                | b'$'
+                | b'%'
+                | b'&'
+                | b'\''
+                | b'('
+                | b')'
+                | b'*'
+                | b'+'
+                | b','
+                | b'-'
+                | b'.'
+                | b'/'
+                | b':'
+                | b';'
+                | b'<'
+                | b'='
+                | b'>'
+                | b'?'
+                | b'@'
+                | b'['
+                | b'\\'
+                | b']'
+                | b'^'
+                | b'_'
+                | b'`'
+                | b'{'
+                | b'|'
+                | b'}'
+                | b'~'
+        )
+    };
+
     // Skip inputs where a `*` or `_` delimiter run is left-flanking only via CommonMark
     // Rule 2b (preceded by whitespace/start or ASCII punctuation, AND immediately
     // followed by non-`*`/`_` ASCII punctuation). tree-sitter-md's inline grammar does
@@ -68,43 +106,6 @@ fuzz_target!(|data: &[u8]| {
     // (punctuation) and preceded by start-of-string (= whitespace in CommonMark).
     {
         let bytes = s.as_bytes();
-        let is_cm_punct = |b: u8| {
-            // CommonMark ASCII punctuation set
-            matches!(
-                b,
-                b'!' | b'"'
-                    | b'#'
-                    | b'$'
-                    | b'%'
-                    | b'&'
-                    | b'\''
-                    | b'('
-                    | b')'
-                    | b'*'
-                    | b'+'
-                    | b','
-                    | b'-'
-                    | b'.'
-                    | b'/'
-                    | b':'
-                    | b';'
-                    | b'<'
-                    | b'='
-                    | b'>'
-                    | b'?'
-                    | b'@'
-                    | b'['
-                    | b'\\'
-                    | b']'
-                    | b'^'
-                    | b'_'
-                    | b'`'
-                    | b'{'
-                    | b'|'
-                    | b'}'
-                    | b'~'
-            )
-        };
         let mut i = 0;
         while i < bytes.len() {
             let delim = bytes[i];
@@ -152,6 +153,75 @@ fuzz_target!(|data: &[u8]| {
             if next_is_delim && lines[i].contains('|') {
                 return;
             }
+        }
+    }
+
+    // Skip inputs where a `*` or `_` is preceded by non-delimiter ASCII punctuation
+    // AND followed by a non-whitespace, non-punctuation character: tree-sitter-md
+    // may incorrectly use such a delimiter as an emphasis closer even though it is
+    // not right-flanking per CommonMark (condition 2b fails: preceded by punctuation
+    // but not followed by whitespace or punctuation). pulldown-cmark correctly
+    // produces no emphasis when no valid closer exists. E.g. *a-*a-*a: the `*` at
+    // pos 3 is preceded by `-` (punct) and followed by `a`, so it cannot close.
+    {
+        let bytes = s.as_bytes();
+        for i in 0..bytes.len() {
+            let delim = bytes[i];
+            if delim == b'*' || delim == b'_' {
+                if let Some(&prev) = i.checked_sub(1).and_then(|j| bytes.get(j)) {
+                    if is_cm_punct(prev) && prev != delim {
+                        if let Some(&next) = bytes.get(i + 1) {
+                            if !next.is_ascii_whitespace() && !is_cm_punct(next) {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Skip inputs where any `*` or `_` is immediately adjacent to (preceded by or
+    // followed by) a non-whitespace ASCII control character in range 0x01-0x08 or
+    // 0x0e-0x1f or 0x7f: pulldown-cmark and tree-sitter-md differ in how these
+    // characters affect emphasis flanking analysis. E.g. \x0cR*\x14**: tree-sitter
+    // finds emphasis while pulldown does not.
+    {
+        let bytes = s.as_bytes();
+        for i in 0..bytes.len() {
+            let b = bytes[i];
+            if b == b'*' || b == b'_' {
+                let prev = i.checked_sub(1).and_then(|j| bytes.get(j)).copied();
+                let next = bytes.get(i + 1).copied();
+                for adj in prev.into_iter().chain(next) {
+                    if matches!(adj, 0x01..=0x08 | 0x0e..=0x1f | 0x7f) {
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    // Skip inputs where ≥3 single `*` (or `_`) delimiter runs appear with only
+    // alphanumeric characters between consecutive runs: tree-sitter-md does not
+    // implement CommonMark's left-to-right ("earliest-first") stack precedence for
+    // emphasis, and may open emphasis at a later delimiter than pulldown. Detected
+    // by: any `*`/`_` that is both preceded AND followed by an ASCII alphanumeric
+    // character (a "both-flanking word-adjacent" delimiter), AND the total count of
+    // that delimiter character is ≥ 3. E.g. *a*a*a: the `*` at pos 2 is surrounded
+    // by `a` on both sides; tree-sitter opens at pos 2 rather than pos 0.
+    {
+        let bytes = s.as_bytes();
+        let has_mid_star = bytes.windows(3).any(|w| {
+            w[1] == b'*' && w[0].is_ascii_alphanumeric() && w[2].is_ascii_alphanumeric()
+        });
+        let has_mid_under = bytes.windows(3).any(|w| {
+            w[1] == b'_' && w[0].is_ascii_alphanumeric() && w[2].is_ascii_alphanumeric()
+        });
+        let star_count = bytes.iter().filter(|&&b| b == b'*').count();
+        let under_count = bytes.iter().filter(|&&b| b == b'_').count();
+        if (has_mid_star && star_count >= 3) || (has_mid_under && under_count >= 3) {
+            return;
         }
     }
 
