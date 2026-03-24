@@ -201,6 +201,12 @@ The format tiers below determine priority order within this model.
 
 ### Vertical priority order (Tier A)
 
+**CURRENT TOP PRIORITY: `commonmark-fmt` — see below.**
+
+0. `commonmark-fmt` — write from scratch; tree-sitter-md is explicitly not for
+   correctness-critical parsing (its README says so); pulldown-cmark is events-only
+   with no proper AST; the Rust ecosystem has no quality CommonMark AST crate.
+   This fills the most important ecosystem gap. See "commonmark-fmt vertical" below.
 1. `rtf-fmt` — highest risk, most isolated, no viable crate exists ✓
 2. `rst-fmt` — large parser, complex spec, `docutils` is the reference ✓
 3. `asciidoc` — similar scope; `asciidoctor` as oracle ✓
@@ -212,6 +218,37 @@ The format tiers below determine priority order within this model.
 9. LaTeX, Typst — read-limited; deferred until all other tiers complete; writer is
    high quality but reader quality ceiling is bounded by package recognition.
    See "Tier A (read-limited)" above.
+
+### commonmark-fmt vertical (CURRENT)
+
+**Why wrapping pulldown-cmark, not from scratch:**
+pulldown-cmark has 77M+ downloads; it IS the Rust CommonMark ecosystem (used by
+mdBook, rustdoc). It already exposes `into_offset_iter()` yielding `(Event, Range<usize>)`
+pairs — spans on every event, explicitly designed for AST construction (see its README:
+"quite straightforward to construct an AST"). The tree-sitter backend was solving a
+problem pulldown already solved; we just weren't using the right API.
+
+**Crate:** `crates/formats/commonmark-fmt/`
+Depends on pulldown-cmark. No rescribe dependency. Exposes:
+- `parse(&[u8]) -> (Ast, Vec<Diagnostic>)` — drives pulldown's offset iterator,
+  assembles (Event, Range) pairs into a full tree with Span on every node
+- `emit(ast: &Ast) -> Vec<u8>` — round-trip correct
+- `events(&[u8]) -> impl Iterator<Item = Event>` — thin re-export of pulldown events
+- Feature flags: ast, streaming, batch, writer-streaming, writer-builder (all default=true)
+
+**Build order:**
+1. [ ] Complete `fixtures/commonmark/` — all COVERAGE.md boxes checked
+2. [ ] `ast.rs` — Block/Inline enums with Span on every node (own types, no pulldown/rescribe)
+3. [ ] `parse.rs` — `pulldown_cmark::Parser::new_ext(...).into_offset_iter()` → Ast
+4. [ ] `emit.rs` — Ast → bytes, round-trip guarantee
+5. [ ] `events.rs` — streaming iterator
+6. [ ] No-panic fuzz gate (`fuzz_commonmark_reader`)
+7. [ ] Round-trip fuzz (`fuzz_commonmark_roundtrip`) — clean
+8. [ ] `rescribe-read-markdown`: drop tree-sitter backend; thin adapter on commonmark-fmt
+9. [ ] 5-Production sign-off
+
+**GFM extensions** (after base complete):
+Tables, strikethrough (`~~text~~`), task list items (`- [x]`), extended autolinks
 
 ### Milestone: M1 ✓
 
