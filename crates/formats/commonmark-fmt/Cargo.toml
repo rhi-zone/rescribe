@@ -1,0 +1,20 @@
+[package]
+name = "commonmark-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CommonMark parser and emitter wrapping pulldown-cmark — no rescribe dependency"
+
+[features]
+default = ["ast", "streaming", "batch", "writer-streaming", "writer-builder"]
+ast = []
+streaming = []
+batch = []
+writer-streaming = []
+writer-builder = ["writer-streaming"]
+
+[dependencies]
+pulldown-cmark = { version = "0.13", default-features = false }
+
+[dev-dependencies]
