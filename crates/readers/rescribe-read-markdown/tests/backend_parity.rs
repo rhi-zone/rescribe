@@ -149,6 +149,8 @@ parity!(bracket_newline_bracket, "[\n]");
 // but tree-sitter-md's block grammar produces paragraph instead. Inputs where every
 // pipe-containing line is delimiter-only (|, -, :, space) are skipped in parity fuzz.
 
+parity!(asterisk_dc4_double_asterisk_dc4, "*\x14**\x14");
+
 // double_tilde_underscore_tilde_underscore (~~_~_): excluded — contains a lone ~
 // at position 3 which causes single-tilde divergence; covered by the fuzz skip
 // "strip ~~ pairs and check if ~ remains".

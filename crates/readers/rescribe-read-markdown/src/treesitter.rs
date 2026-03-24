@@ -426,6 +426,22 @@ impl<'a> Converter<'a> {
             }
 
             "emphasis" => {
+                // CommonMark Rule 17: if the closing delimiter run is ambiguous and the
+                // sum of open+close run lengths is a multiple of 3 (but neither is),
+                // tree-sitter-md pairs them but pulldown-cmark must not. Demote to text.
+                let node_start = offset + tsnode.start_byte();
+                let node_end = offset + tsnode.end_byte();
+                let open_len = 1usize;
+                let close_start = node_end.saturating_sub(open_len);
+                if check_rule17(self.source.as_bytes(), node_start, open_len, close_start) {
+                    let text = self.inline_text(tsnode, offset).to_string();
+                    return Some(self.with_inline_span(
+                        Node::new(node::TEXT).prop(prop::CONTENT, text),
+                        tsnode,
+                        offset,
+                    ));
+                }
+
                 let children = self.process_inline_children(tsnode, offset);
                 let mut em = Node::new(node::EMPHASIS).children(children);
 
@@ -443,6 +459,20 @@ impl<'a> Converter<'a> {
             }
 
             "strong_emphasis" => {
+                // Apply Rule 17 for strong_emphasis (opening run length = 2) as well.
+                let node_start = offset + tsnode.start_byte();
+                let node_end = offset + tsnode.end_byte();
+                let open_len = 2usize;
+                let close_start = node_end.saturating_sub(open_len);
+                if check_rule17(self.source.as_bytes(), node_start, open_len, close_start) {
+                    let text = self.inline_text(tsnode, offset).to_string();
+                    return Some(self.with_inline_span(
+                        Node::new(node::TEXT).prop(prop::CONTENT, text),
+                        tsnode,
+                        offset,
+                    ));
+                }
+
                 let children = self.process_inline_children(tsnode, offset);
                 let mut strong = Node::new(node::STRONG).children(children);
 
@@ -1054,6 +1084,71 @@ fn push_gap_text(text: &str, nodes: &mut Vec<Node>) {
             nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, part.to_string()));
         }
         first = false;
+    }
+}
+
+/// CommonMark Rule 17: if the closing delimiter run can both open and close emphasis,
+/// the sum of the opening and closing run lengths must not be a multiple of 3 unless
+/// both are multiples of 3.
+///
+/// Returns `true` when Rule 17 PREVENTS the emphasis (i.e. the node should be demoted
+/// to raw text).  Only applies to ASCII flanking contexts; for non-ASCII we play it safe
+/// and return `false` (i.e. do not demote).
+///
+/// Arguments:
+/// - `src`:        the full normalised source bytes (the inline tree is indexed into this)
+/// - `open_start`: absolute byte position of the first opening-delimiter character
+/// - `open_len`:   number of delimiter characters in the opening run
+/// - `close_start`: absolute byte position of the first closing-delimiter character
+///   (`node_end - open_len` for symmetric emphasis)
+fn check_rule17(src: &[u8], open_start: usize, open_len: usize, close_start: usize) -> bool {
+    let delim = match src.get(open_start) {
+        Some(&b) if b == b'*' || b == b'_' => b,
+        _ => return false,
+    };
+
+    // Measure the full delimiter run that contains the closing delimiter.
+    // Walk backwards from close_start and forwards from close_start.
+    let back_count = src[..close_start]
+        .iter()
+        .rev()
+        .take_while(|&&b| b == delim)
+        .count();
+    let fwd_count = src[close_start..]
+        .iter()
+        .take_while(|&&b| b == delim)
+        .count();
+    let close_full_run = back_count + fwd_count;
+
+    // If sum is not a multiple of 3, Rule 17 cannot fire.
+    let sum = open_len + close_full_run;
+    if !sum.is_multiple_of(3) {
+        return false;
+    }
+    // If both are multiples of 3, Rule 17 does not prevent the pairing.
+    if open_len.is_multiple_of(3) && close_full_run.is_multiple_of(3) {
+        return false;
+    }
+
+    // Rule 17 only applies when the closing run is *ambiguous* — i.e. it can both
+    // open and close emphasis (is both left-flanking and right-flanking).
+    // A delimiter run is ambiguous when neither adjacent character is a
+    // Unicode whitespace or punctuation character.  Only check ASCII context here;
+    // for non-ASCII we conservatively skip the demotion.
+    let run_begin = close_start - back_count;
+    let run_end = close_start + fwd_count;
+
+    let char_before = run_begin.checked_sub(1).and_then(|i| src.get(i).copied());
+    let char_after = src.get(run_end).copied();
+
+    let is_ascii_neutral = |b: u8| -> bool {
+        b.is_ascii() && !b.is_ascii_whitespace() && !b.is_ascii_punctuation()
+    };
+
+    match (char_before, char_after) {
+        (Some(b), Some(a)) => is_ascii_neutral(b) && is_ascii_neutral(a),
+        // At start/end of inline span — conservatively do not demote.
+        _ => false,
     }
 }
 
