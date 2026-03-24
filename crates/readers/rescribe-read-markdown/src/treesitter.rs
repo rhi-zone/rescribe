@@ -1106,7 +1106,7 @@ fn trim_cell_content(mut nodes: Vec<Node>) -> Vec<Node> {
     let mut trim_next = true; // first node is always a line start
     for node in &mut nodes {
         match node.kind.as_str() {
-            k if k == node::SOFT_BREAK => {
+            k if k == node::SOFT_BREAK || k == node::LINE_BREAK => {
                 trim_next = true;
             }
             k if k == node::TEXT && trim_next => {

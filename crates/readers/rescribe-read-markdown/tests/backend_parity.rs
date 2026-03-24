@@ -139,3 +139,5 @@ parity!(tilde_dollar_tilde_g, "~$~G");
 // Single-tilde inputs are skipped in the parity fuzz target.
 
 parity!(asterisk_a_bracket_caret_asterisk_bracket, "*a[^*[");
+
+parity!(newline_bs_newline_vt_u_bs_paren_lt, "\n\\\n\x0bu\\(<");
