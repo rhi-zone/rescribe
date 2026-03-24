@@ -41,6 +41,82 @@ fuzz_target!(|data: &[u8]| {
         }
     }
 
+    // Skip inputs where a `*` or `_` delimiter run is left-flanking only via CommonMark
+    // Rule 2b (preceded by whitespace/start or ASCII punctuation, AND immediately
+    // followed by non-`*`/`_` ASCII punctuation). tree-sitter-md's inline grammar does
+    // not implement this branch of the flanking rules, causing divergence when
+    // pulldown-cmark correctly recognises emphasis. E.g. *$*$ — the * is followed by $
+    // (punctuation) and preceded by start-of-string (= whitespace in CommonMark).
+    {
+        let bytes = s.as_bytes();
+        let is_cm_punct = |b: u8| {
+            // CommonMark ASCII punctuation set
+            matches!(
+                b,
+                b'!' | b'"'
+                    | b'#'
+                    | b'$'
+                    | b'%'
+                    | b'&'
+                    | b'\''
+                    | b'('
+                    | b')'
+                    | b'*'
+                    | b'+'
+                    | b','
+                    | b'-'
+                    | b'.'
+                    | b'/'
+                    | b':'
+                    | b';'
+                    | b'<'
+                    | b'='
+                    | b'>'
+                    | b'?'
+                    | b'@'
+                    | b'['
+                    | b'\\'
+                    | b']'
+                    | b'^'
+                    | b'_'
+                    | b'`'
+                    | b'{'
+                    | b'|'
+                    | b'}'
+                    | b'~'
+            )
+        };
+        let mut i = 0;
+        while i < bytes.len() {
+            let delim = bytes[i];
+            if delim == b'*' || delim == b'_' {
+                // Measure the run
+                let run_start = i;
+                while i < bytes.len() && bytes[i] == delim {
+                    i += 1;
+                }
+                let run_end = i;
+                let after = bytes.get(run_end).copied();
+                let before = if run_start == 0 {
+                    Some(b' ') // start-of-string counts as whitespace
+                } else {
+                    bytes.get(run_start - 1).copied()
+                };
+                // Left-flanking by rule 2b only: after is non-delim ASCII punct, before
+                // is whitespace or ASCII punct.
+                if let (Some(a), Some(b)) = (after, before) {
+                    if is_cm_punct(a) && a != delim {
+                        if b.is_ascii_whitespace() || is_cm_punct(b) {
+                            return;
+                        }
+                    }
+                }
+            } else {
+                i += 1;
+            }
+        }
+    }
+
     // Skip inputs where every pipe-containing line consists only of |, -, :, and
     // whitespace: pulldown-cmark's GFM table extension recognises these as minimal
     // tables (e.g. |-\n|-) but tree-sitter-md's block grammar does not. Inputs

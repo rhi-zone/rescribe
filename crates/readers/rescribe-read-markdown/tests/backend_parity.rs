@@ -159,6 +159,14 @@ parity!(backtick_tab_double_backtick_tab_backtick, "`\t``\t`");
 
 parity!(dot_tab_newline_dc3, ".\t\n\x13");
 
+// asterisk_dollar_asterisk_dollar (*$*$): excluded — tree-sitter-md's inline grammar
+// does not implement CommonMark flanking Rule 2b: a `*` that is left-flanking only
+// because it is preceded by whitespace/start AND followed by ASCII punctuation (e.g.
+// `$`). pulldown-cmark recognises *$*$ as emphasis(text("$")); tree-sitter produces
+// text("*$*$"). This is an upstream tree-sitter-md bug; inputs where any `*` or `_`
+// run is followed by non-delimiter ASCII punctuation and preceded by whitespace or
+// ASCII punctuation are skipped in the parity fuzz target.
+
 // double_tilde_underscore_tilde_underscore (~~_~_): excluded — contains a lone ~
 // at position 3 which causes single-tilde divergence; covered by the fuzz skip
 // "strip ~~ pairs and check if ~ remains".
