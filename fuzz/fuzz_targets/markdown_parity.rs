@@ -15,12 +15,12 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    // Skip inputs with single tildes: pulldown-cmark and tree-sitter-md implement
-    // different single-tilde (~text~) strikethrough rules. Both agree on ~~text~~
-    // (GFM standard); single-tilde behavior diverges because tree-sitter-md's
-    // inline grammar produces empty nodes for some patterns (e.g. [~[~) while
-    // pulldown's flanking-rule logic parses them differently.
-    if s.contains('~') && !s.contains("~~") {
+    // Skip inputs that contain a ~ not part of a ~~ pair: pulldown-cmark and
+    // tree-sitter-md implement different single-tilde (~text~) strikethrough rules.
+    // Both agree on ~~text~~ (GFM standard). Divergence arises whenever any ~
+    // appears that isn't paired (e.g. [~[~, ~~_~_).
+    // Detection: strip all ~~ pairs; if ~ still present, skip.
+    if s.replace("~~", "").contains('~') {
         return;
     }
 

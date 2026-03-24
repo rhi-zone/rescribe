@@ -144,6 +144,10 @@ parity!(newline_bs_newline_vt_u_bs_paren_lt, "\n\\\n\x0bu\\(<");
 
 parity!(bracket_newline_bracket, "[\n]");
 
+// double_tilde_underscore_tilde_underscore (~~_~_): excluded — contains a lone ~
+// at position 3 which causes single-tilde divergence; covered by the fuzz skip
+// "strip ~~ pairs and check if ~ remains".
+
 // bracket_asterisk_bracket_asterisk ([*[*): excluded — tree-sitter-md inline grammar
 // produces an empty (inline) node for inputs where [ is immediately followed by a
 // single * or _ (e.g. [*[*, [_[_), falling back to raw text. pulldown-cmark's
