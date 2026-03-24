@@ -459,11 +459,29 @@ impl<'a> Converter<'a> {
             }
 
             "hard_line_break" => {
+                // CommonMark requires 2+ literal space characters (0x20) OR a backslash
+                // before the newline to trigger a hard line break. tree-sitter-md
+                // incorrectly treats a trailing tab as creating a hard line break
+                // (tab expansion to 3 spaces). Detect this: check the bytes in the
+                // hard_line_break span. If none of them is a space (0x20) and none is
+                // a backslash, demote to soft_break.
+                let abs_start = offset + tsnode.start_byte();
+                let abs_end = offset + tsnode.end_byte();
+                let span_bytes = &self.source.as_bytes()[abs_start..abs_end];
+                let has_space_or_backslash = span_bytes
+                    .iter()
+                    .any(|&b| b == b' ' || b == b'\\');
+                if !has_space_or_backslash {
+                    return Some(self.with_inline_span(
+                        Node::new(node::SOFT_BREAK),
+                        tsnode,
+                        offset,
+                    ));
+                }
                 let mut n = Node::new(node::LINE_BREAK);
                 if self.preserve_spans {
                     // Detect backslash vs two-space hard break from the source
-                    let start = offset + tsnode.start_byte();
-                    if self.source.as_bytes().get(start) == Some(&b'\\') {
+                    if self.source.as_bytes().get(abs_start) == Some(&b'\\') {
                         n = n.prop(prop::MD_BREAK_CHAR, "\\");
                     }
                 }
