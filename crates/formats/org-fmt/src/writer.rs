@@ -10,7 +10,7 @@
 //!
 //! let mut w = Writer::new(Vec::<u8>::new());
 //! w.write_event(OwnedEvent::StartHeading { level: 1, todo: None, priority: None, tags: vec![] });
-//! w.write_event(OwnedEvent::Text("Hello".to_string()));
+//! w.write_event(OwnedEvent::Text("Hello".to_string().into()));
 //! w.write_event(OwnedEvent::EndHeading);
 //! let bytes = w.finish();
 //! ```
@@ -167,7 +167,7 @@ impl DocBuilder {
                     language,
                     header_args,
                     name,
-                    content,
+                    content: content.into_owned(),
                     span: Span::NONE,
                 });
             }
@@ -265,8 +265,8 @@ impl DocBuilder {
             }
 
             // ── Inline events ──────────────────────────────────────────────────
-            OwnedEvent::Text(text) => {
-                self.push_inline(Inline::Text { text, span: Span::NONE });
+            OwnedEvent::Text(cow) => {
+                self.push_inline(Inline::Text { text: cow.into_owned(), span: Span::NONE });
             }
             OwnedEvent::SoftBreak => {
                 self.push_inline(Inline::SoftBreak { span: Span::NONE });
@@ -322,8 +322,8 @@ impl DocBuilder {
                     self.push_inline(Inline::Subscript(inlines, Span::NONE));
                 }
             }
-            OwnedEvent::InlineCode(content) => {
-                self.push_inline(Inline::Code(content, Span::NONE));
+            OwnedEvent::InlineCode(cow) => {
+                self.push_inline(Inline::Code(cow.into_owned(), Span::NONE));
             }
             OwnedEvent::StartLink { url } => {
                 self.stack.push(Frame::Link { url, inlines: vec![] });
@@ -421,7 +421,7 @@ mod tests {
             priority: None,
             tags: vec![],
         });
-        w.write_event(OwnedEvent::Text("Hello".to_string()));
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("Hello".to_string())));
         w.write_event(OwnedEvent::EndHeading);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();
@@ -432,7 +432,7 @@ mod tests {
     fn test_writer_paragraph() {
         let mut w = Writer::new(Vec::<u8>::new());
         w.write_event(OwnedEvent::StartParagraph);
-        w.write_event(OwnedEvent::Text("World".to_string()));
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("World".to_string())));
         w.write_event(OwnedEvent::EndParagraph);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();

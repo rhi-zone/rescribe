@@ -78,7 +78,7 @@ impl<F: FnMut(OwnedEvent)> BatchSink<F> {
     pub fn finish(mut self) {
         let s = String::from_utf8_lossy(&self.buf);
         for event in crate::events::events(&s) {
-            (self.callback)(event);
+            (self.callback)(event.into_owned());
         }
     }
 }

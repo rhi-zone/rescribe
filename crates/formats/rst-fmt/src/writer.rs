@@ -11,7 +11,7 @@
 //!
 //! let mut w = Writer::new(Vec::<u8>::new());
 //! w.write_event(OwnedEvent::StartHeading { level: 1 });
-//! w.write_event(OwnedEvent::Text("Hello".to_string()));
+//! w.write_event(OwnedEvent::Text("Hello".to_string().into()));
 //! w.write_event(OwnedEvent::EndHeading);
 //! let bytes = w.finish();
 //! ```
@@ -285,8 +285,8 @@ impl DocBuilder {
             }
 
             // ── Inline events ──────────────────────────────────────────────────
-            OwnedEvent::Text(s) => {
-                self.push_inline(Inline::Text(s));
+            OwnedEvent::Text(cow) => {
+                self.push_inline(Inline::Text(cow.into_owned()));
             }
             OwnedEvent::SoftBreak => {
                 self.push_inline(Inline::SoftBreak);
@@ -350,8 +350,8 @@ impl DocBuilder {
                     self.push_inline(Inline::SmallCaps(inlines));
                 }
             }
-            OwnedEvent::Code(s) => {
-                self.push_inline(Inline::Code(s));
+            OwnedEvent::Code(cow) => {
+                self.push_inline(Inline::Code(cow.into_owned()));
             }
             OwnedEvent::StartLink { url } => {
                 self.stack.push(Frame::Link { url, inlines: vec![] });
@@ -450,7 +450,7 @@ mod tests {
     fn test_writer_heading() {
         let mut w = Writer::new(Vec::<u8>::new());
         w.write_event(OwnedEvent::StartHeading { level: 1 });
-        w.write_event(OwnedEvent::Text("Hello".to_string()));
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("Hello".to_string())));
         w.write_event(OwnedEvent::EndHeading);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();
@@ -461,7 +461,7 @@ mod tests {
     fn test_writer_paragraph() {
         let mut w = Writer::new(Vec::<u8>::new());
         w.write_event(OwnedEvent::StartParagraph);
-        w.write_event(OwnedEvent::Text("World".to_string()));
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("World".to_string())));
         w.write_event(OwnedEvent::EndParagraph);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();

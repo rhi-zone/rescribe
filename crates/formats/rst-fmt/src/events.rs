@@ -1,12 +1,18 @@
 //! Streaming event iterator over a parsed [`RstDoc`].
 
+use std::borrow::Cow;
 use std::collections::VecDeque;
 
 use crate::{Block, DefinitionItem, Inline, TableRow};
 
-/// An owned event from an RST document.
+/// A streaming event from an RST document.
+///
+/// Raw text content fields use `Cow<'a, str>` so that future optimisations can
+/// yield borrowed slices of the input without changing the public API.
+/// For the common case of fully-owned events (e.g. batch mode) use the
+/// [`OwnedEvent`] type alias.
 #[derive(Debug, Clone)]
-pub enum OwnedEvent {
+pub enum Event<'a> {
     // Block events
     StartParagraph,
     EndParagraph,
@@ -20,7 +26,7 @@ pub enum OwnedEvent {
     EndListItem,
     StartCodeBlock { language: Option<String> },
     EndCodeBlock,
-    CodeBlockContent(String),
+    CodeBlockContent(Cow<'a, str>),
     RawBlock { format: String, content: String },
     StartDiv { class: Option<String>, directive: Option<String> },
     EndDiv,
@@ -51,7 +57,7 @@ pub enum OwnedEvent {
     StartLineBlockLine,
     EndLineBlockLine,
     // Inline events
-    Text(String),
+    Text(Cow<'a, str>),
     SoftBreak,
     LineBreak,
     StartEmphasis,
@@ -68,7 +74,7 @@ pub enum OwnedEvent {
     EndSuperscript,
     StartSmallCaps,
     EndSmallCaps,
-    Code(String),
+    Code(Cow<'a, str>),
     StartLink { url: String },
     EndLink,
     InlineImage { url: String, alt: String },
@@ -80,6 +86,22 @@ pub enum OwnedEvent {
     MathInline { source: String },
     StartRstSpan { role: String },
     EndRstSpan,
+}
+
+/// Backwards-compatible alias for batch mode (all text is owned).
+pub type OwnedEvent = Event<'static>;
+
+impl<'a> Event<'a> {
+    /// Convert to an owned event (all `Cow::Borrowed` text fields become `Cow::Owned`).
+    pub fn into_owned(self) -> OwnedEvent {
+        match self {
+            Event::Text(cow) => Event::Text(Cow::Owned(cow.into_owned())),
+            Event::Code(cow) => Event::Code(Cow::Owned(cow.into_owned())),
+            Event::CodeBlockContent(cow) => Event::CodeBlockContent(Cow::Owned(cow.into_owned())),
+            // Safety: all other variants contain only String/'static fields.
+            other => unsafe { std::mem::transmute::<Event<'_>, OwnedEvent>(other) },
+        }
+    }
 }
 
 pub use crate::EventIter;
@@ -191,76 +213,76 @@ fn push_block(block: Block, block_stack: &mut [BlockFrame]) {
 }
 
 #[allow(clippy::too_many_lines)]
-fn handle_event(event: OwnedEvent, block_stack: &mut Vec<BlockFrame>, inline_ctx: &mut Vec<InlineFrame>) {
+fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx: &mut Vec<InlineFrame>) {
     match event {
         // ── Block openers ─────────────────────────────────────────────────────
-        OwnedEvent::StartParagraph => {
+        Event::StartParagraph => {
             block_stack.push(BlockFrame::Paragraph { inlines: Vec::new() });
         }
-        OwnedEvent::EndParagraph => {
+        Event::EndParagraph => {
             if let Some(BlockFrame::Paragraph { inlines }) = block_stack.pop() {
                 push_block(Block::Paragraph { inlines }, block_stack);
             }
         }
-        OwnedEvent::StartHeading { level } => {
+        Event::StartHeading { level } => {
             block_stack.push(BlockFrame::Heading { level, inlines: Vec::new() });
         }
-        OwnedEvent::EndHeading => {
+        Event::EndHeading => {
             if let Some(BlockFrame::Heading { level, inlines }) = block_stack.pop() {
                 push_block(Block::Heading { level, inlines }, block_stack);
             }
         }
-        OwnedEvent::StartCodeBlock { language } => {
+        Event::StartCodeBlock { language } => {
             block_stack.push(BlockFrame::CodeBlock { language, content: String::new() });
         }
-        OwnedEvent::CodeBlockContent(c) => {
+        Event::CodeBlockContent(cow) => {
             if let Some(BlockFrame::CodeBlock { content, .. }) = block_stack.last_mut() {
-                *content = c;
+                *content = cow.into_owned();
             }
         }
-        OwnedEvent::EndCodeBlock => {
+        Event::EndCodeBlock => {
             if let Some(BlockFrame::CodeBlock { language, content }) = block_stack.pop() {
                 push_block(Block::CodeBlock { language, content }, block_stack);
             }
         }
-        OwnedEvent::StartBlockquote => {
+        Event::StartBlockquote => {
             block_stack.push(BlockFrame::Blockquote { children: Vec::new() });
         }
-        OwnedEvent::EndBlockquote => {
+        Event::EndBlockquote => {
             if let Some(BlockFrame::Blockquote { children }) = block_stack.pop() {
                 push_block(Block::Blockquote { children }, block_stack);
             }
         }
-        OwnedEvent::StartList { ordered } => {
+        Event::StartList { ordered } => {
             block_stack.push(BlockFrame::List { ordered, items: Vec::new() });
         }
-        OwnedEvent::EndList => {
+        Event::EndList => {
             if let Some(BlockFrame::List { ordered, items }) = block_stack.pop() {
                 push_block(Block::List { ordered, items }, block_stack);
             }
         }
-        OwnedEvent::StartListItem => {
+        Event::StartListItem => {
             block_stack.push(BlockFrame::ListItem { blocks: Vec::new() });
         }
-        OwnedEvent::EndListItem => {
+        Event::EndListItem => {
             if let Some(BlockFrame::ListItem { blocks }) = block_stack.pop() {
                 if let Some(BlockFrame::List { items, .. }) = block_stack.last_mut() {
                     items.push(blocks);
                 }
             }
         }
-        OwnedEvent::StartDefinitionList => {
+        Event::StartDefinitionList => {
             block_stack.push(BlockFrame::DefinitionList { items: Vec::new() });
         }
-        OwnedEvent::EndDefinitionList => {
+        Event::EndDefinitionList => {
             if let Some(BlockFrame::DefinitionList { items }) = block_stack.pop() {
                 push_block(Block::DefinitionList { items }, block_stack);
             }
         }
-        OwnedEvent::StartDefinitionTerm => {
+        Event::StartDefinitionTerm => {
             block_stack.push(BlockFrame::DefinitionTerm { inlines: Vec::new() });
         }
-        OwnedEvent::EndDefinitionTerm => {
+        Event::EndDefinitionTerm => {
             if let Some(BlockFrame::DefinitionTerm { inlines }) = block_stack.pop() {
                 // Push a partial DefinitionItem with term filled, desc empty.
                 // The EndDefinitionDesc will complete it.
@@ -269,10 +291,10 @@ fn handle_event(event: OwnedEvent, block_stack: &mut Vec<BlockFrame>, inline_ctx
                 }
             }
         }
-        OwnedEvent::StartDefinitionDesc => {
+        Event::StartDefinitionDesc => {
             block_stack.push(BlockFrame::DefinitionDesc { inlines: Vec::new() });
         }
-        OwnedEvent::EndDefinitionDesc => {
+        Event::EndDefinitionDesc => {
             if let Some(BlockFrame::DefinitionDesc { inlines }) = block_stack.pop() {
                 if let Some(BlockFrame::DefinitionList { items }) = block_stack.last_mut() {
                     if let Some(last_item) = items.last_mut() {
@@ -281,91 +303,91 @@ fn handle_event(event: OwnedEvent, block_stack: &mut Vec<BlockFrame>, inline_ctx
                 }
             }
         }
-        OwnedEvent::StartDiv { class, directive } => {
+        Event::StartDiv { class, directive } => {
             block_stack.push(BlockFrame::Div { class, directive, children: Vec::new() });
         }
-        OwnedEvent::EndDiv => {
+        Event::EndDiv => {
             if let Some(BlockFrame::Div { class, directive, children }) = block_stack.pop() {
                 push_block(Block::Div { class, directive, children }, block_stack);
             }
         }
-        OwnedEvent::HorizontalRule => {
+        Event::HorizontalRule => {
             push_block(Block::HorizontalRule, block_stack);
         }
-        OwnedEvent::StartTable => {
+        Event::StartTable => {
             block_stack.push(BlockFrame::Table { rows: Vec::new() });
         }
-        OwnedEvent::EndTable => {
+        Event::EndTable => {
             if let Some(BlockFrame::Table { rows }) = block_stack.pop() {
                 push_block(Block::Table { rows }, block_stack);
             }
         }
-        OwnedEvent::StartTableRow { is_header } => {
+        Event::StartTableRow { is_header } => {
             block_stack.push(BlockFrame::TableRow { is_header, cells: Vec::new() });
         }
-        OwnedEvent::EndTableRow => {
+        Event::EndTableRow => {
             if let Some(BlockFrame::TableRow { is_header, cells }) = block_stack.pop() {
                 if let Some(BlockFrame::Table { rows }) = block_stack.last_mut() {
                     rows.push(TableRow { cells, is_header });
                 }
             }
         }
-        OwnedEvent::StartTableCell => {
+        Event::StartTableCell => {
             block_stack.push(BlockFrame::TableCell { inlines: Vec::new() });
         }
-        OwnedEvent::EndTableCell => {
+        Event::EndTableCell => {
             if let Some(BlockFrame::TableCell { inlines }) = block_stack.pop() {
                 if let Some(BlockFrame::TableRow { cells, .. }) = block_stack.last_mut() {
                     cells.push(inlines);
                 }
             }
         }
-        OwnedEvent::StartFootnoteDef { label } => {
+        Event::StartFootnoteDef { label } => {
             block_stack.push(BlockFrame::FootnoteDef { label, inlines: Vec::new() });
         }
-        OwnedEvent::EndFootnoteDef => {
+        Event::EndFootnoteDef => {
             if let Some(BlockFrame::FootnoteDef { label, inlines }) = block_stack.pop() {
                 push_block(Block::FootnoteDef { label, inlines }, block_stack);
             }
         }
-        OwnedEvent::MathDisplay { source } => {
+        Event::MathDisplay { source } => {
             push_block(Block::MathDisplay { source }, block_stack);
         }
-        OwnedEvent::StartAdmonition { admonition_type } => {
+        Event::StartAdmonition { admonition_type } => {
             block_stack.push(BlockFrame::Admonition { admonition_type, children: Vec::new() });
         }
-        OwnedEvent::EndAdmonition => {
+        Event::EndAdmonition => {
             if let Some(BlockFrame::Admonition { admonition_type, children }) = block_stack.pop() {
                 push_block(Block::Admonition { admonition_type, children }, block_stack);
             }
         }
-        OwnedEvent::StartFigure { url, alt } => {
+        Event::StartFigure { url, alt } => {
             block_stack.push(BlockFrame::Figure { url, alt, caption_inlines: Vec::new() });
         }
-        OwnedEvent::EndFigure => {
+        Event::EndFigure => {
             if let Some(BlockFrame::Figure { url, alt, caption_inlines }) = block_stack.pop() {
                 let caption = if caption_inlines.is_empty() { None } else { Some(caption_inlines) };
                 push_block(Block::Figure { url, alt, caption }, block_stack);
             }
         }
-        OwnedEvent::ImageBlock { url, alt, title } => {
+        Event::ImageBlock { url, alt, title } => {
             push_block(Block::Image { url, alt, title }, block_stack);
         }
-        OwnedEvent::RawBlock { format, content } => {
+        Event::RawBlock { format, content } => {
             push_block(Block::RawBlock { format, content }, block_stack);
         }
-        OwnedEvent::StartLineBlock => {
+        Event::StartLineBlock => {
             block_stack.push(BlockFrame::LineBlock { lines: Vec::new() });
         }
-        OwnedEvent::EndLineBlock => {
+        Event::EndLineBlock => {
             if let Some(BlockFrame::LineBlock { lines }) = block_stack.pop() {
                 push_block(Block::LineBlock { lines }, block_stack);
             }
         }
-        OwnedEvent::StartLineBlockLine => {
+        Event::StartLineBlockLine => {
             block_stack.push(BlockFrame::LineBlockLine { inlines: Vec::new() });
         }
-        OwnedEvent::EndLineBlockLine => {
+        Event::EndLineBlockLine => {
             if let Some(BlockFrame::LineBlockLine { inlines }) = block_stack.pop() {
                 if let Some(BlockFrame::LineBlock { lines }) = block_stack.last_mut() {
                     lines.push(inlines);
@@ -374,89 +396,89 @@ fn handle_event(event: OwnedEvent, block_stack: &mut Vec<BlockFrame>, inline_ctx
         }
 
         // ── Inline events ─────────────────────────────────────────────────────
-        OwnedEvent::Text(s) => push_inline(Inline::Text(s), block_stack, inline_ctx),
-        OwnedEvent::SoftBreak => push_inline(Inline::SoftBreak, block_stack, inline_ctx),
-        OwnedEvent::LineBreak => push_inline(Inline::LineBreak, block_stack, inline_ctx),
-        OwnedEvent::Code(s) => push_inline(Inline::Code(s), block_stack, inline_ctx),
-        OwnedEvent::FootnoteRef { label } => {
+        Event::Text(cow) => push_inline(Inline::Text(cow.into_owned()), block_stack, inline_ctx),
+        Event::SoftBreak => push_inline(Inline::SoftBreak, block_stack, inline_ctx),
+        Event::LineBreak => push_inline(Inline::LineBreak, block_stack, inline_ctx),
+        Event::Code(cow) => push_inline(Inline::Code(cow.into_owned()), block_stack, inline_ctx),
+        Event::FootnoteRef { label } => {
             push_inline(Inline::FootnoteRef { label }, block_stack, inline_ctx);
         }
-        OwnedEvent::InlineImage { url, alt } => {
+        Event::InlineImage { url, alt } => {
             push_inline(Inline::Image { url, alt }, block_stack, inline_ctx);
         }
-        OwnedEvent::MathInline { source } => {
+        Event::MathInline { source } => {
             push_inline(Inline::MathInline { source }, block_stack, inline_ctx);
         }
-        OwnedEvent::StartEmphasis => inline_ctx.push(InlineFrame::Emphasis { inlines: Vec::new() }),
-        OwnedEvent::EndEmphasis => {
+        Event::StartEmphasis => inline_ctx.push(InlineFrame::Emphasis { inlines: Vec::new() }),
+        Event::EndEmphasis => {
             if let Some(InlineFrame::Emphasis { inlines }) = inline_ctx.pop() {
                 push_inline(Inline::Emphasis(inlines), block_stack, inline_ctx);
             }
         }
-        OwnedEvent::StartStrong => inline_ctx.push(InlineFrame::Strong { inlines: Vec::new() }),
-        OwnedEvent::EndStrong => {
+        Event::StartStrong => inline_ctx.push(InlineFrame::Strong { inlines: Vec::new() }),
+        Event::EndStrong => {
             if let Some(InlineFrame::Strong { inlines }) = inline_ctx.pop() {
                 push_inline(Inline::Strong(inlines), block_stack, inline_ctx);
             }
         }
-        OwnedEvent::StartStrikeout => inline_ctx.push(InlineFrame::Strikeout { inlines: Vec::new() }),
-        OwnedEvent::EndStrikeout => {
+        Event::StartStrikeout => inline_ctx.push(InlineFrame::Strikeout { inlines: Vec::new() }),
+        Event::EndStrikeout => {
             if let Some(InlineFrame::Strikeout { inlines }) = inline_ctx.pop() {
                 push_inline(Inline::Strikeout(inlines), block_stack, inline_ctx);
             }
         }
-        OwnedEvent::StartUnderline => inline_ctx.push(InlineFrame::Underline { inlines: Vec::new() }),
-        OwnedEvent::EndUnderline => {
+        Event::StartUnderline => inline_ctx.push(InlineFrame::Underline { inlines: Vec::new() }),
+        Event::EndUnderline => {
             if let Some(InlineFrame::Underline { inlines }) = inline_ctx.pop() {
                 push_inline(Inline::Underline(inlines), block_stack, inline_ctx);
             }
         }
-        OwnedEvent::StartSubscript => inline_ctx.push(InlineFrame::Subscript { inlines: Vec::new() }),
-        OwnedEvent::EndSubscript => {
+        Event::StartSubscript => inline_ctx.push(InlineFrame::Subscript { inlines: Vec::new() }),
+        Event::EndSubscript => {
             if let Some(InlineFrame::Subscript { inlines }) = inline_ctx.pop() {
                 push_inline(Inline::Subscript(inlines), block_stack, inline_ctx);
             }
         }
-        OwnedEvent::StartSuperscript => inline_ctx.push(InlineFrame::Superscript { inlines: Vec::new() }),
-        OwnedEvent::EndSuperscript => {
+        Event::StartSuperscript => inline_ctx.push(InlineFrame::Superscript { inlines: Vec::new() }),
+        Event::EndSuperscript => {
             if let Some(InlineFrame::Superscript { inlines }) = inline_ctx.pop() {
                 push_inline(Inline::Superscript(inlines), block_stack, inline_ctx);
             }
         }
-        OwnedEvent::StartSmallCaps => inline_ctx.push(InlineFrame::SmallCaps { inlines: Vec::new() }),
-        OwnedEvent::EndSmallCaps => {
+        Event::StartSmallCaps => inline_ctx.push(InlineFrame::SmallCaps { inlines: Vec::new() }),
+        Event::EndSmallCaps => {
             if let Some(InlineFrame::SmallCaps { inlines }) = inline_ctx.pop() {
                 push_inline(Inline::SmallCaps(inlines), block_stack, inline_ctx);
             }
         }
-        OwnedEvent::StartLink { url } => {
+        Event::StartLink { url } => {
             inline_ctx.push(InlineFrame::Link { url, children: Vec::new() });
         }
-        OwnedEvent::EndLink => {
+        Event::EndLink => {
             if let Some(InlineFrame::Link { url, children }) = inline_ctx.pop() {
                 push_inline(Inline::Link { url, children }, block_stack, inline_ctx);
             }
         }
-        OwnedEvent::StartFootnoteDefInline { label } => {
+        Event::StartFootnoteDefInline { label } => {
             inline_ctx.push(InlineFrame::FootnoteDefInline { label, children: Vec::new() });
         }
-        OwnedEvent::EndFootnoteDefInline => {
+        Event::EndFootnoteDefInline => {
             if let Some(InlineFrame::FootnoteDefInline { label, children }) = inline_ctx.pop() {
                 push_inline(Inline::FootnoteDef { label, children }, block_stack, inline_ctx);
             }
         }
-        OwnedEvent::StartQuoted { quote_type } => {
+        Event::StartQuoted { quote_type } => {
             inline_ctx.push(InlineFrame::Quoted { quote_type, children: Vec::new() });
         }
-        OwnedEvent::EndQuoted => {
+        Event::EndQuoted => {
             if let Some(InlineFrame::Quoted { quote_type, children }) = inline_ctx.pop() {
                 push_inline(Inline::Quoted { quote_type, children }, block_stack, inline_ctx);
             }
         }
-        OwnedEvent::StartRstSpan { role } => {
+        Event::StartRstSpan { role } => {
             inline_ctx.push(InlineFrame::RstSpan { role, children: Vec::new() });
         }
-        OwnedEvent::EndRstSpan => {
+        Event::EndRstSpan => {
             if let Some(InlineFrame::RstSpan { role, children }) = inline_ctx.pop() {
                 push_inline(Inline::RstSpan { role, children }, block_stack, inline_ctx);
             }
@@ -468,17 +490,17 @@ fn handle_event(event: OwnedEvent, block_stack: &mut Vec<BlockFrame>, inline_ctx
 
 /// Walk an [`RstDoc`] and collect events into the given queue.
 #[cfg(test)]
-fn events_from_doc(doc: &crate::RstDoc, queue: &mut VecDeque<OwnedEvent>) {
+fn events_from_doc(doc: &crate::RstDoc, queue: &mut VecDeque<Event<'static>>) {
     collect_blocks_events(&doc.blocks, queue);
 }
 
-fn collect_blocks_events(blocks: &[Block], queue: &mut VecDeque<OwnedEvent>) {
+fn collect_blocks_events(blocks: &[Block], queue: &mut VecDeque<Event<'static>>) {
     for block in blocks {
         collect_block_events(block, queue);
     }
 }
 
-pub(crate) fn collect_block_events(block: &Block, queue: &mut VecDeque<OwnedEvent>) {
+pub(crate) fn collect_block_events(block: &Block, queue: &mut VecDeque<Event<'static>>) {
     match block {
         Block::Paragraph { inlines } => {
             queue.push_back(OwnedEvent::StartParagraph);
@@ -492,7 +514,7 @@ pub(crate) fn collect_block_events(block: &Block, queue: &mut VecDeque<OwnedEven
         }
         Block::CodeBlock { language, content } => {
             queue.push_back(OwnedEvent::StartCodeBlock { language: language.clone() });
-            queue.push_back(OwnedEvent::CodeBlockContent(content.clone()));
+            queue.push_back(Event::CodeBlockContent(Cow::Owned(content.clone())));
             queue.push_back(OwnedEvent::EndCodeBlock);
         }
         Block::Blockquote { children } => {
@@ -579,7 +601,7 @@ pub(crate) fn collect_block_events(block: &Block, queue: &mut VecDeque<OwnedEven
     }
 }
 
-fn collect_definition_item_events(item: &DefinitionItem, queue: &mut VecDeque<OwnedEvent>) {
+fn collect_definition_item_events(item: &DefinitionItem, queue: &mut VecDeque<Event<'static>>) {
     queue.push_back(OwnedEvent::StartDefinitionTerm);
     collect_inlines_events(&item.term, queue);
     queue.push_back(OwnedEvent::EndDefinitionTerm);
@@ -588,7 +610,7 @@ fn collect_definition_item_events(item: &DefinitionItem, queue: &mut VecDeque<Ow
     queue.push_back(OwnedEvent::EndDefinitionDesc);
 }
 
-fn collect_table_row_events(row: &TableRow, queue: &mut VecDeque<OwnedEvent>) {
+fn collect_table_row_events(row: &TableRow, queue: &mut VecDeque<Event<'static>>) {
     queue.push_back(OwnedEvent::StartTableRow { is_header: row.is_header });
     for cell in &row.cells {
         queue.push_back(OwnedEvent::StartTableCell);
@@ -598,16 +620,16 @@ fn collect_table_row_events(row: &TableRow, queue: &mut VecDeque<OwnedEvent>) {
     queue.push_back(OwnedEvent::EndTableRow);
 }
 
-fn collect_inlines_events(inlines: &[Inline], queue: &mut VecDeque<OwnedEvent>) {
+fn collect_inlines_events(inlines: &[Inline], queue: &mut VecDeque<Event<'static>>) {
     for inline in inlines {
         collect_inline_events(inline, queue);
     }
 }
 
-fn collect_inline_events(inline: &Inline, queue: &mut VecDeque<OwnedEvent>) {
+fn collect_inline_events(inline: &Inline, queue: &mut VecDeque<Event<'static>>) {
     match inline {
         Inline::Text(s) => {
-            queue.push_back(OwnedEvent::Text(s.clone()));
+            queue.push_back(Event::Text(Cow::Owned(s.clone())));
         }
         Inline::SoftBreak => {
             queue.push_back(OwnedEvent::SoftBreak);
@@ -651,7 +673,7 @@ fn collect_inline_events(inline: &Inline, queue: &mut VecDeque<OwnedEvent>) {
             queue.push_back(OwnedEvent::EndSmallCaps);
         }
         Inline::Code(s) => {
-            queue.push_back(OwnedEvent::Code(s.clone()));
+            queue.push_back(Event::Code(Cow::Owned(s.clone())));
         }
         Inline::Link { url, children } => {
             queue.push_back(OwnedEvent::StartLink { url: url.clone() });
