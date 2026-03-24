@@ -2405,6 +2405,57 @@ fn collect_text_from_inlines(inlines: &[Inline], out: &mut String) {
     }
 }
 
+// ── Iterator implementation ───────────────────────────────────────────────────
+
+impl<'a> Iterator for EventIter<'a> {
+    type Item = events::Event<'a>;
+
+    fn next(&mut self) -> Option<events::Event<'a>> {
+        // Drain any events buffered from the previous block.
+        if let Some(ev) = self.event_buf.pop_front() {
+            return Some(ev);
+        }
+        if self.iter_done {
+            return None;
+        }
+        // Advance the parser until a block produces events or we hit EOF.
+        loop {
+            // Drain a pending block (e.g. deferred code block after "text::") before
+            // checking EOF, because the pending block may have been set on the last line.
+            if let Some(pending) = self.pending_block.take() {
+                events::collect_block_events(&pending, &mut self.event_buf);
+                if let Some(ev) = self.event_buf.pop_front() {
+                    return Some(ev);
+                }
+                continue;
+            }
+            self.skip_blank_lines();
+            if self.is_eof() {
+                break;
+            }
+            if let Some(block) = self.try_parse_block() {
+                events::collect_block_events(&block, &mut self.event_buf);
+                if let Some(ev) = self.event_buf.pop_front() {
+                    return Some(ev);
+                }
+                // Block produced no events (shouldn't happen) — keep looping.
+            } else {
+                // Fallback: advance to prevent infinite loop.
+                self.advance_line();
+            }
+        }
+        self.iter_done = true;
+        None
+    }
+}
+
+// ── Public streaming API ──────────────────────────────────────────────────────
+
+/// Parse `input` as RST and return a streaming [`EventIter`].
+pub fn events(input: &str) -> EventIter<'_> {
+    EventIter::new(input)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -2703,55 +2754,4 @@ mod tests {
             );
         }
     }
-}
-
-// ── Iterator implementation ───────────────────────────────────────────────────
-
-impl<'a> Iterator for EventIter<'a> {
-    type Item = events::Event<'a>;
-
-    fn next(&mut self) -> Option<events::Event<'a>> {
-        // Drain any events buffered from the previous block.
-        if let Some(ev) = self.event_buf.pop_front() {
-            return Some(ev);
-        }
-        if self.iter_done {
-            return None;
-        }
-        // Advance the parser until a block produces events or we hit EOF.
-        loop {
-            // Drain a pending block (e.g. deferred code block after "text::") before
-            // checking EOF, because the pending block may have been set on the last line.
-            if let Some(pending) = self.pending_block.take() {
-                events::collect_block_events(&pending, &mut self.event_buf);
-                if let Some(ev) = self.event_buf.pop_front() {
-                    return Some(ev);
-                }
-                continue;
-            }
-            self.skip_blank_lines();
-            if self.is_eof() {
-                break;
-            }
-            if let Some(block) = self.try_parse_block() {
-                events::collect_block_events(&block, &mut self.event_buf);
-                if let Some(ev) = self.event_buf.pop_front() {
-                    return Some(ev);
-                }
-                // Block produced no events (shouldn't happen) — keep looping.
-            } else {
-                // Fallback: advance to prevent infinite loop.
-                self.advance_line();
-            }
-        }
-        self.iter_done = true;
-        None
-    }
-}
-
-// ── Public streaming API ──────────────────────────────────────────────────────
-
-/// Parse `input` as RST and return a streaming [`EventIter`].
-pub fn events(input: &str) -> EventIter<'_> {
-    EventIter::new(input)
 }

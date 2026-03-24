@@ -1,9 +1,10 @@
 {
-  "description": "GFM table: table_head contains table_cell children directly; body rows are table_row under table",
+  "description": "GFM table: table_head contains table_row which contains table_cell children; body rows are table_row under table",
   "assertions": [
-    { "path": "/0",     "kind": "table" },
-    { "path": "/0/0",   "kind": "table_head" },
-    { "path": "/0/0/0", "kind": "table_cell" },
-    { "path": "/0/1",   "kind": "table_row" }
+    { "path": "/0",       "kind": "table" },
+    { "path": "/0/0",     "kind": "table_head" },
+    { "path": "/0/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0/0", "kind": "table_cell" },
+    { "path": "/0/1",     "kind": "table_row" }
   ]
 }

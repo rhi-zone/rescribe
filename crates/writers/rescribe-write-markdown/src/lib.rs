@@ -284,11 +284,19 @@ fn emit_list_item_content(node: &Node, ctx: &mut EmitContext) {
     }
 
     // For tight lists, emit inline content; for loose lists, emit blocks
-    if ctx.in_tight_list && node.children.len() == 1 {
-        // Tight list item - emit paragraph content inline
-        let child = &node.children[0];
-        if child.kind.as_str() == node::PARAGRAPH {
-            emit_nodes(&child.children, ctx);
+    if ctx.in_tight_list {
+        // Tight list item — children may be either a single paragraph (old
+        // loose-reader output) or inline nodes directly (tight-reader output).
+        let is_single_para = node.children.len() == 1
+            && node.children[0].kind.as_str() == node::PARAGRAPH;
+        let is_all_inline = !node.children.is_empty()
+            && node.children.iter().all(|c| !is_block_node(c));
+        if is_single_para {
+            emit_nodes(&node.children[0].children, ctx);
+            ctx.newline();
+            return;
+        } else if is_all_inline {
+            emit_nodes(&node.children, ctx);
             ctx.newline();
             return;
         }

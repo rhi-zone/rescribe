@@ -953,11 +953,6 @@ impl<'a> Converter<'a> {
             }
         }
 
-        // Trim trailing newline from content
-        if content.ends_with('\n') {
-            content.pop();
-        }
-
         let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content);
         if !language.is_empty() {
             node = node.prop(prop::LANGUAGE, language);
@@ -976,13 +971,19 @@ impl<'a> Converter<'a> {
     }
 
     fn convert_indented_code(&mut self, tsnode: &tree_sitter::Node) -> Option<Node> {
-        // For indented code blocks, extract the text and remove 4-space indent
+        // For indented code blocks, extract the text and remove 4-space indent.
+        // Only include the trailing newline if it comes from the original input (not the
+        // synthetic newline tree-sitter requires for EOF normalisation).
         let text = self.node_text(tsnode);
-        let content: String = text
+        let trailing_nl_is_original = tsnode.end_byte() <= self.original_len;
+        let mut content: String = text
             .lines()
             .map(strip_code_indent)
             .collect::<Vec<_>>()
             .join("\n");
+        if text.ends_with('\n') && trailing_nl_is_original {
+            content.push('\n');
+        }
 
         Some(self.with_span(
             Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content),
@@ -1036,6 +1037,19 @@ impl<'a> Converter<'a> {
         let tight = is_tight_list(tsnode, self.source);
 
         let children = self.convert_block_children(tsnode);
+        // For tight lists, unwrap single-paragraph content inside list_item children
+        // so text nodes appear directly (matching pulldown-cmark's output).
+        let children = if tight {
+            children.into_iter().map(|item| {
+                if item.kind.as_str() == node::LIST_ITEM {
+                    unwrap_tight_item(item)
+                } else {
+                    item
+                }
+            }).collect()
+        } else {
+            children
+        };
         let mut list = Node::new(node::LIST)
             .prop(prop::ORDERED, ordered)
             .prop(prop::TIGHT, tight)
@@ -1190,6 +1204,16 @@ fn is_tight_list(tsnode: &tree_sitter::Node, source: &str) -> bool {
         }
     }
     true
+}
+
+/// For tight list items, unwrap single-paragraph content so inline nodes appear directly.
+/// tree-sitter-md wraps tight list content in a paragraph; pulldown-cmark does not.
+fn unwrap_tight_item(mut item: Node) -> Node {
+    if item.children.len() == 1 && item.children[0].kind.as_str() == node::PARAGRAPH {
+        let para = item.children.remove(0);
+        item.children = para.children;
+    }
+    item
 }
 
 /// Emit gap text between inline nodes, splitting on `\n` to produce soft_break nodes.

@@ -9,7 +9,7 @@
 //! use org_fmt::OwnedEvent;
 //!
 //! let mut w = Writer::new(Vec::<u8>::new());
-//! w.write_event(OwnedEvent::StartHeading { level: 1, todo: None, priority: None, tags: vec![] });
+//! w.write_event(OwnedEvent::StartHeading { level: 1, todo: None, priority: None, tags: vec![], properties: vec![], scheduled: None, deadline: None });
 //! w.write_event(OwnedEvent::Text("Hello".to_string().into()));
 //! w.write_event(OwnedEvent::EndHeading);
 //! let bytes = w.finish();
@@ -61,7 +61,7 @@ fn events_to_doc(events: Vec<OwnedEvent>) -> OrgDoc {
 enum Frame {
     Document { blocks: Vec<Block> },
     Paragraph { inlines: Vec<Inline> },
-    Heading { level: usize, todo: Option<String>, priority: Option<String>, tags: Vec<String>, inlines: Vec<Inline> },
+    Heading { level: usize, todo: Option<String>, priority: Option<String>, tags: Vec<String>, properties: Vec<(String, String)>, scheduled: Option<String>, deadline: Option<String>, inlines: Vec<Inline> },
     Blockquote { blocks: Vec<Block> },
     List { ordered: bool, start: Option<u64>, items: Vec<ListItem> },
     ListItem { checkbox: Option<CheckboxState>, children: Vec<ListItemContent>, current_inlines: Option<Vec<Inline>> },
@@ -106,25 +106,28 @@ impl DocBuilder {
                     self.push_block(Block::Paragraph { inlines, span: Span::NONE });
                 }
             }
-            OwnedEvent::StartHeading { level, todo, priority, tags } => {
+            OwnedEvent::StartHeading { level, todo, priority, tags, properties, scheduled, deadline } => {
                 self.stack.push(Frame::Heading {
                     level,
                     todo,
                     priority,
                     tags,
+                    properties,
+                    scheduled,
+                    deadline,
                     inlines: vec![],
                 });
             }
             OwnedEvent::EndHeading => {
-                if let Some(Frame::Heading { level, todo, priority, tags, inlines }) = self.stack.pop() {
+                if let Some(Frame::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines }) = self.stack.pop() {
                     self.push_block(Block::Heading {
                         level,
                         todo,
                         priority,
                         tags,
-                        properties: vec![],
-                        scheduled: None,
-                        deadline: None,
+                        properties,
+                        scheduled,
+                        deadline,
                         inlines,
                         span: Span::NONE,
                     });
@@ -420,6 +423,9 @@ mod tests {
             todo: None,
             priority: None,
             tags: vec![],
+            properties: vec![],
+            scheduled: None,
+            deadline: None,
         });
         w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("Hello".to_string())));
         w.write_event(OwnedEvent::EndHeading);

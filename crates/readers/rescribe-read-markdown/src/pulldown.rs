@@ -233,11 +233,12 @@ fn parse_event(
     }
 }
 
-/// Normalize list item children so inline content is always wrapped in a paragraph.
+/// Normalize list item children for mixed items (inline followed by a block child).
 ///
-/// pulldown-cmark omits paragraph wrappers for tight list items and emits bare
-/// inline nodes for mixed items like `- text\n  - sublist`. Wrapping keeps the
-/// IR uniform regardless of tight/loose status.
+/// pulldown-cmark emits bare inline nodes for mixed items like `- text\n  - sublist`.
+/// For tight items (all inline), returns children as-is — the IR preserves the
+/// tight/loose distinction. For loose items, children already start with a paragraph.
+/// Only the mixed case (leading inline run before a block) requires normalization.
 fn normalize_item_children(mut children: Vec<Node>) -> Vec<Node> {
     if children.is_empty() {
         return children;
@@ -257,10 +258,7 @@ fn normalize_item_children(mut children: Vec<Node>) -> Vec<Node> {
         )
     });
     match first_block {
-        None => {
-            // All inline — wrap everything in a paragraph
-            vec![Node::new(node::PARAGRAPH).children(children)]
-        }
+        None => children, // All inline (tight item) — leave as-is
         Some(0) => children, // Already starts with a block
         Some(idx) => {
             // Leading inline nodes before first block — wrap them in a paragraph
@@ -359,9 +357,6 @@ fn parse_tag(
                 .collect::<Vec<_>>()
                 .join("");
 
-            // Strip exactly one trailing newline: the newline before the closing
-            // fence is a formatting artifact, not part of the code content.
-            let content = content.strip_suffix('\n').map(str::to_string).unwrap_or(content);
             let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content);
             if let CodeBlockKind::Fenced(lang) = &kind {
                 let lang_str = lang.to_string();

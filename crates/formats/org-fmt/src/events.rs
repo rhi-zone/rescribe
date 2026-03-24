@@ -21,6 +21,9 @@ pub enum Event<'a> {
         todo: Option<String>,
         priority: Option<String>,
         tags: Vec<String>,
+        properties: Vec<(String, String)>,
+        scheduled: Option<String>,
+        deadline: Option<String>,
     },
     EndHeading,
     StartBlockquote,
@@ -178,7 +181,7 @@ pub(crate) fn collect_doc_from_iter(
 enum BlockFrame {
     Document { blocks: Vec<Block> },
     Paragraph { inlines: Vec<Inline> },
-    Heading { level: usize, todo: Option<String>, priority: Option<String>, tags: Vec<String>, inlines: Vec<Inline> },
+    Heading { level: usize, todo: Option<String>, priority: Option<String>, tags: Vec<String>, properties: Vec<(String, String)>, scheduled: Option<String>, deadline: Option<String>, inlines: Vec<Inline> },
     Blockquote { children: Vec<Block> },
     List { ordered: bool, start: Option<u64>, items: Vec<ListItem> },
     ListItem { checkbox: Option<CheckboxState>, children: Vec<ListItemContent>, inline_buf: Vec<Inline> },
@@ -260,8 +263,8 @@ fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx:
         Event::StartParagraph => {
             block_stack.push(BlockFrame::Paragraph { inlines: Vec::new() });
         }
-        Event::StartHeading { level, todo, priority, tags } => {
-            block_stack.push(BlockFrame::Heading { level, todo, priority, tags, inlines: Vec::new() });
+        Event::StartHeading { level, todo, priority, tags, properties, scheduled, deadline } => {
+            block_stack.push(BlockFrame::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines: Vec::new() });
         }
         Event::StartBlockquote => {
             block_stack.push(BlockFrame::Blockquote { children: Vec::new() });
@@ -310,12 +313,9 @@ fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx:
             }
         }
         Event::EndHeading => {
-            if let Some(BlockFrame::Heading { level, todo, priority, tags, inlines }) = block_stack.pop() {
+            if let Some(BlockFrame::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines }) = block_stack.pop() {
                 push_block(block_stack, Block::Heading {
-                    level, todo, priority, tags,
-                    properties: Vec::new(),
-                    scheduled: None,
-                    deadline: None,
+                    level, todo, priority, tags, properties, scheduled, deadline,
                     inlines,
                     span: Span::NONE,
                 });
@@ -521,12 +521,15 @@ pub(crate) fn collect_block_events(block: &Block, q: &mut VecDeque<Event<'static
             collect_inlines_events(inlines, q);
             q.push_back(Event::EndParagraph);
         }
-        Block::Heading { level, todo, priority, tags, inlines, .. } => {
+        Block::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines, .. } => {
             q.push_back(Event::StartHeading {
                 level: *level,
                 todo: todo.clone(),
                 priority: priority.clone(),
                 tags: tags.clone(),
+                properties: properties.clone(),
+                scheduled: scheduled.clone(),
+                deadline: deadline.clone(),
             });
             collect_inlines_events(inlines, q);
             q.push_back(Event::EndHeading);
