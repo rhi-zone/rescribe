@@ -49,6 +49,11 @@ pub mod events;
 #[cfg(feature = "batch")]
 pub mod batch;
 
+#[cfg(feature = "writer-streaming")]
+pub mod writer;
+#[cfg(feature = "writer-streaming")]
+pub use writer::Writer;
+
 #[cfg(feature = "ast")]
 pub use ast::{
     Block, CmDoc, Diagnostic, Inline, LinkDef, ListItem, ListKind, OrderedMarker, Severity, Span,
