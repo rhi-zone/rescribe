@@ -371,28 +371,19 @@ from scratch as a proper standalone library.
 - [x] Benchmarks: djot_parse_small 7.8µs, djot_parse_medium 49µs, djot_emit_medium 9.8µs
 - [x] `batch` chunk-driven parser (BatchParser + BatchSink) — 2026-03-23
 - [x] Streaming writer (`w-stream`) — Writer<W: Write> with write_event/finish — 2026-03-23
-- [ ] Fix hollow events() — currently calls parse() internally (see DEBT section below)
+- [x] Fix events() — now a true pull iterator (2026-03-24)
 
-### DEBT: True streaming in all format crates
+### ~~DEBT~~: True streaming — FIXED (2026-03-24)
 
-**All four hand-rolled format crates (rst-fmt, asciidoc, djot-fmt, org-fmt) have a
-hollow `events()` implementation.** They call `parse()` internally and drain a
-`VecDeque` — delivering zero streaming benefits. This violates the API contract
-documented in `docs/format-library-design.md` and CLAUDE.md.
+All four hand-rolled format crates now have correct `events()` implementations.
+`EventIter<'a>` holds the Parser directly; `next()` lazily produces events
+one block at a time; `parse()` collects from `EventIter` via a stack-based
+tree builder. No full AST is allocated inside `events()`.
 
-The correct implementation (per rtf-fmt): `events()` is the primary state machine;
-`parse()` is implemented as `events().collect()`.
-
-- [ ] Fix `rst-fmt/src/parse.rs` — true pull parser in EventIter::next(); parse() = events().collect()
-- [ ] Fix `asciidoc/src/parse.rs` — same
-- [ ] Fix `djot-fmt/src/parse.rs` — same
-- [ ] Fix `org-fmt/src/parse.rs` — same
-
-Reference implementation: `rtf-fmt/src/events.rs` (or `parse.rs` depending on layout)
-
-**This is not cosmetic.** Callers that depend on incremental processing, memory
-efficiency, or event-driven pipelines get none of those benefits from the current
-implementation. It is a silent API contract violation.
+- [x] Fix `rst-fmt` — EventIter<'a> holds Parser, parse() = events().collect()
+- [x] Fix `asciidoc` — same
+- [x] Fix `djot-fmt` — same (pre_scan runs once on construction)
+- [x] Fix `org-fmt` — same
 
 ### `rst-fmt` — API modes complete (2026-03-23)
 
@@ -400,8 +391,8 @@ implementation. It is a silent API contract violation.
 - [x] `batch`: BatchParser (feed/finish) + BatchSink<F> callback style
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags: ast, streaming, batch, writer-streaming, writer-builder
+- [x] Fix events() — now a true pull iterator (2026-03-24)
 - [ ] Parser gaps: table parsing, footnote parsing
-- [ ] Fix hollow events() — currently calls parse() internally (see DEBT section above)
 
 ### `org-fmt` — API modes complete (2026-03-23)
 
@@ -409,7 +400,7 @@ implementation. It is a silent API contract violation.
 - [x] `batch`: BatchParser + BatchSink
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags added
-- [ ] Fix hollow events() — currently calls parse() internally (see DEBT section above)
+- [x] Fix events() — now a true pull iterator (2026-03-24)
 - [ ] Parser/writer gaps: blockquote nesting, footnote definitions, figure/caption blocks
 
 ### `asciidoc` — API modes complete (2026-03-23)
@@ -418,7 +409,7 @@ implementation. It is a silent API contract violation.
 - [x] `batch`: BatchParser + BatchSink
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags added
-- [ ] Fix hollow events() — currently calls parse() internally (see DEBT section above)
+- [x] Fix events() — now a true pull iterator (2026-03-24)
 - [ ] Parser gaps: table parsing, footnote parsing, math parsing
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)
