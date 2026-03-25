@@ -119,7 +119,10 @@ impl Emitter {
             }
             Block::List { kind, items, tight: is_tight, .. } => {
                 self.emit_list(kind, items, *is_tight);
-                self.newline();
+                // No extra newline here — each item already ends with '\n', and
+                // inter-block blank lines are added by emit_blocks when !tight.
+                // An extra '\n' here would create a blank continuation line when
+                // this list is inside a tight parent list item (roundtrip bug).
             }
             Block::ThematicBreak { .. } => {
                 self.push("---");
@@ -443,6 +446,14 @@ mod tests {
     #[test]
     fn test_roundtrip_multiple_blocks() {
         roundtrip("# Title\n\nA paragraph.\n\n- item one\n- item two\n");
+    }
+
+    #[test]
+    fn test_roundtrip_nested_tight_list() {
+        // Tight outer list whose first item contains a tight inner list.
+        // Regression: emit() was adding a spurious blank line after the inner
+        // list, causing the outer list to reparse as loose.
+        roundtrip("- - x\n- x\n");
     }
 
     #[test]

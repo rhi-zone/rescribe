@@ -356,12 +356,10 @@ fn push_inline(stack: &mut [Frame], inline: Inline) {
         };
         // Merge consecutive Text nodes — pulldown-cmark can split a single logical
         // text run into multiple Text events (e.g. backslash escapes).
-        if let Inline::Text { content: new_content, span: new_span } = &inline {
-            if let Some(Inline::Text { content, span }) = target.last_mut() {
-                content.push_str(new_content);
-                span.end = new_span.end;
-                return;
-            }
+        if let (Inline::Text { content: new_content, span: new_span }, Some(Inline::Text { content, span })) = (&inline, target.last_mut()) {
+            content.push_str(new_content);
+            span.end = new_span.end;
+            return;
         }
         target.push(inline);
         return;

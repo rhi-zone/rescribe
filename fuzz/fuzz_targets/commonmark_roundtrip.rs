@@ -84,16 +84,16 @@ impl<'a> Gen<'a> {
             },
             2 => Inline::HardBreak { span: Span::NONE },
             3 => Inline::Emphasis {
-                inlines: self.inlines(depth + 1, 1),
+                inlines: no_trailing_code(self.inlines(depth + 1, 1)),
                 span: Span::NONE,
             },
             4 => Inline::Strong {
-                inlines: self.inlines(depth + 1, 1),
+                inlines: no_trailing_code(self.inlines(depth + 1, 1)),
                 span: Span::NONE,
             },
             // Link: safe URL only, no title to avoid title-escaping edge cases
             _ => Inline::Link {
-                inlines: self.inlines(depth + 1, 1),
+                inlines: no_trailing_code(self.inlines(depth + 1, 1)),
                 url: format!("https://example.com/{}", safe_text(self.bytes(2))),
                 title: None,
                 span: Span::NONE,
@@ -144,13 +144,22 @@ impl<'a> Gen<'a> {
                 span: Span::NONE,
             },
             1 => {
-                // Heading: level must be 1..=6
+                // Heading: level must be 1..=6.
+                // HardBreaks don't roundtrip in ATX headings — the heading is
+                // a single-line construct, so "# x  \ny" parses as heading "x"
+                // followed by paragraph "y".  Strip HardBreaks and merge text.
                 let level = (self.byte() % 6) + 1;
-                Block::Heading {
-                    level,
-                    inlines: self.inlines(0, 1),
-                    span: Span::NONE,
-                }
+                let raw = self.inlines(0, 1);
+                let no_breaks: Vec<Inline> = raw
+                    .into_iter()
+                    .filter(|i| !matches!(i, Inline::HardBreak { .. }))
+                    .collect();
+                let inlines = if no_breaks.is_empty() {
+                    vec![Inline::Text { content: "x".to_string(), span: Span::NONE }]
+                } else {
+                    merge_text(no_breaks)
+                };
+                Block::Heading { level, inlines, span: Span::NONE }
             }
             2 => {
                 // CodeBlock: safe language tag and content with trailing newline
@@ -221,6 +230,21 @@ impl<'a> Gen<'a> {
         let count = (self.byte() as usize % 2) + 1;
         (0..count).map(|_| self.block(depth)).collect()
     }
+}
+
+/// Ensure the last inline of an Emphasis/Strong/Link is not a Code span.
+///
+/// CommonMark §6.1: a closing `*`/`**` directly after a code span (`` ` ``,
+/// punctuation) is only right-flanking when followed by whitespace or
+/// punctuation — not a letter.  Since a delimited span can be followed by
+/// Text("abc...") in the parent sequence, a trailing Code would block the
+/// closing delimiter.  Append a Text "x" if necessary; merge_text will fold
+/// it with any preceding Text, keeping things tidy.
+fn no_trailing_code(mut inlines: Vec<Inline>) -> Vec<Inline> {
+    if matches!(inlines.last(), Some(Inline::Code { .. })) {
+        inlines.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
+    }
+    inlines
 }
 
 fn merge_text(inlines: Vec<Inline>) -> Vec<Inline> {
