@@ -380,8 +380,9 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    let block_count = (g.byte() as usize % 2) + 1;
-    let blocks = (0..block_count).map(|_| g.block(0)).collect();
+    // Use g.blocks() to get the same consecutive-list filter applied to
+    // nested block sequences.
+    let blocks = g.blocks(0, 1);
     let doc = CmDoc { blocks, link_defs: vec![] };
 
     // Emit — must not panic.
