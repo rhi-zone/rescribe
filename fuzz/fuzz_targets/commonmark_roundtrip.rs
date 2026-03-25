@@ -160,19 +160,18 @@ impl<'a> Gen<'a> {
             },
             1 => {
                 // Heading: level must be 1..=6.
-                // HardBreaks don't roundtrip in ATX headings — the heading is
-                // a single-line construct, so "# x  \ny" parses as heading "x"
-                // followed by paragraph "y".  Strip HardBreaks and merge text.
+                // HardBreaks don't roundtrip in ATX headings — the heading is a
+                // single-line construct.  A HardBreak *anywhere* in the inline
+                // tree (including inside nested Emphasis/Strong/Link) emits
+                // "  \n" which splits the heading across lines.  Recursively
+                // strip all HardBreaks, then merge adjacent Text nodes.
                 let level = (self.byte() % 6) + 1;
                 let raw = self.inlines(0, 1);
-                let no_breaks: Vec<Inline> = raw
-                    .into_iter()
-                    .filter(|i| !matches!(i, Inline::HardBreak { .. }))
-                    .collect();
-                let inlines = if no_breaks.is_empty() {
+                let stripped = strip_hard_breaks(raw);
+                let inlines = if stripped.is_empty() {
                     vec![Inline::Text { content: "x".to_string(), span: Span::NONE }]
                 } else {
-                    merge_text(no_breaks)
+                    stripped
                 };
                 Block::Heading { level, inlines, span: Span::NONE }
             }
@@ -245,6 +244,36 @@ impl<'a> Gen<'a> {
         let count = (self.byte() as usize % 2) + 1;
         (0..count).map(|_| self.block(depth)).collect()
     }
+}
+
+/// Recursively remove all HardBreak nodes from an inline tree.
+///
+/// ATX headings are single-line; a HardBreak anywhere in the tree (including
+/// inside nested Emphasis/Strong/Link) emits "  \n" which splits the heading
+/// across lines.  Adjacent Text nodes left behind are merged.
+fn strip_hard_breaks(inlines: Vec<Inline>) -> Vec<Inline> {
+    let stripped: Vec<Inline> = inlines
+        .into_iter()
+        .filter_map(|inline| match inline {
+            Inline::HardBreak { .. } => None,
+            Inline::Emphasis { inlines, span } => Some(Inline::Emphasis {
+                inlines: strip_hard_breaks(inlines),
+                span,
+            }),
+            Inline::Strong { inlines, span } => Some(Inline::Strong {
+                inlines: strip_hard_breaks(inlines),
+                span,
+            }),
+            Inline::Link { inlines, url, title, span } => Some(Inline::Link {
+                inlines: strip_hard_breaks(inlines),
+                url,
+                title,
+                span,
+            }),
+            other => Some(other),
+        })
+        .collect();
+    merge_text(stripped)
 }
 
 /// Ensure the last inline of an Emphasis/Strong/Link is not a Code span.
