@@ -2,9 +2,11 @@
 //!
 //! `EventIter<'a>` is the concrete struct (defined in `parse.rs`) that
 //! implements `Iterator<Item = Event<'a>>` directly. Events are yielded
-//! lazily, one block at a time, via `parse_one_block()`. No full AST is
-//! built internally. `parse()` reconstructs a `DjotDoc` from an `EventIter`
-//! via a stack-based tree builder in `collect_doc_from_iter()`.
+//! lazily via `push_next_block_frames()` which pushes frames onto a stack
+//! without intermediate Block allocation for compound blocks. Compound blocks
+//! (blockquote, list items, div) use `Frame::SubParser` to lazily parse inner
+//! content. `parse()` reconstructs a `DjotDoc` from an `EventIter` via a
+//! stack-based tree builder in `collect_doc_from_iter()`.
 
 use crate::ast::*;
 use std::borrow::Cow;
