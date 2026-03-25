@@ -246,7 +246,17 @@ impl<'a> Gen<'a> {
         // consecutive same-kind lists to merge on roundtrip (CommonMark spec
         // §5.3: two bullet lists separated by a blank line → single loose list).
         let count = (self.byte() as usize % 2) + 1;
-        (0..count).map(|_| self.block(depth)).collect()
+        let result: Vec<Block> = (0..count).map(|_| self.block(depth)).collect();
+        // Drop the second block if it's a List and the first is also a List —
+        // two consecutive lists (same or different markers) in the same parent
+        // emit with a blank line separator, which the parser merges into a
+        // single loose list, destroying the two-block structure.
+        if result.len() == 2 {
+            if matches!((&result[0], &result[1]), (Block::List { .. }, Block::List { .. })) {
+                return result.into_iter().take(1).collect();
+            }
+        }
+        result
     }
 }
 
