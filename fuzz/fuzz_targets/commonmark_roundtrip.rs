@@ -113,6 +113,21 @@ impl<'a> Gen<'a> {
         // Merge adjacent Text nodes — roundtrip collapses them:
         // [Text "a", Text "b"] → [Text "ab"]
         let merged = merge_text(raw);
+        // Collapse consecutive HardBreaks — two adjacent HardBreaks emit as
+        // "  \n  \n" where the second line is all-spaces = blank line in
+        // CommonMark §2.1, which acts as a paragraph separator.
+        let merged = {
+            let mut deduped: Vec<Inline> = Vec::new();
+            for inline in merged {
+                if matches!(&inline, Inline::HardBreak { .. })
+                    && matches!(deduped.last(), Some(Inline::HardBreak { .. }))
+                {
+                    continue;
+                }
+                deduped.push(inline);
+            }
+            deduped
+        };
         // HardBreaks at the boundaries of inline content don't roundtrip:
         // - Leading HardBreak: emits "  \n" with nothing before it, which
         //   the parser treats as a blank line and drops.
