@@ -84,16 +84,16 @@ impl<'a> Gen<'a> {
             },
             2 => Inline::HardBreak { span: Span::NONE },
             3 => Inline::Emphasis {
-                inlines: no_trailing_code(self.inlines(depth + 1, 1)),
+                inlines: fix_code_boundaries(self.inlines(depth + 1, 1)),
                 span: Span::NONE,
             },
             4 => Inline::Strong {
-                inlines: no_trailing_code(self.inlines(depth + 1, 1)),
+                inlines: fix_code_boundaries(self.inlines(depth + 1, 1)),
                 span: Span::NONE,
             },
             // Link: safe URL only, no title to avoid title-escaping edge cases
             _ => Inline::Link {
-                inlines: no_trailing_code(self.inlines(depth + 1, 1)),
+                inlines: fix_code_boundaries(self.inlines(depth + 1, 1)),
                 url: format!("https://example.com/{}", safe_text(self.bytes(2))),
                 title: None,
                 span: Span::NONE,
@@ -276,19 +276,36 @@ fn strip_hard_breaks(inlines: Vec<Inline>) -> Vec<Inline> {
     merge_text(stripped)
 }
 
+/// Ensure the first inline of an Emphasis/Strong/Link is not a Code span.
+///
+/// CommonMark §6.1: an opening `*`/`**` before a code span (`` ` ``,
+/// punctuation) is only left-flanking when preceded by whitespace or
+/// punctuation — not a letter.  Since the span can be preceded by
+/// Text("abc...") in the parent sequence, a leading Code blocks the opening
+/// delimiter.  Prepend a Text "x" if necessary.
+fn no_leading_code(mut inlines: Vec<Inline>) -> Vec<Inline> {
+    if matches!(inlines.first(), Some(Inline::Code { .. })) {
+        inlines.insert(0, Inline::Text { content: "x".to_string(), span: Span::NONE });
+    }
+    inlines
+}
+
 /// Ensure the last inline of an Emphasis/Strong/Link is not a Code span.
 ///
 /// CommonMark §6.1: a closing `*`/`**` directly after a code span (`` ` ``,
 /// punctuation) is only right-flanking when followed by whitespace or
 /// punctuation — not a letter.  Since a delimited span can be followed by
 /// Text("abc...") in the parent sequence, a trailing Code would block the
-/// closing delimiter.  Append a Text "x" if necessary; merge_text will fold
-/// it with any preceding Text, keeping things tidy.
+/// closing delimiter.  Append a Text "x" if necessary.
 fn no_trailing_code(mut inlines: Vec<Inline>) -> Vec<Inline> {
     if matches!(inlines.last(), Some(Inline::Code { .. })) {
         inlines.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
     }
     inlines
+}
+
+fn fix_code_boundaries(inlines: Vec<Inline>) -> Vec<Inline> {
+    no_trailing_code(no_leading_code(inlines))
 }
 
 fn merge_text(inlines: Vec<Inline>) -> Vec<Inline> {
