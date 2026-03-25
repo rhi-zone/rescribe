@@ -188,6 +188,16 @@ pub const CORPUS: &[CorpusEntry] = &[
         filename: "markdown-reader-more.txt",
     },
     CorpusEntry {
+        format: "gfm",
+        pandoc_from: "gfm",
+        filename: "writer.markdown",
+    },
+    CorpusEntry {
+        format: "gfm",
+        pandoc_from: "gfm",
+        filename: "tables.markdown",
+    },
+    CorpusEntry {
         format: "rst",
         pandoc_from: "rst",
         filename: "rst-reader.rst",

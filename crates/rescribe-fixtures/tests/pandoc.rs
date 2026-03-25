@@ -66,6 +66,9 @@ fn parse_format(format: &str, input: &[u8]) -> Result<Document, String> {
         "markdown" => rescribe_read_markdown::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
+        "gfm" => rescribe_read_gfm::parse(s)
+            .map(|r| r.value)
+            .map_err(|e| e.to_string()),
         "rst" => rescribe_read_rst::parse(s)
             .map(|r| r.value)
             .map_err(|e| e.to_string()),
