@@ -1,10 +1,10 @@
 //! AsciiDoc parser.
 
 use crate::ast::{
-    AsciiDoc, Block, DefinitionItem, Diagnostic, ImageData, Inline, Span,
+    AsciiDoc, Block, DefinitionItem, Diagnostic, ImageData, Inline, QuoteType, Span, TableRow,
 };
-use crate::events::{collect_block_events, Event};
-use std::collections::VecDeque;
+use crate::events::Event;
+use std::borrow::Cow;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -21,6 +21,21 @@ pub fn parse(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
+/// Lazy-traversal frame for the event iterator.
+/// Frames pushed in reverse-emission order so pop() yields the next event.
+/// Memory is O(nesting depth).
+enum Frame {
+    Event(crate::events::OwnedEvent),
+    Blocks(std::vec::IntoIter<Block>),
+    Inlines(std::vec::IntoIter<Inline>),
+    /// List items are Vec<Block>
+    ListItems(std::vec::IntoIter<Vec<Block>>),
+    TableRows(std::vec::IntoIter<TableRow>),
+    /// Table cells are Vec<Inline>
+    TableCells(std::vec::IntoIter<Vec<Inline>>),
+    DefinitionItems(std::vec::IntoIter<DefinitionItem>),
+}
+
 pub struct EventIter<'a> {
     lines: Vec<&'a str>,
     line_idx: usize,
@@ -33,7 +48,7 @@ pub struct EventIter<'a> {
     /// Pending list style from `[loweralpha]` etc. — applied to the next list block and cleared.
     pending_list_style: Option<String>,
     // ── Iterator state ────────────────────────────────────────────────────────
-    pub(crate) event_buf: VecDeque<Event<'static>>,
+    frame_stack: Vec<Frame>,
     iter_started: bool,
     iter_done: bool,
 }
@@ -49,7 +64,7 @@ impl<'a> EventIter<'a> {
             pending_id: None,
             pending_role: None,
             pending_list_style: None,
-            event_buf: VecDeque::new(),
+            frame_stack: Vec::new(),
             iter_started: false,
             iter_done: false,
         }
@@ -1048,15 +1063,216 @@ impl<'a> EventIter<'a> {
     }
 }
 
+// ── Frame expansion methods ───────────────────────────────────────────────────
+
+impl<'a> EventIter<'a> {
+    fn expand_block(&mut self, block: Block) {
+        use crate::events::OwnedEvent;
+        match block {
+            Block::Paragraph { inlines, id, role, checked, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndParagraph));
+                if !inlines.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartParagraph { id, role, checked }));
+            }
+            Block::Heading { level, inlines, id, role, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndHeading));
+                if !inlines.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartHeading { level, id, role }));
+            }
+            Block::CodeBlock { content, language, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndCodeBlock));
+                self.frame_stack.push(Frame::Event(Event::CodeBlockContent(Cow::Owned(content))));
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartCodeBlock { language }));
+            }
+            Block::Blockquote { children, attribution, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndBlockquote));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Blocks(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartBlockquote { attribution }));
+            }
+            Block::List { ordered, items, style, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndList));
+                if !items.is_empty() {
+                    self.frame_stack.push(Frame::ListItems(items.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartList { ordered, style }));
+            }
+            Block::DefinitionList { items, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionList));
+                if !items.is_empty() {
+                    self.frame_stack.push(Frame::DefinitionItems(items.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionList));
+            }
+            Block::HorizontalRule { .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::HorizontalRule));
+            }
+            Block::PageBreak { .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::PageBreak));
+            }
+            Block::Figure { image, .. } => {
+                let title = image.height.or(image.width);
+                self.frame_stack.push(Frame::Event(OwnedEvent::Figure {
+                    url: image.url,
+                    alt: image.alt,
+                    title,
+                }));
+            }
+            Block::Div { class, title, children, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndDiv));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Blocks(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartDiv { class, title }));
+            }
+            Block::RawBlock { format, content, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::RawBlock { format, content }));
+            }
+            Block::Table { rows, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndTable));
+                if !rows.is_empty() {
+                    self.frame_stack.push(Frame::TableRows(rows.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartTable));
+            }
+        }
+    }
+
+    fn expand_inline(&mut self, inline: Inline) {
+        use crate::events::OwnedEvent;
+        match inline {
+            Inline::Text { text, .. } => {
+                self.frame_stack.push(Frame::Event(Event::Text(Cow::Owned(text))));
+            }
+            Inline::SoftBreak { .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::SoftBreak));
+            }
+            Inline::LineBreak { .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::LineBreak));
+            }
+            Inline::Strong(children, _) => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndStrong));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartStrong));
+            }
+            Inline::Emphasis(children, _) => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndEmphasis));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartEmphasis));
+            }
+            Inline::Code(content, _) => {
+                self.frame_stack.push(Frame::Event(Event::Code(Cow::Owned(content))));
+            }
+            Inline::Superscript(children, _) => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndSuperscript));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartSuperscript));
+            }
+            Inline::Subscript(children, _) => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndSubscript));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartSubscript));
+            }
+            Inline::Highlight(children, _) => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndHighlight));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartHighlight));
+            }
+            Inline::Strikeout(children, _) => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndStrikeout));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartStrikeout));
+            }
+            Inline::Underline(children, _) => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndUnderline));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartUnderline));
+            }
+            Inline::SmallCaps(children, _) => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndSmallCaps));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartSmallCaps));
+            }
+            Inline::Quoted { quote_type, children, .. } => {
+                let qt = match quote_type {
+                    QuoteType::Single => "single".to_string(),
+                    QuoteType::Double => "double".to_string(),
+                };
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndQuoted));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartQuoted { quote_type: qt }));
+            }
+            Inline::Link { url, children, target, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndLink));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartLink { url, target }));
+            }
+            Inline::Image(img, _) => {
+                let title = img.height.or(img.width);
+                self.frame_stack.push(Frame::Event(OwnedEvent::InlineImage {
+                    url: img.url,
+                    alt: img.alt,
+                    title,
+                }));
+            }
+            Inline::FootnoteRef { label, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::FootnoteRef { label }));
+            }
+            Inline::FootnoteDef { label, children, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndFootnoteDef));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartFootnoteDef { label }));
+            }
+            Inline::MathInline { source, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::MathInline { source }));
+            }
+            Inline::MathDisplay { source, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::MathDisplay { source }));
+            }
+            Inline::RawInline { format, content, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::RawInline { format, content }));
+            }
+            Inline::Anchor { id, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::Anchor { id }));
+            }
+        }
+    }
+}
+
 // ── Iterator impl ─────────────────────────────────────────────────────────────
 
 impl<'a> Iterator for EventIter<'a> {
     type Item = Event<'a>;
 
     fn next(&mut self) -> Option<Event<'a>> {
-        if let Some(ev) = self.event_buf.pop_front() {
-            return Some(ev);
-        }
+        use crate::events::OwnedEvent;
         if self.iter_done {
             return None;
         }
@@ -1065,22 +1281,87 @@ impl<'a> Iterator for EventIter<'a> {
             return Some(Event::StartDocument);
         }
         loop {
-            self.skip_blank_lines();
-            if self.is_eof() {
-                break;
-            }
-            if let Some(block) = self.try_parse_block() {
-                collect_block_events(&block, &mut self.event_buf);
-                if let Some(ev) = self.event_buf.pop_front() {
-                    return Some(ev);
+            match self.frame_stack.pop() {
+                Some(Frame::Event(ev)) => return Some(ev),
+                Some(Frame::Blocks(mut iter)) => {
+                    if let Some(block) = iter.next() {
+                        self.frame_stack.push(Frame::Blocks(iter));
+                        self.expand_block(block);
+                    }
+                    continue;
                 }
-                // No events produced (shouldn't happen) — keep looping
-            } else {
-                self.advance_line();
+                Some(Frame::Inlines(mut iter)) => {
+                    if let Some(inline) = iter.next() {
+                        self.frame_stack.push(Frame::Inlines(iter));
+                        self.expand_inline(inline);
+                    }
+                    continue;
+                }
+                Some(Frame::ListItems(mut iter)) => {
+                    if let Some(item_blocks) = iter.next() {
+                        self.frame_stack.push(Frame::ListItems(iter));
+                        self.frame_stack.push(Frame::Event(OwnedEvent::EndListItem));
+                        if !item_blocks.is_empty() {
+                            self.frame_stack.push(Frame::Blocks(item_blocks.into_iter()));
+                        }
+                        self.frame_stack.push(Frame::Event(OwnedEvent::StartListItem));
+                    }
+                    continue;
+                }
+                Some(Frame::TableRows(mut iter)) => {
+                    if let Some(row) = iter.next() {
+                        let is_header = row.is_header;
+                        self.frame_stack.push(Frame::TableRows(iter));
+                        self.frame_stack.push(Frame::Event(OwnedEvent::EndTableRow));
+                        if !row.cells.is_empty() {
+                            self.frame_stack.push(Frame::TableCells(row.cells.into_iter()));
+                        }
+                        self.frame_stack.push(Frame::Event(OwnedEvent::StartTableRow { is_header }));
+                    }
+                    continue;
+                }
+                Some(Frame::TableCells(mut iter)) => {
+                    if let Some(cell_inlines) = iter.next() {
+                        self.frame_stack.push(Frame::TableCells(iter));
+                        self.frame_stack.push(Frame::Event(OwnedEvent::EndTableCell));
+                        if !cell_inlines.is_empty() {
+                            self.frame_stack.push(Frame::Inlines(cell_inlines.into_iter()));
+                        }
+                        self.frame_stack.push(Frame::Event(OwnedEvent::StartTableCell));
+                    }
+                    continue;
+                }
+                Some(Frame::DefinitionItems(mut iter)) => {
+                    if let Some(item) = iter.next() {
+                        self.frame_stack.push(Frame::DefinitionItems(iter));
+                        self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionDesc));
+                        if !item.desc.is_empty() {
+                            self.frame_stack.push(Frame::Inlines(item.desc.into_iter()));
+                        }
+                        self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionDesc));
+                        self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionTerm));
+                        if !item.term.is_empty() {
+                            self.frame_stack.push(Frame::Inlines(item.term.into_iter()));
+                        }
+                        self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionTerm));
+                    }
+                    continue;
+                }
+                None => {
+                    self.skip_blank_lines();
+                    if self.is_eof() {
+                        self.iter_done = true;
+                        return Some(Event::EndDocument);
+                    }
+                    if let Some(block) = self.try_parse_block() {
+                        self.expand_block(block);
+                    } else {
+                        self.advance_line();
+                    }
+                    continue;
+                }
             }
         }
-        self.iter_done = true;
-        Some(Event::EndDocument)
     }
 }
 
