@@ -157,6 +157,17 @@ impl<'a> Gen<'a> {
     }
 
     fn block(&mut self, depth: u8) -> Block {
+        // Depth guard — prevents u8 overflow from deeply nested structures and
+        // guarantees list items / blockquotes don't recurse forever.
+        if depth > 2 {
+            return Block::Paragraph {
+                inlines: vec![Inline::Text {
+                    content: safe_text(self.bytes(2)),
+                    span: Span::NONE,
+                }],
+                span: Span::NONE,
+            };
+        }
         let kind = self.byte() % if depth > 0 { 5 } else { 7 };
         match kind {
             0 => Block::Paragraph {
@@ -197,7 +208,10 @@ impl<'a> Gen<'a> {
             },
             4 => {
                 // Tight unordered list (marker always `-` — pulldown-cmark
-                // doesn't preserve the original marker on reparse)
+                // doesn't preserve the original marker on reparse).
+                // Each item has exactly one block; multiple blocks per tight
+                // item would emit as continuation lines and reparse as one
+                // paragraph with SoftBreaks.
                 let n = (self.byte() as usize % 3) + 1;
                 let items = (0..n)
                     .map(|_| ListItem {
