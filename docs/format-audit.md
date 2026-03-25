@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc promoted to 5-Production 2026-03-22 (benchmarks added, all vertical gates passed).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc promoted to 5-Production 2026-03-22 (benchmarks added, all vertical gates passed); commonmark-fmt reader promoted to 5-Production 2026-03-25 (fuzz_commonmark_reader 342K runs clean, fuzz_commonmark_roundtrip 4+ hours clean after 12 crash artifacts fixed).
 
 ## Maturity Pipeline
 
@@ -30,7 +30,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| commonmark | 4† | 3† | pulldown-cmark | production | fuzz |
+| commonmark | 5† | 3† | pulldown-cmark | – | fuzz |
 | gfm | 4† | 3† | pulldown-cmark | production | fuzz |
 | markdown | 4† | 4† | pulldown-cmark | production | production |
 | markdown-strict | 4† | 2† | pulldown-cmark | production | harness |
