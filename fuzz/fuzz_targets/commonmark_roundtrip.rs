@@ -136,7 +136,7 @@ impl<'a> Gen<'a> {
         // Fix by wrapping boundary HardBreaks with Text nodes.
         let needs_prefix = matches!(merged.first(), Some(Inline::HardBreak { .. }));
         let needs_suffix = matches!(merged.last(), Some(Inline::HardBreak { .. }));
-        if needs_prefix || needs_suffix {
+        let merged = if needs_prefix || needs_suffix {
             let mut out = Vec::new();
             if needs_prefix {
                 out.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
@@ -148,7 +148,11 @@ impl<'a> Gen<'a> {
             merge_text(out)
         } else {
             merged
-        }
+        };
+        // Consecutive delimiter spans (Emphasis/Strong/Link) produce concatenated
+        // star runs at junctions (`****`, `***`) that violate CommonMark §6.4
+        // rule 9 (multiple-of-3 sum) and break roundtrip.  Separate them.
+        separate_delimiter_spans(merged)
     }
 
     fn block(&mut self, depth: u8) -> Block {
@@ -306,6 +310,31 @@ fn no_trailing_code(mut inlines: Vec<Inline>) -> Vec<Inline> {
 
 fn fix_code_boundaries(inlines: Vec<Inline>) -> Vec<Inline> {
     no_trailing_code(no_leading_code(inlines))
+}
+
+/// Insert Text("x") between consecutive delimiter spans.
+///
+/// Two adjacent Emphasis/Strong/Link nodes produce `*...**...*` or `**...****...**`
+/// junctions.  CommonMark §6.4 rule 9: if the sum of the opening and closing
+/// delimiter run lengths is a multiple of 3 (and neither is a multiple of 3),
+/// the run cannot close the span — so `**a****b**` (sum 2+4=6) parses as a
+/// single Strong containing `a****b` rather than two separate Strongs.
+/// Similarly `*a**b*` (sum 1+2=3) breaks.  Insert a separator Text to avoid
+/// the concatenated-run problem.
+fn separate_delimiter_spans(inlines: Vec<Inline>) -> Vec<Inline> {
+    let is_delimited = |i: &Inline| {
+        matches!(i, Inline::Emphasis { .. } | Inline::Strong { .. } | Inline::Link { .. })
+    };
+    let mut out: Vec<Inline> = Vec::new();
+    for inline in inlines {
+        if is_delimited(&inline) {
+            if out.last().map_or(false, is_delimited) {
+                out.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
+            }
+        }
+        out.push(inline);
+    }
+    out
 }
 
 fn merge_text(inlines: Vec<Inline>) -> Vec<Inline> {
