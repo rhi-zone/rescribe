@@ -69,10 +69,11 @@ impl<'a> Gen<'a> {
     }
 
     fn inline(&mut self, depth: u8) -> Inline {
-        // At depth > 0 (inside markup spans), only allow leaf inlines to avoid
-        // nested-delimiter ambiguity. pulldown-cmark has strict rules about
-        // which nesting combinations produce valid markup, so we keep it simple.
-        let kind = self.byte() % if depth > 0 { 3 } else { 6 };
+        // At depth > 0 (inside markup spans), only Text and Code — no HardBreak.
+        // A HardBreak inside Emphasis/Strong/Link would be stripped by
+        // strip_hard_breaks() when the span appears in a heading, potentially
+        // leaving two Code spans adjacent (the HardBreak was their only separator).
+        let kind = self.byte() % if depth > 0 { 2 } else { 6 };
         match kind {
             0 => Inline::Text {
                 content: safe_text(self.bytes(3)),
@@ -260,34 +261,20 @@ impl<'a> Gen<'a> {
     }
 }
 
-/// Recursively remove all HardBreak nodes from an inline tree.
+/// Remove HardBreak nodes from heading inline content and re-normalize.
 ///
-/// ATX headings are single-line; a HardBreak anywhere in the tree (including
-/// inside nested Emphasis/Strong/Link) emits "  \n" which splits the heading
-/// across lines.  Adjacent Text nodes left behind are merged.
+/// ATX headings are single-line; any HardBreak emits "  \n" which splits the
+/// heading.  Since depth > 0 inlines never contain HardBreaks (inline() uses
+/// % 2 at depth > 0), stripping is only needed at the top (depth=0) level.
+///
+/// After stripping, two Code/Emphasis spans that were only separated by a
+/// HardBreak may be adjacent.  Re-apply separate_delimiter_spans.
 fn strip_hard_breaks(inlines: Vec<Inline>) -> Vec<Inline> {
     let stripped: Vec<Inline> = inlines
         .into_iter()
-        .filter_map(|inline| match inline {
-            Inline::HardBreak { .. } => None,
-            Inline::Emphasis { inlines, span } => Some(Inline::Emphasis {
-                inlines: strip_hard_breaks(inlines),
-                span,
-            }),
-            Inline::Strong { inlines, span } => Some(Inline::Strong {
-                inlines: strip_hard_breaks(inlines),
-                span,
-            }),
-            Inline::Link { inlines, url, title, span } => Some(Inline::Link {
-                inlines: strip_hard_breaks(inlines),
-                url,
-                title,
-                span,
-            }),
-            other => Some(other),
-        })
+        .filter(|i| !matches!(i, Inline::HardBreak { .. }))
         .collect();
-    merge_text(stripped)
+    separate_delimiter_spans(merge_text(stripped))
 }
 
 /// Ensure the first inline of an Emphasis/Strong/Link is not a Code span.
