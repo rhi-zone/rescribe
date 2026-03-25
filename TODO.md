@@ -256,7 +256,7 @@ Depends on pulldown-cmark. No rescribe dependency. Exposes:
 8. [x] No-panic fuzz gate (`fuzz_commonmark_reader`) (2026-03-25)
 9. [x] Round-trip fuzz (`fuzz_commonmark_roundtrip`) — compile-verified (2026-03-25)
 10. [x] `rescribe-read-markdown` + `rescribe-read-commonmark`: tree-sitter backend dropped; both now use commonmark-fmt (2026-03-25)
-11. [ ] 5-Production sign-off — pending fuzz run (needs `cargo fuzz run fuzz_commonmark_reader` + roundtrip)
+11. [x] 5-Production sign-off — fuzz_commonmark_reader 342K runs clean; fuzz_commonmark_roundtrip 4+ hours / ~2M+ runs clean after 12 crash artifacts fixed (2026-03-25)
 
 **GFM extensions** (after base complete):
 Tables, strikethrough (`~~text~~`), task list items (`- [x]`), extended autolinks
