@@ -314,23 +314,29 @@ fn fix_code_boundaries(inlines: Vec<Inline>) -> Vec<Inline> {
 
 /// Insert Text("x") between consecutive delimiter spans.
 ///
-/// Two adjacent Emphasis/Strong/Link nodes produce `*...**...*` or `**...****...**`
-/// junctions.  CommonMark §6.4 rule 9: if the sum of the opening and closing
-/// delimiter run lengths is a multiple of 3 (and neither is a multiple of 3),
-/// the run cannot close the span — so `**a****b**` (sum 2+4=6) parses as a
-/// single Strong containing `a****b` rather than two separate Strongs.
-/// Similarly `*a**b*` (sum 1+2=3) breaks.  Insert a separator Text to avoid
-/// the concatenated-run problem.
+/// Adjacent Emphasis/Strong/Link produce star-run junctions (`****`, `***`)
+/// that violate CommonMark §6.4 rule 9 (multiple-of-3 sum).
+///
+/// Adjacent Code spans produce backtick-run junctions (`` ` `` + `` ` `` =
+/// ```` `` ````) — the parser sees the merged backtick run as a 2-backtick
+/// delimiter and swallows content across the span boundary.
+///
+/// Insert a Text("x") separator between any two consecutive spans to prevent
+/// these concatenated-delimiter issues.
 fn separate_delimiter_spans(inlines: Vec<Inline>) -> Vec<Inline> {
-    let is_delimited = |i: &Inline| {
-        matches!(i, Inline::Emphasis { .. } | Inline::Strong { .. } | Inline::Link { .. })
+    let is_span = |i: &Inline| {
+        matches!(
+            i,
+            Inline::Emphasis { .. }
+                | Inline::Strong { .. }
+                | Inline::Link { .. }
+                | Inline::Code { .. }
+        )
     };
     let mut out: Vec<Inline> = Vec::new();
     for inline in inlines {
-        if is_delimited(&inline) {
-            if out.last().map_or(false, is_delimited) {
-                out.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
-            }
+        if is_span(&inline) && out.last().map_or(false, is_span) {
+            out.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
         }
         out.push(inline);
     }
