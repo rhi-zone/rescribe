@@ -164,8 +164,28 @@ const HEADING_CHARS: &[char] = &['=', '-', '~', '^', '"', '`', '#', '*', '+', '_
 
 /// Parse an RST string into an [`RstDoc`].
 pub fn parse(input: &str) -> Result<RstDoc, RstError> {
-    let mut iter = EventIter::new(input);
-    let blocks = events::collect_doc_from_iter(&mut iter);
+    let mut p = EventIter::new(input);
+    let mut blocks = Vec::new();
+    loop {
+        // drain any pending block deferred by the previous try_parse_block
+        if let Some(pending) = p.pending_block.take() {
+            blocks.push(pending);
+            continue;
+        }
+        p.skip_blank_lines();
+        if p.is_eof() {
+            break;
+        }
+        if let Some(block) = p.try_parse_block() {
+            blocks.push(block);
+        } else {
+            p.advance_line();
+        }
+    }
+    // drain any final pending block
+    if let Some(pending) = p.pending_block.take() {
+        blocks.push(pending);
+    }
     Ok(RstDoc { blocks })
 }
 

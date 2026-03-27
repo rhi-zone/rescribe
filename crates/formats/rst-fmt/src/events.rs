@@ -108,7 +108,10 @@ pub use crate::EventIter;
 
 /// Collect all blocks from an [`EventIter`] into a `Vec<Block>`.
 ///
-/// Called by `parse()` to reconstruct the AST from the lazy event stream.
+/// Available for callers who drive [`EventIter`] as an iterator and want to
+/// reconstruct the AST from the event stream. `parse()` uses direct recursive
+/// descent instead.
+#[allow(dead_code)]
 pub(crate) fn collect_doc_from_iter(iter: &mut EventIter<'_>) -> Vec<Block> {
     let mut block_stack: Vec<BlockFrame> = vec![BlockFrame::Document { blocks: Vec::new() }];
     let mut inline_ctx: Vec<InlineFrame> = Vec::new();
@@ -125,6 +128,7 @@ pub(crate) fn collect_doc_from_iter(iter: &mut EventIter<'_>) -> Vec<Block> {
 
 // ── Block frame stack ─────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 enum BlockFrame {
     Document { blocks: Vec<Block> },
     Paragraph { inlines: Vec<Inline> },
@@ -149,6 +153,7 @@ enum BlockFrame {
 
 // ── Inline frame stack ────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 enum InlineFrame {
     Emphasis { inlines: Vec<Inline> },
     Strong { inlines: Vec<Inline> },
@@ -163,6 +168,7 @@ enum InlineFrame {
     RstSpan { role: String, children: Vec<Inline> },
 }
 
+#[allow(dead_code)]
 fn push_inline(inline: Inline, block_stack: &mut [BlockFrame], inline_ctx: &mut [InlineFrame]) {
     if let Some(frame) = inline_ctx.last_mut() {
         match frame {
@@ -198,6 +204,7 @@ fn push_inline(inline: Inline, block_stack: &mut [BlockFrame], inline_ctx: &mut 
     }
 }
 
+#[allow(dead_code)]
 fn push_block(block: Block, block_stack: &mut [BlockFrame]) {
     match block_stack.last_mut() {
         Some(BlockFrame::Document { blocks })
@@ -211,7 +218,7 @@ fn push_block(block: Block, block_stack: &mut [BlockFrame]) {
     }
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, dead_code)]
 fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx: &mut Vec<InlineFrame>) {
     match event {
         // ── Block openers ─────────────────────────────────────────────────────
