@@ -103,7 +103,9 @@ impl<'a> Event<'a> {
 }
 
 /// Collect a complete AsciiDoc from an [`EventIter`] used as an event iterator.
-/// Called by `parse::parse()` to reconstruct the AST from events.
+/// Retained for callers that drive [`EventIter`] as an iterator rather than
+/// calling `parse()` directly.
+#[allow(dead_code)]
 pub(crate) fn collect_doc_from_iter(
     iter: &mut EventIter<'_>,
 ) -> (Vec<Block>, std::collections::HashMap<String, String>, Vec<Diagnostic>) {
@@ -127,6 +129,7 @@ pub(crate) fn collect_doc_from_iter(
 
 // ── Block frame stack ─────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 enum BlockFrame {
     Document { blocks: Vec<Block> },
     Paragraph { id: Option<String>, role: Option<String>, checked: Option<bool>, inlines: Vec<Inline> },
@@ -146,6 +149,7 @@ enum BlockFrame {
 
 // ── Inline frame stack ────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 enum InlineFrame {
     Strong { inlines: Vec<Inline> },
     Emphasis { inlines: Vec<Inline> },
@@ -160,6 +164,7 @@ enum InlineFrame {
     FootnoteDef { label: String, inlines: Vec<Inline> },
 }
 
+#[allow(dead_code)]
 fn inlines_from_frame(frame: &mut InlineFrame) -> &mut Vec<Inline> {
     match frame {
         InlineFrame::Strong { inlines } => inlines,
@@ -176,6 +181,7 @@ fn inlines_from_frame(frame: &mut InlineFrame) -> &mut Vec<Inline> {
     }
 }
 
+#[allow(dead_code)]
 fn push_inline(block_stack: &mut [BlockFrame], inline_ctx: &mut [InlineFrame], inline: Inline) {
     if let Some(frame) = inline_ctx.last_mut() {
         inlines_from_frame(frame).push(inline);
@@ -191,6 +197,7 @@ fn push_inline(block_stack: &mut [BlockFrame], inline_ctx: &mut [InlineFrame], i
     }
 }
 
+#[allow(dead_code)]
 fn push_block(block_stack: &mut [BlockFrame], block: Block) {
     match block_stack.last_mut() {
         Some(BlockFrame::Document { blocks }) => blocks.push(block),
@@ -201,6 +208,7 @@ fn push_block(block_stack: &mut [BlockFrame], block: Block) {
     }
 }
 
+#[allow(dead_code)]
 fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx: &mut Vec<InlineFrame>) {
     match event {
         Event::StartDocument | Event::EndDocument => {

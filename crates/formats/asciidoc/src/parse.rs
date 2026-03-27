@@ -13,10 +13,22 @@ use std::borrow::Cow;
 /// Parsing is always infallible: malformed constructs produce diagnostics
 /// rather than errors.
 pub fn parse(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
-    let mut iter = EventIter::new(input);
-    let (blocks, attributes, diagnostics) = crate::events::collect_doc_from_iter(&mut iter);
-    let doc = AsciiDoc { blocks, attributes, span: Span::NONE };
-    (doc, diagnostics)
+    let mut p = EventIter::new(input);
+    let mut blocks = Vec::new();
+    loop {
+        p.skip_blank_lines();
+        if p.is_eof() {
+            break;
+        }
+        if let Some(block) = p.try_parse_block() {
+            blocks.push(block);
+        } else {
+            p.advance_line();
+        }
+    }
+    let attributes = p.take_attributes();
+    let diagnostics = std::mem::take(&mut p.diagnostics);
+    (AsciiDoc { blocks, attributes, span: Span::NONE }, diagnostics)
 }
 
 // ── Parser ────────────────────────────────────────────────────────────────────
