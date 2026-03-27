@@ -1,27 +1,27 @@
 //! Streaming RTF writer — serializes RTF token events to bytes.
 //!
-//! [`Writer`] accepts [`Event`] items (the low-level RTF token stream) and
+//! [`Writer`] accepts [`TokenEvent`] items (the low-level RTF token stream) and
 //! writes the corresponding RTF bytes to the underlying `Write` sink.
 //!
-//! This is the inverse of the `events()` tokenizer: feeding the output of
-//! `events(input)` into a `Writer` should reproduce the original RTF bytes
+//! This is the inverse of the `token_events()` tokenizer: feeding the output of
+//! `token_events(input)` into a `Writer` should reproduce the original RTF bytes
 //! (modulo whitespace normalization in control word delimiters).
 //!
 //! # Example
 //! ```no_run
 //! use rtf_fmt::writer::Writer;
-//! use rtf_fmt::Event;
+//! use rtf_fmt::TokenEvent;
 //!
 //! let mut w = Writer::new(Vec::<u8>::new());
 //! // Reproduce a minimal RTF document from tokens
-//! w.write_event(Event::GroupStart { span: Default::default() });
-//! w.write_event(Event::ControlWord { name: "rtf".into(), param: Some(1), span: Default::default() });
-//! w.write_event(Event::Text { text: "Hello".into(), span: Default::default() });
-//! w.write_event(Event::GroupEnd { span: Default::default() });
+//! w.write_event(TokenEvent::GroupStart { span: Default::default() });
+//! w.write_event(TokenEvent::ControlWord { name: "rtf".into(), param: Some(1), span: Default::default() });
+//! w.write_event(TokenEvent::Text { text: "Hello".into(), span: Default::default() });
+//! w.write_event(TokenEvent::GroupEnd { span: Default::default() });
 //! let bytes = w.finish();
 //! ```
 
-use crate::events::Event;
+use crate::events::TokenEvent;
 use std::io::Write;
 
 /// Streaming RTF writer.
@@ -41,17 +41,17 @@ impl<W: Write> Writer<W> {
     }
 
     /// Write one RTF token event to the sink.
-    pub fn write_event(&mut self, event: Event) {
+    pub fn write_event(&mut self, event: TokenEvent) {
         match event {
-            Event::GroupStart { .. } => {
+            TokenEvent::GroupStart { .. } => {
                 let _ = self.sink.write_all(b"{");
                 self.last_was_control = false;
             }
-            Event::GroupEnd { .. } => {
+            TokenEvent::GroupEnd { .. } => {
                 let _ = self.sink.write_all(b"}");
                 self.last_was_control = false;
             }
-            Event::ControlWord { name, param, .. } => {
+            TokenEvent::ControlWord { name, param, .. } => {
                 let _ = self.sink.write_all(b"\\");
                 let _ = self.sink.write_all(name.as_bytes());
                 if let Some(n) = param {
@@ -64,7 +64,7 @@ impl<W: Write> Writer<W> {
                     self.last_was_control = true;
                 }
             }
-            Event::ControlSymbol { ch, hex_byte, .. } => {
+            TokenEvent::ControlSymbol { ch, hex_byte, .. } => {
                 if ch == '\'' {
                     if let Some(b) = hex_byte {
                         let _ = write!(self.sink, "\\'{:02x}", b);
@@ -79,7 +79,7 @@ impl<W: Write> Writer<W> {
                 }
                 self.last_was_control = false;
             }
-            Event::Text { text, .. } => {
+            TokenEvent::Text { text, .. } => {
                 // RTF text: escape { } \ characters
                 let escaped = escape_rtf_text(&text);
                 let _ = self.sink.write_all(escaped.as_bytes());
@@ -119,15 +119,15 @@ mod tests {
     #[test]
     fn test_writer_group() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(Event::GroupStart { span: span() });
-        w.write_event(Event::GroupEnd { span: span() });
+        w.write_event(TokenEvent::GroupStart { span: span() });
+        w.write_event(TokenEvent::GroupEnd { span: span() });
         assert_eq!(w.finish(), b"{}");
     }
 
     #[test]
     fn test_writer_control_word_with_param() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(Event::ControlWord { name: "rtf".into(), param: Some(1), span: span() });
+        w.write_event(TokenEvent::ControlWord { name: "rtf".into(), param: Some(1), span: span() });
         let bytes = w.finish();
         assert_eq!(bytes, b"\\rtf1");
     }
@@ -135,7 +135,7 @@ mod tests {
     #[test]
     fn test_writer_control_word_no_param() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(Event::ControlWord { name: "par".into(), param: None, span: span() });
+        w.write_event(TokenEvent::ControlWord { name: "par".into(), param: None, span: span() });
         let bytes = w.finish();
         assert_eq!(bytes, b"\\par ");
     }
@@ -143,7 +143,7 @@ mod tests {
     #[test]
     fn test_writer_hex_symbol() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(Event::ControlSymbol { ch: '\'', hex_byte: Some(0xe9), span: span() });
+        w.write_event(TokenEvent::ControlSymbol { ch: '\'', hex_byte: Some(0xe9), span: span() });
         let bytes = w.finish();
         assert_eq!(bytes, b"\\'e9");
     }
@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn test_writer_text_escaping() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(Event::Text { text: "a{b}c\\d".into(), span: span() });
+        w.write_event(TokenEvent::Text { text: "a{b}c\\d".into(), span: span() });
         let bytes = w.finish();
         assert_eq!(bytes, b"a\\{b\\}c\\\\d");
     }
@@ -160,7 +160,7 @@ mod tests {
     fn test_writer_roundtrip_tokens() {
         // Tokenize an RTF snippet, write it back, re-tokenize — token streams should match.
         let input = b"{\\rtf1\\ansi Hello World}";
-        let tokens: Vec<_> = crate::events::events(input).collect();
+        let tokens: Vec<_> = crate::events::token_events(input).collect();
 
         let mut w = Writer::new(Vec::<u8>::new());
         for ev in tokens.clone() {
@@ -168,20 +168,20 @@ mod tests {
         }
         let output = w.finish();
 
-        let tokens2: Vec<_> = crate::events::events(&output).collect();
+        let tokens2: Vec<_> = crate::events::token_events(&output).collect();
 
         // Strip spans for comparison (positions differ after re-serialization)
-        fn strip(ev: Event) -> Event {
+        fn strip(ev: TokenEvent) -> TokenEvent {
             match ev {
-                Event::GroupStart { .. } => Event::GroupStart { span: Span::new(0, 0) },
-                Event::GroupEnd { .. } => Event::GroupEnd { span: Span::new(0, 0) },
-                Event::ControlWord { name, param, .. } => {
-                    Event::ControlWord { name, param, span: Span::new(0, 0) }
+                TokenEvent::GroupStart { .. } => TokenEvent::GroupStart { span: Span::new(0, 0) },
+                TokenEvent::GroupEnd { .. } => TokenEvent::GroupEnd { span: Span::new(0, 0) },
+                TokenEvent::ControlWord { name, param, .. } => {
+                    TokenEvent::ControlWord { name, param, span: Span::new(0, 0) }
                 }
-                Event::ControlSymbol { ch, hex_byte, .. } => {
-                    Event::ControlSymbol { ch, hex_byte, span: Span::new(0, 0) }
+                TokenEvent::ControlSymbol { ch, hex_byte, .. } => {
+                    TokenEvent::ControlSymbol { ch, hex_byte, span: Span::new(0, 0) }
                 }
-                Event::Text { text, .. } => Event::Text { text, span: Span::new(0, 0) },
+                TokenEvent::Text { text, .. } => TokenEvent::Text { text, span: Span::new(0, 0) },
             }
         }
 

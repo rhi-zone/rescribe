@@ -1,13 +1,14 @@
-/// Low-level pull parser: tokenize RTF into a stream of [`Event`]s.
+/// Low-level pull parser: tokenize RTF into a stream of [`TokenEvent`]s.
 ///
 /// This is a zero-allocation iterator over the raw RTF token stream.
-/// Most callers will prefer the higher-level [`parse`][crate::parse] API.
+/// Most callers will prefer the higher-level [`parse`][crate::parse] API or
+/// the semantic [`events`][crate::events] API.
 use crate::ast::Span;
 use crate::parse::windows1252_to_char;
 
 /// A single RTF token.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Event {
+pub enum TokenEvent {
     /// `{` — begin a group; state should be pushed
     GroupStart { span: Span },
     /// `}` — end a group; state should be popped
@@ -28,25 +29,27 @@ pub enum Event {
     Text { text: String, span: Span },
 }
 
-/// Returns an iterator that tokenizes `input` into RTF [`Event`]s.
-pub fn events(input: &[u8]) -> impl Iterator<Item = Event> + '_ {
-    EventIter { input, pos: 0 }
+/// Returns an iterator that tokenizes `input` into raw RTF [`TokenEvent`]s.
+///
+/// See [`crate::events`] for the higher-level semantic event API.
+pub fn token_events(input: &[u8]) -> impl Iterator<Item = TokenEvent> + '_ {
+    TokenEventIter { input, pos: 0 }
 }
 
 /// Convenience wrapper for callers that already have a `&str`.
-pub fn events_str(input: &str) -> impl Iterator<Item = Event> + '_ {
-    events(input.as_bytes())
+pub fn token_events_str(input: &str) -> impl Iterator<Item = TokenEvent> + '_ {
+    token_events(input.as_bytes())
 }
 
-struct EventIter<'a> {
+struct TokenEventIter<'a> {
     input: &'a [u8],
     pos: usize,
 }
 
-impl<'a> Iterator for EventIter<'a> {
-    type Item = Event;
+impl<'a> Iterator for TokenEventIter<'a> {
+    type Item = TokenEvent;
 
-    fn next(&mut self) -> Option<Event> {
+    fn next(&mut self) -> Option<TokenEvent> {
         loop {
             if self.pos >= self.input.len() {
                 return None;
@@ -58,14 +61,14 @@ impl<'a> Iterator for EventIter<'a> {
                 b'{' => {
                     let start = self.pos;
                     self.advance();
-                    return Some(Event::GroupStart {
+                    return Some(TokenEvent::GroupStart {
                         span: Span::new(start, self.pos),
                     });
                 }
                 b'}' => {
                     let start = self.pos;
                     self.advance();
-                    return Some(Event::GroupEnd {
+                    return Some(TokenEvent::GroupEnd {
                         span: Span::new(start, self.pos),
                     });
                 }
@@ -78,7 +81,7 @@ impl<'a> Iterator for EventIter<'a> {
                     let next = self.current_byte()?;
                     if next.is_ascii_lowercase() {
                         let (name, param) = self.read_control_word();
-                        return Some(Event::ControlWord {
+                        return Some(TokenEvent::ControlWord {
                             name,
                             param,
                             span: Span::new(start, self.pos),
@@ -96,7 +99,7 @@ impl<'a> Iterator for EventIter<'a> {
                         } else {
                             None
                         };
-                        return Some(Event::ControlSymbol {
+                        return Some(TokenEvent::ControlSymbol {
                             ch: '\'',
                             hex_byte,
                             span: Span::new(start, self.pos),
@@ -104,7 +107,7 @@ impl<'a> Iterator for EventIter<'a> {
                     } else {
                         let sym = next as char;
                         self.advance();
-                        return Some(Event::ControlSymbol {
+                        return Some(TokenEvent::ControlSymbol {
                             ch: sym,
                             hex_byte: None,
                             span: Span::new(start, self.pos),
@@ -132,7 +135,7 @@ impl<'a> Iterator for EventIter<'a> {
                     if text.is_empty() {
                         continue;
                     }
-                    return Some(Event::Text {
+                    return Some(TokenEvent::Text {
                         text,
                         span: Span::new(start, self.pos),
                     });
@@ -142,7 +145,7 @@ impl<'a> Iterator for EventIter<'a> {
     }
 }
 
-impl<'a> EventIter<'a> {
+impl<'a> TokenEventIter<'a> {
     fn current_byte(&self) -> Option<u8> {
         self.input.get(self.pos).copied()
     }
@@ -207,38 +210,38 @@ mod tests {
 
     #[test]
     fn test_events_simple() {
-        let evts: Vec<_> = events(br"{\rtf1 Hello\par}").collect();
-        assert!(evts.iter().any(|e| matches!(e, Event::GroupStart { .. })));
-        assert!(evts.iter().any(|e| matches!(e, Event::GroupEnd { .. })));
+        let evts: Vec<_> = token_events(br"{\rtf1 Hello\par}").collect();
+        assert!(evts.iter().any(|e| matches!(e, TokenEvent::GroupStart { .. })));
+        assert!(evts.iter().any(|e| matches!(e, TokenEvent::GroupEnd { .. })));
         assert!(
             evts.iter()
-                .any(|e| matches!(e, Event::ControlWord { name, .. } if name == "rtf"))
+                .any(|e| matches!(e, TokenEvent::ControlWord { name, .. } if name == "rtf"))
         );
         assert!(
             evts.iter()
-                .any(|e| matches!(e, Event::Text { text, .. } if text == "Hello"))
+                .any(|e| matches!(e, TokenEvent::Text { text, .. } if text == "Hello"))
         );
         assert!(
             evts.iter()
-                .any(|e| matches!(e, Event::ControlWord { name, .. } if name == "par"))
+                .any(|e| matches!(e, TokenEvent::ControlWord { name, .. } if name == "par"))
         );
     }
 
     #[test]
     fn test_events_control_symbol() {
-        let evts: Vec<_> = events(br"\{").collect();
+        let evts: Vec<_> = token_events(br"\{").collect();
         assert!(
             evts.iter()
-                .any(|e| matches!(e, Event::ControlSymbol { ch: '{', .. }))
+                .any(|e| matches!(e, TokenEvent::ControlSymbol { ch: '{', .. }))
         );
     }
 
     #[test]
     fn test_events_hex() {
-        let evts: Vec<_> = events(br"\'41").collect();
+        let evts: Vec<_> = token_events(br"\'41").collect();
         assert!(evts.iter().any(|e| matches!(
             e,
-            Event::ControlSymbol {
+            TokenEvent::ControlSymbol {
                 ch: '\'',
                 hex_byte: Some(0x41),
                 ..
@@ -249,13 +252,13 @@ mod tests {
     #[test]
     fn test_events_spans() {
         let input = br"\b hello";
-        let evts: Vec<_> = events(input).collect();
+        let evts: Vec<_> = token_events(input).collect();
         // \b starts at byte 0
         let cw = evts
             .iter()
-            .find(|e| matches!(e, Event::ControlWord { name, .. } if name == "b"));
+            .find(|e| matches!(e, TokenEvent::ControlWord { name, .. } if name == "b"));
         let cw = cw.unwrap();
-        if let Event::ControlWord { span, .. } = cw {
+        if let TokenEvent::ControlWord { span, .. } = cw {
             assert_eq!(span.start, 0);
         }
     }

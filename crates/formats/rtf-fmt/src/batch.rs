@@ -23,16 +23,16 @@
 //! # Example — callback style
 //! ```no_run
 //! use rtf_fmt::batch::BatchSink;
-//! use rtf_fmt::Event;
+//! use rtf_fmt::TokenEvent;
 //!
 //! let mut evs = Vec::new();
-//! let mut sink = BatchSink::new(|ev: Event| evs.push(ev));
+//! let mut sink = BatchSink::new(|ev: TokenEvent| evs.push(ev));
 //! sink.feed(b"{\\rtf1 Hello}");
 //! sink.finish();
 //! ```
 
 use crate::ast::{Diagnostic, RtfDoc};
-use crate::events::Event;
+use crate::events::TokenEvent;
 
 /// Chunk-driven RTF parser that returns the full AST on finish.
 #[derive(Default)]
@@ -56,13 +56,13 @@ impl BatchParser {
     }
 }
 
-/// Chunk-driven RTF tokenizer that delivers low-level events to a callback on finish.
-pub struct BatchSink<F: FnMut(Event)> {
+/// Chunk-driven RTF tokenizer that delivers low-level token events to a callback on finish.
+pub struct BatchSink<F: FnMut(TokenEvent)> {
     buf: Vec<u8>,
     callback: F,
 }
 
-impl<F: FnMut(Event)> BatchSink<F> {
+impl<F: FnMut(TokenEvent)> BatchSink<F> {
     pub fn new(callback: F) -> Self {
         BatchSink { buf: Vec::new(), callback }
     }
@@ -74,7 +74,7 @@ impl<F: FnMut(Event)> BatchSink<F> {
 
     /// Finish and deliver all RTF token events to the callback.
     pub fn finish(mut self) {
-        for event in crate::events::events(&self.buf) {
+        for event in crate::events::token_events(&self.buf) {
             (self.callback)(event);
         }
     }
@@ -83,7 +83,7 @@ impl<F: FnMut(Event)> BatchSink<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::Event;
+    use crate::events::TokenEvent;
 
     #[test]
     fn test_batch_parser_basic() {
@@ -110,6 +110,6 @@ mod tests {
         let mut sink = BatchSink::new(|ev| events.push(ev));
         sink.feed(b"{\\rtf1 Hello}");
         sink.finish();
-        assert!(events.iter().any(|e| matches!(e, Event::GroupStart { .. })));
+        assert!(events.iter().any(|e| matches!(e, TokenEvent::GroupStart { .. })));
     }
 }
