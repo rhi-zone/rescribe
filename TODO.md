@@ -384,7 +384,22 @@ from scratch as a proper standalone library.
 - [x] Streaming writer (`w-stream`) — Writer<W: Write> with write_event/finish — 2026-03-23
 - [x] Fix events() — now a true pull iterator (2026-03-24)
 - [x] StreamingParser<H: Handler> + Handler trait — 2026-03-25
-- [ ] events() frame-stack fix — O(nesting depth), not O(block subtree)
+- [x] events() frame-stack fix — O(nesting depth), not O(block subtree) (2026-03-28)
+- [x] parse() direct recursive descent — independent of events() (2026-03-28)
+- [ ] StreamingParser<H> Tier 2 — true chunked streaming (currently buffers all input)
+
+### `rtf-fmt` — API modes (2026-03-28)
+
+- [x] `ast`: `parse(input: &[u8]) -> (RtfDoc, Vec<Diagnostic>)` — Span on every node
+- [x] `ast`: `emit(ast: &RtfDoc) -> Vec<u8>` — builder writer
+- [x] `stream` (token level): `token_events(input: &[u8]) -> TokenEventIter` — raw RTF tokens
+- [x] `stream` (semantic): `events(input: &[u8]) -> SemanticEventIter` — document-semantic events;
+  internally calls `parse()` first (RTF group/property inheritance requires full context);
+  walks parsed RtfDoc with frame-stack; documented limitation
+- [x] `batch`: `StreamingParser<H: Handler>` + `Handler` trait — buffers all input (stub)
+- [x] `w-build`: `emit()` builder writer
+- [ ] StreamingParser<H> Tier 2 — true chunked streaming (currently buffers all input)
+- [ ] `w-stream`: Writer<W: Write> streaming writer
 
 ### DEBT: Streaming architecture — five hand-rolled crates need upgrade
 
@@ -392,44 +407,31 @@ The four hand-rolled crates (`rst-fmt`, `asciidoc`, `djot-fmt`, `org-fmt`) plus
 `rtf-fmt` do not yet match the architecture in `docs/format-library-design.md`.
 Current state and gaps:
 
-**`events()` — block-granular, not event-granular:**
-All four still use `collect_block_events(block, &mut VecDeque)` — they parse one
-`Block` value, then buffer *all* of that block's events before returning the first.
-For a deeply nested construct (blockquote → list → list_item → paragraph), the
-entire subtree is buffered. Memory is O(subtree size), not O(nesting depth). This
-is not the correct streaming model.
+**`events()` — block-granular, not event-granular: [DONE 2026-03-28]**
+Fixed: all four crates now use a `Vec<Frame>` frame-stack. `next()` pops one frame,
+yields one event, pushes child frames in reverse order. Memory is O(nesting depth).
+`parse()` is now direct recursive descent (independent of events()).
 
-**Correct target:** `EventIter` IS the state machine. A frame stack
-`Vec<(BlockKind, child_cursor)>` replaces `VecDeque<Event>`. `next()` peeks at the
-top frame, yields the appropriate event, and advances the cursor — O(depth) memory,
-one event per `next()` call, no intermediate `Block` allocation.
+**`StreamingParser<H: Handler>` — stub only, Tier 2 required:**
+All five hand-rolled crates have `StreamingParser<H>` in their `batch.rs` but the
+implementation buffers all input until `finish()`. This is **not acceptable** — it
+is a placeholder only. The design-doc contract is O(largest token + nesting depth):
+- `feed()` must process the chunk, call `handler.handle(event)` for each complete token
+- Split tokens at chunk boundaries must be buffered in parser state, not caller
+- `BatchSink` is kept for backwards compat; `StreamingParser` must be true Tier 2
 
-**`StreamingParser<H: Handler>` — added (2026-03-25):**
-All four hand-rolled crates now have `StreamingParser<H: Handler>` + `Handler` trait
-in their `batch.rs`. The implementation buffers all input until `finish()` — same
-behaviour as the old `BatchSink`, but with the correct design-doc API surface. True
-incremental chunked streaming requires the frame-stack events() fix (item 1 above).
-`BatchSink` is kept for backwards compatibility.
+`commonmark-fmt` is the **only** exemption (pulldown requires full `&str`). Every
+hand-rolled parser has no such excuse. This is a blocking gap for large-document use.
 
-**`parse()` — should be independent of `events()`:**
-Currently `parse()` calls `events().collect()` via a stack-based tree builder.
-This is correct for behaviour but suboptimal: it forces materialisation through
-the event dispatch layer and prevents direct struct construction. For max perf,
-`parse()` should be direct recursive descent.
+**`Cow::Borrowed` — not yet used:**
+All `Cow` text fields in `events()` are `Owned`. Identify runs with no escape
+sequences and yield `Cow::Borrowed` slices from the input. Pure performance win.
 
-**`Cow::Borrowed` — not used:**
-All `Cow` text fields are `Owned`. The zero-copy path (borrowed slices from the
-input `&[u8]`) is not wired up. This is the easiest win: identify runs with no
-escape sequences and yield `Cow::Borrowed` from `events()`.
+**Schedule:** Address all five crates in one pass (mechanical and parallel).
 
-**Schedule:** After `commonmark-fmt` vertical is complete. Address all five crates
-in one pass (not one at a time — the changes are mechanical and parallel).
-
-Priority order within the upgrade:
-1. `events()` frame-stack fix — highest impact, enables correct memory profile
-2. `Cow::Borrowed` for zero-copy text — pure performance win, no API change
-3. `parse()` direct recursive descent — low priority, behaviour is already correct
-4. [x] `StreamingParser<H>` — added 2026-03-25; buffers all input (consistent API surface)
+Priority order:
+1. [ ] `StreamingParser<H>` Tier 2 — true chunked streaming, O(largest token + depth)
+2. [ ] `Cow::Borrowed` for zero-copy text — pure performance win, no API change
 
 ### `rst-fmt` — API modes complete (2026-03-23)
 
@@ -439,7 +441,9 @@ Priority order within the upgrade:
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags: ast, streaming, batch, writer-streaming, writer-builder
 - [x] Fix events() — now a true pull iterator (2026-03-24)
-- [ ] events() frame-stack fix — O(nesting depth), not O(block subtree)
+- [x] events() frame-stack fix — O(nesting depth), not O(block subtree) (2026-03-28)
+- [x] parse() direct recursive descent — independent of events() (2026-03-28)
+- [ ] StreamingParser<H> Tier 2 — true chunked streaming (currently buffers all input)
 - [ ] Parser gaps: table parsing, footnote parsing
 
 ### `org-fmt` — API modes complete (2026-03-23)
@@ -450,7 +454,9 @@ Priority order within the upgrade:
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags added
 - [x] Fix events() — now a true pull iterator (2026-03-24)
-- [ ] events() frame-stack fix — O(nesting depth), not O(block subtree)
+- [x] events() frame-stack fix — O(nesting depth), not O(block subtree) (2026-03-28)
+- [x] parse() direct recursive descent — independent of events() (2026-03-28)
+- [ ] StreamingParser<H> Tier 2 — true chunked streaming (currently buffers all input)
 - [ ] Parser/writer gaps: blockquote nesting, footnote definitions, figure/caption blocks
 
 ### `asciidoc` — API modes complete (2026-03-23)
@@ -461,7 +467,9 @@ Priority order within the upgrade:
 - [x] `w-stream`: Writer<W: Write> streaming writer
 - [x] Feature flags added
 - [x] Fix events() — now a true pull iterator (2026-03-24)
-- [ ] events() frame-stack fix — O(nesting depth), not O(block subtree)
+- [x] events() frame-stack fix — O(nesting depth), not O(block subtree) (2026-03-28)
+- [x] parse() direct recursive descent — independent of events() (2026-03-28)
+- [ ] StreamingParser<H> Tier 2 — true chunked streaming (currently buffers all input)
 - [ ] Parser gaps: table parsing, footnote parsing, math parsing
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)
@@ -545,6 +553,37 @@ depth + largest token) memory is the primary use case, not an afterthought.
 - [ ] Publish `ooxml-fmt` to crates.io.
 - [ ] Deprecate individual crates — final version with deprecation notice pointing to
   `ooxml-fmt`. Keep compiling; mark `#[deprecated]` on the re-exported API surface.
+
+### Milestone: M2.5 — Streaming IR layer
+
+End-to-end streaming conversion with O(nesting depth + largest token) memory.
+Never materializes the full document. Required for large-document workloads.
+See CLAUDE.md "Streaming IR" section for architecture and rationale.
+
+**Prerequisite:** All five hand-rolled crates at true Tier 2 `StreamingParser`
+(see DEBT section above). ooxml-fmt rework also required before OOXML can stream.
+
+**rescribe-core additions:**
+- [ ] `IrEvent<'a>` — format-agnostic SAX-style open/close event type, mirroring
+  rescribe-std node kinds (StartParagraph/EndParagraph, StartHeading{level}/EndHeading, Text(Cow), etc.)
+- [ ] `IrHandler` trait — `fn handle(&mut self, event: IrEvent<'_>)`
+- [ ] `StreamingReader` trait — `feed(&mut self, chunk: &[u8])` + `finish(self)`
+  where the impl drives a format `StreamingParser` and translates format events to `IrEvent`
+- [ ] `StreamingWriter` trait — `handle(&mut self, event: IrEvent<'_>)` + `finish(self) -> Vec<u8>`
+- [ ] `IrTransformer` — `IrHandler` wrapper that transforms events and forwards to inner `IrHandler`
+- [ ] `DocumentBuilderHandler` — `IrHandler` impl that assembles a `Document` (materialized path)
+
+**Format adapter additions (one per format):**
+- [ ] Each `rescribe-read-{fmt}` gains a `StreamingReader` impl that wraps the format
+  library's `StreamingParser` and translates format events → `IrEvent`
+- [ ] Each `rescribe-write-{fmt}` gains a `StreamingWriter` impl
+
+**Pipeline:**
+```
+feed(chunk) → StreamingReader → IrEvent → IrTransformer → IrEvent → StreamingWriter → output chunk
+```
+
+---
 
 ### Milestone: M3 — Tier B/C verticals
 

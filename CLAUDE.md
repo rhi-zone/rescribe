@@ -192,6 +192,65 @@ crates/
 - `Emitter` - Document → bytes
 - `Transformer` - Document → Document
 
+## Streaming IR (planned architecture)
+
+`Document` is a materialized tree — it requires the full document in memory simultaneously.
+This is fine for typical documents but unacceptable for large corpora (legal discovery,
+academic corpora, enterprise search) where individual files can exceed available RAM.
+
+**No corners cut:** rescribe must support end-to-end streaming conversion with
+O(nesting depth + largest token) memory, never loading the full document into memory
+at once.
+
+### Target design
+
+```rust
+// Format-agnostic IR event stream (SAX-style open/close pairs, mirroring rescribe-std kinds)
+pub enum IrEvent<'a> {
+    StartDocument, EndDocument,
+    StartParagraph, EndParagraph,
+    StartHeading { level: u8 }, EndHeading,
+    Text(Cow<'a, str>),
+    // ... all IR node kinds as open/close pairs
+}
+
+// Streaming reader: feeds format chunks, calls handler per IR event
+pub trait StreamingReader {
+    fn feed(&mut self, chunk: &[u8]);
+    fn finish(self);
+}
+
+// Streaming writer: consumes IR events, produces output bytes incrementally
+pub trait StreamingWriter {
+    fn handle(&mut self, event: IrEvent<'_>);
+    fn finish(self) -> Vec<u8>;
+}
+
+// Materialized path: StreamingWriter that assembles a Document
+pub struct DocumentBuilderHandler { ... }
+impl StreamingWriter for DocumentBuilderHandler { ... }
+```
+
+### Pipeline model
+
+```
+feed(chunk) → [format StreamingParser] → IrEvent → [IrTransformer] → IrEvent → [StreamingWriter] → output chunk
+```
+
+`Document` stays. Callers that want the materialized tree use `parse()` → format AST
+→ thin adapter → `Document` (current path). The streaming path is additive.
+
+### What this requires from format libraries
+
+Each format library's `StreamingParser<H: Handler>` must be **true Tier 2**:
+- `feed()` processes the chunk, calls `handler.handle(event)` for each complete token
+- Memory: O(largest token + nesting depth), **not O(full input)**
+- Split tokens at chunk boundaries buffered in parser state, not the caller
+- The "buffer all input until finish()" stub is explicitly rejected for hand-rolled parsers
+
+`commonmark-fmt` is the **only** exemption — pulldown-cmark requires the full `&str`
+and superseding it is a non-goal. Every hand-rolled parser has no such excuse.
+
 ## Standard Node Kinds (in rescribe-std)
 
 Block: `document`, `paragraph`, `heading`, `code_block`, `blockquote`, `list`, `list_item`, `table`, `table_row`, `table_cell`, `table_header`, `figure`, `horizontal_rule`, `div`, `raw_block`, `definition_list`, `definition_term`, `definition_desc`
