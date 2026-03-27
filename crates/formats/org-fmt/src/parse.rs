@@ -13,8 +13,16 @@ use crate::events::Event;
 /// Parsing is infallible — unknown constructs produce [`Diagnostic`]s instead
 /// of hard errors.
 pub fn parse(input: &str) -> (OrgDoc, Vec<Diagnostic>) {
-    let mut iter = EventIter::new(input);
-    let (blocks, metadata, diagnostics) = crate::events::collect_doc_from_iter(&mut iter);
+    let mut p = EventIter::new(input);
+    let mut blocks = Vec::new();
+    loop {
+        match p.parse_next_block() {
+            None => break,
+            Some(block) => blocks.push(block),
+        }
+    }
+    let metadata = p.take_metadata();
+    let diagnostics = std::mem::take(&mut p.diagnostics);
     (OrgDoc { blocks, metadata }, diagnostics)
 }
 

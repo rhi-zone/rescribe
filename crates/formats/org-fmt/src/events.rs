@@ -153,8 +153,11 @@ pub use crate::parse::EventIter;
 // ── Tree builder (inverse of the collect_* functions) ────────────────────────
 
 /// Collect a complete `OrgDoc` from an `EventIter`.
-/// Called by `parse::parse()` to reconstruct the AST from events.
-pub(crate) fn collect_doc_from_iter(
+///
+/// Useful for callers that drive [`EventIter`] as an iterator and want a
+/// complete [`crate::ast::OrgDoc`] at the end.  `parse::parse()` no longer
+/// calls this; it uses direct recursive descent instead.
+pub fn collect_doc_from_iter(
     iter: &mut EventIter<'_>,
 ) -> (Vec<Block>, Vec<(String, String)>, Vec<Diagnostic>) {
     let mut block_stack: Vec<BlockFrame> = vec![BlockFrame::Document { blocks: Vec::new() }];
@@ -177,6 +180,7 @@ pub(crate) fn collect_doc_from_iter(
 
 // ── Block frame stack ─────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 enum BlockFrame {
     Document { blocks: Vec<Block> },
     Paragraph { inlines: Vec<Inline> },
@@ -197,6 +201,7 @@ enum BlockFrame {
 
 // ── Inline frame stack ────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 enum InlineFrame {
     Bold { inlines: Vec<Inline> },
     Italic { inlines: Vec<Inline> },
@@ -208,6 +213,7 @@ enum InlineFrame {
     FootnoteDefinition { label: String, inlines: Vec<Inline> },
 }
 
+#[allow(dead_code)]
 fn inlines_from_frame(frame: &mut InlineFrame) -> &mut Vec<Inline> {
     match frame {
         InlineFrame::Bold { inlines } => inlines,
@@ -221,6 +227,7 @@ fn inlines_from_frame(frame: &mut InlineFrame) -> &mut Vec<Inline> {
     }
 }
 
+#[allow(dead_code)]
 fn push_inline(block_stack: &mut [BlockFrame], inline_ctx: &mut [InlineFrame], inline: Inline) {
     if let Some(frame) = inline_ctx.last_mut() {
         inlines_from_frame(frame).push(inline);
@@ -239,6 +246,7 @@ fn push_inline(block_stack: &mut [BlockFrame], inline_ctx: &mut [InlineFrame], i
     }
 }
 
+#[allow(dead_code)]
 fn push_block(block_stack: &mut [BlockFrame], block: Block) {
     match block_stack.last_mut() {
         Some(BlockFrame::Document { blocks }) => blocks.push(block),
@@ -256,6 +264,7 @@ fn push_block(block_stack: &mut [BlockFrame], block: Block) {
     }
 }
 
+#[allow(dead_code)]
 fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx: &mut Vec<InlineFrame>) {
     match event {
         // ── Block start events ─────────────────────────────────────────────
