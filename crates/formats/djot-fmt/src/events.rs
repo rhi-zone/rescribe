@@ -5,8 +5,8 @@
 //! lazily via `push_next_block_frames()` which pushes frames onto a stack
 //! without intermediate Block allocation for compound blocks. Compound blocks
 //! (blockquote, list items, div) use `Frame::SubParser` to lazily parse inner
-//! content. `parse()` reconstructs a `DjotDoc` from an `EventIter` via a
-//! stack-based tree builder in `collect_doc_from_iter()`.
+//! content. `collect_doc_from_iter()` provides a stack-based tree builder for
+//! callers that want to reconstruct a `DjotDoc` from an `EventIter`.
 
 use crate::ast::*;
 use std::borrow::Cow;
@@ -113,8 +113,33 @@ pub use crate::parse::EventIter;
 
 // ── Tree builder: reconstruct DjotDoc from EventIter ─────────────────────────
 
+/// Reconstruct a `Vec<Block>` from any `OwnedEvent` iterator.
+///
+/// Used by the direct parse path to drain a `SubParser` into AST nodes for
+/// compound block content (blockquote, list items, div, definition descs).
+pub(crate) fn collect_blocks_from_event_iter<I: Iterator<Item = OwnedEvent>>(iter: I) -> Vec<Block> {
+    let mut block_stack: Vec<BlockFrame> = vec![BlockFrame::Document {
+        blocks: Vec::new(),
+        footnotes: Vec::new(),
+    }];
+    let mut inline_stack: Vec<InlineFrame> = Vec::new();
+
+    for event in iter {
+        handle_event(event, &mut block_stack, &mut inline_stack);
+    }
+
+    match block_stack.pop() {
+        Some(BlockFrame::Document { blocks, .. }) => blocks,
+        _ => Vec::new(),
+    }
+}
+
 /// Reconstruct a `DjotDoc` by consuming an `EventIter`.
-/// Called by `parse::parse()` so that `parse()` = `events().collect()`.
+///
+/// Useful for callers that drive `EventIter` as an iterator and want to
+/// reconstruct a `DjotDoc` from the event stream. Not used by `parse()`,
+/// which takes the direct recursive descent path.
+#[allow(dead_code)]
 pub(crate) fn collect_doc_from_iter(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
     let mut iter = EventIter::new(input);
 

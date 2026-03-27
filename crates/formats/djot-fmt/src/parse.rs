@@ -17,8 +17,515 @@ use crate::events::{Event, OwnedEvent};
 use std::borrow::Cow;
 
 /// Parse a Djot string into a `DjotDoc` and diagnostics. Infallible.
+///
+/// Direct recursive descent — builds AST nodes without going through event
+/// dispatch. Creates an `EventIter` to reuse `pre_scan` (link defs, footnote
+/// defs), then calls the block-parsing helpers directly in a loop.
 pub fn parse(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
-    crate::events::collect_doc_from_iter(input)
+    let mut iter = EventIter::new(input);
+    let blocks = parse_blocks_direct(&mut iter);
+    let footnotes = std::mem::take(&mut iter.footnote_defs);
+    let link_defs = std::mem::take(&mut iter.link_defs);
+    let diagnostics = std::mem::take(&mut iter.diagnostics);
+    (DjotDoc { blocks, footnotes, link_defs }, diagnostics)
+}
+
+/// Parse all top-level blocks from an `EventIter`, returning them as a `Vec<Block>`.
+///
+/// Calls the same block-parsing helpers as `push_next_block_frames` but
+/// constructs `Block` values directly rather than routing through event
+/// dispatch.
+fn parse_blocks_direct(iter: &mut EventIter<'_>) -> Vec<Block> {
+    let mut blocks = Vec::new();
+    while let Some(block) = parse_next_block_direct(iter) {
+        blocks.push(block);
+    }
+    blocks
+}
+
+/// Parse the next top-level block from `iter`, returning `None` when exhausted.
+///
+/// Mirrors `push_next_block_frames` but returns `Option<Block>` directly.
+fn parse_next_block_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    loop {
+        iter.skip_blank_lines();
+        if iter.at_end() {
+            return None;
+        }
+        let line: String = iter.current_line()?.to_string();
+        let trimmed = line.trim_start();
+
+        // Skip link defs (pre-scanned in EventIter::new)
+        if trimmed.starts_with('[') && !trimmed.starts_with("[^") {
+            if parse_link_def(trimmed).is_some() {
+                iter.advance();
+                continue;
+            }
+        }
+        // Skip footnote defs (pre-scanned in EventIter::new)
+        if trimmed.starts_with("[^") {
+            if parse_footnote_def_start(trimmed).is_some() {
+                iter.advance();
+                loop {
+                    let starts_with_indent = iter.current_line()
+                        .map(|l| l.starts_with(' ') || l.starts_with('\t'))
+                        .unwrap_or(false);
+                    if starts_with_indent { iter.advance(); } else { break; }
+                }
+                continue;
+            }
+        }
+
+        // Block attribute line
+        if trimmed.starts_with('{') && looks_like_attr_line(trimmed) {
+            if let Some(attr) = parse_attr(trimmed) {
+                iter.advance();
+                iter.set_pending_attr(attr);
+                continue;
+            }
+        }
+
+        // Heading
+        if trimmed.starts_with('#') {
+            if let Some(b) = parse_heading_direct(iter) { return Some(b); }
+        }
+
+        // Thematic break
+        if is_thematic_break(trimmed) {
+            return Some(parse_thematic_break_direct(iter));
+        }
+
+        // Fenced code / raw block
+        if trimmed.starts_with("```") {
+            if let Some(b) = parse_fenced_code_direct(iter) { return Some(b); }
+        }
+
+        // Div block
+        if trimmed.starts_with(":::") {
+            if let Some(b) = parse_div_direct(iter) { return Some(b); }
+        }
+
+        // Blockquote
+        if trimmed.starts_with("> ") || trimmed == ">" {
+            if let Some(b) = parse_blockquote_direct(iter) { return Some(b); }
+        }
+
+        // Table
+        if trimmed.starts_with('|') {
+            if let Some(b) = parse_table_direct(iter) { return Some(b); }
+        }
+
+        // List
+        if let Some(list_marker) = detect_list_marker(trimmed) {
+            if let Some(b) = parse_list_direct(iter, list_marker) { return Some(b); }
+        }
+
+        // Definition list
+        if trimmed.starts_with(": ") || trimmed == ":" {
+            if let Some(b) = parse_definition_list_direct(iter) { return Some(b); }
+        }
+
+        // Paragraph (fallback)
+        if let Some(b) = parse_paragraph_direct(iter) { return Some(b); }
+
+        // Nothing parsed — advance to avoid infinite loop
+        iter.advance();
+    }
+}
+
+// ── Direct block constructors ─────────────────────────────────────────────────
+
+fn parse_heading_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    let line: String = iter.current_line()?.to_string();
+    let trimmed = line.trim_start();
+    let level = trimmed.chars().take_while(|&c| c == '#').count() as u8;
+    if level == 0 || level > 6 { return None; }
+    let after = &trimmed[level as usize..];
+    if !after.is_empty() && !after.starts_with(' ') { return None; }
+    let content = after.trim_start().to_string();
+    iter.advance();
+    let attr = iter.take_pending_attr();
+    let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
+    let inlines = parse_inlines(&content, 0, &link_defs);
+    Some(Block::Heading { level, inlines, attr, span: Span::NONE })
+}
+
+fn parse_thematic_break_direct(iter: &mut EventIter<'_>) -> Block {
+    iter.advance();
+    let attr = iter.take_pending_attr();
+    Block::ThematicBreak { attr, span: Span::NONE }
+}
+
+fn parse_fenced_code_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    let line: String = iter.current_line()?.to_string();
+    let indent = count_leading_spaces(&line);
+    let trimmed_line = &line[indent..];
+    if !trimmed_line.starts_with("```") { return None; }
+    let fence_len = trimmed_line.chars().take_while(|&c| c == '`').count();
+    let info = trimmed_line[fence_len..].trim().to_string();
+    iter.advance();
+
+    let mut content_lines: Vec<String> = Vec::new();
+    loop {
+        let l_owned: Option<String> = iter.current_line().map(|l| l.to_string());
+        match l_owned {
+            None => break,
+            Some(l) => {
+                let l_trimmed = l.trim_start();
+                if l_trimmed.starts_with(&"`".repeat(fence_len)) {
+                    let close_extra = l_trimmed[fence_len..].trim();
+                    if close_extra.is_empty() {
+                        iter.advance();
+                        break;
+                    }
+                }
+                let stripped = if indent > 0 {
+                    if l.len() >= indent && l[..indent].chars().all(|c| c == ' ') {
+                        l[indent..].to_string()
+                    } else {
+                        l.to_string()
+                    }
+                } else {
+                    l.to_string()
+                };
+                content_lines.push(stripped);
+                iter.advance();
+            }
+        }
+    }
+    let attr = iter.take_pending_attr();
+    let raw_content = content_lines.join("\n");
+
+    if let Some(fmt) = info.strip_prefix('=') {
+        Some(Block::RawBlock {
+            format: fmt.trim().to_string(),
+            content: raw_content,
+            attr: Attr::default(),
+            span: Span::NONE,
+        })
+    } else {
+        let content = if raw_content.is_empty() { String::new() } else { format!("{raw_content}\n") };
+        let language = if info.is_empty() { None } else { Some(info) };
+        Some(Block::CodeBlock { language, content, attr, span: Span::NONE })
+    }
+}
+
+fn parse_div_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    let (class, valid) = {
+        let line: String = iter.current_line()?.to_string();
+        let trimmed = line.trim_start();
+        if !trimmed.starts_with(":::") { return None; }
+        let after = trimmed[3..].trim().to_string();
+        let class = if after.is_empty() { None } else { Some(after) };
+        (class, true)
+    };
+    let _ = valid;
+    iter.advance();
+
+    let close_line = find_div_close_generic(iter, iter.pos());
+    let mut inner_lines: Vec<String> = Vec::new();
+    while iter.pos() < close_line && !iter.at_end() {
+        inner_lines.push(iter.line_at(iter.pos()).to_string());
+        iter.advance();
+    }
+    {
+        let should_advance = iter.current_line()
+            .map(|t| {
+                let t = t.trim_start();
+                t.starts_with(":::") && t[3..].trim().is_empty()
+            })
+            .unwrap_or(false);
+        if should_advance { iter.advance(); }
+    }
+
+    let attr = iter.take_pending_attr();
+    let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
+    let sub = SubParser::new(inner_lines, link_defs);
+    let blocks = collect_blocks_from_sub(sub);
+    Some(Block::Div { class, blocks, attr, span: Span::NONE })
+}
+
+fn parse_blockquote_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    let mut inner_lines: Vec<String> = Vec::new();
+    loop {
+        let action = iter.current_line().map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("> ") {
+                Some(trimmed[2..].to_string())
+            } else if trimmed == ">" {
+                Some(String::new())
+            } else {
+                None
+            }
+        });
+        match action {
+            Some(Some(content)) => { inner_lines.push(content); iter.advance(); }
+            Some(None) | None => break,
+        }
+    }
+    if inner_lines.is_empty() { return None; }
+    let attr = iter.take_pending_attr();
+    let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
+    let sub = SubParser::new(inner_lines, link_defs);
+    let blocks = collect_blocks_from_sub(sub);
+    Some(Block::Blockquote { blocks, attr, span: Span::NONE })
+}
+
+fn parse_table_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    let mut raw_rows: Vec<(String, usize)> = Vec::new();
+    let mut _caption: Option<Vec<Inline>> = None;
+    let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
+
+    loop {
+        enum TableLineAction { Caption(String), Row(String), Stop }
+        let action = iter.current_line().map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with('^') && !trimmed.starts_with('|') {
+                TableLineAction::Caption(trimmed[1..].trim().to_string())
+            } else if trimmed.starts_with('|') {
+                TableLineAction::Row(trimmed.to_string())
+            } else {
+                TableLineAction::Stop
+            }
+        });
+        match action {
+            None | Some(TableLineAction::Stop) => break,
+            Some(TableLineAction::Caption(cap_content)) => {
+                _caption = Some(parse_inlines(&cap_content, 0, &link_defs));
+                iter.advance();
+            }
+            Some(TableLineAction::Row(row_str)) => {
+                let row_pos = iter.pos();
+                raw_rows.push((row_str, row_pos));
+                iter.advance();
+            }
+        }
+    }
+    if raw_rows.is_empty() { return None; }
+
+    let mut separator_positions: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut alignment_map: Vec<Option<Alignment>> = Vec::new();
+    for (idx, (row_str, _)) in raw_rows.iter().enumerate() {
+        if is_separator_row(row_str) {
+            separator_positions.insert(idx);
+            if alignment_map.is_empty() {
+                alignment_map = parse_separator_alignments(row_str);
+            }
+        }
+    }
+
+    let mut rows: Vec<TableRow> = Vec::new();
+    for (idx, (row_str, _line_idx)) in raw_rows.iter().enumerate() {
+        if separator_positions.contains(&idx) {
+            if let Some(prev) = rows.last_mut() {
+                prev.is_header = true;
+            }
+            continue;
+        }
+        let is_header = separator_positions.contains(&(idx + 1));
+        let cells = parse_table_row(row_str, 0, &alignment_map, &link_defs);
+        rows.push(TableRow { cells, is_header, span: Span::NONE });
+    }
+
+    Some(Block::Table { caption: _caption, rows, span: Span::NONE })
+}
+
+fn parse_list_direct(iter: &mut EventIter<'_>, marker: ListMarker) -> Option<Block> {
+    let attr = iter.take_pending_attr();
+    let kind = marker.to_list_kind();
+    let mut items: Vec<(Vec<String>, Option<bool>)> = Vec::new();
+    let mut tight = true;
+
+    let style_hint = if let ListMarker::Ordered { ref style, .. } = marker {
+        Some(style.clone())
+    } else {
+        None
+    };
+
+    let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
+
+    while let Some(l) = iter.current_line() {
+        let line_owned: String = l.to_string();
+        let trimmed_owned = line_owned.trim_start().to_string();
+        let m = if let Some(ref hint) = style_hint {
+            if let Some(om) = detect_ordered_marker_with_hint(&trimmed_owned, Some(hint)) {
+                om
+            } else if let Some(bm) = detect_list_marker(&trimmed_owned) {
+                bm
+            } else {
+                break;
+            }
+        } else if let Some(bm) = detect_list_marker(&trimmed_owned) {
+            bm
+        } else {
+            break;
+        };
+        if !m.compatible_with(&marker) { break; }
+
+        let marker_str = m.marker_str();
+        let skip = marker_str.len().min(trimmed_owned.len());
+        let content_after_marker = trimmed_owned[skip..].trim_start().to_string();
+        let checked = if m.is_task() { parse_task_marker(&content_after_marker) } else { None };
+        let first_line = if checked.is_some() {
+            skip_task_marker(&content_after_marker).to_string()
+        } else {
+            content_after_marker.clone()
+        };
+
+        iter.advance();
+
+        let mut item_lines = vec![first_line];
+        loop {
+            let next_owned: Option<String> = iter.current_line().map(|l| l.to_string());
+            let next = match next_owned { Some(ref s) => s.as_str(), None => break };
+            if next.trim().is_empty() {
+                let blank_pos = iter.pos();
+                iter.advance();
+                let after_blank_owned: Option<String> = iter.current_line().map(|l| l.to_string());
+                if let Some(ref after_blank) = after_blank_owned {
+                    if after_blank.starts_with("  ") || after_blank.starts_with('\t') {
+                        tight = false;
+                        item_lines.push(String::new());
+                    } else {
+                        iter.set_pos(blank_pos);
+                        break;
+                    }
+                } else {
+                    iter.set_pos(blank_pos);
+                    break;
+                }
+            } else if next.starts_with("  ") || next.starts_with('\t') {
+                let stripped = if next.starts_with('\t') { next[1..].to_string() } else { next[2..].to_string() };
+                item_lines.push(stripped);
+                iter.advance();
+            } else {
+                break;
+            }
+        }
+
+        items.push((item_lines, checked));
+
+        {
+            let next_is_blank = iter.current_line().map(|l| l.trim().is_empty()).unwrap_or(false);
+            if next_is_blank {
+                let saved_pos = iter.pos();
+                iter.skip_blank_lines();
+                let after_owned: Option<String> = iter.current_line().map(|l| l.to_string());
+                if let Some(ref after) = after_owned {
+                    let after_trimmed = after.trim_start();
+                    let hint_ref = style_hint.as_ref();
+                    let is_next_item = detect_list_marker(after_trimmed).is_some()
+                        || detect_ordered_marker_with_hint(after_trimmed, hint_ref).is_some();
+                    if is_next_item {
+                        tight = false;
+                    } else {
+                        iter.set_pos(saved_pos);
+                    }
+                }
+            }
+        }
+    }
+
+    if items.is_empty() { return None; }
+
+    let list_items: Vec<ListItem> = items
+        .into_iter()
+        .map(|(item_lines, checked)| {
+            let sub = SubParser::new(item_lines, link_defs.clone());
+            let blocks = collect_blocks_from_sub(sub);
+            ListItem { blocks, checked, span: Span::NONE }
+        })
+        .collect();
+
+    Some(Block::List { kind, tight, items: list_items, attr, span: Span::NONE })
+}
+
+fn parse_definition_list_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    let attr = iter.take_pending_attr();
+    let mut def_items: Vec<(Vec<Inline>, Vec<String>)> = Vec::new();
+    let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
+
+    loop {
+        let (term_content, valid) = {
+            let line_owned: String = match iter.current_line() { Some(l) => l.to_string(), None => break };
+            let trimmed = line_owned.trim_start().to_string();
+            if !trimmed.starts_with(": ") && trimmed != ":" { break; }
+            let tc = if trimmed.starts_with(": ") { trimmed[2..].to_string() } else { String::new() };
+            (tc, true)
+        };
+        let _ = valid;
+        iter.advance();
+
+        let mut def_lines: Vec<String> = Vec::new();
+        loop {
+            let next_owned: Option<String> = iter.current_line().map(|l| l.to_string());
+            let next = match next_owned { Some(ref s) => s.as_str(), None => break };
+            if next.starts_with("  ") || next.starts_with('\t') {
+                let stripped = if next.starts_with('\t') { next[1..].to_string() } else { next[2..].to_string() };
+                def_lines.push(stripped);
+                iter.advance();
+            } else if next.trim().is_empty() {
+                def_lines.push(String::new());
+                iter.advance();
+            } else {
+                break;
+            }
+        }
+
+        let term = parse_inlines(&term_content, 0, &link_defs);
+        def_items.push((term, def_lines));
+    }
+
+    if def_items.is_empty() { return None; }
+
+    let items: Vec<DefItem> = def_items
+        .into_iter()
+        .map(|(term, def_lines)| {
+            let sub = SubParser::new(def_lines, link_defs.clone());
+            let definitions = collect_blocks_from_sub(sub);
+            DefItem { term, definitions, span: Span::NONE }
+        })
+        .collect();
+
+    Some(Block::DefinitionList { items, attr, span: Span::NONE })
+}
+
+fn parse_paragraph_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    let mut lines: Vec<String> = Vec::new();
+    loop {
+        let line_owned: Option<String> = iter.current_line().map(|l| l.to_string());
+        let line = match line_owned { Some(ref s) => s.as_str(), None => break };
+        if line.trim().is_empty() { break; }
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('#')
+            || trimmed.starts_with("```")
+            || trimmed.starts_with(":::")
+            || is_thematic_break(trimmed)
+            || trimmed.starts_with("> ")
+            || trimmed == ">"
+            || trimmed.starts_with('|')
+            || detect_list_marker(trimmed).is_some()
+            || (trimmed.starts_with('{') && looks_like_attr_line(trimmed))
+        {
+            break;
+        }
+        lines.push(line.trim_end().to_string());
+        iter.advance();
+    }
+    if lines.is_empty() { return None; }
+    let attr = iter.take_pending_attr();
+    let content = lines.join("\n");
+    let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
+    let inlines = parse_inlines(&content, 0, &link_defs);
+    Some(Block::Paragraph { inlines, attr, span: Span::NONE })
+}
+
+/// Collect all blocks from a `SubParser` by draining its event stream into
+/// AST nodes. Used by the direct block constructors for compound blocks
+/// (blockquote, list items, div, definition descriptions).
+fn collect_blocks_from_sub(sub: SubParser) -> Vec<Block> {
+    use crate::events::collect_blocks_from_event_iter;
+    collect_blocks_from_event_iter(sub)
 }
 
 /// Phase tracker for `EventIter`'s `Iterator` implementation.
