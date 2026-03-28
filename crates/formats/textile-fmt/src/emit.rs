@@ -100,6 +100,10 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             ctx.write("\n");
         }
 
+        Block::HorizontalRule { .. } => {
+            ctx.write("---\n\n");
+        }
+
         Block::FootnoteDef { label, inlines, .. } => {
             ctx.write(&format!("fn{}. ", label));
             emit_inlines(inlines, ctx);

@@ -92,6 +92,8 @@ pub enum Block {
         rows: Vec<TableRow>,
         span: Span,
     },
+    /// Horizontal rule (`---` on its own line).
+    HorizontalRule { span: Span },
     /// Footnote definition: `fn1. content` at block level.
     FootnoteDef {
         label: String,
@@ -114,6 +116,7 @@ impl Block {
             Block::Blockquote { span, .. } => *span,
             Block::List { span, .. } => *span,
             Block::Table { span, .. } => *span,
+            Block::HorizontalRule { span } => *span,
             Block::FootnoteDef { span, .. } => *span,
             Block::DefinitionList { span, .. } => *span,
         }
@@ -151,6 +154,7 @@ impl Block {
                 rows: rows.into_iter().map(TableRow::strip_spans).collect(),
                 span: dummy,
             },
+            Block::HorizontalRule { .. } => Block::HorizontalRule { span: dummy },
             Block::FootnoteDef { label, inlines, .. } => Block::FootnoteDef {
                 label,
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),

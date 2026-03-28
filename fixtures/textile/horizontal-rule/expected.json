@@ -1,0 +1,9 @@
+{
+  "description": "Textile horizontal rule (---) mapped to horizontal_rule node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "horizontal_rule" },
+    { "path": "/2", "kind": "paragraph" }
+  ]
+}

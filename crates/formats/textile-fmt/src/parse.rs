@@ -115,6 +115,15 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            // Horizontal rule ---
+            if line.trim() == "---" {
+                let ls = self.line_start(self.pos);
+                let le = self.line_end(self.pos);
+                self.pos += 1;
+                nodes.push(Block::HorizontalRule { span: Span::new(ls, le) });
+                continue;
+            }
+
             // Footnote definition fn1. fn2. etc.
             if let Some(node) = self.try_parse_footnote_def(line) {
                 nodes.push(node);

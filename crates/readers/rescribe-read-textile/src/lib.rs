@@ -87,6 +87,8 @@ fn convert_block(block: &Block) -> Node {
             Node::new(node::TABLE).children(table_rows)
         }
 
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
+
         Block::FootnoteDef { label, inlines, .. } => {
             let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
             Node::new(node::FOOTNOTE_DEF)

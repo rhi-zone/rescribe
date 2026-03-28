@@ -14,7 +14,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] blockquote (bq.) — `rare-blockquote`
 - [x] code block (bc.) — `code-block`
 - [x] table — `table`
-- [ ] horizontal rule (---) — (missing)
+- [x] horizontal rule (---) — `horizontal-rule`
 - [x] definition list (;term :definition) — `definition-list`
 - [ ] pre block (pre.) — (missing)
 - [ ] notextile block (notextile.) — (missing)
