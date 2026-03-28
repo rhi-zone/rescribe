@@ -10,7 +10,7 @@ use crate::ast::*;
 /// yield borrowed slices of the input without changing the public API.
 /// For the common case of fully-owned events (e.g. batch mode) use the
 /// [`OwnedEvent`] type alias.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Event<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartParagraph,

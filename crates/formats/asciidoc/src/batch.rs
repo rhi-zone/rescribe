@@ -1,14 +1,9 @@
 //! Chunk-driven (batch) AsciiDoc parser.
 //!
-//! Feed input in arbitrarily-sized chunks with [`StreamingParser::feed`], then
-//! call [`StreamingParser::finish`] to deliver all events to the handler.
+//! # Memory model
 //!
-//! # Note
-//!
-//! This implementation buffers all input until `finish()`. True incremental
-//! chunked streaming will be added in a future version once the parser is
-//! restructured as a true state machine. For large-file use cases, prefer
-//! loading the full input and using [`events`](crate::events) directly.
+//! [`StreamingParser`] processes input in logical blocks. Memory usage is
+//! O(largest block), not O(full input). [`BatchParser`] buffers all input.
 //!
 //! # Example — AST style
 //! ```no_run
@@ -71,35 +66,146 @@ impl<F: FnMut(OwnedEvent)> Handler for F {
     }
 }
 
+/// Block accumulation state for the streaming parser.
+enum BlockState {
+    Between,
+    Accumulating,
+    /// Inside a delimited block (e.g. `----`…`----`).
+    /// The delimiter is stored to detect the closing line.
+    InDelimitedBlock { delim: String },
+}
+
 /// Chunked streaming AsciiDoc parser that delivers events to a [`Handler`].
 ///
-/// # Note
-///
-/// This implementation buffers all input until [`finish`](StreamingParser::finish).
-/// True incremental chunked streaming will be added in a future version.
+/// Memory: O(largest block). Delimited blocks (`----`…`----`, `====`…`====`,
+/// etc.) are buffered until the closing delimiter. All other content is
+/// buffered until the next blank line.
 pub struct StreamingParser<H: Handler> {
-    buf: Vec<u8>,
     handler: H,
+    line_buf: Vec<u8>,
+    block_lines: Vec<String>,
+    state: BlockState,
+    /// Whether `StartDocument` has been emitted.
+    started: bool,
 }
 
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
-        StreamingParser { buf: Vec::new(), handler }
-    }
-
-    /// Append a chunk of bytes to the internal buffer.
-    pub fn feed(&mut self, chunk: &[u8]) {
-        self.buf.extend_from_slice(chunk);
-    }
-
-    /// Parse all buffered input and deliver events to the handler.
-    pub fn finish(mut self) {
-        let s = String::from_utf8_lossy(&self.buf);
-        for event in crate::events(&s) {
-            self.handler.handle(event.into_owned());
+        StreamingParser {
+            handler,
+            line_buf: Vec::new(),
+            block_lines: Vec::new(),
+            state: BlockState::Between,
+            started: false,
         }
     }
+
+    /// Feed a chunk of bytes.  May call `handler.handle()` zero or more times.
+    pub fn feed(&mut self, chunk: &[u8]) {
+        for &byte in chunk {
+            if byte == b'\n' {
+                if self.line_buf.last() == Some(&b'\r') {
+                    self.line_buf.pop();
+                }
+                let line = String::from_utf8_lossy(&self.line_buf).into_owned();
+                self.line_buf.clear();
+                self.feed_line(line);
+            } else {
+                self.line_buf.push(byte);
+            }
+        }
+    }
+
+    fn feed_line(&mut self, line: String) {
+        let is_end_delim: Option<bool> =
+            if let BlockState::InDelimitedBlock { ref delim } = self.state {
+                Some(line.trim() == delim.as_str())
+            } else {
+                None
+            };
+
+        if let Some(is_end) = is_end_delim {
+            self.block_lines.push(line);
+            if is_end {
+                self.emit_block();
+                self.state = BlockState::Between;
+            }
+            return;
+        }
+
+        if line.trim().is_empty() {
+            if !self.block_lines.is_empty() {
+                self.emit_block();
+            }
+            self.state = BlockState::Between;
+            return;
+        }
+
+        let trimmed = line.trim();
+        // AsciiDoc delimited block markers: 4+ of the same delimiter character
+        if is_delimited_block_marker(trimmed) {
+            if !self.block_lines.is_empty() {
+                self.emit_block();
+            }
+            let delim = trimmed.to_owned();
+            self.state = BlockState::InDelimitedBlock { delim };
+            self.block_lines.push(line);
+            return;
+        }
+
+        self.state = BlockState::Accumulating;
+        self.block_lines.push(line);
+    }
+
+    fn emit_block(&mut self) {
+        if self.block_lines.is_empty() {
+            return;
+        }
+        let text = self.block_lines.join("\n");
+        self.block_lines.clear();
+        // AsciiDoc events() wraps each sub-document in StartDocument/EndDocument.
+        // We emit those at the document level instead, stripping the per-block wrappers.
+        for event in crate::events(&text) {
+            let owned = event.into_owned();
+            match owned {
+                OwnedEvent::StartDocument => {
+                    if !self.started {
+                        self.started = true;
+                        self.handler.handle(OwnedEvent::StartDocument);
+                    }
+                }
+                OwnedEvent::EndDocument => {} // deferred to finish()
+                ev => self.handler.handle(ev),
+            }
+        }
+    }
+
+    /// Flush any remaining input and deliver final events.
+    pub fn finish(mut self) {
+        if !self.line_buf.is_empty() {
+            if self.line_buf.last() == Some(&b'\r') {
+                self.line_buf.pop();
+            }
+            let line = String::from_utf8_lossy(&self.line_buf).into_owned();
+            self.feed_line(line);
+        }
+        self.emit_block();
+        if self.started {
+            self.handler.handle(OwnedEvent::EndDocument);
+        }
+    }
+}
+
+/// Returns true if `line` looks like an AsciiDoc delimited block marker.
+/// Markers are 4+ consecutive identical delimiter characters: `-`, `=`, `.`, `_`, `*`, `+`, `/`, `|`.
+fn is_delimited_block_marker(line: &str) -> bool {
+    if line.len() < 4 {
+        return false;
+    }
+    let ch = line.chars().next().unwrap();
+    matches!(ch, '-' | '=' | '.' | '_' | '*' | '+' | '/' | '|')
+        && line.chars().all(|c| c == ch)
 }
 
 /// Chunk-driven AsciiDoc parser that delivers events to a callback on finish.
@@ -175,6 +281,25 @@ mod tests {
         }
         p.finish();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { .. })));
+    }
+
+    #[test]
+    fn test_streaming_matches_bulk() {
+        let input = b"== Heading\n\nParagraph one.\n\nParagraph two.\n";
+
+        let bulk: Vec<OwnedEvent> = {
+            let s = String::from_utf8_lossy(input);
+            crate::events(&s).map(|e| e.into_owned()).collect()
+        };
+
+        let mut streamed: Vec<OwnedEvent> = Vec::new();
+        let mut p = StreamingParser::new(|ev| streamed.push(ev));
+        for chunk in input.chunks(7) {
+            p.feed(chunk);
+        }
+        p.finish();
+
+        assert_eq!(bulk, streamed);
     }
 
     #[test]

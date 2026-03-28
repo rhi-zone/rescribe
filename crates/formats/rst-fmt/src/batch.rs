@@ -1,14 +1,10 @@
 //! Chunk-driven (batch) RST parser.
 //!
-//! Feed input in arbitrarily-sized chunks with [`StreamingParser::feed`], then
-//! call [`StreamingParser::finish`] to deliver all events to the handler.
+//! # Memory model
 //!
-//! # Note
-//!
-//! This implementation buffers all input until `finish()`. True incremental
-//! chunked streaming will be added in a future version once the parser is
-//! restructured as a true state machine. For large-file use cases, prefer
-//! loading the full input and using [`events`](crate::events) directly.
+//! [`StreamingParser`] processes input in logical blocks (content between blank
+//! lines, or directive bodies). Memory usage is O(largest block), not O(full
+//! input). [`BatchParser`] buffers all input and is O(full input).
 //!
 //! # Example — AST style
 //! ```no_run
@@ -71,34 +67,109 @@ impl<F: FnMut(OwnedEvent)> Handler for F {
     }
 }
 
+/// Block accumulation state for the streaming parser.
+enum BlockState {
+    Between,
+    Accumulating,
+    /// Inside a directive body (indented lines after `::`).
+    /// Ends when a non-indented non-blank line arrives.
+    InDirectiveBody,
+}
+
 /// Chunked streaming RST parser that delivers events to a [`Handler`].
 ///
-/// # Note
+/// Memory: O(largest block). Split tokens at chunk boundaries are handled
+/// correctly — partial lines are buffered until the next `\n`.
 ///
-/// This implementation buffers all input until [`finish`](StreamingParser::finish).
-/// True incremental chunked streaming will be added in a future version.
+/// Known limitations in streaming mode:
+/// - RST link targets defined later in the document are not resolved.
+///   Use [`BatchParser`] + `parse()` for full resolution.
 pub struct StreamingParser<H: Handler> {
-    buf: Vec<u8>,
     handler: H,
+    line_buf: Vec<u8>,
+    block_lines: Vec<String>,
+    state: BlockState,
 }
 
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
-        StreamingParser { buf: Vec::new(), handler }
+        StreamingParser {
+            handler,
+            line_buf: Vec::new(),
+            block_lines: Vec::new(),
+            state: BlockState::Between,
+        }
     }
 
-    /// Append a chunk of bytes to the internal buffer.
+    /// Feed a chunk of bytes.  May call `handler.handle()` zero or more times.
     pub fn feed(&mut self, chunk: &[u8]) {
-        self.buf.extend_from_slice(chunk);
+        for &byte in chunk {
+            if byte == b'\n' {
+                if self.line_buf.last() == Some(&b'\r') {
+                    self.line_buf.pop();
+                }
+                let line = String::from_utf8_lossy(&self.line_buf).into_owned();
+                self.line_buf.clear();
+                self.feed_line(line);
+            } else {
+                self.line_buf.push(byte);
+            }
+        }
     }
 
-    /// Parse all buffered input and deliver events to the handler.
-    pub fn finish(mut self) {
-        let s = String::from_utf8_lossy(&self.buf);
-        for event in crate::events(&s) {
+    fn feed_line(&mut self, line: String) {
+        // Inside a directive body: keep accumulating indented/blank lines
+        if matches!(self.state, BlockState::InDirectiveBody) {
+            let is_blank = line.trim().is_empty();
+            let is_indented = line.starts_with(' ') || line.starts_with('\t');
+            if is_blank || is_indented {
+                self.block_lines.push(line);
+                return;
+            }
+            // Non-indented non-blank: directive body ended
+            self.emit_block();
+            self.state = BlockState::Between;
+            // Fall through to process this line as a new block start
+        }
+
+        if line.trim().is_empty() {
+            if !self.block_lines.is_empty() {
+                self.emit_block();
+            }
+            self.state = BlockState::Between;
+            return;
+        }
+
+        let trimmed = line.trim();
+        // Lines that introduce an indented body (directives, literal blocks)
+        let introduces_body = trimmed.ends_with("::")
+            || trimmed.starts_with(".. ");
+        self.state = if introduces_body { BlockState::InDirectiveBody } else { BlockState::Accumulating };
+        self.block_lines.push(line);
+    }
+
+    fn emit_block(&mut self) {
+        if self.block_lines.is_empty() {
+            return;
+        }
+        let text = self.block_lines.join("\n");
+        self.block_lines.clear();
+        for event in crate::events(&text) {
             self.handler.handle(event.into_owned());
         }
+    }
+
+    /// Flush any remaining input and deliver final events.
+    pub fn finish(mut self) {
+        if !self.line_buf.is_empty() {
+            if self.line_buf.last() == Some(&b'\r') {
+                self.line_buf.pop();
+            }
+            let line = String::from_utf8_lossy(&self.line_buf).into_owned();
+            self.feed_line(line);
+        }
+        self.emit_block();
     }
 }
 
@@ -174,6 +245,25 @@ mod tests {
         }
         p.finish();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { .. })));
+    }
+
+    #[test]
+    fn test_streaming_matches_bulk() {
+        let input = b"Section\n=======\n\nParagraph one.\n\nParagraph two.\n";
+
+        let bulk: Vec<OwnedEvent> = {
+            let s = String::from_utf8_lossy(input);
+            crate::events(&s).map(|e| e.into_owned()).collect()
+        };
+
+        let mut streamed: Vec<OwnedEvent> = Vec::new();
+        let mut p = StreamingParser::new(|ev| streamed.push(ev));
+        for chunk in input.chunks(7) {
+            p.feed(chunk);
+        }
+        p.finish();
+
+        assert_eq!(bulk, streamed);
     }
 
     #[test]

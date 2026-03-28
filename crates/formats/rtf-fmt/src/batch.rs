@@ -3,12 +3,19 @@
 //! Feed input in arbitrarily-sized chunks with [`BatchParser::feed`], then
 //! call [`BatchParser::finish`] to obtain the parsed AST.
 //!
-//! For event-callback style (low-level token delivery), use [`BatchSink`].
+//! For event-callback style with low-level token events use [`BatchSink`].
+//! For event-callback style with semantic document events use [`StreamingParser`].
 //!
-//! # Note
+//! # Memory note — RTF structural constraint
 //!
-//! This initial implementation buffers all input until `finish()`. Future
-//! versions will deliver events incrementally where the RTF structure allows.
+//! RTF requires font tables and color tables (declared in the document header)
+//! to be fully parsed before any body content can be semantically interpreted.
+//! This means [`StreamingParser`] must buffer the full document before delivering
+//! semantic events — it is O(full input), unlike the line-oriented format crates.
+//!
+//! This is an inherent property of the RTF format, not an implementation
+//! limitation. True incremental RTF streaming would require the caller to
+//! re-supply the header on every chunk, which is not practical.
 //!
 //! # Example — AST style
 //! ```no_run
@@ -33,6 +40,7 @@
 
 use crate::ast::{Diagnostic, RtfDoc};
 use crate::events::TokenEvent;
+use crate::sem_events::OwnedEvent;
 
 /// Chunk-driven RTF parser that returns the full AST on finish.
 #[derive(Default)]
@@ -76,6 +84,51 @@ impl<F: FnMut(TokenEvent)> BatchSink<F> {
     pub fn finish(mut self) {
         for event in crate::events::token_events(&self.buf) {
             (self.callback)(event);
+        }
+    }
+}
+
+/// Handler trait for semantic RTF events.
+///
+/// Implemented automatically for any `FnMut(OwnedEvent)`.
+pub trait Handler {
+    fn handle(&mut self, event: OwnedEvent);
+}
+
+impl<F: FnMut(OwnedEvent)> Handler for F {
+    fn handle(&mut self, event: OwnedEvent) {
+        self(event);
+    }
+}
+
+/// Chunked streaming RTF parser delivering semantic document events to a [`Handler`].
+///
+/// # Memory note
+///
+/// RTF's font and color tables must be parsed before body content can be
+/// interpreted, so this implementation buffers the **full document** before
+/// delivering any events. Memory is O(full input). See the
+/// [module-level docs](self) for details.
+pub struct StreamingParser<H: Handler> {
+    buf: Vec<u8>,
+    handler: H,
+}
+
+impl<H: Handler> StreamingParser<H> {
+    /// Create a new `StreamingParser` that delivers events to `handler`.
+    pub fn new(handler: H) -> Self {
+        StreamingParser { buf: Vec::new(), handler }
+    }
+
+    /// Feed a chunk of bytes.
+    pub fn feed(&mut self, chunk: &[u8]) {
+        self.buf.extend_from_slice(chunk);
+    }
+
+    /// Parse all buffered input and deliver semantic events to the handler.
+    pub fn finish(mut self) {
+        for event in crate::sem_events::events(&self.buf) {
+            self.handler.handle(event);
         }
     }
 }

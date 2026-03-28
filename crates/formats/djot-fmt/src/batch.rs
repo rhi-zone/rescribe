@@ -1,14 +1,9 @@
 //! Chunk-driven (batch) Djot parser.
 //!
-//! Feed input in arbitrarily-sized chunks with [`StreamingParser::feed`], then
-//! call [`StreamingParser::finish`] to deliver all events to the handler.
+//! # Memory model
 //!
-//! # Note
-//!
-//! This implementation buffers all input until `finish()`. True incremental
-//! chunked streaming will be added in a future version once the parser is
-//! restructured as a true state machine. For large-file use cases, prefer
-//! loading the full input and using [`events`](crate::events) directly.
+//! [`StreamingParser`] processes input in logical blocks. Memory usage is
+//! O(largest block), not O(full input). [`BatchParser`] buffers all input.
 //!
 //! # Example — AST style
 //! ```no_run
@@ -71,34 +66,154 @@ impl<F: FnMut(OwnedEvent)> Handler for F {
     }
 }
 
+/// Block accumulation state for the streaming parser.
+enum BlockState {
+    Between,
+    Accumulating,
+    /// Inside a fenced code block.  `fence` is the opening fence string
+    /// (e.g. "```" or "````") used to detect the closing fence.
+    InFencedCode { fence: String },
+    /// Inside a div block (`:::` … `:::`).
+    InDiv,
+}
+
 /// Chunked streaming Djot parser that delivers events to a [`Handler`].
 ///
-/// # Note
-///
-/// This implementation buffers all input until [`finish`](StreamingParser::finish).
-/// True incremental chunked streaming will be added in a future version.
+/// Memory: O(largest block). Fenced code blocks and div blocks are buffered
+/// until their closing fence/marker. All other content is buffered until the
+/// next blank line.
 pub struct StreamingParser<H: Handler> {
-    buf: Vec<u8>,
     handler: H,
+    line_buf: Vec<u8>,
+    block_lines: Vec<String>,
+    state: BlockState,
 }
 
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
-        StreamingParser { buf: Vec::new(), handler }
+        StreamingParser {
+            handler,
+            line_buf: Vec::new(),
+            block_lines: Vec::new(),
+            state: BlockState::Between,
+        }
     }
 
-    /// Append a chunk of bytes to the internal buffer.
+    /// Feed a chunk of bytes.  May call `handler.handle()` zero or more times.
     pub fn feed(&mut self, chunk: &[u8]) {
-        self.buf.extend_from_slice(chunk);
+        for &byte in chunk {
+            if byte == b'\n' {
+                if self.line_buf.last() == Some(&b'\r') {
+                    self.line_buf.pop();
+                }
+                let line = String::from_utf8_lossy(&self.line_buf).into_owned();
+                self.line_buf.clear();
+                self.feed_line(line);
+            } else {
+                self.line_buf.push(byte);
+            }
+        }
     }
 
-    /// Parse all buffered input and deliver events to the handler.
-    pub fn finish(mut self) {
-        let s = String::from_utf8_lossy(&self.buf).into_owned();
-        for event in crate::events(&s) {
+    fn feed_line(&mut self, line: String) {
+        let trimmed = line.trim().to_owned();
+
+        // Inside fenced code: accumulate until closing fence
+        let close_fence: Option<bool> =
+            if let BlockState::InFencedCode { ref fence } = self.state {
+                Some(trimmed == *fence)
+            } else {
+                None
+            };
+        if let Some(is_close) = close_fence {
+            self.block_lines.push(line);
+            if is_close {
+                self.emit_block();
+                self.state = BlockState::Between;
+            }
+            return;
+        }
+
+        // Inside div: accumulate until `:::`
+        if matches!(self.state, BlockState::InDiv) {
+            let is_end = trimmed == ":::";
+            self.block_lines.push(line);
+            if is_end {
+                self.emit_block();
+                self.state = BlockState::Between;
+            }
+            return;
+        }
+
+        if trimmed.is_empty() {
+            if !self.block_lines.is_empty() {
+                self.emit_block();
+            }
+            self.state = BlockState::Between;
+            return;
+        }
+
+        // Fenced code block open: line is 3+ backticks or tildes
+        if let Some(fence) = detect_fence(&trimmed) {
+            if !self.block_lines.is_empty() {
+                self.emit_block();
+            }
+            self.state = BlockState::InFencedCode { fence };
+            self.block_lines.push(line);
+            return;
+        }
+
+        // Div block open: line starting with `:::`
+        if trimmed.starts_with(":::") && trimmed.len() >= 3 {
+            if !self.block_lines.is_empty() {
+                self.emit_block();
+            }
+            self.state = BlockState::InDiv;
+            self.block_lines.push(line);
+            return;
+        }
+
+        self.state = BlockState::Accumulating;
+        self.block_lines.push(line);
+    }
+
+    fn emit_block(&mut self) {
+        if self.block_lines.is_empty() {
+            return;
+        }
+        let text = self.block_lines.join("\n");
+        self.block_lines.clear();
+        for event in crate::events(&text) {
             self.handler.handle(event.into_owned());
         }
+    }
+
+    /// Flush any remaining input and deliver final events.
+    pub fn finish(mut self) {
+        if !self.line_buf.is_empty() {
+            if self.line_buf.last() == Some(&b'\r') {
+                self.line_buf.pop();
+            }
+            let line = String::from_utf8_lossy(&self.line_buf).into_owned();
+            self.feed_line(line);
+        }
+        self.emit_block();
+    }
+}
+
+/// If `line` is a fenced code opener (3+ backticks or 3+ tildes), return the
+/// fence string (backticks/tildes only, no info string).
+fn detect_fence(line: &str) -> Option<String> {
+    let ch = line.chars().next()?;
+    if !matches!(ch, '`' | '~') {
+        return None;
+    }
+    let fence_len = line.chars().take_while(|&c| c == ch).count();
+    if fence_len >= 3 {
+        Some(std::iter::repeat_n(ch, fence_len).collect())
+    } else {
+        None
     }
 }
 
@@ -175,6 +290,25 @@ mod tests {
         }
         p.finish();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { .. })));
+    }
+
+    #[test]
+    fn test_streaming_matches_bulk() {
+        let input = b"# Heading\n\nParagraph one.\n\nParagraph two.\n";
+
+        let bulk: Vec<OwnedEvent> = {
+            let s = String::from_utf8_lossy(input);
+            crate::events(&s).map(|e| e.into_owned()).collect()
+        };
+
+        let mut streamed: Vec<OwnedEvent> = Vec::new();
+        let mut p = StreamingParser::new(|ev| streamed.push(ev));
+        for chunk in input.chunks(7) {
+            p.feed(chunk);
+        }
+        p.finish();
+
+        assert_eq!(bulk, streamed);
     }
 
     #[test]
