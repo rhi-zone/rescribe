@@ -1,0 +1,10 @@
+{
+  "description": "ODT table cells containing formatted inline content",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0/0", "kind": "strong" }
+  ]
+}

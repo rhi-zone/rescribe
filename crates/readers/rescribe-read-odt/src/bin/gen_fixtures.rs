@@ -49,6 +49,60 @@ fn write_fixture(name: &str, content_xml: &str, expected_json: &str) {
     println!("wrote {dir}/");
 }
 
+fn write_fixture_raw(name: &str, raw_bytes: Vec<u8>, expected_json: &str) {
+    let dir = format!("fixtures/odt/{name}");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(format!("{dir}/input.odt"), &raw_bytes).unwrap();
+    std::fs::write(format!("{dir}/expected.json"), expected_json).unwrap();
+    println!("wrote {dir}/");
+}
+
+fn make_odt_no_content() -> Vec<u8> {
+    // Valid zip but missing content.xml
+    let mut buf = Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(&mut buf);
+    let opts = SimpleFileOptions::default();
+    zip.start_file("mimetype", opts).unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.text").unwrap();
+    zip.finish().unwrap();
+    buf.into_inner()
+}
+
+fn make_odt_wrong_mimetype() -> Vec<u8> {
+    let mut buf = Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(&mut buf);
+    let opts = SimpleFileOptions::default();
+    zip.start_file("mimetype", opts).unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.spreadsheet").unwrap();
+    zip.start_file("content.xml", opts).unwrap();
+    zip.write_all(b"<root/>").unwrap();
+    zip.finish().unwrap();
+    buf.into_inner()
+}
+
+fn make_odt_corrupt_styles() -> Vec<u8> {
+    let mut buf = Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(&mut buf);
+    let opts = SimpleFileOptions::default();
+    zip.start_file("mimetype", opts).unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.text").unwrap();
+    zip.start_file("styles.xml", opts).unwrap();
+    zip.write_all(b"<not valid xml at all <<<").unwrap();
+    zip.start_file("content.xml", opts).unwrap();
+    zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Body text.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#).unwrap();
+    zip.finish().unwrap();
+    buf.into_inner()
+}
+
 fn main() {
     // Change to workspace root so we write fixtures/ in the right place.
     let manifest = env!("CARGO_MANIFEST_DIR");
@@ -954,5 +1008,481 @@ fn main() {
     { \"path\": \"/0/0\", \"kind\": \"text\", \"props\": { \"content\": \"before\\u00a0after\" } }
   ]
 }",
+    );
+
+    // ── meta-description ─────────────────────────────────────────────────────
+    write_fixture_meta("meta-description",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Body.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-meta
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <office:meta>
+    <dc:description>A test document.</dc:description>
+  </office:meta>
+</office:document-meta>"#,
+        r#"{
+  "description": "ODT document description from meta.xml (dc:description)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "description": "A test document." } }
+  ]
+}"#,
+    );
+
+    // ── meta-date ─────────────────────────────────────────────────────────────
+    write_fixture_meta("meta-date",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Body.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-meta
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <office:meta>
+    <dc:date>2024-01-15T10:30:00</dc:date>
+  </office:meta>
+</office:document-meta>"#,
+        r#"{
+  "description": "ODT document date from meta.xml (dc:date)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "date": "2024-01-15T10:30:00" } }
+  ]
+}"#,
+    );
+
+    // ── meta-language ─────────────────────────────────────────────────────────
+    write_fixture_meta("meta-language",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Body.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-meta
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <office:meta>
+    <dc:language>fr-FR</dc:language>
+  </office:meta>
+</office:document-meta>"#,
+        r#"{
+  "description": "ODT document language from meta.xml (dc:language)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "language": "fr-FR" } }
+  ]
+}"#,
+    );
+
+    // ── para-style-name ───────────────────────────────────────────────────────
+    write_fixture("para-style-name",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p text:style-name="Text_20_Body">Styled paragraph.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT paragraph style name preserved as odt:style-name property",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "odt:style-name": "Text_20_Body" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Styled paragraph." } }
+  ]
+}"#,
+    );
+
+    // ── colspan-rowspan ───────────────────────────────────────────────────────
+    write_fixture("colspan-rowspan",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0">
+  <office:body>
+    <office:text>
+      <table:table>
+        <table:table-row>
+          <table:table-cell table:number-columns-spanned="2"><text:p>Wide</text:p></table:table-cell>
+          <table:covered-table-cell/>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:number-rows-spanned="2"><text:p>Tall</text:p></table:table-cell>
+          <table:table-cell><text:p>B</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:covered-table-cell/>
+          <table:table-cell><text:p>C</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT table with colspan and rowspan",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0/0", "kind": "table_cell", "props": { "colspan": 2 } },
+    { "path": "/0/1/0", "kind": "table_cell", "props": { "rowspan": 2 } }
+  ]
+}"#,
+    );
+
+    // ── footnote ──────────────────────────────────────────────────────────────
+    write_fixture("footnote",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Body text<text:note text:id="ftn1" text:note-class="footnote">
+        <text:note-citation>1</text:note-citation>
+        <text:note-body>
+          <text:p>Footnote content here.</text:p>
+        </text:note-body>
+      </text:note> continues.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT footnote (text:note with note-class=footnote)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Body text" } },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "ftn1" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "ftn1" } }
+  ]
+}"#,
+    );
+
+    // ── endnote ───────────────────────────────────────────────────────────────
+    write_fixture("endnote",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Body text<text:note text:id="edn1" text:note-class="endnote">
+        <text:note-citation>i</text:note-citation>
+        <text:note-body>
+          <text:p>Endnote content.</text:p>
+        </text:note-body>
+      </text:note> more.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT endnote (text:note with note-class=endnote)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "edn1" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "edn1" } }
+  ]
+}"#,
+    );
+
+    // ── bookmark ──────────────────────────────────────────────────────────────
+    write_fixture("bookmark",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Before <text:bookmark text:name="anchor1"/>anchor after.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT bookmark (text:bookmark) becomes span with id",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Before " } },
+    { "path": "/0/1", "kind": "span", "props": { "id": "anchor1" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": "anchor after." } }
+  ]
+}"#,
+    );
+
+    // ── horizontal-rule ───────────────────────────────────────────────────────
+    write_fixture("horizontal-rule",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Before rule.</text:p>
+      <text:p text:style-name="Horizontal Line"/>
+      <text:p>After rule.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT horizontal rule via Horizontal Line paragraph style",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "horizontal_rule" },
+    { "path": "/2", "kind": "paragraph" }
+  ]
+}"#,
+    );
+
+    // ── Composition ──────────────────────────────────────────────────────────
+
+    // ── table-cells-formatted ────────────────────────────────────────────────
+    write_fixture("table-cells-formatted",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0">
+  <office:automatic-styles>
+    <style:style style:name="T1" style:family="text">
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+  </office:automatic-styles>
+  <office:body>
+    <office:text>
+      <table:table>
+        <table:table-row>
+          <table:table-cell><text:p><text:span text:style-name="T1">Bold cell</text:span></text:p></table:table-cell>
+          <table:table-cell><text:p>Plain cell</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT table cells containing formatted inline content",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0/0", "kind": "strong" }
+  ]
+}"#,
+    );
+
+    // ── list-items-formatted ─────────────────────────────────────────────────
+    write_fixture("list-items-formatted",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0">
+  <office:automatic-styles>
+    <style:style style:name="T1" style:family="text">
+      <style:text-properties fo:font-style="italic"/>
+    </style:style>
+  </office:automatic-styles>
+  <office:body>
+    <office:text>
+      <text:list>
+        <text:list-item><text:p><text:span text:style-name="T1">Italic item</text:span></text:p></text:list-item>
+        <text:list-item><text:p>Plain item</text:p></text:list-item>
+      </text:list>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT list items with inline formatting",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}"#,
+    );
+
+    // ── heading-formatted ─────────────────────────────────────────────────────
+    write_fixture("heading-formatted",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0">
+  <office:automatic-styles>
+    <style:style style:name="T1" style:family="text">
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+  </office:automatic-styles>
+  <office:body>
+    <office:text>
+      <text:h text:outline-level="1">Plain <text:span text:style-name="T1">bold</text:span> heading</text:h>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT heading containing inline bold formatting",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Plain " } },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/2", "kind": "text", "props": { "content": " heading" } }
+  ]
+}"#,
+    );
+
+    // ── link-formatted ────────────────────────────────────────────────────────
+    write_fixture("link-formatted",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0">
+  <office:automatic-styles>
+    <style:style style:name="T1" style:family="text">
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+  </office:automatic-styles>
+  <office:body>
+    <office:text>
+      <text:p>See <text:a xlink:href="https://example.com" xlink:type="simple"><text:span text:style-name="T1">bold link</text:span></text:a>.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT hyperlink containing formatted text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0/1", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/1/0", "kind": "strong" }
+  ]
+}"#,
+    );
+
+    // ── Adversarial ──────────────────────────────────────────────────────────
+
+    // ── adv-empty ─────────────────────────────────────────────────────────────
+    write_fixture("adv-empty",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text/>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT with empty body produces document with no children",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 0 }
+  ]
+}"#,
+    );
+
+    // ── adv-unknown-namespace ─────────────────────────────────────────────────
+    write_fixture("adv-unknown-namespace",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:custom="http://example.com/custom/1.0">
+  <office:body>
+    <office:text>
+      <text:p>Normal text.</text:p>
+      <custom:unknown-element custom:attr="value"/>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT with unknown XML namespace parses body content normally",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Normal text." } }
+  ]
+}"#,
+    );
+
+    // ── adv-corrupt-styles ────────────────────────────────────────────────────
+    write_fixture_raw("adv-corrupt-styles",
+        make_odt_corrupt_styles(),
+        r#"{
+  "description": "ODT with corrupt styles.xml still parses body content",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Body text." } }
+  ]
+}"#,
+    );
+
+    // ── adv-missing-content ───────────────────────────────────────────────────
+    write_fixture_raw("adv-missing-content",
+        make_odt_no_content(),
+        r#"{
+  "description": "ODT zip missing content.xml returns a parse error",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}"#,
+    );
+
+    // ── adv-malformed-zip ─────────────────────────────────────────────────────
+    write_fixture_raw("adv-malformed-zip",
+        b"this is not a zip file at all".to_vec(),
+        r#"{
+  "description": "Non-zip input returns a parse error",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}"#,
+    );
+
+    // ── adv-wrong-mimetype ────────────────────────────────────────────────────
+    write_fixture_raw("adv-wrong-mimetype",
+        make_odt_wrong_mimetype(),
+        r#"{
+  "description": "ODT zip with wrong mimetype (spreadsheet) returns parse error",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}"#,
     );
 }

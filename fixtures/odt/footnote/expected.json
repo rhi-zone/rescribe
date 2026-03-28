@@ -1,0 +1,10 @@
+{
+  "description": "ODT footnote (text:note with note-class=footnote)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Body text" } },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "ftn1" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "ftn1" } }
+  ]
+}

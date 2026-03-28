@@ -1,0 +1,8 @@
+{
+  "description": "ODT with unknown XML namespace parses body content normally",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Normal text." } }
+  ]
+}

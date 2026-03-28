@@ -1,0 +1,10 @@
+{
+  "description": "ODT heading containing inline bold formatting",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Plain " } },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/2", "kind": "text", "props": { "content": " heading" } }
+  ]
+}

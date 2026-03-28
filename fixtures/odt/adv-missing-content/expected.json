@@ -1,0 +1,6 @@
+{
+  "description": "ODT zip missing content.xml returns a parse error",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}

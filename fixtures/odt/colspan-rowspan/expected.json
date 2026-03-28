@@ -1,0 +1,9 @@
+{
+  "description": "ODT table with colspan and rowspan",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0/0", "kind": "table_cell", "props": { "colspan": 2 } },
+    { "path": "/0/1/0", "kind": "table_cell", "props": { "rowspan": 2 } }
+  ]
+}

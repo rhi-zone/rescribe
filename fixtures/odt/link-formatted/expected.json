@@ -1,0 +1,8 @@
+{
+  "description": "ODT hyperlink containing formatted text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0/1", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/1/0", "kind": "strong" }
+  ]
+}

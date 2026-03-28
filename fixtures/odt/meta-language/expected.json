@@ -1,0 +1,7 @@
+{
+  "description": "ODT document language from meta.xml (dc:language)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "language": "fr-FR" } }
+  ]
+}

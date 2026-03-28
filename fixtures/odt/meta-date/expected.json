@@ -1,0 +1,7 @@
+{
+  "description": "ODT document date from meta.xml (dc:date)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "date": "2024-01-15T10:30:00" } }
+  ]
+}

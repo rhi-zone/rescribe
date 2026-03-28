@@ -1,0 +1,6 @@
+{
+  "description": "Non-zip input returns a parse error",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}

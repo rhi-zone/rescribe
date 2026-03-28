@@ -24,6 +24,18 @@ pub fn parse_with_options(
     let mut archive =
         ZipArchive::new(cursor).map_err(|e| ParseError::Invalid(format!("Invalid ODT: {}", e)))?;
 
+    // Validate mimetype entry
+    if let Ok(mut mime_file) = archive.by_name("mimetype") {
+        let mut mime_content = String::new();
+        mime_file.read_to_string(&mut mime_content).map_err(ParseError::Io)?;
+        let mime = mime_content.trim();
+        if mime != "application/vnd.oasis.opendocument.text" {
+            return Err(ParseError::Invalid(format!(
+                "Not an ODT file (mimetype: {mime})"
+            )));
+        }
+    }
+
     let mut metadata = Properties::new();
 
     // Read meta.xml for metadata
@@ -139,6 +151,7 @@ enum ParaKind {
     Heading(u8),
     Code,
     Blockquote,
+    HorizontalRule,
 }
 
 // ── Style parsing ──────────────────────────────────────────────────────────────
@@ -198,6 +211,9 @@ fn parse_styles_from_xml(xml: &str) -> HashMap<String, StyleEntry> {
                             }
                             if current_name.contains("Quotation") || current_name.contains("Blockquote") || current_name.contains("Quote") {
                                 entry.para_kind = ParaKind::Blockquote;
+                            }
+                            if current_name.contains("Horizontal") || current_name == "Horizontal Line" {
+                                entry.para_kind = ParaKind::HorizontalRule;
                             }
                             if current_name.contains("Preformatted") || current_name.contains("Code") || current_name.contains("Monospace") {
                                 if current_family == "paragraph" || current_family.is_empty() {
@@ -632,6 +648,13 @@ fn parse_content(
     // Note citation skipping
     let mut in_note_citation: usize = 0;  // depth counter
 
+    // Footnote/endnote state
+    let mut in_note = false;
+    let mut note_id = String::new();
+    let mut note_class = String::new(); // "footnote" or "endnote"
+    let mut note_text = String::new();
+    let mut pending_footnotes: Vec<Node> = Vec::new();
+
     // Table state
     let mut table_stack: Vec<Node> = Vec::new();  // outer tables
     let mut row_stack: Vec<Node> = Vec::new();
@@ -670,6 +693,21 @@ fn parse_content(
                     "text:soft-hyphen" if in_paragraph && in_note_citation == 0 => {
                         if let Some(top) = inline_stack.last_mut() {
                             top.text.push('\u{00AD}');
+                        }
+                    }
+                    "text:bookmark" | "text:bookmark-start" if in_paragraph && in_note_citation == 0 => {
+                        let mut bm_name = String::new();
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"text:name" {
+                                bm_name = String::from_utf8_lossy(&attr.value).to_string();
+                            }
+                        }
+                        if !bm_name.is_empty()
+                            && let Some(top) = inline_stack.last_mut() {
+                            top.flush_text();
+                            top.children.push(
+                                Node::new(node::SPAN).prop("id", bm_name)
+                            );
                         }
                     }
                     // Self-closing paragraph — treat as empty paragraph
@@ -792,6 +830,31 @@ fn parse_content(
                         });
                     }
 
+                    "text:note" if in_paragraph => {
+                        note_id.clear();
+                        note_class.clear();
+                        note_text.clear();
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"text:id" => {
+                                    note_id = String::from_utf8_lossy(&attr.value).to_string();
+                                }
+                                b"text:note-class" => {
+                                    note_class = String::from_utf8_lossy(&attr.value).to_string();
+                                }
+                                _ => {}
+                            }
+                        }
+                        in_note = true;
+                        // Emit footnote_ref inline immediately
+                        if let Some(top) = inline_stack.last_mut() {
+                            top.flush_text();
+                            top.children.push(
+                                Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, note_id.clone())
+                            );
+                        }
+                    }
+
                     "text:note-citation" => {
                         in_note_citation += 1;
                     }
@@ -821,7 +884,27 @@ fn parse_content(
 
                     "table:table-cell" | "table:covered-table-cell" => {
                         in_table_cell = true;
-                        cell_stack.push(Node::new(node::TABLE_CELL));
+                        let mut cell = Node::new(node::TABLE_CELL);
+                        let mut colspan: u32 = 1;
+                        let mut rowspan: u32 = 1;
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"table:number-columns-spanned" => {
+                                    if let Ok(n) = String::from_utf8_lossy(&attr.value).parse::<u32>() {
+                                        colspan = n;
+                                    }
+                                }
+                                b"table:number-rows-spanned" => {
+                                    if let Ok(n) = String::from_utf8_lossy(&attr.value).parse::<u32>() {
+                                        rowspan = n;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        if colspan > 1 { cell = cell.prop(prop::COLSPAN, colspan as i64); }
+                        if rowspan > 1 { cell = cell.prop(prop::ROWSPAN, rowspan as i64); }
+                        cell_stack.push(cell);
                         para_depth = 0;
                         in_paragraph = false;
                         inline_stack.clear();
@@ -876,6 +959,10 @@ fn parse_content(
                                 } else {
                                     flush_pending_blockquote(&mut pending_blockquote, &mut doc);
                                     doc = doc.child(node);
+                                    // Flush any footnote/endnote defs collected during this paragraph
+                                    for fn_def in pending_footnotes.drain(..) {
+                                        doc = doc.child(fn_def);
+                                    }
                                 }
                             }
 
@@ -900,6 +987,21 @@ fn parse_content(
 
                     "text:note-citation" if in_note_citation > 0 => {
                         in_note_citation -= 1;
+                    }
+
+                    "text:note" if in_note => {
+                        // Build footnote_def from collected text
+                        if !note_text.is_empty() {
+                            let text_node = Node::new(node::TEXT)
+                                .prop(prop::CONTENT, note_text.clone());
+                            let para = Node::new(node::PARAGRAPH).child(text_node);
+                            let mut def = Node::new(node::FOOTNOTE_DEF)
+                                .prop(prop::LABEL, note_id.clone());
+                            def = def.child(para);
+                            pending_footnotes.push(def);
+                        }
+                        in_note = false;
+                        note_text.clear();
                     }
 
                     "text:list-item" => {
@@ -959,7 +1061,10 @@ fn parse_content(
             Ok(Event::Text(ref e)) => {
                 if in_paragraph && in_note_citation == 0 && para_depth > 0 {
                     let text = String::from_utf8_lossy(e.as_ref()).to_string();
-                    if let Some(top) = inline_stack.last_mut() {
+                    if in_note {
+                        // Accumulate into note body text
+                        note_text.push_str(&text);
+                    } else if let Some(top) = inline_stack.last_mut() {
                         top.text.push_str(&text);
                     }
                 }
@@ -967,9 +1072,12 @@ fn parse_content(
 
             Ok(Event::GeneralRef(ref e)) => {
                 if in_paragraph && in_note_citation == 0 && para_depth > 0
-                    && let Some(ch) = decode_general_ref(e.as_ref())
-                    && let Some(top) = inline_stack.last_mut() {
-                    top.text.push(ch);
+                    && let Some(ch) = decode_general_ref(e.as_ref()) {
+                    if in_note {
+                        note_text.push(ch);
+                    } else if let Some(top) = inline_stack.last_mut() {
+                        top.text.push(ch);
+                    }
                 }
             }
 
@@ -1055,11 +1163,22 @@ fn build_para_node(
             for c in children { para = para.child(c); }
             para // caller will wrap in blockquote
         }
+        ParaKind::HorizontalRule => {
+            Node::new(node::HORIZONTAL_RULE)
+        }
         ParaKind::Normal => {
             let mut n = Node::new(node::PARAGRAPH);
             for c in children { n = n.child(c); }
             n
         }
+    };
+
+    // Add odt:style-name for non-empty, non-synthetic styles
+    let node = if !style.is_empty() && !is_heading_tag
+        && !style.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        node.prop("odt:style-name", style)
+    } else {
+        node
     };
 
     if let Some(props) = para_props {
@@ -1126,6 +1245,9 @@ fn resolve_para_kind(
     }
     if lower.contains("quotation") || lower.contains("blockquote") || lower.contains("quote") {
         return ParaKind::Blockquote;
+    }
+    if lower.contains("horizontal") || lower.contains("hrule") || lower.contains("h-rule") {
+        return ParaKind::HorizontalRule;
     }
 
     ParaKind::Normal
@@ -1383,4 +1505,3 @@ mod tests {
         assert_eq!(list.props.get_bool("ordered"), Some(true));
     }
 }
-

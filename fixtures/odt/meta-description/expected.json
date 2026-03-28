@@ -1,0 +1,7 @@
+{
+  "description": "ODT document description from meta.xml (dc:description)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "description": "A test document." } }
+  ]
+}

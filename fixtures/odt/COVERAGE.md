@@ -12,10 +12,10 @@ See `fixtures/spec.md` for category definitions.
 - [x] nested list — `nested-list`
 - [x] table (`<table:table>`) — `table`
 - [x] table with header row — `table-header`
-- [ ] table with colspan/rowspan — (missing)
+- [x] table with colspan/rowspan — `colspan-rowspan`
 - [x] code block (preformatted paragraph style) — `code-block`
 - [x] blockquote (Quotations paragraph style) — `blockquote`
-- [ ] horizontal rule (paragraph border or draw:line) — (missing)
+- [x] horizontal rule (Horizontal Line paragraph style) — `horizontal-rule`
 - [ ] text box / frame (`<draw:text-box>`) — (missing)
 - [ ] definition list (no native ODF construct; style-based) — (missing)
 
@@ -32,10 +32,10 @@ See `fixtures/spec.md` for category definitions.
 - [x] font size (`fo:font-size`) — `font-size`
 - [x] font name (`fo:font-family`) — `font-name`
 - [x] hyperlink (`<text:a>`) — `hyperlink`
-- [ ] footnote (`<text:footnote>`) — (missing)
-- [ ] endnote (`<text:endnote>`) — (missing)
+- [x] footnote (`<text:note text:note-class="footnote">`) — `footnote`
+- [x] endnote (`<text:note text:note-class="endnote">`) — `endnote`
 - [ ] image / frame (`<draw:frame><draw:image>`) — (missing)
-- [ ] bookmark (`<text:bookmark>`) — (missing)
+- [x] bookmark (`<text:bookmark>`) — `bookmark`
 - [ ] annotation / comment (`<office:annotation>`) — (missing)
 - [x] tab stop (`<text:tab>`) — `tab`
 - [x] soft hyphen (`<text:soft-hyphen>`) — `soft-hyphen`
@@ -45,7 +45,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] paragraph alignment (`fo:text-align`) — `para-align`
 - [x] paragraph indent (`fo:margin-left`, `fo:text-indent`) — `para-indent`
 - [x] paragraph spacing (`fo:margin-top`, `fo:margin-bottom`) — `para-spacing`
-- [ ] paragraph style name (`text:style-name`) — (missing)
+- [x] paragraph style name (`text:style-name`) — `para-style-name`
 - [x] paragraph border (`fo:border`) — `para-border`
 - [x] paragraph background color — `para-background`
 - [x] line height — `line-height`
@@ -54,29 +54,29 @@ See `fixtures/spec.md` for category definitions.
 ## Document metadata
 - [x] title (`<dc:title>`) — `meta-title`
 - [x] author (`<dc:creator>`) — `meta-author`
-- [ ] description (`<dc:description>`) — (missing)
-- [ ] creation/modification date — (missing)
-- [ ] language (`<dc:language>`) — (missing)
+- [x] description (`<dc:description>`) — `meta-description`
+- [x] creation/modification date — `meta-date`
+- [x] language (`<dc:language>`) — `meta-language`
 - [ ] custom user-defined metadata — (missing)
 - [ ] page size and margins (`<style:page-layout>`) — (missing)
 
 ## Composition (integration)
-- [ ] table cells with formatted inline content — (missing)
-- [ ] list items with inline formatting — (missing)
+- [x] table cells with formatted inline content — `table-cells-formatted`
+- [x] list items with inline formatting — `list-items-formatted`
 - [ ] footnote with formatted content — (missing)
 - [ ] image with caption — (missing)
-- [ ] heading with inline formatting — (missing)
-- [ ] hyperlink containing formatted text — (missing)
+- [x] heading with inline formatting — `heading-formatted`
+- [x] hyperlink containing formatted text — `link-formatted`
 - [ ] nested blockquote — (missing)
 
 ## Adversarial
-- [ ] malformed zip archive — (missing)
-- [ ] missing content.xml — (missing)
-- [ ] corrupt styles.xml — (missing)
-- [ ] unknown XML namespace — (missing)
-- [ ] empty document — (missing)
+- [x] malformed zip archive — `adv-malformed-zip`
+- [x] missing content.xml — `adv-missing-content`
+- [x] corrupt styles.xml — `adv-corrupt-styles`
+- [x] unknown XML namespace — `adv-unknown-namespace`
+- [x] empty document — `adv-empty`
 - [ ] corrupt image binary — (missing)
-- [ ] non-ODF zip (wrong mimetype) — (missing)
+- [x] non-ODF zip (wrong mimetype) — `adv-wrong-mimetype`
 
 ## Pathological
 - [ ] document with thousands of paragraphs — (missing)

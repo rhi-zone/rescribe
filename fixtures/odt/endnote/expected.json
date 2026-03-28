@@ -1,0 +1,9 @@
+{
+  "description": "ODT endnote (text:note with note-class=endnote)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "edn1" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "edn1" } }
+  ]
+}

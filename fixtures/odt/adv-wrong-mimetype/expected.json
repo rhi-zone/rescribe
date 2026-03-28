@@ -1,0 +1,6 @@
+{
+  "description": "ODT zip with wrong mimetype (spreadsheet) returns parse error",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}

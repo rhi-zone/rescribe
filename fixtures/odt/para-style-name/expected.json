@@ -1,0 +1,8 @@
+{
+  "description": "ODT paragraph style name preserved as odt:style-name property",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "odt:style-name": "Text_20_Body" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Styled paragraph." } }
+  ]
+}

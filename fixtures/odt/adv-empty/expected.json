@@ -1,0 +1,7 @@
+{
+  "description": "ODT with empty body produces document with no children",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 0 }
+  ]
+}
