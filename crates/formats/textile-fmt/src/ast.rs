@@ -68,6 +68,8 @@ impl TextileDoc {
 pub enum Block {
     Paragraph {
         inlines: Vec<Inline>,
+        /// Text alignment: "left", "right", "center", "justify", or None.
+        align: Option<String>,
         span: Span,
     },
     Heading {
@@ -77,6 +79,8 @@ pub enum Block {
     },
     CodeBlock {
         content: String,
+        /// Programming language hint (from `bc(lang). ...`).
+        language: Option<String>,
         span: Span,
     },
     Blockquote {
@@ -105,6 +109,8 @@ pub enum Block {
         items: Vec<(Vec<Inline>, Vec<Inline>)>,
         span: Span,
     },
+    /// Raw (notextile) block: content is passed through verbatim.
+    Raw { content: String, span: Span },
 }
 
 impl Block {
@@ -119,14 +125,16 @@ impl Block {
             Block::HorizontalRule { span } => *span,
             Block::FootnoteDef { span, .. } => *span,
             Block::DefinitionList { span, .. } => *span,
+            Block::Raw { span, .. } => *span,
         }
     }
 
     pub fn strip_spans(self) -> Self {
         let dummy = Span::dummy();
         match self {
-            Block::Paragraph { inlines, .. } => Block::Paragraph {
+            Block::Paragraph { inlines, align, .. } => Block::Paragraph {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
+                align,
                 span: dummy,
             },
             Block::Heading { level, inlines, .. } => Block::Heading {
@@ -134,8 +142,9 @@ impl Block {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: dummy,
             },
-            Block::CodeBlock { content, .. } => Block::CodeBlock {
+            Block::CodeBlock { content, language, .. } => Block::CodeBlock {
                 content,
+                language,
                 span: dummy,
             },
             Block::Blockquote { inlines, .. } => Block::Blockquote {
@@ -172,6 +181,7 @@ impl Block {
                     .collect(),
                 span: dummy,
             },
+            Block::Raw { content, .. } => Block::Raw { content, span: dummy },
         }
     }
 }
@@ -221,6 +231,8 @@ pub enum Inline {
     Code(String, Span),
     Link {
         url: String,
+        /// Optional title attribute from `"text(title)":url`.
+        title: Option<String>,
         children: Vec<Inline>,
         span: Span,
     },
@@ -233,6 +245,14 @@ pub enum Inline {
     Subscript(Vec<Inline>, Span),
     /// Inline footnote reference: `[1]` in Textile.
     FootnoteRef { label: String, span: Span },
+    /// Hard line break (newline within a paragraph).
+    LineBreak(Span),
+    /// Raw (notextile) inline: `==content==` — content passed through verbatim.
+    Raw(String, Span),
+    /// Citation: `??text??` — maps to `<cite>` semantics.
+    Citation(Vec<Inline>, Span),
+    /// Generic span: `%text%` — maps to `<span>`.
+    GenericSpan(Vec<Inline>, Span),
 }
 
 impl Inline {
@@ -249,6 +269,10 @@ impl Inline {
             Inline::Superscript(_, s) => *s,
             Inline::Subscript(_, s) => *s,
             Inline::FootnoteRef { span, .. } => *span,
+            Inline::LineBreak(s) => *s,
+            Inline::Raw(_, s) => *s,
+            Inline::Citation(_, s) => *s,
+            Inline::GenericSpan(_, s) => *s,
         }
     }
 
@@ -270,8 +294,9 @@ impl Inline {
                 dummy,
             ),
             Inline::Code(s, _) => Inline::Code(s, dummy),
-            Inline::Link { url, children, .. } => Inline::Link {
+            Inline::Link { url, title, children, .. } => Inline::Link {
                 url,
+                title,
                 children: children.into_iter().map(Inline::strip_spans).collect(),
                 span: dummy,
             },
@@ -289,6 +314,16 @@ impl Inline {
                 dummy,
             ),
             Inline::FootnoteRef { label, .. } => Inline::FootnoteRef { label, span: dummy },
+            Inline::LineBreak(_) => Inline::LineBreak(dummy),
+            Inline::Raw(s, _) => Inline::Raw(s, dummy),
+            Inline::Citation(children, _) => Inline::Citation(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                dummy,
+            ),
+            Inline::GenericSpan(children, _) => Inline::GenericSpan(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                dummy,
+            ),
         }
     }
 }

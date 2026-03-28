@@ -1,0 +1,10 @@
+{
+  "description": "Textile paragraph alignment: p=. p>. p<. p<>.",
+  "category": "block",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "style:align": "center" } },
+    { "path": "/1", "kind": "paragraph", "props": { "style:align": "right" } },
+    { "path": "/2", "kind": "paragraph", "props": { "style:align": "left" } },
+    { "path": "/3", "kind": "paragraph", "props": { "style:align": "justify" } }
+  ]
+}

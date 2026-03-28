@@ -28,9 +28,13 @@ pub fn parse_with_options(
 
 fn convert_block(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines, .. } => {
+        Block::Paragraph { inlines, align, .. } => {
             let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
-            Node::new(node::PARAGRAPH).children(children)
+            let mut n = Node::new(node::PARAGRAPH).children(children);
+            if let Some(a) = align {
+                n = n.prop(prop::STYLE_ALIGN, a.clone());
+            }
+            n
         }
 
         Block::Heading { level, inlines, .. } => {
@@ -40,8 +44,12 @@ fn convert_block(block: &Block) -> Node {
                 .children(children)
         }
 
-        Block::CodeBlock { content, .. } => {
-            Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
+        Block::CodeBlock { content, language, .. } => {
+            let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
+            if let Some(lang) = language {
+                n = n.prop(prop::LANGUAGE, lang.clone());
+            }
+            n
         }
 
         Block::Blockquote { inlines, .. } => {
@@ -110,6 +118,12 @@ fn convert_block(block: &Block) -> Node {
                 .collect();
             Node::new(node::DEFINITION_LIST).children(children)
         }
+
+        Block::Raw { content, .. } => {
+            Node::new(node::RAW_BLOCK)
+                .prop(prop::CONTENT, content.clone())
+                .prop(prop::FORMAT, "textile")
+        }
     }
 }
 
@@ -139,19 +153,23 @@ fn convert_inline(inline: &Inline) -> Node {
 
         Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        Inline::Link { url, children, .. } => {
+        Inline::Link { url, title, children, .. } => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
-            Node::new(node::LINK)
+            let mut n = Node::new(node::LINK)
                 .prop(prop::URL, url.clone())
-                .children(converted)
+                .children(converted);
+            if let Some(t) = title {
+                n = n.prop(prop::TITLE, t.clone());
+            }
+            n
         }
 
         Inline::Image { url, alt, .. } => {
-            let mut node = Node::new(node::IMAGE).prop(prop::URL, url.clone());
+            let mut n = Node::new(node::IMAGE).prop(prop::URL, url.clone());
             if let Some(alt_text) = alt {
-                node = node.prop(prop::ALT, alt_text.clone());
+                n = n.prop(prop::ALT, alt_text.clone());
             }
-            node
+            n
         }
 
         Inline::Superscript(children, _) => {
@@ -166,6 +184,26 @@ fn convert_inline(inline: &Inline) -> Node {
 
         Inline::FootnoteRef { label, .. } => {
             Node::new(node::FOOTNOTE_REF).prop("label", label.clone())
+        }
+
+        Inline::LineBreak(_) => Node::new(node::LINE_BREAK),
+
+        Inline::Raw(content, _) => {
+            Node::new(node::RAW_INLINE)
+                .prop(prop::CONTENT, content.clone())
+                .prop(prop::FORMAT, "textile")
+        }
+
+        Inline::Citation(children, _) => {
+            let converted: Vec<Node> = children.iter().map(convert_inline).collect();
+            Node::new(node::SPAN)
+                .prop("textile:cite", true)
+                .children(converted)
+        }
+
+        Inline::GenericSpan(children, _) => {
+            let converted: Vec<Node> = children.iter().map(convert_inline).collect();
+            Node::new(node::SPAN).children(converted)
         }
     }
 }

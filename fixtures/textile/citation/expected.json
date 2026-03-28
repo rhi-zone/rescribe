@@ -1,0 +1,10 @@
+{
+  "description": "Textile citation ??text?? maps to a span with cite semantics",
+  "category": "inline",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text" },
+    { "path": "/0/1", "kind": "span" },
+    { "path": "/0/2", "kind": "text" }
+  ]
+}

@@ -31,7 +31,17 @@ impl EmitContext {
 
 fn emit_block(block: &Block, ctx: &mut EmitContext) {
     match block {
-        Block::Paragraph { inlines, .. } => {
+        Block::Paragraph { inlines, align, .. } => {
+            if let Some(a) = align {
+                let prefix = match a.as_str() {
+                    "left" => "p<. ",
+                    "right" => "p>. ",
+                    "center" => "p=. ",
+                    "justify" => "p<>. ",
+                    _ => "p. ",
+                };
+                ctx.write(prefix);
+            }
             emit_inlines(inlines, ctx);
             ctx.write("\n\n");
         }
@@ -42,8 +52,12 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             ctx.write("\n\n");
         }
 
-        Block::CodeBlock { content, .. } => {
-            ctx.write("bc. ");
+        Block::CodeBlock { content, language, .. } => {
+            if let Some(lang) = language {
+                ctx.write(&format!("bc({}). ", lang));
+            } else {
+                ctx.write("bc. ");
+            }
             ctx.write(content);
             ctx.write("\n\n");
         }
@@ -120,6 +134,12 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             }
             ctx.write("\n");
         }
+
+        Block::Raw { content, .. } => {
+            ctx.write("notextile. ");
+            ctx.write(content);
+            ctx.write("\n\n");
+        }
     }
 }
 
@@ -175,9 +195,14 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write("@");
         }
 
-        Inline::Link { url, children, .. } => {
+        Inline::Link { url, title, children, .. } => {
             ctx.write("\"");
             emit_inlines(children, ctx);
+            if let Some(t) = title {
+                ctx.write("(");
+                ctx.write(t);
+                ctx.write(")");
+            }
             ctx.write("\":");
             ctx.write(url);
         }
@@ -197,6 +222,28 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write("[");
             ctx.write(label);
             ctx.write("]");
+        }
+
+        Inline::LineBreak(_) => {
+            ctx.write("\n");
+        }
+
+        Inline::Raw(content, _) => {
+            ctx.write("==");
+            ctx.write(content);
+            ctx.write("==");
+        }
+
+        Inline::Citation(children, _) => {
+            ctx.write("??");
+            emit_inlines(children, ctx);
+            ctx.write("??");
+        }
+
+        Inline::GenericSpan(children, _) => {
+            ctx.write("%");
+            emit_inlines(children, ctx);
+            ctx.write("%");
         }
     }
 }

@@ -125,6 +125,7 @@ mod tests {
         let doc = TextileDoc {
             blocks: vec![Block::Paragraph {
                 inlines: vec![Inline::Text("Hello, world!".to_string(), Span::dummy())],
+                align: None,
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -141,6 +142,7 @@ mod tests {
                     vec![Inline::Text("bold".to_string(), Span::dummy())],
                     Span::dummy(),
                 )],
+                align: None,
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -157,6 +159,7 @@ mod tests {
                     vec![Inline::Text("italic".to_string(), Span::dummy())],
                     Span::dummy(),
                 )],
+                align: None,
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -170,6 +173,7 @@ mod tests {
         let doc = TextileDoc {
             blocks: vec![Block::Paragraph {
                 inlines: vec![Inline::Code("code".to_string(), Span::dummy())],
+                align: None,
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -184,9 +188,11 @@ mod tests {
             blocks: vec![Block::Paragraph {
                 inlines: vec![Inline::Link {
                     url: "https://example.com".to_string(),
+                    title: None,
                     children: vec![Inline::Text("click".to_string(), Span::dummy())],
                     span: Span::dummy(),
                 }],
+                align: None,
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -203,10 +209,12 @@ mod tests {
                 items: vec![
                     vec![Block::Paragraph {
                         inlines: vec![Inline::Text("one".to_string(), Span::dummy())],
+                        align: None,
                         span: Span::dummy(),
                     }],
                     vec![Block::Paragraph {
                         inlines: vec![Inline::Text("two".to_string(), Span::dummy())],
+                        align: None,
                         span: Span::dummy(),
                     }],
                 ],
@@ -227,10 +235,12 @@ mod tests {
                 items: vec![
                     vec![Block::Paragraph {
                         inlines: vec![Inline::Text("first".to_string(), Span::dummy())],
+                        align: None,
                         span: Span::dummy(),
                     }],
                     vec![Block::Paragraph {
                         inlines: vec![Inline::Text("second".to_string(), Span::dummy())],
+                        align: None,
                         span: Span::dummy(),
                     }],
                 ],
@@ -248,6 +258,7 @@ mod tests {
         let doc = TextileDoc {
             blocks: vec![Block::CodeBlock {
                 content: "print('hi')".to_string(),
+                language: None,
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -274,6 +285,7 @@ mod tests {
                     alt: None,
                     span: Span::dummy(),
                 }],
+                align: None,
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -291,6 +303,7 @@ mod tests {
                     alt: Some("alt text".to_string()),
                     span: Span::dummy(),
                 }],
+                align: None,
                 span: Span::dummy(),
             }],
             span: Span::dummy(),

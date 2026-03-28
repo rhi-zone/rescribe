@@ -1,0 +1,9 @@
+{
+  "description": "Textile invalid block type identifiers (h7., h0., z.) treated as paragraphs",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/2", "kind": "paragraph" }
+  ]
+}

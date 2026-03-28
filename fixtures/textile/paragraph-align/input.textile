@@ -1,0 +1,7 @@
+p=. Centered paragraph.
+
+p>. Right-aligned paragraph.
+
+p<. Left-aligned paragraph.
+
+p<>. Justified paragraph.

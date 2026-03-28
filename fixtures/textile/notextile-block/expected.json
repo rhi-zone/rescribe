@@ -1,0 +1,7 @@
+{
+  "description": "Textile notextile block passes content through as raw_block",
+  "category": "block",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block" }
+  ]
+}

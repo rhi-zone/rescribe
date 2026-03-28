@@ -75,7 +75,7 @@ impl<'a> Parser<'a> {
             }
 
             // Block code bc. or bc..
-            if line.starts_with("bc.") {
+            if line.starts_with("bc") && has_block_prefix_after(line, 2) {
                 nodes.push(self.parse_code_block());
                 continue;
             }
@@ -89,6 +89,16 @@ impl<'a> Parser<'a> {
             // Pre block pre.
             if line.starts_with("pre.") {
                 nodes.push(self.parse_pre_block());
+                continue;
+            }
+
+            // Notextile block: notextile. content
+            if let Some(rest) = line.strip_prefix("notextile.") {
+                let ls = self.line_start(self.pos);
+                let le = self.line_end(self.pos);
+                let content = rest.trim().to_string();
+                self.pos += 1;
+                nodes.push(Block::Raw { content, span: Span::new(ls, le) });
                 continue;
             }
 
@@ -164,11 +174,11 @@ impl<'a> Parser<'a> {
     fn parse_code_block(&mut self) -> Block {
         let block_start = self.line_start(self.pos);
         let first_line = self.lines[self.pos];
-        let extended = first_line.starts_with("bc..");
 
-        let content_start = if extended { 4 } else { 3 };
+        // Parse optional language: bc(lang). or bc(lang)..
+        let (language, content_start, extended) = parse_code_block_prefix(first_line);
+
         let mut content = String::new();
-
         let first_content = first_line[content_start..].trim();
         if !first_content.is_empty() {
             content.push_str(first_content);
@@ -191,6 +201,7 @@ impl<'a> Parser<'a> {
         let block_end = self.line_end(self.pos.saturating_sub(1));
         Block::CodeBlock {
             content: content.trim_end().to_string(),
+            language,
             span: Span::new(block_start, block_end),
         }
     }
@@ -225,6 +236,7 @@ impl<'a> Parser<'a> {
         let block_end = self.line_end(self.pos.saturating_sub(1));
         Block::CodeBlock {
             content: content.trim_end().to_string(),
+            language: None,
             span: Span::new(block_start, block_end),
         }
     }
@@ -377,6 +389,7 @@ impl<'a> Parser<'a> {
                 let inline_nodes = parse_inline(content, line_start + marker_count + 1);
                 let para = Block::Paragraph {
                     inlines: inline_nodes,
+                    align: None,
                     span: Span::new(line_start, self.line_end(self.pos)),
                 };
                 let mut item_children = vec![para];
@@ -431,11 +444,8 @@ impl<'a> Parser<'a> {
         let mut text = String::new();
         let first_line = self.lines[self.pos];
 
-        let first_content = first_line
-            .strip_prefix("p.")
-            .map(|s| s.trim())
-            .unwrap_or_else(|| first_line.trim());
-
+        // Parse alignment prefix: p<>. p<. p>. p=. p.
+        let (first_content, align) = parse_paragraph_prefix(first_line);
         text.push_str(first_content);
         self.pos += 1;
 
@@ -452,10 +462,14 @@ impl<'a> Parser<'a> {
                 || line.starts_with("h4.")
                 || line.starts_with("h5.")
                 || line.starts_with("h6.")
-                || line.starts_with("bc.")
+                || line.starts_with("bc")
                 || line.starts_with("bq.")
                 || line.starts_with("pre.")
                 || line.starts_with("p.")
+                || line.starts_with("p<")
+                || line.starts_with("p>")
+                || line.starts_with("p=")
+                || line.starts_with("notextile.")
                 || line.trim_start().starts_with('|')
                 || line.trim_start().starts_with("* ")
                 || line.trim_start().starts_with("# ")
@@ -463,8 +477,9 @@ impl<'a> Parser<'a> {
                 break;
             }
 
+            // Use '\n' as separator so the inline parser can emit LineBreak nodes.
             if !text.is_empty() {
-                text.push(' ');
+                text.push('\n');
             }
             text.push_str(line.trim());
             self.pos += 1;
@@ -474,6 +489,7 @@ impl<'a> Parser<'a> {
         let inline_nodes = parse_inline(&text, block_start);
         Block::Paragraph {
             inlines: inline_nodes,
+            align,
             span: Span::new(block_start, block_end),
         }
     }
@@ -508,13 +524,13 @@ impl<'a> Parser<'a> {
 
         while self.pos < self.lines.len() {
             let line = self.lines[self.pos];
-            if line.starts_with(';') {
-                let term_text = line[1..].trim();
+            if let Some(term_rest) = line.strip_prefix(';') {
+                let term_text = term_rest.trim();
                 let ls = self.line_start(self.pos);
                 current_term = Some(parse_inline(term_text, ls + 1));
                 self.pos += 1;
-            } else if line.starts_with(':') {
-                let def_text = line[1..].trim();
+            } else if let Some(def_rest) = line.strip_prefix(':') {
+                let def_text = def_rest.trim();
                 let ls = self.line_start(self.pos);
                 let def_inlines = parse_inline(def_text, ls + 1);
                 let term_inlines = current_term.take().unwrap_or_default();
@@ -536,6 +552,59 @@ impl<'a> Parser<'a> {
             span: Span::new(block_start, block_end),
         }
     }
+}
+
+// ── Block prefix helpers ───────────────────────────────────────────────────────
+
+/// Check if after "bc" at position `offset` in `line` there is a valid prefix
+/// (either `(lang).`, `(lang)..`, `..`, or `.`).
+fn has_block_prefix_after(line: &str, offset: usize) -> bool {
+    let rest = &line[offset..];
+    rest.starts_with('.') || rest.starts_with("..") || rest.starts_with('(')
+}
+
+/// Parse the code block prefix, returning (language, content_byte_offset, is_extended).
+fn parse_code_block_prefix(line: &str) -> (Option<String>, usize, bool) {
+    // bc(lang).. or bc(lang).
+    if let Some(inner) = line.strip_prefix("bc(")
+        && let Some(rel_paren) = inner.find(')')
+    {
+        let paren_end = 3 + rel_paren; // index of ')' in original line
+        let lang = inner[..rel_paren].to_string();
+        let after = &line[paren_end + 1..]; // after ')'
+        if after.starts_with("..") {
+            return (Some(lang), paren_end + 3, true); // skip ").."+space
+        } else if after.starts_with('.') {
+            return (Some(lang), paren_end + 2, false); // skip "."
+        }
+    }
+    // Standard bc.. or bc.
+    if line.starts_with("bc..") {
+        (None, 4, true)
+    } else {
+        (None, 3, false)
+    }
+}
+
+/// Parse a paragraph prefix, returning (trimmed_content, alignment).
+fn parse_paragraph_prefix(line: &str) -> (&str, Option<String>) {
+    // Check longest first to avoid partial matches
+    if let Some(rest) = line.strip_prefix("p<>.") {
+        return (rest.trim(), Some("justify".to_string()));
+    }
+    if let Some(rest) = line.strip_prefix("p<.") {
+        return (rest.trim(), Some("left".to_string()));
+    }
+    if let Some(rest) = line.strip_prefix("p>.") {
+        return (rest.trim(), Some("right".to_string()));
+    }
+    if let Some(rest) = line.strip_prefix("p=.") {
+        return (rest.trim(), Some("center".to_string()));
+    }
+    if let Some(rest) = line.strip_prefix("p.") {
+        return (rest.trim(), None);
+    }
+    (line.trim(), None)
 }
 
 // ── Inline parser ─────────────────────────────────────────────────────────────
@@ -562,6 +631,22 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
     let mut text_start = base_offset; // start of `current` text accumulation
 
     while i < chars.len() {
+        // Hard line break: '\n' within paragraph text
+        if chars[i] == '\n' {
+            if !current.is_empty() {
+                nodes.push(Inline::Text(
+                    current.clone(),
+                    Span::new(text_start, char_abs(i)),
+                ));
+                current.clear();
+            }
+            let lb_span = Span::new(char_abs(i), char_abs(i + 1));
+            nodes.push(Inline::LineBreak(lb_span));
+            i += 1;
+            text_start = char_abs(i);
+            continue;
+        }
+
         // Inline code @...@
         if chars[i] == '@' {
             if !current.is_empty() {
@@ -588,7 +673,59 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
             continue;
         }
 
-        // Try to parse formatting markers
+        // Notextile inline ==raw==
+        if chars[i] == '=' && i + 1 < chars.len() && chars[i + 1] == '=' {
+            if !current.is_empty() {
+                nodes.push(Inline::Text(
+                    current.clone(),
+                    Span::new(text_start, char_abs(i)),
+                ));
+                current.clear();
+            }
+            let raw_start = char_abs(i);
+            i += 2; // skip ==
+            let mut raw_content = String::new();
+            while i + 1 < chars.len() && !(chars[i] == '=' && chars[i + 1] == '=') {
+                raw_content.push(chars[i]);
+                i += 1;
+            }
+            if i + 1 < chars.len() && chars[i] == '=' && chars[i + 1] == '=' {
+                i += 2; // skip closing ==
+            }
+            let raw_end = char_abs(i);
+            nodes.push(Inline::Raw(raw_content, Span::new(raw_start, raw_end)));
+            text_start = char_abs(i);
+            continue;
+        }
+
+        // Citation ??text??
+        if chars[i] == '?' && i + 1 < chars.len() && chars[i + 1] == '?' {
+            if !current.is_empty() {
+                nodes.push(Inline::Text(
+                    current.clone(),
+                    Span::new(text_start, char_abs(i)),
+                ));
+                current.clear();
+            }
+            let cite_start = char_abs(i);
+            i += 2; // skip ??
+            let mut cite_text = String::new();
+            while i + 1 < chars.len() && !(chars[i] == '?' && chars[i + 1] == '?') {
+                cite_text.push(chars[i]);
+                i += 1;
+            }
+            // consume closing ??
+            if i + 1 < chars.len() && chars[i] == '?' && chars[i + 1] == '?' {
+                i += 2;
+            }
+            let cite_end = char_abs(i);
+            let cite_children = parse_inline(&cite_text, cite_start + 2);
+            nodes.push(Inline::Citation(cite_children, Span::new(cite_start, cite_end)));
+            text_start = char_abs(i);
+            continue;
+        }
+
+        // Try to parse formatting markers (includes % for GenericSpan)
         if let Some((new_i, node)) = try_parse_formatting(&chars, i, &mut current, &mut nodes, &char_offsets, base_offset) {
             text_start = char_abs(new_i);
             i = new_i;
@@ -596,9 +733,9 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
             continue;
         }
 
-        // Link "text":url
+        // Link "text":url or "text(title)":url
         if chars[i] == '"'
-            && let Some((link_end, link_text, url)) = parse_textile_link(&chars, i)
+            && let Some((link_end, link_text, title, url)) = parse_textile_link(&chars, i)
         {
             if !current.is_empty() {
                 nodes.push(Inline::Text(
@@ -609,10 +746,12 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
             }
             let link_start = char_abs(i);
             let link_abs_end = char_abs(link_end);
-            let text_node = Inline::Text(link_text, Span::new(link_start + 1, link_abs_end));
+            // Parse the link text for inline formatting
+            let link_children = parse_inline(&link_text, link_start + 1);
             nodes.push(Inline::Link {
                 url,
-                children: vec![text_node],
+                title,
+                children: link_children,
                 span: Span::new(link_start, link_abs_end),
             });
             i = link_end;
@@ -688,6 +827,8 @@ fn try_parse_formatting(
         })
     };
 
+    // (opening_marker, doubled_skip_char, check_prev_alphanumeric)
+    // doubled_skip_char: if non-space and next char equals it, skip this position
     let markers: &[(char, char, bool)] = &[
         ('*', '*', true),
         ('_', '_', true),
@@ -695,6 +836,7 @@ fn try_parse_formatting(
         ('+', '+', true),
         ('^', ' ', false),
         ('~', ' ', false),
+        ('%', ' ', false),  // GenericSpan
     ];
 
     for &(marker, doubled, check_prev) in markers {
@@ -732,6 +874,7 @@ fn try_parse_formatting(
                 '+' => Inline::Underline(inner, Span::new(fmt_start, fmt_end)),
                 '^' => Inline::Superscript(inner, Span::new(fmt_start, fmt_end)),
                 '~' => Inline::Subscript(inner, Span::new(fmt_start, fmt_end)),
+                '%' => Inline::GenericSpan(inner, Span::new(fmt_start, fmt_end)),
                 _ => return None,
             };
 
@@ -756,7 +899,9 @@ fn find_closing_marker(chars: &[char], start: usize, marker: char) -> Option<(us
     None
 }
 
-fn parse_textile_link(chars: &[char], start: usize) -> Option<(usize, String, String)> {
+/// Parse a link: `"text":url` or `"text(title)":url`.
+/// Returns (end_pos, text, title, url).
+fn parse_textile_link(chars: &[char], start: usize) -> Option<(usize, String, Option<String>, String)> {
     if chars[start] != '"' {
         return None;
     }
@@ -789,7 +934,22 @@ fn parse_textile_link(chars: &[char], start: usize) -> Option<(usize, String, St
         return None;
     }
 
-    Some((i, link_text, url))
+    // Extract optional title from link text: "text(title)" → text="text", title="title"
+    let (clean_text, title) = extract_link_title(&link_text);
+
+    Some((i, clean_text, title, url))
+}
+
+/// Extract optional title from Textile link text: `text(title)` → ("text", Some("title")).
+fn extract_link_title(text: &str) -> (String, Option<String>) {
+    if text.ends_with(')')
+        && let Some(paren_start) = text.rfind('(')
+    {
+        let title = text[paren_start + 1..text.len() - 1].to_string();
+        let clean = text[..paren_start].trim_end().to_string();
+        return (clean, Some(title));
+    }
+    (text.to_string(), None)
 }
 
 fn parse_textile_image(chars: &[char], start: usize) -> Option<(usize, String, Option<String>)> {

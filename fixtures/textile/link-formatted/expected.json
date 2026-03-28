@@ -1,0 +1,9 @@
+{
+  "description": "Textile link containing formatted inline text",
+  "category": "inline",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link" },
+    { "path": "/0/0/0", "kind": "strong" }
+  ]
+}

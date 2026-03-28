@@ -1,0 +1,5 @@
+h7. This is not a valid heading level.
+
+h0. Also not valid.
+
+z. Not a block prefix at all.

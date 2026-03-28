@@ -1,0 +1,7 @@
+{
+  "description": "Textile unclosed inline spans are treated as plain text — no panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

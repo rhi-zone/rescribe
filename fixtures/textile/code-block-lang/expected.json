@@ -1,0 +1,7 @@
+{
+  "description": "Textile code block with language hint bc(ruby).",
+  "category": "block",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "ruby" } }
+  ]
+}

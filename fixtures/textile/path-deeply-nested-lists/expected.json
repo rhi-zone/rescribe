@@ -1,0 +1,8 @@
+{
+  "description": "Textile deeply nested unordered list (6 levels deep) — parsed without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" }
+  ]
+}
