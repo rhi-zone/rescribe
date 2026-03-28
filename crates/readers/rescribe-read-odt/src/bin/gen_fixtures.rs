@@ -311,4 +311,92 @@ fn main() {
   ]
 }"#,
     );
+
+    // ── subscript ─────────────────────────────────────────────────────────────
+    write_fixture("subscript",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0">
+  <office:automatic-styles>
+    <style:style style:name="T1" style:family="text">
+      <style:text-properties style:text-position="sub 58%"/>
+    </style:style>
+  </office:automatic-styles>
+  <office:body>
+    <office:text>
+      <text:p>H<text:span text:style-name="T1">2</text:span>O</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT subscript inline (style:text-position=sub)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "H" } },
+    { "path": "/0/1", "kind": "subscript" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "2" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": "O" } }
+  ]
+}"#,
+    );
+
+    // ── superscript ───────────────────────────────────────────────────────────
+    write_fixture("superscript",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0">
+  <office:automatic-styles>
+    <style:style style:name="T1" style:family="text">
+      <style:text-properties style:text-position="super 58%"/>
+    </style:style>
+  </office:automatic-styles>
+  <office:body>
+    <office:text>
+      <text:p>E=mc<text:span text:style-name="T1">2</text:span></text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT superscript inline (style:text-position=super)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "E=mc" } },
+    { "path": "/0/1", "kind": "superscript" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "2" } }
+  ]
+}"#,
+    );
+
+    // ── tab ───────────────────────────────────────────────────────────────────
+    write_fixture("tab",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>before<text:tab/>after</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT tab stop (text:tab)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "before\tafter" } }
+  ]
+}"#,
+    );
 }

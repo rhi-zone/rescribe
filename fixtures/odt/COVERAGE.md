@@ -25,8 +25,8 @@ See `fixtures/spec.md` for category definitions.
 - [x] italic (`fo:font-style="italic"`) — `italic`
 - [x] underline (`style:text-underline-style`) — `underline`
 - [x] strikeout (`style:text-line-through-style`) — `strikeout`
-- [ ] subscript (`style:text-position`) — (missing)
-- [ ] superscript (`style:text-position`) — (missing)
+- [x] subscript (`style:text-position`) — `subscript`
+- [x] superscript (`style:text-position`) — `superscript`
 - [ ] small caps (`fo:font-variant="small-caps"`) — (missing)
 - [ ] font color (`fo:color`) — (missing)
 - [ ] font size (`fo:font-size`) — (missing)
@@ -37,7 +37,7 @@ See `fixtures/spec.md` for category definitions.
 - [ ] image / frame (`<draw:frame><draw:image>`) — (missing)
 - [ ] bookmark (`<text:bookmark>`) — (missing)
 - [ ] annotation / comment (`<office:annotation>`) — (missing)
-- [ ] tab stop (`<text:tab>`) — (missing)
+- [x] tab stop (`<text:tab>`) — `tab`
 - [ ] soft hyphen (`<text:soft-hyphen>`) — (missing)
 - [ ] non-breaking space (`<text:s>` / `&#160;`) — (missing)
 
