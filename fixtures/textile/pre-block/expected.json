@@ -1,0 +1,7 @@
+{
+  "description": "Textile pre. block maps to code_block node (preformatted, no inline parsing)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "Preformatted" } }
+  ]
+}

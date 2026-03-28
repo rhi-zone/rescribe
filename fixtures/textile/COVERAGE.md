@@ -7,7 +7,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] paragraph — `paragraph`
 - [x] heading h1 (h1.) — `heading`
 - [x] heading h2 (h2.) — `heading-h2`
-- [ ] heading h3–h6 — (missing)
+- [x] heading h3–h6 — `heading-h3-h6`
 - [x] unordered list (* item) — `list-unordered`
 - [x] ordered list (# item) — `list-ordered`
 - [x] nested list — `list-nested`
@@ -16,7 +16,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] table — `table`
 - [x] horizontal rule (---) — `horizontal-rule`
 - [x] definition list (;term :definition) — `definition-list`
-- [ ] pre block (pre.) — (missing)
+- [x] pre block (pre.) — `pre-block` (maps to code_block)
 - [ ] notextile block (notextile.) — (missing)
 - [ ] extended block (p.. or bq..) — (missing)
 - [x] footnote definition (fn1.) — `footnote`

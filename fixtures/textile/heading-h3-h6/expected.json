@@ -1,0 +1,14 @@
+{
+  "description": "Textile headings h3–h6 mapped to heading nodes with correct levels",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Level Three" } },
+    { "path": "/1", "kind": "heading", "props": { "level": 4 } },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Level Four" } },
+    { "path": "/2", "kind": "heading", "props": { "level": 5 } },
+    { "path": "/2/0", "kind": "text", "props": { "content": "Level Five" } },
+    { "path": "/3", "kind": "heading", "props": { "level": 6 } },
+    { "path": "/3/0", "kind": "text", "props": { "content": "Level Six" } }
+  ]
+}
