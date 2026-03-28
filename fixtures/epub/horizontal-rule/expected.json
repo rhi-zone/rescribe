@@ -1,0 +1,41 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Before."
+      }
+    },
+    {
+      "kind": "horizontal_rule",
+      "path": "/1"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/2"
+    },
+    {
+      "kind": "text",
+      "path": "/2/0",
+      "props": {
+        "content": "After."
+      }
+    }
+  ],
+  "description": "EPUB hr mapped to horizontal_rule node"
+}

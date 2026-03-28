@@ -1,0 +1,15 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    }
+  ],
+  "description": "EPUB with empty chapter body produces no content nodes"
+}

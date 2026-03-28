@@ -1,0 +1,44 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "This is "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "strong"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2",
+      "props": {
+        "content": " text."
+      }
+    }
+  ],
+  "description": "EPUB strong element mapped to strong node"
+}

@@ -1,0 +1,73 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "list",
+      "path": "/0",
+      "props": {
+        "ordered": false
+      }
+    },
+    {
+      "kind": "list_item",
+      "path": "/0/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0",
+      "props": {
+        "content": "Item 1"
+      }
+    },
+    {
+      "kind": "list",
+      "path": "/0/0/1",
+      "props": {
+        "ordered": false
+      }
+    },
+    {
+      "kind": "list_item",
+      "path": "/0/0/1/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/1/0/0",
+      "props": {
+        "content": "Item 1a"
+      }
+    },
+    {
+      "kind": "list_item",
+      "path": "/0/0/1/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/1/1/0",
+      "props": {
+        "content": "Item 1b"
+      }
+    },
+    {
+      "kind": "list_item",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "Item 2"
+      }
+    }
+  ],
+  "description": "EPUB nested list: list_item contains a child list"
+}

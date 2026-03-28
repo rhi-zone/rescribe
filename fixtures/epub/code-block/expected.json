@@ -1,0 +1,22 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "code_block",
+      "path": "/0",
+      "props": {
+        "content": "fn main() {\n    println!(\"hello\");\n}"
+      }
+    }
+  ],
+  "description": "EPUB code block (pre>code) mapped to code_block node"
+}

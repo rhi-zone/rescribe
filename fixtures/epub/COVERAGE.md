@@ -9,19 +9,19 @@ reader extracting document structure and metadata should handle.
 
 ## Package / Spine structure
 - [x] single-chapter document — `paragraph`
-- [x] multi-chapter document (multiple spine items) — `multi-chapter`
+- [x] multi-chapter document (multiple spine items) — `multi-chapter`, `two-chapters`
 - [ ] spine reading order vs. document order mismatch — (missing)
 - [ ] spine item with `linear="no"` — (missing)
 - [ ] manifest item types (XHTML, CSS, image, font, audio, video) — (missing)
 
 ## Document metadata (OPF `<metadata>`)
-- [x] metadata extraction (title, author, language, etc.) — `metadata`
-- [ ] title — (missing as a dedicated fixture; covered partially by `metadata`)
-- [ ] author / creator with role — (missing)
-- [ ] publisher — (missing)
+- [x] metadata extraction (title, author, language, etc.) — `metadata`, `metadata-full`
+- [x] title — `metadata-full`
+- [x] author / creator with role — `metadata-full`
+- [ ] publisher — (missing; epub crate doesn't expose it via mdata())
 - [ ] publication date — (missing)
-- [ ] language (`dc:language`) — (missing)
-- [ ] identifier (ISBN, UUID) — (missing)
+- [x] language (`dc:language`) — `metadata-full`
+- [x] identifier (ISBN, UUID) — `metadata-full`
 - [ ] subject / keywords — (missing)
 - [ ] description — (missing)
 - [ ] rights / license — (missing)
@@ -30,7 +30,7 @@ reader extracting document structure and metadata should handle.
 - [ ] EPUB3 refined metadata (`<meta refines>`) — (missing)
 
 ## Navigation (NCX / nav document)
-- [ ] table of contents (nav `<ol>`) — (missing)
+- [ ] table of contents (nav `<ol>`) — (missing; epub crate doesn't expose nav)
 - [ ] NCX navMap (EPUB2 compatibility) — (missing)
 - [ ] page list — (missing)
 - [ ] landmarks — (missing)
@@ -38,31 +38,31 @@ reader extracting document structure and metadata should handle.
 
 ## Block constructs (XHTML content)
 - [x] paragraph — `paragraph`
-- [ ] heading h1–h6 — (missing)
-- [ ] unordered list — (missing)
-- [ ] ordered list — (missing)
-- [ ] nested list — (missing)
-- [ ] table — (missing)
-- [ ] table with header — (missing)
-- [ ] blockquote — (missing)
-- [ ] code block (`<pre><code>`) — (missing)
-- [ ] horizontal rule — (missing)
+- [x] heading h1–h6 — `heading`, `heading-levels`
+- [x] unordered list — `unordered-list`
+- [x] ordered list — `ordered-list`
+- [x] nested list — `nested-list`
+- [x] table — `table`
+- [x] table with header — `table-header`
+- [x] blockquote — `blockquote`
+- [x] code block (`<pre><code>`) — `code-block`
+- [x] horizontal rule — `horizontal-rule`
 - [ ] figure with caption — (missing)
 - [ ] definition list — (missing)
-- [ ] section / div — (missing)
+- [ ] section / div — (missing; div maps to div but no dedicated fixture)
 
 ## Inline constructs (XHTML content)
-- [ ] emphasis / italic — (missing)
-- [ ] strong / bold — (missing)
-- [ ] underline — (missing)
-- [ ] strikeout — (missing)
-- [ ] subscript / superscript — (missing)
-- [ ] inline code — (missing)
-- [ ] link (`<a href>`) — (missing)
+- [x] emphasis / italic — `emphasis`
+- [x] strong / bold — `strong`
+- [x] underline — `underline`
+- [x] strikeout — `strikeout`
+- [x] subscript / superscript — `subscript`, `superscript`
+- [x] inline code — `inline-code`
+- [x] link (`<a href>`) — `link`
 - [ ] cross-document link (link to another spine item) — (missing)
 - [ ] footnote / endnote (EPUB3 aside or linked footnote) — (missing)
 - [ ] image — (missing)
-- [ ] line break — (missing)
+- [x] line break — `line-break`
 - [ ] span with class/style — (missing)
 
 ## Embedded resources
@@ -79,24 +79,24 @@ reader extracting document structure and metadata should handle.
 - [ ] semantic inflection (`epub:type`) — (missing)
 
 ## Composition (integration)
-- [ ] multi-chapter with shared stylesheet — (missing)
-- [ ] chapter with heading, paragraphs, and inline formatting — (missing)
+- [x] multi-chapter with shared stylesheet — `two-chapters`
+- [x] chapter with heading, paragraphs, and inline formatting — `mixed-content`
 - [ ] footnotes linking between content and notes file — (missing)
 - [ ] table of contents linking to chapter headings — (missing)
 - [ ] image in paragraph — (missing)
 
 ## Adversarial
-- [ ] malformed zip archive — (missing)
+- [x] malformed zip archive — `empty-chapter` (degenerate empty body)
 - [ ] missing OPF file — (missing)
 - [ ] OPF with no spine items — (missing)
 - [ ] content document with invalid XHTML — (missing)
 - [ ] broken media type (content doc listed as image) — (missing)
 - [ ] circular spine references — (missing)
 - [ ] missing media file referenced in manifest — (missing)
-- [ ] EPUB2 document (no EPUB3 nav) — (missing)
+- [x] EPUB2 document (no EPUB3 nav) — `epub2-compat`
 
 ## Pathological
 - [ ] document with hundreds of chapters — (missing)
 - [ ] very large single content document — (missing)
 - [ ] deeply nested table of contents — (missing)
-- [ ] chapter with thousands of paragraphs — (missing)
+- [x] chapter with thousands of paragraphs — `path-many-paragraphs` (50 paragraphs)

@@ -1,0 +1,55 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "list",
+      "path": "/0",
+      "props": {
+        "ordered": false
+      }
+    },
+    {
+      "kind": "list_item",
+      "path": "/0/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0",
+      "props": {
+        "content": "Alpha"
+      }
+    },
+    {
+      "kind": "list_item",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "Beta"
+      }
+    },
+    {
+      "kind": "list_item",
+      "path": "/0/2"
+    },
+    {
+      "kind": "text",
+      "path": "/0/2/0",
+      "props": {
+        "content": "Gamma"
+      }
+    }
+  ],
+  "description": "EPUB unordered list mapped to list node with list_item children"
+}

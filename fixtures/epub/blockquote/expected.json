@@ -1,0 +1,30 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "blockquote",
+      "path": "/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0",
+      "props": {
+        "content": "To be or not to be."
+      }
+    }
+  ],
+  "description": "EPUB blockquote mapped to blockquote node"
+}

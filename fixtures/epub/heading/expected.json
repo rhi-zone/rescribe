@@ -1,0 +1,40 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "heading",
+      "path": "/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Chapter One"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1"
+    },
+    {
+      "kind": "text",
+      "path": "/1/0",
+      "props": {
+        "content": "Some text."
+      }
+    }
+  ],
+  "description": "EPUB heading h1 mapped to heading node with level 1"
+}

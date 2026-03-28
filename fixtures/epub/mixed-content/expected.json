@@ -1,0 +1,120 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "heading",
+      "path": "/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Chapter"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1"
+    },
+    {
+      "kind": "text",
+      "path": "/1/0",
+      "props": {
+        "content": "A paragraph with "
+      }
+    },
+    {
+      "kind": "emphasis",
+      "path": "/1/1"
+    },
+    {
+      "kind": "text",
+      "path": "/1/1/0",
+      "props": {
+        "content": "emphasis"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/1/2",
+      "props": {
+        "content": " and "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/1/3"
+    },
+    {
+      "kind": "text",
+      "path": "/1/3/0",
+      "props": {
+        "content": "bold"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/1/4",
+      "props": {
+        "content": " text."
+      }
+    },
+    {
+      "kind": "list",
+      "path": "/2",
+      "props": {
+        "ordered": false
+      }
+    },
+    {
+      "kind": "list_item",
+      "path": "/2/0"
+    },
+    {
+      "kind": "text",
+      "path": "/2/0/0",
+      "props": {
+        "content": "Item one"
+      }
+    },
+    {
+      "kind": "list_item",
+      "path": "/2/1"
+    },
+    {
+      "kind": "text",
+      "path": "/2/1/0",
+      "props": {
+        "content": "Item two"
+      }
+    },
+    {
+      "kind": "blockquote",
+      "path": "/3"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/3/0"
+    },
+    {
+      "kind": "text",
+      "path": "/3/0/0",
+      "props": {
+        "content": "A blockquote."
+      }
+    }
+  ],
+  "description": "EPUB chapter with heading, paragraph with inline formatting, list, and blockquote"
+}

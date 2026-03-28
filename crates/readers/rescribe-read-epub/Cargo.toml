@@ -11,3 +11,5 @@ rescribe-core.workspace = true
 rescribe-std.workspace = true
 rescribe-read-html.workspace = true
 epub = "2"
+zip.workspace = true
+serde_json.workspace = true

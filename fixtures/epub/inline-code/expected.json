@@ -1,0 +1,40 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Use "
+      }
+    },
+    {
+      "kind": "code",
+      "path": "/0/1",
+      "props": {
+        "content": "cargo build"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2",
+      "props": {
+        "content": " to compile."
+      }
+    }
+  ],
+  "description": "EPUB inline code element mapped to code node"
+}

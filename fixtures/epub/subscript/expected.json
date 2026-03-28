@@ -1,0 +1,44 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "H"
+      }
+    },
+    {
+      "kind": "subscript",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "2"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2",
+      "props": {
+        "content": "O"
+      }
+    }
+  ],
+  "description": "EPUB sub element mapped to subscript node"
+}

@@ -1,0 +1,26 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Symbols: <angle> & \"quotes\" — em-dash."
+      }
+    }
+  ],
+  "description": "EPUB HTML entities and Unicode decoded correctly in text content"
+}

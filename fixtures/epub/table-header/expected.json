@@ -1,0 +1,79 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "table",
+      "path": "/0"
+    },
+    {
+      "kind": "table_head",
+      "path": "/0/0"
+    },
+    {
+      "kind": "table_row",
+      "path": "/0/0/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/0/0/0/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0/0/0",
+      "props": {
+        "content": "Name"
+      }
+    },
+    {
+      "kind": "table_header",
+      "path": "/0/0/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0/1/0",
+      "props": {
+        "content": "Age"
+      }
+    },
+    {
+      "kind": "table_body",
+      "path": "/0/1"
+    },
+    {
+      "kind": "table_row",
+      "path": "/0/1/0"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/1/0/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0/0/0",
+      "props": {
+        "content": "Alice"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/1/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0/1/0",
+      "props": {
+        "content": "30"
+      }
+    }
+  ],
+  "description": "EPUB table with thead/th mapped to table_header cells"
+}

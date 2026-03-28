@@ -1,0 +1,47 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Visit "
+      }
+    },
+    {
+      "kind": "link",
+      "path": "/0/1",
+      "props": {
+        "url": "https://example.com"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "Example"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2",
+      "props": {
+        "content": " for more."
+      }
+    }
+  ],
+  "description": "EPUB anchor with href mapped to link node with url property"
+}

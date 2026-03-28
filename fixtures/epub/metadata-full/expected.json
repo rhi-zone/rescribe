@@ -1,0 +1,26 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Jane Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Full Metadata Book"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Content here."
+      }
+    }
+  ],
+  "description": "EPUB metadata: title, author, language extracted to document properties"
+}

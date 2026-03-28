@@ -1,0 +1,26 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Old Author",
+        "identifier": "urn:uuid:epub2-test",
+        "language": "en",
+        "title": "EPUB2 Book"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "An EPUB 2.0 style document."
+      }
+    }
+  ],
+  "description": "EPUB2 OPF 2.0 document parsed successfully (no nav doc required)"
+}

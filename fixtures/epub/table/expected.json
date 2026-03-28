@@ -1,0 +1,75 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "table",
+      "path": "/0"
+    },
+    {
+      "kind": "table_body",
+      "path": "/0/0"
+    },
+    {
+      "kind": "table_row",
+      "path": "/0/0/0"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/0/0/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0/0/0",
+      "props": {
+        "content": "A"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/0/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0/1/0",
+      "props": {
+        "content": "B"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/0/0/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/0/1/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/1/0/0",
+      "props": {
+        "content": "C"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/0/1/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/1/1/0",
+      "props": {
+        "content": "D"
+      }
+    }
+  ],
+  "description": "EPUB table mapped to table/table_row/table_cell nodes"
+}

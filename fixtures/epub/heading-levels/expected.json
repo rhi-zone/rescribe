@@ -1,0 +1,99 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "heading",
+      "path": "/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "H1"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/1",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/1/0",
+      "props": {
+        "content": "H2"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/2",
+      "props": {
+        "level": 3
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/2/0",
+      "props": {
+        "content": "H3"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/3",
+      "props": {
+        "level": 4
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/3/0",
+      "props": {
+        "content": "H4"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/4",
+      "props": {
+        "level": 5
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/4/0",
+      "props": {
+        "content": "H5"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/5",
+      "props": {
+        "level": 6
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/5/0",
+      "props": {
+        "content": "H6"
+      }
+    }
+  ],
+  "description": "EPUB headings h1-h6 mapped to heading nodes with levels 1-6"
+}
