@@ -1,0 +1,8 @@
+{
+  "description": "ODT with corrupt image binary still parses; image node present with src",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image" }
+  ]
+}

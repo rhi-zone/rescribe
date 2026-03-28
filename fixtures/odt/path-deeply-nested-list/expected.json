@@ -1,0 +1,7 @@
+{
+  "description": "List nested 6 levels deep parses without error",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list" }
+  ]
+}

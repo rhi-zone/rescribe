@@ -1,0 +1,8 @@
+{
+  "description": "Document with 1000 paragraphs parses without error",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/999", "kind": "paragraph" }
+  ]
+}

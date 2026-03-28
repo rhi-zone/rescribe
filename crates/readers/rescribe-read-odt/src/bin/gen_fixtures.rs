@@ -57,6 +57,68 @@ fn write_fixture_raw(name: &str, raw_bytes: Vec<u8>, expected_json: &str) {
     println!("wrote {dir}/");
 }
 
+fn make_odt_with_styles(content_xml: &str, styles_xml: &str) -> Vec<u8> {
+    let mut buf = Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(&mut buf);
+    let opts = SimpleFileOptions::default();
+    zip.start_file("mimetype", opts).unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.text").unwrap();
+    zip.start_file("content.xml", opts).unwrap();
+    zip.write_all(content_xml.as_bytes()).unwrap();
+    zip.start_file("styles.xml", opts).unwrap();
+    zip.write_all(styles_xml.as_bytes()).unwrap();
+    zip.finish().unwrap();
+    buf.into_inner()
+}
+
+fn write_fixture_styles(name: &str, content_xml: &str, styles_xml: &str, expected_json: &str) {
+    let dir = format!("fixtures/odt/{name}");
+    std::fs::create_dir_all(&dir).unwrap();
+    let odt = make_odt_with_styles(content_xml, styles_xml);
+    std::fs::write(format!("{dir}/input.odt"), &odt).unwrap();
+    std::fs::write(format!("{dir}/expected.json"), expected_json).unwrap();
+    println!("wrote {dir}/");
+}
+
+/// Minimal 1×1 PNG (binary).
+fn tiny_png() -> Vec<u8> {
+    // A minimal valid 1×1 white PNG
+    vec![
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
+        0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, // IHDR length + type
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1×1
+        0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, // 8-bit RGB + CRC start
+        0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, // IDAT length + type
+        0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00, // IDAT data
+        0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc, // IDAT CRC
+        0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, // IEND length + type
+        0x44, 0xae, 0x42, 0x60, 0x82,                   // IEND CRC
+    ]
+}
+
+fn make_odt_with_image(content_xml: &str, image_name: &str, image_bytes: Vec<u8>) -> Vec<u8> {
+    let mut buf = Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(&mut buf);
+    let opts = SimpleFileOptions::default();
+    zip.start_file("mimetype", opts).unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.text").unwrap();
+    zip.start_file("content.xml", opts).unwrap();
+    zip.write_all(content_xml.as_bytes()).unwrap();
+    zip.start_file(image_name, opts).unwrap();
+    zip.write_all(&image_bytes).unwrap();
+    zip.finish().unwrap();
+    buf.into_inner()
+}
+
+fn write_fixture_image(name: &str, content_xml: &str, image_name: &str, image_bytes: Vec<u8>, expected_json: &str) {
+    let dir = format!("fixtures/odt/{name}");
+    std::fs::create_dir_all(&dir).unwrap();
+    let odt = make_odt_with_image(content_xml, image_name, image_bytes);
+    std::fs::write(format!("{dir}/input.odt"), &odt).unwrap();
+    std::fs::write(format!("{dir}/expected.json"), expected_json).unwrap();
+    println!("wrote {dir}/");
+}
+
 fn make_odt_no_content() -> Vec<u8> {
     // Valid zip but missing content.xml
     let mut buf = Cursor::new(Vec::new());
@@ -1485,4 +1547,452 @@ fn main() {
   "assertions": []
 }"#,
     );
+
+    // ── annotation ───────────────────────────────────────────────────────────
+    write_fixture("annotation",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Annotated<office:annotation><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Alice</dc:creator><text:p>A comment.</text:p></office:annotation> word.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT annotation (office:annotation) produces span with odt:annotation prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Annotated" } },
+    { "path": "/0/1", "kind": "span", "props": { "odt:annotation": "A comment." } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " word." } }
+  ]
+}"#,
+    );
+
+    // ── text-box ─────────────────────────────────────────────────────────────
+    write_fixture("text-box",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">
+  <office:body>
+    <office:text>
+      <draw:frame draw:name="TextBox1" svg:width="10cm" svg:height="3cm">
+        <draw:text-box>
+          <text:p>Text box content.</text:p>
+        </draw:text-box>
+      </draw:frame>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT draw:text-box produces a div with paragraph content",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Text box content." } }
+  ]
+}"#,
+    );
+
+    // ── image ────────────────────────────────────────────────────────────────
+    write_fixture_image("image",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Before <draw:frame draw:name="img1" svg:width="2cm" svg:height="2cm">
+        <draw:image xlink:href="Pictures/test.png" xlink:type="simple" xlink:show="embed"/>
+      </draw:frame> after.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        "Pictures/test.png",
+        tiny_png(),
+        r#"{
+  "description": "ODT draw:frame/draw:image embeds image node inline",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Before " } },
+    { "path": "/0/1", "kind": "image" },
+    { "path": "/0/2", "kind": "text", "props": { "content": " after." } }
+  ]
+}"#,
+    );
+
+    // ── meta-custom ───────────────────────────────────────────────────────────
+    write_fixture_meta("meta-custom",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Content.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-meta
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0">
+  <office:meta>
+    <meta:user-defined meta:name="Project">RescribeDemo</meta:user-defined>
+    <meta:user-defined meta:name="Version">1.0</meta:user-defined>
+  </office:meta>
+</office:document-meta>"#,
+        r#"{
+  "description": "ODT custom user-defined metadata preserved with meta: prefix",
+  "category": "happy",
+  "assertions": [],
+  "metadata": {
+    "meta:Project": "RescribeDemo",
+    "meta:Version": "1.0"
+  }
+}"#,
+    );
+
+    // ── page-layout ───────────────────────────────────────────────────────────
+    write_fixture_styles("page-layout",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>Content.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-styles
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0">
+  <office:automatic-styles>
+    <style:page-layout style:name="Mpm1">
+      <style:page-layout-properties
+        fo:page-width="21cm"
+        fo:page-height="29.7cm"
+        fo:margin-top="2cm"
+        fo:margin-bottom="2cm"
+        fo:margin-left="2.5cm"
+        fo:margin-right="2.5cm"/>
+    </style:page-layout>
+  </office:automatic-styles>
+</office:document-styles>"#,
+        r#"{
+  "description": "ODT page size and margins preserved in document metadata",
+  "category": "happy",
+  "assertions": [],
+  "metadata": {
+    "page-width": "21cm",
+    "page-height": "29.7cm",
+    "margin-top": "2cm",
+    "margin-bottom": "2cm",
+    "margin-left": "2.5cm",
+    "margin-right": "2.5cm"
+  }
+}"#,
+    );
+
+    // ── footnote-formatted ────────────────────────────────────────────────────
+    write_fixture("footnote-formatted",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0">
+  <office:automatic-styles>
+    <style:style style:name="T1" style:family="text">
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+  </office:automatic-styles>
+  <office:body>
+    <office:text>
+      <text:p>Body<text:note text:id="ftn1" text:note-class="footnote">
+        <text:note-citation>1</text:note-citation>
+        <text:note-body>
+          <text:p>See <text:span text:style-name="T1">important</text:span> ref.</text:p>
+        </text:note-body>
+      </text:note>.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "Footnote body with bold inline formatting preserved",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "ftn1" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "ftn1" } },
+    { "path": "/1/0", "kind": "paragraph" },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "See " } },
+    { "path": "/1/0/1", "kind": "strong" },
+    { "path": "/1/0/1/0", "kind": "text", "props": { "content": "important" } },
+    { "path": "/1/0/2", "kind": "text", "props": { "content": " ref." } }
+  ]
+}"#,
+    );
+
+    // ── nested-blockquote ─────────────────────────────────────────────────────
+    // ODT has no native nested blockquote; consecutive Quotations paragraphs merge into one.
+    // This fixture verifies that behavior.
+    write_fixture("nested-blockquote",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p text:style-name="Quotations">First quote.</text:p>
+      <text:p text:style-name="Quotations">Second quote.</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "Consecutive Quotations paragraphs merge into a single blockquote",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote", "children_count": 2 },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "First quote." } },
+    { "path": "/0/1", "kind": "paragraph" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Second quote." } }
+  ]
+}"#,
+    );
+
+    // ── image-caption ─────────────────────────────────────────────────────────
+    write_fixture_image("image-caption",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">
+  <office:body>
+    <office:text>
+      <draw:frame draw:name="fig1" svg:width="5cm" svg:height="4cm">
+        <draw:image xlink:href="Pictures/photo.png" xlink:type="simple"/>
+        <draw:text-box>
+          <text:p>Figure 1: A photo.</text:p>
+        </draw:text-box>
+      </draw:frame>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        "Pictures/photo.png",
+        tiny_png(),
+        r#"{
+  "description": "ODT draw:frame with image and caption text-box; image takes priority",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "image" }
+  ]
+}"#,
+    );
+
+    // ── adv-corrupt-image ─────────────────────────────────────────────────────
+    write_fixture_image("adv-corrupt-image",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">
+  <office:body>
+    <office:text>
+      <text:p><draw:frame draw:name="bad" svg:width="2cm" svg:height="2cm">
+        <draw:image xlink:href="Pictures/corrupt.png" xlink:type="simple"/>
+      </draw:frame></text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        "Pictures/corrupt.png",
+        b"NOT A VALID PNG\x00\xff\xfe".to_vec(),
+        r#"{
+  "description": "ODT with corrupt image binary still parses; image node present with src",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image" }
+  ]
+}"#,
+    );
+
+    // ── Pathological ──────────────────────────────────────────────────────────
+
+    // ── path-many-paragraphs ──────────────────────────────────────────────────
+    {
+        let paras: String = (0..1000)
+            .map(|i| format!("      <text:p>Paragraph number {i}.</text:p>\n"))
+            .collect();
+        let content = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+{paras}    </office:text>
+  </office:body>
+</office:document-content>"#
+        );
+        write_fixture("path-many-paragraphs", &content,
+            r#"{
+  "description": "Document with 1000 paragraphs parses without error",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/999", "kind": "paragraph" }
+  ]
+}"#,
+        );
+    }
+
+    // ── path-many-char-runs ───────────────────────────────────────────────────
+    {
+        let spans: String = (0..200)
+            .map(|i| {
+                if i % 2 == 0 {
+                    format!(r#"run{i}"#)
+                } else {
+                    format!(r#"<text:span>run{i}</text:span>"#)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        let content = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>{spans}</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#
+        );
+        write_fixture("path-many-char-runs", &content,
+            r#"{
+  "description": "Paragraph with 200 interleaved text runs parses without error",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}"#,
+        );
+    }
+
+    // ── path-deeply-nested-list ───────────────────────────────────────────────
+    {
+        // Build a list nested 6 levels deep
+        let item_open: String = (0..6).map(|_|
+            "      <text:list><text:list-item>\n".to_owned()
+        ).collect();
+        let item_close: String = (0..6).map(|_|
+            "      </text:list-item></text:list>\n".to_owned()
+        ).collect();
+        let content = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+{item_open}        <text:p>Deep item.</text:p>
+{item_close}    </office:text>
+  </office:body>
+</office:document-content>"#
+        );
+        write_fixture("path-deeply-nested-list", &content,
+            r#"{
+  "description": "List nested 6 levels deep parses without error",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list" }
+  ]
+}"#,
+        );
+    }
+
+    // ── path-deeply-nested-table ──────────────────────────────────────────────
+    {
+        // 3 levels of table nesting
+        let inner = r#"<table:table xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"><table:table-row><table:table-cell><text:p>inner</text:p></table:table-cell></table:table-row></table:table>"#;
+        let mid = format!(
+            r#"<table:table xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"><table:table-row><table:table-cell><text:p>{inner}</text:p></table:table-cell></table:table-row></table:table>"#
+        );
+        let content = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0">
+  <office:body>
+    <office:text>
+      <table:table><table:table-row><table:table-cell><text:p>{mid}</text:p></table:table-cell></table:table-row></table:table>
+    </office:text>
+  </office:body>
+</office:document-content>"#
+        );
+        write_fixture("path-deeply-nested-table", &content,
+            r#"{
+  "description": "Table nested 3 levels deep parses without error",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "table" }
+  ]
+}"#,
+        );
+    }
+
+    // ── path-large-image ─────────────────────────────────────────────────────
+    // 100 KB of "image" data (not valid PNG but should not panic)
+    {
+        let large_bytes = vec![0xffu8; 100_000];
+        write_fixture_image("path-large-image",
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0">
+  <office:body>
+    <office:text>
+      <text:p><draw:frame draw:name="big" svg:width="20cm" svg:height="20cm">
+        <draw:image xlink:href="Pictures/large.bin" xlink:type="simple"/>
+      </draw:frame></text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+            "Pictures/large.bin",
+            large_bytes,
+            r#"{
+  "description": "Document with 100KB embedded image parses without error",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0/0", "kind": "image" }
+  ]
+}"#,
+        );
+    }
 }

@@ -4,7 +4,8 @@
 
 use quick_xml::Reader;
 use quick_xml::events::Event;
-use rescribe_core::{ConversionResult, Document, ParseError, ParseOptions, Properties};
+use rescribe_core::{ConversionResult, Document, ParseError, ParseOptions, Properties, ResourceId,
+    ResourceMap, Resource};
 use rescribe_std::{Node, node, prop};
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
@@ -45,14 +46,40 @@ pub fn parse_with_options(
         parse_metadata(&meta_content, &mut metadata);
     }
 
-    // Read styles.xml for named styles (Bold, Italic, etc.)
-    let named_styles = if let Ok(mut styles_file) = archive.by_name("styles.xml") {
+    // Read styles.xml for named styles (Bold, Italic, etc.) and page layout
+    let (named_styles, page_props) = if let Ok(mut styles_file) = archive.by_name("styles.xml") {
         let mut styles_xml = String::new();
         styles_file.read_to_string(&mut styles_xml).map_err(ParseError::Io)?;
-        parse_named_styles(&styles_xml)
+        let styles = parse_named_styles(&styles_xml);
+        let page = parse_page_layout(&styles_xml);
+        (styles, page)
     } else {
-        HashMap::new()
+        (HashMap::new(), HashMap::new())
     };
+
+    // Apply page layout properties to metadata
+    for (k, v) in &page_props {
+        metadata.set(k.as_str(), v.as_str());
+    }
+
+    // Pre-extract embedded images from Pictures/ entries
+    let mut resources = ResourceMap::new();
+    let mut image_map: HashMap<String, String> = HashMap::new(); // href → resource_id
+    let file_names: Vec<String> = archive.file_names().map(str::to_owned).collect();
+    for name in file_names {
+        if (name.starts_with("Pictures/") || name.starts_with("media/"))
+            && let Ok(mut f) = archive.by_name(&name)
+        {
+            let mut data = Vec::new();
+            if f.read_to_end(&mut data).is_ok() && !data.is_empty() {
+                let mime = mime_from_name(&name);
+                let res_id = ResourceId::new();
+                let id_str = res_id.as_str().to_owned();
+                resources.insert(res_id, Resource::new(mime, data).with_name(name.clone()));
+                image_map.insert(name, id_str);
+            }
+        }
+    }
 
     // Read content.xml
     let mut content_file = archive
@@ -62,11 +89,11 @@ pub fn parse_with_options(
     let mut content_xml = String::new();
     content_file.read_to_string(&mut content_xml).map_err(ParseError::Io)?;
 
-    let content = parse_content(&content_xml, &named_styles)?;
+    let content = parse_content(&content_xml, &named_styles, &image_map)?;
 
     Ok(ConversionResult::ok(Document {
         content,
-        resources: Default::default(),
+        resources,
         metadata,
         source: None,
     }))
@@ -416,13 +443,22 @@ fn parse_metadata(xml: &str, metadata: &mut Properties) {
 
     let mut buf = Vec::new();
     let mut current_element = String::new();
+    let mut current_user_defined_name = String::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
                 current_element = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                if current_element == "meta:user-defined" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"meta:name" {
+                            current_user_defined_name =
+                                String::from_utf8_lossy(&attr.value).to_string();
+                        }
+                    }
+                }
             }
-            Ok(Event::Text(e)) => {
+            Ok(Event::Text(ref e)) => {
                 let text = String::from_utf8_lossy(e.as_ref()).to_string();
                 match current_element.as_str() {
                     "dc:title" => { metadata.set("title", text); }
@@ -430,6 +466,12 @@ fn parse_metadata(xml: &str, metadata: &mut Properties) {
                     "dc:date" | "dc:date-modified" => { metadata.set("date", text); }
                     "dc:description" => { metadata.set("description", text); }
                     "dc:language" => { metadata.set("language", text); }
+                    "meta:user-defined" if !current_user_defined_name.is_empty() => {
+                        metadata.set(
+                            format!("meta:{}", current_user_defined_name).as_str(),
+                            text,
+                        );
+                    }
                     _ => {}
                 }
             }
@@ -439,6 +481,72 @@ fn parse_metadata(xml: &str, metadata: &mut Properties) {
         }
         buf.clear();
     }
+}
+
+/// Parse page layout properties from styles.xml.
+/// Returns a map of metadata key → value string.
+fn parse_page_layout(xml: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                if name == "style:page-layout-properties" {
+                    for attr in e.attributes().flatten() {
+                        match attr.key.as_ref() {
+                            b"fo:page-width" => {
+                                map.insert("page-width".to_owned(),
+                                    String::from_utf8_lossy(&attr.value).to_string());
+                            }
+                            b"fo:page-height" => {
+                                map.insert("page-height".to_owned(),
+                                    String::from_utf8_lossy(&attr.value).to_string());
+                            }
+                            b"fo:margin-top" => {
+                                map.insert("margin-top".to_owned(),
+                                    String::from_utf8_lossy(&attr.value).to_string());
+                            }
+                            b"fo:margin-bottom" => {
+                                map.insert("margin-bottom".to_owned(),
+                                    String::from_utf8_lossy(&attr.value).to_string());
+                            }
+                            b"fo:margin-left" => {
+                                map.insert("margin-left".to_owned(),
+                                    String::from_utf8_lossy(&attr.value).to_string());
+                            }
+                            b"fo:margin-right" => {
+                                map.insert("margin-right".to_owned(),
+                                    String::from_utf8_lossy(&attr.value).to_string());
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    map
+}
+
+/// Return a MIME type string from a filename.
+fn mime_from_name(name: &str) -> &'static str {
+    let lower = name.to_lowercase();
+    if lower.ends_with(".png") { "image/png" }
+    else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") { "image/jpeg" }
+    else if lower.ends_with(".gif") { "image/gif" }
+    else if lower.ends_with(".svg") { "image/svg+xml" }
+    else if lower.ends_with(".webp") { "image/webp" }
+    else if lower.ends_with(".tiff") || lower.ends_with(".tif") { "image/tiff" }
+    else if lower.ends_with(".bmp") { "image/bmp" }
+    else { "application/octet-stream" }
 }
 
 // ── Content parsing ────────────────────────────────────────────────────────────
@@ -624,6 +732,7 @@ enum ParsePhase {
 fn parse_content(
     xml: &str,
     named_styles: &HashMap<String, StyleEntry>,
+    image_map: &HashMap<String, String>, // Pictures/... → resource_id
 ) -> Result<Node, ParseError> {
     let mut reader = Reader::from_str(xml);
     // Do NOT trim_text: spaces between inline elements matter.
@@ -652,8 +761,22 @@ fn parse_content(
     let mut in_note = false;
     let mut note_id = String::new();
     let mut note_class = String::new(); // "footnote" or "endnote"
-    let mut note_text = String::new();
+    let mut note_inline_stack: Vec<InlineCtx> = Vec::new(); // inline content inside note body para
+    let mut note_children: Vec<Node> = Vec::new(); // paragraphs collected inside note body
     let mut pending_footnotes: Vec<Node> = Vec::new();
+
+    // Annotation (comment) state
+    let mut in_annotation: usize = 0;
+    let mut annotation_text = String::new();
+    let mut in_annotation_meta: usize = 0; // depth inside dc:creator, dc:date etc.
+
+    // draw:frame / draw:image state
+    let mut in_frame: usize = 0; // nesting depth for draw:frame
+    let mut frame_href = String::new();
+    let mut frame_name = String::new();
+    let mut frame_alt = String::new();
+    let mut in_text_box = false;
+    let mut text_box_stack: Vec<Node> = Vec::new(); // div node being built for text-box
 
     // Table state
     let mut table_stack: Vec<Node> = Vec::new();  // outer tables
@@ -710,6 +833,15 @@ fn parse_content(
                             );
                         }
                     }
+                    // Self-closing draw:image (most ODT files use self-closing form)
+                    "draw:image" if in_frame > 0 => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"xlink:href" {
+                                frame_href = String::from_utf8_lossy(&attr.value).to_string();
+                            }
+                        }
+                    }
+
                     // Self-closing paragraph — treat as empty paragraph
                     "text:p" | "text:h" if !in_table_cell => {
                         let mut style = String::new();
@@ -773,10 +905,14 @@ fn parse_content(
                                     }
                                 }
                             }
-                        } else if in_paragraph
+                        } else if in_note && para_depth == 1 {
+                            // Note body paragraph: initialize note inline stack
+                            note_inline_stack.clear();
+                            note_inline_stack.push(InlineCtx::plain());
+                        } else if in_paragraph && in_annotation == 0
                             && let Some(top) = inline_stack.last_mut()
                             && !top.text.is_empty() && !top.text.ends_with(' ') {
-                            // Inner paragraph (e.g. footnote body): add a space
+                            // Inner paragraph: add a space separator
                             top.text.push(' ');
                         }
                         para_depth += 1;
@@ -794,7 +930,25 @@ fn parse_content(
                         para_depth += 1;
                     }
 
-                    "text:span" if in_paragraph && in_note_citation == 0 => {
+                    "text:span" if in_note && in_note_citation == 0 && !note_inline_stack.is_empty() => {
+                        let mut style_name = String::new();
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"text:style-name" {
+                                style_name = String::from_utf8_lossy(&attr.value).to_string();
+                            }
+                        }
+                        if let Some(top) = note_inline_stack.last_mut() {
+                            top.flush_text();
+                        }
+                        let kind = style_to_ctx_kind(&style_name, &auto_styles, named_styles);
+                        note_inline_stack.push(InlineCtx {
+                            kind: kind.unwrap_or(InlineCtxKind::Plain),
+                            children: Vec::new(),
+                            text: String::new(),
+                        });
+                    }
+
+                    "text:span" if in_paragraph && !in_note && in_note_citation == 0 => {
                         let mut style_name = String::new();
                         for attr in e.attributes().flatten() {
                             if attr.key.as_ref() == b"text:style-name" {
@@ -813,7 +967,24 @@ fn parse_content(
                         });
                     }
 
-                    "text:a" if in_paragraph && in_note_citation == 0 => {
+                    "text:a" if in_note && in_note_citation == 0 && !note_inline_stack.is_empty() => {
+                        let mut href = String::new();
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"xlink:href" {
+                                href = String::from_utf8_lossy(&attr.value).to_string();
+                            }
+                        }
+                        if let Some(top) = note_inline_stack.last_mut() {
+                            top.flush_text();
+                        }
+                        note_inline_stack.push(InlineCtx {
+                            kind: InlineCtxKind::Link { url: href },
+                            children: Vec::new(),
+                            text: String::new(),
+                        });
+                    }
+
+                    "text:a" if in_paragraph && !in_note && in_note_citation == 0 => {
                         let mut href = String::new();
                         for attr in e.attributes().flatten() {
                             if attr.key.as_ref() == b"xlink:href" {
@@ -833,7 +1004,8 @@ fn parse_content(
                     "text:note" if in_paragraph => {
                         note_id.clear();
                         note_class.clear();
-                        note_text.clear();
+                        note_inline_stack.clear();
+                        note_children.clear();
                         for attr in e.attributes().flatten() {
                             match attr.key.as_ref() {
                                 b"text:id" => {
@@ -857,6 +1029,56 @@ fn parse_content(
 
                     "text:note-citation" => {
                         in_note_citation += 1;
+                    }
+
+                    "office:annotation" => {
+                        in_annotation += 1;
+                        in_annotation_meta = 0;
+                        annotation_text.clear();
+                    }
+
+                    // dc:creator, dc:date etc. inside annotation are metadata, not body text
+                    "dc:creator" | "dc:date" | "meta:date-string" if in_annotation > 0 => {
+                        in_annotation_meta += 1;
+                    }
+
+                    "draw:frame" => {
+                        in_frame += 1;
+                        // Reset per-frame state on outermost frame
+                        if in_frame == 1 {
+                            frame_href.clear();
+                            frame_name.clear();
+                            frame_alt.clear();
+                            in_text_box = false;
+                            for attr in e.attributes().flatten() {
+                                match attr.key.as_ref() {
+                                    b"draw:name" => {
+                                        frame_name = String::from_utf8_lossy(&attr.value).to_string();
+                                    }
+                                    b"svg:title" | b"draw:desc" | b"svg:desc" => {
+                                        if frame_alt.is_empty() {
+                                            frame_alt = String::from_utf8_lossy(&attr.value).to_string();
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+
+                    "draw:image" if in_frame > 0 => {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"xlink:href" {
+                                // href may be "Pictures/foo.png" or "./Pictures/foo.png"
+                                let raw = String::from_utf8_lossy(&attr.value).to_string();
+                                frame_href = raw.trim_start_matches("./").to_owned();
+                            }
+                        }
+                    }
+
+                    "draw:text-box" if in_frame > 0 => {
+                        in_text_box = true;
+                        text_box_stack.push(Node::new(node::DIV));
                     }
 
                     "text:list" => {
@@ -925,6 +1147,13 @@ fn parse_content(
 
                     "text:p" | "text:h" => {
                         para_depth = para_depth.saturating_sub(1);
+                        // Note body paragraph ended: collect its content
+                        if in_note && para_depth == 1 {
+                            let children = flatten_inline_stack(&mut note_inline_stack);
+                            let note_para = children.into_iter().fold(Node::new(node::PARAGRAPH), |n, c| n.child(c));
+                            note_children.push(note_para);
+                            note_inline_stack.clear();
+                        }
                         if para_depth == 0 && in_paragraph {
                             // Close the paragraph: flatten the inline stack
                             let children = flatten_inline_stack(&mut inline_stack);
@@ -937,7 +1166,7 @@ fn parse_content(
                                 named_styles,
                             );
 
-                            // Dispatch: table cell, list item, or document
+                            // Dispatch: table cell, list item, text-box, or document
                             if in_table_cell {
                                 if let Some(cell) = cell_stack.last_mut() {
                                     *cell = cell.clone().child(node);
@@ -947,6 +1176,10 @@ fn parse_content(
                                 // Push to a side buffer via list_item_content
                                 // For now: attach to the list item directly
                                 attach_to_list_item_buf(&mut list_stack, node);
+                            } else if in_text_box {
+                                if let Some(div) = text_box_stack.last_mut() {
+                                    *div = div.clone().child(node);
+                                }
                             } else {
                                 let kind = resolve_para_kind(
                                     &current_para_style,
@@ -972,14 +1205,26 @@ fn parse_content(
                         }
                     }
 
-                    "text:span" if !inline_stack.is_empty() && in_paragraph && in_note_citation == 0 => {
+                    "text:span" if in_note && in_note_citation == 0 && note_inline_stack.len() > 1 => {
+                        let ctx = note_inline_stack.pop().unwrap();
+                        let nodes = ctx.into_node();
+                        push_nodes_to_top(&mut note_inline_stack, nodes);
+                    }
+
+                    "text:span" if !in_note && !inline_stack.is_empty() && in_paragraph && in_note_citation == 0 => {
                         // Pop the span context and push its result into the parent
                         let ctx = inline_stack.pop().unwrap();
                         let nodes = ctx.into_node();
                         push_nodes_to_top(&mut inline_stack, nodes);
                     }
 
-                    "text:a" if !inline_stack.is_empty() && in_paragraph && in_note_citation == 0 => {
+                    "text:a" if in_note && in_note_citation == 0 && note_inline_stack.len() > 1 => {
+                        let ctx = note_inline_stack.pop().unwrap();
+                        let nodes = ctx.into_node();
+                        push_nodes_to_top(&mut note_inline_stack, nodes);
+                    }
+
+                    "text:a" if !in_note && !inline_stack.is_empty() && in_paragraph && in_note_citation == 0 => {
                         let ctx = inline_stack.pop().unwrap();
                         let nodes = ctx.into_node();
                         push_nodes_to_top(&mut inline_stack, nodes);
@@ -990,18 +1235,82 @@ fn parse_content(
                     }
 
                     "text:note" if in_note => {
-                        // Build footnote_def from collected text
-                        if !note_text.is_empty() {
-                            let text_node = Node::new(node::TEXT)
-                                .prop(prop::CONTENT, note_text.clone());
-                            let para = Node::new(node::PARAGRAPH).child(text_node);
+                        // Build footnote_def from collected note_children
+                        if !note_children.is_empty() {
                             let mut def = Node::new(node::FOOTNOTE_DEF)
                                 .prop(prop::LABEL, note_id.clone());
-                            def = def.child(para);
+                            for child in note_children.drain(..) {
+                                def = def.child(child);
+                            }
                             pending_footnotes.push(def);
                         }
                         in_note = false;
-                        note_text.clear();
+                        note_inline_stack.clear();
+                        note_children.clear();
+                    }
+
+                    "dc:creator" | "dc:date" | "meta:date-string" if in_annotation_meta > 0 => {
+                        in_annotation_meta -= 1;
+                    }
+
+                    "office:annotation" if in_annotation > 0 => {
+                        in_annotation_meta = 0;
+                        in_annotation -= 1;
+                        if in_annotation == 0 {
+                            let ann_text = std::mem::take(&mut annotation_text);
+                            if !ann_text.is_empty()
+                                && let Some(top) = inline_stack.last_mut() {
+                                top.flush_text();
+                                top.children.push(
+                                    Node::new(node::SPAN).prop("odt:annotation", ann_text)
+                                );
+                            }
+                        }
+                    }
+
+                    "draw:frame" if in_frame > 0 => {
+                        in_frame -= 1;
+                        if in_frame == 0 {
+                            if !frame_href.is_empty() {
+                                // Image frame
+                                let mut img = Node::new(node::IMAGE);
+                                if let Some(res_id) = image_map.get(&frame_href) {
+                                    img = img.prop("src", res_id.as_str());
+                                } else {
+                                    img = img.prop("src", frame_href.as_str());
+                                }
+                                if !frame_alt.is_empty() { img = img.prop(prop::ALT, frame_alt.as_str()); }
+                                if !frame_name.is_empty() { img = img.prop("odt:name", frame_name.as_str()); }
+                                if in_paragraph {
+                                    if let Some(top) = inline_stack.last_mut() {
+                                        top.flush_text();
+                                        top.children.push(img);
+                                    }
+                                } else {
+                                    flush_pending_blockquote(&mut pending_blockquote, &mut doc);
+                                    doc = doc.child(img);
+                                }
+                            } else if in_text_box {
+                                // Text-box frame: emit div with collected content
+                                in_text_box = false;
+                                if let Some(div) = text_box_stack.pop() {
+                                    if in_paragraph {
+                                        if let Some(top) = inline_stack.last_mut() {
+                                            top.flush_text();
+                                            top.children.push(div);
+                                        }
+                                    } else {
+                                        flush_pending_blockquote(&mut pending_blockquote, &mut doc);
+                                        doc = doc.child(div);
+                                    }
+                                }
+                            }
+                            frame_href.clear();
+                        }
+                    }
+
+                    "draw:text-box" if in_text_box => {
+                        // text-box content already collected via paragraph handler
                     }
 
                     "text:list-item" => {
@@ -1059,24 +1368,36 @@ fn parse_content(
             }
 
             Ok(Event::Text(ref e)) => {
-                if in_paragraph && in_note_citation == 0 && para_depth > 0 {
-                    let text = String::from_utf8_lossy(e.as_ref()).to_string();
-                    if in_note {
-                        // Accumulate into note body text
-                        note_text.push_str(&text);
-                    } else if let Some(top) = inline_stack.last_mut() {
+                let text = String::from_utf8_lossy(e.as_ref()).to_string();
+                if in_frame > 0 && !in_text_box {
+                    // Skip XML whitespace inside draw:frame (not part of document text)
+                } else if in_note && in_note_citation == 0 {
+                    if let Some(top) = note_inline_stack.last_mut() {
+                        top.text.push_str(&text);
+                    }
+                } else if in_paragraph && in_note_citation == 0 && para_depth > 0 {
+                    if in_annotation > 0 && in_annotation_meta == 0 {
+                        annotation_text.push_str(&text);
+                    } else if in_annotation == 0
+                        && let Some(top) = inline_stack.last_mut() {
                         top.text.push_str(&text);
                     }
                 }
             }
 
             Ok(Event::GeneralRef(ref e)) => {
-                if in_paragraph && in_note_citation == 0 && para_depth > 0
-                    && let Some(ch) = decode_general_ref(e.as_ref()) {
-                    if in_note {
-                        note_text.push(ch);
-                    } else if let Some(top) = inline_stack.last_mut() {
-                        top.text.push(ch);
+                if let Some(ch) = decode_general_ref(e.as_ref()) {
+                    if in_note && in_note_citation == 0 {
+                        if let Some(top) = note_inline_stack.last_mut() {
+                            top.text.push(ch);
+                        }
+                    } else if in_paragraph && in_note_citation == 0 && para_depth > 0 {
+                        if in_annotation > 0 && in_annotation_meta == 0 {
+                            annotation_text.push(ch);
+                        } else if in_annotation == 0
+                            && let Some(top) = inline_stack.last_mut() {
+                            top.text.push(ch);
+                        }
                     }
                 }
             }

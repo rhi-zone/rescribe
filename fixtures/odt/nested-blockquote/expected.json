@@ -1,0 +1,11 @@
+{
+  "description": "Consecutive Quotations paragraphs merge into a single blockquote",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote", "children_count": 2 },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "First quote." } },
+    { "path": "/0/1", "kind": "paragraph" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Second quote." } }
+  ]
+}

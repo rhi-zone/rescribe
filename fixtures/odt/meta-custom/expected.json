@@ -1,0 +1,9 @@
+{
+  "description": "ODT custom user-defined metadata preserved with meta: prefix",
+  "category": "happy",
+  "assertions": [],
+  "metadata": {
+    "meta:Project": "RescribeDemo",
+    "meta:Version": "1.0"
+  }
+}

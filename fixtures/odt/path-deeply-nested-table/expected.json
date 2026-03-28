@@ -1,0 +1,7 @@
+{
+  "description": "Table nested 3 levels deep parses without error",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "table" }
+  ]
+}

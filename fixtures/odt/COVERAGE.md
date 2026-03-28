@@ -16,8 +16,8 @@ See `fixtures/spec.md` for category definitions.
 - [x] code block (preformatted paragraph style) — `code-block`
 - [x] blockquote (Quotations paragraph style) — `blockquote`
 - [x] horizontal rule (Horizontal Line paragraph style) — `horizontal-rule`
-- [ ] text box / frame (`<draw:text-box>`) — (missing)
-- [ ] definition list (no native ODF construct; style-based) — (missing)
+- [x] text box / frame (`<draw:text-box>`) — `text-box`
+- [x] definition list (no native ODF construct; style-based) — not applicable (ODF has no native DL)
 
 ## Inline constructs
 - [x] line break (`<text:line-break>`) — `line-break`
@@ -34,9 +34,9 @@ See `fixtures/spec.md` for category definitions.
 - [x] hyperlink (`<text:a>`) — `hyperlink`
 - [x] footnote (`<text:note text:note-class="footnote">`) — `footnote`
 - [x] endnote (`<text:note text:note-class="endnote">`) — `endnote`
-- [ ] image / frame (`<draw:frame><draw:image>`) — (missing)
+- [x] image / frame (`<draw:frame><draw:image>`) — `image`
 - [x] bookmark (`<text:bookmark>`) — `bookmark`
-- [ ] annotation / comment (`<office:annotation>`) — (missing)
+- [x] annotation / comment (`<office:annotation>`) — `annotation`
 - [x] tab stop (`<text:tab>`) — `tab`
 - [x] soft hyphen (`<text:soft-hyphen>`) — `soft-hyphen`
 - [x] non-breaking space (`&#160;`) — `non-breaking-space`
@@ -57,17 +57,17 @@ See `fixtures/spec.md` for category definitions.
 - [x] description (`<dc:description>`) — `meta-description`
 - [x] creation/modification date — `meta-date`
 - [x] language (`<dc:language>`) — `meta-language`
-- [ ] custom user-defined metadata — (missing)
-- [ ] page size and margins (`<style:page-layout>`) — (missing)
+- [x] custom user-defined metadata — `meta-custom`
+- [x] page size and margins (`<style:page-layout>`) — `page-layout`
 
 ## Composition (integration)
 - [x] table cells with formatted inline content — `table-cells-formatted`
 - [x] list items with inline formatting — `list-items-formatted`
-- [ ] footnote with formatted content — (missing)
-- [ ] image with caption — (missing)
+- [x] footnote with formatted content — `footnote-formatted`
+- [x] image with caption — `image-caption`
 - [x] heading with inline formatting — `heading-formatted`
 - [x] hyperlink containing formatted text — `link-formatted`
-- [ ] nested blockquote — (missing)
+- [x] nested blockquote — `nested-blockquote`
 
 ## Adversarial
 - [x] malformed zip archive — `adv-malformed-zip`
@@ -75,12 +75,12 @@ See `fixtures/spec.md` for category definitions.
 - [x] corrupt styles.xml — `adv-corrupt-styles`
 - [x] unknown XML namespace — `adv-unknown-namespace`
 - [x] empty document — `adv-empty`
-- [ ] corrupt image binary — (missing)
+- [x] corrupt image binary — `adv-corrupt-image`
 - [x] non-ODF zip (wrong mimetype) — `adv-wrong-mimetype`
 
 ## Pathological
-- [ ] document with thousands of paragraphs — (missing)
-- [ ] deeply nested tables — (missing)
-- [ ] list with many nesting levels — (missing)
-- [ ] paragraph with hundreds of character runs — (missing)
-- [ ] very large embedded image — (missing)
+- [x] document with thousands of paragraphs — `path-many-paragraphs`
+- [x] deeply nested tables — `path-deeply-nested-table`
+- [x] list with many nesting levels — `path-deeply-nested-list`
+- [x] paragraph with hundreds of character runs — `path-many-char-runs`
+- [x] very large embedded image — `path-large-image`

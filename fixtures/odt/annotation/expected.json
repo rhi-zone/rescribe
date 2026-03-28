@@ -1,0 +1,10 @@
+{
+  "description": "ODT annotation (office:annotation) produces span with odt:annotation prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Annotated" } },
+    { "path": "/0/1", "kind": "span", "props": { "odt:annotation": "A comment." } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " word." } }
+  ]
+}

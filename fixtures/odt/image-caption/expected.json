@@ -1,0 +1,7 @@
+{
+  "description": "ODT draw:frame with image and caption text-box; image takes priority",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "image" }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Footnote body with bold inline formatting preserved",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "ftn1" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "ftn1" } },
+    { "path": "/1/0", "kind": "paragraph" },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "See " } },
+    { "path": "/1/0/1", "kind": "strong" },
+    { "path": "/1/0/1/0", "kind": "text", "props": { "content": "important" } },
+    { "path": "/1/0/2", "kind": "text", "props": { "content": " ref." } }
+  ]
+}
