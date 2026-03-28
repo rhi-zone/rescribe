@@ -12,6 +12,11 @@ categories = ["encoding", "parser-implementations"]
 [features]
 default = ["full"]
 full = [
+    "reader-ast",
+    "reader-streaming",
+    "reader-batch",
+    "writer-streaming",
+    "writer-builder",
     "pml-transitions",
     "pml-animations",
     "pml-notes",
@@ -28,6 +33,12 @@ full = [
     "extra-children",
     "dml-tables",
 ]
+# API-mode flags
+reader-ast = []       # Presentation::open / parse — materialised tree
+reader-streaming = [] # events() — iterator over PmlEvents (stub; impl pending)
+reader-batch = []     # StreamingParser<H> — chunk-driven (stub; impl pending)
+writer-streaming = [] # Writer<W> — event-driven emit (stub; impl pending)
+writer-builder = []   # PresentationBuilder — build and write a presentation
 # Individual feature flags (see spec/ooxml-features.yaml)
 pml-transitions = []     # Slide transitions
 pml-charts = ["ooxml-dml/dml-charts", "ooxml-dml/dml-diagrams"]  # Chart and SmartArt reading

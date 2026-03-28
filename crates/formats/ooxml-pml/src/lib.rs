@@ -65,25 +65,31 @@ pub mod generated_serializers;
 pub use generated_serializers as serializers;
 
 pub use error::{Error, Result};
-#[cfg(feature = "pml-charts")]
+#[cfg(all(feature = "reader-ast", feature = "pml-charts"))]
 pub use presentation::SmartArtParts;
+#[cfg(feature = "reader-ast")]
 pub use presentation::{
     DiagramRelIds, Hyperlink, ImageData, Presentation, Slide, SlideLayout, SlideLayoutType,
     SlideMaster, Table, Transition, TransitionSpeed, TransitionType,
 };
 // Re-export generated types that replace handwritten ones
+#[cfg(feature = "reader-ast")]
 pub use types::{Picture, Shape};
 // Re-export DML table types and extension traits for table access
+#[cfg(feature = "reader-ast")]
 pub use ooxml_dml::types::{CTTable, CTTableCell, CTTableRow};
+#[cfg(feature = "reader-ast")]
 pub use ooxml_dml::{TableCellExt, TableExt, TableRowExt};
+#[cfg(feature = "writer-builder")]
 pub use writer::{
     GroupBuilder, ImageFormat, Paragraph, PresentationBuilder, PresetGeometry, ShapeBuilder,
     SlideBuilder, SlideTransition, TableBuilder, TextAlign, TextRun,
 };
 
 // Extension traits for generated types
-#[cfg(feature = "pml-notes")]
+#[cfg(all(feature = "reader-ast", feature = "pml-notes"))]
 pub use ext::NotesSlideExt;
+#[cfg(feature = "reader-ast")]
 pub use ext::{
     CommonSlideDataExt, ConnectorExt, GraphicalObjectFrameExt, GroupShapeExt, PictureExt, ShapeExt,
     SlideExt, SlideLayoutExt, SlideMasterExt,

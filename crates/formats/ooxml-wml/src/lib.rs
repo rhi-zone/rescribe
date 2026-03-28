@@ -57,7 +57,8 @@ pub mod generated_serializers;
 /// Serializers for the generated ECMA-376 types. See [`generated_serializers`] for details.
 pub use generated_serializers as serializers;
 
-// Metadata types from document.rs (OPC, not WML — not generated).
+// Reader AST types from document.rs (OPC, not WML — not generated).
+#[cfg(feature = "reader-ast")]
 pub use document::{AppProperties, CoreProperties, Document, DocumentSettings, ImageData};
 
 // Error types — always available.
@@ -65,6 +66,7 @@ pub use error::{Error, ParseContext, Result, position_to_line_col};
 pub use ooxml_xml::{PositionedAttr, PositionedNode, RawXmlElement, RawXmlNode};
 
 // Writer types.
+#[cfg(feature = "writer-builder")]
 pub use writer::{
     AnchoredImage, CommentBuilder, DocumentBuilder, Drawing, EndnoteBuilder, FooterBuilder,
     FootnoteBuilder, HeaderBuilder, HeaderFooterType, InlineImage, ListType, NumberingLevel,

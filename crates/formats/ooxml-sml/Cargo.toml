@@ -13,6 +13,11 @@ categories = ["encoding", "parser-implementations"]
 default = ["full"]
 # Enable all optional features
 full = [
+    "reader-ast",
+    "reader-streaming",
+    "reader-batch",
+    "writer-streaming",
+    "writer-builder",
     "sml-styling", "sml-structure", "sml-formulas", "sml-formulas-advanced",
     "sml-layout", "sml-protection", "sml-filtering", "sml-validation",
     "sml-comments", "sml-charts", "sml-drawings", "sml-hyperlinks",
@@ -20,6 +25,12 @@ full = [
     "sml-revisions", "sml-external",
     "extra-attrs", "extra-children"
 ]
+# API-mode flags
+reader-ast = []       # Workbook::open / parse — materialised tree
+reader-streaming = [] # LazyWorksheet + events() — lazy/streaming row iteration
+reader-batch = []     # StreamingParser<H> — chunk-driven (stub; impl pending)
+writer-streaming = [] # Writer<W> — event-driven emit (stub; impl pending)
+writer-builder = []   # WorkbookBuilder — build and write a workbook
 # Roundtrip fidelity features
 extra-attrs = []              # Capture unknown attributes for roundtrip
 extra-children = []  # Capture unknown child elements for roundtrip

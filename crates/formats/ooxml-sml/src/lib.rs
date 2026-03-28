@@ -65,27 +65,32 @@ pub mod generated_serializers;
 pub use generated_serializers as serializers;
 
 // Lazy/streaming API for memory-efficient parsing
+#[cfg(feature = "reader-streaming")]
 pub mod lazy;
+#[cfg(feature = "reader-streaming")]
 pub use lazy::{LazyCell, LazyRow, LazyWorksheet};
 
 // Extension traits for generated types (see ADR-003)
 pub mod ext;
 #[cfg(feature = "sml-pivot")]
 pub use ext::PivotTableExt;
+#[cfg(feature = "reader-ast")]
 pub use ext::{
     CellExt, CellResolveExt, CellValue, Chart, ChartType, Comment, ResolveContext, ResolvedSheet,
     RowExt, SheetDataExt, WorksheetExt, parse_worksheet,
 };
-#[cfg(feature = "sml-styling")]
+#[cfg(all(feature = "reader-ast", feature = "sml-styling"))]
 pub use ext::{ConditionalFormattingExt, ConditionalRuleExt, WorksheetConditionalFormattingExt};
 
 pub use error::{Error, Result};
-// Writer-required types from workbook module
+// Reader AST types from workbook module
+#[cfg(feature = "reader-ast")]
 pub use workbook::{
     ConditionalRuleType, DataValidationErrorStyle, DataValidationOperator, DataValidationType,
     DefinedNameExt, DefinedNameScope, StylesheetExt, Workbook, builtin_format_code,
     excel_date_to_ymd, excel_datetime_to_ymdhms, format_excel_date, format_excel_datetime,
 };
+#[cfg(feature = "writer-builder")]
 pub use writer::{
     BorderLineStyle, BorderSideStyle, BorderStyle, CellStyle, CommentBuilder, ConditionalFormat,
     ConditionalFormatRule, DataValidationBuilder, DefinedNameBuilder, FillPattern, FillStyle,
