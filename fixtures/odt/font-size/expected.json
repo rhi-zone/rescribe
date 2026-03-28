@@ -1,0 +1,11 @@
+{
+  "description": "ODT font size (fo:font-size)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Before " } },
+    { "path": "/0/1", "kind": "span", "props": { "style:size": "24pt" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "large text" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " after." } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "ODT document title from meta.xml (dc:title)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "title": "My Document Title" } }
+  ]
+}

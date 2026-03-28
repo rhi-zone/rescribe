@@ -1,0 +1,8 @@
+{
+  "description": "ODT paragraph alignment (fo:text-align=center)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "style:align": "center" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Centered text." } }
+  ]
+}

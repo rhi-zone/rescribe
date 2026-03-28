@@ -1,0 +1,8 @@
+{
+  "description": "ODT paragraph border (fo:border)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "style:border": "0.5pt solid #000000" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Bordered paragraph." } }
+  ]
+}

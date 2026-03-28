@@ -1,0 +1,8 @@
+{
+  "description": "ODT keep-together / keep-with-next paragraph properties",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "style:keep-together": "always", "style:keep-with-next": "always" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Keep together paragraph." } }
+  ]
+}

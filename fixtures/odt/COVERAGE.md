@@ -27,10 +27,10 @@ See `fixtures/spec.md` for category definitions.
 - [x] strikeout (`style:text-line-through-style`) — `strikeout`
 - [x] subscript (`style:text-position`) — `subscript`
 - [x] superscript (`style:text-position`) — `superscript`
-- [ ] small caps (`fo:font-variant="small-caps"`) — (missing)
-- [ ] font color (`fo:color`) — (missing)
-- [ ] font size (`fo:font-size`) — (missing)
-- [ ] font name (`fo:font-family`) — (missing)
+- [x] small caps (`fo:font-variant="small-caps"`) — `small-caps`
+- [x] font color (`fo:color`) — `font-color`
+- [x] font size (`fo:font-size`) — `font-size`
+- [x] font name (`fo:font-family`) — `font-name`
 - [x] hyperlink (`<text:a>`) — `hyperlink`
 - [ ] footnote (`<text:footnote>`) — (missing)
 - [ ] endnote (`<text:endnote>`) — (missing)
@@ -38,22 +38,22 @@ See `fixtures/spec.md` for category definitions.
 - [ ] bookmark (`<text:bookmark>`) — (missing)
 - [ ] annotation / comment (`<office:annotation>`) — (missing)
 - [x] tab stop (`<text:tab>`) — `tab`
-- [ ] soft hyphen (`<text:soft-hyphen>`) — (missing)
+- [x] soft hyphen (`<text:soft-hyphen>`) — `soft-hyphen`
 - [x] non-breaking space (`&#160;`) — `non-breaking-space`
 
 ## Paragraph properties
-- [ ] paragraph alignment (`fo:text-align`) — (missing)
-- [ ] paragraph indent (`fo:margin-left`, `fo:text-indent`) — (missing)
-- [ ] paragraph spacing (`fo:margin-top`, `fo:margin-bottom`) — (missing)
+- [x] paragraph alignment (`fo:text-align`) — `para-align`
+- [x] paragraph indent (`fo:margin-left`, `fo:text-indent`) — `para-indent`
+- [x] paragraph spacing (`fo:margin-top`, `fo:margin-bottom`) — `para-spacing`
 - [ ] paragraph style name (`text:style-name`) — (missing)
-- [ ] paragraph border (`fo:border`) — (missing)
-- [ ] paragraph background color — (missing)
-- [ ] line height — (missing)
-- [ ] keep-together / keep-with-next — (missing)
+- [x] paragraph border (`fo:border`) — `para-border`
+- [x] paragraph background color — `para-background`
+- [x] line height — `line-height`
+- [x] keep-together / keep-with-next — `keep-together`
 
 ## Document metadata
-- [ ] title (`<dc:title>`) — (missing)
-- [ ] author (`<dc:creator>`) — (missing)
+- [x] title (`<dc:title>`) — `meta-title`
+- [x] author (`<dc:creator>`) — `meta-author`
 - [ ] description (`<dc:description>`) — (missing)
 - [ ] creation/modification date — (missing)
 - [ ] language (`<dc:language>`) — (missing)

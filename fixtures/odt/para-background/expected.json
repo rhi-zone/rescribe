@@ -1,0 +1,8 @@
+{
+  "description": "ODT paragraph background color (fo:background-color)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "style:background": "#ffffcc" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Yellow background." } }
+  ]
+}

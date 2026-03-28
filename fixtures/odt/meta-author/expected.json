@@ -1,0 +1,7 @@
+{
+  "description": "ODT document author from meta.xml (dc:creator)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document", "metadata": { "author": "Jane Doe" } }
+  ]
+}

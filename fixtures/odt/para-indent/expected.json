@@ -1,0 +1,8 @@
+{
+  "description": "ODT paragraph indent (fo:margin-left, fo:text-indent)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "style:margin-left": "1.5cm", "style:text-indent": "0.5cm" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Indented paragraph." } }
+  ]
+}

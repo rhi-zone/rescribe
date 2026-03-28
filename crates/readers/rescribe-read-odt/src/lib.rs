@@ -72,6 +72,10 @@ struct TextProps {
     subscript: bool,
     superscript: bool,
     code: bool, // monospace font → inline code
+    color: Option<String>,
+    font_size: Option<String>,
+    font_name_styled: Option<String>, // non-monospace font name
+    small_caps: bool,
 }
 
 impl TextProps {
@@ -79,6 +83,8 @@ impl TextProps {
     fn is_any(&self) -> bool {
         self.bold || self.italic || self.underline || self.strikeout
             || self.subscript || self.superscript || self.code
+            || self.color.is_some() || self.font_size.is_some()
+            || self.font_name_styled.is_some() || self.small_caps
     }
 }
 
@@ -89,10 +95,37 @@ enum ListLevelKind {
     Number,
 }
 
+/// Resolved paragraph layout properties for a style.
+#[derive(Debug, Clone, Default)]
+struct ParaProps {
+    align: Option<String>,
+    margin_left: Option<String>,
+    margin_right: Option<String>,
+    margin_top: Option<String>,
+    margin_bottom: Option<String>,
+    text_indent: Option<String>,
+    line_height: Option<String>,
+    border: Option<String>,
+    background_color: Option<String>,
+    keep_together: bool,
+    keep_with_next: bool,
+}
+
+impl ParaProps {
+    fn is_any(&self) -> bool {
+        self.align.is_some() || self.margin_left.is_some() || self.margin_right.is_some()
+            || self.margin_top.is_some() || self.margin_bottom.is_some()
+            || self.text_indent.is_some() || self.line_height.is_some()
+            || self.border.is_some() || self.background_color.is_some()
+            || self.keep_together || self.keep_with_next
+    }
+}
+
 /// A named or automatic style entry.
 #[derive(Debug, Clone, Default)]
 struct StyleEntry {
     text: TextProps,
+    para: ParaProps,
     /// For paragraph styles: the paragraph-level kind (code block, blockquote, etc.)
     para_kind: ParaKind,
     /// For list styles: the kind of the first level.
@@ -180,7 +213,68 @@ fn parse_styles_from_xml(xml: &str) -> HashMap<String, StyleEntry> {
                         parse_text_properties_attrs(e.attributes(), &mut entry.text);
                     }
                     "style:paragraph-properties" if in_style && !current_name.is_empty() => {
-                        // Could read margin-left for blockquote detection, but name heuristics above handle common cases
+                        let entry = map.entry(current_name.clone()).or_default();
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"fo:text-align" => {
+                                    let v = String::from_utf8_lossy(&attr.value).to_string();
+                                    if !v.is_empty() && v != "start" { entry.para.align = Some(v); }
+                                }
+                                b"fo:margin-left" => {
+                                    let v = String::from_utf8_lossy(&attr.value).to_string();
+                                    if !v.is_empty() && v != "0cm" && v != "0in" && v != "0pt" {
+                                        entry.para.margin_left = Some(v);
+                                    }
+                                }
+                                b"fo:margin-right" => {
+                                    let v = String::from_utf8_lossy(&attr.value).to_string();
+                                    if !v.is_empty() && v != "0cm" && v != "0in" && v != "0pt" {
+                                        entry.para.margin_right = Some(v);
+                                    }
+                                }
+                                b"fo:margin-top" => {
+                                    let v = String::from_utf8_lossy(&attr.value).to_string();
+                                    if !v.is_empty() && v != "0cm" && v != "0in" && v != "0pt" {
+                                        entry.para.margin_top = Some(v);
+                                    }
+                                }
+                                b"fo:margin-bottom" => {
+                                    let v = String::from_utf8_lossy(&attr.value).to_string();
+                                    if !v.is_empty() && v != "0cm" && v != "0in" && v != "0pt" {
+                                        entry.para.margin_bottom = Some(v);
+                                    }
+                                }
+                                b"fo:text-indent" => {
+                                    let v = String::from_utf8_lossy(&attr.value).to_string();
+                                    if !v.is_empty() && v != "0cm" && v != "0in" && v != "0pt" {
+                                        entry.para.text_indent = Some(v);
+                                    }
+                                }
+                                b"fo:line-height" => {
+                                    let v = String::from_utf8_lossy(&attr.value).to_string();
+                                    if !v.is_empty() && v != "100%" && v != "normal" {
+                                        entry.para.line_height = Some(v);
+                                    }
+                                }
+                                b"fo:border" => {
+                                    let v = String::from_utf8_lossy(&attr.value).to_string();
+                                    if !v.is_empty() && v != "none" { entry.para.border = Some(v); }
+                                }
+                                b"fo:background-color" => {
+                                    let v = String::from_utf8_lossy(&attr.value).to_string();
+                                    if !v.is_empty() && v != "transparent" {
+                                        entry.para.background_color = Some(v);
+                                    }
+                                }
+                                b"fo:keep-together" => {
+                                    if attr.value.as_ref() == b"always" { entry.para.keep_together = true; }
+                                }
+                                b"fo:keep-with-next" => {
+                                    if attr.value.as_ref() == b"always" { entry.para.keep_with_next = true; }
+                                }
+                                _ => {}
+                            }
+                        }
                     }
                     "text:list-style" => {
                         in_list_style = true;
@@ -264,14 +358,33 @@ fn parse_text_properties_attrs(
                 if val.starts_with("sub") { props.subscript = true; }
                 if val.starts_with("super") { props.superscript = true; }
             }
+            b"fo:color" => {
+                let val = String::from_utf8_lossy(attr.value.as_ref()).to_string();
+                if !val.is_empty() && val != "auto" {
+                    props.color = Some(val);
+                }
+            }
+            b"fo:font-size" => {
+                let val = String::from_utf8_lossy(attr.value.as_ref()).to_string();
+                if !val.is_empty() {
+                    props.font_size = Some(val);
+                }
+            }
+            b"fo:font-variant" => {
+                if attr.value.as_ref() == b"small-caps" {
+                    props.small_caps = true;
+                }
+            }
             b"style:font-name" | b"fo:font-family" => {
-                // Monospace/Code detection by common font names
-                let val = String::from_utf8_lossy(attr.value.as_ref()).to_lowercase();
+                let raw = String::from_utf8_lossy(attr.value.as_ref()).to_string();
+                let val = raw.to_lowercase();
                 if val.contains("courier") || val.contains("mono") || val.contains("consol")
                     || val.contains("fixed") || val.contains("inconsolata") || val.contains("menlo")
                     || val == "code2000" || val == "source code pro"
                 {
                     props.code = true;
+                } else if !raw.is_empty() {
+                    props.font_name_styled = Some(raw);
                 }
             }
             _ => {}
@@ -334,6 +447,12 @@ enum InlineCtxKind {
     Subscript,
     Superscript,
     Link { url: String },
+    Span {
+        color: Option<String>,
+        font_size: Option<String>,
+        font_name: Option<String>,
+        small_caps: bool,
+    },
 }
 
 impl InlineCtx {
@@ -404,6 +523,16 @@ impl InlineCtx {
                 for c in self.children { n = n.child(c); }
                 vec![n]
             }
+            InlineCtxKind::Span { color, font_size, font_name, small_caps } => {
+                if self.children.is_empty() { return vec![]; }
+                let mut n = Node::new(node::SPAN);
+                if let Some(c) = color { n = n.prop("style:color", c); }
+                if let Some(s) = font_size { n = n.prop("style:size", s); }
+                if let Some(f) = font_name { n = n.prop("style:font", f); }
+                if small_caps { n = n.prop("style:variant", "small-caps"); }
+                for c in self.children { n = n.child(c); }
+                vec![n]
+            }
         }
     }
 }
@@ -444,6 +573,14 @@ fn style_to_ctx_kind(
         if p.italic { return Some(InlineCtxKind::Emphasis); }
         if p.underline { return Some(InlineCtxKind::Underline); }
         if p.strikeout { return Some(InlineCtxKind::Strikeout); }
+        if p.color.is_some() || p.font_size.is_some() || p.font_name_styled.is_some() || p.small_caps {
+            return Some(InlineCtxKind::Span {
+                color: p.color.clone(),
+                font_size: p.font_size.clone(),
+                font_name: p.font_name_styled.clone(),
+                small_caps: p.small_caps,
+            });
+        }
     } else {
         // No style definition found; fall back to name heuristics
         let lower = style_name.to_lowercase();
@@ -528,6 +665,11 @@ fn parse_content(
                     "text:tab" if in_paragraph && in_note_citation == 0 => {
                         if let Some(top) = inline_stack.last_mut() {
                             top.text.push('\t');
+                        }
+                    }
+                    "text:soft-hyphen" if in_paragraph && in_note_citation == 0 => {
+                        if let Some(top) = inline_stack.last_mut() {
+                            top.text.push('\u{00AD}');
                         }
                     }
                     // Self-closing paragraph — treat as empty paragraph
@@ -860,6 +1002,22 @@ fn flatten_inline_stack(stack: &mut Vec<InlineCtx>) -> Vec<Node> {
     top.children
 }
 
+/// Apply paragraph layout properties from a `ParaProps` to a node.
+fn apply_para_props(mut n: Node, props: &ParaProps) -> Node {
+    if let Some(v) = &props.align { n = n.prop("style:align", v.as_str()); }
+    if let Some(v) = &props.margin_left { n = n.prop("style:margin-left", v.as_str()); }
+    if let Some(v) = &props.margin_right { n = n.prop("style:margin-right", v.as_str()); }
+    if let Some(v) = &props.margin_top { n = n.prop("style:margin-top", v.as_str()); }
+    if let Some(v) = &props.margin_bottom { n = n.prop("style:margin-bottom", v.as_str()); }
+    if let Some(v) = &props.text_indent { n = n.prop("style:text-indent", v.as_str()); }
+    if let Some(v) = &props.line_height { n = n.prop("style:line-height", v.as_str()); }
+    if let Some(v) = &props.border { n = n.prop("style:border", v.as_str()); }
+    if let Some(v) = &props.background_color { n = n.prop("style:background", v.as_str()); }
+    if props.keep_together { n = n.prop("style:keep-together", "always"); }
+    if props.keep_with_next { n = n.prop("style:keep-with-next", "always"); }
+    n
+}
+
 /// Build the paragraph/heading/code_block/etc. node from its children.
 fn build_para_node(
     style: &str,
@@ -869,8 +1027,15 @@ fn build_para_node(
     named_styles: &HashMap<String, StyleEntry>,
 ) -> Node {
     let kind = resolve_para_kind(style, is_heading_tag, auto_styles, named_styles);
+    let para_props = if style.is_empty() {
+        None
+    } else {
+        auto_styles.get(style).or_else(|| named_styles.get(style))
+            .filter(|e| e.para.is_any())
+            .map(|e| &e.para)
+    };
 
-    match kind {
+    let node = match kind {
         ParaKind::Heading(level) => {
             let mut n = Node::new(node::HEADING).prop(prop::LEVEL, level as i64);
             for c in children { n = n.child(c); }
@@ -895,6 +1060,12 @@ fn build_para_node(
             for c in children { n = n.child(c); }
             n
         }
+    };
+
+    if let Some(props) = para_props {
+        apply_para_props(node, props)
+    } else {
+        node
     }
 }
 

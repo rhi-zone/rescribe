@@ -1,0 +1,8 @@
+{
+  "description": "ODT line height (fo:line-height)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "style:line-height": "150%" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "One-and-a-half line spacing." } }
+  ]
+}

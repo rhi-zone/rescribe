@@ -1,0 +1,11 @@
+{
+  "description": "ODT font name (fo:font-family)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Before " } },
+    { "path": "/0/1", "kind": "span", "props": { "style:font": "Arial" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Arial text" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " after." } }
+  ]
+}

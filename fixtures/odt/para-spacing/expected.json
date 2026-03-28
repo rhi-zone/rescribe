@@ -1,0 +1,8 @@
+{
+  "description": "ODT paragraph spacing (fo:margin-top, fo:margin-bottom)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "style:margin-top": "0.5cm", "style:margin-bottom": "0.5cm" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Spaced paragraph." } }
+  ]
+}
