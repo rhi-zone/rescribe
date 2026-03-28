@@ -1,0 +1,9 @@
+{
+  "description": "ODT nested list (list within list_item)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}

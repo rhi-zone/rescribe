@@ -1,0 +1,11 @@
+{
+  "description": "ODT table with header row (table:table-header-rows)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" }
+  ]
+}

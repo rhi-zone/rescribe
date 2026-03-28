@@ -774,7 +774,15 @@ fn parse_content(
                                 flush_pending_blockquote(&mut pending_blockquote, &mut doc);
                                 doc = doc.child(list_node);
                             } else if let Some((_, parent_list)) = list_stack.last_mut() {
-                                *parent_list = parent_list.clone().child(list_node);
+                                // Nested list: append inside the last list_item of the parent
+                                if let Some(last_item) = parent_list.children.last_mut()
+                                    && last_item.kind.as_str() == node::LIST_ITEM
+                                {
+                                    *last_item = last_item.clone().child(list_node);
+                                } else {
+                                    // No list_item yet (unusual): append directly
+                                    *parent_list = parent_list.clone().child(list_node);
+                                }
                             }
                         }
                     }
@@ -812,6 +820,14 @@ fn parse_content(
                     if let Some(top) = inline_stack.last_mut() {
                         top.text.push_str(&text);
                     }
+                }
+            }
+
+            Ok(Event::GeneralRef(ref e)) => {
+                if in_paragraph && in_note_citation == 0 && para_depth > 0
+                    && let Some(ch) = decode_general_ref(e.as_ref())
+                    && let Some(top) = inline_stack.last_mut() {
+                    top.text.push(ch);
                 }
             }
 
@@ -984,6 +1000,36 @@ fn flush_pending_blockquote(pending: &mut Option<Vec<Node>>, doc: &mut Node) {
         let mut bq = Node::new(node::BLOCKQUOTE);
         for p in paras { bq = bq.child(p); }
         *doc = doc.clone().child(bq);
+    }
+}
+
+// ── XML entity / character reference decoding ─────────────────────────────────
+
+/// Decode a `GeneralRef` event (the content between `&` and `;`) to a char.
+///
+/// Handles:
+/// - Decimal numeric refs: `#160` → U+00A0
+/// - Hex numeric refs: `#xa0` or `#xA0` → U+00A0
+/// - Named XML entities: `amp`, `lt`, `gt`, `apos`, `quot`
+fn decode_general_ref(content: &[u8]) -> Option<char> {
+    let s = std::str::from_utf8(content).ok()?;
+    if let Some(dec) = s.strip_prefix('#').and_then(|r| {
+        if r.starts_with(['x', 'X']) {
+            u32::from_str_radix(&r[1..], 16).ok()
+        } else {
+            r.parse::<u32>().ok()
+        }
+    }) {
+        char::from_u32(dec)
+    } else {
+        match s {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "apos" => Some('\''),
+            "quot" => Some('"'),
+            _ => None,
+        }
     }
 }
 
@@ -1166,3 +1212,4 @@ mod tests {
         assert_eq!(list.props.get_bool("ordered"), Some(true));
     }
 }
+

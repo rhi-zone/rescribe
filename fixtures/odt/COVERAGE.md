@@ -6,12 +6,12 @@ See `fixtures/spec.md` for category definitions.
 ## Block constructs
 - [x] paragraph (`<text:p>`) — `paragraph`
 - [x] heading (`<text:h>`) — `heading`
-- [ ] heading levels 1–6 individually — (missing; `heading` may cover only one level)
+- [x] heading levels 1–6 individually — `heading-levels`
 - [x] unordered list (`<text:list>` with bullet style) — `list`
 - [x] ordered list (`<text:list>` with number style) — `ordered-list`
-- [ ] nested list — (missing)
+- [x] nested list — `nested-list`
 - [x] table (`<table:table>`) — `table`
-- [ ] table with header row — (missing)
+- [x] table with header row — `table-header`
 - [ ] table with colspan/rowspan — (missing)
 - [x] code block (preformatted paragraph style) — `code-block`
 - [x] blockquote (Quotations paragraph style) — `blockquote`
@@ -39,7 +39,7 @@ See `fixtures/spec.md` for category definitions.
 - [ ] annotation / comment (`<office:annotation>`) — (missing)
 - [x] tab stop (`<text:tab>`) — `tab`
 - [ ] soft hyphen (`<text:soft-hyphen>`) — (missing)
-- [ ] non-breaking space (`<text:s>` / `&#160;`) — (missing)
+- [x] non-breaking space (`&#160;`) — `non-breaking-space`
 
 ## Paragraph properties
 - [ ] paragraph alignment (`fo:text-align`) — (missing)

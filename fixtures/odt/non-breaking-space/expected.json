@@ -1,0 +1,8 @@
+{
+  "description": "ODT non-breaking space (&#160;)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "before\u00a0after" } }
+  ]
+}

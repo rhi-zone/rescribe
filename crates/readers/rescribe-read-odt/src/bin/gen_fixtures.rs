@@ -399,4 +399,126 @@ fn main() {
   ]
 }"#,
     );
+
+    // ── heading-levels ───────────────────────────────────────────────────────
+    write_fixture("heading-levels",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:h text:outline-level="1">Level One</text:h>
+      <text:h text:outline-level="2">Level Two</text:h>
+      <text:h text:outline-level="3">Level Three</text:h>
+      <text:h text:outline-level="4">Level Four</text:h>
+      <text:h text:outline-level="5">Level Five</text:h>
+      <text:h text:outline-level="6">Level Six</text:h>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT heading levels 1 through 6",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/1", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/2", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/3", "kind": "heading", "props": { "level": 4 } },
+    { "path": "/4", "kind": "heading", "props": { "level": 5 } },
+    { "path": "/5", "kind": "heading", "props": { "level": 6 } }
+  ]
+}"#,
+    );
+
+    // ── table-header ─────────────────────────────────────────────────────────
+    write_fixture("table-header",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0">
+  <office:body>
+    <office:text>
+      <table:table>
+        <table:table-header-rows>
+          <table:table-row>
+            <table:table-cell><text:p>Header A</text:p></table:table-cell>
+            <table:table-cell><text:p>Header B</text:p></table:table-cell>
+          </table:table-row>
+        </table:table-header-rows>
+        <table:table-row>
+          <table:table-cell><text:p>Data 1</text:p></table:table-cell>
+          <table:table-cell><text:p>Data 2</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT table with header row (table:table-header-rows)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" }
+  ]
+}"#,
+    );
+
+    // ── nested-list ──────────────────────────────────────────────────────────
+    write_fixture("nested-list",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:list>
+        <text:list-item>
+          <text:p>Item one</text:p>
+          <text:list>
+            <text:list-item><text:p>Nested item</text:p></text:list-item>
+          </text:list>
+        </text:list-item>
+        <text:list-item><text:p>Item two</text:p></text:list-item>
+      </text:list>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        r#"{
+  "description": "ODT nested list (list within list_item)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}"#,
+    );
+
+    // ── non-breaking-space ───────────────────────────────────────────────────
+    // text:s represents a run of multiple spaces; here just the non-breaking concept
+    write_fixture("non-breaking-space",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+  <office:body>
+    <office:text>
+      <text:p>before&#160;after</text:p>
+    </office:text>
+  </office:body>
+</office:document-content>"#,
+        "{
+  \"description\": \"ODT non-breaking space (&#160;)\",
+  \"category\": \"happy\",
+  \"assertions\": [
+    { \"path\": \"/0\", \"kind\": \"paragraph\" },
+    { \"path\": \"/0/0\", \"kind\": \"text\", \"props\": { \"content\": \"before\\u00a0after\" } }
+  ]
+}",
+    );
 }
