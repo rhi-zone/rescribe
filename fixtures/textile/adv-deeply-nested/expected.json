@@ -1,0 +1,7 @@
+{
+  "description": "Textile deeply nested inline markup (*_+word+_*) — parsed without panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

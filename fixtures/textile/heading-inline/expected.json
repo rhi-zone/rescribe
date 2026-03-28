@@ -1,0 +1,11 @@
+{
+  "description": "Textile heading with inline bold formatting",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Title with " } },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "bold" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " word" } }
+  ]
+}

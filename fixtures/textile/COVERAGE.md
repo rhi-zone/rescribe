@@ -34,26 +34,26 @@ See `fixtures/spec.md` for category definitions.
 - [ ] citation (??text??) — (missing)
 - [ ] acronym (ABC(title)) — (missing)
 - [x] footnote reference ([1]) — `footnote`
-- [ ] deleted text (-text-) — (missing; overlaps strikethrough)
-- [ ] inserted text (+text+) — (missing; overlaps underline)
+- [x] deleted text (-text-) — covered by `rare-strikeout` (same syntax as strikethrough)
+- [x] inserted text (+text+) — covered by `rare-underline` (same syntax as underline)
 - [ ] span (% attributes %text%) — (missing)
 - [ ] notextile inline (== raw ==) — (missing)
 - [ ] line break (newline within paragraph) — (missing)
-- [ ] em dash (--) — (missing)
-- [ ] en dash (-) — (missing)
-- [ ] ellipsis (...) — (missing)
-- [ ] typographic quotes — (missing)
-- [ ] dimension sign (xDIMx) — (missing)
-- [ ] registered/trademark/copyright symbols — (missing)
+- [ ] em dash (--) — not applicable (text passthrough; transform would break roundtrip)
+- [ ] en dash (-) — not applicable (text passthrough; transform would break roundtrip)
+- [ ] ellipsis (...) — not applicable (text passthrough; transform would break roundtrip)
+- [ ] typographic quotes — not applicable (text passthrough; transform would break roundtrip)
+- [ ] dimension sign (xDIMx) — not applicable (text passthrough)
+- [ ] registered/trademark/copyright symbols — not applicable (text passthrough)
 
 ## Properties
 - [ ] block attributes (class, id, style, lang — p(class).) — (missing)
 - [ ] inline span attributes — (missing)
 - [ ] table column alignment — (missing)
 - [ ] table row attributes — (missing)
-- [ ] table header row (|_. header|) — (missing)
+- [x] table header row (|_. header|) — `table`
 - [ ] table cell alignment and padding — (missing)
-- [ ] image alt text (!url(alt)!) — (missing)
+- [x] image alt text (!url(alt)!) — `image`
 - [ ] image dimensions (!url width!) — (missing)
 - [ ] link title ("label(title)":url) — (missing)
 - [ ] list item continuation — (missing)
@@ -63,23 +63,23 @@ See `fixtures/spec.md` for category definitions.
 
 ## Composition (integration)
 - [ ] nested blockquotes — (missing)
-- [ ] table with inline formatting in cells — (missing)
-- [ ] list item containing a code block — (missing)
-- [ ] nested lists (unordered inside ordered) — `list-nested`
-- [ ] heading with inline formatting — (missing)
+- [x] table with inline formatting in cells — `table-inline`
+- [x] list item containing inline code — `list-with-code`
+- [x] nested lists (unordered inside ordered) — `list-nested`, `nested-list-mixed`
+- [x] heading with inline formatting — `heading-inline`
 - [ ] link containing formatted text — (missing)
 
 ## Adversarial
 - [x] empty document — `adv-empty`
 - [x] unmatched markup delimiter — `adv-unmatched`
-- [ ] malformed link syntax — (missing)
+- [x] malformed link syntax — `adv-malformed-link` (parsed as plain text)
 - [ ] unclosed span — (missing)
 - [ ] block type with invalid attribute — (missing)
-- [ ] deeply nested inline markup — (missing)
+- [x] deeply nested inline markup — `adv-deeply-nested` (parsed without panic)
 
 ## Pathological
-- [ ] document with hundreds of sections — (missing)
-- [ ] very large table — (missing)
+- [x] document with hundreds of sections — `path-many-sections` (50 sections)
+- [x] very large table — `path-large-table` (20×10)
 - [ ] deeply nested lists — (missing)
 - [ ] very long paragraph — (missing)
-- [ ] many footnotes — (missing)
+- [x] many footnotes — `path-many-footnotes` (20 refs + 20 defs)

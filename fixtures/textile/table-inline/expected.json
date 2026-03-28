@@ -1,0 +1,16 @@
+{
+  "description": "Textile table with inline formatting in cells: bold, italic, code",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/0/0", "kind": "strong" },
+    { "path": "/0/0/1", "kind": "table_cell" },
+    { "path": "/0/0/1/0", "kind": "emphasis" },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" },
+    { "path": "/0/1/1", "kind": "table_cell" },
+    { "path": "/0/1/1/0", "kind": "code" }
+  ]
+}

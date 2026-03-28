@@ -1,0 +1,2 @@
+|*bold*|_italic_|
+|normal|@code@|

@@ -1,0 +1,42 @@
+Text with references [1] [2] [3] [4] [5] [6] [7] [8] [9] [10] [11] [12] [13] [14] [15] [16] [17] [18] [19] [20] .
+
+fn1. Footnote number 1.
+
+fn2. Footnote number 2.
+
+fn3. Footnote number 3.
+
+fn4. Footnote number 4.
+
+fn5. Footnote number 5.
+
+fn6. Footnote number 6.
+
+fn7. Footnote number 7.
+
+fn8. Footnote number 8.
+
+fn9. Footnote number 9.
+
+fn10. Footnote number 10.
+
+fn11. Footnote number 11.
+
+fn12. Footnote number 12.
+
+fn13. Footnote number 13.
+
+fn14. Footnote number 14.
+
+fn15. Footnote number 15.
+
+fn16. Footnote number 16.
+
+fn17. Footnote number 17.
+
+fn18. Footnote number 18.
+
+fn19. Footnote number 19.
+
+fn20. Footnote number 20.
+

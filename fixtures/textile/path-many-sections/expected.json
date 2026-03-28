@@ -1,0 +1,10 @@
+{
+  "description": "Textile document with 50 h2 sections plus paragraphs",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/98", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/99", "kind": "paragraph" }
+  ]
+}

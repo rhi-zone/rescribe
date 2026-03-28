@@ -1,0 +1,7 @@
+{
+  "description": "Textile malformed link syntax (no closing quote or URL): treated as plain text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

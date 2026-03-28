@@ -1,0 +1,9 @@
+{
+  "description": "Textile document with 20 footnote references and 20 footnote definitions",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "footnote_def" },
+    { "path": "/20", "kind": "footnote_def" }
+  ]
+}
