@@ -511,26 +511,53 @@ fn parse_content(
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+            Ok(Event::Empty(ref e)) => {
+                if phase != ParsePhase::InBody {
+                    buf.clear();
+                    continue;
+                }
                 let name_bytes = e.name().as_ref().to_vec();
                 let name = String::from_utf8_lossy(&name_bytes).to_string();
-
                 match name.as_str() {
                     "text:line-break" if in_paragraph && in_note_citation == 0 => {
                         if let Some(top) = inline_stack.last_mut() {
                             top.flush_text();
                             top.children.push(Node::new(node::LINE_BREAK));
                         }
-                        buf.clear();
-                        continue;
                     }
                     "text:tab" if in_paragraph && in_note_citation == 0 => {
                         if let Some(top) = inline_stack.last_mut() {
                             top.text.push('\t');
                         }
-                        buf.clear();
-                        continue;
                     }
+                    // Self-closing paragraph — treat as empty paragraph
+                    "text:p" | "text:h" if !in_table_cell => {
+                        let mut style = String::new();
+                        for attr in e.attributes().flatten() {
+                            if matches!(attr.key.as_ref(), b"text:style-name" | b"text:outline-level") {
+                                style = String::from_utf8_lossy(&attr.value).to_string();
+                            }
+                        }
+                        let node = build_para_node(&style, vec![], name.as_str() == "text:h", &auto_styles, named_styles);
+                        let kind = resolve_para_kind(&style, name.as_str() == "text:h", &auto_styles, named_styles);
+                        if kind == ParaKind::Blockquote {
+                            pending_blockquote.get_or_insert_with(Vec::new).push(node);
+                        } else {
+                            flush_pending_blockquote(&mut pending_blockquote, &mut doc);
+                            doc = doc.child(node);
+                        }
+                    }
+                    _ => {}
+                }
+                buf.clear();
+                continue;
+            }
+
+            Ok(Event::Start(ref e)) => {
+                let name_bytes = e.name().as_ref().to_vec();
+                let name = String::from_utf8_lossy(&name_bytes).to_string();
+
+                match name.as_str() {
                     "office:automatic-styles" => {
                         phase = ParsePhase::InAutoStyles;
                     }
