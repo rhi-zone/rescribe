@@ -1,0 +1,8 @@
+{
+  "description": "ODT code block (Preformatted Text style)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "code_block", "props": { "content": "let x = 1;" } }
+  ]
+}

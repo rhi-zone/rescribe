@@ -1,0 +1,12 @@
+{
+  "description": "ODT hyperlink (text:a)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "See " } },
+    { "path": "/0/1", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "this link" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " for details." } }
+  ]
+}

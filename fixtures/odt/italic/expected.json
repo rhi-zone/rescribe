@@ -1,0 +1,12 @@
+{
+  "description": "ODT italic inline (automatic style with fo:font-style=italic)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Before " } },
+    { "path": "/0/1", "kind": "emphasis" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "italic text" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " after." } }
+  ]
+}

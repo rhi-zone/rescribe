@@ -1,0 +1,12 @@
+{
+  "description": "ODT underline inline",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Before " } },
+    { "path": "/0/1", "kind": "underline" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "underlined text" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " after." } }
+  ]
+}
