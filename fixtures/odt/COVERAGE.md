@@ -8,30 +8,30 @@ See `fixtures/spec.md` for category definitions.
 - [x] heading (`<text:h>`) — `heading`
 - [ ] heading levels 1–6 individually — (missing; `heading` may cover only one level)
 - [x] unordered list (`<text:list>` with bullet style) — `list`
-- [ ] ordered list (`<text:list>` with number style) — (missing)
+- [x] ordered list (`<text:list>` with number style) — `ordered-list`
 - [ ] nested list — (missing)
-- [ ] table (`<table:table>`) — (missing)
+- [x] table (`<table:table>`) — `table`
 - [ ] table with header row — (missing)
 - [ ] table with colspan/rowspan — (missing)
-- [ ] code block (preformatted paragraph style) — (missing)
-- [ ] blockquote (Quotations paragraph style) — (missing)
+- [x] code block (preformatted paragraph style) — `code-block`
+- [x] blockquote (Quotations paragraph style) — `blockquote`
 - [ ] horizontal rule (paragraph border or draw:line) — (missing)
 - [ ] text box / frame (`<draw:text-box>`) — (missing)
 - [ ] definition list (no native ODF construct; style-based) — (missing)
 
 ## Inline constructs
 - [x] line break (`<text:line-break>`) — `line-break`
-- [ ] bold (`fo:font-weight="bold"`) — (missing)
-- [ ] italic (`fo:font-style="italic"`) — (missing)
-- [ ] underline (`style:text-underline-style`) — (missing)
-- [ ] strikeout (`style:text-line-through-style`) — (missing)
+- [x] bold (`fo:font-weight="bold"`) — `bold`
+- [x] italic (`fo:font-style="italic"`) — `italic`
+- [x] underline (`style:text-underline-style`) — `underline`
+- [x] strikeout (`style:text-line-through-style`) — `strikeout`
 - [ ] subscript (`style:text-position`) — (missing)
 - [ ] superscript (`style:text-position`) — (missing)
 - [ ] small caps (`fo:font-variant="small-caps"`) — (missing)
 - [ ] font color (`fo:color`) — (missing)
 - [ ] font size (`fo:font-size`) — (missing)
 - [ ] font name (`fo:font-family`) — (missing)
-- [ ] hyperlink (`<text:a>`) — (missing)
+- [x] hyperlink (`<text:a>`) — `hyperlink`
 - [ ] footnote (`<text:footnote>`) — (missing)
 - [ ] endnote (`<text:endnote>`) — (missing)
 - [ ] image / frame (`<draw:frame><draw:image>`) — (missing)
