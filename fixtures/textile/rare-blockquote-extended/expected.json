@@ -1,0 +1,10 @@
+{
+  "description": "Textile extended blockquote (bq..) collects multiple paragraphs",
+  "category": "block_constructs",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "paragraph" },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

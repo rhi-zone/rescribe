@@ -1,0 +1,13 @@
+{
+  "description": "Textile list item continuation: non-list lines after an item append to its text",
+  "category": "properties",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "First item with continuation text" } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Second item" } },
+    { "path": "/1", "kind": "list" },
+    { "path": "/1/0/0/0", "kind": "text", "props": { "content": "Ordered first continued line" } }
+  ]
+}

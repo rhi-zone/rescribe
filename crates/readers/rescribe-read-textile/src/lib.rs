@@ -78,10 +78,11 @@ fn convert_block(block: &Block) -> Node {
             n
         }
 
-        Block::Blockquote { inlines, .. } => {
-            let para_children: Vec<Node> = inlines.iter().map(convert_inline).collect();
-            let para = Node::new(node::PARAGRAPH).children(para_children);
-            Node::new(node::BLOCKQUOTE).children(vec![para])
+        Block::Blockquote { blocks, attrs, .. } => {
+            let children: Vec<Node> = blocks.iter().map(convert_block).collect();
+            let mut n = Node::new(node::BLOCKQUOTE).children(children);
+            n = apply_block_attrs(n, attrs);
+            n
         }
 
         Block::List { ordered, items, .. } => {
@@ -119,7 +120,9 @@ fn convert_block(block: &Block) -> Node {
                             n
                         })
                         .collect();
-                    Node::new(node::TABLE_ROW).children(cells)
+                    let mut row_node = Node::new(node::TABLE_ROW).children(cells);
+                    row_node = apply_block_attrs(row_node, &row.attrs);
+                    row_node
                 })
                 .collect();
             Node::new(node::TABLE).children(table_rows)
@@ -231,9 +234,11 @@ fn convert_inline(inline: &Inline) -> Node {
                 .children(converted)
         }
 
-        Inline::GenericSpan(children, _) => {
+        Inline::GenericSpan { attrs, children, .. } => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
-            Node::new(node::SPAN).children(converted)
+            let mut n = Node::new(node::SPAN).children(converted);
+            n = apply_block_attrs(n, attrs);
+            n
         }
 
         Inline::Acronym { text, title, .. } => {

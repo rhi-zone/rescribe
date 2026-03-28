@@ -1,0 +1,3 @@
+A paragraph with %{color:red}red text% inline.
+
+A paragraph with %(highlight)highlighted% text.

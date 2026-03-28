@@ -109,8 +109,8 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            // Table
-            if line.trim_start().starts_with('|') {
+            // Table: starts with '|' or with row attributes prefix (e.g. `{style}. |`)
+            if line.trim_start().starts_with('|') || is_table_row_with_attrs(line.trim_start()) {
                 nodes.push(self.parse_table());
                 continue;
             }
@@ -250,33 +250,73 @@ impl<'a> Parser<'a> {
         let first_line = self.lines[self.pos];
         let extended = first_line.starts_with("bq..");
 
+        // `bq. content` → content at offset 3; `bq.. content` → offset 4.
         let content_start = if extended { 4 } else { 3 };
-        let mut text = String::new();
+        let attrs = BlockAttrs::default();
+
+        let mut blocks = Vec::new();
 
         let first_content = first_line[content_start..].trim();
         if !first_content.is_empty() {
-            text.push_str(first_content);
+            let ls = self.line_start(self.pos);
+            let inline_nodes = parse_inline(first_content, ls + content_start);
+            blocks.push(Block::Paragraph {
+                inlines: inline_nodes,
+                align: None,
+                attrs: BlockAttrs::default(),
+                span: Span::new(ls + content_start, self.line_end(self.pos)),
+            });
         }
         self.pos += 1;
 
         if extended {
+            // Collect subsequent paragraphs separated by blank lines, until an explicit
+            // new block type is encountered or end of input.
+            let mut para_lines: Vec<&str> = Vec::new();
             while self.pos < self.lines.len() {
                 let line = self.lines[self.pos];
                 if line.trim().is_empty() {
+                    // Flush accumulated lines as a paragraph
+                    if !para_lines.is_empty() {
+                        let text = para_lines.join("\n");
+                        let ls = self.line_start(self.pos - para_lines.len());
+                        let inline_nodes = parse_inline(&text, ls);
+                        blocks.push(Block::Paragraph {
+                            inlines: inline_nodes,
+                            align: None,
+                            attrs: BlockAttrs::default(),
+                            span: Span::new(ls, self.line_end(self.pos.saturating_sub(1))),
+                        });
+                        para_lines.clear();
+                    }
+                    self.pos += 1;
+                    continue;
+                }
+                // Stop at an explicit block type change
+                if is_explicit_block_start(line) {
                     break;
                 }
-                if !text.is_empty() {
-                    text.push(' ');
-                }
-                text.push_str(line.trim());
+                para_lines.push(line.trim());
                 self.pos += 1;
+            }
+            // Flush any remaining lines
+            if !para_lines.is_empty() {
+                let text = para_lines.join("\n");
+                let ls = self.line_start(self.pos - para_lines.len());
+                let inline_nodes = parse_inline(&text, ls);
+                blocks.push(Block::Paragraph {
+                    inlines: inline_nodes,
+                    align: None,
+                    attrs: BlockAttrs::default(),
+                    span: Span::new(ls, self.line_end(self.pos.saturating_sub(1))),
+                });
             }
         }
 
         let block_end = self.line_end(self.pos.saturating_sub(1));
-        let inline_nodes = parse_inline(&text, block_start + content_start);
         Block::Blockquote {
-            inlines: inline_nodes,
+            blocks,
+            attrs,
             span: Span::new(block_start, block_end),
         }
     }
@@ -287,7 +327,8 @@ impl<'a> Parser<'a> {
 
         while self.pos < self.lines.len() {
             let line = self.lines[self.pos];
-            if !line.trim_start().starts_with('|') {
+            let t = line.trim_start();
+            if !t.starts_with('|') && !is_table_row_with_attrs(t) {
                 break;
             }
 
@@ -307,14 +348,27 @@ impl<'a> Parser<'a> {
         let mut cells = Vec::new();
         let trimmed = line.trim();
 
-        let inner = trimmed.trim_start_matches('|').trim_end_matches('|');
+        // Detect row-level attributes: `{style}. |cell|` or `(class). |cell|`
+        let (row_attrs, cell_str) = parse_row_attrs(trimmed);
+
+        let inner = cell_str.trim_start_matches('|').trim_end_matches('|');
         let parts: Vec<&str> = inner.split('|').collect();
 
         let mut offset = line_start + (trimmed.len() - inner.len());
         for part in parts {
             let part_trimmed = part.trim();
-            let is_header = part_trimmed.starts_with("_.");
-            let after_header = if is_header { part_trimmed[2..].trim() } else { part_trimmed };
+            // Detect header marker: `_.` (plain header) or combined `_<.`, `_>.`, `_=.`, `_<>.`
+            let (is_header, after_header) = if let Some(rest) = part_trimmed.strip_prefix('_') {
+                if let Some(after_dot) = rest.strip_prefix('.') {
+                    (true, after_dot.trim_start())
+                } else if rest.starts_with("<>.") || rest.starts_with(">.") || rest.starts_with("<.") || rest.starts_with("=.") {
+                    (true, rest) // leave alignment chars for parse_cell_align below
+                } else {
+                    (false, part_trimmed)
+                }
+            } else {
+                (false, part_trimmed)
+            };
             // Parse cell alignment: <. >. =. <>.
             let (cell_content, align) = parse_cell_align(after_header);
 
@@ -331,6 +385,7 @@ impl<'a> Parser<'a> {
         }
 
         TableRow {
+            attrs: row_attrs,
             cells,
             span: Span::new(line_start, line_start + line.len()),
         }
@@ -387,18 +442,38 @@ impl<'a> Parser<'a> {
                 && trimmed.len() > marker_count
                 && trimmed.chars().nth(marker_count) == Some(' ')
             {
-                let content = trimmed[marker_count + 1..].trim();
+                let mut content = trimmed[marker_count + 1..].trim().to_string();
                 let line_start = self.line_start(self.pos);
-                let inline_nodes = parse_inline(content, line_start + marker_count + 1);
+
+                self.pos += 1;
+
+                // Collect continuation lines: non-blank lines that are not list items
+                // or explicit block starts belong to this item.
+                while self.pos < self.lines.len() {
+                    let cont = self.lines[self.pos].trim_start();
+                    if cont.is_empty() || is_explicit_block_start(cont) {
+                        break;
+                    }
+                    let cont_marker_count = cont.chars().take_while(|&c| c == marker).count();
+                    let other_marker = if ordered { '*' } else { '#' };
+                    let cont_other_count =
+                        cont.chars().take_while(|&c| c == other_marker).count();
+                    if cont_marker_count > 0 || cont_other_count > 0 {
+                        break;
+                    }
+                    content.push(' ');
+                    content.push_str(cont);
+                    self.pos += 1;
+                }
+
+                let inline_nodes = parse_inline(&content, line_start + marker_count + 1);
                 let para = Block::Paragraph {
                     inlines: inline_nodes,
                     align: None,
                     attrs: BlockAttrs::default(),
-                    span: Span::new(line_start, self.line_end(self.pos)),
+                    span: Span::new(line_start, self.line_end(self.pos.saturating_sub(1))),
                 };
                 let mut item_children = vec![para];
-
-                self.pos += 1;
 
                 if self.pos < self.lines.len() {
                     let next_line = self.lines[self.pos];
@@ -707,6 +782,112 @@ fn parse_cell_align(content: &str) -> (&str, Option<String>) {
         return (rest.trim(), Some("center".to_string()));
     }
     (content, None)
+}
+
+/// Parse inline span attributes (`{style}(class)[lang]`) from a string prefix.
+/// Unlike `parse_block_attrs`, no trailing `.` is required.
+/// Returns `(attrs, bytes_consumed)`.
+fn parse_inline_span_attrs(s: &str) -> (BlockAttrs, usize) {
+    let mut attrs = BlockAttrs::default();
+    let bytes = s.as_bytes();
+    let mut i = 0;
+
+    loop {
+        if i >= bytes.len() {
+            break;
+        }
+        match bytes[i] {
+            b'{' => {
+                if let Some(close) = s[i + 1..].find('}') {
+                    attrs.style = Some(s[i + 1..i + 1 + close].to_string());
+                    i += close + 2;
+                } else {
+                    break;
+                }
+            }
+            b'(' => {
+                if let Some(close) = s[i + 1..].find(')') {
+                    let inner = &s[i + 1..i + 1 + close];
+                    if let Some(hash) = inner.find('#') {
+                        attrs.class =
+                            Some(inner[..hash].to_string()).filter(|s| !s.is_empty());
+                        attrs.id =
+                            Some(inner[hash + 1..].to_string()).filter(|s| !s.is_empty());
+                    } else {
+                        attrs.class = Some(inner.to_string()).filter(|s| !s.is_empty());
+                    }
+                    i += close + 2;
+                } else {
+                    break;
+                }
+            }
+            b'[' => {
+                if let Some(close) = s[i + 1..].find(']') {
+                    attrs.lang = Some(s[i + 1..i + 1 + close].to_string());
+                    i += close + 2;
+                } else {
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+
+    (attrs, i)
+}
+
+/// Detect and strip row-level attributes from a table row line.
+/// Format: `{style}. |cells|` or `(class). |cells|` or `[lang]. |cells|`
+/// Returns `(attrs, remaining_line_starting_with_|)`.
+fn parse_row_attrs(line: &str) -> (BlockAttrs, &str) {
+    let first = line.as_bytes().first().copied();
+    if !matches!(first, Some(b'{') | Some(b'(') | Some(b'[')) {
+        return (BlockAttrs::default(), line);
+    }
+    let (attrs, consumed) = parse_inline_span_attrs(line);
+    let rest = &line[consumed..];
+    // Must be followed by ". " or ".|" (dot then space or pipe)
+    if let Some(after_dot) = rest.strip_prefix(". ") {
+        return (attrs, after_dot.trim_start());
+    }
+    if let Some(after_dot) = rest.strip_prefix(".|") {
+        return (attrs, after_dot.trim_start_matches('|').trim_end_matches('|'));
+    }
+    (BlockAttrs::default(), line)
+}
+
+/// Returns true if `line` looks like a table row with row-level attributes prefix.
+/// Pattern: `{...}. |` or `(...). |` or `[...]. |`
+fn is_table_row_with_attrs(line: &str) -> bool {
+    let first = line.as_bytes().first().copied();
+    if !matches!(first, Some(b'{') | Some(b'(') | Some(b'[')) {
+        return false;
+    }
+    let (_, consumed) = parse_inline_span_attrs(line);
+    if consumed == 0 {
+        return false;
+    }
+    let rest = &line[consumed..];
+    (rest.starts_with(". |") || rest.starts_with(".|")) && rest.contains('|')
+}
+
+/// Returns true if `line` starts an explicit new block type (used to stop extended blocks).
+fn is_explicit_block_start(line: &str) -> bool {
+    let t = line.trim_start();
+    // heading h1–h9
+    if let Some(h_rest) = t.strip_prefix('h') {
+        let rest = h_rest.trim_start_matches(|c: char| c.is_ascii_digit());
+        if rest.starts_with('.') {
+            return true;
+        }
+    }
+    // common block prefixes
+    for prefix in &["p.", "p(", "p{", "p[", "bq.", "bc.", "pre.", "notextile.", "fn", "---"] {
+        if t.starts_with(prefix) {
+            return true;
+        }
+    }
+    false
 }
 
 // ── Inline parser ─────────────────────────────────────────────────────────────
@@ -1045,7 +1226,20 @@ fn try_parse_formatting(
                 '+' => Inline::Underline(inner, Span::new(fmt_start, fmt_end)),
                 '^' => Inline::Superscript(inner, Span::new(fmt_start, fmt_end)),
                 '~' => Inline::Subscript(inner, Span::new(fmt_start, fmt_end)),
-                '%' => Inline::GenericSpan(inner, Span::new(fmt_start, fmt_end)),
+                '%' => {
+                    // Strip inline span attrs from the start of content
+                    let (span_attrs, attr_len) = parse_inline_span_attrs(&content);
+                    let children = if attr_len > 0 {
+                        parse_inline(&content[attr_len..], fmt_start + 1 + attr_len)
+                    } else {
+                        inner
+                    };
+                    Inline::GenericSpan {
+                        attrs: span_attrs,
+                        children,
+                        span: Span::new(fmt_start, fmt_end),
+                    }
+                }
                 _ => return None,
             };
 

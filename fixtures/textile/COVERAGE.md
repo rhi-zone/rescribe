@@ -18,7 +18,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] definition list (;term :definition) — `definition-list`
 - [x] pre block (pre.) — `pre-block` (maps to code_block)
 - [x] notextile block (notextile.) — `notextile-block`
-- [ ] extended block (p.. or bq..) — (missing)
+- [x] extended block (bq..) — `rare-blockquote-extended` (multi-paragraph bq..)
 - [x] footnote definition (fn1.) — `footnote`
 
 ## Inline constructs
@@ -48,21 +48,21 @@ See `fixtures/spec.md` for category definitions.
 
 ## Properties
 - [x] block attributes (class, id, style, lang — p(class).) — `block-attrs`
-- [ ] inline span attributes (%{style}text%) — (missing: attribute parsing inside %)
-- [ ] table column alignment — (missing)
-- [ ] table row attributes — (missing)
+- [x] inline span attributes (%{style}text%) — `inline-span-attrs`
+- [x] table column alignment — `table-column-align` (combined _<. _>. _=. header+align)
+- [x] table row attributes — `table-row-attrs`
 - [x] table header row (|_. header|) — `table`
 - [x] table cell alignment (|<. >. =. <>.|) — `table-cell-align`
 - [x] image alt text (!url(alt)!) — `image`
 - [x] image dimensions — not applicable: non-standard extension; standard Textile uses {style} attributes
 - [x] link title ("label(title)":url) — `link-title`
-- [ ] list item continuation — (missing)
+- [x] list item continuation — `list-item-continuation`
 - [x] code block language (bc(lang).) — `code-block-lang`
 - [x] paragraph alignment (p<. p>. p=. p<>.) — `paragraph-align`
 - [x] indentation (p(. p).) — covered by `block-attrs` (parsed as indent_left/indent_right props)
 
 ## Composition (integration)
-- [ ] nested blockquotes — (missing)
+- [x] nested blockquotes — `rare-blockquote-extended` (blockquote holds Vec<Block>, enabling multi-paragraph and nested content)
 - [x] table with inline formatting in cells — `table-inline`
 - [x] list item containing inline code — `list-with-code`
 - [x] nested lists (unordered inside ordered) — `list-nested`, `nested-list-mixed`

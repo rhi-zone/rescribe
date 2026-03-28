@@ -1,0 +1,10 @@
+{
+  "description": "Textile table row attributes: {style}. and (class). prefixes",
+  "category": "properties",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row", "props": { "style": "background:blue" } },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/2", "kind": "table_row", "props": { "classes": "highlight" } }
+  ]
+}

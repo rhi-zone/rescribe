@@ -1,0 +1,2 @@
+|_<. Left header|_>. Right header|_=. Center header|
+|<. data left|>. data right|=. data center|

@@ -1,0 +1,10 @@
+{
+  "description": "Textile inline span attributes: %{style}text% and %(class)text%",
+  "category": "properties",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "span", "props": { "style": "color:red" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/1", "kind": "span", "props": { "classes": "highlight" } }
+  ]
+}

@@ -119,7 +119,9 @@ pub enum Block {
         span: Span,
     },
     Blockquote {
-        inlines: Vec<Inline>,
+        blocks: Vec<Block>,
+        /// Block-level attributes (class, id, style, lang).
+        attrs: BlockAttrs,
         span: Span,
     },
     List {
@@ -184,8 +186,9 @@ impl Block {
                 language,
                 span: dummy,
             },
-            Block::Blockquote { inlines, .. } => Block::Blockquote {
-                inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
+            Block::Blockquote { blocks, attrs, .. } => Block::Blockquote {
+                blocks: blocks.into_iter().map(Block::strip_spans).collect(),
+                attrs,
                 span: dummy,
             },
             Block::List { ordered, items, .. } => Block::List {
@@ -226,6 +229,8 @@ impl Block {
 /// A table row.
 #[derive(Debug, Clone)]
 pub struct TableRow {
+    /// Row-level attributes (class, id, style, lang).
+    pub attrs: BlockAttrs,
     pub cells: Vec<TableCell>,
     pub span: Span,
 }
@@ -233,6 +238,7 @@ pub struct TableRow {
 impl TableRow {
     pub fn strip_spans(self) -> Self {
         Self {
+            attrs: self.attrs,
             cells: self.cells.into_iter().map(TableCell::strip_spans).collect(),
             span: Span::dummy(),
         }
@@ -291,8 +297,8 @@ pub enum Inline {
     Raw(String, Span),
     /// Citation: `??text??` — maps to `<cite>` semantics.
     Citation(Vec<Inline>, Span),
-    /// Generic span: `%text%` — maps to `<span>`.
-    GenericSpan(Vec<Inline>, Span),
+    /// Generic span: `%text%` — maps to `<span>`. May carry inline attributes.
+    GenericSpan { attrs: BlockAttrs, children: Vec<Inline>, span: Span },
     /// Acronym: `ABC(meaning)` — all-caps abbreviation with title.
     Acronym { text: String, title: String, span: Span },
 }
@@ -314,7 +320,7 @@ impl Inline {
             Inline::LineBreak(s) => *s,
             Inline::Raw(_, s) => *s,
             Inline::Citation(_, s) => *s,
-            Inline::GenericSpan(_, s) => *s,
+            Inline::GenericSpan { span, .. } => *span,
             Inline::Acronym { span, .. } => *span,
         }
     }
@@ -363,10 +369,11 @@ impl Inline {
                 children.into_iter().map(Inline::strip_spans).collect(),
                 dummy,
             ),
-            Inline::GenericSpan(children, _) => Inline::GenericSpan(
-                children.into_iter().map(Inline::strip_spans).collect(),
-                dummy,
-            ),
+            Inline::GenericSpan { attrs, children, .. } => Inline::GenericSpan {
+                attrs,
+                children: children.into_iter().map(Inline::strip_spans).collect(),
+                span: dummy,
+            },
             Inline::Acronym { text, title, .. } => Inline::Acronym { text, title, span: dummy },
         }
     }

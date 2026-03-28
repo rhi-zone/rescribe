@@ -72,10 +72,27 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             ctx.write("\n\n");
         }
 
-        Block::Blockquote { inlines, .. } => {
-            ctx.write("bq. ");
-            emit_inlines(inlines, ctx);
-            ctx.write("\n\n");
+        Block::Blockquote { blocks, attrs, .. } => {
+            let prefix = if !attrs.is_empty() {
+                let mut p = String::from("bq");
+                let mut tmp = EmitContext::new();
+                emit_block_attrs(attrs, &mut tmp);
+                p.push_str(&tmp.output);
+                p.push_str(". ");
+                p
+            } else {
+                "bq. ".to_string()
+            };
+            for block in blocks {
+                match block {
+                    Block::Paragraph { inlines, .. } => {
+                        ctx.write(&prefix);
+                        emit_inlines(inlines, ctx);
+                        ctx.write("\n\n");
+                    }
+                    other => emit_block(other, ctx),
+                }
+            }
         }
 
         Block::List { ordered, items, .. } => {
@@ -112,23 +129,31 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
 
         Block::Table { rows, .. } => {
             for row in rows {
+                // Emit row-level attributes if present
+                if !row.attrs.is_empty() {
+                    emit_block_attrs(&row.attrs, ctx);
+                    ctx.write(". ");
+                }
                 for cell in &row.cells {
                     ctx.write("|");
+                    let align_str = cell.align.as_deref().map(|a| match a {
+                        "left" => "<.",
+                        "right" => ">.",
+                        "center" => "=.",
+                        "justify" => "<>.",
+                        _ => "",
+                    });
                     if cell.is_header {
-                        ctx.write("_. ");
-                    }
-                    if let Some(align) = &cell.align {
-                        let align_str = match align.as_str() {
-                            "left" => "<.",
-                            "right" => ">.",
-                            "center" => "=.",
-                            "justify" => "<>.",
-                            _ => "",
-                        };
-                        if !align_str.is_empty() {
-                            ctx.write(align_str);
-                            ctx.write(" ");
+                        ctx.write("_");
+                        if let Some(a) = align_str.filter(|s| !s.is_empty()) {
+                            ctx.write(a);
+                        } else {
+                            ctx.write(".");
                         }
+                        ctx.write(" ");
+                    } else if let Some(a) = align_str.filter(|s| !s.is_empty()) {
+                        ctx.write(a);
+                        ctx.write(" ");
                     }
                     emit_inlines(&cell.inlines, ctx);
                 }
@@ -163,6 +188,33 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             ctx.write(content);
             ctx.write("\n\n");
         }
+    }
+}
+
+/// Emit inline span attributes (`{style}(class)[lang]`) — no alignment or indent.
+fn emit_inline_attrs(attrs: &BlockAttrs, ctx: &mut EmitContext) {
+    if let Some(style) = &attrs.style {
+        ctx.write("{");
+        ctx.write(style);
+        ctx.write("}");
+    }
+    if let Some(class) = &attrs.class {
+        ctx.write("(");
+        ctx.write(class);
+        if let Some(id) = &attrs.id {
+            ctx.write("#");
+            ctx.write(id);
+        }
+        ctx.write(")");
+    } else if let Some(id) = &attrs.id {
+        ctx.write("(#");
+        ctx.write(id);
+        ctx.write(")");
+    }
+    if let Some(lang) = &attrs.lang {
+        ctx.write("[");
+        ctx.write(lang);
+        ctx.write("]");
     }
 }
 
@@ -295,8 +347,11 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write("??");
         }
 
-        Inline::GenericSpan(children, _) => {
+        Inline::GenericSpan { attrs, children, .. } => {
             ctx.write("%");
+            if !attrs.is_empty() {
+                emit_inline_attrs(attrs, ctx);
+            }
             emit_inlines(children, ctx);
             ctx.write("%");
         }

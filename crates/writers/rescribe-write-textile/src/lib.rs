@@ -4,7 +4,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use textile_fmt::{Block, Inline, Span, TableCell, TableRow, TextileDoc, emit as emit_textile};
+use textile_fmt::{Block, BlockAttrs, Inline, Span, TableCell, TableRow, TextileDoc, emit as emit_textile};
 
 /// Emit a document as Textile markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -41,6 +41,7 @@ fn convert_node_to_block(node: &Node) -> Block {
             Block::Heading {
                 level,
                 inlines,
+                attrs: BlockAttrs::default(),
                 span: dummy,
             }
         }
@@ -49,6 +50,8 @@ fn convert_node_to_block(node: &Node) -> Block {
             let inlines = node.children.iter().map(convert_node_to_inline).collect();
             Block::Paragraph {
                 inlines,
+                align: None,
+                attrs: BlockAttrs::default(),
                 span: dummy,
             }
         }
@@ -61,20 +64,16 @@ fn convert_node_to_block(node: &Node) -> Block {
                 .unwrap_or_default();
             Block::CodeBlock {
                 content,
+                language: node.props.get_str(prop::LANGUAGE).map(|s| s.to_string()),
                 span: dummy,
             }
         }
 
         node::BLOCKQUOTE => {
-            // Extract text from blockquote children (usually paragraphs)
-            let mut inlines = Vec::new();
-            for child in &node.children {
-                if child.kind.as_str() == node::PARAGRAPH {
-                    inlines.extend(child.children.iter().map(convert_node_to_inline));
-                }
-            }
+            let blocks = node.children.iter().map(convert_node_to_block).collect();
             Block::Blockquote {
-                inlines,
+                blocks,
+                attrs: BlockAttrs::default(),
                 span: dummy,
             }
         }
@@ -107,14 +106,19 @@ fn convert_node_to_block(node: &Node) -> Block {
                             let is_header = cell.kind.as_str() == node::TABLE_HEADER;
                             let inlines: Vec<Inline> =
                                 cell.children.iter().map(convert_node_to_inline).collect();
+                            let align = cell
+                                .props
+                                .get_str(prop::ALIGN)
+                                .map(|s| s.to_string());
                             TableCell {
                                 is_header,
+                                align,
                                 inlines,
                                 span: dummy,
                             }
                         })
                         .collect();
-                    TableRow { cells, span: dummy }
+                    TableRow { attrs: BlockAttrs::default(), cells, span: dummy }
                 })
                 .collect();
             Block::Table { rows, span: dummy }
@@ -124,6 +128,8 @@ fn convert_node_to_block(node: &Node) -> Block {
             let inlines: Vec<Inline> = node.children.iter().map(convert_node_to_inline).collect();
             Block::Paragraph {
                 inlines,
+                align: None,
+                attrs: BlockAttrs::default(),
                 span: dummy,
             }
         }
@@ -132,6 +138,8 @@ fn convert_node_to_block(node: &Node) -> Block {
             let inlines: Vec<Inline> = node.children.iter().map(convert_node_to_inline).collect();
             Block::Paragraph {
                 inlines,
+                align: None,
+                attrs: BlockAttrs::default(),
                 span: dummy,
             }
         }
@@ -140,6 +148,8 @@ fn convert_node_to_block(node: &Node) -> Block {
             let inlines: Vec<Inline> = node.children.iter().map(convert_node_to_inline).collect();
             Block::Paragraph {
                 inlines,
+                align: None,
+                attrs: BlockAttrs::default(),
                 span: dummy,
             }
         }
@@ -148,6 +158,8 @@ fn convert_node_to_block(node: &Node) -> Block {
             let inlines: Vec<Inline> = node.children.iter().map(convert_node_to_inline).collect();
             Block::Paragraph {
                 inlines,
+                align: None,
+                attrs: BlockAttrs::default(),
                 span: dummy,
             }
         }
@@ -204,6 +216,7 @@ fn convert_node_to_inline(node: &Node) -> Inline {
             let children = node.children.iter().map(convert_node_to_inline).collect();
             Inline::Link {
                 url,
+                title: node.props.get_str(prop::TITLE).map(|s| s.to_string()),
                 children,
                 span: dummy,
             }
