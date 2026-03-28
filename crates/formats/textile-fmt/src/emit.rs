@@ -1,6 +1,6 @@
 //! Textile emitter — Document → String.
 
-use crate::ast::{Block, Inline, TextileDoc};
+use crate::ast::{Block, BlockAttrs, Inline, TextileDoc};
 
 /// Build a Textile string from a [`TextileDoc`].
 pub fn emit(doc: &TextileDoc) -> String {
@@ -31,23 +31,33 @@ impl EmitContext {
 
 fn emit_block(block: &Block, ctx: &mut EmitContext) {
     match block {
-        Block::Paragraph { inlines, align, .. } => {
-            if let Some(a) = align {
-                let prefix = match a.as_str() {
-                    "left" => "p<. ",
-                    "right" => "p>. ",
-                    "center" => "p=. ",
-                    "justify" => "p<>. ",
-                    _ => "p. ",
-                };
-                ctx.write(prefix);
+        Block::Paragraph { inlines, align, attrs, .. } => {
+            // Emit "p" + block attrs only if there's something to write
+            let has_align = align.is_some();
+            let has_attrs = !attrs.is_empty();
+            if has_align || has_attrs {
+                ctx.write("p");
+                emit_block_attrs(attrs, ctx);
+                if let Some(a) = align {
+                    let align_str = match a.as_str() {
+                        "left" => "<",
+                        "right" => ">",
+                        "center" => "=",
+                        "justify" => "<>",
+                        _ => "",
+                    };
+                    ctx.write(align_str);
+                }
+                ctx.write(". ");
             }
             emit_inlines(inlines, ctx);
             ctx.write("\n\n");
         }
 
-        Block::Heading { level, inlines, .. } => {
-            ctx.write(&format!("h{}. ", level));
+        Block::Heading { level, inlines, attrs, .. } => {
+            ctx.write(&format!("h{}", level));
+            emit_block_attrs(attrs, ctx);
+            ctx.write(". ");
             emit_inlines(inlines, ctx);
             ctx.write("\n\n");
         }
@@ -107,6 +117,19 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
                     if cell.is_header {
                         ctx.write("_. ");
                     }
+                    if let Some(align) = &cell.align {
+                        let align_str = match align.as_str() {
+                            "left" => "<.",
+                            "right" => ">.",
+                            "center" => "=.",
+                            "justify" => "<>.",
+                            _ => "",
+                        };
+                        if !align_str.is_empty() {
+                            ctx.write(align_str);
+                            ctx.write(" ");
+                        }
+                    }
                     emit_inlines(&cell.inlines, ctx);
                 }
                 ctx.write("|\n");
@@ -140,6 +163,38 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             ctx.write(content);
             ctx.write("\n\n");
         }
+    }
+}
+
+fn emit_block_attrs(attrs: &BlockAttrs, ctx: &mut EmitContext) {
+    if let Some(class) = &attrs.class {
+        ctx.write("(");
+        ctx.write(class);
+        if let Some(id) = &attrs.id {
+            ctx.write("#");
+            ctx.write(id);
+        }
+        ctx.write(")");
+    } else if let Some(id) = &attrs.id {
+        ctx.write("(#");
+        ctx.write(id);
+        ctx.write(")");
+    }
+    if let Some(style) = &attrs.style {
+        ctx.write("{");
+        ctx.write(style);
+        ctx.write("}");
+    }
+    if let Some(lang) = &attrs.lang {
+        ctx.write("[");
+        ctx.write(lang);
+        ctx.write("]");
+    }
+    for _ in 0..attrs.indent_left {
+        ctx.write("(");
+    }
+    for _ in 0..attrs.indent_right {
+        ctx.write(")");
     }
 }
 
@@ -244,6 +299,13 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write("%");
             emit_inlines(children, ctx);
             ctx.write("%");
+        }
+
+        Inline::Acronym { text, title, .. } => {
+            ctx.write(text);
+            ctx.write("(");
+            ctx.write(title);
+            ctx.write(")");
         }
     }
 }

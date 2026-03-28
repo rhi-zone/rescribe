@@ -1,0 +1,7 @@
+p(myclass). A paragraph with a CSS class.
+
+p{color:red}. A paragraph with inline style.
+
+p[fr]. Un paragraphe en français.
+
+h2(section-title). Heading with class

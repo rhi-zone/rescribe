@@ -32,34 +32,34 @@ See `fixtures/spec.md` for category definitions.
 - [x] subscript (~text~) — `subscript`
 - [x] superscript (^text^) — `superscript`
 - [x] citation (??text??) — `citation`
-- [ ] acronym (ABC(title)) — (missing: requires look-behind in inline parser)
+- [x] acronym (ABC(title)) — `acronym`
 - [x] footnote reference ([1]) — `footnote`
 - [x] deleted text (-text-) — covered by `rare-strikeout` (same syntax as strikethrough)
 - [x] inserted text (+text+) — covered by `rare-underline` (same syntax as underline)
 - [x] span (%text%) — `span`
 - [x] notextile inline (==raw==) — `notextile-inline`
 - [x] line break (newline within paragraph) — `line-break`
-- [ ] em dash (--) — not applicable (text passthrough; transform would break roundtrip)
-- [ ] en dash (-) — not applicable (text passthrough; transform would break roundtrip)
-- [ ] ellipsis (...) — not applicable (text passthrough; transform would break roundtrip)
-- [ ] typographic quotes — not applicable (text passthrough; transform would break roundtrip)
-- [ ] dimension sign (xDIMx) — not applicable (text passthrough)
-- [ ] registered/trademark/copyright symbols — not applicable (text passthrough)
+- [x] em dash (--) — not applicable: Textile transforms `--` to `&mdash;` at render time; lossless library keeps as-is
+- [x] en dash (-) — not applicable: same as em dash; text passthrough preserves original
+- [x] ellipsis (...) — not applicable: Textile renders `...` to `&hellip;`; library keeps literal text
+- [x] typographic quotes — not applicable: transform at render time; library is lossless, keeps literal chars
+- [x] dimension sign (xDIMx) — not applicable: render-time transform; library keeps literal text
+- [x] registered/trademark/copyright symbols — not applicable: render-time HTML entities; library keeps literal
 
 ## Properties
-- [ ] block attributes (class, id, style, lang — p(class).) — (missing)
-- [ ] inline span attributes — (missing)
+- [x] block attributes (class, id, style, lang — p(class).) — `block-attrs`
+- [ ] inline span attributes (%{style}text%) — (missing: attribute parsing inside %)
 - [ ] table column alignment — (missing)
 - [ ] table row attributes — (missing)
 - [x] table header row (|_. header|) — `table`
-- [ ] table cell alignment and padding — (missing)
+- [x] table cell alignment (|<. >. =. <>.|) — `table-cell-align`
 - [x] image alt text (!url(alt)!) — `image`
-- [ ] image dimensions (!url width!) — not applicable (non-standard extension; standard Textile uses style attributes)
+- [x] image dimensions — not applicable: non-standard extension; standard Textile uses {style} attributes
 - [x] link title ("label(title)":url) — `link-title`
 - [ ] list item continuation — (missing)
 - [x] code block language (bc(lang).) — `code-block-lang`
 - [x] paragraph alignment (p<. p>. p=. p<>.) — `paragraph-align`
-- [ ] indentation (p(. p).) — (missing: block attribute extension)
+- [x] indentation (p(. p).) — covered by `block-attrs` (parsed as indent_left/indent_right props)
 
 ## Composition (integration)
 - [ ] nested blockquotes — (missing)

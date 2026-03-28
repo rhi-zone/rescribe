@@ -1,0 +1,3 @@
+The HTML(HyperText Markup Language) specification defines the web.
+
+Use CSS(Cascading Style Sheets) to style your document.

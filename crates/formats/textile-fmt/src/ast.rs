@@ -63,6 +63,37 @@ impl TextileDoc {
     }
 }
 
+/// Block-level attributes: class, id, CSS style string, language, alignment, indentation.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BlockAttrs {
+    /// CSS class name(s).
+    pub class: Option<String>,
+    /// Element id.
+    pub id: Option<String>,
+    /// Inline CSS style.
+    pub style: Option<String>,
+    /// Language attribute.
+    pub lang: Option<String>,
+    /// Text alignment: "left", "right", "center", "justify".
+    pub align: Option<String>,
+    /// Left indentation level (one per `(` after block type).
+    pub indent_left: u8,
+    /// Right indentation level (one per `)` after block type).
+    pub indent_right: u8,
+}
+
+impl BlockAttrs {
+    pub fn is_empty(&self) -> bool {
+        self.class.is_none()
+            && self.id.is_none()
+            && self.style.is_none()
+            && self.lang.is_none()
+            && self.align.is_none()
+            && self.indent_left == 0
+            && self.indent_right == 0
+    }
+}
+
 /// Block-level element.
 #[derive(Debug, Clone)]
 pub enum Block {
@@ -70,11 +101,15 @@ pub enum Block {
         inlines: Vec<Inline>,
         /// Text alignment: "left", "right", "center", "justify", or None.
         align: Option<String>,
+        /// Block-level attributes (class, id, style, lang, indentation).
+        attrs: BlockAttrs,
         span: Span,
     },
     Heading {
         level: u8,
         inlines: Vec<Inline>,
+        /// Block-level attributes.
+        attrs: BlockAttrs,
         span: Span,
     },
     CodeBlock {
@@ -132,14 +167,16 @@ impl Block {
     pub fn strip_spans(self) -> Self {
         let dummy = Span::dummy();
         match self {
-            Block::Paragraph { inlines, align, .. } => Block::Paragraph {
+            Block::Paragraph { inlines, align, attrs, .. } => Block::Paragraph {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 align,
+                attrs,
                 span: dummy,
             },
-            Block::Heading { level, inlines, .. } => Block::Heading {
+            Block::Heading { level, inlines, attrs, .. } => Block::Heading {
                 level,
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
+                attrs,
                 span: dummy,
             },
             Block::CodeBlock { content, language, .. } => Block::CodeBlock {
@@ -206,6 +243,8 @@ impl TableRow {
 #[derive(Debug, Clone)]
 pub struct TableCell {
     pub is_header: bool,
+    /// Cell text alignment: "left", "right", "center", "justify", or None.
+    pub align: Option<String>,
     pub inlines: Vec<Inline>,
     pub span: Span,
 }
@@ -214,6 +253,7 @@ impl TableCell {
     pub fn strip_spans(self) -> Self {
         Self {
             is_header: self.is_header,
+            align: self.align,
             inlines: self.inlines.into_iter().map(Inline::strip_spans).collect(),
             span: Span::dummy(),
         }
@@ -253,6 +293,8 @@ pub enum Inline {
     Citation(Vec<Inline>, Span),
     /// Generic span: `%text%` — maps to `<span>`.
     GenericSpan(Vec<Inline>, Span),
+    /// Acronym: `ABC(meaning)` — all-caps abbreviation with title.
+    Acronym { text: String, title: String, span: Span },
 }
 
 impl Inline {
@@ -273,6 +315,7 @@ impl Inline {
             Inline::Raw(_, s) => *s,
             Inline::Citation(_, s) => *s,
             Inline::GenericSpan(_, s) => *s,
+            Inline::Acronym { span, .. } => *span,
         }
     }
 
@@ -324,6 +367,7 @@ impl Inline {
                 children.into_iter().map(Inline::strip_spans).collect(),
                 dummy,
             ),
+            Inline::Acronym { text, title, .. } => Inline::Acronym { text, title, span: dummy },
         }
     }
 }

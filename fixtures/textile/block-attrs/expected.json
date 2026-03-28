@@ -1,0 +1,10 @@
+{
+  "description": "Textile block attributes: (class), {style}, [lang] on paragraphs and headings",
+  "category": "properties",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "classes": "myclass" } },
+    { "path": "/1", "kind": "paragraph", "props": { "style": "color:red" } },
+    { "path": "/2", "kind": "paragraph", "props": { "lang": "fr" } },
+    { "path": "/3", "kind": "heading", "props": { "classes": "section-title" } }
+  ]
+}

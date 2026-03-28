@@ -1,0 +1,12 @@
+{
+  "description": "Textile table cell alignment: <. >. =. <>. prefixes",
+  "category": "properties",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell", "props": { "align": "left" } },
+    { "path": "/0/0/1", "kind": "table_cell", "props": { "align": "right" } },
+    { "path": "/0/0/2", "kind": "table_cell", "props": { "align": "center" } },
+    { "path": "/0/1/1", "kind": "table_cell", "props": { "align": "justify" } }
+  ]
+}

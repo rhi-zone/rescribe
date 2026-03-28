@@ -1,6 +1,6 @@
 //! Textile parser — infallible, returns (TextileDoc, Vec<Diagnostic>).
 
-use crate::ast::{Block, Diagnostic, Inline, Span, TableCell, TableRow, TextileDoc};
+use crate::ast::{Block, BlockAttrs, Diagnostic, Inline, Span, TableCell, TableRow, TextileDoc};
 
 /// Parse a Textile string into a [`TextileDoc`] plus diagnostics.
 /// Never panics; always returns a (possibly partial) document.
@@ -157,16 +157,20 @@ impl<'a> Parser<'a> {
     fn try_parse_heading(&self, line: &str) -> Option<Block> {
         let line_start = self.line_start(self.pos);
         for level in 1..=6u8 {
-            let prefix = format!("h{}.", level);
-            if line.starts_with(&prefix) {
-                let content = line[prefix.len()..].trim();
-                let inline_nodes = parse_inline(content, line_start + prefix.len());
-                return Some(Block::Heading {
-                    level,
-                    inlines: inline_nodes,
-                    span: Span::new(line_start, self.line_end(self.pos)),
-                });
+            let bare = format!("h{}", level);
+            if !line.starts_with(&bare) {
+                continue;
             }
+            let rest = &line[bare.len()..];
+            let (attrs, dot_offset) = parse_block_attrs(rest)?;
+            let content = rest[dot_offset..].trim();
+            let inline_nodes = parse_inline(content, line_start + bare.len() + dot_offset);
+            return Some(Block::Heading {
+                level,
+                inlines: inline_nodes,
+                attrs,
+                span: Span::new(line_start, self.line_end(self.pos)),
+            });
         }
         None
     }
@@ -310,17 +314,16 @@ impl<'a> Parser<'a> {
         for part in parts {
             let part_trimmed = part.trim();
             let is_header = part_trimmed.starts_with("_.");
-            let cell_content = if is_header {
-                part_trimmed[2..].trim()
-            } else {
-                part_trimmed
-            };
+            let after_header = if is_header { part_trimmed[2..].trim() } else { part_trimmed };
+            // Parse cell alignment: <. >. =. <>.
+            let (cell_content, align) = parse_cell_align(after_header);
 
             let cell_start = offset;
             let cell_end = cell_start + part.len();
             let inline_nodes = parse_inline(cell_content, cell_start);
             cells.push(TableCell {
                 is_header,
+                align,
                 inlines: inline_nodes,
                 span: Span::new(cell_start, cell_end),
             });
@@ -390,6 +393,7 @@ impl<'a> Parser<'a> {
                 let para = Block::Paragraph {
                     inlines: inline_nodes,
                     align: None,
+                    attrs: BlockAttrs::default(),
                     span: Span::new(line_start, self.line_end(self.pos)),
                 };
                 let mut item_children = vec![para];
@@ -444,8 +448,9 @@ impl<'a> Parser<'a> {
         let mut text = String::new();
         let first_line = self.lines[self.pos];
 
-        // Parse alignment prefix: p<>. p<. p>. p=. p.
-        let (first_content, align) = parse_paragraph_prefix(first_line);
+        // Parse block attributes: p(class){style}[lang]<. or p<>. or p.
+        let (first_content, attrs) = parse_paragraph_prefix(first_line);
+        let align = attrs.align.clone();
         text.push_str(first_content);
         self.pos += 1;
 
@@ -490,6 +495,7 @@ impl<'a> Parser<'a> {
         Block::Paragraph {
             inlines: inline_nodes,
             align,
+            attrs,
             span: Span::new(block_start, block_end),
         }
     }
@@ -586,25 +592,121 @@ fn parse_code_block_prefix(line: &str) -> (Option<String>, usize, bool) {
     }
 }
 
-/// Parse a paragraph prefix, returning (trimmed_content, alignment).
-fn parse_paragraph_prefix(line: &str) -> (&str, Option<String>) {
-    // Check longest first to avoid partial matches
-    if let Some(rest) = line.strip_prefix("p<>.") {
+/// Parse a paragraph prefix, returning (trimmed_content, BlockAttrs).
+fn parse_paragraph_prefix(line: &str) -> (&str, BlockAttrs) {
+    // Strip "p" prefix if present, then parse block attrs
+    if let Some(rest) = line.strip_prefix('p') {
+        // Must be followed by attrs+'.', otherwise it's not a paragraph prefix
+        if let Some((attrs, dot_offset)) = parse_block_attrs(rest) {
+            let content = rest[dot_offset..].trim();
+            return (content, attrs);
+        }
+    }
+    (line.trim(), BlockAttrs::default())
+}
+
+/// Parse block-level attributes from the string after the block type indicator.
+/// Returns `Some((attrs, bytes_consumed_including_dot))` on success.
+/// The format is: `[(<class>)][{<style>}][[<lang>]][<align>][<indent>].`
+///
+/// Examples: `(myclass).`, `{color:red}.`, `[en].`, `<.`, `>.`, `=.`, `<>.`, `.`
+fn parse_block_attrs(s: &str) -> Option<(BlockAttrs, usize)> {
+    let mut attrs = BlockAttrs::default();
+    let bytes = s.as_bytes();
+    let mut i = 0;
+
+    // Consume attribute tokens in any order until we hit '.'
+    loop {
+        if i >= bytes.len() {
+            return None;
+        }
+        match bytes[i] {
+            b'(' => {
+                // Could be (class#id) or indent (
+                // If next char is also '(' or '.', treat as indent
+                let inner_start = i + 1;
+                // Check if this is indentation: a bare '(' not followed by class chars
+                // Simple heuristic: if immediately '.' or ')' without text, it's indent
+                if let Some(close) = s[inner_start..].find(')') {
+                    let class_id = &s[inner_start..inner_start + close];
+                    // class_id could be "name" or "name#id" or "#id"
+                    if class_id.is_empty() {
+                        // empty () = indent
+                        attrs.indent_left += 1;
+                    } else if let Some(hash) = class_id.find('#') {
+                        attrs.class = Some(class_id[..hash].to_string()).filter(|s| !s.is_empty());
+                        attrs.id = Some(class_id[hash + 1..].to_string()).filter(|s| !s.is_empty());
+                    } else {
+                        attrs.class = Some(class_id.to_string());
+                    }
+                    i = inner_start + close + 1;
+                } else {
+                    // No closing ), treat as indent
+                    attrs.indent_left += 1;
+                    i += 1;
+                }
+            }
+            b')' => {
+                attrs.indent_right += 1;
+                i += 1;
+            }
+            b'{' => {
+                if let Some(close) = s[i + 1..].find('}') {
+                    attrs.style = Some(s[i + 1..i + 1 + close].to_string());
+                    i = i + 1 + close + 1;
+                } else {
+                    return None;
+                }
+            }
+            b'[' => {
+                if let Some(close) = s[i + 1..].find(']') {
+                    attrs.lang = Some(s[i + 1..i + 1 + close].to_string());
+                    i = i + 1 + close + 1;
+                } else {
+                    return None;
+                }
+            }
+            b'<' if i + 1 < bytes.len() && bytes[i + 1] == b'>' => {
+                // <> = justify
+                attrs.align = Some("justify".to_string());
+                i += 2;
+            }
+            b'<' => {
+                attrs.align = Some("left".to_string());
+                i += 1;
+            }
+            b'>' => {
+                attrs.align = Some("right".to_string());
+                i += 1;
+            }
+            b'=' => {
+                attrs.align = Some("center".to_string());
+                i += 1;
+            }
+            b'.' => {
+                // End of attributes
+                return Some((attrs, i + 1));
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// Parse cell-level alignment prefix (`<.`, `>.`, `=.`, `<>.`).
+fn parse_cell_align(content: &str) -> (&str, Option<String>) {
+    if let Some(rest) = content.strip_prefix("<>.") {
         return (rest.trim(), Some("justify".to_string()));
     }
-    if let Some(rest) = line.strip_prefix("p<.") {
+    if let Some(rest) = content.strip_prefix("<.") {
         return (rest.trim(), Some("left".to_string()));
     }
-    if let Some(rest) = line.strip_prefix("p>.") {
+    if let Some(rest) = content.strip_prefix(">.") {
         return (rest.trim(), Some("right".to_string()));
     }
-    if let Some(rest) = line.strip_prefix("p=.") {
+    if let Some(rest) = content.strip_prefix("=.") {
         return (rest.trim(), Some("center".to_string()));
     }
-    if let Some(rest) = line.strip_prefix("p.") {
-        return (rest.trim(), None);
-    }
-    (line.trim(), None)
+    (content, None)
 }
 
 // ── Inline parser ─────────────────────────────────────────────────────────────
@@ -799,6 +901,32 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
             continue;
         }
 
+        // Acronym ABC(title): look back in `current` for trailing uppercase sequence
+        if chars[i] == '('
+            && !current.is_empty()
+            && let Some((abbr_byte_start, abbr_text, title, end_pos)) =
+                try_parse_acronym(&current, &chars, i, &char_offsets, base_offset)
+        {
+            // Emit accumulated text before the abbreviation
+            let pre_text = current[..abbr_byte_start].to_string();
+            if !pre_text.is_empty() {
+                let pre_end = text_start + pre_text.len();
+                nodes.push(Inline::Text(pre_text, Span::new(text_start, pre_end)));
+            }
+            current.clear();
+            // Approximate span: from where abbr starts to end of title+)
+            let abbr_abs_start = char_abs(i).saturating_sub(abbr_text.len());
+            let abbr_abs_end = char_abs(end_pos);
+            nodes.push(Inline::Acronym {
+                text: abbr_text,
+                title,
+                span: Span::new(abbr_abs_start, abbr_abs_end),
+            });
+            i = end_pos;
+            text_start = char_abs(i);
+            continue;
+        }
+
         current.push(chars[i]);
         i += 1;
     }
@@ -811,6 +939,49 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
     }
 
     nodes
+}
+
+/// Try to parse an acronym: if `current` ends with ≥2 uppercase letters and `chars[i] == '('`,
+/// attempt to read until `)`. Returns `(abbr_byte_start_in_current, abbr_text, title, end_char_pos)`.
+fn try_parse_acronym(
+    current: &str,
+    chars: &[char],
+    i: usize,
+    _char_offsets: &[usize],
+    _base_offset: usize,
+) -> Option<(usize, String, String, usize)> {
+    // Find trailing uppercase sequence in current
+    let bytes = current.as_bytes();
+    let mut abbr_byte_start = bytes.len();
+    // Walk backwards through the string
+    let current_chars: Vec<char> = current.chars().collect();
+    let mut ci = current_chars.len();
+    while ci > 0 {
+        let c = current_chars[ci - 1];
+        if c.is_uppercase() {
+            ci -= 1;
+            abbr_byte_start -= c.len_utf8();
+        } else {
+            break;
+        }
+    }
+    let abbr = &current[abbr_byte_start..];
+    if abbr.chars().count() < 2 {
+        return None;
+    }
+
+    // Parse the title content: (title text)
+    let mut j = i + 1;
+    let mut title = String::new();
+    while j < chars.len() && chars[j] != ')' {
+        title.push(chars[j]);
+        j += 1;
+    }
+    if j >= chars.len() || chars[j] != ')' || title.is_empty() {
+        return None;
+    }
+
+    Some((abbr_byte_start, abbr.to_string(), title, j + 1))
 }
 
 fn try_parse_formatting(

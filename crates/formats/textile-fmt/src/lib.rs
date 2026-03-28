@@ -9,7 +9,7 @@ pub mod parse;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 
-pub use ast::{Block, Diagnostic, Inline, Severity, Span, TableCell, TableRow, TextileDoc};
+pub use ast::{Block, BlockAttrs, Diagnostic, Inline, Severity, Span, TableCell, TableRow, TextileDoc};
 pub use emit::emit;
 pub use parse::parse;
 
@@ -112,6 +112,7 @@ mod tests {
             blocks: vec![Block::Heading {
                 level: 1,
                 inlines: vec![Inline::Text("Title".to_string(), Span::dummy())],
+                attrs: BlockAttrs::default(),
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -126,6 +127,7 @@ mod tests {
             blocks: vec![Block::Paragraph {
                 inlines: vec![Inline::Text("Hello, world!".to_string(), Span::dummy())],
                 align: None,
+                attrs: BlockAttrs::default(),
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -143,6 +145,7 @@ mod tests {
                     Span::dummy(),
                 )],
                 align: None,
+                attrs: BlockAttrs::default(),
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -160,6 +163,7 @@ mod tests {
                     Span::dummy(),
                 )],
                 align: None,
+                attrs: BlockAttrs::default(),
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -174,6 +178,7 @@ mod tests {
             blocks: vec![Block::Paragraph {
                 inlines: vec![Inline::Code("code".to_string(), Span::dummy())],
                 align: None,
+                attrs: BlockAttrs::default(),
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -193,6 +198,7 @@ mod tests {
                     span: Span::dummy(),
                 }],
                 align: None,
+                attrs: BlockAttrs::default(),
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -210,11 +216,13 @@ mod tests {
                     vec![Block::Paragraph {
                         inlines: vec![Inline::Text("one".to_string(), Span::dummy())],
                         align: None,
+                        attrs: BlockAttrs::default(),
                         span: Span::dummy(),
                     }],
                     vec![Block::Paragraph {
                         inlines: vec![Inline::Text("two".to_string(), Span::dummy())],
                         align: None,
+                        attrs: BlockAttrs::default(),
                         span: Span::dummy(),
                     }],
                 ],
@@ -236,11 +244,13 @@ mod tests {
                     vec![Block::Paragraph {
                         inlines: vec![Inline::Text("first".to_string(), Span::dummy())],
                         align: None,
+                        attrs: BlockAttrs::default(),
                         span: Span::dummy(),
                     }],
                     vec![Block::Paragraph {
                         inlines: vec![Inline::Text("second".to_string(), Span::dummy())],
                         align: None,
+                        attrs: BlockAttrs::default(),
                         span: Span::dummy(),
                     }],
                 ],
@@ -286,6 +296,7 @@ mod tests {
                     span: Span::dummy(),
                 }],
                 align: None,
+                attrs: BlockAttrs::default(),
                 span: Span::dummy(),
             }],
             span: Span::dummy(),
@@ -304,6 +315,7 @@ mod tests {
                     span: Span::dummy(),
                 }],
                 align: None,
+                attrs: BlockAttrs::default(),
                 span: Span::dummy(),
             }],
             span: Span::dummy(),

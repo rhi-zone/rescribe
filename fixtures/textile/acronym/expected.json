@@ -1,0 +1,11 @@
+{
+  "description": "Textile acronym ABC(title) creates a span with abbr and title props",
+  "category": "inline",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text" },
+    { "path": "/0/1", "kind": "span", "props": { "title": "HyperText Markup Language" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/1", "kind": "span", "props": { "title": "Cascading Style Sheets" } }
+  ]
+}

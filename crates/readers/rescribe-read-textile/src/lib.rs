@@ -4,7 +4,7 @@
 
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
 use rescribe_std::{node, prop};
-use textile_fmt::{Block, Inline, parse as parse_textile};
+use textile_fmt::{Block, BlockAttrs, Inline, parse as parse_textile};
 
 /// Parse Textile markup.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
@@ -26,22 +26,48 @@ pub fn parse_with_options(
     Ok(ConversionResult::ok(document))
 }
 
+/// Apply block-level attributes (class, id, style, lang) to a node.
+fn apply_block_attrs(mut n: Node, attrs: &BlockAttrs) -> Node {
+    if let Some(class) = &attrs.class {
+        n = n.prop(prop::CLASSES, class.clone());
+    }
+    if let Some(id) = &attrs.id {
+        n = n.prop(prop::ID, id.clone());
+    }
+    if let Some(style) = &attrs.style {
+        n = n.prop("style", style.clone());
+    }
+    if let Some(lang) = &attrs.lang {
+        n = n.prop("lang", lang.clone());
+    }
+    if attrs.indent_left > 0 {
+        n = n.prop("textile:indent-left", attrs.indent_left as i64);
+    }
+    if attrs.indent_right > 0 {
+        n = n.prop("textile:indent-right", attrs.indent_right as i64);
+    }
+    n
+}
+
 fn convert_block(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines, align, .. } => {
+        Block::Paragraph { inlines, align, attrs, .. } => {
             let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
             let mut n = Node::new(node::PARAGRAPH).children(children);
             if let Some(a) = align {
                 n = n.prop(prop::STYLE_ALIGN, a.clone());
             }
+            n = apply_block_attrs(n, attrs);
             n
         }
 
-        Block::Heading { level, inlines, .. } => {
+        Block::Heading { level, inlines, attrs, .. } => {
             let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
-            Node::new(node::HEADING)
+            let mut n = Node::new(node::HEADING)
                 .prop(prop::LEVEL, *level as i64)
-                .children(children)
+                .children(children);
+            n = apply_block_attrs(n, attrs);
+            n
         }
 
         Block::CodeBlock { content, language, .. } => {
@@ -86,7 +112,11 @@ fn convert_block(block: &Block) -> Node {
                             } else {
                                 node::TABLE_CELL
                             };
-                            Node::new(kind).children(children)
+                            let mut n = Node::new(kind).children(children);
+                            if let Some(align) = &cell.align {
+                                n = n.prop(prop::ALIGN, align.clone());
+                            }
+                            n
                         })
                         .collect();
                     Node::new(node::TABLE_ROW).children(cells)
@@ -204,6 +234,12 @@ fn convert_inline(inline: &Inline) -> Node {
         Inline::GenericSpan(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::SPAN).children(converted)
+        }
+
+        Inline::Acronym { text, title, .. } => {
+            Node::new(node::SPAN)
+                .prop("textile:abbr", text.clone())
+                .prop(prop::TITLE, title.clone())
         }
     }
 }
