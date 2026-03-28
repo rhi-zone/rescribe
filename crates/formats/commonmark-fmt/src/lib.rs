@@ -36,17 +36,17 @@
 //!
 //! Superseding pulldown-cmark (77M+ weekly downloads) is a non-goal.
 
-#[cfg(feature = "ast")]
+#[cfg(feature = "reader-ast")]
 pub mod ast;
-#[cfg(feature = "ast")]
+#[cfg(feature = "reader-ast")]
 pub mod emit;
-#[cfg(feature = "ast")]
+#[cfg(feature = "reader-ast")]
 pub mod parse;
 
-#[cfg(feature = "streaming")]
+#[cfg(feature = "reader-streaming")]
 pub mod events;
 
-#[cfg(feature = "batch")]
+#[cfg(feature = "reader-batch")]
 pub mod batch;
 
 #[cfg(feature = "writer-streaming")]
@@ -54,17 +54,17 @@ pub mod writer;
 #[cfg(feature = "writer-streaming")]
 pub use writer::Writer;
 
-#[cfg(feature = "ast")]
+#[cfg(feature = "reader-ast")]
 pub use ast::{
     Block, CmDoc, Diagnostic, Inline, LinkDef, ListItem, ListKind, OrderedMarker, Severity, Span,
 };
-#[cfg(feature = "ast")]
+#[cfg(feature = "reader-ast")]
 pub use emit::emit;
-#[cfg(feature = "ast")]
+#[cfg(feature = "reader-ast")]
 pub use parse::parse;
 
-#[cfg(feature = "streaming")]
+#[cfg(feature = "reader-streaming")]
 pub use events::{Event, EventIter, OwnedEvent, events, events_str};
 
-#[cfg(feature = "batch")]
+#[cfg(feature = "reader-batch")]
 pub use batch::{Handler, StreamingParser};

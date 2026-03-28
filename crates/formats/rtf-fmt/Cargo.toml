@@ -7,9 +7,9 @@ repository.workspace = true
 description = "RTF (Rich Text Format) tokenizer, AST, and builder — no rescribe dependency"
 
 [features]
-default = ["ast", "streaming", "batch", "writer-streaming", "writer-builder"]
-ast = []
-streaming = []
-batch = []
+default = ["reader-ast", "reader-streaming", "reader-batch", "writer-streaming", "writer-builder"]
+reader-ast = []
+reader-streaming = []
+reader-batch = []
 writer-streaming = []
 writer-builder = []

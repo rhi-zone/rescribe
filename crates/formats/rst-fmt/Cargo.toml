@@ -7,12 +7,12 @@ repository.workspace = true
 description = "reStructuredText parser, AST, and builder — no rescribe dependency"
 
 [features]
-default = ["ast", "streaming", "batch", "writer-streaming", "writer-builder"]
-ast = []
-streaming = ["ast"]
-batch = []
+default = ["reader-ast", "reader-streaming", "reader-batch", "writer-streaming", "writer-builder"]
+reader-ast = []
+reader-streaming = ["reader-ast"]
+reader-batch = []
 writer-streaming = []
-writer-builder = ["ast", "writer-streaming"]
+writer-builder = ["reader-ast", "writer-streaming"]
 
 [dev-dependencies]
 criterion.workspace = true
