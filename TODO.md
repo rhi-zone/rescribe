@@ -387,6 +387,13 @@ from scratch as a proper standalone library.
 - [x] events() frame-stack fix — O(nesting depth), not O(block subtree) (2026-03-28)
 - [x] parse() direct recursive descent — independent of events() (2026-03-28)
 - [x] StreamingParser<H> Tier 2 — O(largest block) streaming (2026-03-28)
+- [x] `Cow::Borrowed` zero-copy text for headings and paragraphs (2026-03-28)
+  - `Frame::InlineText { span, content }` carries absolute span + owned fallback
+  - `ParseContext::line_offset_at()` provides line→byte mapping (0 for SubParser)
+  - `push_heading_frames` / `push_paragraph_frames` pass real base_offset to parse_inlines
+  - EventIter::next() checks `&input[span] == content` before borrowing; falls back to Owned
+  - Smart punctuation (e.g. `--` → `–`) correctly returns Cow::Owned (content ≠ input slice)
+  - SubParser events always Cow::Owned (no input reference available)
 
 ### `rtf-fmt` — API modes (2026-03-28)
 
@@ -417,13 +424,16 @@ direct recursive descent, independent of events().
   without significant parser refactoring (font/color table dependency)
 - commonmark-fmt: O(full input) — pulldown-cmark requires full `&str`; exemption documented
 
-**`Cow::Borrowed` — not yet done:**
-All `Cow` text fields in `events()` are `Owned`. Identify runs with no escape
-sequences and yield `Cow::Borrowed` slices from the input. Pure performance win.
-Deferred — not a correctness issue, lower priority than format vertical completion.
+**`Cow::Borrowed` — DONE for djot-fmt (2026-03-28):**
+`Text` events for headings and paragraphs now yield `Cow::Borrowed` when the span maps
+cleanly to the original input (no escape processing). Implementation: `Frame::InlineText`,
+`ParseContext::line_offset_at()`, real base_offset in push_heading/paragraph_frames.
 
-**Remaining:**
-- [ ] `Cow::Borrowed` for zero-copy text — pure performance win, no API change
+**Remaining (other crates):**
+- [ ] `Cow::Borrowed` for org-fmt — inline parser uses `Span::NONE`; needs span tracking in parse_inline_content before base_offset approach works
+- [ ] `Cow::Borrowed` for rst-fmt — same; `Inline::Text(String)` has no span at all
+- [ ] `Cow::Borrowed` for asciidoc — same as rst-fmt
+- [ ] `Cow::Borrowed` for djot-fmt Verbatim/Math — Verbatim trimming means span ≠ content slice; would need a content-only span separate from the full backtick-construct span
 
 ### `rst-fmt` — API modes complete (2026-03-23)
 

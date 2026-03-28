@@ -136,6 +136,7 @@ fn parse_next_block_direct(iter: &mut EventIter<'_>) -> Option<Block> {
 // ── Direct block constructors ─────────────────────────────────────────────────
 
 fn parse_heading_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    let heading_line = iter.pos();
     let line: String = iter.current_line()?.to_string();
     let trimmed = line.trim_start();
     let level = trimmed.chars().take_while(|&c| c == '#').count() as u8;
@@ -146,7 +147,12 @@ fn parse_heading_direct(iter: &mut EventIter<'_>) -> Option<Block> {
     iter.advance();
     let attr = iter.take_pending_attr();
     let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
-    let inlines = parse_inlines(&content, 0, &link_defs);
+    // base_offset: byte position of `content` within `self.input`.
+    // `content` is the suffix of `line` after stripping leading indent, `#`s, and space.
+    // `line.len() - content.len()` gives the prefix byte count.
+    let base_offset = iter.line_offsets.get(heading_line).copied().unwrap_or(0)
+        + line.len().saturating_sub(content.len());
+    let inlines = parse_inlines(&content, base_offset, &link_defs);
     Some(Block::Heading { level, inlines, attr, span: Span::NONE })
 }
 
@@ -491,6 +497,7 @@ fn parse_definition_list_direct(iter: &mut EventIter<'_>) -> Option<Block> {
 }
 
 fn parse_paragraph_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    let first_line = iter.pos();
     let mut lines: Vec<String> = Vec::new();
     loop {
         let line_owned: Option<String> = iter.current_line().map(|l| l.to_string());
@@ -514,9 +521,15 @@ fn parse_paragraph_direct(iter: &mut EventIter<'_>) -> Option<Block> {
     }
     if lines.is_empty() { return None; }
     let attr = iter.take_pending_attr();
+    // base_offset: byte position of the paragraph's first character in `self.input`.
+    // Inline spans are relative to the joined content; adding base_offset maps them to
+    // absolute positions so EventIter::next can yield Cow::Borrowed for plain text runs.
+    // The safety check in EventIter::next (content == &input[span]) catches any mismatch
+    // caused by trim_end or non-Unix line endings and falls back to Cow::Owned.
+    let base_offset = iter.line_offsets.get(first_line).copied().unwrap_or(0);
     let content = lines.join("\n");
     let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
-    let inlines = parse_inlines(&content, 0, &link_defs);
+    let inlines = parse_inlines(&content, base_offset, &link_defs);
     Some(Block::Paragraph { inlines, attr, span: Span::NONE })
 }
 
@@ -548,6 +561,14 @@ pub(crate) enum Phase {
 enum Frame {
     /// Yield this single event immediately and pop.
     Event(OwnedEvent),
+    /// A text inline whose content may borrow from the original input.
+    ///
+    /// `span` holds the byte range in the document input (set when base_offset
+    /// is known); `content` is the owned fallback for cases where the span
+    /// doesn't match (e.g. smart-punctuation substitution) or is unavailable.
+    /// `EventIter::next` will try `Cow::Borrowed` first; `SubParser::next`
+    /// always falls back to `Cow::Owned`.
+    InlineText { span: Span, content: String },
     /// Pop the next Block from the iterator, expand it, and put the remainder back.
     Blocks(std::vec::IntoIter<Block>),
     /// Pop the next Inline, expand it, and put the remainder back.
@@ -578,6 +599,13 @@ trait ParseContext {
     fn set_pending_attr(&mut self, attr: Attr);
     fn link_defs(&self) -> &[LinkDef];
     fn push_frame(&mut self, frame: Frame);
+
+    /// Return the byte offset of `line_idx` within the original document input.
+    ///
+    /// Returns 0 by default (SubParser has no original-input reference).
+    /// EventIter overrides this to return real offsets so that inline spans
+    /// produced by `parse_inlines` can be used for `Cow::Borrowed` slices.
+    fn line_offset_at(&self, _line_idx: usize) -> usize { 0 }
 
     fn current_line(&self) -> Option<&str> {
         if self.pos() < self.num_lines() { Some(self.line_at(self.pos())) } else { None }
@@ -648,6 +676,10 @@ impl Iterator for SubParser {
         loop {
             match self.frame_stack.pop() {
                 Some(Frame::Event(ev)) => return Some(ev),
+                // SubParser has no input reference; always fall back to Cow::Owned.
+                Some(Frame::InlineText { content, .. }) => {
+                    return Some(OwnedEvent::Text(Cow::Owned(content)));
+                }
                 Some(Frame::Blocks(mut iter)) => {
                     if let Some(block) = iter.next() {
                         self.frame_stack.push(Frame::Blocks(iter));
@@ -765,6 +797,9 @@ impl<'a> ParseContext for EventIter<'a> {
     fn set_pending_attr(&mut self, attr: Attr) { self.pending_attr = Some(attr); }
     fn link_defs(&self) -> &[LinkDef] { &self.link_defs }
     fn push_frame(&mut self, frame: Frame) { self.frame_stack.push(frame); }
+    fn line_offset_at(&self, line_idx: usize) -> usize {
+        self.line_offsets.get(line_idx).copied().unwrap_or(0)
+    }
 }
 
 impl<'a> EventIter<'a> {
@@ -947,8 +982,8 @@ fn expand_block_frames<C: ParseContext>(ctx: &mut C, block: Block) {
 /// Expand an Inline into frames pushed via ctx.push_frame().
 fn expand_inline_frames<C: ParseContext>(ctx: &mut C, inline: Inline) {
     match inline {
-        Inline::Text { content, .. } => {
-            ctx.push_frame(Frame::Event(Event::Text(Cow::Owned(content))));
+        Inline::Text { content, span } => {
+            ctx.push_frame(Frame::InlineText { span, content });
         }
         Inline::SoftBreak { .. } => {
             ctx.push_frame(Frame::Event(OwnedEvent::SoftBreak));
@@ -1176,6 +1211,7 @@ fn push_next_block_frames<C: ParseContext>(ctx: &mut C) -> bool {
 // ── Block-frame push functions ────────────────────────────────────────────────
 
 fn push_heading_frames<C: ParseContext>(ctx: &mut C) -> bool {
+    let heading_line = ctx.pos();
     let line: String = match ctx.current_line() { Some(l) => l.to_string(), None => return false };
     let trimmed = line.trim_start();
     let level = trimmed.chars().take_while(|&c| c == '#').count() as u8;
@@ -1186,7 +1222,10 @@ fn push_heading_frames<C: ParseContext>(ctx: &mut C) -> bool {
     ctx.advance();
     let attr = ctx.take_pending_attr();
     let link_defs: Vec<LinkDef> = ctx.link_defs().to_vec();
-    let inlines = parse_inlines(&content, 0, &link_defs);
+    // base_offset positions `content` within the document input for Cow::Borrowed.
+    let base_offset = ctx.line_offset_at(heading_line)
+        + line.len().saturating_sub(content.len());
+    let inlines = parse_inlines(&content, base_offset, &link_defs);
     ctx.push_frame(Frame::Event(OwnedEvent::EndHeading));
     if !inlines.is_empty() {
         ctx.push_frame(Frame::Inlines(inlines.into_iter()));
@@ -1600,6 +1639,7 @@ fn push_definition_list_frames<C: ParseContext>(ctx: &mut C) -> bool {
 }
 
 fn push_paragraph_frames<C: ParseContext>(ctx: &mut C) -> bool {
+    let first_line = ctx.pos();
     let mut lines: Vec<String> = Vec::new();
 
     loop {
@@ -1627,9 +1667,12 @@ fn push_paragraph_frames<C: ParseContext>(ctx: &mut C) -> bool {
     if lines.is_empty() { return false; }
 
     let attr = ctx.take_pending_attr();
+    // base_offset: byte position of the paragraph start within the document input.
+    // Used by parse_inlines so Text spans are absolute, enabling Cow::Borrowed in EventIter.
+    let base_offset = ctx.line_offset_at(first_line);
     let content = lines.join("\n");
     let link_defs: Vec<LinkDef> = ctx.link_defs().to_vec();
-    let inlines = parse_inlines(&content, 0, &link_defs);
+    let inlines = parse_inlines(&content, base_offset, &link_defs);
 
     ctx.push_frame(Frame::Event(OwnedEvent::EndParagraph));
     if !inlines.is_empty() {
@@ -1649,6 +1692,21 @@ impl<'a> Iterator for EventIter<'a> {
             match self.frame_stack.pop() {
                 // ── Atomic: yield immediately ─────────────────────────────────
                 Some(Frame::Event(ev)) => return Some(ev),
+
+                // ── Text inline: borrow from input when span is valid ─────────
+                Some(Frame::InlineText { span, content }) => {
+                    let text = if span.start < span.end
+                        && span.end <= self.input.len()
+                        && self.input.is_char_boundary(span.start)
+                        && self.input.is_char_boundary(span.end)
+                        && &self.input[span.start..span.end] == content.as_str()
+                    {
+                        Cow::Borrowed(&self.input[span.start..span.end])
+                    } else {
+                        Cow::Owned(content)
+                    };
+                    return Some(Event::Text(text));
+                }
 
                 // ── Block sequence (from expand_block_frames on pre-built Blocks) ──
                 Some(Frame::Blocks(mut iter)) => {
@@ -3090,6 +3148,44 @@ mod tests {
             }
             other => panic!("expected paragraph, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_events_cow_borrowed_plain_text() {
+        // Plain text with no escape sequences should yield Cow::Borrowed slices
+        // pointing into the original input, not freshly-allocated Cow::Owned strings.
+        use crate::events::EventIter;
+        use std::borrow::Cow;
+        let input = "# Hello\n\nA paragraph.";
+        let mut heading_borrowed = false;
+        let mut para_borrowed = false;
+        for ev in EventIter::new(input) {
+            if let crate::events::Event::Text(Cow::Borrowed(s)) = ev {
+                // Verify it's actually a slice of the input (same bytes, same address range)
+                let input_range = input.as_ptr()..=input.as_ptr().wrapping_add(input.len());
+                assert!(input_range.contains(&s.as_ptr()), "borrowed slice not in input");
+                if s == "Hello" { heading_borrowed = true; }
+                if s == "A paragraph." { para_borrowed = true; }
+            }
+        }
+        assert!(heading_borrowed, "heading text should be Cow::Borrowed");
+        assert!(para_borrowed, "paragraph text should be Cow::Borrowed");
+    }
+
+    #[test]
+    fn test_events_cow_owned_smart_punct() {
+        // Smart punctuation substitutions must yield Cow::Owned (content differs from input).
+        use crate::events::EventIter;
+        use std::borrow::Cow;
+        let input = "A -- B"; // em-dash substitution
+        let owned_texts: Vec<_> = EventIter::new(input)
+            .filter_map(|ev| {
+                if let crate::events::Event::Text(Cow::Owned(s)) = ev { Some(s) } else { None }
+            })
+            .collect();
+        // The em-dash text should be owned (can't borrow "—" from "–" input)
+        assert!(owned_texts.iter().any(|s| s.contains('\u{2013}') || s.contains('\u{2014}')),
+            "smart punctuation should yield Cow::Owned");
     }
 
     #[test]
