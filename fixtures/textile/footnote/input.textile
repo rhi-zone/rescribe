@@ -1,0 +1,3 @@
+See the note[1] for details.
+
+fn1. This is the footnote.

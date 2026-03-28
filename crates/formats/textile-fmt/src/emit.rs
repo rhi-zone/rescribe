@@ -99,6 +99,23 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             }
             ctx.write("\n");
         }
+
+        Block::FootnoteDef { label, inlines, .. } => {
+            ctx.write(&format!("fn{}. ", label));
+            emit_inlines(inlines, ctx);
+            ctx.write("\n\n");
+        }
+
+        Block::DefinitionList { items, .. } => {
+            for (term, def) in items {
+                ctx.write(";");
+                emit_inlines(term, ctx);
+                ctx.write("\n:");
+                emit_inlines(def, ctx);
+                ctx.write("\n");
+            }
+            ctx.write("\n");
+        }
     }
 }
 
@@ -170,6 +187,12 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
                 ctx.write(")");
             }
             ctx.write("!");
+        }
+
+        Inline::FootnoteRef { label, .. } => {
+            ctx.write("[");
+            ctx.write(label);
+            ctx.write("]");
         }
     }
 }

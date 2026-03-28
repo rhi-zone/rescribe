@@ -1,0 +1,12 @@
+{
+  "description": "Textile footnote: [1] reference inline and fn1. definition at block level",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "See the note" } },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "1" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " for details." } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "1" } },
+    { "path": "/1/0", "kind": "text", "props": { "content": "This is the footnote." } }
+  ]
+}

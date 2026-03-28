@@ -92,6 +92,17 @@ pub enum Block {
         rows: Vec<TableRow>,
         span: Span,
     },
+    /// Footnote definition: `fn1. content` at block level.
+    FootnoteDef {
+        label: String,
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    /// Definition list: pairs of (term inlines, definition inlines).
+    DefinitionList {
+        items: Vec<(Vec<Inline>, Vec<Inline>)>,
+        span: Span,
+    },
 }
 
 impl Block {
@@ -103,6 +114,8 @@ impl Block {
             Block::Blockquote { span, .. } => *span,
             Block::List { span, .. } => *span,
             Block::Table { span, .. } => *span,
+            Block::FootnoteDef { span, .. } => *span,
+            Block::DefinitionList { span, .. } => *span,
         }
     }
 
@@ -136,6 +149,23 @@ impl Block {
             },
             Block::Table { rows, .. } => Block::Table {
                 rows: rows.into_iter().map(TableRow::strip_spans).collect(),
+                span: dummy,
+            },
+            Block::FootnoteDef { label, inlines, .. } => Block::FootnoteDef {
+                label,
+                inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
+                span: dummy,
+            },
+            Block::DefinitionList { items, .. } => Block::DefinitionList {
+                items: items
+                    .into_iter()
+                    .map(|(term, def)| {
+                        (
+                            term.into_iter().map(Inline::strip_spans).collect(),
+                            def.into_iter().map(Inline::strip_spans).collect(),
+                        )
+                    })
+                    .collect(),
                 span: dummy,
             },
         }
@@ -197,6 +227,8 @@ pub enum Inline {
     },
     Superscript(Vec<Inline>, Span),
     Subscript(Vec<Inline>, Span),
+    /// Inline footnote reference: `[1]` in Textile.
+    FootnoteRef { label: String, span: Span },
 }
 
 impl Inline {
@@ -212,6 +244,7 @@ impl Inline {
             Inline::Image { span, .. } => *span,
             Inline::Superscript(_, s) => *s,
             Inline::Subscript(_, s) => *s,
+            Inline::FootnoteRef { span, .. } => *span,
         }
     }
 
@@ -251,6 +284,7 @@ impl Inline {
                 children.into_iter().map(Inline::strip_spans).collect(),
                 dummy,
             ),
+            Inline::FootnoteRef { label, .. } => Inline::FootnoteRef { label, span: dummy },
         }
     }
 }

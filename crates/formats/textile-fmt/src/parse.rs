@@ -115,6 +115,19 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            // Footnote definition fn1. fn2. etc.
+            if let Some(node) = self.try_parse_footnote_def(line) {
+                nodes.push(node);
+                self.pos += 1;
+                continue;
+            }
+
+            // Definition list — starts with ; (term) or : (definition)
+            if line.starts_with(';') || line.starts_with(':') {
+                nodes.push(self.parse_definition_list());
+                continue;
+            }
+
             // Regular paragraph p. or just text
             nodes.push(self.parse_paragraph());
         }
@@ -455,6 +468,65 @@ impl<'a> Parser<'a> {
             span: Span::new(block_start, block_end),
         }
     }
+
+    /// Try to parse a footnote definition line: `fn1. content text`.
+    fn try_parse_footnote_def(&self, line: &str) -> Option<Block> {
+        // Match "fn" followed by digits and "."
+        if !line.starts_with("fn") {
+            return None;
+        }
+        let rest = &line[2..];
+        let dot_pos = rest.find('.')?;
+        let label = &rest[..dot_pos];
+        if label.is_empty() || !label.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        let content = rest[dot_pos + 1..].trim();
+        let line_start = self.line_start(self.pos);
+        let inlines = parse_inline(content, line_start + 2 + dot_pos + 1);
+        Some(Block::FootnoteDef {
+            label: label.to_string(),
+            inlines,
+            span: Span::new(line_start, self.line_end(self.pos)),
+        })
+    }
+
+    /// Parse a definition list: consecutive lines starting with `;` (term) or `:` (definition).
+    fn parse_definition_list(&mut self) -> Block {
+        let block_start = self.line_start(self.pos);
+        let mut items: Vec<(Vec<Inline>, Vec<Inline>)> = Vec::new();
+        let mut current_term: Option<Vec<Inline>> = None;
+
+        while self.pos < self.lines.len() {
+            let line = self.lines[self.pos];
+            if line.starts_with(';') {
+                let term_text = line[1..].trim();
+                let ls = self.line_start(self.pos);
+                current_term = Some(parse_inline(term_text, ls + 1));
+                self.pos += 1;
+            } else if line.starts_with(':') {
+                let def_text = line[1..].trim();
+                let ls = self.line_start(self.pos);
+                let def_inlines = parse_inline(def_text, ls + 1);
+                let term_inlines = current_term.take().unwrap_or_default();
+                items.push((term_inlines, def_inlines));
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+
+        // Any orphan term with no definition becomes an empty-def item
+        if let Some(term) = current_term {
+            items.push((term, vec![]));
+        }
+
+        let block_end = self.line_end(self.pos.saturating_sub(1));
+        Block::DefinitionList {
+            items,
+            span: Span::new(block_start, block_end),
+        }
+    }
 }
 
 // ── Inline parser ─────────────────────────────────────────────────────────────
@@ -557,6 +629,24 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
                 span: img_span,
             });
             i = img_end;
+            text_start = char_abs(i);
+            continue;
+        }
+
+        // Footnote reference [1], [2], etc.
+        if chars[i] == '['
+            && let Some((ref_end, label)) = parse_footnote_ref(&chars, i)
+        {
+            if !current.is_empty() {
+                nodes.push(Inline::Text(
+                    current.clone(),
+                    Span::new(text_start, char_abs(i)),
+                ));
+                current.clear();
+            }
+            let ref_span = Span::new(char_abs(i), char_abs(ref_end));
+            nodes.push(Inline::FootnoteRef { label, span: ref_span });
+            i = ref_end;
             text_start = char_abs(i);
             continue;
         }
@@ -734,4 +824,21 @@ fn parse_textile_image(chars: &[char], start: usize) -> Option<(usize, String, O
     }
 
     Some((i, url, alt))
+}
+
+/// Try to parse a footnote reference `[digits]`. Returns (end_pos, label).
+fn parse_footnote_ref(chars: &[char], start: usize) -> Option<(usize, String)> {
+    if chars[start] != '[' {
+        return None;
+    }
+    let mut i = start + 1;
+    let mut label = String::new();
+    while i < chars.len() && chars[i].is_ascii_digit() {
+        label.push(chars[i]);
+        i += 1;
+    }
+    if label.is_empty() || i >= chars.len() || chars[i] != ']' {
+        return None;
+    }
+    Some((i + 1, label))
 }

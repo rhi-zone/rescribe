@@ -298,7 +298,7 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Pandoc harness: N/A (pandoc can't read asciidoc)
   - [x] Benchmarks: asciidoc_parse_small 6.6µs, asciidoc_parse_medium 48µs, asciidoc_emit_medium 1.9µs
   - Note: table/footnote/math parsing not yet implemented — coverage gaps deferred
-- [ ] `textile-fmt` vertical — **4-Fuzz** (2026-03-21)
+- [ ] `textile-fmt` vertical — **4-Fuzz** (2026-03-21); footnotes + def-lists added (2026-03-28)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
   - [x] parse() infallible → (TextileDoc, Vec<Diagnostic>)
@@ -307,8 +307,8 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Roundtrip fuzz target (`fuzz_textile_roundtrip`) — 923K runs clean (2026-03-21)
   - [x] Fixed infinite loop bug: list parser on `** ` (level-2 marker with no level-1 items)
   - [x] Fixtures: table, image, superscript, subscript added (2026-03-21)
-  - [ ] Footnotes (no AST support yet)
-  - [ ] Definition lists (no AST support yet)
+  - [x] Footnotes — FootnoteDef block + FootnoteRef inline (2026-03-28)
+  - [x] Definition lists — DefinitionList block with term/desc pairs (2026-03-28)
 - [x] `org-fmt` vertical — **5-Production** reader (2026-03-22)
   - [x] Split lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span/Diagnostic types; infallible parse() → (OrgDoc, Vec<Diagnostic>)
@@ -407,7 +407,7 @@ from scratch as a proper standalone library.
   RTF is O(full input) — structural constraint (font/color tables must precede body);
   documented as inherent format limitation, not an implementation shortcut.
 - [x] `w-build`: `emit()` builder writer
-- [ ] `w-stream`: Writer<W: Write> streaming writer
+- [x] `w-stream`: Writer<W: Write> streaming writer — exists as writer::Writer<W> (token-level; 2026-03-28)
 
 ### DEBT: Streaming architecture — COMPLETED 2026-03-28
 
@@ -512,7 +512,7 @@ cleanly to the original input (no escape processing). Implementation: `Frame::In
   - [x] Bullet/list structure in IR — consecutive bullet paragraphs grouped into list/list_item nodes (2026-03-20)
   - [ ] Nested bullet levels (currently flattened to single level with fidelity warning)
   - [ ] Roundtrip fuzz target (requires PPTX writer capable of roundtrip)
-- [ ] EPUB (epub/epub-builder backed; same)
+- [x] EPUB — 3-Harness (30 fixtures, fuzz target compiles, 2026-03-28)
 - [ ] ODT writer (no library; treat as a vertical)
 - [ ] AZW3 reader/writer (boko as reference, MIT attribution)
 - [ ] PDF reader (pdf-extract backed; already at 4)

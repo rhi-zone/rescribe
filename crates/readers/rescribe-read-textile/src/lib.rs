@@ -86,6 +86,28 @@ fn convert_block(block: &Block) -> Node {
                 .collect();
             Node::new(node::TABLE).children(table_rows)
         }
+
+        Block::FootnoteDef { label, inlines, .. } => {
+            let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
+            Node::new(node::FOOTNOTE_DEF)
+                .prop("label", label.clone())
+                .children(children)
+        }
+
+        Block::DefinitionList { items, .. } => {
+            let children: Vec<Node> = items
+                .iter()
+                .flat_map(|(term, def)| {
+                    let term_children: Vec<Node> = term.iter().map(convert_inline).collect();
+                    let def_children: Vec<Node> = def.iter().map(convert_inline).collect();
+                    vec![
+                        Node::new(node::DEFINITION_TERM).children(term_children),
+                        Node::new(node::DEFINITION_DESC).children(def_children),
+                    ]
+                })
+                .collect();
+            Node::new(node::DEFINITION_LIST).children(children)
+        }
     }
 }
 
@@ -138,6 +160,10 @@ fn convert_inline(inline: &Inline) -> Node {
         Inline::Subscript(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             Node::new(node::SUBSCRIPT).children(converted)
+        }
+
+        Inline::FootnoteRef { label, .. } => {
+            Node::new(node::FOOTNOTE_REF).prop("label", label.clone())
         }
     }
 }

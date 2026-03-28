@@ -15,11 +15,11 @@ See `fixtures/spec.md` for category definitions.
 - [x] code block (bc.) — `code-block`
 - [x] table — `table`
 - [ ] horizontal rule (---) — (missing)
-- [ ] definition list (- term := definition) — (missing)
+- [x] definition list (;term :definition) — `definition-list`
 - [ ] pre block (pre.) — (missing)
 - [ ] notextile block (notextile.) — (missing)
 - [ ] extended block (p.. or bq..) — (missing)
-- [ ] footnote definition (fn1.) — (missing)
+- [x] footnote definition (fn1.) — `footnote`
 
 ## Inline constructs
 - [x] italic (_text_ or __text__) — `italic`
@@ -33,7 +33,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] superscript (^text^) — `superscript`
 - [ ] citation (??text??) — (missing)
 - [ ] acronym (ABC(title)) — (missing)
-- [ ] footnote reference ([1]) — (missing)
+- [x] footnote reference ([1]) — `footnote`
 - [ ] deleted text (-text-) — (missing; overlaps strikethrough)
 - [ ] inserted text (+text+) — (missing; overlaps underline)
 - [ ] span (% attributes %text%) — (missing)
