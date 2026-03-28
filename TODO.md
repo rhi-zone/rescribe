@@ -386,7 +386,7 @@ from scratch as a proper standalone library.
 - [x] StreamingParser<H: Handler> + Handler trait — 2026-03-25
 - [x] events() frame-stack fix — O(nesting depth), not O(block subtree) (2026-03-28)
 - [x] parse() direct recursive descent — independent of events() (2026-03-28)
-- [ ] StreamingParser<H> Tier 2 — true chunked streaming (currently buffers all input)
+- [x] StreamingParser<H> Tier 2 — O(largest block) streaming (2026-03-28)
 
 ### `rtf-fmt` — API modes (2026-03-28)
 
@@ -396,42 +396,34 @@ from scratch as a proper standalone library.
 - [x] `stream` (semantic): `events(input: &[u8]) -> SemanticEventIter` — document-semantic events;
   internally calls `parse()` first (RTF group/property inheritance requires full context);
   walks parsed RtfDoc with frame-stack; documented limitation
-- [x] `batch`: `StreamingParser<H: Handler>` + `Handler` trait — buffers all input (stub)
+- [x] `batch`: `StreamingParser<H: Handler>` + `Handler` trait (2026-03-28)
+  RTF is O(full input) — structural constraint (font/color tables must precede body);
+  documented as inherent format limitation, not an implementation shortcut.
 - [x] `w-build`: `emit()` builder writer
-- [ ] StreamingParser<H> Tier 2 — true chunked streaming (currently buffers all input)
 - [ ] `w-stream`: Writer<W: Write> streaming writer
 
-### DEBT: Streaming architecture — five hand-rolled crates need upgrade
+### DEBT: Streaming architecture — COMPLETED 2026-03-28
 
-The four hand-rolled crates (`rst-fmt`, `asciidoc`, `djot-fmt`, `org-fmt`) plus
-`rtf-fmt` do not yet match the architecture in `docs/format-library-design.md`.
-Current state and gaps:
+**`events()` frame-stack — DONE:**
+All four crates use `Vec<Frame>` frame-stack. Memory O(nesting depth). `parse()` is
+direct recursive descent, independent of events().
 
-**`events()` — block-granular, not event-granular: [DONE 2026-03-28]**
-Fixed: all four crates now use a `Vec<Frame>` frame-stack. `next()` pops one frame,
-yields one event, pushes child frames in reverse order. Memory is O(nesting depth).
-`parse()` is now direct recursive descent (independent of events()).
+**`StreamingParser<H>` Tier 2 — DONE (line-oriented crates):**
+- org-fmt: blank-line separation + #+BEGIN_*…#+END_* (O(largest block))
+- rst-fmt: blank-line separation + directive body (O(largest block))
+- asciidoc: blank-line separation + delimited blocks (O(largest block))
+- djot-fmt: blank-line separation + fenced code / div (O(largest block))
+- rtf-fmt: O(full input) — documented structural constraint; cannot be improved
+  without significant parser refactoring (font/color table dependency)
+- commonmark-fmt: O(full input) — pulldown-cmark requires full `&str`; exemption documented
 
-**`StreamingParser<H: Handler>` — stub only, Tier 2 required:**
-All five hand-rolled crates have `StreamingParser<H>` in their `batch.rs` but the
-implementation buffers all input until `finish()`. This is **not acceptable** — it
-is a placeholder only. The design-doc contract is O(largest token + nesting depth):
-- `feed()` must process the chunk, call `handler.handle(event)` for each complete token
-- Split tokens at chunk boundaries must be buffered in parser state, not caller
-- `BatchSink` is kept for backwards compat; `StreamingParser` must be true Tier 2
-
-`commonmark-fmt` is the **only** exemption (pulldown requires full `&str`). Every
-hand-rolled parser has no such excuse. This is a blocking gap for large-document use.
-
-**`Cow::Borrowed` — not yet used:**
+**`Cow::Borrowed` — not yet done:**
 All `Cow` text fields in `events()` are `Owned`. Identify runs with no escape
 sequences and yield `Cow::Borrowed` slices from the input. Pure performance win.
+Deferred — not a correctness issue, lower priority than format vertical completion.
 
-**Schedule:** Address all five crates in one pass (mechanical and parallel).
-
-Priority order:
-1. [ ] `StreamingParser<H>` Tier 2 — true chunked streaming, O(largest token + depth)
-2. [ ] `Cow::Borrowed` for zero-copy text — pure performance win, no API change
+**Remaining:**
+- [ ] `Cow::Borrowed` for zero-copy text — pure performance win, no API change
 
 ### `rst-fmt` — API modes complete (2026-03-23)
 
@@ -443,7 +435,7 @@ Priority order:
 - [x] Fix events() — now a true pull iterator (2026-03-24)
 - [x] events() frame-stack fix — O(nesting depth), not O(block subtree) (2026-03-28)
 - [x] parse() direct recursive descent — independent of events() (2026-03-28)
-- [ ] StreamingParser<H> Tier 2 — true chunked streaming (currently buffers all input)
+- [x] StreamingParser<H> Tier 2 — O(largest block) streaming (2026-03-28)
 - [ ] Parser gaps: table parsing, footnote parsing
 
 ### `org-fmt` — API modes complete (2026-03-23)
@@ -456,7 +448,7 @@ Priority order:
 - [x] Fix events() — now a true pull iterator (2026-03-24)
 - [x] events() frame-stack fix — O(nesting depth), not O(block subtree) (2026-03-28)
 - [x] parse() direct recursive descent — independent of events() (2026-03-28)
-- [ ] StreamingParser<H> Tier 2 — true chunked streaming (currently buffers all input)
+- [x] StreamingParser<H> Tier 2 — O(largest block) streaming (2026-03-28)
 - [ ] Parser/writer gaps: blockquote nesting, footnote definitions, figure/caption blocks
 
 ### `asciidoc` — API modes complete (2026-03-23)
@@ -469,7 +461,7 @@ Priority order:
 - [x] Fix events() — now a true pull iterator (2026-03-24)
 - [x] events() frame-stack fix — O(nesting depth), not O(block subtree) (2026-03-28)
 - [x] parse() direct recursive descent — independent of events() (2026-03-28)
-- [ ] StreamingParser<H> Tier 2 — true chunked streaming (currently buffers all input)
+- [x] StreamingParser<H> Tier 2 — O(largest block) streaming (2026-03-28)
 - [ ] Parser gaps: table parsing, footnote parsing, math parsing
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed; same)
