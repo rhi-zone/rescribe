@@ -295,15 +295,19 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Oracle harness: 100% word coverage on rst-reader.rst (ref=618)
   - [x] Benchmarks: rst_parse_small 3.3µs, rst_parse_medium 30µs, rst_emit_medium 2.5µs
   - [x] All API modes: ast + stream + batch + w-build + w-stream
-  - [ ] Construct gaps: table parsing, footnote parsing
+  - [x] Table parsing — grid and simple tables with header support (2026-03-29)
+  - [x] Footnote parsing — numbered, auto-symbol (`*`), auto-numbered (`#`) refs (2026-03-29)
+  - [ ] Construct gaps: footnote defs with continuation lines (complex body content)
 - [ ] `asciidoc` vertical — **4-Fuzz** (demoted 2026-03-29: construct gaps disqualify 5-Production)
   - [x] No-panic fuzz gate (`fuzz_asciidoc_reader`); roundtrip fuzz (`fuzz_asciidoc_roundtrip`)
   - [x] Fixtures: 84 total; COVERAGE.md all boxes checked
   - [x] Oracle harness: N/A (pandoc can't read asciidoc)
   - [x] Benchmarks: asciidoc_parse_small 6.6µs, asciidoc_parse_medium 48µs, asciidoc_emit_medium 1.9µs
   - [x] All API modes: ast + stream + batch + w-build + w-stream
-  - [ ] Construct gaps: table parsing, footnote parsing, math parsing
-- [ ] `textile-fmt` vertical — **4-Fuzz** (2026-03-21); footnotes + def-lists added (2026-03-28)
+  - [x] Table parsing — with header row detection (2026-03-29)
+  - [x] Footnote parsing — anonymous + named + back-reference forms (2026-03-29)
+  - [ ] Construct gaps: math parsing (`stem:[...]`, `latexmath:[...]`)
+- [x] `textile-fmt` vertical — **5-Production** (2026-03-29)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
   - [x] parse() infallible → (TextileDoc, Vec<Diagnostic>)
@@ -311,16 +315,21 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] No-panic fuzz gate (`fuzz_textile_reader`) — 1.6M runs clean (2026-03-21)
   - [x] Roundtrip fuzz target (`fuzz_textile_roundtrip`) — 923K runs clean (2026-03-21)
   - [x] Fixed infinite loop bug: list parser on `** ` (level-2 marker with no level-1 items)
-  - [x] Fixtures: table, image, superscript, subscript added (2026-03-21)
+  - [x] Fixtures: table, image, superscript, subscript added (2026-03-21); COVERAGE.md all checked
   - [x] Footnotes — FootnoteDef block + FootnoteRef inline (2026-03-28)
   - [x] Definition lists — DefinitionList block with term/desc pairs (2026-03-28)
+  - [x] Oracle harness (`pandoc_textile_corpus` #[ignore]) — pandoc_harness.rs (2026-03-29)
+  - [x] Benchmarks: textile_parse_small ~1.9µs, textile_parse_medium ~47µs (2026-03-29)
+  - [x] All API modes: ast + stream + batch + w-build + w-stream (2026-03-29)
 - [ ] `org-fmt` vertical — **4-Fuzz** (demoted 2026-03-29: construct gaps disqualify 5-Production)
   - [x] No-panic fuzz gate (`fuzz_org_reader`) — 1.25M runs clean; roundtrip fuzz clean
   - [x] Fixtures: 88 total; COVERAGE.md all boxes checked
   - [x] Oracle harness: 100% word coverage on writer.org (ref=919)
   - [x] Benchmarks: org_parse_small 3.4µs, org_parse_medium 53µs, org_emit_medium 2.9µs
   - [x] All API modes: ast + stream + batch + w-build + w-stream
-  - [ ] Construct gaps: blockquote nesting, footnote definitions, figure/caption blocks
+  - [x] Nested blockquote parsing (depth counter) — (2026-03-29)
+  - [x] Footnote definitions — `[fn:label]` block-level (2026-03-29)
+  - [ ] Construct gaps: figure/caption blocks
 - [x] `muse-fmt` vertical — **4-Fuzz** (2026-03-21)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
@@ -343,14 +352,14 @@ Each Tier A format at 5-Production with a published standalone crate.
   - Note: headings excluded from text comparison (emitted uppercase; .TH always adds "UNTITLED" title)
   - [ ] 100% construct coverage — tables, images, code inline, footnotes
   - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
-- [ ] `djot-fmt` vertical — **reader: 5-Production** (2026-03-23); **writer: 4-Fuzz**
+- [x] `djot-fmt` vertical — **5-Production** (2026-03-29; writer signed off)
   - [x] All API modes: ast + stream + batch + w-build + w-stream
   - [x] Oracle harness: 100% word coverage on djot-reader.djot (ref=931)
   - [x] Fixtures: 79 total; COVERAGE.md all boxes checked
   - [x] Benchmarks: djot_parse_small 7.8µs, djot_parse_medium 49µs, djot_emit_medium 9.8µs
   - [x] Fuzz reader: fuzz_djot_fmt_reader + fuzz_djot_fmt_roundtrip — 21M runs clean
   - [x] Fuzz writer: fuzz_djot_roundtrip — 1M runs clean
-  - [ ] Writer: verify no construct gaps vs reader; sign off writer at 5-Production
+  - [x] Writer: no construct gaps vs reader; all Block+Inline variants handled in emit.rs + writer.rs
 
 ---
 
