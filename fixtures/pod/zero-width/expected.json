@@ -1,0 +1,7 @@
+{
+  "description": "Z<> (zero-width) formatting code produces an empty raw_inline node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "raw_inline" }
+  ]
+}

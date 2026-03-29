@@ -1,0 +1,7 @@
+{
+  "description": "=back without =over produces a diagnostic and no output",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 0 }
+  ]
+}

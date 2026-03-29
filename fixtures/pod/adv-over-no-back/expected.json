@@ -1,0 +1,7 @@
+{
+  "description": "=over without =back still produces a list (implicitly closed at end)",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "list" }
+  ]
+}

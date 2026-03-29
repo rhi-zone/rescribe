@@ -1,0 +1,11 @@
+{
+  "description": "Nested =over/=back produces a list inside a list item",
+  "assertions": [
+    { "path": "/0",         "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0",       "kind": "list_item" },
+    { "path": "/0/0/1",     "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0/1/0",   "kind": "list_item" },
+    { "path": "/0/0/1/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1/0/0/0", "kind": "text", "props": { "content": "Inner" } }
+  ]
+}

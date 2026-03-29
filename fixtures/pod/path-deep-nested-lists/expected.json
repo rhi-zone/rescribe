@@ -1,0 +1,7 @@
+{
+  "description": "Deeply nested lists (20 levels) parse without stack overflow",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list" }
+  ]
+}

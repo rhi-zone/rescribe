@@ -1,0 +1,8 @@
+{
+  "description": "L<name/section> produces a link with section in url",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "link", "props": { "url": "perlpod/Formatting Codes" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "perlpod/Formatting Codes" } }
+  ]
+}

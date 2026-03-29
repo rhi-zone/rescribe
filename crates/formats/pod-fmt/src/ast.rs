@@ -56,6 +56,20 @@ pub enum Block {
     Paragraph { inlines: Vec<Inline>, span: Span },
     CodeBlock { content: String, span: Span },
     List { ordered: bool, items: Vec<Vec<Block>>, span: Span },
+    DefinitionList { items: Vec<DefinitionItem>, span: Span },
+    /// `=begin FORMAT` ... `=end FORMAT` raw region.
+    RawBlock { format: String, content: String, span: Span },
+    /// `=for FORMAT text` single-paragraph format-specific content.
+    ForBlock { format: String, content: String, span: Span },
+    /// `=encoding ENC` declaration (preserved for round-trip).
+    Encoding { encoding: String, span: Span },
+}
+
+/// A term/description pair in a definition list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionItem {
+    pub term: Vec<Inline>,
+    pub desc: Vec<Block>,
 }
 
 impl Block {
@@ -79,6 +93,23 @@ impl Block {
                     .collect(),
                 span: Span::NONE,
             },
+            Block::DefinitionList { items, .. } => Block::DefinitionList {
+                items: items
+                    .into_iter()
+                    .map(|item| DefinitionItem {
+                        term: item.term.into_iter().map(Inline::strip_spans).collect(),
+                        desc: item.desc.into_iter().map(Block::strip_spans).collect(),
+                    })
+                    .collect(),
+                span: Span::NONE,
+            },
+            Block::RawBlock { format, content, .. } => {
+                Block::RawBlock { format, content, span: Span::NONE }
+            }
+            Block::ForBlock { format, content, .. } => {
+                Block::ForBlock { format, content, span: Span::NONE }
+            }
+            Block::Encoding { encoding, .. } => Block::Encoding { encoding, span: Span::NONE },
         }
     }
 }
@@ -92,6 +123,16 @@ pub enum Inline {
     Underline(Vec<Inline>, Span),
     Code(String, Span),
     Link { url: String, label: String, span: Span },
+    /// `F<filename>` — filename inline (semantically distinct from italic).
+    Filename(Vec<Inline>, Span),
+    /// `S<text>` — non-breaking spaces (spaces in content must not wrap).
+    NonBreaking(Vec<Inline>, Span),
+    /// `X<entry>` — index entry (invisible in output).
+    IndexEntry(String, Span),
+    /// `Z<>` — zero-width / null element.
+    Null(Span),
+    /// `E<escape>` — entity/escape that resolved to a character.
+    Entity(String, Span),
 }
 
 impl Inline {
@@ -109,6 +150,15 @@ impl Inline {
             }
             Inline::Code(s, _) => Inline::Code(s, Span::NONE),
             Inline::Link { url, label, .. } => Inline::Link { url, label, span: Span::NONE },
+            Inline::Filename(ch, _) => {
+                Inline::Filename(ch.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::NonBreaking(ch, _) => {
+                Inline::NonBreaking(ch.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::IndexEntry(s, _) => Inline::IndexEntry(s, Span::NONE),
+            Inline::Null(_) => Inline::Null(Span::NONE),
+            Inline::Entity(s, _) => Inline::Entity(s, Span::NONE),
         }
     }
 }

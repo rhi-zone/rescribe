@@ -1,0 +1,7 @@
+{
+  "description": "=pod/=cut delimit POD regions; content inside is parsed as normal paragraphs",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Content inside pod markers." } }
+  ]
+}

@@ -1,21 +1,23 @@
-use crate::ast::{Block, Diagnostic, Inline, PodDoc, Span};
+use crate::ast::{Block, DefinitionItem, Diagnostic, Inline, PodDoc, Span};
 
 /// Parse a POD string into a [`PodDoc`], returning diagnostics for any issues.
 pub fn parse(input: &str) -> (PodDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.parse_blocks();
-    (PodDoc { blocks, span: Span::NONE }, vec![])
+    let diagnostics = std::mem::take(&mut p.diagnostics);
+    (PodDoc { blocks, span: Span::NONE }, diagnostics)
 }
 
 struct Parser<'a> {
     lines: Vec<&'a str>,
     pos: usize,
     in_pod: bool,
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl<'a> Parser<'a> {
     fn new(input: &'a str) -> Self {
-        Self { lines: input.lines().collect(), pos: 0, in_pod: false }
+        Self { lines: input.lines().collect(), pos: 0, in_pod: false, diagnostics: Vec::new() }
     }
 
     fn parse_blocks(&mut self) -> Vec<Block> {
@@ -26,6 +28,11 @@ impl<'a> Parser<'a> {
 
             // Check for =pod or =head* to enter POD mode
             if line.starts_with("=pod") || line.starts_with("=head") {
+                self.in_pod = true;
+            }
+
+            // =over also enters POD mode
+            if line.starts_with("=over") {
                 self.in_pod = true;
             }
 
@@ -47,7 +54,8 @@ impl<'a> Parser<'a> {
                 if let Some(block) = self.parse_command(line) {
                     nodes.push(block);
                 }
-                self.pos += 1;
+                // parse_command may advance pos itself (for =over, =begin)
+                // If not, we advance here.
                 continue;
             }
 
@@ -79,6 +87,7 @@ impl<'a> Parser<'a> {
         {
             let title = rest.get(1..)?.trim();
             let inlines = parse_inline(title);
+            self.pos += 1;
             return Some(Block::Heading { level, inlines, span: Span::NONE });
         }
 
@@ -89,35 +98,134 @@ impl<'a> Parser<'a> {
 
         // =pod is just a marker, skip
         if line.starts_with("=pod") {
+            self.pos += 1;
             return None;
         }
 
-        // =begin / =end / =for - format-specific content
-        if line.starts_with("=begin") || line.starts_with("=end") || line.starts_with("=for") {
-            // Skip format-specific content for now
+        // =begin FORMAT ... =end FORMAT
+        if line.starts_with("=begin") {
+            return Some(self.parse_begin_end());
+        }
+
+        // =end without matching =begin
+        if line.starts_with("=end") {
+            self.diagnostics.push(Diagnostic::warning("=end without matching =begin", Span::NONE));
+            self.pos += 1;
             return None;
         }
 
-        // =encoding - metadata
-        if line.starts_with("=encoding") {
+        // =for FORMAT text
+        if line.starts_with("=for") {
+            return Some(self.parse_for());
+        }
+
+        // =encoding ENC
+        if let Some(rest) = line.strip_prefix("=encoding") {
+            let encoding = rest.trim().to_string();
+            self.pos += 1;
+            return Some(Block::Encoding { encoding, span: Span::NONE });
+        }
+
+        // =back without matching =over
+        if line.starts_with("=back") {
+            self.diagnostics.push(Diagnostic::warning("=back without matching =over", Span::NONE));
+            self.pos += 1;
             return None;
         }
 
+        // =item outside =over
+        if line.starts_with("=item") {
+            self.diagnostics.push(Diagnostic::warning("=item outside =over", Span::NONE));
+            self.pos += 1;
+            return None;
+        }
+
+        // Unknown command
+        self.pos += 1;
         None
     }
 
+    fn parse_begin_end(&mut self) -> Block {
+        let first_line = self.lines[self.pos];
+        let format = first_line
+            .strip_prefix("=begin")
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        self.pos += 1;
+
+        let mut content = String::new();
+        while self.pos < self.lines.len() {
+            let line = self.lines[self.pos];
+            if line.starts_with("=end") {
+                self.pos += 1;
+                break;
+            }
+            if !content.is_empty() {
+                content.push('\n');
+            }
+            content.push_str(line);
+            self.pos += 1;
+        }
+
+        Block::RawBlock { format, content, span: Span::NONE }
+    }
+
+    fn parse_for(&mut self) -> Block {
+        let first_line = self.lines[self.pos];
+        let rest = first_line.strip_prefix("=for").unwrap_or("").trim();
+        // First word is format, rest is content
+        let (format, content) = if let Some(space_pos) = rest.find(char::is_whitespace) {
+            (rest[..space_pos].to_string(), rest[space_pos..].trim().to_string())
+        } else {
+            (rest.to_string(), String::new())
+        };
+        self.pos += 1;
+        Block::ForBlock { format, content, span: Span::NONE }
+    }
+
     fn parse_list(&mut self) -> Block {
-        let mut items = Vec::new();
         self.pos += 1; // Skip =over
 
-        // Determine if it's ordered (numbered items) or not
+        // Peek ahead to determine list type
         let mut is_ordered = false;
+        let mut is_definition = false;
+        for i in self.pos..self.lines.len() {
+            let line = self.lines[i];
+            if line.starts_with("=item") {
+                let item_content = line.strip_prefix("=item").unwrap_or("").trim();
+                if item_content.starts_with('*') {
+                    // bullet list
+                    break;
+                } else if item_content.starts_with(|c: char| c.is_ascii_digit()) {
+                    is_ordered = true;
+                    break;
+                } else if !item_content.is_empty() {
+                    is_definition = true;
+                    break;
+                }
+                break;
+            }
+            if line.starts_with("=back") || line.starts_with("=cut") {
+                break;
+            }
+        }
+
+        if is_definition {
+            return self.parse_definition_list();
+        }
+
+        let mut items = Vec::new();
 
         while self.pos < self.lines.len() {
             let line = self.lines[self.pos];
 
             if line.starts_with("=back") {
                 self.pos += 1;
+                break;
+            }
+
+            if line.starts_with("=cut") {
                 break;
             }
 
@@ -155,6 +263,10 @@ impl<'a> Parser<'a> {
                         break;
                     }
 
+                    if inner_line.starts_with("=cut") {
+                        break;
+                    }
+
                     if inner_line.trim().is_empty() {
                         self.pos += 1;
                         continue;
@@ -166,7 +278,7 @@ impl<'a> Parser<'a> {
                         continue;
                     }
 
-                    // Other POD commands (=cut, =pod, =begin, =end, =for, etc.) — skip.
+                    // Other POD commands (=pod, =begin, =end, =for, etc.) — skip.
                     if inner_line.starts_with('=') {
                         self.pos += 1;
                         continue;
@@ -186,6 +298,70 @@ impl<'a> Parser<'a> {
         }
 
         Block::List { ordered: is_ordered, items, span: Span::NONE }
+    }
+
+    fn parse_definition_list(&mut self) -> Block {
+        let mut items = Vec::new();
+
+        while self.pos < self.lines.len() {
+            let line = self.lines[self.pos];
+
+            if line.starts_with("=back") {
+                self.pos += 1;
+                break;
+            }
+
+            if line.starts_with("=cut") {
+                break;
+            }
+
+            if line.starts_with("=item") {
+                let term_text = line.strip_prefix("=item").unwrap_or("").trim();
+                let term = parse_inline(term_text);
+                self.pos += 1;
+
+                let mut desc_blocks = Vec::new();
+
+                while self.pos < self.lines.len() {
+                    let inner_line = self.lines[self.pos];
+
+                    if inner_line.starts_with("=item") || inner_line.starts_with("=back") {
+                        break;
+                    }
+
+                    if inner_line.starts_with("=cut") {
+                        break;
+                    }
+
+                    if inner_line.trim().is_empty() {
+                        self.pos += 1;
+                        continue;
+                    }
+
+                    if inner_line.starts_with("=over") {
+                        desc_blocks.push(self.parse_list());
+                        continue;
+                    }
+
+                    if inner_line.starts_with('=') {
+                        self.pos += 1;
+                        continue;
+                    }
+
+                    if inner_line.starts_with(' ') || inner_line.starts_with('\t') {
+                        desc_blocks.push(self.parse_verbatim());
+                    } else {
+                        desc_blocks.push(self.parse_paragraph());
+                    }
+                }
+
+                items.push(DefinitionItem { term, desc: desc_blocks });
+            } else {
+                self.pos += 1;
+            }
+        }
+
+        Block::DefinitionList { items, span: Span::NONE }
     }
 
     fn parse_verbatim(&mut self) -> Block {
@@ -265,10 +441,10 @@ pub fn parse_inline(text: &str) -> Vec<Inline> {
                 };
 
                 if let Some((content, end)) = content.zip(end_pos) {
-                    // For escape codes (E, X, Z, S), don't flush buffer - just accumulate
-                    let is_escape = matches!(code, 'E' | 'X' | 'Z' | 'S');
-
-                    if !is_escape && !current.is_empty() {
+                    // Flush text buffer before structured inlines
+                    if !current.is_empty()
+                        && !matches!(code, 'E')
+                    {
                         inlines.push(Inline::Text(current.clone(), Span::NONE));
                         current.clear();
                     }
@@ -278,10 +454,13 @@ pub fn parse_inline(text: &str) -> Vec<Inline> {
                             let inner = parse_inline(&content);
                             inlines.push(Inline::Bold(inner, Span::NONE));
                         }
-                        'I' | 'F' => {
-                            // F<> (filename) is typically rendered as italic
+                        'I' => {
                             let inner = parse_inline(&content);
                             inlines.push(Inline::Italic(inner, Span::NONE));
+                        }
+                        'F' => {
+                            let inner = parse_inline(&content);
+                            inlines.push(Inline::Filename(inner, Span::NONE));
                         }
                         'U' => {
                             let inner = parse_inline(&content);
@@ -303,49 +482,23 @@ pub fn parse_inline(text: &str) -> Vec<Inline> {
                             inlines.push(Inline::Link { url, label, span: Span::NONE });
                         }
                         'S' => {
-                            // Non-breaking spaces - just accumulate the text
-                            current.push_str(&content);
+                            let inner = parse_inline(&content);
+                            inlines.push(Inline::NonBreaking(inner, Span::NONE));
                         }
                         'E' => {
                             // Escape: E<lt>, E<gt>, E<amp>, E<sol>, E<verbar>, etc.
-                            let escaped = match content.as_str() {
-                                "lt" => "<",
-                                "gt" => ">",
-                                "amp" => "&",
-                                "sol" => "/",
-                                "verbar" => "|",
-                                "quot" => "\"",
-                                "apos" => "'",
-                                _ => {
-                                    // Try numeric (E<0x201E> or E<8222>)
-                                    if let Some(hex) = content.strip_prefix("0x")
-                                        && let Ok(code) = u32::from_str_radix(hex, 16)
-                                        && let Some(c) = char::from_u32(code)
-                                    {
-                                        current.push(c);
-                                        i = end;
-                                        continue;
-                                    } else if let Ok(code) = content.parse::<u32>()
-                                        && let Some(c) = char::from_u32(code)
-                                    {
-                                        current.push(c);
-                                        i = end;
-                                        continue;
-                                    }
-                                    ""
-                                }
-                            };
-                            if !escaped.is_empty() {
-                                current.push_str(escaped);
+                            let resolved = resolve_entity(&content);
+                            if let Some(s) = resolved {
+                                current.push_str(&s);
                             }
                             i = end;
                             continue;
                         }
-                        'X' | 'Z' => {
-                            // X<> is an index entry (invisible)
-                            // Z<> is a null element (invisible)
-                            i = end;
-                            continue;
+                        'X' => {
+                            inlines.push(Inline::IndexEntry(content, Span::NONE));
+                        }
+                        'Z' => {
+                            inlines.push(Inline::Null(Span::NONE));
                         }
                         _ => {}
                     }
@@ -365,6 +518,35 @@ pub fn parse_inline(text: &str) -> Vec<Inline> {
     }
 
     inlines
+}
+
+/// Resolve a POD entity name to its string value.
+fn resolve_entity(name: &str) -> Option<String> {
+    match name {
+        "lt" => Some("<".into()),
+        "gt" => Some(">".into()),
+        "amp" => Some("&".into()),
+        "sol" => Some("/".into()),
+        "verbar" => Some("|".into()),
+        "quot" => Some("\"".into()),
+        "apos" => Some("'".into()),
+        _ => {
+            // Try hex (E<0x263A>)
+            if let Some(hex) = name.strip_prefix("0x")
+                && let Ok(code) = u32::from_str_radix(hex, 16)
+                && let Some(c) = char::from_u32(code)
+            {
+                return Some(c.to_string());
+            }
+            // Try decimal (E<169>)
+            if let Ok(code) = name.parse::<u32>()
+                && let Some(c) = char::from_u32(code)
+            {
+                return Some(c.to_string());
+            }
+            None
+        }
+    }
 }
 
 fn find_single_bracket_content(chars: &[char], start: usize) -> (Option<String>, Option<usize>) {

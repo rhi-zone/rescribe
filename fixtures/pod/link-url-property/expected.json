@@ -1,0 +1,6 @@
+{
+  "description": "Link node carries url property from L<text|url>",
+  "assertions": [
+    { "path": "/0/1", "kind": "link", "props": { "url": "https://example.com/page" } }
+  ]
+}

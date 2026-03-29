@@ -1,0 +1,8 @@
+{
+  "description": "S<text> formatting code produces a span with non-breaking content",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "span" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "break here" } }
+  ]
+}

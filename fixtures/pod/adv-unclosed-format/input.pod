@@ -1,0 +1,5 @@
+=pod
+
+This has B<unclosed bold text.
+
+=cut

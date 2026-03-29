@@ -1,0 +1,8 @@
+{
+  "description": "L<text|url> produces a link with separate label and URL",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "the docs" } }
+  ]
+}

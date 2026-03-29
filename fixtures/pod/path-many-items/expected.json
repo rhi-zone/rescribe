@@ -1,0 +1,7 @@
+{
+  "description": "List with 500 items parses without issue",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list", "children_count": 500 }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "=begin without matching =end still produces a raw_block (consumed to end of input)",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "format": "html" } }
+  ]
+}

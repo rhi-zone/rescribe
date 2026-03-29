@@ -1,0 +1,5 @@
+=pod
+
+See L<the description|/"DESCRIPTION"> here.
+
+=cut

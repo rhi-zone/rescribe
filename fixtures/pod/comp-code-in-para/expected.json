@@ -1,0 +1,9 @@
+{
+  "description": "Code inline inside a paragraph",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "code" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "my $var" } }
+  ]
+}

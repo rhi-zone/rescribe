@@ -1,0 +1,6 @@
+{
+  "description": "Encoding node carries the declared encoding string",
+  "assertions": [
+    { "path": "/0", "kind": "encoding", "props": { "encoding": "iso-8859-1" } }
+  ]
+}

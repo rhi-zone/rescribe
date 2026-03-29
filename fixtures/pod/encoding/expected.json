@@ -1,0 +1,6 @@
+{
+  "description": "=encoding declaration is preserved as an encoding node",
+  "assertions": [
+    { "path": "/0", "kind": "encoding", "props": { "encoding": "UTF-8" } }
+  ]
+}

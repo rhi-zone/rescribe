@@ -1,0 +1,5 @@
+=pod
+
+Do not S<break here> please.
+
+=cut

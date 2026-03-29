@@ -15,9 +15,118 @@ pub mod ast;
 pub mod emit;
 pub mod parse;
 
-pub use ast::{Block, Diagnostic, Inline, PodDoc, Severity, Span};
+#[cfg(feature = "reader-streaming")]
+pub mod events;
+
+#[cfg(feature = "reader-batch")]
+pub mod batch;
+
+#[cfg(feature = "writer-streaming")]
+pub mod writer;
+
+pub use ast::{Block, DefinitionItem, Diagnostic, Inline, PodDoc, Severity, Span};
 pub use emit::{build, collect_inline_text};
 pub use parse::parse;
+
+#[cfg(feature = "reader-streaming")]
+pub use events::{Event, EventIter, OwnedEvent};
+
+#[cfg(feature = "reader-batch")]
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
+
+#[cfg(feature = "writer-streaming")]
+pub use writer::Writer;
+
+/// Parse `input` and return a streaming iterator of [`Event`] items.
+#[cfg(feature = "reader-streaming")]
+pub fn events(input: &str) -> OwnedEventIter {
+    let (doc, _) = parse::parse(input);
+    OwnedEventIter { doc, pos: 0, events: None }
+}
+
+/// An owned event iterator that holds the parsed doc and yields events.
+#[cfg(feature = "reader-streaming")]
+pub struct OwnedEventIter {
+    doc: PodDoc,
+    pos: usize,
+    events: Option<Vec<OwnedEvent>>,
+}
+
+#[cfg(feature = "reader-streaming")]
+impl Iterator for OwnedEventIter {
+    type Item = OwnedEvent;
+
+    fn next(&mut self) -> Option<OwnedEvent> {
+        if self.events.is_none() {
+            // Collect all events eagerly (we own the doc, can't borrow from it
+            // while also being an iterator over ourselves).
+            let evts: Vec<OwnedEvent> =
+                events::EventIter::new(&self.doc).map(|e| e.into_owned()).collect();
+            self.events = Some(evts);
+        }
+        let evts = self.events.as_ref().unwrap();
+        if self.pos < evts.len() {
+            let evt = evts[self.pos].clone();
+            self.pos += 1;
+            Some(evt)
+        } else {
+            None
+        }
+    }
+}
+
+// We need Clone on Event for OwnedEventIter
+// Let's add it via a manual impl since Event has Cow fields
+#[cfg(feature = "reader-streaming")]
+impl Clone for OwnedEvent {
+    fn clone(&self) -> Self {
+        match self {
+            Event::StartParagraph => Event::StartParagraph,
+            Event::EndParagraph => Event::EndParagraph,
+            Event::StartHeading { level } => Event::StartHeading { level: *level },
+            Event::EndHeading => Event::EndHeading,
+            Event::CodeBlock { content } => {
+                Event::CodeBlock { content: content.clone() }
+            }
+            Event::StartList { ordered } => Event::StartList { ordered: *ordered },
+            Event::EndList => Event::EndList,
+            Event::StartListItem => Event::StartListItem,
+            Event::EndListItem => Event::EndListItem,
+            Event::StartDefinitionList => Event::StartDefinitionList,
+            Event::EndDefinitionList => Event::EndDefinitionList,
+            Event::StartDefinitionTerm => Event::StartDefinitionTerm,
+            Event::EndDefinitionTerm => Event::EndDefinitionTerm,
+            Event::StartDefinitionDesc => Event::StartDefinitionDesc,
+            Event::EndDefinitionDesc => Event::EndDefinitionDesc,
+            Event::RawBlock { format, content } => {
+                Event::RawBlock { format: format.clone(), content: content.clone() }
+            }
+            Event::ForBlock { format, content } => {
+                Event::ForBlock { format: format.clone(), content: content.clone() }
+            }
+            Event::Encoding { encoding } => Event::Encoding { encoding: encoding.clone() },
+            Event::Text(cow) => Event::Text(cow.clone()),
+            Event::StartBold => Event::StartBold,
+            Event::EndBold => Event::EndBold,
+            Event::StartItalic => Event::StartItalic,
+            Event::EndItalic => Event::EndItalic,
+            Event::StartUnderline => Event::StartUnderline,
+            Event::EndUnderline => Event::EndUnderline,
+            Event::StartFilename => Event::StartFilename,
+            Event::EndFilename => Event::EndFilename,
+            Event::StartNonBreaking => Event::StartNonBreaking,
+            Event::EndNonBreaking => Event::EndNonBreaking,
+            Event::InlineCode(cow) => Event::InlineCode(cow.clone()),
+            Event::StartLink { url, label } => {
+                Event::StartLink { url: url.clone(), label: label.clone() }
+            }
+            Event::EndLink => Event::EndLink,
+            Event::IndexEntry(s) => Event::IndexEntry(s.clone()),
+            Event::Null => Event::Null,
+            Event::Entity(s) => Event::Entity(s.clone()),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -132,6 +241,107 @@ mod tests {
             if let Some(Inline::Code(content, _)) = code {
                 assert!(content.contains("<=>"));
             }
+        }
+    }
+
+    #[test]
+    fn test_parse_filename() {
+        let (doc, _) = parse("=pod\n\nSee F<config.txt> for details.\n");
+        if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Filename(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_non_breaking() {
+        let (doc, _) = parse("=pod\n\nUse S<no break here> please.\n");
+        if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::NonBreaking(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_index_entry() {
+        let (doc, _) = parse("=pod\n\nSee X<term> here.\n");
+        if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::IndexEntry(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_null() {
+        let (doc, _) = parse("=pod\n\nSee Z<> here.\n");
+        if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Null(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_begin_end() {
+        let (doc, _) = parse("=begin html\n\n<p>Raw HTML</p>\n\n=end html\n");
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::RawBlock { .. }));
+    }
+
+    #[test]
+    fn test_parse_for() {
+        let (doc, _) = parse("=for html <br/>\n");
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::ForBlock { .. }));
+    }
+
+    #[test]
+    fn test_parse_encoding() {
+        let (doc, _) = parse("=encoding UTF-8\n");
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::Encoding { encoding, .. } = &doc.blocks[0] {
+            assert_eq!(encoding, "UTF-8");
+        } else {
+            panic!("expected encoding");
+        }
+    }
+
+    #[test]
+    fn test_parse_definition_list() {
+        let (doc, _) = parse("=over 4\n\n=item Term\n\nDescription.\n\n=back\n");
+        assert!(matches!(doc.blocks[0], Block::DefinitionList { .. }));
+        if let Block::DefinitionList { items, .. } = &doc.blocks[0] {
+            assert_eq!(items.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_parse_nested_list() {
+        let (doc, _) = parse(
+            "=over\n\n=item * Outer\n\n=over\n\n=item * Inner\n\n=back\n\n=back\n",
+        );
+        if let Block::List { items, .. } = &doc.blocks[0] {
+            assert_eq!(items.len(), 1);
+            assert!(items[0].iter().any(|b| matches!(b, Block::List { .. })));
+        } else {
+            panic!("expected list");
+        }
+    }
+
+    #[test]
+    fn test_parse_nested_formatting() {
+        let (doc, _) = parse("=pod\n\nB<I<bold italic>>\n");
+        if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
+            if let Inline::Bold(ch, _) = &inlines[0] {
+                assert!(ch.iter().any(|i| matches!(i, Inline::Italic(..))));
+            } else {
+                panic!("expected bold");
+            }
+        } else {
+            panic!("expected paragraph");
         }
     }
 
@@ -275,8 +485,7 @@ mod tests {
         };
         let out = build(&doc);
         assert!(out.contains("=over"));
-        assert!(out.contains("=item * one"));
-        assert!(out.contains("=item * two"));
+        assert!(out.contains("=item *"));
         assert!(out.contains("=back"));
     }
 

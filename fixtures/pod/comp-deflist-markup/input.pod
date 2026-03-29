@@ -1,0 +1,7 @@
+=over 4
+
+=item B<Term>
+
+This has I<emphasis> in the description.
+
+=back

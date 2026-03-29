@@ -17,13 +17,20 @@ pub fn collect_inline_text(inlines: &[Inline]) -> String {
     for inline in inlines {
         match inline {
             Inline::Text(s, _) => out.push_str(s),
-            Inline::Bold(ch, _) | Inline::Italic(ch, _) | Inline::Underline(ch, _) => {
+            Inline::Bold(ch, _)
+            | Inline::Italic(ch, _)
+            | Inline::Underline(ch, _)
+            | Inline::Filename(ch, _)
+            | Inline::NonBreaking(ch, _) => {
                 out.push_str(&collect_inline_text(ch));
             }
             Inline::Code(s, _) => out.push_str(s),
             Inline::Link { label, url, .. } => {
                 out.push_str(if label.is_empty() { url } else { label });
             }
+            Inline::IndexEntry(s, _) => out.push_str(s),
+            Inline::Entity(s, _) => out.push_str(s),
+            Inline::Null(_) => {}
         }
     }
     out
@@ -72,28 +79,51 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             let mut num = 1;
             for item_blocks in items {
                 if *ordered {
-                    ctx.write(&format!("=item {}. ", num));
+                    ctx.write(&format!("=item {}.\n\n", num));
                     num += 1;
                 } else {
-                    ctx.write("=item * ");
+                    ctx.write("=item *\n\n");
                 }
 
-                // Emit first paragraph inline with =item
-                let mut first = true;
                 for item_block in item_blocks {
-                    if first && matches!(item_block, Block::Paragraph { .. }) {
-                        if let Block::Paragraph { inlines, .. } = item_block {
-                            build_inlines(inlines, ctx);
-                            ctx.write("\n\n");
-                        }
-                        first = false;
-                    } else {
-                        build_block(item_block, ctx);
-                    }
+                    build_block(item_block, ctx);
                 }
             }
 
             ctx.write("=back\n\n");
+        }
+
+        Block::DefinitionList { items, .. } => {
+            ctx.write("=over 4\n\n");
+
+            for item in items {
+                ctx.write("=item ");
+                build_inlines(&item.term, ctx);
+                ctx.write("\n\n");
+
+                for desc_block in &item.desc {
+                    build_block(desc_block, ctx);
+                }
+            }
+
+            ctx.write("=back\n\n");
+        }
+
+        Block::RawBlock { format, content, .. } => {
+            ctx.write(&format!("=begin {}\n", format));
+            if !content.is_empty() {
+                ctx.write(content);
+                ctx.write("\n");
+            }
+            ctx.write(&format!("=end {}\n\n", format));
+        }
+
+        Block::ForBlock { format, content, .. } => {
+            ctx.write(&format!("=for {} {}\n\n", format, content));
+        }
+
+        Block::Encoding { encoding, .. } => {
+            ctx.write(&format!("=encoding {}\n\n", encoding));
         }
     }
 }
@@ -130,6 +160,18 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write(">");
         }
 
+        Inline::Filename(children, _) => {
+            ctx.write("F<");
+            build_inlines(children, ctx);
+            ctx.write(">");
+        }
+
+        Inline::NonBreaking(children, _) => {
+            ctx.write("S<");
+            build_inlines(children, ctx);
+            ctx.write(">");
+        }
+
         Inline::Code(content, _) => {
             // Use double brackets if content contains > or <
             if content.contains('>') || content.contains('<') {
@@ -155,6 +197,21 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
                 ctx.write(url);
                 ctx.write(">");
             }
+        }
+
+        Inline::IndexEntry(entry, _) => {
+            ctx.write("X<");
+            ctx.write(entry);
+            ctx.write(">");
+        }
+
+        Inline::Null(_) => {
+            ctx.write("Z<>");
+        }
+
+        Inline::Entity(s, _) => {
+            // Entity already resolved to a string; emit as text
+            ctx.write(s);
         }
     }
 }

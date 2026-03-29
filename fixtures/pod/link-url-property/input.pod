@@ -1,0 +1,5 @@
+=pod
+
+Visit L<click here|https://example.com/page>.
+
+=cut

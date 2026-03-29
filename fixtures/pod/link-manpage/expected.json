@@ -1,0 +1,8 @@
+{
+  "description": "L<name> produces a link to a man page (url=name, label=name)",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "link", "props": { "url": "perlpod" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "perlpod" } }
+  ]
+}

@@ -1,0 +1,5 @@
+=pod
+
+Use C<< $a <=> $b >> to compare.
+
+=cut

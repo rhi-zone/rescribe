@@ -1,0 +1,6 @@
+{
+  "description": "=for FORMAT text produces a for_block with format and content",
+  "assertions": [
+    { "path": "/0", "kind": "for_block", "props": { "format": "html", "content": "<br/>" } }
+  ]
+}

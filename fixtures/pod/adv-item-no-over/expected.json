@@ -1,0 +1,7 @@
+{
+  "description": "=item outside =over produces a diagnostic and is ignored",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "", "kind": "document", "children_count": 0 }
+  ]
+}

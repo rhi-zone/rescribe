@@ -1,0 +1,10 @@
+{
+  "description": "Definition list with inline markup in both term and description",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0",         "kind": "definition_list" },
+    { "path": "/0/0/term/0",   "kind": "strong" },
+    { "path": "/0/0/term/0/0", "kind": "text", "props": { "content": "Term" } },
+    { "path": "/0/0/desc/0",   "kind": "paragraph" }
+  ]
+}

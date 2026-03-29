@@ -1,0 +1,11 @@
+{
+  "description": "Bold formatting inside a list item",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0",         "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0",       "kind": "list_item" },
+    { "path": "/0/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/0/1",   "kind": "strong" },
+    { "path": "/0/0/0/1/0", "kind": "text", "props": { "content": "bold" } }
+  ]
+}

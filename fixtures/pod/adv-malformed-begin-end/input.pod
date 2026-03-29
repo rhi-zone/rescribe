@@ -1,0 +1,3 @@
+=begin html
+
+<p>Unclosed begin block</p>

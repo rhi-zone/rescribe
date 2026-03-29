@@ -1,0 +1,7 @@
+{
+  "description": "X<entry> formatting code produces an invisible index_entry node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "raw_inline", "props": { "content": "term" } }
+  ]
+}

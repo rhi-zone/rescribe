@@ -1,0 +1,8 @@
+{
+  "description": "L</\"section\"> produces a link to a section in the current document",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "link", "props": { "url": "/\"DESCRIPTION\"" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "/\"DESCRIPTION\"" } }
+  ]
+}

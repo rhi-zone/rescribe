@@ -1,0 +1,5 @@
+=pod
+
+See L<perlpod> for details.
+
+=cut
