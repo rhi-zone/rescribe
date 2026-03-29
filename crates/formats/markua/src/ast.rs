@@ -45,6 +45,9 @@ pub struct Diagnostic {
 pub struct MarkuaDoc {
     pub blocks: Vec<Block>,
     pub span: Span,
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub description: Option<String>,
 }
 
 impl MarkuaDoc {
@@ -53,6 +56,9 @@ impl MarkuaDoc {
         MarkuaDoc {
             blocks: self.blocks.iter().map(Block::strip_spans).collect(),
             span: Span::NONE,
+            title: self.title.clone(),
+            author: self.author.clone(),
+            description: self.description.clone(),
         }
     }
 }
@@ -94,7 +100,19 @@ pub enum Block {
     },
     SpecialBlock {
         block_type: String,
-        inlines: Vec<Inline>,
+        children: Vec<Block>,
+        span: Span,
+    },
+    DefinitionList {
+        items: Vec<(Vec<Inline>, Vec<Block>)>,
+        span: Span,
+    },
+    PageBreak {
+        span: Span,
+    },
+    Figure {
+        caption: Vec<Inline>,
+        body: Box<Block>,
         span: Span,
     },
 }
@@ -109,7 +127,10 @@ impl Block {
             | Block::List { span, .. }
             | Block::Table { span, .. }
             | Block::HorizontalRule { span }
-            | Block::SpecialBlock { span, .. } => *span,
+            | Block::SpecialBlock { span, .. }
+            | Block::DefinitionList { span, .. }
+            | Block::PageBreak { span }
+            | Block::Figure { span, .. } => *span,
         }
     }
 
@@ -152,11 +173,31 @@ impl Block {
             Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
             Block::SpecialBlock {
                 block_type,
-                inlines,
+                children,
                 ..
             } => Block::SpecialBlock {
                 block_type: block_type.clone(),
-                inlines: inlines.iter().map(Inline::strip_spans).collect(),
+                children: children.iter().map(Block::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::DefinitionList { items, .. } => Block::DefinitionList {
+                items: items
+                    .iter()
+                    .map(|(term, def)| {
+                        (
+                            term.iter().map(Inline::strip_spans).collect(),
+                            def.iter().map(Block::strip_spans).collect(),
+                        )
+                    })
+                    .collect(),
+                span: Span::NONE,
+            },
+            Block::PageBreak { .. } => Block::PageBreak { span: Span::NONE },
+            Block::Figure {
+                caption, body, ..
+            } => Block::Figure {
+                caption: caption.iter().map(Inline::strip_spans).collect(),
+                body: Box::new(body.strip_spans()),
                 span: Span::NONE,
             },
         }
@@ -194,6 +235,10 @@ pub enum Inline {
     Strong(Vec<Inline>, Span),
     Emphasis(Vec<Inline>, Span),
     Strikethrough(Vec<Inline>, Span),
+    Subscript(Vec<Inline>, Span),
+    Superscript(Vec<Inline>, Span),
+    Underline(Vec<Inline>, Span),
+    SmallCaps(Vec<Inline>, Span),
     Code(String, Span),
     Link {
         url: String,
@@ -207,6 +252,18 @@ pub enum Inline {
     },
     LineBreak(Span),
     SoftBreak(Span),
+    FootnoteRef {
+        content: Vec<Inline>,
+        span: Span,
+    },
+    IndexTerm {
+        term: String,
+        span: Span,
+    },
+    MathInline {
+        content: String,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -216,10 +273,18 @@ impl Inline {
             | Inline::Strong(_, s)
             | Inline::Emphasis(_, s)
             | Inline::Strikethrough(_, s)
+            | Inline::Subscript(_, s)
+            | Inline::Superscript(_, s)
+            | Inline::Underline(_, s)
+            | Inline::SmallCaps(_, s)
             | Inline::Code(_, s)
             | Inline::LineBreak(s)
             | Inline::SoftBreak(s) => *s,
-            Inline::Link { span, .. } | Inline::Image { span, .. } => *span,
+            Inline::Link { span, .. }
+            | Inline::Image { span, .. }
+            | Inline::FootnoteRef { span, .. }
+            | Inline::IndexTerm { span, .. }
+            | Inline::MathInline { span, .. } => *span,
         }
     }
 
@@ -235,6 +300,18 @@ impl Inline {
             Inline::Strikethrough(ch, _) => {
                 Inline::Strikethrough(ch.iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
+            Inline::Subscript(ch, _) => {
+                Inline::Subscript(ch.iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Superscript(ch, _) => {
+                Inline::Superscript(ch.iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Underline(ch, _) => {
+                Inline::Underline(ch.iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::SmallCaps(ch, _) => {
+                Inline::SmallCaps(ch.iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
             Inline::Code(s, _) => Inline::Code(s.clone(), Span::NONE),
             Inline::Link { url, children, .. } => Inline::Link {
                 url: url.clone(),
@@ -248,6 +325,18 @@ impl Inline {
             },
             Inline::LineBreak(_) => Inline::LineBreak(Span::NONE),
             Inline::SoftBreak(_) => Inline::SoftBreak(Span::NONE),
+            Inline::FootnoteRef { content, .. } => Inline::FootnoteRef {
+                content: content.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::IndexTerm { term, .. } => Inline::IndexTerm {
+                term: term.clone(),
+                span: Span::NONE,
+            },
+            Inline::MathInline { content, .. } => Inline::MathInline {
+                content: content.clone(),
+                span: Span::NONE,
+            },
         }
     }
 }

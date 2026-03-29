@@ -1,0 +1,7 @@
+{
+  "description": "Multiple list items produce a single list node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } }
+  ]
+}

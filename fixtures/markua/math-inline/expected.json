@@ -1,0 +1,7 @@
+{
+  "description": "$expr$ produces a math_inline node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

@@ -19,6 +19,9 @@ pub fn emit_with_options(
     let markua_doc = markua::MarkuaDoc {
         blocks: markua_blocks,
         span: markua::Span::NONE,
+        title: None,
+        author: None,
+        description: None,
     };
     let output = markua::build(&markua_doc);
 
@@ -124,20 +127,9 @@ fn convert_block(node: &Node) -> markua::Block {
         node::DIV => {
             if let Some(class) = node.props.get_str("class") {
                 let block_type = class.to_string();
-                let inlines: Vec<markua::Inline> = node
-                    .children
-                    .iter()
-                    .flat_map(|child| {
-                        if child.kind.as_str() == node::PARAGRAPH {
-                            convert_inlines(&child.children)
-                        } else {
-                            Vec::new()
-                        }
-                    })
-                    .collect();
                 markua::Block::SpecialBlock {
                     block_type,
-                    inlines,
+                    children: convert_blocks(&node.children),
                     span: markua::Span::NONE,
                 }
             } else {

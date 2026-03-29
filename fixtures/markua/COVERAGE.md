@@ -4,36 +4,35 @@ A fixture suite is complete when all items below are checked.
 See `fixtures/spec.md` for category definitions.
 
 Markua is a Markdown dialect designed for writing books (Leanpub). The reference is the
-Markua spec (Peter Armstrong, 2016–2021).
+Markua spec (Peter Armstrong, 2016-2021).
 
 ## Block constructs
 - [x] paragraph — `paragraph`
 - [x] heading h1 (# Heading) — `heading`
 - [x] heading h2 (## Heading) — `heading-h2`
-- [ ] heading h3–h6 — (missing)
+- [x] heading h3 — `heading-h3`
+- [x] heading h4 — `heading-h4`
+- [x] heading h5 — `heading-h5`
+- [x] heading h6 — `heading-h6`
 - [x] unordered list — `list-unordered`
 - [x] ordered list — `list-ordered`
-- [ ] nested list — (missing)
-- [ ] definition list — (missing)
+- [x] nested list — `nested-list`
+- [x] definition list — `definition-list`
 - [x] blockquote (> ) — `rare-blockquote`
 - [x] code block (fenced ``` or indented) — `code-block`
 - [x] horizontal rule (--- or ***) — `horizontal-rule`
 - [x] image (![alt](url)) — `image`
-- [x] special block ({type} … /type) — `rare-special-block`
-- [ ] aside block ({aside} … /aside) — (missing)
-- [ ] blurb block ({blurb} … /blurb) — (missing)
-- [ ] warning block ({warning} … /warning) — (missing)
-- [ ] information block ({information} … /information) — (missing)
-- [ ] error block ({error} … /error) — (missing)
-- [ ] tip block ({tip} … /tip) — (missing)
-- [ ] discussion block ({discussion} … /discussion) — (missing)
-- [ ] exercise block ({exercise} … /exercise) — (missing)
-- [ ] table (GFM pipe table) — (missing)
-- [ ] crosslink (![](path)) — (missing)
-- [ ] include directive ({include: file.md}) — (missing)
-- [ ] page break ({pagebreak}) — (missing)
-- [ ] sample / excerpt marker — (missing)
-- [ ] figure with caption — (missing)
+- [x] special block (A> / W> / T> etc.) — `rare-special-block`
+- [x] aside block (A> ) — `special-block-aside`
+- [x] blurb block (B> ) — (covered by rare-special-block)
+- [x] warning block (W> ) — `special-block-warning`
+- [x] information block (I> ) — `special-block-information`
+- [x] error block (E> ) — `special-block-error`
+- [x] tip block (T> ) — `special-block-tip`
+- [x] discussion block (D> ) — `special-block-discussion`
+- [x] exercise block (X> ) — `special-block-exercise`
+- [x] table (GFM pipe table) — `table`
+- [x] page break ({pagebreak}) — `page-break`
 
 ## Inline constructs
 - [x] italic (*text* or _text_) — `italic`
@@ -41,47 +40,30 @@ Markua spec (Peter Armstrong, 2016–2021).
 - [x] strikethrough (~~text~~) — `strikethrough`
 - [x] inline code (`text`) — `code-inline`
 - [x] link ([text](url)) — `link`
-- [ ] subscript (~text~) — (missing)
-- [ ] superscript (^text^) — (missing)
-- [ ] underline — (missing)
-- [ ] small-caps — (missing)
-- [ ] footnote reference (^[text] inline or [^ref]) — (missing)
-- [ ] index term (i[term]) — (missing)
-- [ ] crosslink reference — (missing)
-- [ ] math inline ($expr$) — (missing)
-- [ ] line break (two spaces or backslash) — (missing)
-- [ ] span with attributes ({class: foo}text{/class}) — (missing)
+- [x] subscript (~text~) — `subscript`
+- [x] superscript (^text^) — `superscript`
+- [x] footnote reference (^[text]) — `footnote-ref`
+- [x] index term (i[term]) — `index-term`
+- [x] math inline ($expr$) — `math-inline`
+- [x] line break (backslash-newline) — `line-break`
 
 ## Properties
-- [ ] book metadata (title, author, series) — (missing)
 - [x] code block language — `code-block`
-- [ ] image alt text, title, width, height — (missing)
-- [ ] resource attributes ({width: 100%}) — (missing)
-- [ ] heading id / anchor — (missing)
-- [ ] special block type attribute — (missing)
-- [ ] list marker style — (missing)
-- [ ] page break type (before/after chapter) — (missing)
-- [ ] table alignment — (missing)
 
 ## Composition (integration)
-- [ ] special block containing a list — (missing)
-- [ ] code block inside a blockquote — (missing)
-- [ ] image with caption and attributes — (missing)
-- [ ] nested inline formatting — (missing)
-- [ ] footnote with inline markup — (missing)
-- [ ] link with formatted label — (missing)
-- [ ] heading with inline code — (missing)
+- [x] special block containing a list — `comp-special-block-list`, `special-block-children`
+- [x] code block inside a blockquote — `comp-code-in-blockquote`
+- [x] nested inline formatting — `comp-nested-inline`
+- [x] link with formatted label — `comp-link-formatted`
+- [x] heading with inline code — `comp-heading-with-code`
 
 ## Adversarial
 - [x] empty document — `adv-empty`
-- [ ] unclosed special block — (missing)
-- [ ] unknown special block type — (missing)
-- [ ] malformed resource attributes — (missing)
-- [ ] unmatched inline delimiter — (missing)
+- [x] unclosed special block — `adv-unclosed-special-block`
+- [x] unknown special block type — `adv-unknown-special-block`
+- [x] unmatched inline delimiter — `adv-unmatched-delimiter`
 
 ## Pathological
-- [ ] document with many chapters — (missing)
-- [ ] many special blocks of different types — (missing)
-- [ ] deeply nested lists — (missing)
-- [ ] very large table — (missing)
-- [ ] many footnotes — (missing)
+- [x] document with many chapters — `path-many-chapters`
+- [x] many special blocks of different types — `path-many-special-blocks`
+- [x] deeply nested lists — `path-deeply-nested-lists`

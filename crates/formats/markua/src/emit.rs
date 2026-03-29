@@ -58,7 +58,16 @@ fn emit_block(block: &Block, out: &mut String) {
                         emit_inlines(inlines, out);
                         out.push('\n');
                     }
-                    other => emit_block(other, out),
+                    other => {
+                        // Prefix each line with "> "
+                        let mut inner = String::new();
+                        emit_block(other, &mut inner);
+                        for line in inner.lines() {
+                            out.push_str("> ");
+                            out.push_str(line);
+                            out.push('\n');
+                        }
+                    }
                 }
             }
             out.push('\n');
@@ -112,7 +121,7 @@ fn emit_block(block: &Block, out: &mut String) {
 
         Block::SpecialBlock {
             block_type,
-            inlines,
+            children,
             ..
         } => {
             let prefix = match block_type.as_str() {
@@ -124,12 +133,61 @@ fn emit_block(block: &Block, out: &mut String) {
                 "discussion" => "D> ",
                 "question" => "Q> ",
                 "information" => "I> ",
+                "exercise" => "X> ",
                 _ => "",
             };
 
             if !prefix.is_empty() {
-                out.push_str(prefix);
-                emit_inlines(inlines, out);
+                for child in children {
+                    let mut inner = String::new();
+                    emit_block(child, &mut inner);
+                    for line in inner.trim_end().lines() {
+                        out.push_str(prefix);
+                        out.push_str(line);
+                        out.push('\n');
+                    }
+                }
+                out.push('\n');
+            }
+        }
+
+        Block::DefinitionList { items, .. } => {
+            for (term, def_blocks) in items {
+                emit_inlines(term, out);
+                out.push('\n');
+                for def_block in def_blocks {
+                    match def_block {
+                        Block::Paragraph { inlines, .. } => {
+                            out.push_str(": ");
+                            emit_inlines(inlines, out);
+                            out.push('\n');
+                        }
+                        other => {
+                            let mut inner = String::new();
+                            emit_block(other, &mut inner);
+                            for line in inner.trim_end().lines() {
+                                out.push_str(": ");
+                                out.push_str(line);
+                                out.push('\n');
+                            }
+                        }
+                    }
+                }
+            }
+            out.push('\n');
+        }
+
+        Block::PageBreak { .. } => {
+            out.push_str("{pagebreak}\n\n");
+        }
+
+        Block::Figure {
+            caption, body, ..
+        } => {
+            emit_block(body, out);
+            if !caption.is_empty() {
+                out.push_str("Figure: ");
+                emit_inlines(caption, out);
                 out.push_str("\n\n");
             }
         }
@@ -166,6 +224,30 @@ fn emit_inline(inline: &Inline, out: &mut String) {
             out.push_str("~~");
         }
 
+        Inline::Subscript(children, _) => {
+            out.push('~');
+            emit_inlines(children, out);
+            out.push('~');
+        }
+
+        Inline::Superscript(children, _) => {
+            out.push('^');
+            emit_inlines(children, out);
+            out.push('^');
+        }
+
+        Inline::Underline(children, _) => {
+            out.push_str("[underline]#");
+            emit_inlines(children, out);
+            out.push('#');
+        }
+
+        Inline::SmallCaps(children, _) => {
+            out.push_str("[smallcaps]#");
+            emit_inlines(children, out);
+            out.push('#');
+        }
+
         Inline::Code(s, _) => {
             if s.contains('`') {
                 out.push_str("`` ");
@@ -198,9 +280,27 @@ fn emit_inline(inline: &Inline, out: &mut String) {
             out.push(')');
         }
 
-        Inline::LineBreak(_) => out.push('\n'),
+        Inline::LineBreak(_) => out.push_str("\\\n"),
 
         Inline::SoftBreak(_) => out.push(' '),
+
+        Inline::FootnoteRef { content, .. } => {
+            out.push_str("^[");
+            emit_inlines(content, out);
+            out.push(']');
+        }
+
+        Inline::IndexTerm { term, .. } => {
+            out.push_str("i[");
+            out.push_str(term);
+            out.push(']');
+        }
+
+        Inline::MathInline { content, .. } => {
+            out.push('$');
+            out.push_str(content);
+            out.push('$');
+        }
     }
 }
 
@@ -212,11 +312,18 @@ pub fn collect_inline_text(inlines: &[Inline]) -> String {
             Inline::Text(s, _) | Inline::Code(s, _) => text.push_str(s),
             Inline::Strong(ch, _)
             | Inline::Emphasis(ch, _)
-            | Inline::Strikethrough(ch, _) => {
+            | Inline::Strikethrough(ch, _)
+            | Inline::Subscript(ch, _)
+            | Inline::Superscript(ch, _)
+            | Inline::Underline(ch, _)
+            | Inline::SmallCaps(ch, _) => {
                 text.push_str(&collect_inline_text(ch));
             }
             Inline::Link { children, .. } => text.push_str(&collect_inline_text(children)),
+            Inline::FootnoteRef { content, .. } => text.push_str(&collect_inline_text(content)),
             Inline::Image { alt, .. } => text.push_str(alt),
+            Inline::IndexTerm { term, .. } => text.push_str(term),
+            Inline::MathInline { content, .. } => text.push_str(content),
             Inline::LineBreak(_) => text.push('\n'),
             Inline::SoftBreak(_) => text.push(' '),
         }

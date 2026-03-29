@@ -1,0 +1,8 @@
+{
+  "description": "^[text] produces a footnote_ref node with inline content",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref" }
+  ]
+}

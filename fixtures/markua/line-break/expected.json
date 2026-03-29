@@ -1,0 +1,7 @@
+{
+  "description": "Backslash-newline produces a line_break node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

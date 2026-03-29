@@ -1,0 +1,7 @@
+{
+  "description": "Long list; parser handles many items without panic",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } }
+  ]
+}

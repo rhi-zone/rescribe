@@ -1,0 +1,8 @@
+{
+  "description": "Triple-hash heading produces a level-3 heading node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Level Three" } }
+  ]
+}

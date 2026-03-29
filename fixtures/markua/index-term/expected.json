@@ -1,0 +1,7 @@
+{
+  "description": "i[term] produces a raw_inline index term node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

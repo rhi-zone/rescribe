@@ -1,0 +1,9 @@
+{
+  "description": "Many special blocks of different types; parser handles all correctly",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "warning" } },
+    { "path": "/1", "kind": "div", "props": { "class": "aside" } },
+    { "path": "/2", "kind": "div", "props": { "class": "tip" } }
+  ]
+}

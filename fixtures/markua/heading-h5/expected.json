@@ -1,0 +1,8 @@
+{
+  "description": "Five-hash heading produces a level-5 heading node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 5 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Level Five" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "{pagebreak} directive produces a horizontal_rule (page break) node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "horizontal_rule" }
+  ]
+}

@@ -13,12 +13,23 @@
 //! ```
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
 pub use ast::{Block, Diagnostic, Inline, MarkuaDoc, Severity, Span, TableRow};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::{build, collect_inline_text, emit};
+pub use events::{EventIter, MarkuaEvent, OwnedMarkuaEvent};
 pub use parse::parse;
+pub use writer::Writer;
+
+/// Parse `input` and return a streaming iterator of [`MarkuaEvent`] items.
+pub fn events(input: &str) -> events::EventIter<'_> {
+    events::events(input)
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -176,6 +187,87 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_page_break() {
+        let (doc, _) = parse("{pagebreak}\n");
+        assert!(matches!(doc.blocks[0], Block::PageBreak { .. }));
+    }
+
+    #[test]
+    fn test_parse_page_break_hyphenated() {
+        let (doc, _) = parse("{page-break}\n");
+        assert!(matches!(doc.blocks[0], Block::PageBreak { .. }));
+    }
+
+    #[test]
+    fn test_parse_subscript() {
+        let (doc, _) = parse("H~2~O\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|i| matches!(i, Inline::Subscript(..))));
+    }
+
+    #[test]
+    fn test_parse_superscript() {
+        let (doc, _) = parse("x^2^\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|i| matches!(i, Inline::Superscript(..))));
+    }
+
+    #[test]
+    fn test_parse_footnote_ref() {
+        let (doc, _) = parse("text ^[a note] more\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|i| matches!(i, Inline::FootnoteRef { .. })));
+    }
+
+    #[test]
+    fn test_parse_index_term() {
+        let (doc, _) = parse("See i[Markua] here.\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|i| matches!(i, Inline::IndexTerm { term, .. } if term == "Markua")));
+    }
+
+    #[test]
+    fn test_parse_math_inline() {
+        let (doc, _) = parse("Solve $x^2 + 1 = 0$.\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|i| matches!(i, Inline::MathInline { .. })));
+    }
+
+    #[test]
+    fn test_parse_definition_list() {
+        let (doc, _) = parse("Term\n: Definition text\n");
+        assert!(matches!(doc.blocks[0], Block::DefinitionList { .. }));
+    }
+
+    #[test]
+    fn test_parse_table() {
+        let (doc, _) = parse("| A | B |\n| --- | --- |\n| 1 | 2 |\n");
+        assert!(matches!(doc.blocks[0], Block::Table { .. }));
+    }
+
+    #[test]
+    fn test_parse_special_block_with_children() {
+        let (doc, _) = parse("W> - item 1\nW> - item 2\n");
+        match &doc.blocks[0] {
+            Block::SpecialBlock { block_type, children, .. } => {
+                assert_eq!(block_type, "warning");
+                assert!(!children.is_empty());
+            }
+            _ => panic!("expected special block"),
+        }
+    }
+
+    #[test]
     fn test_build_paragraph() {
         let doc = MarkuaDoc {
             blocks: vec![Block::Paragraph {
@@ -183,6 +275,9 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            title: None,
+            author: None,
+            description: None,
         };
         let out = build(&doc);
         assert!(out.contains("Hello, world!"));
@@ -199,6 +294,9 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            title: None,
+            author: None,
+            description: None,
         };
         let out = build(&doc);
         assert!(out.contains("**bold**"));
@@ -213,6 +311,9 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            title: None,
+            author: None,
+            description: None,
         };
         let out = build(&doc);
         assert!(out.contains("# Title"));
@@ -227,6 +328,9 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            title: None,
+            author: None,
+            description: None,
         };
         let out = build(&doc);
         assert!(out.contains("```"));
@@ -245,5 +349,26 @@ mod tests {
         let (doc, _) = parse("**bold text**\n");
         let output = build(&doc);
         assert!(output.contains("**bold text**"));
+    }
+
+    #[test]
+    fn test_roundtrip_page_break() {
+        let (doc, _) = parse("{pagebreak}\n");
+        let output = build(&doc);
+        assert!(output.contains("{pagebreak}"));
+    }
+
+    #[test]
+    fn test_roundtrip_math_inline() {
+        let (doc, _) = parse("$x^2 + 1$\n");
+        let output = build(&doc);
+        assert!(output.contains("$x^2 + 1$"));
+    }
+
+    #[test]
+    fn test_roundtrip_footnote_ref() {
+        let (doc, _) = parse("^[a note]\n");
+        let output = build(&doc);
+        assert!(output.contains("^[a note]"));
     }
 }

@@ -1,0 +1,7 @@
+{
+  "description": "Unmatched inline delimiters are treated as literal text; parser does not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

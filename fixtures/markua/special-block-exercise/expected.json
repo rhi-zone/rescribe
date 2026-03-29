@@ -1,0 +1,9 @@
+{
+  "description": "X> prefix produces a div node with class=exercise",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "exercise" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "This is an exercise." } }
+  ]
+}

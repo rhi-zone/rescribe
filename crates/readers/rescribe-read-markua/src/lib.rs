@@ -83,13 +83,36 @@ fn convert_block(block: &markua::Block) -> Node {
 
         markua::Block::SpecialBlock {
             block_type,
-            inlines,
+            children,
             ..
+        } => Node::new(node::DIV)
+            .prop("class", block_type.as_str())
+            .children(convert_blocks(children)),
+
+        markua::Block::DefinitionList { items, .. } => {
+            let dl_nodes: Vec<Node> = items
+                .iter()
+                .flat_map(|(term, def_blocks)| {
+                    let dt = Node::new(node::DEFINITION_TERM).children(convert_inlines(term));
+                    let dd = Node::new(node::DEFINITION_DESC).children(convert_blocks(def_blocks));
+                    vec![dt, dd]
+                })
+                .collect();
+            Node::new(node::DEFINITION_LIST).children(dl_nodes)
+        }
+
+        markua::Block::PageBreak { .. } => Node::new(node::HORIZONTAL_RULE),
+
+        markua::Block::Figure {
+            caption, body, ..
         } => {
-            let para = Node::new(node::PARAGRAPH).children(convert_inlines(inlines));
-            Node::new(node::DIV)
-                .prop("class", block_type.as_str())
-                .children(vec![para])
+            let mut children = vec![convert_block(body)];
+            if !caption.is_empty() {
+                children.push(
+                    Node::new(node::PARAGRAPH).children(convert_inlines(caption)),
+                );
+            }
+            Node::new(node::FIGURE).children(children)
         }
     }
 }
@@ -123,6 +146,38 @@ fn convert_inline(inline: &markua::Inline) -> Node {
         markua::Inline::Image { url, alt, .. } => Node::new(node::IMAGE)
             .prop(prop::URL, url.as_str())
             .prop(prop::ALT, alt.as_str()),
+
+        markua::Inline::Subscript(children, _) => {
+            Node::new(node::SUBSCRIPT).children(convert_inlines(children))
+        }
+
+        markua::Inline::Superscript(children, _) => {
+            Node::new(node::SUPERSCRIPT).children(convert_inlines(children))
+        }
+
+        markua::Inline::Underline(children, _) => {
+            Node::new(node::UNDERLINE).children(convert_inlines(children))
+        }
+
+        markua::Inline::SmallCaps(children, _) => {
+            Node::new(node::SPAN)
+                .prop("style:variant", "small-caps")
+                .children(convert_inlines(children))
+        }
+
+        markua::Inline::FootnoteRef { content, .. } => {
+            Node::new(node::FOOTNOTE_REF).children(convert_inlines(content))
+        }
+
+        markua::Inline::IndexTerm { term, .. } => {
+            Node::new(node::RAW_INLINE)
+                .prop(prop::CONTENT, format!("i[{}]", term))
+                .prop("markua:type", "index-term")
+        }
+
+        markua::Inline::MathInline { content, .. } => {
+            Node::new("math_inline").prop(prop::CONTENT, content.as_str())
+        }
 
         markua::Inline::LineBreak(_) => Node::new(node::LINE_BREAK),
 

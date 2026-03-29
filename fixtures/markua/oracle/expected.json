@@ -1,0 +1,7 @@
+{
+  "description": "Comprehensive oracle sample covering all major Markua constructs",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } }
+  ]
+}

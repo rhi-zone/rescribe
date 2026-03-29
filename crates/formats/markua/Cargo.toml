@@ -5,3 +5,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Markua parser, AST, and builder — no rescribe dependency"
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "markua_bench"
+harness = false

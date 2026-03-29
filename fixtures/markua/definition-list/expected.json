@@ -1,0 +1,12 @@
+{
+  "description": "Term followed by : definition produces a definition_list node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Term" } },
+    { "path": "/0/1", "kind": "definition_desc" },
+    { "path": "/0/1/0", "kind": "paragraph" },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "The definition of the term." } }
+  ]
+}

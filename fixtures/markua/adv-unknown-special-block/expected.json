@@ -1,0 +1,7 @@
+{
+  "description": "Unknown special block prefix (Z>) treated as paragraph text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

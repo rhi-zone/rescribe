@@ -1,0 +1,7 @@
+{
+  "description": "Document with 50 chapters; parser handles large documents without panic",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } }
+  ]
+}

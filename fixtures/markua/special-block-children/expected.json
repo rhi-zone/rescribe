@@ -1,0 +1,8 @@
+{
+  "description": "Special block containing a list produces a div with a list child",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "warning" } },
+    { "path": "/0/0", "kind": "list", "props": { "ordered": false } }
+  ]
+}

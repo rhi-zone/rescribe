@@ -1058,6 +1058,9 @@ dependencies = [
 [[package]]
 name = "markua"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "markup5ever"

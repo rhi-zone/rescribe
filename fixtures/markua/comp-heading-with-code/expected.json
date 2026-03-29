@@ -1,0 +1,8 @@
+{
+  "description": "Heading containing inline code",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/1", "kind": "code", "props": { "content": "main" } }
+  ]
+}

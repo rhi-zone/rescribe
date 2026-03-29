@@ -1,0 +1,9 @@
+{
+  "description": "A> prefix produces a div node with class=aside",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "aside" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "This is an aside block." } }
+  ]
+}

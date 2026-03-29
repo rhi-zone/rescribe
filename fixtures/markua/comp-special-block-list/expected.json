@@ -1,0 +1,8 @@
+{
+  "description": "Special block (aside) containing a list",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "class": "aside" } },
+    { "path": "/0/0", "kind": "list" }
+  ]
+}
