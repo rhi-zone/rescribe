@@ -354,6 +354,50 @@ impl<'a> Parser<'a> {
 
         let rest = &line[3..];
 
+        // Check for footnote definition: .. [label] text
+        // Label is digits, *, or # (numbered, auto-symbol, auto-numbered).
+        if rest.starts_with('[') {
+            if let Some(close_bracket) = rest.find(']') {
+                let label = rest[1..close_bracket].trim();
+                let after_bracket = &rest[close_bracket + 1..];
+                // Must be followed by a space (and optional text) — not `[label]_` which is an inline ref
+                if after_bracket.starts_with(' ') || after_bracket.is_empty() {
+                    let first_line_text = after_bracket.trim().to_string();
+                    self.advance_line();
+
+                    // Collect continuation lines indented by ≥ 3 spaces
+                    let mut body = first_line_text;
+                    while !self.is_eof() {
+                        let cont = self.current_line().unwrap_or("");
+                        if cont.trim().is_empty() {
+                            // Blank line ends the footnote body
+                            break;
+                        }
+                        // Continuation line must be indented by at least 3 spaces
+                        let indent = cont
+                            .chars()
+                            .take_while(|c| *c == ' ' || *c == '\t')
+                            .count();
+                        if indent < 3 {
+                            break;
+                        }
+                        if !body.is_empty() {
+                            body.push(' ');
+                        }
+                        body.push_str(cont.trim());
+                        self.advance_line();
+                    }
+
+                    let inlines =
+                        parse_inline_content(&body, &self.link_targets);
+                    return Some(Block::FootnoteDef {
+                        label: label.to_string(),
+                        inlines,
+                    });
+                }
+            }
+        }
+
         // Check for comment (just .. with optional text but no ::)
         if !rest.contains("::") {
             // It's a comment, skip it
@@ -1051,6 +1095,20 @@ fn parse_inline_content(
                         pos = word_end + 1;
                         continue;
                     }
+                }
+            }
+        }
+
+        // Footnote reference: [label]_
+        if chars[pos] == '[' {
+            if let Some(close) = chars[pos + 1..].iter().position(|&c| c == ']') {
+                let close_abs = pos + 1 + close;
+                // Check for trailing _
+                if close_abs + 1 < chars.len() && chars[close_abs + 1] == '_' {
+                    let label: String = chars[pos + 1..close_abs].iter().collect();
+                    nodes.push(Inline::FootnoteRef { label });
+                    pos = close_abs + 2;
+                    continue;
                 }
             }
         }

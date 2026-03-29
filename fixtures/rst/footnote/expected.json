@@ -1,0 +1,11 @@
+{
+  "description": "Footnote reference and multi-line footnote definition with continuation lines",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "This is text " } },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "1" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "1" } },
+    { "path": "/1/0", "kind": "text", "props": { "content": "First line of the footnote. Second line of the footnote. Third line of the footnote." } }
+  ]
+}
