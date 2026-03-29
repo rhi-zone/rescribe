@@ -635,6 +635,13 @@ standalone library where the ecosystem gap justifies it.
   - [x] Oracle harness + benchmarks (2026-03-29)
   - [x] Fixtures: COVERAGE.md all boxes checked (2026-03-29)
   - [ ] Re-run fuzz clean after construct expansion
+- [ ] `markua` vertical — **4-Fuzz** → needs re-fuzz after expansion (2026-03-29)
+  - [x] No-panic fuzz gate + roundtrip fuzz — clean on original constructs; needs re-run
+  - [x] New constructs: DefinitionList, PageBreak, Figure blocks; SpecialBlock reworked to hold Vec<Block>; Subscript/Superscript/Underline/SmallCaps/FootnoteRef/IndexTerm/MathInline inlines (2026-03-29)
+  - [x] All API modes: ast + stream + batch + w-build + w-stream (2026-03-29)
+  - [x] Benchmarks: markua_parse_small, markua_parse_medium, markua_emit_medium (2026-03-29)
+  - [x] Fixtures: COVERAGE.md all boxes checked (2026-03-29)
+  - [ ] Re-run fuzz clean after construct expansion
 - [ ] MOBI reader (boko as reference)
 - [ ] KFX reader/writer (Ion spec + boko)
 - [ ] Remaining Tier B/C formats: audit and bring to target stage

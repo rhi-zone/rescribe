@@ -47,7 +47,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | textile | 5 | 5 | hand | – | – |
 | muse | 4 | 4 | hand | re-fuzz after expansion | – |
 | t2t | 4 | 4 | hand | re-fuzz after expansion | – |
-| markua | 4 | 2 | hand | fuzz | harness |
+| markua | 4 | 4 | hand | re-fuzz after expansion | – |
 | fountain | 4 | 2 | hand | – (harness N/A) | coverage |
 | typst | 1 | 2 | hand | partial→fixtures | harness |
 | texinfo | 4 | 4 | hand | – (harness N/A) | production |
