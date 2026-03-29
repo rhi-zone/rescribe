@@ -341,16 +341,17 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Benchmarks: muse_parse_small, muse_parse_medium, muse_emit_medium (2026-03-29)
   - [x] All API modes: ast + stream + batch + w-build + w-stream (2026-03-29)
   - [ ] Re-run fuzz clean after construct expansion (pre-req for 5-Production)
-- [x] `man-fmt` vertical — **4-Fuzz** (2026-03-21)
+- [ ] `man-fmt` vertical — **4-Fuzz** → needs re-fuzz after expansion (2026-03-29)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
   - [x] parse() infallible → (ManDoc, Vec<Diagnostic>)
-  - [x] No-panic fuzz gate (`fuzz_man_reader`) — 2M runs clean (2026-03-21)
-  - [x] Roundtrip fuzz target (`fuzz_man_roundtrip`) — 855K runs clean (2026-03-21)
-  - Note: lists excluded from roundtrip (`.IP \(bu` / `.IP N.` tags become term text in definition lists; structural limitation of man format)
-  - Note: headings excluded from text comparison (emitted uppercase; .TH always adds "UNTITLED" title)
-  - [ ] 100% construct coverage — tables, images, code inline, footnotes
-  - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
+  - [x] No-panic fuzz gate (`fuzz_man_reader`) — 2M runs clean; needs re-run
+  - [x] Roundtrip fuzz target (`fuzz_man_roundtrip`) — 855K runs clean; needs re-run
+  - [x] New constructs: IndentedParagraph, ExampleBlock, Comment blocks; Code/Superscript/Subscript inlines; special char escapes; .TH full metadata (2026-03-29)
+  - [x] All API modes: ast + stream + batch + w-build + w-stream (2026-03-29)
+  - [x] Oracle harness + benchmarks (2026-03-29)
+  - [x] Fixtures: COVERAGE.md mostly checked (few N/A items: .SY/.RS synopsis, \fP, \f[name]) (2026-03-29)
+  - [ ] Re-run fuzz clean after construct expansion
 - [x] `djot-fmt` vertical — **5-Production** (2026-03-29; writer signed off)
   - [x] All API modes: ast + stream + batch + w-build + w-stream
   - [x] Oracle harness: 100% word coverage on djot-reader.djot (ref=931)
@@ -623,15 +624,17 @@ feed(chunk) → StreamingReader → IrEvent → IrTransformer → IrEvent → St
 Tier B formats at 3-Harness or 2-Fixtures (where harness is N/A), each with a
 standalone library where the ecosystem gap justifies it.
 
-- [x] `t2t` vertical — **4-Fuzz** (2026-03-21)
+- [ ] `t2t` vertical — **4-Fuzz** → needs re-fuzz after expansion (2026-03-29)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
   - [x] parse() infallible → (T2tDoc, Vec<Diagnostic>)
-  - [x] No-panic fuzz gate (`fuzz_t2t_reader`) — 2M runs clean (2026-03-21)
-  - [x] Roundtrip fuzz target (`fuzz_t2t_roundtrip`) — 939K runs clean (2026-03-21)
-  - [x] Fixed URL sanitiser: ':' filtered to prevent http: + //italic// combining into URL patterns
-  - [x] Fixtures: blockquote, table, image added (2026-03-21)
-  - [ ] 100% construct coverage — raw blocks; footnotes; definition lists
+  - [x] No-panic fuzz gate (`fuzz_t2t_reader`) — 2M runs clean; needs re-run
+  - [x] Roundtrip fuzz target (`fuzz_t2t_roundtrip`) — 939K runs clean; needs re-run
+  - [x] New constructs: DefinitionList block; Verbatim/Tagged inlines; document header metadata (2026-03-29)
+  - [x] All API modes: ast + stream + batch + w-build + w-stream (2026-03-29)
+  - [x] Oracle harness + benchmarks (2026-03-29)
+  - [x] Fixtures: COVERAGE.md all boxes checked (2026-03-29)
+  - [ ] Re-run fuzz clean after construct expansion
 - [ ] MOBI reader (boko as reference)
 - [ ] KFX reader/writer (Ion spec + boko)
 - [ ] Remaining Tier B/C formats: audit and bring to target stage

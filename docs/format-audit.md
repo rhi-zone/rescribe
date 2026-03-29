@@ -46,7 +46,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | asciidoc | 5 | 5 | hand | – | – |
 | textile | 5 | 5 | hand | – | – |
 | muse | 4 | 4 | hand | re-fuzz after expansion | – |
-| t2t | 4 | 2 | hand | fuzz | harness |
+| t2t | 4 | 4 | hand | re-fuzz after expansion | – |
 | markua | 4 | 2 | hand | fuzz | harness |
 | fountain | 4 | 2 | hand | – (harness N/A) | coverage |
 | typst | 1 | 2 | hand | partial→fixtures | harness |
@@ -55,7 +55,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | pod | 4 | 2 | hand | fuzz | harness |
 | haddock | 4 | 2 | hand | fuzz | harness |
 | ansi | 4 | 2 | hand | – (harness N/A; production) | coverage |
-| man | 4 | 2 | hand | coverage | fuzz |
+| man | 4 | 4 | hand | re-fuzz after expansion | – |
 
 † Pandoc cannot read AsciiDoc (`--from asciidoc` unsupported); consider asciidoctor as alternate oracle.
 
