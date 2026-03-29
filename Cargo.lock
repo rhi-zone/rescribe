@@ -1112,6 +1112,9 @@ dependencies = [
 [[package]]
 name = "muse-fmt"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "native"

@@ -13,3 +13,10 @@ reader-streaming = ["reader-ast"]
 reader-batch = []
 writer-streaming = []
 writer-builder = ["reader-ast", "writer-streaming"]
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "muse_bench"
+harness = false
