@@ -57,8 +57,20 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            // List - but not bold **text**
+            // Definition list: ; term\n: definition
             let trimmed = line.trim_start();
+            if trimmed.starts_with("; ") || trimmed == ";" {
+                nodes.push(self.parse_definition_list());
+                continue;
+            }
+
+            // Blockquote (> prefix)
+            if trimmed.starts_with("> ") || trimmed == ">" {
+                nodes.push(self.parse_blockquote());
+                continue;
+            }
+
+            // List - but not bold **text**
             if (trimmed.starts_with('*') && !trimmed.starts_with("**"))
                 || (trimmed.starts_with('#') && !trimmed.starts_with("##"))
             {
@@ -177,6 +189,81 @@ impl<'a> Parser<'a> {
         TableRow { cells, span: Span::NONE }
     }
 
+    fn parse_definition_list(&mut self) -> Block {
+        let mut items = Vec::new();
+
+        while self.pos < self.lines.len() {
+            let line = self.lines[self.pos];
+            let trimmed = line.trim_start();
+
+            if !trimmed.starts_with("; ") && trimmed != ";" {
+                // Check if next line is a definition (: prefix)
+                break;
+            }
+
+            // Parse the term
+            let term_text = if trimmed == ";" { "" } else { trimmed[2..].trim() };
+            let term = Self::parse_inline(term_text);
+            self.pos += 1;
+
+            // Parse the description (: prefix on the next line)
+            let desc = if self.pos < self.lines.len() {
+                let next = self.lines[self.pos].trim_start();
+                if let Some(stripped) = next.strip_prefix(": ") {
+                    let desc_text = stripped.trim();
+                    self.pos += 1;
+                    Self::parse_inline(desc_text)
+                } else if next == ":" {
+                    self.pos += 1;
+                    Vec::new()
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+
+            items.push(DefinitionItem { term, desc });
+        }
+
+        Block::DefinitionList { items, span: Span::NONE }
+    }
+
+    fn parse_blockquote(&mut self) -> Block {
+        let mut children = Vec::new();
+        let mut text = String::new();
+
+        while self.pos < self.lines.len() {
+            let line = self.lines[self.pos];
+            let trimmed = line.trim_start();
+
+            if let Some(stripped) = trimmed.strip_prefix("> ") {
+                if !text.is_empty() {
+                    text.push(' ');
+                }
+                text.push_str(stripped);
+                self.pos += 1;
+            } else if trimmed == ">" {
+                // Empty blockquote line — flush current paragraph if any
+                if !text.is_empty() {
+                    let inlines = Self::parse_inline(&text);
+                    children.push(Block::Paragraph { inlines, span: Span::NONE });
+                    text.clear();
+                }
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+
+        if !text.is_empty() {
+            let inlines = Self::parse_inline(&text);
+            children.push(Block::Paragraph { inlines, span: Span::NONE });
+        }
+
+        Block::Blockquote { children, span: Span::NONE }
+    }
+
     fn parse_list(&mut self) -> Block {
         let first_line = self.lines[self.pos];
         let first_char = first_line.trim_start().chars().next().unwrap();
@@ -282,6 +369,9 @@ impl<'a> Parser<'a> {
                 || (trimmed.starts_with('*') && !trimmed.starts_with("**"))
                 || (trimmed.starts_with('#') && !trimmed.starts_with("##"))
                 || trimmed.starts_with("{{{")
+                || trimmed.starts_with("> ")
+                || trimmed == ">"
+                || trimmed.starts_with("; ")
             {
                 break;
             }
@@ -307,6 +397,13 @@ impl<'a> Parser<'a> {
         let mut i = 0;
 
         while i < chars.len() {
+            // Escape character ~
+            if chars[i] == '~' && i + 1 < chars.len() {
+                current.push(chars[i + 1]);
+                i += 2;
+                continue;
+            }
+
             // Line break \\
             if i + 1 < chars.len() && chars[i] == '\\' && chars[i + 1] == '\\' {
                 if !current.is_empty() {

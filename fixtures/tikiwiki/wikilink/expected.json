@@ -1,0 +1,10 @@
+{
+  "description": "Wiki link with ((page)) syntax",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "See " } },
+    { "path": "/0/1", "kind": "wikilink", "props": { "page": "WikiWord" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "WikiWord" } }
+  ]
+}

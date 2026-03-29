@@ -1,0 +1,11 @@
+{
+  "description": "Very wide table (20 columns)",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_header" },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" }
+  ]
+}

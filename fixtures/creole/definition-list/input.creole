@@ -1,0 +1,4 @@
+; Cat
+: A small furry animal
+; Dog
+: A loyal companion

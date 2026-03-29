@@ -1,0 +1,7 @@
+{
+  "description": "Unclosed {CODE} block still produces a code block node",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "code_block" }
+  ]
+}

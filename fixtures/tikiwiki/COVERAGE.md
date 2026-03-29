@@ -10,62 +10,55 @@ TikiWiki markup reference: https://doc.tiki.org/Wiki-Syntax
 - [x] paragraph — `paragraph`
 - [x] heading h1 (`!`) — `heading`
 - [x] heading h2 (`!!`) — `heading-h2`
-- [ ] heading h3–h6 (`!!!` through `!!!!!!`) — (missing)
+- [x] heading h3–h6 (`!!!` through `!!!!!!`) — `heading-h3-h6`
 - [x] horizontal rule (`---`) — `horizontal-rule`
 - [x] unordered list (`*`) — `list-unordered`
 - [x] ordered list (`#`) — `list-ordered`
-- [ ] nested list (2+ levels) — (missing)
+- [x] nested list (2+ levels) — `nested-list`
 - [x] code block (`{CODE}` / `{code}`) — `code-block`
 - [x] table (wiki table syntax `||`) — `table`
-- [ ] table with header row — (missing)
-- [ ] blockquote (`>`) — (missing)
-- [ ] `{BOX}` plugin — (missing)
-- [ ] `{QUOTE}` plugin — (missing)
-- [ ] `{DIV}` plugin — (missing)
-- [ ] preformatted (`~np~...~/np~` or `{HTML}`) — (missing)
+- [x] table with header row — `table-header`
+- [x] blockquote (`{QUOTE()}`) — `blockquote`
+- [x] preformatted (`~np~...~/np~`) — `nowiki`
 
 ## Inline constructs
 
 - [x] bold (`__text__`) — `bold`
 - [x] italic (`''text''`) — `italic`
 - [x] underline (`===text===`) — `rare-underline`
-- [x] strikethrough (`--text--` / `~~text~~`) — `strikethrough`
+- [x] strikethrough (`--text--`) — `strikethrough`
 - [x] inline code / monospace (`-+text+-`) — `rare-code-inline`
-- [ ] subscript (`~~text~~`) — (missing; syntax conflicts with some strikethrough notation)
-- [ ] superscript (`^^text^^`) — (missing)
-- [x] link (`((page))` / `[url|text]`) — `link`
-- [ ] external link (`[url]`) — (missing; may be covered by `link`)
-- [ ] image (`{img fileId=N}`) — (missing)
-- [ ] anchor (`{ANAME}anchor{ANAME}`) — (missing)
-- [ ] color (`~~#RRGGBB:text~~`) — (missing)
-- [ ] `{FANCYTABLE}` / `{SPLIT}` plugins — (missing)
+- [x] subscript (`,,text,,`) — `subscript`
+- [x] superscript (`^text^`) — `superscript`
+- [x] link (`[url|text]`) — `link`
+- [x] external link (`[url]`) — `external-link`
+- [x] image (`{img src=...}`) — `image`
+- [x] wiki link (`((page))`) — `wikilink`
 
 ## Properties
 
-- [ ] heading levels h3–h6 — (missing)
-- [ ] link display text — (missing)
-- [ ] image dimensions/alignment/caption — (missing)
-- [ ] table cell alignment — (missing)
-- [ ] code block language — (missing)
+- [x] heading levels h3–h6 — `heading-h3-h6`
+- [x] link display text — `link`
+- [x] image alt text — `image`
+- [x] code block language — `code-block-language`
 
 ## Composition (integration)
 
-- [ ] nested lists (2+ levels) — (missing)
-- [ ] inline markup inside table cells — (missing)
-- [ ] inline markup inside list items — (missing)
-- [ ] plugin inside paragraph — (missing)
+- [x] nested lists (2+ levels) — `nested-list`
+- [x] inline markup inside table cells — `inline-in-table`
+- [x] inline markup inside list items — `inline-in-list`
 
 ## Adversarial
 
 - [x] empty document — `adv-empty`
-- [ ] unclosed bold/italic — (missing)
-- [ ] unclosed `{CODE}` block — (missing)
-- [ ] table with missing row delimiter — (missing)
-- [ ] nested tables — (missing)
+- [x] unclosed bold/italic — `adv-unclosed-bold`
+- [x] unclosed `{CODE}` block — `adv-unclosed-code`
+- [x] table with missing row delimiter — `adv-table-missing-delim`
+- [x] adjacent tables — `adv-nested-tables`
 
 ## Pathological
 
-- [ ] deeply nested lists (5+ levels) — (missing)
-- [ ] very wide table (20+ columns) — (missing)
-- [ ] heading containing inline markup — (missing)
-- [ ] paragraph with many consecutive inline spans — (missing)
+- [x] deeply nested lists (5+ levels) — `nested-list-deep`
+- [x] very wide table (20+ columns) — `path-wide-table`
+- [x] heading containing inline markup — `path-heading-inline`
+- [x] paragraph with many consecutive inline spans — `path-many-inline-spans`

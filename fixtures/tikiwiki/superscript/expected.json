@@ -1,0 +1,10 @@
+{
+  "description": "Superscript with ^text^ syntax",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "E=mc" } },
+    { "path": "/0/1", "kind": "superscript" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "2" } }
+  ]
+}

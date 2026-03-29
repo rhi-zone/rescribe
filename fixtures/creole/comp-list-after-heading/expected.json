@@ -1,0 +1,8 @@
+{
+  "description": "List immediately following heading",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/1", "kind": "list", "props": { "ordered": false } }
+  ]
+}

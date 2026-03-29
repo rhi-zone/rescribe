@@ -1,0 +1,7 @@
+{
+  "description": "Unclosed nowiki block does not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "code_block" }
+  ]
+}

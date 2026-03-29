@@ -154,6 +154,18 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n");
         }
 
+        Block::DefinitionList { items, .. } => {
+            for item in items {
+                ctx.write("; ");
+                build_inlines(&item.term, ctx);
+                ctx.write("\n");
+                ctx.write(": ");
+                build_inlines(&item.desc, ctx);
+                ctx.write("\n");
+            }
+            ctx.write("\n");
+        }
+
         Block::HorizontalRule(_) => {
             ctx.write("----\n\n");
         }

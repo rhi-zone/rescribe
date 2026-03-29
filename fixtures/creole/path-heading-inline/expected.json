@@ -1,0 +1,14 @@
+{
+  "description": "Heading containing inline markup",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "A " } },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "bold" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " and " } },
+    { "path": "/0/3", "kind": "emphasis" },
+    { "path": "/0/3/0", "kind": "text", "props": { "content": "italic" } },
+    { "path": "/0/4", "kind": "text", "props": { "content": " heading" } }
+  ]
+}

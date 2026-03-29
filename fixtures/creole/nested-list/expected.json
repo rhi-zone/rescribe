@@ -1,0 +1,14 @@
+{
+  "description": "Nested list with 2 levels",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Item one" } },
+    { "path": "/0/0/1", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0/1/0/0/0", "kind": "text", "props": { "content": "Nested unordered" } },
+    { "path": "/0/0/1/1/0/0", "kind": "text", "props": { "content": "Nested again" } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Item two" } }
+  ]
+}

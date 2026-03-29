@@ -1,0 +1,9 @@
+{
+  "description": "Two-level nested unordered list",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Item 1" } }
+  ]
+}

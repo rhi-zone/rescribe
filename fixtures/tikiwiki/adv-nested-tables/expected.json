@@ -1,0 +1,8 @@
+{
+  "description": "Adjacent tables separated by blank line",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/1", "kind": "table" }
+  ]
+}

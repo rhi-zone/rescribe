@@ -77,6 +77,10 @@ pub enum Block {
         rows: Vec<TableRow>,
         span: Span,
     },
+    DefinitionList {
+        items: Vec<DefinitionItem>,
+        span: Span,
+    },
     HorizontalRule(Span),
 }
 
@@ -112,7 +116,27 @@ impl Block {
                 rows: rows.into_iter().map(|r| r.strip_spans()).collect(),
                 span: Span::NONE,
             },
+            Block::DefinitionList { items, .. } => Block::DefinitionList {
+                items: items.into_iter().map(|i| i.strip_spans()).collect(),
+                span: Span::NONE,
+            },
             Block::HorizontalRule(_) => Block::HorizontalRule(Span::NONE),
+        }
+    }
+}
+
+/// A definition list item (term + description).
+#[derive(Debug, Clone)]
+pub struct DefinitionItem {
+    pub term: Vec<Inline>,
+    pub desc: Vec<Inline>,
+}
+
+impl DefinitionItem {
+    pub fn strip_spans(self) -> Self {
+        DefinitionItem {
+            term: self.term.into_iter().map(|i| i.strip_spans()).collect(),
+            desc: self.desc.into_iter().map(|i| i.strip_spans()).collect(),
         }
     }
 }

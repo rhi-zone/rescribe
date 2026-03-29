@@ -434,6 +434,9 @@ dependencies = [
 [[package]]
 name = "creole"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "criterion"
@@ -571,6 +574,9 @@ version = "0.1.0"
 [[package]]
 name = "dokuwiki"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "ecb"
@@ -918,6 +924,9 @@ checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 [[package]]
 name = "jira-fmt"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "jobserver"
@@ -1098,6 +1107,9 @@ dependencies = [
 [[package]]
 name = "mediawiki-fmt"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "memchr"
@@ -3367,6 +3379,9 @@ dependencies = [
 [[package]]
 name = "tikiwiki"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "time"
@@ -3497,6 +3512,9 @@ checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 [[package]]
 name = "twiki"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "type1-encoding-parser"
@@ -3688,6 +3706,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vimwiki-fmt"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "walkdir"
@@ -3974,6 +3995,9 @@ dependencies = [
 [[package]]
 name = "xwiki"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "xz2"
@@ -4027,6 +4051,9 @@ dependencies = [
 [[package]]
 name = "zimwiki"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "zip"

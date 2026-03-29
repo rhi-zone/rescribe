@@ -7,9 +7,37 @@ pub mod ast;
 pub mod emit;
 pub mod parse;
 
-pub use ast::{Block, CreoleDoc, Diagnostic, Inline, Severity, Span, TableCell, TableRow};
+#[cfg(feature = "reader-streaming")]
+pub mod events;
+
+#[cfg(feature = "reader-batch")]
+pub mod batch;
+
+#[cfg(feature = "writer-streaming")]
+pub mod writer;
+
+pub use ast::{
+    Block, CreoleDoc, DefinitionItem, Diagnostic, Inline, Severity, Span, TableCell, TableRow,
+};
 pub use emit::{build, collect_inline_text};
 pub use parse::parse;
+
+#[cfg(feature = "reader-streaming")]
+pub use events::{Event, EventIter, OwnedEvent};
+
+#[cfg(feature = "reader-batch")]
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
+
+#[cfg(feature = "writer-streaming")]
+pub use writer::Writer;
+
+/// Parse `input` and return a streaming iterator of events.
+#[cfg(feature = "reader-streaming")]
+pub fn events(input: &str) -> events::EventIter {
+    events::events(input)
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -92,6 +120,38 @@ mod tests {
         let (doc, _) = parse("{{{code}}}\n");
         assert_eq!(doc.blocks.len(), 1);
         assert!(matches!(doc.blocks[0], Block::CodeBlock { .. }));
+    }
+
+    #[test]
+    fn test_parse_definition_list() {
+        let (doc, _) = parse("; Term\n: Definition\n");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::DefinitionList { items, .. } = &doc.blocks[0] else {
+            panic!("expected definition list");
+        };
+        assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_blockquote() {
+        let (doc, _) = parse("> quoted text\n");
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::Blockquote { .. }));
+    }
+
+    #[test]
+    fn test_parse_escape() {
+        let (doc, _) = parse("~**not bold~**\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        // Should have a single text node with literal **not bold**
+        assert_eq!(inlines.len(), 1);
+        if let Inline::Text(s, _) = &inlines[0] {
+            assert_eq!(s, "**not bold**");
+        } else {
+            panic!("expected text, got {:?}", inlines[0]);
+        }
     }
 
     #[test]
@@ -235,5 +295,21 @@ mod tests {
         assert!(output.contains("{{{\n"));
         assert!(output.contains("print('hi')"));
         assert!(output.contains("}}}\n"));
+    }
+
+    #[test]
+    fn test_build_definition_list() {
+        let doc = CreoleDoc {
+            blocks: vec![Block::DefinitionList {
+                items: vec![DefinitionItem {
+                    term: vec![Inline::Text("Term".into(), Span::NONE)],
+                    desc: vec![Inline::Text("Definition".into(), Span::NONE)],
+                }],
+                span: Span::NONE,
+            }],
+        };
+        let output = build(&doc);
+        assert!(output.contains("; Term"));
+        assert!(output.contains(": Definition"));
     }
 }

@@ -4,12 +4,26 @@
 //! Used by `rescribe-read-tikiwiki` and `rescribe-write-tikiwiki` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
-pub use ast::{Block, Diagnostic, Inline, Severity, Span, TableRow, TikiwikiDoc};
+// Re-export everything callers need.
+pub use ast::{
+    Block, Diagnostic, Inline, ListItem, Severity, Span, TableCell, TableRow, TikiwikiDoc,
+};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::{build, collect_inline_text};
+pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
+pub use writer::Writer;
+
+/// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
+pub fn tikiwiki_events(input: &str) -> events::EventIter<'_> {
+    events::events(input)
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -43,7 +57,7 @@ mod tests {
 
     #[test]
     fn test_parse_list() {
-        let (doc, _) = parse("*Item 1\n*Item 2");
+        let (doc, _) = parse("* Item 1\n* Item 2");
         assert_eq!(doc.blocks.len(), 1);
         if let Block::List { .. } = &doc.blocks[0] {
             // OK
@@ -74,7 +88,7 @@ mod tests {
             span: Span::NONE,
         };
         let out = build(&doc);
-        assert!(out.contains("!Title"));
+        assert!(out.contains("! Title"));
     }
 
     #[test]
@@ -142,12 +156,95 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_superscript() {
+        let (doc, _) = parse("H^2^O");
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Superscript(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_subscript() {
+        let (doc, _) = parse("H,,2,,O");
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Subscript(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_wikilink() {
+        let (doc, _) = parse("See ((WikiWord))");
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::WikiLink { .. })));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_image() {
+        let (doc, _) = parse("{img src=image.png}");
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Image { .. })));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_nowiki() {
+        let (doc, _) = parse("~np~raw __text__~/np~");
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Nowiki(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_blockquote() {
+        let (doc, _) = parse("{QUOTE()}\nSome quoted text\n{QUOTE}");
+        assert!(matches!(doc.blocks[0], Block::Blockquote { .. }));
+    }
+
+    #[test]
     fn test_roundtrip_simple() {
-        let input = "!Heading\n\nParagraph text\n\n__bold__";
+        let input = "! Heading\n\nParagraph text\n\n__bold__";
         let (doc, _) = parse(input);
         let output = build(&doc);
-        // Parse again to verify consistency
         let (doc2, _) = parse(&output);
         assert_eq!(doc.blocks.len(), doc2.blocks.len());
+    }
+
+    #[test]
+    fn test_parse_sample_no_panic() {
+        // Adversarial: arbitrary bytes must not panic
+        let samples = [
+            "",
+            "!",
+            "!!!!!!! too many",
+            "__unclosed bold",
+            "''unclosed italic",
+            "{CODE()\nunclosed code block",
+            "||unclosed|table",
+            "***deeply nested",
+            "[unclosed link",
+            "((unclosed wikilink",
+            "~np~unclosed nowiki",
+            "---",
+            "\n\n\n\n",
+            "normal text",
+            "{img src=}",
+            "^unclosed super",
+            ",,unclosed sub",
+            "--unclosed strike",
+        ];
+        for sample in &samples {
+            let _ = parse(sample);
+        }
     }
 }

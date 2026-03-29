@@ -1,0 +1,8 @@
+{
+  "description": "Nowiki inline with ~np~...~/np~ preserves raw text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "nowiki", "props": { "content": "__not bold__" } }
+  ]
+}

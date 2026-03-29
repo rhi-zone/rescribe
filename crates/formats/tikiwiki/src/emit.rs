@@ -20,10 +20,15 @@ pub fn collect_inline_text(inlines: &[Inline]) -> String {
             Inline::Bold(c, _)
             | Inline::Italic(c, _)
             | Inline::Underline(c, _)
-            | Inline::Strikethrough(c, _) => s.push_str(&collect_inline_text(c)),
+            | Inline::Strikethrough(c, _)
+            | Inline::Superscript(c, _)
+            | Inline::Subscript(c, _) => s.push_str(&collect_inline_text(c)),
             Inline::Code(t, _) => s.push_str(t),
-            Inline::Link { children, .. } => s.push_str(&collect_inline_text(children)),
+            Inline::Link { children, .. } | Inline::WikiLink { children, .. } => {
+                s.push_str(&collect_inline_text(children));
+            }
             Inline::Image { alt, .. } => s.push_str(alt),
+            Inline::Nowiki(t, _) => s.push_str(t),
             Inline::LineBreak { .. } => s.push('\n'),
         }
     }
@@ -41,6 +46,7 @@ fn build_block(block: &Block, output: &mut String) {
             for _ in 0..(*level as usize).min(6) {
                 output.push('!');
             }
+            output.push(' ');
             build_inlines(inlines, output);
             output.push('\n');
         }
@@ -58,19 +64,17 @@ fn build_block(block: &Block, output: &mut String) {
             output.push_str("{CODE}\n\n");
         }
 
-        Block::Blockquote { inlines, .. } => {
-            output.push('^');
-            build_inlines(inlines, output);
-            output.push_str("^\n\n");
+        Block::Blockquote { blocks, .. } => {
+            output.push_str("{QUOTE()}\n");
+            for block in blocks {
+                build_block(block, output);
+            }
+            output.push_str("{QUOTE}\n\n");
         }
 
         Block::List { ordered, items, .. } => {
             let marker = if *ordered { '#' } else { '*' };
-            for item_inlines in items {
-                output.push(marker);
-                build_inlines(item_inlines, output);
-                output.push('\n');
-            }
+            build_list_items(items, output, marker, 1);
             output.push('\n');
         }
 
@@ -81,7 +85,13 @@ fn build_block(block: &Block, output: &mut String) {
                     if i > 0 {
                         output.push('|');
                     }
-                    build_inlines(cell, output);
+                    if row.is_header {
+                        output.push('^');
+                        build_inlines(&cell.inlines, output);
+                        output.push('^');
+                    } else {
+                        build_inlines(&cell.inlines, output);
+                    }
                 }
                 output.push_str("||\n");
             }
@@ -90,6 +100,22 @@ fn build_block(block: &Block, output: &mut String) {
 
         Block::HorizontalRule { .. } => {
             output.push_str("---\n\n");
+        }
+    }
+}
+
+fn build_list_items(items: &[ListItem], output: &mut String, marker: char, depth: usize) {
+    for item in items {
+        for _ in 0..depth {
+            output.push(marker);
+        }
+        output.push(' ');
+        build_inlines(&item.inlines, output);
+        output.push('\n');
+        for child in &item.children {
+            if let Block::List { items: nested_items, .. } = child {
+                build_list_items(nested_items, output, marker, depth + 1);
+            }
         }
     }
 }
@@ -128,6 +154,18 @@ fn build_inline(inline: &Inline, output: &mut String) {
             output.push_str("--");
         }
 
+        Inline::Superscript(children, _) => {
+            output.push('^');
+            build_inlines(children, output);
+            output.push('^');
+        }
+
+        Inline::Subscript(children, _) => {
+            output.push_str(",,");
+            build_inlines(children, output);
+            output.push_str(",,");
+        }
+
         Inline::Code(s, _) => {
             output.push_str("-+");
             output.push_str(s);
@@ -144,6 +182,18 @@ fn build_inline(inline: &Inline, output: &mut String) {
             output.push(']');
         }
 
+        Inline::WikiLink { page, children, .. } => {
+            output.push_str("((");
+            output.push_str(page);
+            // Only emit |label if the label differs from the page name
+            let label_text = collect_inline_text(children);
+            if label_text != *page {
+                output.push('|');
+                build_inlines(children, output);
+            }
+            output.push_str("))");
+        }
+
         Inline::Image { url, alt, .. } => {
             output.push_str("{img src=\"");
             output.push_str(url);
@@ -152,6 +202,12 @@ fn build_inline(inline: &Inline, output: &mut String) {
                 output.push_str(alt);
             }
             output.push_str("\"}");
+        }
+
+        Inline::Nowiki(s, _) => {
+            output.push_str("~np~");
+            output.push_str(s);
+            output.push_str("~/np~");
         }
 
         Inline::LineBreak { .. } => output.push_str("%%%"),
