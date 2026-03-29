@@ -1,0 +1,7 @@
+{
+  "description": "Table with missing |} close does not crash",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "table" }
+  ]
+}

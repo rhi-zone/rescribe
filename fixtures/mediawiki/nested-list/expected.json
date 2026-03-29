@@ -1,0 +1,7 @@
+{
+  "description": "Nested list with 2 levels",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list" }
+  ]
+}

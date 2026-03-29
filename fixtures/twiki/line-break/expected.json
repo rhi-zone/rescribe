@@ -1,0 +1,10 @@
+{
+  "description": "Forced line break with %BR%",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Line one" } },
+    { "path": "/0/1", "kind": "line_break" },
+    { "path": "/0/2", "kind": "text", "props": { "content": "Line two" } }
+  ]
+}

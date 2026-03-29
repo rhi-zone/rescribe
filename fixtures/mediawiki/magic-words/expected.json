@@ -1,0 +1,8 @@
+{
+  "description": "Magic words (__TOC__) are skipped",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Some content here." } }
+  ]
+}

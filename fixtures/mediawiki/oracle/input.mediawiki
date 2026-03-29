@@ -1,0 +1,49 @@
+= Top-Level Heading =
+
+This is a paragraph with '''bold''', ''italic'', and <code>inline code</code>.
+
+== Second Level ==
+
+A link: [[Main Page|click here]]. An external link: [https://example.com Example].
+
+=== Third Level ===
+
+* Unordered item one
+* Unordered item two
+
+# Ordered item one
+# Ordered item two
+
+; Term
+: Definition of the term.
+
+----
+
+<blockquote>
+This is a blockquote.
+</blockquote>
+
+{|
+! Header 1 !! Header 2
+|-
+| Cell 1 || Cell 2
+|}
+
+<syntaxhighlight lang="python">
+def hello():
+    print("hello")
+</syntaxhighlight>
+
+Some text with a footnote<ref>This is the footnote.</ref>.
+
+Inline math: <math>x^2 + y^2 = r^2</math>.
+
+Text with <u>underline</u>, <s>strikethrough</s>, <sup>super</sup>, <sub>sub</sub>.
+
+[[File:photo.jpg|A photo]]
+
+<pre>Preformatted text here.</pre>
+
+<nowiki>'''This is not bold'''</nowiki>
+
+{{Template|arg=value}}

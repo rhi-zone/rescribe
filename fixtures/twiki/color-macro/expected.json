@@ -1,0 +1,7 @@
+{
+  "description": "%RED%...%ENDCOLOR% color macros preserved as raw inlines",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

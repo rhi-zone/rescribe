@@ -1,6 +1,6 @@
 //! MediaWiki AST types, Span, and Diagnostic.
 
-// ── Span / Diagnostic ─────────────────────────────────────────────────────────
+// -- Span / Diagnostic -------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Span {
@@ -35,7 +35,7 @@ impl Diagnostic {
     }
 }
 
-// ── AST ───────────────────────────────────────────────────────────────────────
+// -- AST ----------------------------------------------------------------------
 
 /// A parsed MediaWiki document.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -66,6 +66,7 @@ pub enum Block {
         span: Span,
     },
     CodeBlock {
+        language: Option<String>,
         content: String,
         span: Span,
     },
@@ -74,9 +75,26 @@ pub enum Block {
         items: Vec<Vec<Block>>,
         span: Span,
     },
+    DefinitionList {
+        items: Vec<DefinitionItem>,
+        span: Span,
+    },
     HorizontalRule,
     Table {
         rows: Vec<TableRow>,
+        caption: Option<Vec<Inline>>,
+        span: Span,
+    },
+    Blockquote {
+        children: Vec<Block>,
+        span: Span,
+    },
+    PreBlock {
+        content: String,
+        span: Span,
+    },
+    RawBlock {
+        content: String,
         span: Span,
     },
 }
@@ -93,7 +111,9 @@ impl Block {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { content, .. } => Block::CodeBlock { content, span: Span::NONE },
+            Block::CodeBlock { language, content, .. } => {
+                Block::CodeBlock { language, content, span: Span::NONE }
+            }
             Block::List { ordered, items, .. } => Block::List {
                 ordered,
                 items: items
@@ -102,11 +122,43 @@ impl Block {
                     .collect(),
                 span: Span::NONE,
             },
-            Block::HorizontalRule => Block::HorizontalRule,
-            Block::Table { rows, .. } => Block::Table {
-                rows: rows.into_iter().map(TableRow::strip_spans).collect(),
+            Block::DefinitionList { items, .. } => Block::DefinitionList {
+                items: items.into_iter().map(DefinitionItem::strip_spans).collect(),
                 span: Span::NONE,
             },
+            Block::HorizontalRule => Block::HorizontalRule,
+            Block::Table { rows, caption, .. } => Block::Table {
+                rows: rows.into_iter().map(TableRow::strip_spans).collect(),
+                caption: caption
+                    .map(|c| c.into_iter().map(Inline::strip_spans).collect()),
+                span: Span::NONE,
+            },
+            Block::Blockquote { children, .. } => Block::Blockquote {
+                children: children.into_iter().map(Block::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::PreBlock { content, .. } => {
+                Block::PreBlock { content, span: Span::NONE }
+            }
+            Block::RawBlock { content, .. } => {
+                Block::RawBlock { content, span: Span::NONE }
+            }
+        }
+    }
+}
+
+/// A definition list item.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionItem {
+    pub term: Vec<Inline>,
+    pub desc: Vec<Inline>,
+}
+
+impl DefinitionItem {
+    pub fn strip_spans(self) -> Self {
+        DefinitionItem {
+            term: self.term.into_iter().map(Inline::strip_spans).collect(),
+            desc: self.desc.into_iter().map(Inline::strip_spans).collect(),
         }
     }
 }
@@ -159,6 +211,10 @@ pub enum Inline {
     Underline(Vec<Inline>),
     Subscript(Vec<Inline>),
     Superscript(Vec<Inline>),
+    FootnoteRef { label: String, content: Option<String> },
+    MathInline { source: String },
+    Template { content: String },
+    Nowiki { content: String },
 }
 
 impl Inline {

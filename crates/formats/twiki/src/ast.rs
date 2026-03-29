@@ -59,9 +59,12 @@ pub enum Block {
     Paragraph { inlines: Vec<Inline>, span: Span },
     Heading { level: u8, inlines: Vec<Inline>, span: Span },
     CodeBlock { content: String, span: Span },
-    List { ordered: bool, items: Vec<Vec<Inline>>, span: Span },
+    List { ordered: bool, items: Vec<ListItem>, span: Span },
     Table { rows: Vec<TableRow>, span: Span },
     HorizontalRule { span: Span },
+    RawBlock { content: String, span: Span },
+    DefinitionList { items: Vec<DefinitionItem>, span: Span },
+    Blockquote { children: Vec<Block>, span: Span },
 }
 
 impl Block {
@@ -79,10 +82,7 @@ impl Block {
             Block::CodeBlock { content, .. } => Block::CodeBlock { content, span: Span::NONE },
             Block::List { ordered, items, .. } => Block::List {
                 ordered,
-                items: items
-                    .into_iter()
-                    .map(|item| item.into_iter().map(Inline::strip_spans).collect())
-                    .collect(),
+                items: items.into_iter().map(ListItem::strip_spans).collect(),
                 span: Span::NONE,
             },
             Block::Table { rows, .. } => Block::Table {
@@ -90,6 +90,51 @@ impl Block {
                 span: Span::NONE,
             },
             Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
+            Block::RawBlock { content, .. } => Block::RawBlock { content, span: Span::NONE },
+            Block::DefinitionList { items, .. } => Block::DefinitionList {
+                items: items.into_iter().map(DefinitionItem::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::Blockquote { children, .. } => Block::Blockquote {
+                children: children.into_iter().map(Block::strip_spans).collect(),
+                span: Span::NONE,
+            },
+        }
+    }
+}
+
+/// A list item wrapping its content.
+#[derive(Debug, Clone)]
+pub struct ListItem {
+    pub inlines: Vec<Inline>,
+    pub children: Vec<Block>,
+    pub span: Span,
+}
+
+impl ListItem {
+    pub fn strip_spans(self) -> Self {
+        ListItem {
+            inlines: self.inlines.into_iter().map(Inline::strip_spans).collect(),
+            children: self.children.into_iter().map(Block::strip_spans).collect(),
+            span: Span::NONE,
+        }
+    }
+}
+
+/// A definition list item.
+#[derive(Debug, Clone)]
+pub struct DefinitionItem {
+    pub term: Vec<Inline>,
+    pub desc: Vec<Inline>,
+    pub span: Span,
+}
+
+impl DefinitionItem {
+    pub fn strip_spans(self) -> Self {
+        DefinitionItem {
+            term: self.term.into_iter().map(Inline::strip_spans).collect(),
+            desc: self.desc.into_iter().map(Inline::strip_spans).collect(),
+            span: Span::NONE,
         }
     }
 }
@@ -139,6 +184,13 @@ pub enum Inline {
     BoldCode(Vec<Inline>, Span),
     Link { url: String, label: String, span: Span },
     LineBreak { span: Span },
+    Strikethrough(Vec<Inline>, Span),
+    Superscript(Vec<Inline>, Span),
+    Subscript(Vec<Inline>, Span),
+    Underline(Vec<Inline>, Span),
+    Image { url: String, alt: String, span: Span },
+    RawInline { content: String, span: Span },
+    WikiWord { word: String, span: Span },
 }
 
 impl Inline {
@@ -160,6 +212,21 @@ impl Inline {
             }
             Inline::Link { url, label, .. } => Inline::Link { url, label, span: Span::NONE },
             Inline::LineBreak { .. } => Inline::LineBreak { span: Span::NONE },
+            Inline::Strikethrough(c, _) => {
+                Inline::Strikethrough(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Superscript(c, _) => {
+                Inline::Superscript(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Subscript(c, _) => {
+                Inline::Subscript(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Underline(c, _) => {
+                Inline::Underline(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Image { url, alt, .. } => Inline::Image { url, alt, span: Span::NONE },
+            Inline::RawInline { content, .. } => Inline::RawInline { content, span: Span::NONE },
+            Inline::WikiWord { word, .. } => Inline::WikiWord { word, span: Span::NONE },
         }
     }
 }

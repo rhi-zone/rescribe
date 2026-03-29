@@ -1,0 +1,8 @@
+{
+  "description": "Inline math via <math> tag",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "math_inline" }
+  ]
+}

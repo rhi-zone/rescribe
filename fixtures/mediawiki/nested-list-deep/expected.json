@@ -1,0 +1,7 @@
+{
+  "description": "Deeply nested list (5 levels)",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list" }
+  ]
+}

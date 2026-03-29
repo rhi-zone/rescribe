@@ -1,0 +1,7 @@
+{
+  "description": "HTML <pre> block treated as code block",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block" }
+  ]
+}

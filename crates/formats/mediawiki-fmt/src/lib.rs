@@ -4,14 +4,29 @@
 //! Used by `rescribe-read-mediawiki` and `rescribe-write-mediawiki` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
-pub use ast::*;
+// Re-export everything callers need.
+pub use ast::{
+    Block, DefinitionItem, Diagnostic, Inline, MediawikiDoc, Severity, Span, TableCell,
+    TableRow,
+};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::emit;
+pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
+pub use writer::Writer;
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+/// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
+pub fn events(input: &str) -> events::EventIter {
+    events::events(input)
+}
+
+// -- Tests --------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -83,7 +98,11 @@ mod tests {
             panic!("expected paragraph");
         };
         let has_link = inlines.iter().any(|i| {
-            if let Inline::Link { url, .. } = i { url == "https://example.com" } else { false }
+            if let Inline::Link { url, .. } = i {
+                url == "https://example.com"
+            } else {
+                false
+            }
         });
         assert!(has_link);
     }
@@ -103,6 +122,76 @@ mod tests {
             assert!(content.contains("code line"));
         } else {
             panic!("expected code block");
+        }
+    }
+
+    #[test]
+    fn test_parse_blockquote() {
+        let (doc, _) = parse("<blockquote>\nSome quoted text.\n</blockquote>");
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::Blockquote { .. }));
+    }
+
+    #[test]
+    fn test_parse_definition_list() {
+        let (doc, _) = parse("; Term\n: Definition");
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::DefinitionList { items, .. } = &doc.blocks[0] {
+            assert_eq!(items.len(), 1);
+        } else {
+            panic!("expected definition list");
+        }
+    }
+
+    #[test]
+    fn test_parse_footnote_ref() {
+        let (doc, _) = parse("Text<ref>footnote content</ref>.");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|i| matches!(
+            i,
+            Inline::FootnoteRef { content: Some(_), .. }
+        )));
+    }
+
+    #[test]
+    fn test_parse_math_inline() {
+        let (doc, _) = parse("Solve <math>x^2</math>.");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|i| matches!(i, Inline::MathInline { .. })));
+    }
+
+    #[test]
+    fn test_parse_nowiki() {
+        let (doc, _) = parse("Some <nowiki>'''not bold'''</nowiki> text.");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|i| matches!(i, Inline::Nowiki { .. })));
+    }
+
+    #[test]
+    fn test_parse_template() {
+        let (doc, _) = parse("See {{cite|author=Smith}}.");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|i| matches!(i, Inline::Template { .. })));
+    }
+
+    #[test]
+    fn test_parse_syntaxhighlight() {
+        let (doc, _) =
+            parse("<syntaxhighlight lang=\"python\">\nprint(\"hello\")\n</syntaxhighlight>");
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::CodeBlock { language, content, .. } = &doc.blocks[0] {
+            assert_eq!(language.as_deref(), Some("python"));
+            assert!(content.contains("print"));
+        } else {
+            panic!("expected code block, got {:?}", doc.blocks[0]);
         }
     }
 

@@ -1,0 +1,9 @@
+{
+  "description": "Blockquote via <blockquote> tag",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "This is a quoted passage." } }
+  ]
+}

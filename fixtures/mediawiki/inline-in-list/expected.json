@@ -1,0 +1,7 @@
+{
+  "description": "Inline markup inside list items",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "list" }
+  ]
+}

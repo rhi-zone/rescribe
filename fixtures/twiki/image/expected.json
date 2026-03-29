@@ -1,0 +1,8 @@
+{
+  "description": "Image via <img> HTML tag",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "image", "props": { "url": "photo.png" } }
+  ]
+}

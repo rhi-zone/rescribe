@@ -1,0 +1,2 @@
+<pre>Preformatted text
+with multiple lines.</pre>

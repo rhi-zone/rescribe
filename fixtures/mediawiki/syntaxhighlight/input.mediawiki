@@ -1,0 +1,4 @@
+<syntaxhighlight lang="python">
+def hello():
+    print("hello")
+</syntaxhighlight>

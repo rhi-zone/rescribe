@@ -1,4 +1,4 @@
-//! MediaWiki emitter — renders a [`MediawikiDoc`] back to MediaWiki markup.
+//! MediaWiki emitter -- renders a [`MediawikiDoc`] back to MediaWiki markup.
 
 use crate::ast::{Block, Inline, MediawikiDoc};
 
@@ -54,11 +54,20 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.newline();
         }
 
-        Block::CodeBlock { content, .. } => {
-            for line in content.lines() {
-                ctx.write(" ");
-                ctx.writeln(line);
+        Block::CodeBlock { language, content, .. } => {
+            if let Some(lang) = language {
+                ctx.writeln(&format!("<syntaxhighlight lang=\"{}\">", lang));
+            } else {
+                // Indented code block
+                for line in content.lines() {
+                    ctx.write(" ");
+                    ctx.writeln(line);
+                }
+                ctx.newline();
+                return;
             }
+            ctx.writeln(content);
+            ctx.writeln("</syntaxhighlight>");
             ctx.newline();
         }
 
@@ -90,13 +99,32 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             }
         }
 
+        Block::DefinitionList { items, .. } => {
+            for item in items {
+                ctx.write("; ");
+                build_inlines(&item.term, ctx);
+                ctx.newline();
+                if !item.desc.is_empty() {
+                    ctx.write(": ");
+                    build_inlines(&item.desc, ctx);
+                    ctx.newline();
+                }
+            }
+            ctx.newline();
+        }
+
         Block::HorizontalRule => {
             ctx.writeln("----");
             ctx.newline();
         }
 
-        Block::Table { rows, .. } => {
+        Block::Table { rows, caption, .. } => {
             ctx.writeln("{|");
+            if let Some(cap) = caption {
+                ctx.write("|+ ");
+                build_inlines(cap, ctx);
+                ctx.newline();
+            }
             for (i, row) in rows.iter().enumerate() {
                 if i > 0 {
                     ctx.writeln("|-");
@@ -110,6 +138,31 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
                 }
             }
             ctx.writeln("|}");
+            ctx.newline();
+        }
+
+        Block::Blockquote { children, .. } => {
+            ctx.writeln("<blockquote>");
+            for child in children {
+                build_block(child, ctx);
+            }
+            // Remove trailing blank line inside blockquote
+            if ctx.output.ends_with("\n\n") {
+                ctx.output.pop();
+            }
+            ctx.writeln("</blockquote>");
+            ctx.newline();
+        }
+
+        Block::PreBlock { content, .. } => {
+            ctx.write("<pre>");
+            ctx.write(content);
+            ctx.writeln("</pre>");
+            ctx.newline();
+        }
+
+        Block::RawBlock { content, .. } => {
+            ctx.writeln(content);
             ctx.newline();
         }
     }
@@ -195,6 +248,38 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("<sup>");
             build_inlines(children, ctx);
             ctx.write("</sup>");
+        }
+
+        Inline::FootnoteRef { label, content } => {
+            if label.is_empty() {
+                if let Some(c) = content {
+                    ctx.write(&format!("<ref>{}</ref>", c));
+                } else {
+                    ctx.write("<ref/>");
+                }
+            } else if let Some(c) = content {
+                ctx.write(&format!("<ref name=\"{}\">{}</ref>", label, c));
+            } else {
+                ctx.write(&format!("<ref name=\"{}\" />", label));
+            }
+        }
+
+        Inline::MathInline { source } => {
+            ctx.write("<math>");
+            ctx.write(source);
+            ctx.write("</math>");
+        }
+
+        Inline::Template { content } => {
+            ctx.write("{{");
+            ctx.write(content);
+            ctx.write("}}");
+        }
+
+        Inline::Nowiki { content } => {
+            ctx.write("<nowiki>");
+            ctx.write(content);
+            ctx.write("</nowiki>");
         }
     }
 }

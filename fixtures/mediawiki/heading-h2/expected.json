@@ -1,0 +1,8 @@
+{
+  "description": "Heading level 2 via == ... ==",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Second Level Heading" } }
+  ]
+}

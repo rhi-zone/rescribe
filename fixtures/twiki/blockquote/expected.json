@@ -1,0 +1,8 @@
+{
+  "description": "Blockquote using <blockquote> HTML tags",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

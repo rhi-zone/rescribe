@@ -1,0 +1,9 @@
+{
+  "description": "Link with display text property",
+  "category": "property",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Click Here" } }
+  ]
+}

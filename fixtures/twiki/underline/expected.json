@@ -1,0 +1,11 @@
+{
+  "description": "Underline with <u> tags",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "This has " } },
+    { "path": "/0/1", "kind": "underline" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "underlined" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " text." } }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "description": "WikiWord auto-link detection",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Visit " } },
+    { "path": "/0/1", "kind": "wikiword", "props": { "word": "MyPage" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " for more info." } }
+  ]
+}

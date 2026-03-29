@@ -1,0 +1,8 @@
+{
+  "description": "Table row with missing closing pipe treated as paragraph",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "table" }
+  ]
+}

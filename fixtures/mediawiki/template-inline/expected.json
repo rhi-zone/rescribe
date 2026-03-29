@@ -1,0 +1,8 @@
+{
+  "description": "Template transclusion preserved as raw",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "template" }
+  ]
+}

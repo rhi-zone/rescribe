@@ -1,0 +1,8 @@
+{
+  "description": "Nowiki escapes wiki markup",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "nowiki" }
+  ]
+}

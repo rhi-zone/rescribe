@@ -1,0 +1,8 @@
+{
+  "description": "Inline markup inside table cells",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0/0", "kind": "table_header" }
+  ]
+}

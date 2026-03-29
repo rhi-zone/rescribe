@@ -1,0 +1,9 @@
+{
+  "description": "Definition list with $ term: definition syntax",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "definition_item" },
+    { "path": "/0/1", "kind": "definition_item" }
+  ]
+}

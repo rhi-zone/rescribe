@@ -4,12 +4,21 @@
 //! Used by `rescribe-read-twiki` and `rescribe-write-twiki` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
-pub use ast::{Block, Diagnostic, Inline, Severity, Span, TableCell, TableRow, TwikiDoc};
+pub use ast::{
+    Block, DefinitionItem, Diagnostic, Inline, ListItem, Severity, Span, TableCell, TableRow,
+    TwikiDoc,
+};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::{build, collect_inline_text};
+pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
+pub use writer::Writer;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -149,8 +158,16 @@ mod tests {
             blocks: vec![Block::List {
                 ordered: false,
                 items: vec![
-                    vec![Inline::Text("one".into(), Span::NONE)],
-                    vec![Inline::Text("two".into(), Span::NONE)],
+                    ListItem {
+                        inlines: vec![Inline::Text("one".into(), Span::NONE)],
+                        children: vec![],
+                        span: Span::NONE,
+                    },
+                    ListItem {
+                        inlines: vec![Inline::Text("two".into(), Span::NONE)],
+                        children: vec![],
+                        span: Span::NONE,
+                    },
                 ],
                 span: Span::NONE,
             }],
@@ -181,5 +198,67 @@ mod tests {
         let rebuilt = build(&doc);
         let (doc2, _) = parse(&rebuilt);
         assert_eq!(doc.blocks.len(), doc2.blocks.len());
+    }
+
+    #[test]
+    fn test_parse_strikethrough() {
+        let (result, _) = parse("Some <del>struck</del> text");
+        if let Block::Paragraph { inlines, .. } = &result.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Strikethrough(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_superscript() {
+        let (result, _) = parse("E=mc<sup>2</sup>");
+        if let Block::Paragraph { inlines, .. } = &result.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Superscript(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_subscript() {
+        let (result, _) = parse("H<sub>2</sub>O");
+        if let Block::Paragraph { inlines, .. } = &result.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Subscript(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_wikiword() {
+        let (result, _) = parse("Visit MyPage for info");
+        if let Block::Paragraph { inlines, .. } = &result.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::WikiWord { word, .. } if word == "MyPage")));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_definition_list() {
+        let (result, _) = parse("   $ Term: Definition");
+        assert!(matches!(result.blocks[0], Block::DefinitionList { .. }));
+    }
+
+    #[test]
+    fn test_parse_line_break() {
+        let (result, _) = parse("Line one%BR%Line two");
+        if let Block::Paragraph { inlines, .. } = &result.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::LineBreak { .. })));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_blockquote() {
+        let (result, _) = parse("<blockquote>\nSome quoted text\n</blockquote>");
+        assert!(matches!(result.blocks[0], Block::Blockquote { .. }));
     }
 }

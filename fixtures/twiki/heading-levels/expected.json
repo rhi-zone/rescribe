@@ -1,0 +1,10 @@
+{
+  "description": "Heading levels h3 through h6 property verification",
+  "category": "property",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/1", "kind": "heading", "props": { "level": 4 } },
+    { "path": "/2", "kind": "heading", "props": { "level": 5 } },
+    { "path": "/3", "kind": "heading", "props": { "level": 6 } }
+  ]
+}

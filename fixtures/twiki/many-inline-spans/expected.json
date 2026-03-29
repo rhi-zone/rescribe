@@ -1,0 +1,7 @@
+{
+  "description": "Paragraph with many consecutive inline spans",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

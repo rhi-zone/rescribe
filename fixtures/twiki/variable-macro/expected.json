@@ -1,0 +1,9 @@
+{
+  "description": "%VARIABLE% macro preserved as raw inline",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Current date: " } },
+    { "path": "/0/1", "kind": "raw_inline" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Definition list via ; term and : definition",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" },
+    { "path": "/0/0", "kind": "definition_term" },
+    { "path": "/0/1", "kind": "definition_desc" }
+  ]
+}
