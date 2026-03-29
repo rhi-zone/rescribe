@@ -1593,25 +1593,71 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
         if chars[pos] == 'f' || chars[pos] == 'k' || chars[pos] == 'b' || chars[pos] == 'p' || chars[pos] == 'm' {
             let remaining: String = chars[pos..].iter().take(12).collect();
 
-            // footnote:[text]
-            if remaining.starts_with("footnote:[") || remaining.starts_with("footnote::[") {
-                let skip = if remaining.starts_with("footnote::[") { 11 } else { 10 };
-                let content_start = pos + skip;
-                if let Some(close_pos) = find_matching_bracket(&chars, content_start) {
-                    let content: String = chars[content_start..close_pos].iter().collect();
-                    let label = format!("fn{}", nodes.len());
-                    let fn_inlines = parse_inline_content(&content);
-                    nodes.push(Inline::FootnoteRef {
-                        label: label.clone(),
-                        span: Span::NONE,
-                    });
-                    nodes.push(Inline::FootnoteDef {
-                        label,
-                        children: fn_inlines,
-                        span: Span::NONE,
-                    });
-                    pos = close_pos + 1;
-                    continue;
+            // footnote:[text], footnote:id[text], footnote:id[]
+            // Also handle the legacy footnote::[text] double-colon variant.
+            if remaining.starts_with("footnote:") {
+                // Determine where the id and bracket start.
+                // Forms:
+                //   footnote:[text]   — pos+9 is '['  (anonymous)
+                //   footnote::[text]  — pos+9 is ':', pos+10 is '[' (legacy double-colon anonymous)
+                //   footnote:id[text] — id between pos+9 and the next '['
+                //   footnote:id[]     — back-reference
+                let after_prefix = pos + 9; // after "footnote:"
+                let (id_opt, bracket_start) = if after_prefix < chars.len() && chars[after_prefix] == '[' {
+                    // anonymous: footnote:[...]
+                    (None, after_prefix)
+                } else if after_prefix < chars.len() && chars[after_prefix] == ':' {
+                    // legacy double-colon: footnote::[...]
+                    let bb = after_prefix + 1;
+                    if bb < chars.len() && chars[bb] == '[' {
+                        (None, bb)
+                    } else {
+                        // Not a valid footnote macro — fall through to text handling.
+                        (None, usize::MAX)
+                    }
+                } else {
+                    // Named: scan for '[' to extract id
+                    let mut scan = after_prefix;
+                    while scan < chars.len() && chars[scan] != '[' && chars[scan] != ' ' && chars[scan] != '\n' {
+                        scan += 1;
+                    }
+                    if scan < chars.len() && chars[scan] == '[' {
+                        let id: String = chars[after_prefix..scan].iter().collect();
+                        (Some(id), scan)
+                    } else {
+                        (None, usize::MAX)
+                    }
+                };
+
+                if bracket_start != usize::MAX {
+                    // find_matching_bracket expects the position *after* the opening '['.
+                    if let Some(close_pos) = find_matching_bracket(&chars, bracket_start + 1) {
+                        let content: String = chars[bracket_start + 1..close_pos].iter().collect();
+                        let is_backref = content.is_empty() && id_opt.is_some();
+
+                        if is_backref {
+                            // footnote:id[] — back-reference only
+                            nodes.push(Inline::FootnoteRef {
+                                label: id_opt.unwrap(),
+                                span: Span::NONE,
+                            });
+                        } else {
+                            // Anonymous or named footnote definition
+                            let label = id_opt.unwrap_or_else(|| format!("fn{}", nodes.len()));
+                            let fn_inlines = parse_inline_content(&content);
+                            nodes.push(Inline::FootnoteRef {
+                                label: label.clone(),
+                                span: Span::NONE,
+                            });
+                            nodes.push(Inline::FootnoteDef {
+                                label,
+                                children: fn_inlines,
+                                span: Span::NONE,
+                            });
+                        }
+                        pos = close_pos + 1;
+                        continue;
+                    }
                 }
             }
 
@@ -1719,12 +1765,33 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
             // Check for macros: image:, link:, https://, http://, footnote:, kbd:, btn:, pass:, menu:
             if c == 'i' || c == 'l' || c == 'h' || c == 'f' || c == 'k' || c == 'b' || c == 'p' || c == 'm' {
                 let remaining: String = chars[pos..].iter().take(12).collect();
+                // Check for footnote: macro (any form: anonymous, named, or back-ref).
+                // Valid forms: footnote:[...], footnote::[...], footnote:id[...]
+                // Detect by scanning forward from pos+9 for a '[' with only
+                // identifier chars (or ':') in between.
+                let is_footnote = remaining.starts_with("footnote:") && {
+                    let after = pos + 9;
+                    if after < chars.len() && (chars[after] == '[' || chars[after] == ':') {
+                        true
+                    } else {
+                        // Named form: pos+9 starts the id, look for '[' with only
+                        // word chars allowed.
+                        let mut sc = after;
+                        while sc < chars.len()
+                            && chars[sc] != '['
+                            && chars[sc] != ' '
+                            && chars[sc] != '\n'
+                        {
+                            sc += 1;
+                        }
+                        sc < chars.len() && chars[sc] == '['
+                    }
+                };
                 if remaining.starts_with("image:")
                     || remaining.starts_with("link:")
                     || remaining.starts_with("https://")
                     || remaining.starts_with("http://")
-                    || remaining.starts_with("footnote:[")
-                    || remaining.starts_with("footnote::[")
+                    || is_footnote
                     || remaining.starts_with("kbd:[")
                     || remaining.starts_with("btn:[")
                     || remaining.starts_with("pass:[")

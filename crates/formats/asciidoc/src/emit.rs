@@ -176,8 +176,34 @@ fn build_definition_item(item: &DefinitionItem, ctx: &mut BuildContext) {
 // ── Inline builders ───────────────────────────────────────────────────────────
 
 fn build_inlines(inlines: &[Inline], ctx: &mut BuildContext) {
-    for inline in inlines {
-        build_inline(inline, ctx);
+    let mut i = 0;
+    while i < inlines.len() {
+        // FootnoteRef immediately followed by FootnoteDef with the same label
+        // collapses back to footnote:id[text] (or footnote:[text] for auto ids).
+        if let Inline::FootnoteRef { label: ref_label, .. } = &inlines[i] {
+            if let Some(Inline::FootnoteDef { label: def_label, children, .. }) = inlines.get(i + 1) {
+                if ref_label == def_label {
+                    // Emit as single inline footnote macro.
+                    // Auto-generated labels (fn<N>) are not user-visible IDs,
+                    // so we emit anonymous form footnote:[text].
+                    let is_auto = def_label.starts_with("fn")
+                        && def_label[2..].chars().all(|c| c.is_ascii_digit());
+                    if is_auto {
+                        ctx.write("footnote:[");
+                    } else {
+                        ctx.write("footnote:");
+                        ctx.write(def_label);
+                        ctx.write("[");
+                    }
+                    build_inlines(children, ctx);
+                    ctx.write("]");
+                    i += 2;
+                    continue;
+                }
+            }
+        }
+        build_inline(&inlines[i], ctx);
+        i += 1;
     }
 }
 
@@ -278,19 +304,24 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
         Inline::SoftBreak { .. } => ctx.write("\n"),
 
         Inline::FootnoteRef { label, .. } => {
-            ctx.write("footnoteref:[");
+            // Back-reference to a named footnote: footnote:id[]
+            ctx.write("footnote:");
             ctx.write(label);
-            ctx.write("]");
+            ctx.write("[]");
         }
 
         Inline::FootnoteDef {
             label, children, ..
         } => {
-            ctx.write("footnotedef:[");
+            // Named footnote definition is emitted inline as footnote:id[text].
+            // Anonymous footnotes use footnote:[text] (label is auto-generated
+            // and starts with "fn", so we always include it as the id here to
+            // preserve the ref/def pairing on round-trips).
+            ctx.write("footnote:");
             ctx.write(label);
-            ctx.write(",");
+            ctx.write("[");
             build_inlines(children, ctx);
-            ctx.write("]\n");
+            ctx.write("]");
         }
 
         Inline::MathInline { source, .. } => {

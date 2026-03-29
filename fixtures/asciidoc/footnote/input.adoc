@@ -1,1 +1,5 @@
 See footnote:[Some footnote text] for details.
+
+Named footnote:fn-named[Named footnote text] here.
+
+Back reference footnote:fn-named[] here.
