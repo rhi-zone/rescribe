@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc writer APIs added 2026-03-23 (streaming + builder); 2026-03-29: definition of 5-Production tightened — reader-only no longer qualifies; RST/Org/AsciiDoc demoted from R:5 to R:4 due to construct gaps (tables, footnotes); writer column updated from 2→4 (API modes complete, fuzz clean, construct gaps remain). djot-fmt + textile-fmt signed off at 5-Production (2026-03-29). RST/AsciiDoc/Org signed off at 5-Production (2026-03-29; all construct gaps closed: tables, footnotes, math, nested blockquotes, figure/caption). 2026-03-30: muse/t2t/man/markua/creole/dokuwiki/vimwiki/zimwiki/xwiki/twiki/tikiwiki/jira/mediawiki all completed to R:4/W:4 (all constructs + API modes + fixtures; need fuzz re-run).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc writer APIs added 2026-03-23 (streaming + builder); 2026-03-29: definition of 5-Production tightened — reader-only no longer qualifies; RST/Org/AsciiDoc demoted from R:5 to R:4 due to construct gaps (tables, footnotes); writer column updated from 2→4 (API modes complete, fuzz clean, construct gaps remain). djot-fmt + textile-fmt signed off at 5-Production (2026-03-29). RST/AsciiDoc/Org signed off at 5-Production (2026-03-29; all construct gaps closed: tables, footnotes, math, nested blockquotes, figure/caption). 2026-03-30: muse/t2t/man/markua/creole/dokuwiki/vimwiki/zimwiki/xwiki/twiki/tikiwiki/jira/mediawiki all completed to R:4/W:4; fountain/texinfo/bbcode/pod/haddock/ansi same (all constructs + API modes + fixtures; need fuzz re-run).
 
 ## Maturity Pipeline
 
@@ -48,13 +48,13 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | muse | 4 | 4 | hand | re-fuzz after expansion | – |
 | t2t | 4 | 4 | hand | re-fuzz after expansion | – |
 | markua | 4 | 4 | hand | re-fuzz after expansion | – |
-| fountain | 4 | 2 | hand | – (harness N/A) | coverage |
+| fountain | 4 | 4 | hand | re-fuzz after expansion | – |
 | typst | 1 | 2 | hand | partial→fixtures | harness |
-| texinfo | 4 | 4 | hand | – (harness N/A) | production |
-| bbcode | 4 | 2 | hand | – (harness N/A; Pandoc cannot read BBCode) | coverage |
-| pod | 4 | 2 | hand | fuzz | harness |
-| haddock | 4 | 2 | hand | fuzz | harness |
-| ansi | 4 | 2 | hand | – (harness N/A; production) | coverage |
+| texinfo | 4 | 4 | hand | re-fuzz after expansion | – |
+| bbcode | 4 | 4 | hand | re-fuzz after expansion | – |
+| pod | 4 | 4 | hand | re-fuzz after expansion | – |
+| haddock | 4 | 4 | hand | re-fuzz after expansion | – |
+| ansi | 4 | 4 | hand | re-fuzz after expansion | – |
 | man | 4 | 4 | hand | re-fuzz after expansion | – |
 
 † Pandoc cannot read AsciiDoc (`--from asciidoc` unsupported); consider asciidoctor as alternate oracle.
