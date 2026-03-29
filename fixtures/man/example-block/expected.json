@@ -1,0 +1,6 @@
+{
+  "description": ".EX/.EE block produces an example_block node with preformatted content",
+  "assertions": [
+    { "path": "/0", "kind": "example_block", "props": { "content": "int main() {\n    return 0;\n}" } }
+  ]
+}

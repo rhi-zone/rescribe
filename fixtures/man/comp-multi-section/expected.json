@@ -1,0 +1,12 @@
+{
+  "description": "Multiple .SH sections in one document produce alternating heading and paragraph nodes",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/2", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/3", "kind": "paragraph" },
+    { "path": "/4", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/5", "kind": "paragraph" }
+  ]
+}

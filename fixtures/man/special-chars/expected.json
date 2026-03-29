@@ -1,0 +1,7 @@
+{
+  "description": "Special character escapes are substituted with Unicode equivalents",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "em dash \u2014 en dash \u2013 copyright \u00a9 registered \u00ae backslash \\" } }
+  ]
+}

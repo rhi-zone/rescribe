@@ -1,0 +1,8 @@
+{
+  "description": "Deeply nested .RS/.RE (50 levels) does not panic; paragraph content is preserved",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "deep content" } }
+  ]
+}

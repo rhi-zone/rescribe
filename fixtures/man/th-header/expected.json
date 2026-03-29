@@ -1,0 +1,8 @@
+{
+  "description": ".TH with all five fields populates document metadata and creates a level-1 heading",
+  "assertions": [
+    { "path": "",   "kind": "document", "props": { "title": "MYAPP", "section": "1", "date": "2024-01-15", "source": "MyApp 1.0", "manual": "User Commands" } },
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "MYAPP" } }
+  ]
+}

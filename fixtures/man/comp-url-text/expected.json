@@ -1,0 +1,9 @@
+{
+  "description": ".UR with descriptive text produces a paragraph with a link node",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Example Site" } }
+  ]
+}

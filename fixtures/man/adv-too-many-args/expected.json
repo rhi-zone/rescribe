@@ -1,0 +1,8 @@
+{
+  "description": "Macro with too many arguments does not panic; extra arguments are ignored",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "",   "kind": "document", "props": { "title": "MYAPP", "section": "1" } },
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } }
+  ]
+}

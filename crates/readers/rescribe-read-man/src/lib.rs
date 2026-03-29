@@ -25,6 +25,15 @@ fn convert_to_document(man: ManDoc) -> Document {
     if let Some(section) = man.section {
         metadata.set("man:section", section);
     }
+    if let Some(date) = man.date {
+        metadata.set("man:date", date);
+    }
+    if let Some(source) = man.source {
+        metadata.set("man:source", source);
+    }
+    if let Some(manual) = man.manual {
+        metadata.set("man:manual", manual);
+    }
 
     let mut children = Vec::new();
     for block in man.blocks {
@@ -111,6 +120,20 @@ fn convert_block(block: &Block) -> Option<Node> {
             Some(Node::new(node::DEFINITION_LIST).children(children))
         }
 
+        Block::IndentedParagraph { inlines, .. } => {
+            let children = convert_inlines(inlines);
+            Some(Node::new(node::PARAGRAPH).children(children))
+        }
+
+        Block::ExampleBlock { content, .. } => {
+            Some(Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone()))
+        }
+
+        Block::Comment { .. } => {
+            // Comments are not represented in the IR
+            None
+        }
+
         Block::HorizontalRule { .. } => Some(Node::new(node::HORIZONTAL_RULE)),
     }
 }
@@ -137,6 +160,20 @@ fn convert_inline(inline: &Inline) -> Option<Node> {
         Inline::Italic(children, _) => {
             let child_nodes = convert_inlines(children);
             Some(Node::new(node::EMPHASIS).children(child_nodes))
+        }
+
+        Inline::Code(text, _) => {
+            Some(Node::new(node::CODE).prop(prop::CONTENT, text.clone()))
+        }
+
+        Inline::Superscript(children, _) => {
+            let child_nodes = convert_inlines(children);
+            Some(Node::new(node::SUPERSCRIPT).children(child_nodes))
+        }
+
+        Inline::Subscript(children, _) => {
+            let child_nodes = convert_inlines(children);
+            Some(Node::new(node::SUBSCRIPT).children(child_nodes))
         }
 
         Inline::Link { url, children, .. } => {

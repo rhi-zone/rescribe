@@ -27,6 +27,9 @@ fn convert_from_document(doc: &Document) -> ManDoc {
     let mut man = ManDoc {
         title: doc.metadata.get_str("title").map(|s| s.to_string()),
         section: doc.metadata.get_str("man:section").map(|s| s.to_string()),
+        date: doc.metadata.get_str("man:date").map(|s| s.to_string()),
+        source: doc.metadata.get_str("man:source").map(|s| s.to_string()),
+        manual: doc.metadata.get_str("man:manual").map(|s| s.to_string()),
         blocks: Vec::new(),
         span: Span::NONE,
     };
@@ -272,10 +275,7 @@ fn convert_node_to_inline(node: &Node) -> Option<Inline> {
             } else {
                 content
             };
-            Some(Inline::Bold(
-                vec![Inline::Text(text, Span::NONE)],
-                Span::NONE,
-            ))
+            Some(Inline::Code(text, Span::NONE))
         }
 
         node::LINK => {
@@ -307,29 +307,14 @@ fn convert_node_to_inline(node: &Node) -> Option<Inline> {
             Some(Inline::Text(format!("[Image: {}]", label), Span::NONE))
         }
 
-        node::SUBSCRIPT | node::SUPERSCRIPT => {
-            // No native support, just emit children
+        node::SUPERSCRIPT => {
             let children = convert_nodes_to_inlines(&node.children);
-            if children.is_empty() {
-                None
-            } else if children.len() == 1 {
-                Some(children.into_iter().next().unwrap())
-            } else {
-                Some(Inline::Text(
-                    children
-                        .iter()
-                        .filter_map(|i| {
-                            if let Inline::Text(s, _) = i {
-                                Some(s.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .join(""),
-                    Span::NONE,
-                ))
-            }
+            Some(Inline::Superscript(children, Span::NONE))
+        }
+
+        node::SUBSCRIPT => {
+            let children = convert_nodes_to_inlines(&node.children);
+            Some(Inline::Subscript(children, Span::NONE))
         }
 
         node::LINE_BREAK => Some(Inline::Text("\n".to_string(), Span::NONE)),

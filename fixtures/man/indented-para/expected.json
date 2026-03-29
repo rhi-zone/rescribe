@@ -1,0 +1,7 @@
+{
+  "description": ".IP without a tag produces an indented_paragraph node",
+  "assertions": [
+    { "path": "/0",   "kind": "indented_paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "This is an indented paragraph." } }
+  ]
+}

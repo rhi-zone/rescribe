@@ -1,0 +1,10 @@
+{
+  "description": "Unclosed font escape (\\fB with no \\fR) does not panic; bold runs to end of text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "text", "props": { "content": "This has " } },
+    { "path": "/0/1",   "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "unclosed bold text" } }
+  ]
+}

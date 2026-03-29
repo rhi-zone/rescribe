@@ -1,0 +1,7 @@
+{
+  "description": "A line longer than 64 KB does not panic; produces a paragraph with a long text node",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

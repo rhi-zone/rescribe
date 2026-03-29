@@ -13,7 +13,7 @@ pub fn parse(input: &str) -> (ManDoc, Vec<Diagnostic>) {
 
 // ── Internal ──────────────────────────────────────────────────────────────────
 
-type ParseElement = (Option<String>, Option<String>, Option<Block>);
+type ParseElement = (Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<Block>);
 
 struct Parser<'a> {
     lines: Vec<&'a str>,
@@ -34,15 +34,27 @@ impl<'a> Parser<'a> {
     fn parse_document(&mut self) -> ManDoc {
         let mut title = None;
         let mut section = None;
+        let mut date = None;
+        let mut source = None;
+        let mut manual = None;
         let mut blocks = Vec::new();
 
         while self.pos < self.lines.len() {
-            let (t, s, block) = self.parse_element();
+            let (t, s, d, src, man, block) = self.parse_element();
             if let Some(new_title) = t {
                 title = Some(new_title);
             }
             if let Some(new_section) = s {
                 section = Some(new_section);
+            }
+            if let Some(new_date) = d {
+                date = Some(new_date);
+            }
+            if let Some(new_source) = src {
+                source = Some(new_source);
+            }
+            if let Some(new_manual) = man {
+                manual = Some(new_manual);
             }
             if let Some(block) = block {
                 blocks.push(block);
@@ -52,6 +64,9 @@ impl<'a> Parser<'a> {
         ManDoc {
             title,
             section,
+            date,
+            source,
+            manual,
             blocks,
             span: Span::NONE,
         }
@@ -68,17 +83,20 @@ impl<'a> Parser<'a> {
     fn parse_element(&mut self) -> ParseElement {
         let line = match self.current_line() {
             Some(l) => l,
-            None => return (None, None, None),
+            None => return (None, None, None, None, None, None),
         };
 
-        // Skip empty lines and comments
+        // Skip empty lines
         if line.is_empty() {
             self.advance();
-            return (None, None, None);
+            return (None, None, None, None, None, None);
         }
+
+        // Comments: .\" or '\"
         if line.starts_with(".\\\"") || line.starts_with("'\\\"") {
+            let text = line[3..].trim().to_string();
             self.advance();
-            return (None, None, None);
+            return (None, None, None, None, None, Some(Block::Comment { text, span: Span::NONE }));
         }
 
         // Macro lines start with .
@@ -88,13 +106,13 @@ impl<'a> Parser<'a> {
 
         // Plain text paragraph
         let block = self.parse_text_block();
-        (None, None, block)
+        (None, None, None, None, None, block)
     }
 
     fn parse_macro(&mut self) -> ParseElement {
         let line = match self.current_line() {
             Some(l) => l,
-            None => return (None, None, None),
+            None => return (None, None, None, None, None, None),
         };
         self.advance();
 
@@ -105,12 +123,15 @@ impl<'a> Parser<'a> {
             "TH" => {
                 let title = args.first().cloned();
                 let section = args.get(1).cloned();
+                let date = args.get(2).cloned();
+                let source = args.get(3).cloned();
+                let manual = args.get(4).cloned();
                 let block = title.as_ref().map(|t| Block::Heading {
                     level: 1,
                     inlines: vec![Inline::Text(t.clone(), Span::NONE)],
                     span: Span::NONE,
                 });
-                (title, section, block)
+                (title, section, date, source, manual, block)
             }
 
             // Section heading
@@ -118,6 +139,9 @@ impl<'a> Parser<'a> {
                 let text = args.join(" ");
                 let inlines = self.parse_inline_text(&text);
                 (
+                    None,
+                    None,
+                    None,
                     None,
                     None,
                     Some(Block::Heading {
@@ -135,6 +159,9 @@ impl<'a> Parser<'a> {
                 (
                     None,
                     None,
+                    None,
+                    None,
+                    None,
                     Some(Block::Heading {
                         level: 3,
                         inlines,
@@ -146,7 +173,7 @@ impl<'a> Parser<'a> {
             // Paragraph break
             "PP" | "P" | "LP" => {
                 let block = self.parse_paragraph();
-                (None, None, block)
+                (None, None, None, None, None, block)
             }
 
             // Indented paragraph / definition list
@@ -176,25 +203,35 @@ impl<'a> Parser<'a> {
                         span: Span::NONE,
                     }
                 } else {
-                    Block::Paragraph {
+                    // .IP without a tag → IndentedParagraph
+                    if content_inline.is_empty() {
+                        return (None, None, None, None, None, None);
+                    }
+                    Block::IndentedParagraph {
                         inlines: content_inline,
                         span: Span::NONE,
                     }
                 };
 
-                (None, None, Some(block))
+                (None, None, None, None, None, Some(block))
             }
 
             // Relative indent start/end
             "RS" | "RE" => {
                 // Skip these for now, they affect indentation
-                (None, None, None)
+                (None, None, None, None, None, None)
             }
 
             // No-fill (preformatted)
             "nf" => {
                 let block = self.parse_preformatted();
-                (None, None, Some(block))
+                (None, None, None, None, None, Some(block))
+            }
+
+            // Example block (groff extension)
+            "EX" => {
+                let block = self.parse_example_block();
+                (None, None, None, None, None, Some(block))
             }
 
             // Bold text
@@ -207,7 +244,7 @@ impl<'a> Parser<'a> {
                     )],
                     span: Span::NONE,
                 };
-                (None, None, Some(block))
+                (None, None, None, None, None, Some(block))
             }
 
             // Italic text
@@ -220,19 +257,19 @@ impl<'a> Parser<'a> {
                     )],
                     span: Span::NONE,
                 };
-                (None, None, Some(block))
+                (None, None, None, None, None, Some(block))
             }
 
             // Bold-Roman alternation
             "BR" | "RB" => {
                 let block = self.parse_alternating(&args, true);
-                (None, None, Some(block))
+                (None, None, None, None, None, Some(block))
             }
 
             // Italic-Roman alternation
             "IR" | "RI" => {
                 let block = self.parse_alternating(&args, false);
-                (None, None, Some(block))
+                (None, None, None, None, None, Some(block))
             }
 
             // Bold-Italic alternation
@@ -254,6 +291,9 @@ impl<'a> Parser<'a> {
                     is_bold = !is_bold;
                 }
                 (
+                    None,
+                    None,
+                    None,
                     None,
                     None,
                     Some(Block::Paragraph {
@@ -284,6 +324,9 @@ impl<'a> Parser<'a> {
                 (
                     None,
                     None,
+                    None,
+                    None,
+                    None,
                     Some(Block::Paragraph {
                         inlines,
                         span: Span::NONE,
@@ -303,14 +346,17 @@ impl<'a> Parser<'a> {
                     }],
                     span: Span::NONE,
                 };
-                (None, None, Some(block))
+                (None, None, None, None, None, Some(block))
             }
 
             // End URL
-            "UE" => (None, None, None),
+            "UE" => (None, None, None, None, None, None),
 
             // Horizontal rule / break
             "sp" => (
+                None,
+                None,
+                None,
                 None,
                 None,
                 Some(Block::HorizontalRule { span: Span::NONE }),
@@ -324,7 +370,7 @@ impl<'a> Parser<'a> {
                     message: format!("unknown macro: .{other}"),
                     code: "man:unknown-macro",
                 });
-                (None, None, None)
+                (None, None, None, None, None, None)
             }
         }
     }
@@ -422,6 +468,25 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_example_block(&mut self) -> Block {
+        let mut lines = Vec::new();
+
+        while let Some(line) = self.current_line() {
+            if line == ".EE" {
+                self.advance();
+                break;
+            }
+            lines.push(line);
+            self.advance();
+        }
+
+        let content = lines.join("\n");
+        Block::ExampleBlock {
+            content,
+            span: Span::NONE,
+        }
+    }
+
     fn parse_alternating(&mut self, args: &[String], bold_first: bool) -> Block {
         let mut inlines = Vec::new();
         let mut use_style = bold_first;
@@ -460,8 +525,15 @@ impl<'a> Parser<'a> {
                     current.clear();
                 }
 
-                let font_char = chars[i + 2];
-                i += 3;
+                let font_code;
+                if chars[i + 2] == '(' && i + 4 < chars.len() {
+                    // \f(CW — two-character font name
+                    font_code = format!("{}{}", chars[i + 3], chars[i + 4]);
+                    i += 5;
+                } else {
+                    font_code = chars[i + 2].to_string();
+                    i += 3;
+                }
 
                 // Find the text until next font change or end
                 let mut styled_text = String::new();
@@ -469,21 +541,30 @@ impl<'a> Parser<'a> {
                     if i + 2 < chars.len() && chars[i] == '\\' && chars[i + 1] == 'f' {
                         break;
                     }
+                    // Handle escapes inside styled text
+                    if i + 1 < chars.len()
+                        && chars[i] == '\\'
+                        && let Some(esc) = self.try_escape(&chars, &mut i)
+                    {
+                        styled_text.push_str(&esc);
+                        continue;
+                    }
                     styled_text.push(chars[i]);
                     i += 1;
                 }
 
                 if !styled_text.is_empty() {
-                    let styled_inline = match font_char {
-                        'B' => Inline::Bold(
+                    let styled_inline = match font_code.as_str() {
+                        "B" => Inline::Bold(
                             vec![Inline::Text(styled_text, Span::NONE)],
                             Span::NONE,
                         ),
-                        'I' => Inline::Italic(
+                        "I" => Inline::Italic(
                             vec![Inline::Text(styled_text, Span::NONE)],
                             Span::NONE,
                         ),
-                        'R' | 'P' => Inline::Text(styled_text, Span::NONE),
+                        "CW" | "CR" => Inline::Code(styled_text, Span::NONE),
+                        "R" | "P" => Inline::Text(styled_text, Span::NONE),
                         _ => Inline::Text(styled_text, Span::NONE),
                     };
                     inlines.push(styled_inline);
@@ -491,18 +572,15 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            // Other escapes
+            // Special character escapes
             if i + 1 < chars.len() && chars[i] == '\\' {
-                match chars[i + 1] {
-                    '-' => current.push('-'),
-                    '\\' => current.push('\\'),
-                    'e' => current.push('\\'),
-                    '&' => {} // Zero-width space, ignore
-                    _ => {
-                        current.push(chars[i]);
-                        current.push(chars[i + 1]);
-                    }
+                if let Some(esc) = self.try_escape(&chars, &mut i) {
+                    current.push_str(&esc);
+                    continue;
                 }
+                // Fallback: push both chars
+                current.push(chars[i]);
+                current.push(chars[i + 1]);
                 i += 2;
                 continue;
             }
@@ -516,5 +594,38 @@ impl<'a> Parser<'a> {
         }
 
         inlines
+    }
+
+    /// Try to parse an escape sequence starting at position `i`.
+    /// On success, advances `i` past the escape and returns the replacement string.
+    /// On failure, returns None and does not advance `i`.
+    fn try_escape(&self, chars: &[char], i: &mut usize) -> Option<String> {
+        if *i + 1 >= chars.len() || chars[*i] != '\\' {
+            return None;
+        }
+        match chars[*i + 1] {
+            '-' => { *i += 2; Some("-".into()) }
+            '\\' => { *i += 2; Some("\\".into()) }
+            'e' => { *i += 2; Some("\\".into()) }
+            '~' => { *i += 2; Some("\u{00a0}".into()) } // non-breaking space
+            '&' => { *i += 2; Some(String::new()) } // zero-width, skip
+            '(' if *i + 3 < chars.len() => {
+                let code = format!("{}{}", chars[*i + 2], chars[*i + 3]);
+                let replacement = match code.as_str() {
+                    "em" => "\u{2014}", // em dash
+                    "en" => "\u{2013}", // en dash
+                    "co" => "\u{00a9}", // copyright
+                    "rg" => "\u{00ae}", // registered
+                    "bu" => "\u{2022}", // bullet
+                    "sq" => "\u{25a1}", // white square
+                    "lq" => "\u{201c}", // left double quote
+                    "rq" => "\u{201d}", // right double quote
+                    _ => return None,
+                };
+                *i += 4;
+                Some(replacement.into())
+            }
+            _ => None,
+        }
     }
 }

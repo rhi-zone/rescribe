@@ -1,0 +1,6 @@
+.SH NAME
+test \- a test program
+.SH SYNOPSIS
+test [options]
+.SH DESCRIPTION
+This program does nothing.

@@ -1,0 +1,8 @@
+{
+  "description": "Bare troff request (just a dot) does not panic; subsequent content parses normally",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "hello" } }
+  ]
+}

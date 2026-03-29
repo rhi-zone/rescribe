@@ -45,6 +45,9 @@ pub struct Diagnostic {
 pub struct ManDoc {
     pub title: Option<String>,
     pub section: Option<String>,
+    pub date: Option<String>,
+    pub source: Option<String>,
+    pub manual: Option<String>,
     pub blocks: Vec<Block>,
     pub span: Span,
 }
@@ -55,6 +58,9 @@ impl ManDoc {
         ManDoc {
             title: self.title.clone(),
             section: self.section.clone(),
+            date: self.date.clone(),
+            source: self.source.clone(),
+            manual: self.manual.clone(),
             blocks: self.blocks.iter().map(Block::strip_spans).collect(),
             span: Span::NONE,
         }
@@ -75,7 +81,15 @@ pub enum Block {
         inlines: Vec<Inline>,
         span: Span,
     },
+    IndentedParagraph {
+        inlines: Vec<Inline>,
+        span: Span,
+    },
     CodeBlock {
+        content: String,
+        span: Span,
+    },
+    ExampleBlock {
         content: String,
         span: Span,
     },
@@ -89,6 +103,10 @@ pub enum Block {
         span: Span,
     },
     HorizontalRule {
+        span: Span,
+    },
+    Comment {
+        text: String,
         span: Span,
     },
 }
@@ -105,7 +123,15 @@ impl Block {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
+            Block::IndentedParagraph { inlines, .. } => Block::IndentedParagraph {
+                inlines: inlines.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
             Block::CodeBlock { content, .. } => Block::CodeBlock {
+                content: content.clone(),
+                span: Span::NONE,
+            },
+            Block::ExampleBlock { content, .. } => Block::ExampleBlock {
                 content: content.clone(),
                 span: Span::NONE,
             },
@@ -130,6 +156,10 @@ impl Block {
                 span: Span::NONE,
             },
             Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
+            Block::Comment { text, .. } => Block::Comment {
+                text: text.clone(),
+                span: Span::NONE,
+            },
         }
     }
 }
@@ -142,6 +172,9 @@ pub enum Inline {
     Text(String, Span),
     Bold(Vec<Inline>, Span),
     Italic(Vec<Inline>, Span),
+    Code(String, Span),
+    Superscript(Vec<Inline>, Span),
+    Subscript(Vec<Inline>, Span),
     Link {
         url: String,
         children: Vec<Inline>,
@@ -158,6 +191,13 @@ impl Inline {
             }
             Inline::Italic(children, _) => {
                 Inline::Italic(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Code(s, _) => Inline::Code(s.clone(), Span::NONE),
+            Inline::Superscript(children, _) => {
+                Inline::Superscript(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Subscript(children, _) => {
+                Inline::Subscript(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
             Inline::Link {
                 url,

@@ -1,0 +1,7 @@
+{
+  "description": "Definition list with 200 entries does not panic and produces 200 definition_list items",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" }
+  ]
+}

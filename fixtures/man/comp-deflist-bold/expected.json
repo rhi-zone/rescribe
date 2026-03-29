@@ -1,0 +1,13 @@
+{
+  "description": "Definition list with bold term: .TP followed by \\fB-v\\fR produces a definition_list with a strong term",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0",       "kind": "definition_list" },
+    { "path": "/0/0",     "kind": "definition_term" },
+    { "path": "/0/0/0",   "kind": "strong" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "-v" } },
+    { "path": "/0/1",     "kind": "definition_desc" },
+    { "path": "/0/1/0",   "kind": "paragraph" },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Enable verbose mode." } }
+  ]
+}

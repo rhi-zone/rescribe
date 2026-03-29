@@ -1,0 +1,1 @@
+.TH MYAPP 1 "2024-01-15" "MyApp 1.0" "User Commands"

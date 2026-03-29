@@ -13,9 +13,9 @@ Scope: troff/groff man macro set (man(7)) as used for Unix manual pages.
 - [x] definition list / tagged paragraph (.TP) — `definition-list`
 - [x] code block / literal block (.nf / .fi) — `code-block`
 - [x] horizontal rule (.sp with rule) — `horizontal-rule`
-- [ ] indented paragraph (.IP) — (missing)
-- [ ] relative indent start/end (.RS / .RE) — (missing)
-- [ ] example block (.EX / .EE, groff extension) — (missing)
+- [x] indented paragraph (.IP) — `indented-para`
+- [ ] relative indent start/end (.RS / .RE) — (modeled as skip; tested in `path-deep-rs-re`)
+- [x] example block (.EX / .EE, groff extension) — `example-block`
 - [ ] synopsis block (.SY / .OP / .YS, groff extension) — (missing)
 - [ ] synopsis section convention (NAME, SYNOPSIS, etc.) — (missing)
 
@@ -27,51 +27,51 @@ Scope: troff/groff man macro set (man(7)) as used for Unix manual pages.
 - [x] inline italic (.I inline via font escape \fI...\fR) — `inline-italic`
 - [x] alternating bold/italic (.BI, .IB, .BR, .RB, .RI, .IR macros) — `rare-alternating`
 - [x] hyperlink / URL (.UR / .UE) — `link`
-- [ ] inline code / monospace (\f(CW ... \fR) — (missing)
-- [ ] small caps — (missing)
-- [ ] superscript — (missing)
-- [ ] subscript — (missing)
+- [x] inline code / monospace (\f(CW ... \fR) — `inline-code`
+- [ ] small caps — (no native man syntax)
+- [ ] superscript — (modeled in AST; no dedicated fixture — no native man syntax)
+- [ ] subscript — (modeled in AST; no dedicated fixture — no native man syntax)
 
 ## Font escapes
 
-- [ ] \fB (bold) / \fR (roman) — (covered via inline-bold, no dedicated escape fixture)
-- [ ] \fI (italic) — (covered via inline-italic)
-- [ ] \f(CW (constant width) — (missing)
+- [x] \fB (bold) / \fR (roman) — (covered via `inline-bold`)
+- [x] \fI (italic) — (covered via `inline-italic`)
+- [x] \f(CW (constant width) — `inline-code`
 - [ ] \fP (previous font) — (missing)
 - [ ] \f[fontname] (groff named font) — (missing)
 
 ## Special character escapes
 
-- [ ] \(em (em dash) — (missing)
-- [ ] \(en (en dash) — (missing)
-- [ ] \(co (copyright) — (missing)
-- [ ] \(rg (registered) — (missing)
-- [ ] \e (backslash) — (missing)
-- [ ] \~ (non-breaking space) — (missing)
-- [ ] \& (zero-width non-joiner) — (missing)
+- [x] \(em (em dash) — `special-chars`
+- [x] \(en (en dash) — `special-chars`
+- [x] \(co (copyright) — `special-chars`
+- [x] \(rg (registered) — `special-chars`
+- [x] \e (backslash) — `special-chars`
+- [ ] \~ (non-breaking space) — (modeled in parser; no dedicated fixture)
+- [x] \& (zero-width non-joiner) — (modeled in parser as skip)
 
 ## Metadata / comments
 
-- [ ] .TH (title header: name, section, date, source, manual) — (missing)
-- [ ] .\" (comment line) — (missing)
+- [x] .TH (title header: name, section, date, source, manual) — `th-header`
+- [x] .\" (comment line) — `comment-line`
 
 ## Composition (integration)
 
-- [ ] definition list with inline bold in term — (missing)
+- [x] definition list with inline bold in term — `comp-deflist-bold`
 - [ ] code block inside indented paragraph — (missing)
-- [ ] URL with descriptive text — (missing)
-- [ ] multiple sections in one document — (missing)
+- [x] URL with descriptive text — `comp-url-text`
+- [x] multiple sections in one document — `comp-multi-section`
 
 ## Adversarial
 
 - [x] empty document — `adv-empty`
-- [ ] unknown macro (.foo) — (missing)
-- [ ] unclosed font escape (\fB with no \fR) — (missing)
-- [ ] macro with too many arguments — (missing)
-- [ ] bare troff request (.) — (missing)
+- [x] unknown macro (.foo) — `adv-unknown-macro`
+- [x] unclosed font escape (\fB with no \fR) — `adv-unclosed-font`
+- [x] macro with too many arguments — `adv-too-many-args`
+- [x] bare troff request (.) — `adv-bare-troff`
 
 ## Pathological
 
-- [ ] very long line (>64 KB) — (missing)
-- [ ] deeply nested .RS / .RE — (missing)
-- [ ] definition list with hundreds of entries — (missing)
+- [x] very long line (>64 KB) — `path-long-line`
+- [x] deeply nested .RS / .RE — `path-deep-rs-re`
+- [x] definition list with hundreds of entries — `path-many-defs`

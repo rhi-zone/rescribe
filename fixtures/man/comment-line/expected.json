@@ -1,0 +1,8 @@
+{
+  "description": ".\\\" comment line is preserved as a comment node",
+  "assertions": [
+    { "path": "/0", "kind": "comment", "props": { "content": "This is a comment" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Hello" } }
+  ]
+}

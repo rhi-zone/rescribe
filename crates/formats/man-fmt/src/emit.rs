@@ -11,8 +11,17 @@ pub fn build(doc: &ManDoc) -> String {
     // Write title header
     let title = doc.title.as_deref().unwrap_or("UNTITLED");
     let section = doc.section.as_deref().unwrap_or("1");
-    ctx.write(&format!(".TH {} {} ", title.to_uppercase(), section));
-    ctx.write("\"\" \"\" \"\"\n");
+    let date = doc.date.as_deref().unwrap_or("");
+    let source = doc.source.as_deref().unwrap_or("");
+    let manual = doc.manual.as_deref().unwrap_or("");
+    ctx.write(&format!(
+        ".TH {} {} \"{}\" \"{}\" \"{}\"\n",
+        title.to_uppercase(),
+        section,
+        date,
+        source,
+        manual,
+    ));
 
     for block in &doc.blocks {
         build_block(block, &mut ctx);
@@ -68,6 +77,13 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n");
         }
 
+        Block::IndentedParagraph { inlines, .. } => {
+            ctx.newline();
+            ctx.write(".IP\n");
+            build_inlines(inlines, ctx);
+            ctx.write("\n");
+        }
+
         Block::CodeBlock { content, .. } => {
             ctx.newline();
             ctx.write(".nf\n");
@@ -80,6 +96,16 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
                 ctx.write("\n");
             }
             ctx.write(".fi\n");
+        }
+
+        Block::ExampleBlock { content, .. } => {
+            ctx.newline();
+            ctx.write(".EX\n");
+            for line in content.lines() {
+                ctx.write(line);
+                ctx.write("\n");
+            }
+            ctx.write(".EE\n");
         }
 
         Block::List { ordered, items, .. } => {
@@ -122,6 +148,13 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.newline();
             ctx.write(".sp\n");
         }
+
+        Block::Comment { text, .. } => {
+            ctx.newline();
+            ctx.write(".\\\" ");
+            ctx.write(text);
+            ctx.write("\n");
+        }
     }
 }
 
@@ -150,6 +183,24 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("\\fR");
         }
 
+        Inline::Code(text, _) => {
+            ctx.write("\\f(CW");
+            ctx.write(&escape_man(text));
+            ctx.write("\\fR");
+        }
+
+        Inline::Superscript(children, _) => {
+            ctx.write("^{");
+            build_inlines(children, ctx);
+            ctx.write("}");
+        }
+
+        Inline::Subscript(children, _) => {
+            ctx.write("_{");
+            build_inlines(children, ctx);
+            ctx.write("}");
+        }
+
         Inline::Link { url, children, .. } => {
             build_inlines(children, ctx);
             ctx.write(" (");
@@ -176,8 +227,11 @@ pub fn extract_text(inlines: &[Inline]) -> String {
     for inline in inlines {
         match inline {
             Inline::Text(s, _) => text.push_str(s),
+            Inline::Code(s, _) => text.push_str(s),
             Inline::Bold(children, _)
             | Inline::Italic(children, _)
+            | Inline::Superscript(children, _)
+            | Inline::Subscript(children, _)
             | Inline::Link { children, .. } => {
                 text.push_str(&extract_text(children));
             }
