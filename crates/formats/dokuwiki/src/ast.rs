@@ -1,4 +1,4 @@
-// ── Span / Diagnostic ─────────────────────────────────────────────────────────
+// -- Span / Diagnostic ----------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Span {
@@ -25,14 +25,22 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Diagnostic { severity: Severity::Warning, message: message.into(), span }
+        Diagnostic {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
     }
     pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Diagnostic { severity: Severity::Error, message: message.into(), span }
+        Diagnostic {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
     }
 }
 
-// ── AST ───────────────────────────────────────────────────────────────────────
+// -- AST ------------------------------------------------------------------
 
 /// A parsed DokuWiki document.
 #[derive(Debug, Clone, Default)]
@@ -65,16 +73,101 @@ pub enum Block {
         content: String,
         span: Span,
     },
+    FileBlock {
+        language: Option<String>,
+        filename: Option<String>,
+        content: String,
+        span: Span,
+    },
     Blockquote {
         children: Vec<Block>,
         span: Span,
     },
     List {
         ordered: bool,
-        items: Vec<Vec<Block>>,
+        items: Vec<ListItem>,
+        span: Span,
+    },
+    Table {
+        rows: Vec<TableRow>,
+        span: Span,
+    },
+    DefinitionList {
+        items: Vec<DefinitionItem>,
         span: Span,
     },
     HorizontalRule(Span),
+    RawBlock {
+        format: String,
+        content: String,
+        span: Span,
+    },
+    Macro {
+        name: String,
+        span: Span,
+    },
+}
+
+/// A list item, which may contain nested lists.
+#[derive(Debug, Clone)]
+pub struct ListItem {
+    pub inlines: Vec<Inline>,
+    pub children: Vec<Block>,
+}
+
+impl ListItem {
+    pub fn strip_spans(self) -> Self {
+        ListItem {
+            inlines: self.inlines.into_iter().map(|i| i.strip_spans()).collect(),
+            children: self.children.into_iter().map(|b| b.strip_spans()).collect(),
+        }
+    }
+}
+
+/// A table row.
+#[derive(Debug, Clone)]
+pub struct TableRow {
+    pub cells: Vec<TableCell>,
+    pub is_header: bool,
+}
+
+impl TableRow {
+    pub fn strip_spans(self) -> Self {
+        TableRow {
+            cells: self.cells.into_iter().map(|c| c.strip_spans()).collect(),
+            is_header: self.is_header,
+        }
+    }
+}
+
+/// A table cell.
+#[derive(Debug, Clone)]
+pub struct TableCell {
+    pub inlines: Vec<Inline>,
+}
+
+impl TableCell {
+    pub fn strip_spans(self) -> Self {
+        TableCell {
+            inlines: self.inlines.into_iter().map(|i| i.strip_spans()).collect(),
+        }
+    }
+}
+
+/// A definition list item.
+#[derive(Debug, Clone)]
+pub struct DefinitionItem {
+    pub term: Vec<Inline>,
+    pub desc: Vec<Inline>,
+}
+
+impl DefinitionItem {
+    pub fn strip_spans(self) -> Self {
+        DefinitionItem {
+            term: self.term.into_iter().map(|i| i.strip_spans()).collect(),
+            desc: self.desc.into_iter().map(|i| i.strip_spans()).collect(),
+        }
+    }
 }
 
 impl Block {
@@ -89,8 +182,21 @@ impl Block {
                 inlines: inlines.into_iter().map(|i| i.strip_spans()).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { language, content, .. } => Block::CodeBlock {
+            Block::CodeBlock {
+                language, content, ..
+            } => Block::CodeBlock {
                 language,
+                content,
+                span: Span::NONE,
+            },
+            Block::FileBlock {
+                language,
+                filename,
+                content,
+                ..
+            } => Block::FileBlock {
+                language,
+                filename,
                 content,
                 span: Span::NONE,
             },
@@ -98,15 +204,33 @@ impl Block {
                 children: children.into_iter().map(|b| b.strip_spans()).collect(),
                 span: Span::NONE,
             },
-            Block::List { ordered, items, .. } => Block::List {
+            Block::List {
+                ordered, items, ..
+            } => Block::List {
                 ordered,
-                items: items
-                    .into_iter()
-                    .map(|item| item.into_iter().map(|b| b.strip_spans()).collect())
-                    .collect(),
+                items: items.into_iter().map(|it| it.strip_spans()).collect(),
+                span: Span::NONE,
+            },
+            Block::Table { rows, .. } => Block::Table {
+                rows: rows.into_iter().map(|r| r.strip_spans()).collect(),
+                span: Span::NONE,
+            },
+            Block::DefinitionList { items, .. } => Block::DefinitionList {
+                items: items.into_iter().map(|it| it.strip_spans()).collect(),
                 span: Span::NONE,
             },
             Block::HorizontalRule(_) => Block::HorizontalRule(Span::NONE),
+            Block::RawBlock {
+                format, content, ..
+            } => Block::RawBlock {
+                format,
+                content,
+                span: Span::NONE,
+            },
+            Block::Macro { name, .. } => Block::Macro {
+                name,
+                span: Span::NONE,
+            },
         }
     }
 }
@@ -118,9 +242,25 @@ pub enum Inline {
     Bold(Vec<Inline>, Span),
     Italic(Vec<Inline>, Span),
     Underline(Vec<Inline>, Span),
+    Strikethrough(Vec<Inline>, Span),
+    Superscript(Vec<Inline>, Span),
+    Subscript(Vec<Inline>, Span),
     Code(String, Span),
-    Link { url: String, children: Vec<Inline>, span: Span },
-    Image { url: String, alt: Option<String>, span: Span },
+    Nowiki(String, Span),
+    Link {
+        url: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    Image {
+        url: String,
+        alt: Option<String>,
+        span: Span,
+    },
+    FootnoteRef {
+        content: String,
+        span: Span,
+    },
     LineBreak(Span),
     SoftBreak(Span),
 }
@@ -129,23 +269,46 @@ impl Inline {
     pub fn strip_spans(self) -> Self {
         match self {
             Inline::Text(s, _) => Inline::Text(s, Span::NONE),
-            Inline::Bold(children, _) => {
-                Inline::Bold(children.into_iter().map(|i| i.strip_spans()).collect(), Span::NONE)
-            }
-            Inline::Italic(children, _) => {
-                Inline::Italic(children.into_iter().map(|i| i.strip_spans()).collect(), Span::NONE)
-            }
+            Inline::Bold(children, _) => Inline::Bold(
+                children.into_iter().map(|i| i.strip_spans()).collect(),
+                Span::NONE,
+            ),
+            Inline::Italic(children, _) => Inline::Italic(
+                children.into_iter().map(|i| i.strip_spans()).collect(),
+                Span::NONE,
+            ),
             Inline::Underline(children, _) => Inline::Underline(
                 children.into_iter().map(|i| i.strip_spans()).collect(),
                 Span::NONE,
             ),
+            Inline::Strikethrough(children, _) => Inline::Strikethrough(
+                children.into_iter().map(|i| i.strip_spans()).collect(),
+                Span::NONE,
+            ),
+            Inline::Superscript(children, _) => Inline::Superscript(
+                children.into_iter().map(|i| i.strip_spans()).collect(),
+                Span::NONE,
+            ),
+            Inline::Subscript(children, _) => Inline::Subscript(
+                children.into_iter().map(|i| i.strip_spans()).collect(),
+                Span::NONE,
+            ),
             Inline::Code(s, _) => Inline::Code(s, Span::NONE),
+            Inline::Nowiki(s, _) => Inline::Nowiki(s, Span::NONE),
             Inline::Link { url, children, .. } => Inline::Link {
                 url,
                 children: children.into_iter().map(|i| i.strip_spans()).collect(),
                 span: Span::NONE,
             },
-            Inline::Image { url, alt, .. } => Inline::Image { url, alt, span: Span::NONE },
+            Inline::Image { url, alt, .. } => Inline::Image {
+                url,
+                alt,
+                span: Span::NONE,
+            },
+            Inline::FootnoteRef { content, .. } => Inline::FootnoteRef {
+                content,
+                span: Span::NONE,
+            },
             Inline::LineBreak(_) => Inline::LineBreak(Span::NONE),
             Inline::SoftBreak(_) => Inline::SoftBreak(Span::NONE),
         }

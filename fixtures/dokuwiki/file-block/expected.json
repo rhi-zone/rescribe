@@ -1,0 +1,7 @@
+{
+  "description": "File block with <file> tags",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "file_block" }
+  ]
+}

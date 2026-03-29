@@ -1,0 +1,8 @@
+{
+  "description": "Level 4 heading with three equals signs",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 4 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Heading 4" } }
+  ]
+}

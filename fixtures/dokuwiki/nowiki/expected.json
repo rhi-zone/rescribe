@@ -1,0 +1,8 @@
+{
+  "description": "Nowiki/literal span with %% delimiters",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "raw_inline", "props": { "content": "**not bold**" } }
+  ]
+}

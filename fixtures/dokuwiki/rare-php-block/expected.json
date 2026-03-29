@@ -1,0 +1,7 @@
+{
+  "description": "Raw PHP block with <php> tags",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "format": "php" } }
+  ]
+}

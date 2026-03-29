@@ -1,0 +1,7 @@
+{
+  "description": "Unclosed bold markup does not crash the parser",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

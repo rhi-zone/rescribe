@@ -1,0 +1,7 @@
+{
+  "description": "Deeply nested lists (6 levels) do not crash the parser",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list" }
+  ]
+}

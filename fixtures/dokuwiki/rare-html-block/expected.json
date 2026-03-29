@@ -1,0 +1,7 @@
+{
+  "description": "Raw HTML block with <html> tags",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "format": "html" } }
+  ]
+}

@@ -4,12 +4,27 @@
 //! Used by `rescribe-read-dokuwiki` and `rescribe-write-dokuwiki` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
-pub use ast::{Block, Diagnostic, DokuwikiDoc, Inline, Severity, Span};
+// Re-export everything callers need.
+pub use ast::{
+    Block, DefinitionItem, Diagnostic, DokuwikiDoc, Inline, ListItem, Severity, Span, TableCell,
+    TableRow,
+};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::{build, collect_inline_text};
+pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
+pub use writer::Writer;
+
+/// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
+pub fn events(input: &str) -> events::InputEventIter<'_> {
+    events::events(input)
+}
 
 #[cfg(test)]
 mod tests {
@@ -91,7 +106,10 @@ mod tests {
     fn test_parse_list() {
         let (doc, _) = parse("  * Item 1\n  * Item 2");
         assert_eq!(doc.blocks.len(), 1);
-        let Block::List { ordered, items, .. } = &doc.blocks[0] else {
+        let Block::List {
+            ordered, items, ..
+        } = &doc.blocks[0]
+        else {
             panic!("expected list");
         };
         assert!(!ordered);
@@ -102,11 +120,119 @@ mod tests {
     fn test_parse_code_block() {
         let (doc, _) = parse("<code rust>\nfn main() {}\n</code>");
         assert_eq!(doc.blocks.len(), 1);
-        let Block::CodeBlock { language, content, .. } = &doc.blocks[0] else {
+        let Block::CodeBlock {
+            language, content, ..
+        } = &doc.blocks[0]
+        else {
             panic!("expected code block");
         };
         assert_eq!(language.as_deref(), Some("rust"));
         assert!(content.contains("fn main()"));
+    }
+
+    #[test]
+    fn test_parse_strikethrough() {
+        let (doc, _) = parse("This is <del>struck</del> text.");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines
+            .iter()
+            .any(|i| matches!(i, Inline::Strikethrough(_, _))));
+    }
+
+    #[test]
+    fn test_parse_superscript() {
+        let (doc, _) = parse("E=mc<sup>2</sup>");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines
+            .iter()
+            .any(|i| matches!(i, Inline::Superscript(_, _))));
+    }
+
+    #[test]
+    fn test_parse_subscript() {
+        let (doc, _) = parse("H<sub>2</sub>O");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines
+            .iter()
+            .any(|i| matches!(i, Inline::Subscript(_, _))));
+    }
+
+    #[test]
+    fn test_parse_footnote() {
+        let (doc, _) = parse("See this((footnote text)).");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines
+            .iter()
+            .any(|i| matches!(i, Inline::FootnoteRef { .. })));
+    }
+
+    #[test]
+    fn test_parse_nowiki() {
+        let (doc, _) = parse("This %%**not bold**%% stays.");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines
+            .iter()
+            .any(|i| matches!(i, Inline::Nowiki(s, _) if s == "**not bold**")));
+    }
+
+    #[test]
+    fn test_parse_table() {
+        let (doc, _) = parse("^ Name ^ Age ^\n| Alice | 30 |");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Table { rows, .. } = &doc.blocks[0] else {
+            panic!("expected table");
+        };
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].is_header);
+        assert!(!rows[1].is_header);
+    }
+
+    #[test]
+    fn test_parse_definition_list() {
+        let (doc, _) = parse("; Term\n: Description");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::DefinitionList { items, .. } = &doc.blocks[0] else {
+            panic!("expected definition list");
+        };
+        assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_line_break() {
+        let (doc, _) = parse("line one\\\\ line two");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines
+            .iter()
+            .any(|i| matches!(i, Inline::LineBreak(_))));
+    }
+
+    #[test]
+    fn test_parse_file_block() {
+        let (doc, _) = parse("<file>\nsome content\n</file>");
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::FileBlock { .. }));
+    }
+
+    #[test]
+    fn test_parse_macro() {
+        let (doc, _) = parse("~~NOTOC~~");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Macro { name, .. } = &doc.blocks[0] else {
+            panic!("expected macro");
+        };
+        assert_eq!(name, "NOTOC");
     }
 
     #[test]

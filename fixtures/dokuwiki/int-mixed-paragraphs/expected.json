@@ -1,0 +1,8 @@
+{
+  "description": "Multiple paragraphs with mixed inline formatting",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

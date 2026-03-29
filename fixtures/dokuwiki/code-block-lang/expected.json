@@ -1,0 +1,7 @@
+{
+  "description": "Code block with language attribute",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "python" } }
+  ]
+}

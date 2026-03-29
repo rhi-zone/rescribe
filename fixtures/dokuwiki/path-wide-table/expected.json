@@ -1,0 +1,7 @@
+{
+  "description": "Very wide table (25 columns) does not crash the parser",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "table" }
+  ]
+}

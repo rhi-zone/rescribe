@@ -1,0 +1,9 @@
+{
+  "description": "Superscript text with <sup> tags",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "superscript" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "2" } }
+  ]
+}

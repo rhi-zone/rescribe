@@ -1,0 +1,9 @@
+{
+  "description": "Inline markup inside table cells",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/1", "kind": "table_row" }
+  ]
+}

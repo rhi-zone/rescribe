@@ -21,12 +21,18 @@ pub fn collect_inline_text(inlines: &[Inline]) -> String {
 fn collect_inline_text_one(inline: &Inline, out: &mut String) {
     match inline {
         Inline::Text(s, _) => out.push_str(s),
-        Inline::Bold(children, _) | Inline::Italic(children, _) | Inline::Underline(children, _) => {
+        Inline::Bold(children, _)
+        | Inline::Italic(children, _)
+        | Inline::Underline(children, _)
+        | Inline::Strikethrough(children, _)
+        | Inline::Superscript(children, _)
+        | Inline::Subscript(children, _) => {
             for child in children {
                 collect_inline_text_one(child, out);
             }
         }
         Inline::Code(s, _) => out.push_str(s),
+        Inline::Nowiki(s, _) => out.push_str(s),
         Inline::Link { children, .. } => {
             for child in children {
                 collect_inline_text_one(child, out);
@@ -37,6 +43,7 @@ fn collect_inline_text_one(inline: &Inline, out: &mut String) {
                 out.push_str(a);
             }
         }
+        Inline::FootnoteRef { content, .. } => out.push_str(content),
         Inline::LineBreak(_) => out.push('\n'),
         Inline::SoftBreak(_) => out.push(' '),
     }
@@ -81,7 +88,9 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n\n");
         }
 
-        Block::CodeBlock { language, content, .. } => {
+        Block::CodeBlock {
+            language, content, ..
+        } => {
             ctx.write("<code");
             if let Some(lang) = language {
                 ctx.write(" ");
@@ -93,6 +102,32 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
                 ctx.write("\n");
             }
             ctx.write("</code>\n\n");
+        }
+
+        Block::FileBlock {
+            language,
+            filename,
+            content,
+            ..
+        } => {
+            ctx.write("<file");
+            if let Some(lang) = language {
+                ctx.write(" ");
+                ctx.write(lang);
+            }
+            if let Some(fname) = filename {
+                if language.is_none() {
+                    ctx.write(" ");
+                }
+                ctx.write(" ");
+                ctx.write(fname);
+            }
+            ctx.write(">\n");
+            ctx.write(content);
+            if !content.ends_with('\n') {
+                ctx.write("\n");
+            }
+            ctx.write("</file>\n\n");
         }
 
         Block::Blockquote { children, .. } => {
@@ -109,9 +144,11 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n");
         }
 
-        Block::List { ordered, items, .. } => {
+        Block::List {
+            ordered, items, ..
+        } => {
             ctx.list_depth += 1;
-            for item_blocks in items {
+            for item in items {
                 for _ in 0..ctx.list_depth {
                     ctx.write("  ");
                 }
@@ -120,14 +157,10 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
                 } else {
                     ctx.write("* ");
                 }
-                for block in item_blocks {
-                    match block {
-                        Block::Paragraph { inlines, .. } => {
-                            build_inlines(inlines, ctx);
-                            ctx.write("\n");
-                        }
-                        _ => build_block(block, ctx),
-                    }
+                build_inlines(&item.inlines, ctx);
+                ctx.write("\n");
+                for child in &item.children {
+                    build_block(child, ctx);
                 }
             }
             ctx.list_depth -= 1;
@@ -136,8 +169,58 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             }
         }
 
+        Block::Table { rows, .. } => {
+            for row in rows {
+                let delim = if row.is_header { "^" } else { "|" };
+                for cell in &row.cells {
+                    ctx.write(delim);
+                    ctx.write(" ");
+                    build_inlines(&cell.inlines, ctx);
+                    ctx.write(" ");
+                }
+                ctx.write(delim);
+                ctx.write("\n");
+            }
+            ctx.write("\n");
+        }
+
+        Block::DefinitionList { items, .. } => {
+            for item in items {
+                ctx.write("; ");
+                build_inlines(&item.term, ctx);
+                ctx.write("\n");
+                if !item.desc.is_empty() {
+                    ctx.write(": ");
+                    build_inlines(&item.desc, ctx);
+                    ctx.write("\n");
+                }
+            }
+            ctx.write("\n");
+        }
+
         Block::HorizontalRule(_) => {
             ctx.write("----\n\n");
+        }
+
+        Block::RawBlock {
+            format, content, ..
+        } => {
+            ctx.write("<");
+            ctx.write(format);
+            ctx.write(">\n");
+            ctx.write(content);
+            if !content.ends_with('\n') {
+                ctx.write("\n");
+            }
+            ctx.write("</");
+            ctx.write(format);
+            ctx.write(">\n\n");
+        }
+
+        Block::Macro { name, .. } => {
+            ctx.write("~~");
+            ctx.write(name);
+            ctx.write("~~\n\n");
         }
     }
 }
@@ -170,10 +253,34 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("__");
         }
 
+        Inline::Strikethrough(children, _) => {
+            ctx.write("<del>");
+            build_inlines(children, ctx);
+            ctx.write("</del>");
+        }
+
+        Inline::Superscript(children, _) => {
+            ctx.write("<sup>");
+            build_inlines(children, ctx);
+            ctx.write("</sup>");
+        }
+
+        Inline::Subscript(children, _) => {
+            ctx.write("<sub>");
+            build_inlines(children, ctx);
+            ctx.write("</sub>");
+        }
+
         Inline::Code(s, _) => {
             ctx.write("''");
             ctx.write(s);
             ctx.write("''");
+        }
+
+        Inline::Nowiki(s, _) => {
+            ctx.write("%%");
+            ctx.write(s);
+            ctx.write("%%");
         }
 
         Inline::Link { url, children, .. } => {
@@ -194,7 +301,13 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("}}");
         }
 
-        Inline::LineBreak(_) => ctx.write("\\\\\n"),
+        Inline::FootnoteRef { content, .. } => {
+            ctx.write("((");
+            ctx.write(content);
+            ctx.write("))");
+        }
+
+        Inline::LineBreak(_) => ctx.write("\\\\ "),
         Inline::SoftBreak(_) => ctx.write(" "),
     }
 }

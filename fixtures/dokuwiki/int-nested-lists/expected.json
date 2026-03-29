@@ -1,0 +1,8 @@
+{
+  "description": "Three levels of nested unordered lists",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item" }
+  ]
+}
