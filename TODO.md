@@ -329,18 +329,18 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Nested blockquote parsing (depth counter) — (2026-03-29)
   - [x] Footnote definitions — `[fn:label]` block-level (2026-03-29)
   - [x] Figure/caption blocks — `#+CAPTION:`/`#+NAME:` wrapping image/table/code (2026-03-29)
-- [x] `muse-fmt` vertical — **4-Fuzz** (2026-03-21)
+- [ ] `muse-fmt` vertical — **4-Fuzz** → needs re-fuzz after construct expansion
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
   - [x] parse() infallible → (MuseDoc, Vec<Diagnostic>)
-  - [x] No-panic fuzz gate (`fuzz_muse_reader`) — 1.65M runs clean (2026-03-21)
-  - [x] Roundtrip fuzz target (`fuzz_muse_roundtrip`) — 1.15M runs clean (2026-03-21)
-  - [x] Fixed OOM/infinite-loop bugs: unknown `<` tag and over-leveled `****** ` heading
-  - [x] Fixed roundtrip italic-boundary loss: word-boundary guard in fuzz target
-  - [x] Fixtures: blockquote, horizontal-rule, definition-list added (2026-03-21)
-  - [ ] Verse block fixture
-  - [ ] Table support (not in muse AST yet)
-  - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
+  - [x] No-panic fuzz gate (`fuzz_muse_reader`) — 1.65M runs clean (2026-03-21); needs re-run after expansion
+  - [x] Roundtrip fuzz target (`fuzz_muse_roundtrip`) — 1.15M runs clean (2026-03-21); needs re-run
+  - [x] Constructs: tables, verse, footnotes, centered/right/literal/src blocks, underline, strikethrough, sup, sub, image, anchor, line-break (2026-03-29)
+  - [x] Fixtures: COVERAGE.md fully checked (2026-03-29); composition + adversarial + pathological added
+  - [x] Oracle harness: `pandoc_muse_corpus` #[ignore] + `parse_sample_no_panic` CI test (2026-03-29)
+  - [x] Benchmarks: muse_parse_small, muse_parse_medium, muse_emit_medium (2026-03-29)
+  - [x] All API modes: ast + stream + batch + w-build + w-stream (2026-03-29)
+  - [ ] Re-run fuzz clean after construct expansion (pre-req for 5-Production)
 - [x] `man-fmt` vertical — **4-Fuzz** (2026-03-21)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
