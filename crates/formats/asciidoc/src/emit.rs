@@ -147,7 +147,6 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
 
         Block::Table { rows, .. } => {
             ctx.write("|===\n");
-            let mut first_row = true;
             for row in rows {
                 for cell in &row.cells {
                     ctx.write("| ");
@@ -156,10 +155,10 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
                 }
                 ctx.write("\n");
 
-                // Add blank line after header row
-                if first_row || row.is_header {
+                // Blank line after a header row separates it from body rows.
+                // Only emit if the row is explicitly marked as a header.
+                if row.is_header {
                     ctx.write("\n");
-                    first_row = false;
                 }
             }
             ctx.write("|===\n\n");

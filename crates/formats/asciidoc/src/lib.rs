@@ -315,4 +315,75 @@ mod tests {
         let out = build(&doc);
         assert!(out.contains("https://example.com[click]"));
     }
+
+    #[test]
+    fn test_parse_table_basic() {
+        let (doc, diags) = parse("|===\n| Cell A | Cell B\n|===\n");
+        assert!(diags.is_empty());
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Table { rows, .. } = &doc.blocks[0] else {
+            panic!("expected table, got {:?}", doc.blocks[0]);
+        };
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].cells.len(), 2);
+        assert!(!rows[0].is_header);
+    }
+
+    #[test]
+    fn test_parse_table_with_header() {
+        let input = "|===\n| Col1 | Col2\n\n| Cell1\n| Cell2\n|===\n";
+        let (doc, diags) = parse(input);
+        assert!(diags.is_empty());
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Table { rows, .. } = &doc.blocks[0] else {
+            panic!("expected table");
+        };
+        // First group (before blank line) becomes header
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].is_header);
+        assert!(!rows[1].is_header);
+    }
+
+    #[test]
+    fn test_table_roundtrip() {
+        // Build an arbitrary table AST and verify parse(emit(ast)) == ast
+        let ast = AsciiDoc {
+            blocks: vec![Block::Table {
+                rows: vec![
+                    TableRow {
+                        cells: vec![
+                            vec![Inline::Text { text: "Col1".into(), span: Span::NONE }],
+                            vec![Inline::Text { text: "Col2".into(), span: Span::NONE }],
+                        ],
+                        is_header: false,
+                    },
+                    TableRow {
+                        cells: vec![
+                            vec![Inline::Text { text: "A".into(), span: Span::NONE }],
+                            vec![Inline::Text { text: "B".into(), span: Span::NONE }],
+                        ],
+                        is_header: false,
+                    },
+                ],
+                span: Span::NONE,
+            }],
+            attributes: Default::default(),
+            span: Span::NONE,
+        };
+        let emitted = build(&ast);
+        let (reparsed, diags) = parse(&emitted);
+        assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+        assert_eq!(reparsed.strip_spans(), ast.strip_spans());
+    }
+
+    #[test]
+    fn test_table_events() {
+        let evs: Vec<_> = events("|===\n| A | B\n|===\n").collect();
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTable)));
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndTable)));
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTableRow { .. })));
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTableCell)));
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndTableCell)));
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndTableRow)));
+    }
 }

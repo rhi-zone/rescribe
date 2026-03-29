@@ -54,7 +54,7 @@ impl std::error::Error for AsciiDocError {}
 // ── Document ──────────────────────────────────────────────────────────────────
 
 /// A parsed AsciiDoc document.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct AsciiDoc {
     pub blocks: Vec<Block>,
     pub attributes: std::collections::HashMap<String, String>,
@@ -75,7 +75,7 @@ impl AsciiDoc {
 // ── Block ─────────────────────────────────────────────────────────────────────
 
 /// Block-level element.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Block {
     Paragraph {
         inlines: Vec<Inline>,
@@ -226,7 +226,7 @@ impl Block {
 // ── Inline ────────────────────────────────────────────────────────────────────
 
 /// Inline element.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Inline {
     Text {
         text: String,
@@ -384,7 +384,7 @@ impl Inline {
 // ── Supporting types ──────────────────────────────────────────────────────────
 
 /// An image (URL + optional alt, width, height).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ImageData {
     pub url: String,
     pub alt: Option<String>,
@@ -393,7 +393,7 @@ pub struct ImageData {
 }
 
 /// A definition list item (term + description).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DefinitionItem {
     pub term: Vec<Inline>,
     pub desc: Vec<Inline>,
@@ -409,7 +409,7 @@ impl DefinitionItem {
 }
 
 /// A table row.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TableRow {
     pub cells: Vec<Vec<Inline>>,
     pub is_header: bool,
@@ -428,7 +428,7 @@ impl TableRow {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum QuoteType {
     Single,
     Double,

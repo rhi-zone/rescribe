@@ -990,6 +990,7 @@ impl<'a> EventIter<'a> {
                 let parts: Vec<&str> = line.splitn(2, '|').collect();
                 let rest = if parts.len() > 1 { parts[1] } else { "" };
                 let cell_parts: Vec<&str> = rest.split('|').collect();
+                let is_multi_cell_line = cell_parts.len() > 1;
                 for (i, cell) in cell_parts.iter().enumerate() {
                     let trimmed = cell.trim();
                     // Drop trailing empty cell from `| A | B |`
@@ -997,6 +998,12 @@ impl<'a> EventIter<'a> {
                         continue;
                     }
                     current_row.push(parse_inline_content(trimmed));
+                }
+                // A line with multiple `|`-separated cells is a complete row.
+                // Flush it immediately so that `| A | B\n| C | D` becomes two rows,
+                // not one row with four cells.
+                if is_multi_cell_line && !current_row.is_empty() {
+                    current_group.push(std::mem::take(&mut current_row));
                 }
             }
             self.advance_line();
