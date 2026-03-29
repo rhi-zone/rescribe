@@ -45,6 +45,16 @@ pub struct Diagnostic {
 pub struct MuseDoc {
     pub blocks: Vec<Block>,
     pub span: Span,
+    /// `#title` directive value.
+    pub title: Option<String>,
+    /// `#author` directive value.
+    pub author: Option<String>,
+    /// `#date` directive value.
+    pub date: Option<String>,
+    /// `#desc` directive value.
+    pub description: Option<String>,
+    /// `#keywords` directive value.
+    pub keywords: Option<String>,
 }
 
 impl MuseDoc {
@@ -53,6 +63,33 @@ impl MuseDoc {
         Self {
             blocks: self.blocks.into_iter().map(Block::strip_spans).collect(),
             span: Span::NONE,
+            title: self.title,
+            author: self.author,
+            date: self.date,
+            description: self.description,
+            keywords: self.keywords,
+        }
+    }
+}
+
+/// A row in a Muse table.
+#[derive(Debug, Clone)]
+pub struct TableRow {
+    /// Each cell contains inline content.
+    pub cells: Vec<Vec<Inline>>,
+    /// True if the row uses `||` header delimiters.
+    pub header: bool,
+}
+
+impl TableRow {
+    pub fn strip_spans(self) -> Self {
+        Self {
+            cells: self
+                .cells
+                .into_iter()
+                .map(|cell| cell.into_iter().map(Inline::strip_spans).collect())
+                .collect(),
+            header: self.header,
         }
     }
 }
@@ -87,6 +124,48 @@ pub enum Block {
         span: Span,
     },
     HorizontalRule {
+        span: Span,
+    },
+    /// `<verse>...</verse>` — preserves line breaks.
+    Verse {
+        children: Vec<Block>,
+        span: Span,
+    },
+    /// `<center>...</center>` — centered block.
+    CenteredBlock {
+        children: Vec<Block>,
+        span: Span,
+    },
+    /// `<right>...</right>` — right-aligned block.
+    RightBlock {
+        children: Vec<Block>,
+        span: Span,
+    },
+    /// `<literal>...</literal>` — literal passthrough (raw HTML, etc.).
+    LiteralBlock {
+        content: String,
+        span: Span,
+    },
+    /// `<src lang="...">...</src>` — code block with language.
+    SrcBlock {
+        lang: Option<String>,
+        content: String,
+        span: Span,
+    },
+    /// `;; text` or `<comment>...</comment>` — comment (no output).
+    Comment {
+        content: String,
+        span: Span,
+    },
+    /// Simple table: `| cell | cell |` rows.
+    Table {
+        rows: Vec<TableRow>,
+        span: Span,
+    },
+    /// Footnote definition: `[N] text`.
+    FootnoteDef {
+        label: String,
+        content: Vec<Inline>,
         span: Span,
     },
 }
@@ -132,6 +211,42 @@ impl Block {
                 span: Span::NONE,
             },
             Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
+            Block::Verse { children, .. } => Block::Verse {
+                children: children.into_iter().map(Block::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::CenteredBlock { children, .. } => Block::CenteredBlock {
+                children: children.into_iter().map(Block::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::RightBlock { children, .. } => Block::RightBlock {
+                children: children.into_iter().map(Block::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::LiteralBlock { content, .. } => Block::LiteralBlock {
+                content,
+                span: Span::NONE,
+            },
+            Block::SrcBlock { lang, content, .. } => Block::SrcBlock {
+                lang,
+                content,
+                span: Span::NONE,
+            },
+            Block::Comment { content, .. } => Block::Comment {
+                content,
+                span: Span::NONE,
+            },
+            Block::Table { rows, .. } => Block::Table {
+                rows: rows.into_iter().map(TableRow::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::FootnoteDef {
+                label, content, ..
+            } => Block::FootnoteDef {
+                label,
+                content: content.into_iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
         }
     }
 }
@@ -146,6 +261,32 @@ pub enum Inline {
     Link {
         url: String,
         children: Vec<Inline>,
+        span: Span,
+    },
+    /// `_underline_`
+    Underline(Vec<Inline>, Span),
+    /// `~~strikethrough~~`
+    Strikethrough(Vec<Inline>, Span),
+    /// `^superscript^`
+    Superscript(Vec<Inline>, Span),
+    /// `<sub>text</sub>`
+    Subscript(Vec<Inline>, Span),
+    /// `[N]` footnote reference
+    FootnoteRef {
+        label: String,
+        span: Span,
+    },
+    /// `<br>` hard line break
+    LineBreak(Span),
+    /// `<anchor name>` named anchor
+    Anchor {
+        name: String,
+        span: Span,
+    },
+    /// `[[image.png]]` image link
+    Image {
+        src: String,
+        alt: Option<String>,
         span: Span,
     },
 }
@@ -164,6 +305,36 @@ impl Inline {
             Inline::Link { url, children, .. } => Inline::Link {
                 url,
                 children: children.into_iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Underline(children, _) => Inline::Underline(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Strikethrough(children, _) => Inline::Strikethrough(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Superscript(children, _) => Inline::Superscript(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Subscript(children, _) => Inline::Subscript(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::FootnoteRef { label, .. } => Inline::FootnoteRef {
+                label,
+                span: Span::NONE,
+            },
+            Inline::LineBreak(_) => Inline::LineBreak(Span::NONE),
+            Inline::Anchor { name, .. } => Inline::Anchor {
+                name,
+                span: Span::NONE,
+            },
+            Inline::Image { src, alt, .. } => Inline::Image {
+                src,
+                alt,
                 span: Span::NONE,
             },
         }

@@ -1,0 +1,7 @@
+<center>
+Centered text
+</center>
+
+<right>
+Right-aligned text
+</right>

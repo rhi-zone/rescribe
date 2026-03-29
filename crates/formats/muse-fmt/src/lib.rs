@@ -8,7 +8,7 @@ pub mod emit;
 pub mod parse;
 
 // Re-export primary types for convenience.
-pub use ast::{Block, Diagnostic, Inline, MuseDoc, Severity, Span};
+pub use ast::{Block, Diagnostic, Inline, MuseDoc, Severity, Span, TableRow};
 pub use emit::build;
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -124,6 +124,7 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            ..Default::default()
         };
         let out = build(&doc);
         assert!(out.contains("* Title"));
@@ -137,6 +138,7 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            ..Default::default()
         };
         let out = build(&doc);
         assert!(out.contains("Hello, world!"));
@@ -153,6 +155,7 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            ..Default::default()
         };
         let out = build(&doc);
         assert!(out.contains("**bold**"));
@@ -169,6 +172,7 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            ..Default::default()
         };
         let out = build(&doc);
         assert!(out.contains("*emphasis*"));
@@ -182,6 +186,7 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            ..Default::default()
         };
         let out = build(&doc);
         assert!(out.contains("=code="));
@@ -199,6 +204,7 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            ..Default::default()
         };
         let out = build(&doc);
         assert!(out.contains("[[https://example.com][click]]"));
@@ -222,6 +228,7 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            ..Default::default()
         };
         let out = build(&doc);
         assert!(out.contains(" - one"));
@@ -246,6 +253,7 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            ..Default::default()
         };
         let out = build(&doc);
         assert!(out.contains(" 1. first"));
@@ -260,10 +268,224 @@ mod tests {
                 span: Span::NONE,
             }],
             span: Span::NONE,
+            ..Default::default()
         };
         let out = build(&doc);
         assert!(out.contains("<example>"));
         assert!(out.contains("print hi"));
         assert!(out.contains("</example>"));
+    }
+
+    // ── New construct tests ─────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_heading_h3_h4() {
+        let (doc, _) = parse("*** Level 3\n**** Level 4\n");
+        assert_eq!(doc.blocks.len(), 2);
+        assert!(matches!(doc.blocks[0], Block::Heading { level: 3, .. }));
+        assert!(matches!(doc.blocks[1], Block::Heading { level: 4, .. }));
+    }
+
+    #[test]
+    fn test_parse_verse_block() {
+        let (doc, _) = parse("<verse>\nLine one\nLine two\n</verse>\n");
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::Verse { .. }));
+    }
+
+    #[test]
+    fn test_parse_center_block() {
+        let (doc, _) = parse("<center>\nCentered text\n</center>\n");
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::CenteredBlock { .. }));
+    }
+
+    #[test]
+    fn test_parse_right_block() {
+        let (doc, _) = parse("<right>\nRight text\n</right>\n");
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::RightBlock { .. }));
+    }
+
+    #[test]
+    fn test_parse_literal_block() {
+        let (doc, _) = parse("<literal>\n<b>HTML</b>\n</literal>\n");
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::LiteralBlock { content, .. } = &doc.blocks[0] {
+            assert_eq!(content, "<b>HTML</b>");
+        } else {
+            panic!("expected LiteralBlock");
+        }
+    }
+
+    #[test]
+    fn test_parse_src_block() {
+        let (doc, _) = parse("<src lang=\"python\">\ndef f():\n    pass\n</src>\n");
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::SrcBlock { lang, content, .. } = &doc.blocks[0] {
+            assert_eq!(lang.as_deref(), Some("python"));
+            assert!(content.contains("def f()"));
+        } else {
+            panic!("expected SrcBlock");
+        }
+    }
+
+    #[test]
+    fn test_parse_line_comment() {
+        let (doc, _) = parse(";; This is a comment\n");
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::Comment { content, .. } = &doc.blocks[0] {
+            assert_eq!(content, "This is a comment");
+        } else {
+            panic!("expected Comment");
+        }
+    }
+
+    #[test]
+    fn test_parse_comment_block() {
+        let (doc, _) = parse("<comment>\nBlock comment\n</comment>\n");
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::Comment { content, .. } = &doc.blocks[0] {
+            assert_eq!(content, "Block comment");
+        } else {
+            panic!("expected Comment");
+        }
+    }
+
+    #[test]
+    fn test_parse_table() {
+        let (doc, _) = parse("|| Name || Age ||\n| Alice | 30 |\n| Bob | 25 |\n");
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::Table { rows, .. } = &doc.blocks[0] {
+            assert_eq!(rows.len(), 3);
+            assert!(rows[0].header);
+            assert!(!rows[1].header);
+        } else {
+            panic!("expected Table");
+        }
+    }
+
+    #[test]
+    fn test_parse_footnote_def() {
+        let (doc, _) = parse("[1] This is a footnote.\n");
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::FootnoteDef { label, .. } = &doc.blocks[0] {
+            assert_eq!(label, "1");
+        } else {
+            panic!("expected FootnoteDef");
+        }
+    }
+
+    #[test]
+    fn test_parse_underline() {
+        let (doc, _) = parse("_underlined_\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(matches!(inlines[0], Inline::Underline(_, _)));
+    }
+
+    #[test]
+    fn test_parse_strikethrough() {
+        let (doc, _) = parse("~~struck~~\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(matches!(inlines[0], Inline::Strikethrough(_, _)));
+    }
+
+    #[test]
+    fn test_parse_superscript() {
+        let (doc, _) = parse("x^2^\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|n| matches!(n, Inline::Superscript(_, _))));
+    }
+
+    #[test]
+    fn test_parse_subscript() {
+        let (doc, _) = parse("H<sub>2</sub>O\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|n| matches!(n, Inline::Subscript(_, _))));
+    }
+
+    #[test]
+    fn test_parse_footnote_ref() {
+        let (doc, _) = parse("See [1] for details.\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|n| matches!(n, Inline::FootnoteRef { .. })));
+    }
+
+    #[test]
+    fn test_parse_line_break() {
+        let (doc, _) = parse("first<br>second\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|n| matches!(n, Inline::LineBreak(_))));
+    }
+
+    #[test]
+    fn test_parse_anchor() {
+        let (doc, _) = parse("<anchor intro>This is the intro.\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|n| matches!(n, Inline::Anchor { .. })));
+    }
+
+    #[test]
+    fn test_parse_image() {
+        let (doc, _) = parse("See [[photo.png]] here.\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines.iter().any(|n| matches!(n, Inline::Image { .. })));
+    }
+
+    #[test]
+    fn test_parse_document_header() {
+        let (doc, _) = parse("#title My Doc\n#author Jane\n#date 2024-01-15\n\nBody text.\n");
+        assert_eq!(doc.title.as_deref(), Some("My Doc"));
+        assert_eq!(doc.author.as_deref(), Some("Jane"));
+        assert_eq!(doc.date.as_deref(), Some("2024-01-15"));
+        assert_eq!(doc.blocks.len(), 1);
+    }
+
+    #[test]
+    fn test_roundtrip_new_constructs() {
+        // Test that parse(build(doc)) preserves structure for new constructs
+        let inputs = [
+            "<center>\nCentered\n</center>\n",
+            "<right>\nRight\n</right>\n",
+            "<literal>\nraw content\n</literal>\n",
+            "<src lang=\"rust\">\nfn main() {}\n</src>\n",
+            ";; A comment\n",
+            "|| A || B ||\n| 1 | 2 |\n",
+            "[1] Footnote text.\n",
+            "_underlined_ text\n",
+            "~~struck~~ text\n",
+            "x^2^ formula\n",
+            "H<sub>2</sub>O\n",
+            "See [1] here.\n",
+            "first<br>second\n",
+            "[[photo.png]]\n",
+        ];
+        for input in &inputs {
+            let (doc, _) = parse(input);
+            let output = build(&doc);
+            let (doc2, _) = parse(&output);
+            assert_eq!(
+                doc.blocks.len(),
+                doc2.blocks.len(),
+                "Block count mismatch for input: {}",
+                input
+            );
+        }
     }
 }

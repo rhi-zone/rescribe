@@ -20,7 +20,11 @@ pub fn emit_with_options(
     let blocks = convert_nodes_to_blocks(&doc.content.children);
 
     // Build using the format-specific crate
-    let muse_doc = MuseDoc { blocks, span: Span::NONE };
+    let muse_doc = MuseDoc {
+        blocks,
+        span: Span::NONE,
+        ..Default::default()
+    };
     let output = muse_fmt::build(&muse_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
@@ -157,29 +161,37 @@ fn convert_node_to_inline(node: &Node) -> Inline {
             Inline::Link { url, children, span: Span::NONE }
         }
 
-        node::STRIKEOUT | node::UNDERLINE | node::SUBSCRIPT | node::SUPERSCRIPT => {
-            // Muse doesn't support these, emit children as-is
+        node::STRIKEOUT => {
             let children = convert_nodes_to_inlines(&node.children);
-            if children.is_empty() {
-                Inline::Text(String::new(), Span::NONE)
-            } else {
-                children.into_iter().next().unwrap()
-            }
+            Inline::Strikethrough(children, Span::NONE)
+        }
+
+        node::UNDERLINE => {
+            let children = convert_nodes_to_inlines(&node.children);
+            Inline::Underline(children, Span::NONE)
+        }
+
+        node::SUBSCRIPT => {
+            let children = convert_nodes_to_inlines(&node.children);
+            Inline::Subscript(children, Span::NONE)
+        }
+
+        node::SUPERSCRIPT => {
+            let children = convert_nodes_to_inlines(&node.children);
+            Inline::Superscript(children, Span::NONE)
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
-            Inline::Link {
-                url,
-                children: vec![],
+            let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
+            Inline::Image {
+                src: url,
+                alt,
                 span: Span::NONE,
             }
         }
 
-        node::LINE_BREAK => {
-            // Muse doesn't support line breaks in the AST, convert to text
-            Inline::Text("\n".to_string(), Span::NONE)
-        }
+        node::LINE_BREAK => Inline::LineBreak(Span::NONE),
 
         node::SOFT_BREAK => Inline::Text(" ".to_string(), Span::NONE),
 

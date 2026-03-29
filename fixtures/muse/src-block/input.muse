@@ -1,0 +1,4 @@
+<src lang="python">
+def hello():
+    print("hello")
+</src>

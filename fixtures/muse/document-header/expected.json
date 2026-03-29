@@ -1,0 +1,5 @@
+{ "description": "Document header directives", "category": "happy",
+  "metadata": { "title": "My Document", "author": "Jane Doe", "date": "2024-01-15" },
+  "assertions": [
+  { "path": "/0", "kind": "paragraph" }
+]}

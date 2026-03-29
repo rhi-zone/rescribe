@@ -1,0 +1,3 @@
+{ "description": "Simple table with header row", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "table" }
+]}

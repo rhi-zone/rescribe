@@ -1,0 +1,3 @@
+{ "description": "Superscript and subscript inline", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "paragraph" }
+]}

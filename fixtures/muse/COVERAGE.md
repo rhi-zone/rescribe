@@ -10,7 +10,7 @@ manual.
 - [x] paragraph — `paragraph`
 - [x] heading h1 (* Heading) — `heading`
 - [x] heading h2 (** Heading) — `heading-h2`
-- [ ] heading h3–h4 (*** / ****) — (missing)
+- [x] heading h3–h4 (*** / ****) — `heading-h3-h4`
 - [x] unordered list (- item) — `list-unordered`
 - [x] ordered list (1. item) — `list-ordered`
 - [x] definition list (term :: definition) — `definition-list`
@@ -19,13 +19,13 @@ manual.
 - [x] code block (<example> … </example>) — `code-block`
 - [x] verse block (<verse> … </verse>) — `verse-block`
 - [x] horizontal rule (---- ) — `horizontal-rule`
-- [ ] centered block (<center> … </center>) — (missing)
-- [ ] right-aligned block (<right> … </right>) — (missing)
-- [ ] literal block (<literal> … </literal>) — (missing)
-- [ ] src block (<src lang="…"> … </src>) — (missing)
-- [ ] comment (;; text or <comment> … </comment>) — (missing)
-- [ ] table (simple | | | syntax) — (missing)
-- [ ] footnote definition ([1] text) — (missing)
+- [x] centered block (<center> … </center>) — `center-right`
+- [x] right-aligned block (<right> … </right>) — `center-right`
+- [x] literal block (<literal> … </literal>) — `literal-block`
+- [x] src block (<src lang="…"> … </src>) — `src-block`
+- [x] comment (;; text or <comment> … </comment>) — `comment`
+- [x] table (simple | | | syntax) — `table`
+- [x] footnote definition ([1] text) — `footnote`
 
 ## Inline constructs
 - [x] italic (*text*) — `italic`
@@ -33,24 +33,24 @@ manual.
 - [x] inline code (=text=) — `code-inline`
 - [x] link ([[url][desc]] or [[url]]) — `link`
 - [x] bare URL link — `rare-link-bare`
-- [ ] underline (_text_) — (missing)
-- [ ] superscript (<sup>text</sup>) — (missing)
-- [ ] subscript (<sub>text</sub>) — (missing)
-- [ ] strikethrough (~~text~~) — (missing)
-- [ ] footnote reference ([1]) — (missing)
-- [ ] line break (<br>) — (missing)
-- [ ] anchor (<anchor id>) — (missing)
-- [ ] image ([[file.png]]) — (missing)
-- [ ] inline literal (=text=) — (missing; covered by code-inline)
+- [x] underline (_text_) — `underline`
+- [x] superscript (^text^ or <sup>text</sup>) — `superscript-subscript`
+- [x] subscript (<sub>text</sub>) — `superscript-subscript`
+- [x] strikethrough (~~text~~) — `strikethrough`
+- [x] footnote reference ([1]) — `footnote`
+- [x] line break (<br>) — `line-break`
+- [x] anchor (<anchor id>) — `anchor`
+- [x] image ([[file.png]]) — `image`
+- [x] inline literal (=text=) — covered by `code-inline`
 
 ## Properties
 - [ ] heading anchor / id — (missing)
 - [ ] link title — (missing)
-- [ ] image alt text — (missing)
-- [ ] code block language — (missing)
-- [ ] document header directives (#title, #author, #date, #desc, #keywords) — (missing)
-- [ ] table column alignment — (missing)
-- [ ] tag attributes (style=, class=) — (missing)
+- [x] image alt text — `image` (via [[img][alt]] syntax)
+- [x] code block language — `src-block`
+- [x] document header directives (#title, #author, #date, #desc, #keywords) — `document-header`
+- [ ] table column alignment — (missing; Muse does not define column alignment)
+- [ ] tag attributes (style=, class=) — (missing; Muse does not define generic attributes)
 
 ## Composition (integration)
 - [ ] heading followed by list — (missing)

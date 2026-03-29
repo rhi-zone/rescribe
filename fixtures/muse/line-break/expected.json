@@ -1,0 +1,3 @@
+{ "description": "Hard line break via <br>", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "paragraph" }
+]}

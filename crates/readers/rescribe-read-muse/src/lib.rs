@@ -75,6 +75,68 @@ fn convert_block(block: &muse_fmt::Block) -> Node {
         }
 
         muse_fmt::Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
+
+        muse_fmt::Block::Verse { children, .. } => {
+            Node::new(node::BLOCKQUOTE)
+                .prop("muse:block-type", "verse")
+                .children(convert_blocks(children))
+        }
+
+        muse_fmt::Block::CenteredBlock { children, .. } => {
+            Node::new(node::DIV)
+                .prop("style:align", "center")
+                .children(convert_blocks(children))
+        }
+
+        muse_fmt::Block::RightBlock { children, .. } => {
+            Node::new(node::DIV)
+                .prop("style:align", "right")
+                .children(convert_blocks(children))
+        }
+
+        muse_fmt::Block::LiteralBlock { content, .. } => {
+            Node::new(node::RAW_BLOCK).prop(prop::CONTENT, content.clone())
+        }
+
+        muse_fmt::Block::SrcBlock { lang, content, .. } => {
+            let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
+            if let Some(lang) = lang {
+                n = n.prop(prop::LANGUAGE, lang.clone());
+            }
+            n
+        }
+
+        muse_fmt::Block::Comment { content, .. } => {
+            Node::new(node::RAW_BLOCK)
+                .prop(prop::FORMAT, "muse")
+                .prop(prop::CONTENT, content.clone())
+        }
+
+        muse_fmt::Block::Table { rows, .. } => {
+            let row_nodes: Vec<Node> = rows
+                .iter()
+                .map(|row| {
+                    let cell_kind = if row.header {
+                        node::TABLE_HEADER
+                    } else {
+                        node::TABLE_CELL
+                    };
+                    let cells: Vec<Node> = row
+                        .cells
+                        .iter()
+                        .map(|cell| Node::new(cell_kind).children(convert_inlines(cell)))
+                        .collect();
+                    Node::new(node::TABLE_ROW).children(cells)
+                })
+                .collect();
+            Node::new(node::TABLE).children(row_nodes)
+        }
+
+        muse_fmt::Block::FootnoteDef { label, content, .. } => {
+            Node::new(node::FOOTNOTE_DEF)
+                .prop(prop::LABEL, label.clone())
+                .children(convert_inlines(content))
+        }
     }
 }
 
@@ -99,6 +161,40 @@ fn convert_inline(inline: &muse_fmt::Inline) -> Node {
         muse_fmt::Inline::Link { url, children, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .children(convert_inlines(children)),
+
+        muse_fmt::Inline::Underline(children, _) => {
+            Node::new(node::UNDERLINE).children(convert_inlines(children))
+        }
+
+        muse_fmt::Inline::Strikethrough(children, _) => {
+            Node::new(node::STRIKEOUT).children(convert_inlines(children))
+        }
+
+        muse_fmt::Inline::Superscript(children, _) => {
+            Node::new(node::SUPERSCRIPT).children(convert_inlines(children))
+        }
+
+        muse_fmt::Inline::Subscript(children, _) => {
+            Node::new(node::SUBSCRIPT).children(convert_inlines(children))
+        }
+
+        muse_fmt::Inline::FootnoteRef { label, .. } => {
+            Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, label.clone())
+        }
+
+        muse_fmt::Inline::LineBreak(_) => Node::new(node::LINE_BREAK),
+
+        muse_fmt::Inline::Anchor { name, .. } => {
+            Node::new(node::SPAN).prop(prop::ID, name.clone())
+        }
+
+        muse_fmt::Inline::Image { src, alt, .. } => {
+            let mut n = Node::new(node::IMAGE).prop(prop::URL, src.clone());
+            if let Some(alt_text) = alt {
+                n = n.prop(prop::ALT, alt_text.clone());
+            }
+            n
+        }
     }
 }
 

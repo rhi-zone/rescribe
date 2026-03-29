@@ -1,0 +1,4 @@
+{ "description": "Line comment and block comment", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "comment", "props": { "content": "This is a comment" } },
+  { "path": "/1", "kind": "comment", "props": { "content": "This is also a comment" } }
+]}
