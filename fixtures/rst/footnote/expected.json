@@ -1,5 +1,5 @@
 {
-  "description": "Footnote auto-symbol ([*]_) and auto-numbered ([#]_) refs and defs parse as footnote_ref/footnote_def with correct labels",
+  "description": "Footnote refs (numbered, auto-symbol, auto-numbered) and multi-line footnote def with continuation",
   "category": "happy",
   "assertions": [
     { "path": "/0", "kind": "paragraph" },
