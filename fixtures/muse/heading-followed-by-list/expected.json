@@ -1,0 +1,6 @@
+{ "description": "Heading immediately followed by list with no blank line between", "category": "composition", "assertions": [
+  { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+  { "path": "/1", "kind": "list", "props": { "ordered": false } },
+  { "path": "/1/0", "kind": "list_item" },
+  { "path": "/1/1", "kind": "list_item" }
+]}

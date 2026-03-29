@@ -1,0 +1,6 @@
+{ "description": "List items containing inline code spans", "category": "composition", "assertions": [
+  { "path": "/0", "kind": "list" },
+  { "path": "/0/0", "kind": "list_item" },
+  { "path": "/0/0/0", "kind": "paragraph" },
+  { "path": "/0/1/0", "kind": "paragraph" }
+]}

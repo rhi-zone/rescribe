@@ -1,0 +1,7 @@
+{ "description": "Sub-list items via deeper indentation collected into one list", "category": "composition", "assertions": [
+  { "path": "/0", "kind": "list" },
+  { "path": "/0/0", "kind": "list_item" },
+  { "path": "/0/1", "kind": "list_item" },
+  { "path": "/0/2", "kind": "list_item" },
+  { "path": "/0/3", "kind": "list_item" }
+]}

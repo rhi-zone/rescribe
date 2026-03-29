@@ -1,0 +1,16 @@
+References [1] and [2] appear in the introduction.
+Further citations [3] and [4] appear in the body.
+Additional references [5] and [6] follow later.
+More sources [7] and [8] are consulted.
+Final citations [9] and [10] appear at the end.
+
+[1] First footnote definition.
+[2] Second footnote definition.
+[3] Third footnote definition.
+[4] Fourth footnote definition.
+[5] Fifth footnote definition.
+[6] Sixth footnote definition.
+[7] Seventh footnote definition.
+[8] Eighth footnote definition.
+[9] Ninth footnote definition.
+[10] Tenth footnote definition.

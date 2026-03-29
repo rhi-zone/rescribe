@@ -44,33 +44,37 @@ manual.
 - [x] inline literal (=text=) — covered by `code-inline`
 
 ## Properties
-- [ ] heading anchor / id — (missing)
-- [ ] link title — (missing)
+- [N/A] heading anchor / id — Muse does not have a dedicated heading anchor syntax;
+  anchors are placed as `<anchor name>` inline elements independent of headings.
+- [x] link title — `link-title`
 - [x] image alt text — `image` (via [[img][alt]] syntax)
 - [x] code block language — `src-block`
 - [x] document header directives (#title, #author, #date, #desc, #keywords) — `document-header`
-- [ ] table column alignment — (missing; Muse does not define column alignment)
-- [ ] tag attributes (style=, class=) — (missing; Muse does not define generic attributes)
+- [N/A] table column alignment — Muse simple table syntax (| col |) does not define
+  column alignment; alignment is presentation-only and not encoded in the markup.
+- [N/A] tag attributes (style=, class=) — Muse does not define generic HTML-style
+  attributes on block tags; the tag set is fixed (<verse>, <center>, <right>, etc.)
+  with no attribute syntax.
 
 ## Composition (integration)
-- [ ] heading followed by list — (missing)
-- [ ] nested lists — (missing)
-- [ ] blockquote containing a list — (missing)
-- [ ] list item containing inline code — (missing)
-- [ ] verse block with multiple stanzas — (missing)
-- [ ] link inside bold — (missing)
-- [ ] definition list inside blockquote — (missing)
+- [x] heading followed by list — `heading-followed-by-list`
+- [x] nested lists — `nested-lists`
+- [x] blockquote containing a list — `blockquote-list`
+- [x] list item containing inline code — `list-inline-code`
+- [x] verse block with multiple stanzas — `verse-multi-stanza`
+- [x] link inside bold — `link-in-bold`
+- [x] definition list inside blockquote — `deflist-in-blockquote`
 
 ## Adversarial
 - [x] empty document — `adv-empty`
 - [x] unmatched inline delimiter — `adv-unmatched`
-- [ ] unclosed tag block — (missing)
-- [ ] link with missing closing bracket — (missing)
-- [ ] footnote reference to undefined label — (missing)
+- [x] unclosed tag block — `adv-unclosed-tag`
+- [x] link with missing closing bracket — `adv-missing-bracket`
+- [x] footnote reference to undefined label — `adv-undef-footnote`
 
 ## Pathological
-- [ ] document with many sections — (missing)
-- [ ] very large table — (missing)
-- [ ] deeply nested lists — (missing)
-- [ ] very long paragraph — (missing)
-- [ ] many footnotes — (missing)
+- [x] document with many sections — `path-many-sections`
+- [x] very large table — `path-large-table`
+- [x] deeply nested lists — `path-deep-lists`
+- [x] very long paragraph — `path-long-paragraph`
+- [x] many footnotes — `path-many-footnotes`

@@ -1,0 +1,4 @@
+{ "description": "Blockquote containing list-like content via <quote> tag", "category": "composition", "assertions": [
+  { "path": "/0", "kind": "blockquote" },
+  { "path": "/0/0", "kind": "paragraph" }
+]}

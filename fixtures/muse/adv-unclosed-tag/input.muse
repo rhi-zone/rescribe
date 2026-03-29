@@ -1,0 +1,5 @@
+Some text before.
+
+<verse>
+This verse block is never closed.
+It just keeps going

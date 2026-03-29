@@ -1,0 +1,5 @@
+{ "description": "Table with 5 columns and 21 rows (1 header + 20 data)", "category": "pathological", "assertions": [
+  { "path": "/0", "kind": "table", "children_count": 21 },
+  { "path": "/0/0", "kind": "table_row", "children_count": 5 },
+  { "path": "/0/20", "kind": "table_row" }
+]}

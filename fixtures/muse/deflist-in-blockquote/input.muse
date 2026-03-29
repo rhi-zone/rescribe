@@ -1,0 +1,4 @@
+<quote>
+Term :: Definition text
+Other :: More text
+</quote>

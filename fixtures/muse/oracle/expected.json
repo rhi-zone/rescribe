@@ -1,0 +1,3 @@
+{ "description": "Oracle sample document — smoke test covering many constructs", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "heading", "props": { "level": 1 } }
+]}

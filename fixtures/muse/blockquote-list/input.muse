@@ -1,0 +1,4 @@
+<quote>
+ - item one
+ - item two
+</quote>

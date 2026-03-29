@@ -1,0 +1,2 @@
+ - run =make test= to execute
+ - see =README= for details

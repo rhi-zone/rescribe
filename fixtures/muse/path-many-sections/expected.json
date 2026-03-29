@@ -1,0 +1,6 @@
+{ "description": "Document with 11 headings each followed by a paragraph", "category": "pathological", "assertions": [
+  { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+  { "path": "/1", "kind": "paragraph" },
+  { "path": "/20", "kind": "heading", "props": { "level": 1 } },
+  { "path": "/21", "kind": "paragraph" }
+]}

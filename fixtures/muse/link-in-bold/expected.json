@@ -1,0 +1,5 @@
+{ "description": "Link nested inside bold markup", "category": "composition", "assertions": [
+  { "path": "/0", "kind": "paragraph" },
+  { "path": "/0/1", "kind": "strong" },
+  { "path": "/0/1/0", "kind": "link", "props": { "url": "https://example.com" } }
+]}

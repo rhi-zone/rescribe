@@ -1,0 +1,3 @@
+{ "description": "Link with missing closing ]] treated as plain text — parser must not panic", "category": "adversarial", "assertions": [
+  { "path": "/0", "kind": "paragraph" }
+]}

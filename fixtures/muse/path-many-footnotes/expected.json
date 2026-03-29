@@ -1,0 +1,5 @@
+{ "description": "Document with 10 footnote definitions and corresponding references", "category": "pathological", "assertions": [
+  { "path": "/0", "kind": "paragraph" },
+  { "path": "/1", "kind": "footnote_def", "props": { "label": "1" } },
+  { "path": "/10", "kind": "footnote_def", "props": { "label": "10" } }
+]}
