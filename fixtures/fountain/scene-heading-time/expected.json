@@ -1,0 +1,7 @@
+{
+  "description": "Scene heading preserves time of day after dash",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "fountain:type": "scene_heading", "fountain:time_of_day": "NIGHT" } }
+  ]
+}

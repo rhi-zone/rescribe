@@ -1,0 +1,6 @@
+{
+  "description": "@deprecated annotation produces a property node with key 'deprecated'",
+  "assertions": [
+    { "path": "/0", "kind": "property", "props": { "key": "deprecated" } }
+  ]
+}

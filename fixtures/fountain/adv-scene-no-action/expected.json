@@ -1,0 +1,8 @@
+{
+  "description": "Scene heading with no following action produces a lone scene heading",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "fountain:type": "scene_heading" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "INT. EMPTY ROOM - DAY" } }
+  ]
+}

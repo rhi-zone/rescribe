@@ -1,0 +1,6 @@
+{
+  "description": "Bird-track code with trailing spaces preserves content",
+  "assertions": [
+    { "path": "/0", "kind": "code_block" }
+  ]
+}

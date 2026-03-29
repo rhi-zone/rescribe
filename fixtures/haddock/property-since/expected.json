@@ -1,0 +1,7 @@
+{
+  "description": "@since annotation produces a property node with key 'since'",
+  "assertions": [
+    { "path": "/0", "kind": "property", "props": { "key": "since" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "4.2.0" } }
+  ]
+}

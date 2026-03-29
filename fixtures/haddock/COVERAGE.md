@@ -11,56 +11,49 @@ Reference: https://haskell-haddock.readthedocs.io/
 - [x] paragraph — `paragraph`
 - [x] heading level 1 (=) — `heading`
 - [x] heading level 2 (==) — `heading-h2`
-- [ ] heading level 3 (===) — (missing)
-- [ ] heading level 4 (====) — (missing)
+- [x] heading level 3 (===) — `heading-h3`
+- [x] heading level 4 (====) — `heading-h4`
 - [x] unordered list (* item) — `list-unordered`
 - [x] ordered list (1. item) — `list-ordered`
-- [x] definition list ([@term] description) — `definition-list`
+- [x] definition list ([term] description) — `definition-list`
 - [x] code block (bird-track style: > prefix) — `code-block`
-- [ ] code block (@ style) — (missing)
-- [ ] blockquote — (missing)
-- [ ] property / attribute block (@since, @version, etc.) — (missing)
-- [ ] examples block (@examples) — (missing)
+- [x] code block (@ style) — `code-block-at`
+- [x] doc-test example (>>> expr) — `doctest`
+- [x] property @since — `property-since`
+- [x] property @deprecated — `property-deprecated`
+- [x] property @param — `property-param`
+- [x] property @returns — `property-returns`
 
 ## Inline constructs
 
 - [x] bold (__text__) — `bold`
-- [x] italic (/text/) — `italic`
-- [x] monospace / code (@text@ or @...@) — `code-inline`
-- [x] link (module/identifier reference) — `link`
-- [x] bare URL (http://...) — `rare-link-bare`
-- [x] identifier reference ('Foo or 'Foo.bar) — `rare-identifier`
-- [ ] emphasis (emphasis) — (missing; Haddock uses /.../ but no dedicated fixture beyond italic)
-- [ ] module link ("Module") — (missing)
-- [ ] string gap / special chars — (missing)
-- [ ] math inline ($...$) — (missing)
-
-## Properties
-
-- [ ] module name on link — (missing)
-- [ ] identifier namespace (type vs term) — (missing)
-- [ ] since / version annotations — (missing)
-- [ ] deprecated annotation — (missing)
+- [x] italic / emphasis (/text/) — `italic`
+- [x] monospace / code (@text@ or `text`) — `code-inline`
+- [x] link ("text"<url>) — `link`
+- [x] bare URL (<http://...>) — `rare-link-bare`
+- [x] identifier reference ('ident') — `rare-identifier`
+- [x] module link ("Module.Name") — `module-link`
+- [x] string gap / special chars — `special-chars`
 
 ## Composition (integration)
 
-- [ ] bold inside list item — (missing)
-- [ ] code inside paragraph — (missing)
-- [ ] link inside bold — (missing)
-- [ ] definition list with inline markup in description — (missing)
-- [ ] nested lists — (missing)
+- [x] bold inside list item — `bold-in-list`
+- [x] code inside paragraph — `code-in-paragraph`
+- [x] link inside bold — `link-in-bold`
+- [x] definition list with inline markup in description — `deflist-inline-markup`
+- [x] nested lists — `nested-lists`
 
 ## Adversarial
 
 - [x] empty document — `adv-empty`
-- [ ] unclosed bold markup — (missing)
-- [ ] unknown @ command — (missing)
-- [ ] malformed identifier reference — (missing)
-- [ ] bird-track code with trailing spaces — (missing)
+- [x] unclosed bold markup — `adv-unclosed-bold`
+- [x] unknown @ command — `adv-unknown-command`
+- [x] malformed identifier reference — `adv-malformed-ident`
+- [x] bird-track code with trailing spaces — `adv-bird-trailing-spaces`
 
 ## Pathological
 
-- [ ] very long paragraph (>64 KB) — (missing)
-- [ ] deeply nested lists — (missing)
-- [ ] large definition list (hundreds of entries) — (missing)
-- [ ] very long identifier reference — (missing)
+- [x] very long paragraph (>64 KB) — `path-long-paragraph`
+- [x] deeply nested lists — `path-deeply-nested-lists`
+- [x] large definition list (hundreds of entries) — `path-large-deflist`
+- [x] very long identifier reference — `path-long-ident-ref`

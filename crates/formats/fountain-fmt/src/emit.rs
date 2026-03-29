@@ -197,5 +197,12 @@ fn emit_block(block: &Block, ctx: &mut BuildContext) {
             ctx.ensure_blank_line();
             ctx.writeln("===");
         }
+
+        Block::Boneyard { text, .. } => {
+            ctx.ensure_blank_line();
+            ctx.write("/* ");
+            ctx.write(text);
+            ctx.writeln(" */");
+        }
     }
 }

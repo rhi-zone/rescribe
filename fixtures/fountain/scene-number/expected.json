@@ -1,0 +1,7 @@
+{
+  "description": "Scene heading with scene number #N# suffix",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "fountain:type": "scene_heading", "fountain:scene_number": "42" } }
+  ]
+}

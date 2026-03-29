@@ -1,0 +1,8 @@
+{
+  "description": "Action block followed immediately by scene heading",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "action" } },
+    { "path": "/1", "kind": "heading", "props": { "fountain:type": "scene_heading" } }
+  ]
+}

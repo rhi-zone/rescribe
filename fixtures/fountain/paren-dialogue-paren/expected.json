@@ -1,0 +1,12 @@
+{
+  "description": "Parenthetical, dialogue, then another parenthetical in sequence",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "fountain:type": "dialogue_block" } },
+    { "path": "/0/0", "kind": "paragraph", "props": { "fountain:type": "character" } },
+    { "path": "/0/1", "kind": "paragraph", "props": { "fountain:type": "parenthetical" } },
+    { "path": "/0/2", "kind": "paragraph", "props": { "fountain:type": "dialogue" } },
+    { "path": "/0/3", "kind": "paragraph", "props": { "fountain:type": "parenthetical" } },
+    { "path": "/0/4", "kind": "paragraph", "props": { "fountain:type": "dialogue" } }
+  ]
+}

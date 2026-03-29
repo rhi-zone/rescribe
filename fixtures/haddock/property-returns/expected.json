@@ -1,0 +1,6 @@
+{
+  "description": "@returns annotation produces a property node with key 'returns'",
+  "assertions": [
+    { "path": "/0", "kind": "property", "props": { "key": "returns" } }
+  ]
+}

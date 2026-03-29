@@ -1,0 +1,8 @@
+{
+  "description": "Synopsis with text content preserved",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "synopsis" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "The hero sets out on the journey." } }
+  ]
+}

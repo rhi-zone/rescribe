@@ -1,0 +1,6 @@
+{
+  "description": "Unknown @ command is treated as a paragraph, not a parse error",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

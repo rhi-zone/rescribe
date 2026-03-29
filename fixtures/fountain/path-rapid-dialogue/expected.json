@@ -1,0 +1,9 @@
+{
+  "description": "Many characters in rapid dialogue interchange",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "fountain:type": "dialogue_block" } },
+    { "path": "/1", "kind": "div", "props": { "fountain:type": "dialogue_block" } },
+    { "path": "/2", "kind": "div", "props": { "fountain:type": "dialogue_block" } }
+  ]
+}

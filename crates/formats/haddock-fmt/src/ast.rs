@@ -71,6 +71,11 @@ pub enum Block {
         content: String,
         span: Span,
     },
+    /// `@`-delimited code block (`@ ... @` on separate lines).
+    AtCodeBlock {
+        content: String,
+        span: Span,
+    },
     UnorderedList {
         items: Vec<Vec<Inline>>,
         span: Span,
@@ -81,6 +86,24 @@ pub enum Block {
     },
     DefinitionList {
         items: Vec<(Vec<Inline>, Vec<Inline>)>,
+        span: Span,
+    },
+    /// `>>> expression` / `>>> expression\nresult` doc-test example.
+    DocTest {
+        expression: String,
+        result: Option<String>,
+        span: Span,
+    },
+    /// `> quoted text` blockquote (when not a bird-track code block).
+    Blockquote {
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    /// Property annotations: `@since`, `@deprecated`, `@param`, `@returns`.
+    Property {
+        key: String,
+        name: Option<String>,
+        description: Vec<Inline>,
         span: Span,
     },
 }
@@ -98,6 +121,10 @@ impl Block {
                 span: Span::NONE,
             },
             Block::CodeBlock { content, .. } => Block::CodeBlock {
+                content,
+                span: Span::NONE,
+            },
+            Block::AtCodeBlock { content, .. } => Block::AtCodeBlock {
                 content,
                 span: Span::NONE,
             },
@@ -127,6 +154,21 @@ impl Block {
                     .collect(),
                 span: Span::NONE,
             },
+            Block::DocTest { expression, result, .. } => Block::DocTest {
+                expression,
+                result,
+                span: Span::NONE,
+            },
+            Block::Blockquote { inlines, .. } => Block::Blockquote {
+                inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::Property { key, name, description, .. } => Block::Property {
+                key,
+                name,
+                description: description.into_iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
         }
     }
 }
@@ -138,7 +180,16 @@ pub enum Inline {
     Code(String, Span),
     Strong(Vec<Inline>, Span),
     Emphasis(Vec<Inline>, Span),
-    Link { url: String, text: String, span: Span },
+    Link {
+        url: String,
+        text: String,
+        span: Span,
+    },
+    /// Module cross-reference: `"Module.Name"`.
+    ModuleLink {
+        module: String,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -157,6 +208,10 @@ impl Inline {
             Inline::Link { url, text, .. } => Inline::Link {
                 url,
                 text,
+                span: Span::NONE,
+            },
+            Inline::ModuleLink { module, .. } => Inline::ModuleLink {
+                module,
                 span: Span::NONE,
             },
         }

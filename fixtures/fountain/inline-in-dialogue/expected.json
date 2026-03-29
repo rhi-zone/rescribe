@@ -1,0 +1,8 @@
+{
+  "description": "Inline formatting (italic, bold) inside dialogue",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "fountain:type": "dialogue_block" } },
+    { "path": "/0/1", "kind": "paragraph", "props": { "fountain:type": "dialogue" } }
+  ]
+}

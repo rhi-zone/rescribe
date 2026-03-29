@@ -1,0 +1,11 @@
+{
+  "description": "Forced character name with @ prefix",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "fountain:type": "dialogue_block" } },
+    { "path": "/0/0", "kind": "paragraph", "props": { "fountain:type": "character" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "McCLANE" } },
+    { "path": "/0/1", "kind": "paragraph", "props": { "fountain:type": "dialogue" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Yippee ki-yay." } }
+  ]
+}

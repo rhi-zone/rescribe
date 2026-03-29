@@ -1,0 +1,12 @@
+{
+  "description": "Title page followed by first scene heading and action",
+  "category": "composition",
+  "metadata": {
+    "fountain:title": "My Script",
+    "fountain:author": "Jane"
+  },
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "fountain:type": "scene_heading" } },
+    { "path": "/1", "kind": "paragraph", "props": { "fountain:type": "action" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Very long action block parses as a single action",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "action" } }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "description": "Multiple list items are grouped into a single list",
+  "assertions": [
+    { "path": "/0", "kind": "unordered_list" }
+  ]
+}

@@ -212,6 +212,11 @@ impl<'a> Parser<'a> {
             return None;
         }
 
+        // Boneyard (block comment): /* ... */
+        if line.trim_start().starts_with("/*") {
+            return Some(self.parse_boneyard());
+        }
+
         // Page break: ===
         if line.trim() == "===" {
             let span = self.span_for_line(self.pos);
@@ -399,6 +404,7 @@ impl<'a> Parser<'a> {
                 || line.starts_with('=')
                 || line.starts_with('~')
                 || line.contains("[[")
+                || line.trim_start().starts_with("/*")
             {
                 break;
             }
@@ -484,6 +490,48 @@ impl<'a> Parser<'a> {
             text: text.to_string(),
             span,
         }
+    }
+
+    fn parse_boneyard(&mut self) -> Block {
+        let start_idx = self.pos;
+        let mut text_lines = Vec::new();
+
+        // First line: strip /* prefix
+        let first_line = self.lines[self.pos];
+        let after_open = first_line.trim_start().strip_prefix("/*").unwrap_or(first_line);
+
+        // Check if single-line: /* ... */
+        if let Some(before_close) = after_open.strip_suffix("*/") {
+            let span = self.span_for_line(self.pos);
+            self.pos += 1;
+            return Block::Boneyard {
+                text: before_close.trim().to_string(),
+                span,
+            };
+        }
+
+        text_lines.push(after_open.to_string());
+        self.pos += 1;
+
+        // Multi-line: consume until */
+        while self.pos < self.lines.len() {
+            let line = self.lines[self.pos];
+            if line.trim_end().ends_with("*/") {
+                let before_close = line.trim_end().strip_suffix("*/").unwrap_or(line);
+                text_lines.push(before_close.to_string());
+                self.pos += 1;
+                break;
+            }
+            text_lines.push(line.to_string());
+            self.pos += 1;
+        }
+
+        let span = Span::new(
+            self.line_offsets.get(start_idx).copied().unwrap_or(0),
+            self.current_offset(),
+        );
+        let text = text_lines.join("\n").trim().to_string();
+        Block::Boneyard { text, span }
     }
 
     fn parse_lyric(&mut self) -> Block {

@@ -1,0 +1,7 @@
+{
+  "description": "Backslash sequences are preserved as literal text",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "String with \\n and \\t escapes." } }
+  ]
+}

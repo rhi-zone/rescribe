@@ -1,0 +1,7 @@
+{
+  "description": "Transition-like text embedded in a sentence is not a transition",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "action" } }
+  ]
+}

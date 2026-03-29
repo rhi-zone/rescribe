@@ -1,0 +1,7 @@
+{
+  "description": "Boneyard block comment is preserved as raw_block",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "fountain:type": "boneyard", "content": "This is a boneyard comment" } }
+  ]
+}

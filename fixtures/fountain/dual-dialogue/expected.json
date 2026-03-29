@@ -1,0 +1,11 @@
+{
+  "description": "Dual dialogue with ^ suffix on second character",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "fountain:type": "dialogue_block" } },
+    { "path": "/0/0", "kind": "paragraph", "props": { "fountain:type": "character" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "JOHN" } },
+    { "path": "/1", "kind": "div", "props": { "fountain:type": "dialogue_block", "fountain:dual": true } },
+    { "path": "/1/0", "kind": "paragraph", "props": { "fountain:type": "character", "fountain:dual": true } }
+  ]
+}

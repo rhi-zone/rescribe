@@ -1,0 +1,8 @@
+{
+  "description": "Forced action with ! prefix treats line as action, not scene heading",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "action" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "INT. OFFICE - DAY" } }
+  ]
+}

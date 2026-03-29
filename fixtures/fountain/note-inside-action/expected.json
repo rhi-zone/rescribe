@@ -1,0 +1,7 @@
+{
+  "description": "Note embedded inside action text",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "note" } }
+  ]
+}

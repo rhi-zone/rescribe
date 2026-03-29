@@ -1,0 +1,6 @@
+{
+  "description": "Definition list with inline markup in description",
+  "assertions": [
+    { "path": "/0",   "kind": "definition_list" }
+  ]
+}

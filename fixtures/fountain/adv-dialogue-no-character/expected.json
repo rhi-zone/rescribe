@@ -1,0 +1,8 @@
+{
+  "description": "Dialogue-like text without a character name above is treated as action",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "action" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Hello there." } }
+  ]
+}

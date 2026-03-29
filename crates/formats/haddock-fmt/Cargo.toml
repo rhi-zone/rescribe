@@ -5,3 +5,18 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Haddock documentation parser, AST, and builder — no rescribe dependency"
+
+[features]
+default = ["reader-ast", "reader-streaming", "reader-batch", "writer-streaming", "writer-builder"]
+reader-ast = []
+reader-streaming = ["reader-ast"]
+reader-batch = []
+writer-streaming = []
+writer-builder = ["reader-ast", "writer-streaming"]
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "haddock_bench"
+harness = false

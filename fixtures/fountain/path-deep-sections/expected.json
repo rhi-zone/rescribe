@@ -1,0 +1,12 @@
+{
+  "description": "Deeply nested section headings at multiple levels",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/1", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/2", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/3", "kind": "heading", "props": { "level": 4 } },
+    { "path": "/4", "kind": "heading", "props": { "level": 5 } },
+    { "path": "/5", "kind": "heading", "props": { "level": 1 } }
+  ]
+}

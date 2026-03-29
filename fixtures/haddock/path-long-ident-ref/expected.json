@@ -1,0 +1,7 @@
+{
+  "description": "Very long identifier reference does not cause parser failure",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "code", "props": { "content": "VeryLongIdentifierNameThatGoesOnAndOnForTestingPurposes" } }
+  ]
+}

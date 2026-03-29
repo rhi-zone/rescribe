@@ -1,0 +1,8 @@
+{
+  "description": "Link inside bold markup is parsed correctly",
+  "assertions": [
+    { "path": "/0",       "kind": "paragraph" },
+    { "path": "/0/0",     "kind": "strong" },
+    { "path": "/0/0/0",   "kind": "link", "props": { "url": "https://example.com" } }
+  ]
+}

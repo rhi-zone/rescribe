@@ -1,0 +1,6 @@
+{
+  "description": "@param annotation produces a property node with key 'param' and named parameter",
+  "assertions": [
+    { "path": "/0", "kind": "property", "props": { "key": "param", "name": "x" } }
+  ]
+}

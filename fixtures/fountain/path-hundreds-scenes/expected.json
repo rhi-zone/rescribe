@@ -1,0 +1,8 @@
+{
+  "description": "Screenplay with hundreds of scenes parses without error",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "fountain:type": "scene_heading" } },
+    { "path": "/1", "kind": "paragraph", "props": { "fountain:type": "action" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Scene heading preserves INT/EXT location type",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "fountain:type": "scene_heading", "fountain:location_type": "INT" } }
+  ]
+}

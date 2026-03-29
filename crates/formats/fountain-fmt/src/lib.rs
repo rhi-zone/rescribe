@@ -4,11 +4,17 @@
 //! Used by `rescribe-read-fountain` and `rescribe-write-fountain` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
 // Re-export the most-used types for convenience.
 pub use ast::{Block, Diagnostic, FountainDoc, Severity, Span};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
+pub use events::{Event, OwnedEvent};
+pub use writer::Writer;
 
 /// Parse a Fountain string into a [`FountainDoc`].
 ///
@@ -21,6 +27,11 @@ pub fn parse(input: &str) -> (FountainDoc, Vec<Diagnostic>) {
 /// Build a Fountain string from a [`FountainDoc`].
 pub fn build(doc: &FountainDoc) -> String {
     emit::emit(doc)
+}
+
+/// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
+pub fn events(input: &str) -> events::OwnedEventIter {
+    events::events(input)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -177,5 +188,73 @@ mod tests {
         });
         let output = build(&doc);
         assert!(output.contains("JOHN ^"));
+    }
+
+    #[test]
+    fn test_parse_boneyard() {
+        let input = "/* This is a boneyard comment */";
+        let (doc, _diags) = parse(input);
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::Boneyard { .. }));
+        if let Block::Boneyard { ref text, .. } = doc.blocks[0] {
+            assert_eq!(text, "This is a boneyard comment");
+        }
+    }
+
+    #[test]
+    fn test_parse_boneyard_multiline() {
+        let input = "/* Line one\nLine two\nLine three */";
+        let (doc, _diags) = parse(input);
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::Boneyard { .. }));
+    }
+
+    #[test]
+    fn test_parse_forced_action() {
+        let input = "!INT. OFFICE - DAY";
+        let (doc, _diags) = parse(input);
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0], Block::Action { .. }));
+        if let Block::Action { ref text, .. } = doc.blocks[0] {
+            assert_eq!(text, "INT. OFFICE - DAY");
+        }
+    }
+
+    #[test]
+    fn test_parse_forced_character() {
+        let input = "@McCLANE\nYippee ki-yay.";
+        let (doc, _diags) = parse(input);
+        assert!(doc.blocks.iter().any(|b| matches!(b, Block::Character { .. })));
+        if let Block::Character { ref name, .. } = doc.blocks[0] {
+            assert_eq!(name, "McCLANE");
+        }
+    }
+
+    #[test]
+    fn test_parse_dual_dialogue() {
+        let input = "JOHN\nHello!\n\nMARY ^\nHi!";
+        let (doc, _diags) = parse(input);
+        let dual_chars: Vec<_> = doc
+            .blocks
+            .iter()
+            .filter(|b| matches!(b, Block::Character { dual: true, .. }))
+            .collect();
+        assert_eq!(dual_chars.len(), 1);
+    }
+
+    #[test]
+    fn test_strip_spans() {
+        let input = "INT. OFFICE - DAY\n\nJohn enters.";
+        let (doc, _) = parse(input);
+        let stripped = doc.strip_spans();
+        for block in &stripped.blocks {
+            match block {
+                Block::SceneHeading { span, .. }
+                | Block::Action { span, .. } => {
+                    assert_eq!(*span, Span::NONE);
+                }
+                _ => {}
+            }
+        }
     }
 }

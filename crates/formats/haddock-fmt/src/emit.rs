@@ -22,6 +22,7 @@ pub fn collect_inline_text(inlines: &[Inline]) -> String {
             Inline::Link { text, url, .. } => {
                 out.push_str(if text.is_empty() { url } else { text });
             }
+            Inline::ModuleLink { module, .. } => out.push_str(module),
         }
     }
     out
@@ -68,6 +69,12 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n");
         }
 
+        Block::AtCodeBlock { content, .. } => {
+            ctx.write("@\n");
+            ctx.write(content);
+            ctx.write("\n@\n\n");
+        }
+
         Block::UnorderedList { items, .. } => {
             for item_inlines in items {
                 ctx.write("* ");
@@ -95,6 +102,39 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
                 ctx.write("\n");
             }
             ctx.write("\n");
+        }
+
+        Block::DocTest { expression, result, .. } => {
+            ctx.write(">>> ");
+            ctx.write(expression);
+            ctx.write("\n");
+            if let Some(r) = result {
+                ctx.write(r);
+                ctx.write("\n");
+            }
+            ctx.write("\n");
+        }
+
+        Block::Blockquote { inlines, .. } => {
+            // Emit as bird-track style but we use a different block type
+            // so we know this is a blockquote rather than code
+            ctx.write("> ");
+            build_inlines(inlines, ctx);
+            ctx.write("\n\n");
+        }
+
+        Block::Property { key, name, description, .. } => {
+            ctx.write("@");
+            ctx.write(key);
+            if let Some(n) = name {
+                ctx.write(" ");
+                ctx.write(n);
+            }
+            if !description.is_empty() {
+                ctx.write(" ");
+                build_inlines(description, ctx);
+            }
+            ctx.write("\n\n");
         }
     }
 }
@@ -133,6 +173,12 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("\"<");
             ctx.write(url);
             ctx.write(">");
+        }
+
+        Inline::ModuleLink { module, .. } => {
+            ctx.write("\"");
+            ctx.write(module);
+            ctx.write("\"");
         }
     }
 }

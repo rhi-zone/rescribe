@@ -1,0 +1,11 @@
+{
+  "description": "Bold emphasis with **text** produces strong inline",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "action" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "He was " } },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "very" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " angry." } }
+  ]
+}

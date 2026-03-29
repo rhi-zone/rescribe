@@ -90,6 +90,8 @@ pub enum Block {
     Section { level: usize, text: String, span: Span },
     /// Page break (===)
     PageBreak { span: Span },
+    /// Boneyard / block comment (/* ... */)
+    Boneyard { text: String, span: Span },
 }
 
 impl Block {
@@ -143,6 +145,10 @@ impl Block {
                 span: Span::NONE,
             },
             Block::PageBreak { .. } => Block::PageBreak { span: Span::NONE },
+            Block::Boneyard { text, .. } => Block::Boneyard {
+                text: text.clone(),
+                span: Span::NONE,
+            },
         }
     }
 }

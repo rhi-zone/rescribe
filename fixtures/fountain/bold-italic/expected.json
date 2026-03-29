@@ -1,0 +1,7 @@
+{
+  "description": "Bold-italic with ***text*** produces nested strong+emphasis",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "action" } }
+  ]
+}

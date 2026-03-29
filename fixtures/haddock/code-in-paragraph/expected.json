@@ -1,0 +1,9 @@
+{
+  "description": "Inline code inside a paragraph is parsed correctly",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Use " } },
+    { "path": "/0/1", "kind": "code", "props": { "content": "foo" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " in your code." } }
+  ]
+}

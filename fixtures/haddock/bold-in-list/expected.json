@@ -1,0 +1,8 @@
+{
+  "description": "Bold markup inside a list item is parsed correctly",
+  "assertions": [
+    { "path": "/0",       "kind": "unordered_list" },
+    { "path": "/0/0/0",   "kind": "strong" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "bold" } }
+  ]
+}

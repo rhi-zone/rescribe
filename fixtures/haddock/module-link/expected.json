@@ -1,0 +1,7 @@
+{
+  "description": "\"Module.Name\" syntax produces a module_link node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "module_link", "props": { "module": "Data.Map" } }
+  ]
+}

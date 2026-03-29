@@ -1,0 +1,9 @@
+{
+  "description": "Multiple dialogue blocks in sequence",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "fountain:type": "dialogue_block" } },
+    { "path": "/1", "kind": "div", "props": { "fountain:type": "dialogue_block" } },
+    { "path": "/2", "kind": "div", "props": { "fountain:type": "dialogue_block" } }
+  ]
+}

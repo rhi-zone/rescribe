@@ -1,0 +1,6 @@
+{
+  "description": "Apostrophe in a contraction does not create a malformed identifier reference",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

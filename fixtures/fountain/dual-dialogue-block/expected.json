@@ -1,0 +1,8 @@
+{
+  "description": "Complete dual dialogue block with two characters side by side",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "fountain:type": "dialogue_block" } },
+    { "path": "/1", "kind": "div", "props": { "fountain:type": "dialogue_block", "fountain:dual": true } }
+  ]
+}

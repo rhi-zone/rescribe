@@ -1,0 +1,6 @@
+{
+  "description": "Large definition list does not cause parser failure",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" }
+  ]
+}

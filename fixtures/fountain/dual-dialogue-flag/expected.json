@@ -1,0 +1,8 @@
+{
+  "description": "Character with ^ dual dialogue flag",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "fountain:type": "dialogue_block", "fountain:dual": true } },
+    { "path": "/0/0", "kind": "paragraph", "props": { "fountain:type": "character", "fountain:dual": true } }
+  ]
+}

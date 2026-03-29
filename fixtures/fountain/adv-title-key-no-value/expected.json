@@ -1,0 +1,10 @@
+{
+  "description": "Title page key with empty value still produces metadata entry",
+  "category": "adversarial",
+  "metadata": {
+    "fountain:title": ""
+  },
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "fountain:type": "scene_heading" } }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "Italic emphasis with *text* produces emphasis inline",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "action" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "She " } },
+    { "path": "/0/1", "kind": "emphasis" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "slowly" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " turned." } }
+  ]
+}

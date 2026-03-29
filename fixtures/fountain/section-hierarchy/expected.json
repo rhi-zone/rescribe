@@ -1,0 +1,10 @@
+{
+  "description": "Section hierarchy with nested levels",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/1", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/2", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/3", "kind": "heading", "props": { "level": 2 } }
+  ]
+}

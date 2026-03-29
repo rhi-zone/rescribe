@@ -1,0 +1,11 @@
+{
+  "description": "@-delimited code block produces an at_code_block node",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "at_code_block",
+      "props": { "content": "foo bar\nbaz" },
+      "children_count": 0
+    }
+  ]
+}

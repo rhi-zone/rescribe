@@ -1,0 +1,16 @@
+{
+  "description": "Full title page with all standard fields sets document metadata",
+  "category": "happy",
+  "metadata": {
+    "fountain:title": "My Screenplay",
+    "fountain:credit": "Written by",
+    "fountain:author": "Jane Doe",
+    "fountain:source": "Based on a true story",
+    "fountain:draft_date": "January 2026",
+    "fountain:contact": "jane@example.com",
+    "fountain:copyright": "(c) 2026"
+  },
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "fountain:type": "scene_heading" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Inline note [[text]] within action text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "note" } }
+  ]
+}

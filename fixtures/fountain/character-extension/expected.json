@@ -1,0 +1,8 @@
+{
+  "description": "Character name with V.O. extension",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "fountain:type": "dialogue_block" } },
+    { "path": "/0/0", "kind": "paragraph", "props": { "fountain:type": "character", "fountain:extension": "V.O." } }
+  ]
+}

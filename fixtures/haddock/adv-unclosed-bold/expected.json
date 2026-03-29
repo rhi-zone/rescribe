@@ -1,0 +1,6 @@
+{
+  "description": "Unclosed bold markup is treated as literal text, not a parse error",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "description": "Section headings at different levels",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Act One" } },
+    { "path": "/1", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Scene One" } },
+    { "path": "/2", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/2/0", "kind": "text", "props": { "content": "Beat One" } }
+  ]
+}

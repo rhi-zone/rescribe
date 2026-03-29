@@ -1,0 +1,7 @@
+{
+  "description": "Note with missing closing brackets is still parsed as a note",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "note" } }
+  ]
+}

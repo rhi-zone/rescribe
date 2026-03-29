@@ -1,0 +1,8 @@
+{
+  "description": "Forced transition with > prefix (no trailing <)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "transition" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "FADE TO BLACK" } }
+  ]
+}

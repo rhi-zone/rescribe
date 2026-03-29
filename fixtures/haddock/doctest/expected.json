@@ -1,0 +1,10 @@
+{
+  "description": ">>> expression with result produces a doc_test node",
+  "assertions": [
+    {
+      "path": "/0",
+      "kind": "doc_test",
+      "props": { "expression": "1 + 1", "result": "2" }
+    }
+  ]
+}

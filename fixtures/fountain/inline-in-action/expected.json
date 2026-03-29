@@ -1,0 +1,7 @@
+{
+  "description": "Inline formatting (bold, italic) inside action block",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "fountain:type": "action" } }
+  ]
+}
