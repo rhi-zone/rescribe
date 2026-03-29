@@ -2231,8 +2231,8 @@ fn build_table(rows: &[TableRow], ctx: &mut BuildContext) {
 
     emit_table_border(&col_widths, ctx);
 
-    let mut is_first = true;
-    for (row, text_row) in rows.iter().zip(text_rows.iter()) {
+    let last_idx = rows.len().saturating_sub(1);
+    for (idx, (row, text_row)) in rows.iter().zip(text_rows.iter()).enumerate() {
         ctx.write("|");
         for (i, cell) in text_row.iter().enumerate() {
             let width = col_widths.get(i).copied().unwrap_or(1);
@@ -2245,11 +2245,14 @@ fn build_table(rows: &[TableRow], ctx: &mut BuildContext) {
         }
         ctx.write("\n");
 
-        // Header separator after first row if it's a header
-        if is_first && row.is_header && rows.len() > 1 {
-            emit_table_border(&col_widths, ctx);
+        if idx < last_idx {
+            // After a header row, emit the `+=====+` separator; after a body row, emit `+-----+`
+            if row.is_header {
+                emit_table_header_sep(&col_widths, ctx);
+            } else {
+                emit_table_border(&col_widths, ctx);
+            }
         }
-        is_first = false;
     }
 
     emit_table_border(&col_widths, ctx);
@@ -2261,6 +2264,17 @@ fn emit_table_border(widths: &[usize], ctx: &mut BuildContext) {
     for w in widths {
         for _ in 0..(*w + 2) {
             ctx.write("-");
+        }
+        ctx.write("+");
+    }
+    ctx.write("\n");
+}
+
+fn emit_table_header_sep(widths: &[usize], ctx: &mut BuildContext) {
+    ctx.write("+");
+    for w in widths {
+        for _ in 0..(*w + 2) {
+            ctx.write("=");
         }
         ctx.write("+");
     }
@@ -3039,6 +3053,79 @@ mod tests {
                 panic!("expected Heading block, got {:?}", reparsed.blocks[0]);
             }
         }
+    }
+
+    #[test]
+    fn test_parse_grid_table_basic() {
+        let input = "+--------+--------+\n| A      | B      |\n+========+========+\n| Cell 1 | Cell 2 |\n+--------+--------+\n";
+        let doc = parse(input).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Table { rows } = &doc.blocks[0] else { panic!("expected table") };
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].is_header, "first row should be header");
+        assert!(!rows[1].is_header, "second row should not be header");
+        assert_eq!(rows[0].cells.len(), 2);
+        assert_eq!(rows[1].cells.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_simple_table_basic() {
+        let input = "=====  =====\nA      B\n=====  =====\n1      2\n=====  =====\n";
+        let doc = parse(input).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Table { rows } = &doc.blocks[0] else { panic!("expected table") };
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].is_header, "first row should be header");
+        assert!(!rows[1].is_header, "data row should not be header");
+    }
+
+    #[test]
+    fn test_grid_table_roundtrip() {
+        // Grid table with header: parse → build → parse must produce same structure
+        let doc = RstDoc {
+            blocks: vec![Block::Table {
+                rows: vec![
+                    TableRow { cells: vec![vec![Inline::Text("Head1".into())], vec![Inline::Text("Head2".into())]], is_header: true },
+                    TableRow { cells: vec![vec![Inline::Text("Cell1".into())], vec![Inline::Text("Cell2".into())]], is_header: false },
+                    TableRow { cells: vec![vec![Inline::Text("Cell3".into())], vec![Inline::Text("Cell4".into())]], is_header: false },
+                ],
+            }],
+        };
+        let rst = build(&doc);
+        // Must contain header separator (=)
+        assert!(rst.contains("+="), "header separator must use = chars, got:\n{rst}");
+        let reparsed = parse(&rst).expect("parse failed");
+        assert_eq!(reparsed.blocks.len(), 1);
+        let Block::Table { rows } = &reparsed.blocks[0] else { panic!("expected table after roundtrip") };
+        assert_eq!(rows.len(), 3);
+        assert!(rows[0].is_header, "header row must be preserved after roundtrip");
+        assert!(!rows[1].is_header, "body row must not be header after roundtrip");
+        // Verify cell text survived
+        let mut text = String::new();
+        collect_text_from_inlines(&rows[0].cells[0], &mut text);
+        assert_eq!(text, "Head1");
+    }
+
+    #[test]
+    fn test_grid_table_no_header_roundtrip() {
+        // Table with no header rows: all rows use is_header=false
+        let doc = RstDoc {
+            blocks: vec![Block::Table {
+                rows: vec![
+                    TableRow { cells: vec![vec![Inline::Text("A".into())], vec![Inline::Text("B".into())]], is_header: false },
+                    TableRow { cells: vec![vec![Inline::Text("C".into())], vec![Inline::Text("D".into())]], is_header: false },
+                ],
+            }],
+        };
+        let rst = build(&doc);
+        // Must NOT contain header separator
+        assert!(!rst.contains("+="), "no header separator expected for all-body table, got:\n{rst}");
+        let reparsed = parse(&rst).expect("parse failed");
+        assert_eq!(reparsed.blocks.len(), 1);
+        let Block::Table { rows } = &reparsed.blocks[0] else { panic!("expected table") };
+        assert_eq!(rows.len(), 2);
+        assert!(!rows[0].is_header);
+        assert!(!rows[1].is_header);
     }
 
     /// Long heading title consisting of grid-table border chars (4+ '+' chars)

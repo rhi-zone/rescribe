@@ -204,7 +204,8 @@ fn table_row_to_node(row: &TableRow, warnings: &mut Vec<FidelityWarning>) -> Nod
         .iter()
         .map(|cell| Node::new(node::TABLE_CELL).children(inlines_to_nodes(cell, warnings)))
         .collect();
-    Node::new(node::TABLE_ROW).children(cells)
+    let row_kind = if row.is_header { node::TABLE_HEADER } else { node::TABLE_ROW };
+    Node::new(row_kind).children(cells)
 }
 
 fn inlines_to_nodes(inlines: &[Inline], warnings: &mut Vec<FidelityWarning>) -> Vec<Node> {

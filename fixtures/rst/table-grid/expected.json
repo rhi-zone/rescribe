@@ -1,10 +1,13 @@
 {
-  "description": "RST grid table produces a table node with rows and cells",
+  "description": "RST grid table: header row (above +=====+ separator) maps to table_header; body rows map to table_row",
   "category": "happy",
   "assertions": [
     { "path": "/0", "kind": "table" },
-    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0", "kind": "table_header" },
     { "path": "/0/0/0", "kind": "table_cell" },
-    { "path": "/0/0/1", "kind": "table_cell" }
+    { "path": "/0/0/1", "kind": "table_cell" },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" },
+    { "path": "/0/1/1", "kind": "table_cell" }
   ]
 }

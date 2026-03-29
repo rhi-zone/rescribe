@@ -35,8 +35,8 @@ See `fixtures/spec.md` for category definitions.
 - [x] table (.. table:: directive) — `table-directive`
 - [x] csv-table (.. csv-table:: directive) — `csv-table`
 - [x] list-table (.. list-table:: directive) — `list-table`
-- [x] grid table (not parsed; treated as paragraph) — `table-grid`
-- [x] simple table (not parsed; treated as paragraph) — `table-simple`
+- [x] grid table (parsed; header rows via +===+ separator) — `table-grid`
+- [x] simple table (parsed; first row is header before second ===== border) — `table-simple`
 - [x] line block (| prefix) — `line-block`
 - [x] bullet list with auto-enumeration (#.) — `list-auto-enum`
 - [x] field list (parsed as paragraph; no field-list support) — `field-list`

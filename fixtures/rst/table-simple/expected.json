@@ -1,10 +1,13 @@
 {
-  "description": "RST simple table (=== borders) produces a table node with rows and cells",
+  "description": "RST simple table: first row (before second ===== border) is table_header; remaining rows are table_row",
   "category": "happy",
   "assertions": [
     { "path": "/0", "kind": "table" },
-    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0", "kind": "table_header" },
     { "path": "/0/0/0", "kind": "table_cell" },
-    { "path": "/0/0/1", "kind": "table_cell" }
+    { "path": "/0/0/1", "kind": "table_cell" },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_cell" },
+    { "path": "/0/1/1", "kind": "table_cell" }
   ]
 }
