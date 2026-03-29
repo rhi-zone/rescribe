@@ -43,6 +43,28 @@ pub mod generated;
 /// Type aliases for the generated ECMA-376 types. See [`generated`] for details.
 pub use generated as types;
 
+/// Generated streaming event types (`WmlEvent`, `OwnedWmlEvent`, dispatch helpers).
+///
+/// These are driven by `ooxml-events-wml.yaml` and regenerated via
+/// `OOXML_GENERATE_EVENTS=1 cargo build`.
+///
+/// Re-exported as [`events`].
+#[cfg(feature = "reader-streaming")]
+pub mod generated_events;
+/// Streaming event types. See [`generated_events`] for details.
+#[cfg(feature = "reader-streaming")]
+pub use generated_events as event_types;
+
+/// Hand-written SAX iterator that emits [`WmlEvent`] items without materializing the full tree.
+#[cfg(feature = "reader-streaming")]
+pub mod events;
+
+// Re-export key event types at crate root when the feature is on.
+#[cfg(feature = "reader-streaming")]
+pub use events::{WmlEventIter, events as wml_events};
+#[cfg(feature = "reader-streaming")]
+pub use generated_events::{OwnedWmlEvent, WmlEvent, WmlStartKind, dispatch_start, props_element};
+
 /// Generated [`FromXml`](ooxml_xml::FromXml) parsers for all generated types.
 ///
 /// Re-exported as [`parsers`].

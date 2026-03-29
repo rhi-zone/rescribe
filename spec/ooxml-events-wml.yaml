@@ -1,0 +1,81 @@
+# Streaming event configuration for WordprocessingML (DOCX).
+# Used by ooxml-codegen event_gen to generate src/generated_events.rs in ooxml-wml.
+#
+# Design: DOCX-faithful, not IR-faithful.
+# Headings are StartParagraph { style: "Heading1" } — not a separate StartHeading.
+# Lists are paragraphs with numPr — not a separate StartList.
+
+enum_name: WmlEvent
+document_start: StartDocument
+document_end: EndDocument
+
+containers:
+  - xml_local: p
+    start_variant: StartParagraph
+    end_variant: EndParagraph
+    props_xml_local: pPr
+    props_rust_type: ParagraphProperties
+
+  - xml_local: r
+    start_variant: StartRun
+    end_variant: EndRun
+    props_xml_local: rPr
+    props_rust_type: RunProperties
+
+  - xml_local: tbl
+    start_variant: StartTable
+    end_variant: EndTable
+    props_xml_local: tblPr
+    props_rust_type: TableProperties
+
+  - xml_local: tr
+    start_variant: StartTableRow
+    end_variant: EndTableRow
+    props_xml_local: trPr
+    props_rust_type: TableRowProperties
+
+  - xml_local: tc
+    start_variant: StartTableCell
+    end_variant: EndTableCell
+    props_xml_local: tcPr
+    props_rust_type: TableCellProperties
+
+  - xml_local: hyperlink
+    start_variant: StartHyperlink
+    end_variant: EndHyperlink
+    attrs:
+      - xml_attr: "r:id"
+        field_name: rel_id
+        rust_type: "Option<Cow<'a, str>>"
+      - xml_attr: "w:anchor"
+        field_name: anchor
+        rust_type: "Option<Cow<'a, str>>"
+
+leaves:
+  - xml_local: t
+    variant: Text
+    text_content: true
+
+  - xml_local: br
+    variant: LineBreak
+
+  - xml_local: footnoteReference
+    variant: FootnoteRef
+    attrs:
+      - xml_attr: "w:id"
+        field_name: id
+        rust_type: i32
+
+  - xml_local: endnoteReference
+    variant: EndnoteRef
+    attrs:
+      - xml_attr: "w:id"
+        field_name: id
+        rust_type: i32
+
+  - xml_local: blip
+    variant: Image
+    attrs:
+      - xml_attr: "r:embed"
+        field_name: rel_id
+        rust_type: "Cow<'a, str>"

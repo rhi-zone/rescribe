@@ -34,7 +34,7 @@ full = [
 ]
 # API-mode flags
 reader-ast = []       # Document::open / parse — materialised tree
-reader-streaming = [] # events() — iterator over WmlEvents (stub; impl pending)
+reader-streaming = [] # events() — true SAX iterator over WmlEvent; no full-tree materialization
 reader-batch = []     # StreamingParser<H> — chunk-driven (stub; impl pending)
 writer-streaming = [] # Writer<W> — event-driven emit (stub; impl pending)
 writer-builder = []   # DocumentBuilder — build and write a document

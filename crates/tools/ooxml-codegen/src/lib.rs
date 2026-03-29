@@ -6,6 +6,7 @@
 pub mod analysis;
 pub mod ast;
 pub mod codegen;
+pub mod event_gen;
 pub mod lexer;
 pub mod parser;
 pub mod parser_gen;
@@ -16,6 +17,7 @@ pub use ast::{DatatypeParam, Definition, Namespace, Pattern, QName, Schema};
 pub use codegen::{CodegenConfig, FeatureMappings, ModuleMappings, NameMappings, generate};
 pub use lexer::{LexError, Lexer};
 pub use parser::{ParseError, Parser};
+pub use event_gen::{AttrFieldDef, ContainerDef, EventConfig, LeafDef, generate_events};
 pub use parser_gen::generate_parsers;
 pub use serializer_gen::generate_serializers;
 
