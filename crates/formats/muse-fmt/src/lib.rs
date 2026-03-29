@@ -4,12 +4,18 @@
 //! Used by `rescribe-read-muse` and `rescribe-write-muse` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
 // Re-export primary types for convenience.
 pub use ast::{Block, Diagnostic, Inline, MuseDoc, Severity, Span, TableRow};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::build;
+pub use events::{EventIter, MuseEvent, OwnedMuseEvent};
+pub use writer::Writer;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
