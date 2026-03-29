@@ -26,9 +26,13 @@ A vertical has these steps, in order — complete each before moving to the next
 1. **Fixture suite complete** — `fixtures/{format}/COVERAGE.md` all boxes checked. Covers
    all six dimensions: happy path, integration, end-to-end, rare, adversarial, pathological.
    Fixtures assert correct behavior; the Rust implementation is fixed to pass them (dogfooding).
-2. **Pandoc/oracle harness at ≥90%** (where applicable — skip for formats Pandoc can't read)
-3. **Fuzz clean** — both no-panic gate and roundtrip property, run until no failures
-4. **Benchmarks** — at least one `cargo bench` target measuring reader and writer throughput
+   Required for both reader and writer.
+2. **Oracle harness** (where applicable — skip for formats Pandoc can't read) — run against
+   Pandoc or another reference implementation. No numeric threshold; all differences must be
+   understood and documented. The goal is zero unexplained differences.
+3. **Fuzz clean** — both no-panic gate and roundtrip property, run until no failures.
+   Required for both reader and writer.
+4. **All API modes complete** — reader: ast + stream + batch; writer: w-build + w-stream.
 5. **5-Production sign-off** in `docs/format-audit.md`
 
 **The anti-pattern to avoid:** completing step 1 for format A, then starting format B at
@@ -285,19 +289,20 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] **Lists** — `{\*\pn\pnlvlblt}`/`{\*\pn\pnlvlbody}` → `Block::List`
   - [x] **Zero-diagnostic corpus gate** — `#[ignore]` test; 1125 files, 0% diagnostics
   - [x] **Fuzz clean** — reader/roundtrip/writer all clean; 3 bugs fixed (slice panic, OOM, UTF-8 boundary)
-- [x] `rst-fmt` vertical — **5-Production** reader (2026-03-22)
+- [ ] `rst-fmt` vertical — **4-Fuzz** (demoted 2026-03-29: construct gaps disqualify 5-Production)
   - [x] No-panic fuzz gate (`fuzz_rst_reader`); roundtrip fuzz (`fuzz_rst_roundtrip`)
   - [x] Fixtures: 80 total; COVERAGE.md all boxes checked
-  - [x] Pandoc harness: 100% word coverage on rst-reader.rst (ref=618)
+  - [x] Oracle harness: 100% word coverage on rst-reader.rst (ref=618)
   - [x] Benchmarks: rst_parse_small 3.3µs, rst_parse_medium 30µs, rst_emit_medium 2.5µs
-  - [x] Parser fixes: "text::" paragraph+code block (pending_block); `<url>`_ empty display text
-  - Note: table parsing and footnote parsing not yet in parser — coverage gaps, not bugs
-- [x] `asciidoc` vertical — **5-Production** reader (2026-03-22)
+  - [x] All API modes: ast + stream + batch + w-build + w-stream
+  - [ ] Construct gaps: table parsing, footnote parsing
+- [ ] `asciidoc` vertical — **4-Fuzz** (demoted 2026-03-29: construct gaps disqualify 5-Production)
   - [x] No-panic fuzz gate (`fuzz_asciidoc_reader`); roundtrip fuzz (`fuzz_asciidoc_roundtrip`)
   - [x] Fixtures: 84 total; COVERAGE.md all boxes checked
-  - [x] Pandoc harness: N/A (pandoc can't read asciidoc)
+  - [x] Oracle harness: N/A (pandoc can't read asciidoc)
   - [x] Benchmarks: asciidoc_parse_small 6.6µs, asciidoc_parse_medium 48µs, asciidoc_emit_medium 1.9µs
-  - Note: table/footnote/math parsing not yet implemented — coverage gaps deferred
+  - [x] All API modes: ast + stream + batch + w-build + w-stream
+  - [ ] Construct gaps: table parsing, footnote parsing, math parsing
 - [ ] `textile-fmt` vertical — **4-Fuzz** (2026-03-21); footnotes + def-lists added (2026-03-28)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
@@ -309,16 +314,13 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Fixtures: table, image, superscript, subscript added (2026-03-21)
   - [x] Footnotes — FootnoteDef block + FootnoteRef inline (2026-03-28)
   - [x] Definition lists — DefinitionList block with term/desc pairs (2026-03-28)
-- [x] `org-fmt` vertical — **5-Production** reader (2026-03-22)
-  - [x] Split lib.rs into ast.rs / parse.rs / emit.rs
-  - [x] Span/Diagnostic types; infallible parse() → (OrgDoc, Vec<Diagnostic>)
-  - [x] strip_spans() on all AST types; merge_text_inlines() utility
+- [ ] `org-fmt` vertical — **4-Fuzz** (demoted 2026-03-29: construct gaps disqualify 5-Production)
   - [x] No-panic fuzz gate (`fuzz_org_reader`) — 1.25M runs clean; roundtrip fuzz clean
   - [x] Fixtures: 88 total; COVERAGE.md all boxes checked
-  - [x] Pandoc harness: 100% word coverage on writer.org (ref=919)
+  - [x] Oracle harness: 100% word coverage on writer.org (ref=919)
   - [x] Benchmarks: org_parse_small 3.4µs, org_parse_medium 53µs, org_emit_medium 2.9µs
-  - [x] Parser fix: `$` math rejected when next char is digit (currency not math)
-  - Note: writer still at 2-Fixtures; blockquote nesting/footnote defs deferred
+  - [x] All API modes: ast + stream + batch + w-build + w-stream
+  - [ ] Construct gaps: blockquote nesting, footnote definitions, figure/caption blocks
 - [x] `muse-fmt` vertical — **4-Fuzz** (2026-03-21)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
@@ -341,16 +343,14 @@ Each Tier A format at 5-Production with a published standalone crate.
   - Note: headings excluded from text comparison (emitted uppercase; .TH always adds "UNTITLED" title)
   - [ ] 100% construct coverage — tables, images, code inline, footnotes
   - [ ] Writer at 2-Fixtures; needs fuzz target and coverage work
-- [x] `djot-fmt` vertical — **5-Production** reader (2026-03-23)
-  - [x] push_text merges adjacent text nodes (smart-quote events no longer split words)
-  - [x] Pandoc harness: 100% word coverage on djot-reader.djot (ref=931)
+- [ ] `djot-fmt` vertical — **reader: 5-Production** (2026-03-23); **writer: 4-Fuzz**
+  - [x] All API modes: ast + stream + batch + w-build + w-stream
+  - [x] Oracle harness: 100% word coverage on djot-reader.djot (ref=931)
   - [x] Fixtures: 79 total; COVERAGE.md all boxes checked
   - [x] Benchmarks: djot_parse_small 7.8µs, djot_parse_medium 49µs, djot_emit_medium 9.8µs
-  - [x] Fuzz: 1M+ runs clean (2026-03-21); native fuzz targets added (2026-03-23)
-  - [x] Native fuzz: fuzz_djot_fmt_reader (no-panic) + fuzz_djot_fmt_roundtrip (parse(emit(ast))==ast)
-    - 21M roundtrip executions clean; 4 bugs found and fixed: slice OOB on bare marker,
-      unclosed verbatim OOB, tight-list false positive (blank after list), trailing-\n artifact
-  - Note: writer still at 4-Fuzz (fuzz_djot_roundtrip 1M runs clean); writer to 5-Production deferred
+  - [x] Fuzz reader: fuzz_djot_fmt_reader + fuzz_djot_fmt_roundtrip — 21M runs clean
+  - [x] Fuzz writer: fuzz_djot_roundtrip — 1M runs clean
+  - [ ] Writer: verify no construct gaps vs reader; sign off writer at 5-Production
 
 ---
 

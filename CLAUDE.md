@@ -315,6 +315,14 @@ No new feature without a fixture.
 
 ## What "5-Production" actually means
 
+**5-Production means the crate is a complete, published-quality library — reader AND
+writer, all API modes, full construct coverage, fuzz clean.**
+
+It is not enough to have a working reader. A crate with a complete reader and a stub
+writer is not production-grade — it's an incomplete library. Track reader and writer
+separately in the audit table, but do not call a vertical "5-Production" until both
+are done.
+
 **5-Production requires 100% construct coverage — not "enough for common cases."**
 
 A format vertical is not production-grade until every construct the format can express is
@@ -329,20 +337,27 @@ Each standalone format crate must satisfy all of:
 - **AST** (`feature = "ast"`, default on): `parse(input: &[u8]) -> (Ast, Vec<Diagnostic>)` — full tree, infallible, Span on every node
 - **Streaming** (`feature = "streaming"`, default on): `events(input: &[u8]) -> impl Iterator<Item = Event>`
 - **Batch** (`feature = "batch"`, default on): chunk-driven `Parser` (feed/finish)
+- Fuzz: no-panic gate (arbitrary bytes must not panic)
+- Fuzz: round-trip property `parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast`
+- 100% construct coverage (all format constructs either modeled or raw-preserved)
+- Fixture suite complete (`fixtures/{format}/COVERAGE.md` all boxes checked)
 
 **Writer:**
-- **Streaming** (`feature = "writer-streaming"`, default on): closure/visitor API
 - **Builder** (`feature = "writer-builder"`, default on): `emit(ast: &Ast) -> Vec<u8>`
+- **Streaming** (`feature = "writer-streaming"`, default on): event-driven writer
+- Fuzz: round-trip property (same as reader — writer must produce re-parseable output)
+- Fixture suite: at least the same constructs covered as reader
 
 **Feature gating:** all on by default. Gating is about contract scoping, not binary size.
 
-**Fuzz:**
-- No-panic gate: arbitrary bytes must not panic
-- Round-trip fuzz: `parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast`
+**Oracle harness (where applicable):**
+- Run against Pandoc or another reference implementation for sanity
+- Differences must be understood and documented — not silently ignored
+- No numeric threshold (≥90% was arbitrary); the goal is zero unexplained differences
+- Skip for formats Pandoc cannot read (e.g. AsciiDoc)
 
 **Rescribe integration:**
 - Thin adapter ≤300 lines each side
-- Fixture suite at 3-Harness
 - **100% construct coverage**
 
 See `docs/format-library-design.md` for the full spec.
@@ -356,15 +371,16 @@ parse already drops content; this only checks dropped content stays dropped.
 arbitrary instance of the format crate's own `Ast` type. The native AST is the ground
 truth. This covers the full surface area regardless of IR modeling completeness.
 
-## Marathon Mode
+## Work is vertical slices only
 
-When working autonomously:
-1. Work through todo list systematically
-2. For each format vertical: fixtures → harness → fuzz → commit
-3. Commit working increments (don't batch too much)
-4. Progress in vertical priority order (see TODO.md)
-5. Keep this file updated with architecture changes
-6. Don't stop early - continue until blocked or todo list exhausted
+**Never track "API modes" or any other concern as a horizontal sweep across crates.**
+The only valid unit of work is a format vertical: one crate, taken from current state
+to 5-Production. All requirements (reader, writer, all API modes, fuzz, fixtures) are
+part of that single vertical — not separate dimensions to be swept across formats.
+
+If a crate has a complete reader but a stub writer, it is not 5-Production. If it has
+reader + writer but is missing the streaming API mode, it is not 5-Production. The
+vertical is done when the whole crate is done. Nothing else counts.
 
 ## Design Principles
 

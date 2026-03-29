@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc promoted to 5-Production 2026-03-22 (benchmarks added, all vertical gates passed); commonmark-fmt reader promoted to 5-Production 2026-03-25 (fuzz_commonmark_reader 342K runs clean, fuzz_commonmark_roundtrip 4+ hours clean after 12 crash artifacts fixed); GFM reader promoted to 5-Production 2026-03-25 (Pandoc harness 97%/100%, fuzz_gfm_reader 698K runs clean).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc writer APIs added 2026-03-23 (streaming + builder); 2026-03-29: definition of 5-Production tightened — reader-only no longer qualifies; RST/Org/AsciiDoc demoted from R:5 to R:4 due to construct gaps (tables, footnotes); writer column updated from 2→4 (API modes complete, fuzz clean, construct gaps remain). djot-fmt confirmed as only fully complete standalone crate.
 
 ## Maturity Pipeline
 
@@ -13,9 +13,9 @@ Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/
 | **0-Stub** | Crate compiles; little or no real implementation |
 | **1-Partial** | Handles common constructs; known gaps remain |
 | **2-Fixtures** | Owned fixture suite authored and passing in CI |
-| **3-Harness** | Pandoc oracle harness ≥90% word coverage |
-| **4-Fuzz** | Fuzz target exists and has been run |
-| **5-Production** | All gates passed (see "Vertical completion checklist" in CLAUDE.md) |
+| **3-Harness** | Oracle harness run; all differences understood and documented |
+| **4-Fuzz** | No-panic + roundtrip fuzz targets exist and have been run clean |
+| **5-Production** | Reader complete + writer complete + all API modes + fuzz clean + fixtures complete (see CLAUDE.md) |
 
 **Conventions:**
 `†` = library-backed (upstream provides correctness guarantee; wrapper still needs fixtures and fuzz).
@@ -40,10 +40,10 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| djot | 5 | 4† | jotdown | – | production |
-| org | 5 | 2 | hand | – | harness 100% (writer.org) fixtures (88) benchmarks ✓ |
-| rst | 5 | 2 | hand | – | harness 100% fixtures (80) benchmarks ✓ |
-| asciidoc | 5 | 2 | hand | – | harness N/A fixtures (84) benchmarks ✓ |
+| djot | 5 | 4 | djot-fmt | – | production |
+| org | 4 | 4 | hand | construct gaps (blockquote nesting, footnote defs) | writer: same gaps |
+| rst | 4 | 4 | hand | construct gaps (tables, footnotes) | writer: same gaps |
+| asciidoc | 4 | 4 | hand | construct gaps (tables, footnotes, math) | writer: same gaps |
 | textile | 4 | 2 | hand | fuzz | harness |
 | muse | 4 | 2 | hand | production | harness |
 | t2t | 4 | 2 | hand | fuzz | harness |
