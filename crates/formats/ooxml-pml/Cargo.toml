@@ -37,7 +37,7 @@ full = [
 reader-ast = []       # Presentation::open / parse — materialised tree
 reader-streaming = [] # events() — iterator over PmlEvents (stub; impl pending)
 reader-batch = ["reader-ast"] # BatchParser — chunk-driven; buffers all input, parses on finish()
-writer-streaming = [] # Writer<W> — event-driven emit (stub; impl pending)
+writer-streaming = ["reader-streaming", "writer-builder"] # PmlWriter<W> — event-driven PPTX emit
 writer-builder = []   # PresentationBuilder — build and write a presentation
 # Individual feature flags (see spec/ooxml-features.yaml)
 pml-transitions = []     # Slide transitions

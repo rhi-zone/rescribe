@@ -44,6 +44,12 @@ pub mod batch;
 #[cfg(feature = "reader-batch")]
 pub use batch::BatchParser;
 
+// Streaming writer.
+#[cfg(feature = "writer-streaming")]
+pub mod streaming;
+#[cfg(feature = "writer-streaming")]
+pub use streaming::SmlWriter;
+
 /// Generated types from the ECMA-376 SpreadsheetML schema.
 ///
 /// These types map 1:1 to XML elements and attributes defined in ECMA-376 Part 1 §18.

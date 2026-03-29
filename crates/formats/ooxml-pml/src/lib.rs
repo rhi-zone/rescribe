@@ -44,6 +44,12 @@ pub mod ext;
 pub mod presentation;
 pub mod writer;
 
+// Streaming writer.
+#[cfg(feature = "writer-streaming")]
+pub mod streaming;
+#[cfg(feature = "writer-streaming")]
+pub use streaming::PmlWriter;
+
 /// Generated streaming event types (`PmlEvent`, `OwnedPmlEvent`, dispatch helpers).
 #[cfg(feature = "reader-streaming")]
 pub mod generated_events;

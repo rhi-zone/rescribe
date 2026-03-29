@@ -101,6 +101,12 @@ pub use writer::{
     TextBox, WrapType,
 };
 
+// Streaming writer.
+#[cfg(feature = "writer-streaming")]
+pub mod streaming;
+#[cfg(feature = "writer-streaming")]
+pub use streaming::WmlWriter;
+
 // Re-export commonly used generated types at the crate root.
 pub use types::ns;
 
