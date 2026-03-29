@@ -158,6 +158,33 @@ pub enum Inline {
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
+/// Returns true if `label` is a valid RST footnote/citation label.
+///
+/// Valid forms:
+/// - Numeric:           `1`, `23`, etc.
+/// - Auto-symbol:       `*`
+/// - Auto-numbered:     `#`
+/// - Named auto-number: `#label` where label is alphanumeric + `-` + `_`
+/// - Citation:          alphabetic + digits + `-` + `_` (same chars, no `#`/`*`)
+fn is_footnote_label(label: &str) -> bool {
+    if label.is_empty() {
+        return false;
+    }
+    if label == "*" || label == "#" {
+        return true;
+    }
+    if let Some(rest) = label.strip_prefix('#') {
+        // Named auto-numbered: #label
+        return !rest.is_empty()
+            && rest
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_');
+    }
+    label
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+}
+
 /// RST heading character priority (lower = higher level).
 /// The actual level is determined by order of appearance in the document.
 const HEADING_CHARS: &[char] = &['=', '-', '~', '^', '"', '`', '#', '*', '+', '_'];
@@ -1688,11 +1715,7 @@ fn parse_inline_content(
                 && chars[end + 1] == '_'
             {
                 let label: String = chars[pos + 1..end].iter().collect();
-                if !label.is_empty()
-                    && label
-                        .chars()
-                        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
-                {
+                if is_footnote_label(&label) {
                     nodes.push(Inline::FootnoteRef { label });
                     pos = end + 2;
                     continue;
@@ -3153,5 +3176,23 @@ mod tests {
                 "level {level} heading with 103-char '+' title lost after roundtrip\nRST:\n{rst_output}"
             );
         }
+    }
+
+    #[test]
+    fn test_footnote_auto_variants() {
+        let input = "See [1]_ for details and [*]_ for a symbol note and [#]_ for auto-numbered.\n\n.. [1] Numbered footnote.\n\n.. [*] Auto-symbol footnote.\n\n.. [#] Auto-numbered footnote.\n";
+        let doc = parse(input).unwrap();
+        // paragraph + 3 footnote defs
+        assert_eq!(doc.blocks.len(), 4, "expected 4 blocks, got: {doc:#?}");
+        assert!(matches!(doc.blocks[0], Block::Paragraph { .. }));
+        assert!(matches!(doc.blocks[1], Block::FootnoteDef { ref label, .. } if label == "1"));
+        assert!(matches!(doc.blocks[2], Block::FootnoteDef { ref label, .. } if label == "*"));
+        assert!(matches!(doc.blocks[3], Block::FootnoteDef { ref label, .. } if label == "#"));
+        // check inline refs
+        let Block::Paragraph { ref inlines } = doc.blocks[0] else { panic!() };
+        let refs: Vec<&str> = inlines.iter().filter_map(|i| {
+            if let Inline::FootnoteRef { label } = i { Some(label.as_str()) } else { None }
+        }).collect();
+        assert_eq!(refs, ["1", "*", "#"], "expected three footnote refs");
     }
 }

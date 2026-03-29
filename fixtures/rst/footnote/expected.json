@@ -1,0 +1,13 @@
+{
+  "description": "Footnote auto-symbol ([*]_) and auto-numbered ([#]_) refs and defs parse as footnote_ref/footnote_def with correct labels",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "1" } },
+    { "path": "/0/3", "kind": "footnote_ref", "props": { "label": "*" } },
+    { "path": "/0/5", "kind": "footnote_ref", "props": { "label": "#" } },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "1" } },
+    { "path": "/2", "kind": "footnote_def", "props": { "label": "*" } },
+    { "path": "/3", "kind": "footnote_def", "props": { "label": "#" } }
+  ]
+}

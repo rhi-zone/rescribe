@@ -41,7 +41,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] bullet list with auto-enumeration (#.) — `list-auto-enum`
 - [x] field list (parsed as paragraph; no field-list support) — `field-list`
 - [x] option list (falls through to paragraph; no dedicated parser support) — `option-list`
-- [x] footnote definition (dropped as comment; ref stays as text) — `footnote-def`
+- [x] footnote definition (numbered, auto-symbol `[*]`, auto-numbered `[#]`, named `[#label]`) — `footnote-def`, `footnote`
 - [x] citation definition (dropped as comment; ref stays as text) — `citation`
 - [x] comment (.. ) — `comment`
 - [x] section numbering (.. sectnum:: → div with rst:directive; heading preserved) — `sectnum`
@@ -63,7 +63,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] custom role span (.. role:: or :role:`text`) — `rst-span`
 - [x] anonymous hyperlink (`text`__) — `anonymous-link`
 - [x] embedded URI (`text <url>`_) — `link`
-- [x] footnote reference ([1]_ stays as literal text) — `footnote-def`
+- [x] footnote reference (numbered, auto-symbol, auto-numbered, named) — `footnote-def`, `footnote`
 - [x] citation reference ([label]_ stays as literal text) — `citation`
 - [x] substitution reference (|sub|) — `substitution`
 - [x] substitution definition (.. |sub| replace::) — `substitution`
