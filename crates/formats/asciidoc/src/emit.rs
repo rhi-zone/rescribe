@@ -145,6 +145,18 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             }
         }
 
+        Block::MathBlock { content, flavor, .. } => {
+            let macro_name = flavor.as_deref().unwrap_or("stem");
+            ctx.write("[");
+            ctx.write(macro_name);
+            ctx.write("]\n++++\n");
+            ctx.write(content);
+            if !content.ends_with('\n') {
+                ctx.write("\n");
+            }
+            ctx.write("++++\n\n");
+        }
+
         Block::Table { rows, .. } => {
             ctx.write("|===\n");
             for row in rows {
@@ -324,16 +336,12 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("]");
         }
 
-        Inline::MathInline { source, .. } => {
-            ctx.write("stem:[");
-            ctx.write(source);
+        Inline::MathInline { content, flavor, .. } => {
+            let macro_name = flavor.as_deref().unwrap_or("stem");
+            ctx.write(macro_name);
+            ctx.write(":[");
+            ctx.write(content);
             ctx.write("]");
-        }
-
-        Inline::MathDisplay { source, .. } => {
-            ctx.write("[stem]\n++++\n");
-            ctx.write(source);
-            ctx.write("\n++++\n\n");
         }
 
         Inline::RawInline { format, content, .. } => {

@@ -1,0 +1,6 @@
+The equation stem:[x^2 + y^2 = z^2] is Pythagorean.
+
+[stem]
+++++
+x^2 + y^2 = z^2
+++++

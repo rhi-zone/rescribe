@@ -140,6 +140,12 @@ pub enum Block {
         content: String,
         span: Span,
     },
+    MathBlock {
+        content: String,
+        /// The macro flavor: `"stem"`, `"latexmath"`, `"asciimath"`, or `None`.
+        flavor: Option<String>,
+        span: Span,
+    },
     Table {
         rows: Vec<TableRow>,
         span: Span,
@@ -215,6 +221,11 @@ impl Block {
                 content: content.clone(),
                 span: Span::NONE,
             },
+            Block::MathBlock { content, flavor, .. } => Block::MathBlock {
+                content: content.clone(),
+                flavor: flavor.clone(),
+                span: Span::NONE,
+            },
             Block::Table { rows, .. } => Block::Table {
                 rows: rows.iter().map(TableRow::strip_spans).collect(),
                 span: Span::NONE,
@@ -270,11 +281,9 @@ pub enum Inline {
         span: Span,
     },
     MathInline {
-        source: String,
-        span: Span,
-    },
-    MathDisplay {
-        source: String,
+        content: String,
+        /// The macro flavor: `"stem"`, `"latexmath"`, `"asciimath"`, or `None`.
+        flavor: Option<String>,
         span: Span,
     },
     RawInline {
@@ -358,12 +367,9 @@ impl Inline {
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::MathInline { source, .. } => Inline::MathInline {
-                source: source.clone(),
-                span: Span::NONE,
-            },
-            Inline::MathDisplay { source, .. } => Inline::MathDisplay {
-                source: source.clone(),
+            Inline::MathInline { content, flavor, .. } => Inline::MathInline {
+                content: content.clone(),
+                flavor: flavor.clone(),
                 span: Span::NONE,
             },
             Inline::RawInline {

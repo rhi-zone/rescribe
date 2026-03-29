@@ -1,0 +1,9 @@
+{
+  "description": "Inline stem macro and display math block",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "math_inline", "props": { "math:source": "x^2 + y^2 = z^2", "math:flavor": "stem" } },
+    { "path": "/1", "kind": "math_block", "props": { "math:source": "x^2 + y^2 = z^2", "math:flavor": "stem" } }
+  ]
+}

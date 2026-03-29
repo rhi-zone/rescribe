@@ -386,11 +386,11 @@ impl DocBuilder {
                     });
                 }
             }
-            OwnedEvent::MathInline { source } => {
-                self.push_inline(Inline::MathInline { source, span: Span::NONE });
+            OwnedEvent::MathBlock { content, flavor } => {
+                self.push_block(Block::MathBlock { content, flavor, span: Span::NONE });
             }
-            OwnedEvent::MathDisplay { source } => {
-                self.push_inline(Inline::MathDisplay { source, span: Span::NONE });
+            OwnedEvent::MathInline { content, flavor } => {
+                self.push_inline(Inline::MathInline { content, flavor, span: Span::NONE });
             }
             OwnedEvent::RawInline { format, content } => {
                 self.push_inline(Inline::RawInline { format, content, span: Span::NONE });

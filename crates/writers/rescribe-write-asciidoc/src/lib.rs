@@ -167,16 +167,12 @@ fn node_to_blocks(node: &Node) -> Vec<Block> {
             }
         }
 
-        "math_display" => {
+        "math_block" | "math_display" => {
             if let Some(source) = node.props.get_str("math:source") {
-                vec![Block::Paragraph {
-                    inlines: vec![Inline::MathDisplay {
-                        source: source.to_string(),
-                        span: asciidoc::Span::NONE,
-                    }],
-                    id: None,
-                    role: None,
-                    checked: None,
+                let flavor = node.props.get_str("math:flavor").map(|s| s.to_string());
+                vec![Block::MathBlock {
+                    content: source.to_string(),
+                    flavor,
                     span: asciidoc::Span::NONE,
                 }]
             } else {
@@ -379,17 +375,11 @@ fn node_to_inline(node: &Node) -> Inline {
         }
 
         "math_inline" => {
-            let source = node.props.get_str("math:source").unwrap_or("").to_string();
+            let content = node.props.get_str("math:source").unwrap_or("").to_string();
+            let flavor = node.props.get_str("math:flavor").map(|s| s.to_string());
             Inline::MathInline {
-                source,
-                span: asciidoc::Span::NONE,
-            }
-        }
-
-        "math_display" => {
-            let source = node.props.get_str("math:source").unwrap_or("").to_string();
-            Inline::MathDisplay {
-                source,
+                content,
+                flavor,
                 span: asciidoc::Span::NONE,
             }
         }

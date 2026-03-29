@@ -389,6 +389,19 @@ impl<'a> EventIter<'a> {
                     span: Span::NONE,
                 })
             }
+            Some("STEM") | Some("LATEXMATH") | Some("ASCIIMATH") => {
+                let flavor = Some(first_attr.unwrap().to_lowercase());
+                self.skip_blank_lines();
+                if let Some(delim_line) = self.current_line() {
+                    if delim_line.starts_with('+') && delim_line.chars().all(|c| c == '+') {
+                        let content = self.collect_delimited_content("++++");
+                        return Some(Block::MathBlock { content, flavor, span: Span::NONE });
+                    }
+                }
+                // Fallback: passthrough block content without delimiter
+                let content = self.collect_paragraph_content();
+                Some(Block::MathBlock { content, flavor, span: Span::NONE })
+            }
             _ => {
                 // Unknown attribute — skip and try parsing next element
                 self.try_parse_block()
@@ -1152,6 +1165,9 @@ impl<'a> EventIter<'a> {
             Block::RawBlock { format, content, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::RawBlock { format, content }));
             }
+            Block::MathBlock { content, flavor, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::MathBlock { content, flavor }));
+            }
             Block::Table { rows, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndTable));
                 if !rows.is_empty() {
@@ -1269,11 +1285,8 @@ impl<'a> EventIter<'a> {
                 }
                 self.frame_stack.push(Frame::Event(OwnedEvent::StartFootnoteDef { label }));
             }
-            Inline::MathInline { source, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::MathInline { source }));
-            }
-            Inline::MathDisplay { source, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::MathDisplay { source }));
+            Inline::MathInline { content, flavor, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::MathInline { content, flavor }));
             }
             Inline::RawInline { format, content, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::RawInline { format, content }));
@@ -1589,6 +1602,56 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
             }
         }
 
+        // Math macros: stem:[...], latexmath:[...], asciimath:[...]
+        if chars[pos] == 's' || chars[pos] == 'l' || chars[pos] == 'a' {
+            let remaining: String = chars[pos..].iter().take(12).collect();
+
+            // stem:[content]
+            if remaining.starts_with("stem:[") {
+                let content_start = pos + 6;
+                if let Some(close_pos) = find_matching_bracket(&chars, content_start) {
+                    let content: String = chars[content_start..close_pos].iter().collect();
+                    nodes.push(Inline::MathInline {
+                        content,
+                        flavor: Some("stem".to_string()),
+                        span: Span::NONE,
+                    });
+                    pos = close_pos + 1;
+                    continue;
+                }
+            }
+
+            // latexmath:[content]
+            if remaining.starts_with("latexmath:[") {
+                let content_start = pos + 11;
+                if let Some(close_pos) = find_matching_bracket(&chars, content_start) {
+                    let content: String = chars[content_start..close_pos].iter().collect();
+                    nodes.push(Inline::MathInline {
+                        content,
+                        flavor: Some("latexmath".to_string()),
+                        span: Span::NONE,
+                    });
+                    pos = close_pos + 1;
+                    continue;
+                }
+            }
+
+            // asciimath:[content]
+            if remaining.starts_with("asciimath:[") {
+                let content_start = pos + 11;
+                if let Some(close_pos) = find_matching_bracket(&chars, content_start) {
+                    let content: String = chars[content_start..close_pos].iter().collect();
+                    nodes.push(Inline::MathInline {
+                        content,
+                        flavor: Some("asciimath".to_string()),
+                        span: Span::NONE,
+                    });
+                    pos = close_pos + 1;
+                    continue;
+                }
+            }
+        }
+
         // Macro shortcuts: footnote:[...], kbd:[...], btn:[...], pass:[...], menu:...[...]
         if chars[pos] == 'f' || chars[pos] == 'k' || chars[pos] == 'b' || chars[pos] == 'p' || chars[pos] == 'm' {
             let remaining: String = chars[pos..].iter().take(12).collect();
@@ -1762,8 +1825,11 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
             {
                 break;
             }
-            // Check for macros: image:, link:, https://, http://, footnote:, kbd:, btn:, pass:, menu:
-            if c == 'i' || c == 'l' || c == 'h' || c == 'f' || c == 'k' || c == 'b' || c == 'p' || c == 'm' {
+            // Check for macros: image:, link:, https://, http://, footnote:, kbd:, btn:, pass:, menu:,
+            //                  stem:, latexmath:, asciimath:
+            if c == 'i' || c == 'l' || c == 'h' || c == 'f' || c == 'k' || c == 'b' || c == 'p' || c == 'm'
+                || c == 's' || c == 'a'
+            {
                 let remaining: String = chars[pos..].iter().take(12).collect();
                 // Check for footnote: macro (any form: anonymous, named, or back-ref).
                 // Valid forms: footnote:[...], footnote::[...], footnote:id[...]
@@ -1796,6 +1862,9 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
                     || remaining.starts_with("btn:[")
                     || remaining.starts_with("pass:[")
                     || remaining.starts_with("menu:")
+                    || remaining.starts_with("stem:[")
+                    || remaining.starts_with("latexmath:[")
+                    || remaining.starts_with("asciimath:[")
                 {
                     break;
                 }

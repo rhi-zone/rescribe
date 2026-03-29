@@ -39,6 +39,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] callout list (<1> ... <1> annotations) — `callout-list`
 - [x] bibliography list (- [ref]) — `bibliography-list`
 - [x] footnote block — `footnote`
+- [x] math block ([stem] / [latexmath] / [asciimath] + ++++) — `math`
 
 ## Inline constructs
 - [x] italic (_text_ or __text__) — `italic`
@@ -64,6 +65,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] indexterm macro ((((term)))) — `indexterm`
 - [x] pass macro (pass:[raw]) — `pass-macro`
 - [x] inline literal passthrough (+raw+) — `inline-literal-pass`
+- [x] inline math (stem:[...], latexmath:[...], asciimath:[...]) — `math`
 
 ## Properties
 - [x] document title metadata (author, revnumber, revdate) — `doc-metadata`

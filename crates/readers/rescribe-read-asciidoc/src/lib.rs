@@ -138,6 +138,14 @@ fn block_to_node(block: &Block) -> Node {
             .prop(prop::CONTENT, content.clone())
             .prop("format", format.clone()),
 
+        Block::MathBlock { content, flavor, .. } => {
+            let mut n = Node::new("math_block").prop("math:source", content.clone());
+            if let Some(f) = flavor {
+                n = n.prop("math:flavor", f.clone());
+            }
+            n
+        }
+
         Block::Table { rows, .. } => {
             let row_nodes: Vec<Node> = rows.iter().map(table_row_to_node).collect();
             Node::new(node::TABLE).children(row_nodes)
@@ -263,12 +271,12 @@ fn inline_to_node(inline: &Inline) -> Node {
             .prop(prop::LABEL, label.clone())
             .children(inlines_to_nodes(children)),
 
-        Inline::MathInline { source, .. } => {
-            Node::new("math_inline").prop("math:source", source.clone())
-        }
-
-        Inline::MathDisplay { source, .. } => {
-            Node::new("math_display").prop("math:source", source.clone())
+        Inline::MathInline { content, flavor, .. } => {
+            let mut n = Node::new("math_inline").prop("math:source", content.clone());
+            if let Some(f) = flavor {
+                n = n.prop("math:flavor", f.clone());
+            }
+            n
         }
 
         Inline::RawInline {

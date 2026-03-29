@@ -79,8 +79,8 @@ pub enum Event<'a> {
     FootnoteRef { label: String },
     StartFootnoteDef { label: String },
     EndFootnoteDef,
-    MathInline { source: String },
-    MathDisplay { source: String },
+    MathBlock { content: String, flavor: Option<String> },
+    MathInline { content: String, flavor: Option<String> },
     RawInline { format: String, content: String },
     Anchor { id: String },
 }
@@ -392,11 +392,11 @@ fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx:
         Event::FootnoteRef { label } => {
             push_inline(block_stack, inline_ctx, Inline::FootnoteRef { label, span: Span::NONE });
         }
-        Event::MathInline { source } => {
-            push_inline(block_stack, inline_ctx, Inline::MathInline { source, span: Span::NONE });
+        Event::MathBlock { content, flavor } => {
+            push_block(block_stack, Block::MathBlock { content, flavor, span: Span::NONE });
         }
-        Event::MathDisplay { source } => {
-            push_inline(block_stack, inline_ctx, Inline::MathDisplay { source, span: Span::NONE });
+        Event::MathInline { content, flavor } => {
+            push_inline(block_stack, inline_ctx, Inline::MathInline { content, flavor, span: Span::NONE });
         }
         Event::RawInline { format, content } => {
             push_inline(block_stack, inline_ctx, Inline::RawInline { format, content, span: Span::NONE });
