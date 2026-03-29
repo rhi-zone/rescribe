@@ -5,3 +5,11 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Textile parser, AST, and builder — no rescribe dependency"
+
+[features]
+default = ["reader-ast", "reader-streaming", "reader-batch", "writer-streaming", "writer-builder"]
+reader-ast = []
+reader-streaming = ["reader-ast"]
+reader-batch = []
+writer-streaming = []
+writer-builder = ["reader-ast", "writer-streaming"]

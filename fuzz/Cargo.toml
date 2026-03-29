@@ -93,6 +93,9 @@ path = "../crates/readers/rescribe-read-asciidoc"
 [dependencies.rescribe-write-asciidoc]
 path = "../crates/writers/rescribe-write-asciidoc"
 
+[dependencies.textile-fmt]
+path = "../crates/formats/textile-fmt"
+
 [dependencies.rescribe-read-textile]
 path = "../crates/readers/rescribe-read-textile"
 
@@ -524,6 +527,13 @@ bench = false
 [[bin]]
 name = "fuzz_textile_roundtrip"
 path = "fuzz_targets/textile_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_textile_fmt_roundtrip"
+path = "fuzz_targets/textile_fmt_roundtrip.rs"
 test = false
 doc = false
 bench = false

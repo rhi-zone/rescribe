@@ -5,12 +5,15 @@
 
 pub mod ast;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 
 pub use ast::{Block, BlockAttrs, Diagnostic, Inline, Severity, Span, TableCell, TableRow, TextileDoc};
 pub use emit::emit;
+pub use events::{EventIter, TextileEvent, events};
 pub use parse::parse;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

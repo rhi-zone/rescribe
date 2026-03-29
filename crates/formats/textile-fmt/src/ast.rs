@@ -48,7 +48,7 @@ impl Diagnostic {
 // ── AST ───────────────────────────────────────────────────────────────────────
 
 /// A parsed Textile document.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct TextileDoc {
     pub blocks: Vec<Block>,
     pub span: Span,
@@ -95,7 +95,7 @@ impl BlockAttrs {
 }
 
 /// Block-level element.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Block {
     Paragraph {
         inlines: Vec<Inline>,
@@ -227,7 +227,7 @@ impl Block {
 }
 
 /// A table row.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TableRow {
     /// Row-level attributes (class, id, style, lang).
     pub attrs: BlockAttrs,
@@ -246,7 +246,7 @@ impl TableRow {
 }
 
 /// A table cell.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TableCell {
     pub is_header: bool,
     /// Cell text alignment: "left", "right", "center", "justify", or None.
@@ -267,7 +267,7 @@ impl TableCell {
 }
 
 /// Inline element.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Inline {
     Text(String, Span),
     Bold(Vec<Inline>, Span),
