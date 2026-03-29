@@ -1,0 +1,10 @@
+{
+  "description": "Indented block via [indent] tag",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "indented text" } }
+  ]
+}

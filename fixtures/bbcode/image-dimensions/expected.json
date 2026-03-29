@@ -1,0 +1,8 @@
+{
+  "description": "Image with width and height dimensions",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "https://example.com/img.png", "bbcode:width": 100, "bbcode:height": 50 } }
+  ]
+}

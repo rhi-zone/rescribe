@@ -1,0 +1,11 @@
+{
+  "description": "Link inside a table cell",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "table_row" },
+    { "path": "/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/0/0", "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "link" } }
+  ]
+}

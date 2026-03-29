@@ -1,0 +1,12 @@
+{
+  "description": "Left and right alignment blocks",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "style:align": "left" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "left text" } },
+    { "path": "/1", "kind": "div", "props": { "style:align": "right" } },
+    { "path": "/1/0", "kind": "paragraph" },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "right text" } }
+  ]
+}

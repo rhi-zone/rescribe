@@ -1,0 +1,7 @@
+{
+  "description": "List with 50 items",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list", "children_count": 50 }
+  ]
+}

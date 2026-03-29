@@ -1,0 +1,10 @@
+{
+  "description": "Color and bold combined",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:color": "red" } },
+    { "path": "/0/0/0", "kind": "strong" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "red bold" } }
+  ]
+}

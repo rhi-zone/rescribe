@@ -67,10 +67,12 @@ pub enum Block {
         span: Span,
     },
     CodeBlock {
+        language: Option<String>,
         content: String,
         span: Span,
     },
     Blockquote {
+        author: Option<String>,
         children: Vec<Block>,
         span: Span,
     },
@@ -83,6 +85,39 @@ pub enum Block {
         rows: Vec<TableRow>,
         span: Span,
     },
+    HorizontalRule {
+        span: Span,
+    },
+    Heading {
+        level: u8,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    Alignment {
+        kind: AlignKind,
+        children: Vec<Block>,
+        span: Span,
+    },
+    Spoiler {
+        children: Vec<Block>,
+        span: Span,
+    },
+    Preformatted {
+        content: String,
+        span: Span,
+    },
+    Indent {
+        children: Vec<Block>,
+        span: Span,
+    },
+}
+
+/// Alignment kind for `[center]`, `[left]`, `[right]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlignKind {
+    Center,
+    Left,
+    Right,
 }
 
 impl Block {
@@ -92,11 +127,17 @@ impl Block {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { content, .. } => Block::CodeBlock {
+            Block::CodeBlock {
+                language, content, ..
+            } => Block::CodeBlock {
+                language: language.clone(),
                 content: content.clone(),
                 span: Span::NONE,
             },
-            Block::Blockquote { children, .. } => Block::Blockquote {
+            Block::Blockquote {
+                author, children, ..
+            } => Block::Blockquote {
+                author: author.clone(),
                 children: children.iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
@@ -110,6 +151,33 @@ impl Block {
             },
             Block::Table { rows, .. } => Block::Table {
                 rows: rows.iter().map(TableRow::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
+            Block::Heading {
+                level, children, ..
+            } => Block::Heading {
+                level: *level,
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::Alignment {
+                kind, children, ..
+            } => Block::Alignment {
+                kind: *kind,
+                children: children.iter().map(Block::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::Spoiler { children, .. } => Block::Spoiler {
+                children: children.iter().map(Block::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::Preformatted { content, .. } => Block::Preformatted {
+                content: content.clone(),
+                span: Span::NONE,
+            },
+            Block::Indent { children, .. } => Block::Indent {
+                children: children.iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
         }
@@ -158,10 +226,34 @@ pub enum Inline {
     },
     Image {
         url: String,
+        width: Option<u32>,
+        height: Option<u32>,
         span: Span,
     },
     Subscript(Vec<Inline>, Span),
     Superscript(Vec<Inline>, Span),
+    Color {
+        value: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    Size {
+        value: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    Font {
+        name: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    Email {
+        addr: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    Noparse(String, Span),
+    /// Generic span for format-specific attributes not covered above.
     Span {
         attr: String,
         value: String,
@@ -192,8 +284,15 @@ impl Inline {
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::Image { url, .. } => Inline::Image {
+            Inline::Image {
+                url,
+                width,
+                height,
+                ..
+            } => Inline::Image {
                 url: url.clone(),
+                width: *width,
+                height: *height,
                 span: Span::NONE,
             },
             Inline::Subscript(ch, _) => {
@@ -202,6 +301,35 @@ impl Inline {
             Inline::Superscript(ch, _) => {
                 Inline::Superscript(ch.iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
+            Inline::Color {
+                value, children, ..
+            } => Inline::Color {
+                value: value.clone(),
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Size {
+                value, children, ..
+            } => Inline::Size {
+                value: value.clone(),
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Font {
+                name, children, ..
+            } => Inline::Font {
+                name: name.clone(),
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Email {
+                addr, children, ..
+            } => Inline::Email {
+                addr: addr.clone(),
+                children: children.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Noparse(s, _) => Inline::Noparse(s.clone(), Span::NONE),
             Inline::Span {
                 attr,
                 value,

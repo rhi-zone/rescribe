@@ -1,0 +1,7 @@
+{
+  "description": "Deeply nested unclosed tags - parser must not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

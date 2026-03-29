@@ -1,0 +1,9 @@
+{
+  "description": "Spoiler block hides content",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "bbcode:spoiler": true } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "hidden content" } }
+  ]
+}

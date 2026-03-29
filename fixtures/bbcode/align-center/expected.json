@@ -1,0 +1,10 @@
+{
+  "description": "Center alignment block",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "div", "props": { "style:align": "center" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "centered text" } }
+  ]
+}

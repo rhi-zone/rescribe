@@ -1,0 +1,8 @@
+{
+  "description": "Tag with no content",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "strong", "children_count": 0 }
+  ]
+}

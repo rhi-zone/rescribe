@@ -1,6 +1,6 @@
 //! BBCode emitter — build a BBCode string from a [`BbcodeDoc`].
 
-use crate::ast::{BbcodeDoc, Block, Inline, TableRow};
+use crate::ast::{AlignKind, BbcodeDoc, Block, Inline, TableRow};
 
 /// Build a BBCode string from a [`BbcodeDoc`].
 pub fn emit(doc: &BbcodeDoc) -> String {
@@ -18,8 +18,14 @@ fn emit_block(block: &Block, output: &mut String) {
             output.push_str("\n\n");
         }
 
-        Block::CodeBlock { content, .. } => {
-            output.push_str("[code]\n");
+        Block::CodeBlock {
+            language, content, ..
+        } => {
+            if let Some(lang) = language {
+                output.push_str(&format!("[code={}]\n", lang));
+            } else {
+                output.push_str("[code]\n");
+            }
             output.push_str(content);
             if !content.ends_with('\n') {
                 output.push('\n');
@@ -27,8 +33,14 @@ fn emit_block(block: &Block, output: &mut String) {
             output.push_str("[/code]\n\n");
         }
 
-        Block::Blockquote { children, .. } => {
-            output.push_str("[quote]\n");
+        Block::Blockquote {
+            author, children, ..
+        } => {
+            if let Some(author) = author {
+                output.push_str(&format!("[quote={}]\n", author));
+            } else {
+                output.push_str("[quote]\n");
+            }
             for child in children {
                 if let Block::Paragraph { inlines, .. } = child {
                     emit_inlines(inlines, output);
@@ -59,6 +71,55 @@ fn emit_block(block: &Block, output: &mut String) {
         Block::Table { rows, .. } => {
             emit_table(rows, output);
         }
+
+        Block::HorizontalRule { .. } => {
+            output.push_str("[hr]\n\n");
+        }
+
+        Block::Heading {
+            level, children, ..
+        } => {
+            output.push_str(&format!("[h{}]", level));
+            emit_inlines(children, output);
+            output.push_str(&format!("[/h{}]\n\n", level));
+        }
+
+        Block::Alignment {
+            kind, children, ..
+        } => {
+            let tag = match kind {
+                AlignKind::Center => "center",
+                AlignKind::Left => "left",
+                AlignKind::Right => "right",
+            };
+            output.push_str(&format!("[{}]\n", tag));
+            for child in children {
+                emit_block(child, output);
+            }
+            output.push_str(&format!("[/{}]\n\n", tag));
+        }
+
+        Block::Spoiler { children, .. } => {
+            output.push_str("[spoiler]\n");
+            for child in children {
+                emit_block(child, output);
+            }
+            output.push_str("[/spoiler]\n\n");
+        }
+
+        Block::Preformatted { content, .. } => {
+            output.push_str("[pre]");
+            output.push_str(content);
+            output.push_str("[/pre]\n\n");
+        }
+
+        Block::Indent { children, .. } => {
+            output.push_str("[indent]\n");
+            for child in children {
+                emit_block(child, output);
+            }
+            output.push_str("[/indent]\n\n");
+        }
     }
 }
 
@@ -83,7 +144,7 @@ fn emit_inlines(inlines: &[Inline], output: &mut String) {
     }
 }
 
-fn emit_inline(inline: &Inline, output: &mut String) {
+pub(crate) fn emit_inline(inline: &Inline, output: &mut String) {
     match inline {
         Inline::Text(s, _) => output.push_str(s),
 
@@ -123,8 +184,17 @@ fn emit_inline(inline: &Inline, output: &mut String) {
             output.push_str("[/url]");
         }
 
-        Inline::Image { url, .. } => {
-            output.push_str("[img]");
+        Inline::Image {
+            url,
+            width,
+            height,
+            ..
+        } => {
+            if let (Some(w), Some(h)) = (width, height) {
+                output.push_str(&format!("[img={}x{}]", w, h));
+            } else {
+                output.push_str("[img]");
+            }
             output.push_str(url);
             output.push_str("[/img]");
         }
@@ -139,6 +209,44 @@ fn emit_inline(inline: &Inline, output: &mut String) {
             output.push_str("[sup]");
             emit_inlines(children, output);
             output.push_str("[/sup]");
+        }
+
+        Inline::Color {
+            value, children, ..
+        } => {
+            output.push_str(&format!("[color={}]", value));
+            emit_inlines(children, output);
+            output.push_str("[/color]");
+        }
+
+        Inline::Size {
+            value, children, ..
+        } => {
+            output.push_str(&format!("[size={}]", value));
+            emit_inlines(children, output);
+            output.push_str("[/size]");
+        }
+
+        Inline::Font {
+            name, children, ..
+        } => {
+            output.push_str(&format!("[font={}]", name));
+            emit_inlines(children, output);
+            output.push_str("[/font]");
+        }
+
+        Inline::Email {
+            addr, children, ..
+        } => {
+            output.push_str(&format!("[email={}]", addr));
+            emit_inlines(children, output);
+            output.push_str("[/email]");
+        }
+
+        Inline::Noparse(s, _) => {
+            output.push_str("[noparse]");
+            output.push_str(s);
+            output.push_str("[/noparse]");
         }
 
         Inline::Span {

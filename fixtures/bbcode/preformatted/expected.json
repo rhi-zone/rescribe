@@ -1,0 +1,7 @@
+{
+  "description": "Preformatted block via [pre] tag",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "preformatted text" } }
+  ]
+}

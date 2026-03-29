@@ -1,0 +1,9 @@
+{
+  "description": "Nested list structure",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list" },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "outer" } }
+  ]
+}

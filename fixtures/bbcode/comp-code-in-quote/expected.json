@@ -1,0 +1,7 @@
+{
+  "description": "Code block inside a blockquote",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" }
+  ]
+}

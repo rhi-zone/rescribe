@@ -1,0 +1,10 @@
+{
+  "description": "Attributed blockquote with author name",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "blockquote", "props": { "bbcode:author": "Author" } },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "quoted text" } }
+  ]
+}

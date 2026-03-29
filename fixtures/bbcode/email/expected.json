@@ -1,0 +1,9 @@
+{
+  "description": "Email link via [email] tag",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "mailto:user@example.com" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "user@example.com" } }
+  ]
+}

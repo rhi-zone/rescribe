@@ -1,0 +1,7 @@
+{
+  "description": "Unknown tag preserved as literal text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

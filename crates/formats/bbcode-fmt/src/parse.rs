@@ -1,6 +1,6 @@
 //! BBCode parser — infallible, returns (BbcodeDoc, Vec<Diagnostic>).
 
-use crate::ast::{BbcodeDoc, Block, Diagnostic, Inline, Span, TableRow};
+use crate::ast::{AlignKind, BbcodeDoc, Block, Diagnostic, Inline, Span, TableRow};
 
 /// Parse a BBCode string into a [`BbcodeDoc`].
 ///
@@ -13,17 +13,26 @@ pub fn parse(input: &str) -> (BbcodeDoc, Vec<Diagnostic>) {
 
     while i < lines.len() {
         let line = lines[i];
+        let lower = line.trim().to_lowercase();
 
-        // Code block: [code]...[/code]
-        if line.trim().to_lowercase().starts_with("[code]") {
+        // Code block: [code]...[/code] or [code=lang]...[/code]
+        if lower.starts_with("[code]") || lower.starts_with("[code=") {
             let (block, end) = parse_code_block(&lines, i);
             result.push(block);
             i = end;
             continue;
         }
 
-        // Quote: [quote]...[/quote]
-        if line.trim().to_lowercase().starts_with("[quote") {
+        // Pre block: [pre]...[/pre]
+        if lower.starts_with("[pre]") {
+            let (block, end) = parse_pre_block(&lines, i);
+            result.push(block);
+            i = end;
+            continue;
+        }
+
+        // Quote: [quote]...[/quote] or [quote=Author]...[/quote]
+        if lower.starts_with("[quote") {
             let (block, end) = parse_quote(&lines, i);
             result.push(block);
             i = end;
@@ -31,7 +40,7 @@ pub fn parse(input: &str) -> (BbcodeDoc, Vec<Diagnostic>) {
         }
 
         // List: [list]...[/list]
-        if line.trim().to_lowercase().starts_with("[list") {
+        if lower.starts_with("[list") {
             let (block, end) = parse_list(&lines, i);
             result.push(block);
             i = end;
@@ -39,10 +48,79 @@ pub fn parse(input: &str) -> (BbcodeDoc, Vec<Diagnostic>) {
         }
 
         // Table: [table]...[/table]
-        if line.trim().to_lowercase().starts_with("[table]") {
+        if lower.starts_with("[table]") {
             let (block, end) = parse_table(&lines, i);
             result.push(block);
             i = end;
+            continue;
+        }
+
+        // Spoiler: [spoiler]...[/spoiler]
+        if lower.starts_with("[spoiler]") {
+            let (block, end) = parse_wrapped_block(&lines, i, "spoiler");
+            result.push(Block::Spoiler {
+                children: block,
+                span: Span::NONE,
+            });
+            i = end;
+            continue;
+        }
+
+        // Indent: [indent]...[/indent]
+        if lower.starts_with("[indent]") {
+            let (block, end) = parse_wrapped_block(&lines, i, "indent");
+            result.push(Block::Indent {
+                children: block,
+                span: Span::NONE,
+            });
+            i = end;
+            continue;
+        }
+
+        // Alignment blocks: [center], [left], [right]
+        if lower.starts_with("[center]") {
+            let (block, end) = parse_wrapped_block(&lines, i, "center");
+            result.push(Block::Alignment {
+                kind: AlignKind::Center,
+                children: block,
+                span: Span::NONE,
+            });
+            i = end;
+            continue;
+        }
+        if lower.starts_with("[left]") {
+            let (block, end) = parse_wrapped_block(&lines, i, "left");
+            result.push(Block::Alignment {
+                kind: AlignKind::Left,
+                children: block,
+                span: Span::NONE,
+            });
+            i = end;
+            continue;
+        }
+        if lower.starts_with("[right]") {
+            let (block, end) = parse_wrapped_block(&lines, i, "right");
+            result.push(Block::Alignment {
+                kind: AlignKind::Right,
+                children: block,
+                span: Span::NONE,
+            });
+            i = end;
+            continue;
+        }
+
+        // Heading: [h1]...[/h1] through [h6]...[/h6]
+        if let Some(level) = parse_heading_level(&lower) {
+            let (block, end) = parse_heading(&lines, i, level);
+            result.push(block);
+            i = end;
+            continue;
+        }
+
+        // Horizontal rule: [hr] (self-closing)
+        if lower.starts_with("[hr]") || lower == "[hr/]" || lower == "[hr /]" {
+            result.push(Block::HorizontalRule { span: Span::NONE });
+            i += 1;
             continue;
         }
 
@@ -75,6 +153,96 @@ pub fn parse(input: &str) -> (BbcodeDoc, Vec<Diagnostic>) {
     )
 }
 
+fn parse_heading_level(lower: &str) -> Option<u8> {
+    for level in 1..=6u8 {
+        let tag = format!("[h{}]", level);
+        if lower.starts_with(&tag) {
+            return Some(level);
+        }
+    }
+    None
+}
+
+fn parse_heading(lines: &[&str], start: usize, level: u8) -> (Block, usize) {
+    let open_tag = format!("[h{}]", level);
+    let close_tag = format!("[/h{}]", level);
+
+    // Combine all lines until we find close tag
+    let mut content_parts = Vec::new();
+    let first_line = lines[start].trim();
+    // Extract content after opening tag on first line
+    let lower_first = first_line.to_lowercase();
+    if let Some(pos) = lower_first.find(&open_tag) {
+        let after = &first_line[pos + open_tag.len()..];
+        // Check if close tag is on same line
+        let lower_after = after.to_lowercase();
+        if let Some(close_pos) = lower_after.find(&close_tag) {
+            let content = &after[..close_pos];
+            return (
+                Block::Heading {
+                    level,
+                    children: parse_inline(content),
+                    span: Span::NONE,
+                },
+                start + 1,
+            );
+        }
+        content_parts.push(after.to_string());
+    }
+
+    let mut i = start + 1;
+    while i < lines.len() {
+        let lower = lines[i].to_lowercase();
+        if let Some(close_pos) = lower.find(&close_tag) {
+            let before = &lines[i][..close_pos];
+            if !before.trim().is_empty() {
+                content_parts.push(before.trim().to_string());
+            }
+            let text = content_parts.join(" ");
+            return (
+                Block::Heading {
+                    level,
+                    children: parse_inline(&text),
+                    span: Span::NONE,
+                },
+                i + 1,
+            );
+        }
+        if !lines[i].trim().is_empty() {
+            content_parts.push(lines[i].trim().to_string());
+        }
+        i += 1;
+    }
+
+    let text = content_parts.join(" ");
+    (
+        Block::Heading {
+            level,
+            children: parse_inline(&text),
+            span: Span::NONE,
+        },
+        i,
+    )
+}
+
+fn is_block_start(lower: &str) -> bool {
+    lower.starts_with("[code]")
+        || lower.starts_with("[code=")
+        || lower.starts_with("[pre]")
+        || lower.starts_with("[quote")
+        || lower.starts_with("[list")
+        || lower.starts_with("[table]")
+        || lower.starts_with("[spoiler]")
+        || lower.starts_with("[indent]")
+        || lower.starts_with("[center]")
+        || lower.starts_with("[left]")
+        || lower.starts_with("[right]")
+        || lower.starts_with("[hr]")
+        || lower == "[hr/]"
+        || lower == "[hr /]"
+        || parse_heading_level(lower).is_some()
+}
+
 fn collect_paragraph<'a>(lines: &[&'a str], start: usize) -> (Vec<&'a str>, usize) {
     let mut para_lines = Vec::new();
     let mut i = start;
@@ -82,18 +250,7 @@ fn collect_paragraph<'a>(lines: &[&'a str], start: usize) -> (Vec<&'a str>, usiz
     while i < lines.len() {
         let line = lines[i];
         let lower = line.trim().to_lowercase();
-        // Break on lines that the main loop handles as block starters.
-        // Use the same exact prefixes as the main loop to avoid mismatch:
-        // - "[code]" (with closing bracket — partial "[code" alone is not a block)
-        // - "[quote" (with or without "=", so prefix match is correct)
-        // - "[list" (with or without "=1]/[list=a]", prefix match is correct)
-        // - "[table]" (exact)
-        if line.trim().is_empty()
-            || lower.starts_with("[code]")
-            || lower.starts_with("[quote")
-            || lower.starts_with("[list")
-            || lower.starts_with("[table]")
-        {
+        if line.trim().is_empty() || is_block_start(&lower) {
             break;
         }
         para_lines.push(line.trim());
@@ -105,20 +262,37 @@ fn collect_paragraph<'a>(lines: &[&'a str], start: usize) -> (Vec<&'a str>, usiz
 
 fn parse_code_block(lines: &[&str], start: usize) -> (Block, usize) {
     let first_line = lines[start].trim();
+    let lower_first = first_line.to_lowercase();
     let mut code_lines = Vec::new();
-    let mut i = start;
+
+    // Extract language if present: [code=lang]
+    let language = if lower_first.starts_with("[code=") {
+        let after_eq = &first_line[6..]; // skip "[code="
+        after_eq
+            .find(']')
+            .map(|end| first_line[6..6 + end].to_string())
+    } else {
+        None
+    };
+
+    // Find the end of the opening tag
+    let open_end = first_line
+        .find(']')
+        .map(|p| p + 1)
+        .unwrap_or(first_line.len());
+    let after_open = &first_line[open_end..];
 
     // Single line code block
-    if first_line.to_lowercase().contains("[/code]") {
-        let content = first_line
-            .strip_prefix("[code]")
-            .or_else(|| first_line.strip_prefix("[CODE]"))
-            .unwrap_or(first_line)
-            .strip_suffix("[/code]")
-            .or_else(|| first_line.strip_suffix("[/CODE]"))
-            .unwrap_or(first_line);
+    let lower_after = after_open.to_lowercase();
+    if lower_after.contains("[/code]") {
+        let content = if let Some(pos) = lower_after.find("[/code]") {
+            &after_open[..pos]
+        } else {
+            after_open
+        };
         return (
             Block::CodeBlock {
+                language,
                 content: content.to_string(),
                 span: Span::NONE,
             },
@@ -126,15 +300,10 @@ fn parse_code_block(lines: &[&str], start: usize) -> (Block, usize) {
         );
     }
 
-    // Multi-line
-    let after_tag = first_line
-        .strip_prefix("[code]")
-        .or_else(|| first_line.strip_prefix("[CODE]"))
-        .unwrap_or("");
-    if !after_tag.is_empty() {
-        code_lines.push(after_tag.to_string());
+    if !after_open.is_empty() {
+        code_lines.push(after_open.to_string());
     }
-    i += 1;
+    let mut i = start + 1;
 
     while i < lines.len() {
         let line = lines[i];
@@ -147,6 +316,7 @@ fn parse_code_block(lines: &[&str], start: usize) -> (Block, usize) {
             }
             return (
                 Block::CodeBlock {
+                    language,
                     content: code_lines.join("\n"),
                     span: Span::NONE,
                 },
@@ -159,6 +329,7 @@ fn parse_code_block(lines: &[&str], start: usize) -> (Block, usize) {
 
     (
         Block::CodeBlock {
+            language,
             content: code_lines.join("\n"),
             span: Span::NONE,
         },
@@ -166,7 +337,79 @@ fn parse_code_block(lines: &[&str], start: usize) -> (Block, usize) {
     )
 }
 
+fn parse_pre_block(lines: &[&str], start: usize) -> (Block, usize) {
+    let first_line = lines[start].trim();
+    let lower_first = first_line.to_lowercase();
+
+    // Single-line: [pre]content[/pre]
+    if lower_first.contains("[/pre]") {
+        let after_open = &first_line[5..]; // skip "[pre]"
+        let content = if let Some(pos) = after_open.to_lowercase().find("[/pre]") {
+            &after_open[..pos]
+        } else {
+            after_open
+        };
+        return (
+            Block::Preformatted {
+                content: content.to_string(),
+                span: Span::NONE,
+            },
+            start + 1,
+        );
+    }
+
+    let after_open = &first_line[5..]; // skip "[pre]"
+    let mut content_lines = Vec::new();
+    if !after_open.is_empty() {
+        content_lines.push(after_open.to_string());
+    }
+    let mut i = start + 1;
+
+    while i < lines.len() {
+        let lower = lines[i].to_lowercase();
+        if lower.contains("[/pre]") {
+            let before = lines[i].split("[/pre]").next().unwrap_or("");
+            let before = before.split("[/PRE]").next().unwrap_or(before);
+            if !before.is_empty() {
+                content_lines.push(before.to_string());
+            }
+            return (
+                Block::Preformatted {
+                    content: content_lines.join("\n"),
+                    span: Span::NONE,
+                },
+                i + 1,
+            );
+        }
+        content_lines.push(lines[i].to_string());
+        i += 1;
+    }
+
+    (
+        Block::Preformatted {
+            content: content_lines.join("\n"),
+            span: Span::NONE,
+        },
+        i,
+    )
+}
+
 fn parse_quote(lines: &[&str], start: usize) -> (Block, usize) {
+    let first_line = lines[start].trim();
+    let lower_first = first_line.to_lowercase();
+
+    // Extract author if present: [quote=Author] or [quote="Author"]
+    let author = if lower_first.starts_with("[quote=") {
+        let after_eq = &first_line[7..]; // skip "[quote="
+        after_eq.find(']').map(|end| {
+            let raw = &first_line[7..7 + end];
+            // Strip quotes if present
+            raw.trim_matches('"').trim_matches('\'').to_string()
+        })
+    } else {
+        None
+    };
+
     let mut quote_lines = Vec::new();
     let mut i = start + 1;
 
@@ -176,6 +419,7 @@ fn parse_quote(lines: &[&str], start: usize) -> (Block, usize) {
             let text = quote_lines.join(" ");
             return (
                 Block::Blockquote {
+                    author,
                     children: vec![Block::Paragraph {
                         inlines: parse_inline(&text),
                         span: Span::NONE,
@@ -194,6 +438,7 @@ fn parse_quote(lines: &[&str], start: usize) -> (Block, usize) {
     let text = quote_lines.join(" ");
     (
         Block::Blockquote {
+            author,
             children: vec![Block::Paragraph {
                 inlines: parse_inline(&text),
                 span: Span::NONE,
@@ -202,6 +447,31 @@ fn parse_quote(lines: &[&str], start: usize) -> (Block, usize) {
         },
         i,
     )
+}
+
+/// Parse a generic wrapped block ([spoiler], [center], [left], [right], [indent]).
+fn parse_wrapped_block(lines: &[&str], start: usize, tag: &str) -> (Vec<Block>, usize) {
+    let close_tag = format!("[/{}]", tag);
+    let mut inner_lines = Vec::new();
+    let mut i = start + 1;
+
+    while i < lines.len() {
+        let lower = lines[i].to_lowercase();
+        if lower.contains(&close_tag) {
+            break;
+        }
+        inner_lines.push(lines[i]);
+        i += 1;
+    }
+    // Skip close tag line
+    if i < lines.len() {
+        i += 1;
+    }
+
+    // Parse inner lines as block content
+    let inner_text = inner_lines.join("\n");
+    let (inner_doc, _) = parse(&inner_text);
+    (inner_doc.blocks, i)
 }
 
 fn parse_list(lines: &[&str], start: usize) -> (Block, usize) {
@@ -285,7 +555,15 @@ fn parse_table_row(line: &str) -> Vec<(bool, Vec<Inline>)> {
     // Find [td] or [th] cells
     while !search.is_empty() {
         let (tag_pos, is_header, tag_len) = if let Some(pos) = search.find("[td]") {
-            (pos, false, 4usize)
+            if let Some(th_pos) = search.find("[th]") {
+                if th_pos < pos {
+                    (th_pos, true, 4usize)
+                } else {
+                    (pos, false, 4usize)
+                }
+            } else {
+                (pos, false, 4usize)
+            }
         } else if let Some(pos) = search.find("[th]") {
             (pos, true, 4usize)
         } else {
@@ -322,15 +600,35 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 current.clear();
             }
 
-            let node = match tag.to_lowercase().as_str() {
+            let tag_lower = tag.to_lowercase();
+            let node = match tag_lower.as_str() {
                 "b" => Some(Inline::Bold(parse_inline(&content), Span::NONE)),
                 "i" => Some(Inline::Italic(parse_inline(&content), Span::NONE)),
                 "u" => Some(Inline::Underline(parse_inline(&content), Span::NONE)),
                 "s" | "strike" => {
                     Some(Inline::Strikethrough(parse_inline(&content), Span::NONE))
                 }
-                "code" => Some(Inline::Code(content, Span::NONE)),
-                _ if tag.to_lowercase().starts_with("url=") => {
+                "code" | "icode" | "inlinecode" => Some(Inline::Code(content, Span::NONE)),
+                "sub" => Some(Inline::Subscript(parse_inline(&content), Span::NONE)),
+                "sup" => Some(Inline::Superscript(parse_inline(&content), Span::NONE)),
+                "noparse" | "nobbc" => Some(Inline::Noparse(content, Span::NONE)),
+                "url" => Some(Inline::Link {
+                    url: content.clone(),
+                    children: parse_inline(&content),
+                    span: Span::NONE,
+                }),
+                "email" => Some(Inline::Email {
+                    addr: content.clone(),
+                    children: parse_inline(&content),
+                    span: Span::NONE,
+                }),
+                "img" => Some(Inline::Image {
+                    url: content,
+                    width: None,
+                    height: None,
+                    span: Span::NONE,
+                }),
+                _ if tag_lower.starts_with("url=") => {
                     let url = tag[4..].to_string();
                     Some(Inline::Link {
                         url,
@@ -338,35 +636,59 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                         span: Span::NONE,
                     })
                 }
-                "url" => Some(Inline::Link {
-                    url: content.clone(),
-                    children: parse_inline(&content),
-                    span: Span::NONE,
-                }),
-                _ if tag.to_lowercase().starts_with("img") => Some(Inline::Image {
-                    url: content,
-                    span: Span::NONE,
-                }),
-                "sub" => Some(Inline::Subscript(parse_inline(&content), Span::NONE)),
-                "sup" => Some(Inline::Superscript(parse_inline(&content), Span::NONE)),
-                _ if tag.to_lowercase().starts_with("color=") => {
+                _ if tag_lower.starts_with("email=") => {
+                    let addr = tag[6..].to_string();
+                    Some(Inline::Email {
+                        addr,
+                        children: parse_inline(&content),
+                        span: Span::NONE,
+                    })
+                }
+                _ if tag_lower.starts_with("img=") => {
+                    let dims = &tag[4..];
+                    let (w, h) = parse_dimensions(dims);
+                    Some(Inline::Image {
+                        url: content,
+                        width: w,
+                        height: h,
+                        span: Span::NONE,
+                    })
+                }
+                _ if tag_lower.starts_with("color=") => {
                     let value = tag[6..].to_string();
-                    Some(Inline::Span {
-                        attr: "color".to_string(),
+                    Some(Inline::Color {
                         value,
                         children: parse_inline(&content),
                         span: Span::NONE,
                     })
                 }
-                _ if tag.to_lowercase().starts_with("size=") => {
+                _ if tag_lower.starts_with("size=") => {
                     let value = tag[5..].to_string();
-                    Some(Inline::Span {
-                        attr: "size".to_string(),
+                    Some(Inline::Size {
                         value,
                         children: parse_inline(&content),
                         span: Span::NONE,
                     })
                 }
+                _ if tag_lower.starts_with("font=") => {
+                    let name = tag[5..].to_string();
+                    Some(Inline::Font {
+                        name,
+                        children: parse_inline(&content),
+                        span: Span::NONE,
+                    })
+                }
+                // YouTube / video → link
+                "youtube" => Some(Inline::Link {
+                    url: format!("https://www.youtube.com/watch?v={}", content),
+                    children: vec![Inline::Text(content, Span::NONE)],
+                    span: Span::NONE,
+                }),
+                "video" => Some(Inline::Link {
+                    url: content.clone(),
+                    children: vec![Inline::Text(content, Span::NONE)],
+                    span: Span::NONE,
+                }),
                 _ => None,
             };
 
@@ -386,6 +708,18 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
     }
 
     nodes
+}
+
+/// Parse dimensions string like "100x50" into (width, height).
+fn parse_dimensions(s: &str) -> (Option<u32>, Option<u32>) {
+    let lower = s.to_lowercase();
+    if let Some(pos) = lower.find('x') {
+        let w = lower[..pos].parse().ok();
+        let h = lower[pos + 1..].parse().ok();
+        (w, h)
+    } else {
+        (None, None)
+    }
 }
 
 fn parse_bbcode_tag(chars: &[char], start: usize) -> Option<(String, String, usize)> {

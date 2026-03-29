@@ -1,0 +1,8 @@
+{
+  "description": "Noparse prevents BBCode interpretation",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "raw_inline", "props": { "content": "[b]not bold[/b]" } }
+  ]
+}

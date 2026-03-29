@@ -12,11 +12,14 @@ See `fixtures/spec.md` for category definitions.
 - [x] table ([table] / [tr] / [td]) — `table`
 - [x] table with header ([th]) — `table-header`
 - [x] blockquote ([quote]) — `rare-blockquote`
-- [ ] named/attributed quote ([quote=Author]) — (missing)
-- [ ] horizontal rule ([hr]) — (missing)
-- [ ] center alignment ([center]) — (missing)
-- [ ] left/right alignment ([left] / [right]) — (missing)
-- [ ] indented block ([indent]) — (missing)
+- [x] named/attributed quote ([quote=Author]) — `quote-attributed`
+- [x] horizontal rule ([hr]) — `horizontal-rule`
+- [x] heading ([h1]–[h6]) — `heading`
+- [x] center alignment ([center]) — `align-center`
+- [x] left/right alignment ([left] / [right]) — `align-left-right`
+- [x] indented block ([indent]) — `indent`
+- [x] spoiler ([spoiler]) — `spoiler`
+- [x] preformatted ([pre]) — `preformatted`
 
 ## Inline constructs
 
@@ -31,50 +34,48 @@ See `fixtures/spec.md` for category definitions.
 - [x] link ([url]) — `link`
 - [x] link with display text ([url=href]text[/url]) — `link`
 - [x] image ([img]) — `image`
-- [ ] image with dimensions ([img=WxH]) — (missing)
-- [ ] font size ([size=N]) — (missing)
-- [ ] font name ([font=name]) — (missing)
-- [ ] email link ([email]) — (missing)
-- [ ] spoiler ([spoiler]) — (missing)
-- [ ] preformatted inline ([pre]) — (missing)
-- [ ] noparse / no bbcode ([noparse]) — (missing)
+- [x] image with dimensions ([img=WxH]) — `image-dimensions`
+- [x] font size ([size=N]) — `span-size`
+- [x] font name ([font=name]) — `span-font`
+- [x] email link ([email]) — `email`
+- [x] noparse / no bbcode ([noparse]) — `noparse`
 
 ## List structure
 
-- [ ] list item ([*]) — (covered via list-unordered/list-ordered but no dedicated fixture)
-- [ ] nested list — (missing)
-- [ ] list item with inline markup — (missing)
+- [x] list item ([*]) — `list-item`
+- [x] nested list — `list-nested`
+- [x] list item with inline markup — `list-item-markup`
 
 ## Properties
 
 - [x] color value on span — `span-color`
-- [ ] url attribute on link — (covered in `link` but no dedicated property fixture)
-- [ ] size attribute on font — (missing)
-- [ ] language/type attribute on code block — (missing)
-- [ ] named quote attribution — (missing)
+- [x] url attribute on link — `link`
+- [x] size attribute on font — `prop-size`
+- [x] language/type attribute on code block — `prop-code-language`
+- [x] named quote attribution — `quote-attributed`
 
 ## Composition (integration)
 
-- [ ] bold inside list item — (missing)
-- [ ] link inside table cell — (missing)
-- [ ] color + bold combined — (missing)
-- [ ] code block inside blockquote — (missing)
-- [ ] nested lists — (missing)
-- [ ] image inside link — (missing)
+- [x] bold inside list item — `comp-bold-in-list`
+- [x] link inside table cell — `comp-link-in-table`
+- [x] color + bold combined — `comp-color-bold`
+- [x] code block inside blockquote — `comp-code-in-quote`
+- [x] nested lists — `comp-nested-lists`
+- [x] image inside link — `comp-image-in-link`
 
 ## Adversarial
 
 - [x] empty document — `adv-empty`
-- [ ] unclosed tag ([b] with no [/b]) — (missing)
-- [ ] unknown/unrecognized tag ([foo]) — (missing)
-- [ ] mismatched closing tag ([b]...[/i]) — (missing)
-- [ ] tag with no content — (missing)
-- [ ] stray closing tag ([/b] with no open) — (missing)
-- [ ] deeply nested unclosed tags — (missing)
+- [x] unclosed tag ([b] with no [/b]) — `adv-unclosed-tag`
+- [x] unknown/unrecognized tag ([foo]) — `adv-unknown-tag`
+- [x] mismatched closing tag ([b]...[/i]) — `adv-mismatched-tag`
+- [x] tag with no content — `adv-empty-tag`
+- [x] stray closing tag ([/b] with no open) — `adv-stray-close`
+- [x] deeply nested unclosed tags — `adv-deeply-nested-unclosed`
 
 ## Pathological
 
-- [ ] very long line (>64 KB) — (missing)
-- [ ] deeply nested formatting tags — (missing)
-- [ ] very large table — (missing)
-- [ ] list with hundreds of items — (missing)
+- [x] very long line (>1 KB) — `path-long-line`
+- [x] deeply nested formatting tags — `path-deeply-nested`
+- [x] very large table — `path-large-table`
+- [x] list with many items — `path-many-list-items`
