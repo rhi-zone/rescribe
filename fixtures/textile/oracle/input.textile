@@ -1,0 +1,96 @@
+h1. Textile Oracle Sample
+
+h2. Paragraphs
+
+This is a regular paragraph with *bold*, _italic_, +underline+, and -strikethrough- text.
+
+Here is a second paragraph to verify paragraph separation.
+
+h2. Inline Formatting
+
+A paragraph with @inline code@, ??citation??, and a "hyperlink":https://example.com.
+
+Superscript: E=mc^2^ and subscript: H~2~O.
+
+h2. Lists
+
+Unordered list:
+
+* First item
+* Second item
+* Third item
+
+Ordered list:
+
+# Step one
+# Step two
+# Step three
+
+h2. Nested Lists
+
+* Outer one
+** Inner one
+** Inner two
+* Outer two
+
+h2. Definition List
+
+- term := a short definition
+- another term := a longer definition with more words
+
+h2. Code Block
+
+bc. def greet(name):
+    return "Hello, " + name
+
+h2. Blockquote
+
+bq. This is a famous blockquote. It spans multiple lines
+and contains important words.
+
+h2. Table
+
+|_. Name|_. Age|_. City|
+| Alice | 30 | New York |
+| Bob | 25 | London |
+| Carol | 35 | Tokyo |
+
+h2. Image
+
+!photo.jpg(A photo of something interesting)!
+
+h2. Footnote
+
+This sentence has a footnote[1].
+
+fn1. The footnote definition text goes here.
+
+h2. Horizontal Rule
+
+Above the rule.
+
+---
+
+Below the rule.
+
+h2. Raw Passthrough
+
+==<em>raw html</em>==
+
+h2. Span with Attributes
+
+%(highlight)highlighted span% of text.
+
+h3. Level Three Heading
+
+Content under a level-three heading.
+
+h4. Level Four Heading
+
+Content under a level-four heading.
+
+h2. Aligned Paragraph
+
+p=. This paragraph is centered.
+
+p>. This paragraph is right-aligned.
