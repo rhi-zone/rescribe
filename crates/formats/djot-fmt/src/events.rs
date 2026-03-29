@@ -37,6 +37,7 @@ pub enum Event<'a> {
     RawBlock { format: String, content: String },
     StartDiv { class: Option<String>, id: Option<String>, classes: Vec<String>, kv: Vec<(String, String)> },
     EndDiv,
+    TableCaption(Vec<Inline>),
     StartTable,
     EndTable,
     StartTableRow { is_header: bool },
@@ -176,7 +177,8 @@ enum BlockFrame {
     ListItem { blocks: Vec<Block>, checked: Option<bool> },
     CodeBlock { language: Option<String>, content: String, attr: Attr },
     Div { class: Option<String>, blocks: Vec<Block>, attr: Attr },
-    Table { rows: Vec<TableRow> },
+    Table { caption: Option<Vec<Inline>>, rows: Vec<TableRow> },
+    TablePendingCaption(Vec<Inline>),
     TableRow { is_header: bool, cells: Vec<TableCell> },
     TableCell { inlines: Vec<Inline>, alignment: Alignment },
     DefinitionList { items: Vec<DefItem>, attr: Attr },
@@ -276,8 +278,16 @@ fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_stac
         Event::StartDiv { class, id, classes, kv } => {
             block_stack.push(BlockFrame::Div { class, blocks: Vec::new(), attr: make_attr(id, classes, kv) });
         }
+        Event::TableCaption(inlines) => {
+            block_stack.push(BlockFrame::TablePendingCaption(inlines));
+        }
         Event::StartTable => {
-            block_stack.push(BlockFrame::Table { rows: Vec::new() });
+            let caption = if matches!(block_stack.last(), Some(BlockFrame::TablePendingCaption(_))) {
+                if let Some(BlockFrame::TablePendingCaption(cap)) = block_stack.pop() { Some(cap) } else { None }
+            } else {
+                None
+            };
+            block_stack.push(BlockFrame::Table { caption, rows: Vec::new() });
         }
         Event::StartTableRow { is_header } => {
             block_stack.push(BlockFrame::TableRow { is_header, cells: Vec::new() });
@@ -339,13 +349,13 @@ fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_stac
             }
         }
         Event::EndTable => {
-            if let Some(BlockFrame::Table { rows }) = block_stack.pop() {
-                push_block_to_ctx(Block::Table { caption: None, rows, span: Span::NONE }, block_stack);
+            if let Some(BlockFrame::Table { caption, rows }) = block_stack.pop() {
+                push_block_to_ctx(Block::Table { caption, rows, span: Span::NONE }, block_stack);
             }
         }
         Event::EndTableRow => {
             if let Some(BlockFrame::TableRow { is_header, cells }) = block_stack.pop()
-                && let Some(BlockFrame::Table { rows }) = block_stack.last_mut() {
+                && let Some(BlockFrame::Table { rows, .. }) = block_stack.last_mut() {
                 rows.push(TableRow { cells, is_header, span: Span::NONE });
             }
         }
@@ -530,5 +540,27 @@ mod tests {
             .iter()
             .any(|e| matches!(e, OwnedEvent::StartCodeBlock { language: Some(l), .. } if l == "rust")));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndCodeBlock)));
+    }
+
+    #[test]
+    fn test_events_table_caption() {
+        let input = "^ Caption text\n| A | B |\n|---|---|\n| x | y |\n";
+        let evs: Vec<_> = EventIter::new(input).collect();
+
+        // TableCaption must appear before StartTable
+        let cap_pos = evs.iter().position(|e| matches!(e, OwnedEvent::TableCaption(_)));
+        let start_pos = evs.iter().position(|e| matches!(e, OwnedEvent::StartTable));
+        assert!(cap_pos.is_some(), "Expected TableCaption event in stream");
+        assert!(start_pos.is_some(), "Expected StartTable event in stream");
+        assert!(cap_pos.unwrap() < start_pos.unwrap(), "TableCaption must precede StartTable");
+
+        // collect_doc_from_iter should reconstruct the caption
+        let (doc, _diags) = collect_doc_from_iter(input);
+        match &doc.blocks[0] {
+            crate::ast::Block::Table { caption: Some(cap), .. } => {
+                assert!(!cap.is_empty(), "Caption should have inline content");
+            }
+            other => panic!("Expected Table with caption, got {:?}", other),
+        }
     }
 }

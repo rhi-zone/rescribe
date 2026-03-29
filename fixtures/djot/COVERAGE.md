@@ -17,6 +17,7 @@ with an unambiguous grammar and richer inline/block extensibility.
 - [x] ordered list — `list-ordered`
 - [x] horizontal rule — `horizontal-rule`
 - [x] table — `table`
+- [x] table with caption (`^` prefix line) — `table-caption`
 - [x] task list — `task-list`
 - [x] footnote definition — `footnote`
 - [x] div (fenced with `:::`) — `div`

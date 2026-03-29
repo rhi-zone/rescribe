@@ -1,0 +1,16 @@
+{
+  "description": "Table with a caption line (^ prefix) before the pipe rows; caption is preserved as first child of table node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" },
+    { "path": "/0/0", "kind": "paragraph", "props": { "role": "caption" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Monthly sales data" } },
+    { "path": "/0/1", "kind": "table_row" },
+    { "path": "/0/1/0", "kind": "table_header" },
+    { "path": "/0/1/1", "kind": "table_header" },
+    { "path": "/0/2", "kind": "table_row" },
+    { "path": "/0/2/0", "kind": "table_cell" },
+    { "path": "/0/3", "kind": "table_row" },
+    { "path": "/0/3/0", "kind": "table_cell" }
+  ]
+}

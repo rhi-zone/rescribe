@@ -110,8 +110,8 @@ fn parse_next_block_direct(iter: &mut EventIter<'_>) -> Option<Block> {
             if let Some(b) = parse_blockquote_direct(iter) { return Some(b); }
         }
 
-        // Table
-        if trimmed.starts_with('|') {
+        // Table (may start with caption line `^` or pipe row `|`)
+        if trimmed.starts_with('|') || trimmed.starts_with('^') {
             if let Some(b) = parse_table_direct(iter) { return Some(b); }
         }
 
@@ -278,8 +278,9 @@ fn parse_blockquote_direct(iter: &mut EventIter<'_>) -> Option<Block> {
 }
 
 fn parse_table_direct(iter: &mut EventIter<'_>) -> Option<Block> {
+    let saved_pos = iter.pos();
     let mut raw_rows: Vec<(String, usize)> = Vec::new();
-    let mut _caption: Option<Vec<Inline>> = None;
+    let mut caption: Option<Vec<Inline>> = None;
     let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
 
     loop {
@@ -297,7 +298,7 @@ fn parse_table_direct(iter: &mut EventIter<'_>) -> Option<Block> {
         match action {
             None | Some(TableLineAction::Stop) => break,
             Some(TableLineAction::Caption(cap_content)) => {
-                _caption = Some(parse_inlines(&cap_content, 0, &link_defs));
+                caption = Some(parse_inlines(&cap_content, 0, &link_defs));
                 iter.advance();
             }
             Some(TableLineAction::Row(row_str)) => {
@@ -307,7 +308,10 @@ fn parse_table_direct(iter: &mut EventIter<'_>) -> Option<Block> {
             }
         }
     }
-    if raw_rows.is_empty() { return None; }
+    if raw_rows.is_empty() {
+        iter.set_pos(saved_pos);
+        return None;
+    }
 
     let mut separator_positions: std::collections::HashSet<usize> = std::collections::HashSet::new();
     let mut alignment_map: Vec<Option<Alignment>> = Vec::new();
@@ -333,7 +337,7 @@ fn parse_table_direct(iter: &mut EventIter<'_>) -> Option<Block> {
         rows.push(TableRow { cells, is_header, span: Span::NONE });
     }
 
-    Some(Block::Table { caption: _caption, rows, span: Span::NONE })
+    Some(Block::Table { caption, rows, span: Span::NONE })
 }
 
 fn parse_list_direct(iter: &mut EventIter<'_>, marker: ListMarker) -> Option<Block> {
@@ -955,12 +959,15 @@ fn expand_block_frames<C: ParseContext>(ctx: &mut C, block: Block) {
                 class, id: attr.id, classes: attr.classes, kv: attr.kv,
             }));
         }
-        Block::Table { rows, .. } => {
+        Block::Table { caption, rows, .. } => {
             ctx.push_frame(Frame::Event(OwnedEvent::EndTable));
             if !rows.is_empty() {
                 ctx.push_frame(Frame::TableRows(rows.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartTable));
+            if let Some(cap) = caption {
+                ctx.push_frame(Frame::Event(OwnedEvent::TableCaption(cap)));
+            }
         }
         Block::ThematicBreak { attr, .. } => {
             ctx.push_frame(Frame::Event(OwnedEvent::ThematicBreak {
@@ -1185,8 +1192,8 @@ fn push_next_block_frames<C: ParseContext>(ctx: &mut C) -> bool {
             if push_blockquote_frames(ctx) { return true; }
         }
 
-        // Table
-        if trimmed.starts_with('|') {
+        // Table (may start with caption line `^` or pipe row `|`)
+        if trimmed.starts_with('|') || trimmed.starts_with('^') {
             if push_table_frames(ctx) { return true; }
         }
 
@@ -1397,6 +1404,7 @@ fn push_blockquote_frames<C: ParseContext>(ctx: &mut C) -> bool {
 }
 
 fn push_table_frames<C: ParseContext>(ctx: &mut C) -> bool {
+    let saved_pos = ctx.pos();
     let mut raw_rows: Vec<(String, usize)> = Vec::new();
     let mut caption: Option<Vec<Inline>> = None;
     let link_defs: Vec<LinkDef> = ctx.link_defs().to_vec();
@@ -1427,7 +1435,10 @@ fn push_table_frames<C: ParseContext>(ctx: &mut C) -> bool {
         }
     }
 
-    if raw_rows.is_empty() { return false; }
+    if raw_rows.is_empty() {
+        ctx.set_pos(saved_pos);
+        return false;
+    }
 
     let mut separator_positions: std::collections::HashSet<usize> = std::collections::HashSet::new();
     let mut alignment_map: Vec<Option<Alignment>> = Vec::new();

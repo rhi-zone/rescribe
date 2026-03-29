@@ -69,7 +69,8 @@ enum Frame {
     ListItem { blocks: Vec<Block>, checked: Option<bool> },
     CodeBlock { language: Option<String>, content: String, attr: Attr },
     Div { class: Option<String>, blocks: Vec<Block>, attr: Attr },
-    Table { rows: Vec<TableRow> },
+    Table { caption: Option<Vec<Inline>>, rows: Vec<TableRow> },
+    TablePendingCaption(Vec<Inline>),
     TableRow { cells: Vec<TableCell>, is_header: bool },
     TableCell { inlines: Vec<Inline>, alignment: Alignment },
     DefinitionList { items: Vec<DefItem>, attr: Attr },
@@ -178,12 +179,20 @@ impl DocBuilder {
                     self.push_block(Block::Div { class, blocks, attr, span: Span::NONE });
                 }
             }
+            OwnedEvent::TableCaption(inlines) => {
+                self.stack.push(Frame::TablePendingCaption(inlines));
+            }
             OwnedEvent::StartTable => {
-                self.stack.push(Frame::Table { rows: vec![] });
+                let caption = if matches!(self.stack.last(), Some(Frame::TablePendingCaption(_))) {
+                    if let Some(Frame::TablePendingCaption(cap)) = self.stack.pop() { Some(cap) } else { None }
+                } else {
+                    None
+                };
+                self.stack.push(Frame::Table { caption, rows: vec![] });
             }
             OwnedEvent::EndTable => {
-                if let Some(Frame::Table { rows }) = self.stack.pop() {
-                    self.push_block(Block::Table { caption: None, rows, span: Span::NONE });
+                if let Some(Frame::Table { caption, rows }) = self.stack.pop() {
+                    self.push_block(Block::Table { caption, rows, span: Span::NONE });
                 }
             }
             OwnedEvent::StartTableRow { is_header } => {
@@ -191,7 +200,7 @@ impl DocBuilder {
             }
             OwnedEvent::EndTableRow => {
                 if let Some(Frame::TableRow { cells, is_header }) = self.stack.pop() {
-                    if let Some(Frame::Table { rows }) = self.stack.last_mut() {
+                    if let Some(Frame::Table { rows, .. }) = self.stack.last_mut() {
                         rows.push(TableRow { cells, is_header, span: Span::NONE });
                     }
                 }
@@ -448,5 +457,35 @@ mod tests {
         let emitted_text = String::from_utf8(bytes).unwrap();
         let (doc2, _) = crate::parse::parse(&emitted_text);
         assert_eq!(doc.strip_spans(), doc2.strip_spans(), "writer roundtrip mismatch");
+    }
+
+    #[test]
+    fn test_writer_table_caption_roundtrip() {
+        // Verify that a table with a caption survives the full
+        // parse → events → Writer → parse roundtrip.
+        let input = "^ Caption text\n| A | B |\n|---|---|\n| x | y |\n";
+        let (doc, _) = crate::parse::parse(input);
+
+        // Confirm parse captured the caption.
+        match &doc.blocks[0] {
+            crate::ast::Block::Table { caption: Some(_), .. } => {}
+            other => panic!("Expected Table with caption after direct parse, got {:?}", other),
+        }
+
+        // Reconstruct via streaming events.
+        let evts: Vec<_> = crate::events(input).collect();
+        let mut w = Writer::new(Vec::<u8>::new());
+        for e in evts {
+            w.write_event(e);
+        }
+        let bytes = w.finish();
+        let emitted_text = String::from_utf8(bytes).unwrap();
+        let (doc2, _) = crate::parse::parse(&emitted_text);
+
+        assert_eq!(
+            doc.strip_spans(),
+            doc2.strip_spans(),
+            "table caption lost in event path; emitted: {emitted_text:?}"
+        );
     }
 }

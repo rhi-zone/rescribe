@@ -1234,6 +1234,7 @@ dependencies = [
  "ris",
  "rtf-fmt",
  "texinfo",
+ "textile-fmt",
  "tsv-fmt",
 ]
 

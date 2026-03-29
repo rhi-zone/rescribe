@@ -12,7 +12,7 @@
 //! express, regardless of IR modeling completeness.
 
 use libfuzzer_sys::fuzz_target;
-use djot_fmt::{Block, DjotDoc, Inline};
+use djot_fmt::{Alignment, Block, DjotDoc, Inline, TableCell, TableRow};
 
 // ── Helpers to build a well-formed DjotDoc from raw bytes ─────────────────────
 
@@ -118,7 +118,8 @@ impl<'a> Gen<'a> {
     }
 
     fn block(&mut self, depth: u8) -> Block {
-        let kind = self.byte() % if depth > 0 { 5 } else { 8 };
+        // Tables are only generated at top level (depth == 0) to avoid nesting complexity.
+        let kind = self.byte() % if depth > 0 { 5 } else { 9 };
         match kind {
             0 => Block::Paragraph {
                 inlines: self.inlines(0, 1),
@@ -189,12 +190,64 @@ impl<'a> Gen<'a> {
                     span: djot_fmt::Span::NONE,
                 }
             }
-            _ => Block::Paragraph {
+            7 => Block::Paragraph {
                 inlines: self.inlines(0, 1),
                 attr: Default::default(),
                 span: djot_fmt::Span::NONE,
             },
+            _ => self.table(),
         }
+    }
+
+    fn table(&mut self) -> Block {
+        // Produce a table with 1-2 columns and 1-2 body rows, optionally with a caption.
+        // Kept simple to stay roundtrip-stable: no alignment (Default), plain text cells.
+        let cols: usize = (self.byte() as usize % 2) + 1;
+        let body_rows: usize = (self.byte() as usize % 2) + 1;
+        let has_caption = self.byte() % 2 == 0;
+
+        let caption = if has_caption {
+            Some(vec![Inline::Text {
+                content: safe_text(self.bytes(4)),
+                span: djot_fmt::Span::NONE,
+            }])
+        } else {
+            None
+        };
+
+        // Header row
+        let header_cells: Vec<TableCell> = (0..cols)
+            .map(|_| TableCell {
+                inlines: vec![Inline::Text {
+                    content: safe_text(self.bytes(2)),
+                    span: djot_fmt::Span::NONE,
+                }],
+                alignment: Alignment::Default,
+                span: djot_fmt::Span::NONE,
+            })
+            .collect();
+        let mut rows: Vec<TableRow> = vec![TableRow {
+            cells: header_cells,
+            is_header: true,
+            span: djot_fmt::Span::NONE,
+        }];
+
+        // Body rows
+        for _ in 0..body_rows {
+            let cells: Vec<TableCell> = (0..cols)
+                .map(|_| TableCell {
+                    inlines: vec![Inline::Text {
+                        content: safe_text(self.bytes(2)),
+                        span: djot_fmt::Span::NONE,
+                    }],
+                    alignment: Alignment::Default,
+                    span: djot_fmt::Span::NONE,
+                })
+                .collect();
+            rows.push(TableRow { cells, is_header: false, span: djot_fmt::Span::NONE });
+        }
+
+        Block::Table { caption, rows, span: djot_fmt::Span::NONE }
     }
 
     fn blocks(&mut self, depth: u8, _min: usize) -> Vec<Block> {
