@@ -4,12 +4,26 @@
 //! Used by `rescribe-read-jira` and `rescribe-write-jira` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
-pub use ast::{Block, Diagnostic, Inline, JiraDoc, Severity, Span, TableCell, TableRow};
+pub use ast::{
+    Block, Diagnostic, Inline, JiraDoc, ListItem, ListItemContent, Severity, Span, TableCell,
+    TableRow,
+};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::{build, collect_inline_text};
+pub use events::{Event, OwnedEvent};
 pub use parse::parse;
+pub use writer::Writer;
+
+/// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
+pub fn events(input: &str) -> events::EagerEventIter {
+    events::events(input)
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -85,6 +99,57 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_noformat() {
+        let (doc, _) = parse("{noformat}\nraw text\n{noformat}");
+        assert!(matches!(doc.blocks[0], Block::Noformat { .. }));
+        if let Block::Noformat { content, .. } = &doc.blocks[0] {
+            assert_eq!(content, "raw text");
+        }
+    }
+
+    #[test]
+    fn test_parse_color_span() {
+        let (doc, _) = parse("{color:red}warning{color}");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines
+            .iter()
+            .any(|i| matches!(i, Inline::ColorSpan { color, .. } if color == "red")));
+    }
+
+    #[test]
+    fn test_parse_mention() {
+        let (doc, _) = parse("Hello @alice!");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(inlines
+            .iter()
+            .any(|i| matches!(i, Inline::Mention(name, _) if name == "alice")));
+    }
+
+    #[test]
+    fn test_parse_panel_with_title() {
+        let (doc, _) = parse("{panel:title=Note}\nContent\n{panel}");
+        assert!(matches!(doc.blocks[0], Block::Panel { .. }));
+        if let Block::Panel { title, .. } = &doc.blocks[0] {
+            assert_eq!(title.as_deref(), Some("Note"));
+        }
+    }
+
+    #[test]
+    fn test_parse_nested_list() {
+        let (doc, _) = parse("* Item 1\n** Sub item\n* Item 2");
+        let Block::List { items, .. } = &doc.blocks[0] else {
+            panic!("expected list");
+        };
+        assert_eq!(items.len(), 2);
+        // First item should have nested content
+        assert!(items[0].children.len() >= 2);
+    }
+
+    #[test]
     fn test_build_paragraph() {
         let doc = JiraDoc {
             blocks: vec![Block::Paragraph {
@@ -157,5 +222,47 @@ mod tests {
         let (doc, _) = parse(original);
         let rebuilt = build(&doc);
         assert!(rebuilt.contains("*bold*"));
+    }
+
+    #[test]
+    fn test_parse_sample_no_panic() {
+        // Adversarial: arbitrary inputs must not panic
+        let samples = [
+            "",
+            "   ",
+            "\n\n\n",
+            "*",
+            "**",
+            "***",
+            "{code}",
+            "{code:}",
+            "{panel",
+            "{panel:title=}",
+            "{quote}",
+            "{noformat}",
+            "----",
+            "|| ||",
+            "| |",
+            "[",
+            "[|",
+            "!",
+            "{{",
+            "}}",
+            "{color:red}unclosed",
+            "@",
+            "h1.",
+            "h7. not a heading",
+            "* ",
+            "# ",
+            "** nested without parent",
+            "* item\n** sub\n*** subsub\n**** deep\n***** deeper",
+            "||h1||h2||\n|missing closing",
+            "{code}\nunclosed code block",
+            "{panel}\nunclosed panel",
+            "{quote}\nunclosed quote",
+        ];
+        for s in &samples {
+            let _ = parse(s);
+        }
     }
 }

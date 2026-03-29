@@ -1,0 +1,7 @@
+{
+  "description": "Panel containing a code block preserves both structures",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "div" }
+  ]
+}

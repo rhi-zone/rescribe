@@ -1,0 +1,5 @@
+{
+  "description": "Unclosed {panel} and {quote} blocks do not crash the parser",
+  "category": "adversarial",
+  "assertions": []
+}

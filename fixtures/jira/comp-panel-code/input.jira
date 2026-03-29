@@ -1,0 +1,7 @@
+{panel:title=Example}
+Some text.
+
+{code:java}
+System.out.println("hello");
+{code}
+{panel}

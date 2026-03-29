@@ -1,0 +1,5 @@
+{
+  "description": "Unclosed {code} block does not crash the parser",
+  "category": "adversarial",
+  "assertions": []
+}

@@ -1,0 +1,6 @@
+{
+  "description": "{noformat} block preserves raw text without markup processing",
+  "assertions": [
+    { "path": "/0", "kind": "code_block" }
+  ]
+}

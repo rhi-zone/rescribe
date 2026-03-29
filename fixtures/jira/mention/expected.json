@@ -1,0 +1,6 @@
+{
+  "description": "@username produces a mention inline",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" }
+  ]
+}

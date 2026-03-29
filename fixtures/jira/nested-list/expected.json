@@ -1,0 +1,8 @@
+{
+  "description": "Nested lists with ** sub-items produce nested list structures",
+  "assertions": [
+    { "path": "/0",       "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0",     "kind": "list_item" },
+    { "path": "/0/1",     "kind": "list_item" }
+  ]
+}

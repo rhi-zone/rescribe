@@ -1,0 +1,6 @@
+{
+  "description": "Panel with title attribute preserves the title",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "title": "Important" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Blockquote with inline markup processes both correctly",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",   "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

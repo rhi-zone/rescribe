@@ -26,6 +26,11 @@ pub fn collect_inline_text(inlines: &[Inline]) -> String {
             Inline::Code(t, _) => s.push_str(t),
             Inline::Link { children, .. } => s.push_str(&collect_inline_text(children)),
             Inline::Image { url, .. } => s.push_str(url),
+            Inline::ColorSpan { children, .. } => s.push_str(&collect_inline_text(children)),
+            Inline::Mention(name, _) => {
+                s.push('@');
+                s.push_str(name);
+            }
         }
     }
     s
@@ -75,6 +80,15 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("{code}\n\n");
         }
 
+        Block::Noformat { content, .. } => {
+            ctx.write("{noformat}\n");
+            ctx.write(content);
+            if !content.ends_with('\n') {
+                ctx.write("\n");
+            }
+            ctx.write("{noformat}\n\n");
+        }
+
         Block::Blockquote { children, .. } => {
             ctx.write("{quote}\n");
             for child in children {
@@ -83,8 +97,12 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("{quote}\n\n");
         }
 
-        Block::Panel { children, .. } => {
-            ctx.write("{panel}\n");
+        Block::Panel { title, children, .. } => {
+            if let Some(t) = title {
+                ctx.write(&format!("{{panel:title={}}}\n", t));
+            } else {
+                ctx.write("{panel}\n");
+            }
             for child in children {
                 build_block(child, ctx);
             }
@@ -93,16 +111,21 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
 
         Block::List { ordered, items, .. } => {
             ctx.list_depth += 1;
-            for item_blocks in items {
+            for item in items {
                 let marker = if *ordered { "#" } else { "*" };
                 for _ in 0..ctx.list_depth {
                     ctx.write(marker);
                 }
                 ctx.write(" ");
-                for block in item_blocks {
-                    match block {
-                        Block::Paragraph { inlines, .. } => build_inlines(inlines, ctx),
-                        _ => build_block(block, ctx),
+                for content in &item.children {
+                    match content {
+                        ListItemContent::Inline(inlines) => build_inlines(inlines, ctx),
+                        ListItemContent::NestedList(nested) => {
+                            ctx.write("\n");
+                            build_block(nested, ctx);
+                            // Don't add extra newline since the nested block already did
+                            continue;
+                        }
                     }
                 }
                 ctx.write("\n");
@@ -115,6 +138,8 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
 
         Block::Table { rows, .. } => {
             for row in rows {
+                let row_is_header =
+                    row.cells.first().map(|c| c.is_header).unwrap_or(false);
                 for cell in &row.cells {
                     if cell.is_header {
                         ctx.write("||");
@@ -123,11 +148,7 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
                     }
                     build_inlines(&cell.inlines, ctx);
                 }
-                if rows
-                    .first()
-                    .and_then(|r| r.cells.first().map(|c| c.is_header))
-                    == Some(true)
-                {
+                if row_is_header {
                     ctx.write("||\n");
                 } else {
                     ctx.write("|\n");
@@ -210,6 +231,17 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("~");
             build_inlines(children, ctx);
             ctx.write("~");
+        }
+
+        Inline::ColorSpan { color, children, .. } => {
+            ctx.write(&format!("{{color:{}}}", color));
+            build_inlines(children, ctx);
+            ctx.write("{color}");
+        }
+
+        Inline::Mention(name, _) => {
+            ctx.write("@");
+            ctx.write(name);
         }
     }
 }

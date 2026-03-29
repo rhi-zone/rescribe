@@ -1,0 +1,8 @@
+{
+  "description": "{color:red}text{color} produces a span with color property",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "span", "props": { "style:color": "red" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "warning text" } }
+  ]
+}

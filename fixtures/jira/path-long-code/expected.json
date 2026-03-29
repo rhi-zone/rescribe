@@ -1,0 +1,7 @@
+{
+  "description": "Code block with 1000 lines does not crash",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "language": "java" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Inline markup inside list items is parsed correctly",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 3 }
+  ]
+}

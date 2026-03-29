@@ -59,9 +59,10 @@ pub enum Block {
     Paragraph { inlines: Vec<Inline>, span: Span },
     Heading { level: u8, inlines: Vec<Inline>, span: Span },
     CodeBlock { content: String, language: Option<String>, span: Span },
+    Noformat { content: String, span: Span },
     Blockquote { children: Vec<Block>, span: Span },
-    Panel { children: Vec<Block>, span: Span },
-    List { ordered: bool, items: Vec<Vec<Block>>, span: Span },
+    Panel { title: Option<String>, children: Vec<Block>, span: Span },
+    List { ordered: bool, items: Vec<ListItem>, span: Span },
     Table { rows: Vec<TableRow>, span: Span },
     HorizontalRule { span: Span },
 }
@@ -81,20 +82,19 @@ impl Block {
             Block::CodeBlock { content, language, .. } => {
                 Block::CodeBlock { content, language, span: Span::NONE }
             }
+            Block::Noformat { content, .. } => Block::Noformat { content, span: Span::NONE },
             Block::Blockquote { children, .. } => Block::Blockquote {
                 children: children.into_iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::Panel { children, .. } => Block::Panel {
+            Block::Panel { title, children, .. } => Block::Panel {
+                title,
                 children: children.into_iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
             Block::List { ordered, items, .. } => Block::List {
                 ordered,
-                items: items
-                    .into_iter()
-                    .map(|item| item.into_iter().map(Block::strip_spans).collect())
-                    .collect(),
+                items: items.into_iter().map(ListItem::strip_spans).collect(),
                 span: Span::NONE,
             },
             Block::Table { rows, .. } => Block::Table {
@@ -102,6 +102,40 @@ impl Block {
                 span: Span::NONE,
             },
             Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
+        }
+    }
+}
+
+/// A list item with nested children (supports nested lists).
+#[derive(Debug, Clone)]
+pub struct ListItem {
+    pub children: Vec<ListItemContent>,
+}
+
+impl ListItem {
+    pub fn strip_spans(self) -> Self {
+        ListItem {
+            children: self.children.into_iter().map(ListItemContent::strip_spans).collect(),
+        }
+    }
+}
+
+/// Content within a list item: either inline content or a nested list.
+#[derive(Debug, Clone)]
+pub enum ListItemContent {
+    Inline(Vec<Inline>),
+    NestedList(Block),
+}
+
+impl ListItemContent {
+    pub fn strip_spans(self) -> Self {
+        match self {
+            ListItemContent::Inline(inlines) => {
+                ListItemContent::Inline(inlines.into_iter().map(Inline::strip_spans).collect())
+            }
+            ListItemContent::NestedList(block) => {
+                ListItemContent::NestedList(block.strip_spans())
+            }
         }
     }
 }
@@ -153,6 +187,8 @@ pub enum Inline {
     Image { url: String, alt: Option<String>, span: Span },
     Superscript(Vec<Inline>, Span),
     Subscript(Vec<Inline>, Span),
+    ColorSpan { color: String, children: Vec<Inline>, span: Span },
+    Mention(String, Span),
 }
 
 impl Inline {
@@ -184,6 +220,12 @@ impl Inline {
             Inline::Subscript(c, _) => {
                 Inline::Subscript(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
+            Inline::ColorSpan { color, children, .. } => Inline::ColorSpan {
+                color,
+                children: children.into_iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Inline::Mention(name, _) => Inline::Mention(name, Span::NONE),
         }
     }
 }
