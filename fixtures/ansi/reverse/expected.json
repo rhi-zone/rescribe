@@ -1,0 +1,9 @@
+{
+  "description": "Reverse video text via SGR 7",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:reverse": true } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Reverse" } }
+  ]
+}

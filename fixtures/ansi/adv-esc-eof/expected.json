@@ -1,0 +1,6 @@
+{
+  "description": "ESC at end of input",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}

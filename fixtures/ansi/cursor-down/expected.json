@@ -1,0 +1,7 @@
+{
+  "description": "Cursor down (CSI 3B)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "ansi:type": "cursor-down", "ansi:count": 3 } }
+  ]
+}

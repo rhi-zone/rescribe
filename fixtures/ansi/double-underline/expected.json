@@ -1,0 +1,9 @@
+{
+  "description": "Double underline text via SGR 21",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:double-underline": true } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Double" } }
+  ]
+}

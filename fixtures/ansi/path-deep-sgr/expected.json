@@ -1,0 +1,7 @@
+{
+  "description": "Many SGR opens before a single reset",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

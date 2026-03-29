@@ -9,69 +9,69 @@ See `fixtures/spec.md` for category definitions.
 - [x] italic (SGR 3) — `italic`
 - [x] underline (SGR 4) — `underline`
 - [x] strikethrough (SGR 9) — `rare-strikeout`
-- [ ] dim / faint (SGR 2) — (missing)
-- [ ] blink (SGR 5) — (missing)
-- [ ] reverse video (SGR 7) — (missing)
-- [ ] hidden / invisible (SGR 8) — (missing)
-- [ ] double underline (SGR 21) — (missing)
-- [ ] overline (SGR 53) — (missing)
-- [ ] reset / SGR 0 — (missing)
+- [x] dim / faint (SGR 2) — `dim`
+- [x] blink (SGR 5) — `blink`
+- [x] reverse video (SGR 7) — `reverse`
+- [x] hidden / invisible (SGR 8) — `hidden`
+- [x] double underline (SGR 21) — `double-underline`
+- [x] overline (SGR 53) — `overline`
+- [x] reset / SGR 0 — `reset`
 - [x] bold + italic combined (SGR 1 + 3) — `rare-bold-italic`
 
 ## SGR — foreground color
 
-- [ ] standard foreground colors (SGR 30–37) — (missing)
-- [ ] default foreground (SGR 39) — (missing)
-- [ ] bright foreground colors (SGR 90–97) — (missing)
-- [ ] 256-color foreground (SGR 38;5;n) — (missing)
-- [ ] truecolor foreground (SGR 38;2;r;g;b) — (missing)
+- [x] standard foreground colors (SGR 30–37) — `fg-standard`
+- [x] default foreground (SGR 39) — `fg-default`
+- [x] bright foreground colors (SGR 90–97) — `fg-bright`
+- [x] 256-color foreground (SGR 38;5;n) — `fg-256`
+- [x] truecolor foreground (SGR 38;2;r;g;b) — `fg-truecolor`
 
 ## SGR — background color
 
-- [ ] standard background colors (SGR 40–47) — (missing)
-- [ ] default background (SGR 49) — (missing)
-- [ ] bright background colors (SGR 100–107) — (missing)
-- [ ] 256-color background (SGR 48;5;n) — (missing)
-- [ ] truecolor background (SGR 48;2;r;g;b) — (missing)
+- [x] standard background colors (SGR 40–47) — `bg-standard`
+- [x] default background (SGR 49) — `bg-default`
+- [x] bright background colors (SGR 100–107) — `bg-bright`
+- [x] 256-color background (SGR 48;5;n) — `bg-256`
+- [x] truecolor background (SGR 48;2;r;g;b) — `bg-truecolor`
 
 ## Text structure
 
 - [x] plain paragraph — `paragraph`
 - [x] inline markup interleaved with plain text — `rare-inline-in-text`
-- [ ] multiple paragraphs separated by newlines — (missing)
-- [ ] line break (explicit newline mid-paragraph) — (missing)
+- [x] multiple paragraphs separated by newlines — `multi-paragraph`
+- [x] line break (explicit newline mid-paragraph) — `line-break`
 
 ## Cursor movement (CSI sequences)
 
-- [ ] cursor up (CSI A) — (missing)
-- [ ] cursor down (CSI B) — (missing)
-- [ ] cursor forward (CSI C) — (missing)
-- [ ] cursor back (CSI D) — (missing)
-- [ ] cursor position (CSI H / CSI f) — (missing)
-- [ ] erase in display (CSI J) — (missing)
-- [ ] erase in line (CSI K) — (missing)
+- [x] cursor up (CSI A) — `cursor-up`
+- [x] cursor down (CSI B) — `cursor-down`
+- [x] cursor forward (CSI C) — `cursor-forward`
+- [x] cursor back (CSI D) — `cursor-back`
+- [x] cursor position (CSI H / CSI f) — `cursor-position`
+- [x] erase in display (CSI J) — `erase-display`
+- [x] erase in line (CSI K) — `erase-line`
 
 ## Other escape sequences
 
-- [ ] OSC hyperlink (OSC 8) — (missing)
-- [ ] hyperlink with URI and text — (missing)
+- [x] OSC hyperlink (OSC 8) — `hyperlink`
+- [x] hyperlink with URI and text — `rare-hyperlink-uri`
 
 ## Composition (integration)
 
-- [ ] bold + color on same span — (missing)
-- [ ] nested SGR resets correctly — (missing)
-- [ ] styled text inside a paragraph alongside plain text — (missing)
+- [x] bold + color on same span — `bold-color`
+- [x] nested SGR resets correctly — `nested-sgr-reset`
+- [x] styled text inside a paragraph alongside plain text — `styled-in-paragraph`
 
 ## Adversarial
 
 - [x] empty document — `adv-empty`
-- [ ] incomplete escape sequence (truncated CSI) — (missing)
-- [ ] unknown SGR parameter — (missing)
-- [ ] bare ESC without bracket — (missing)
-- [ ] ESC followed by end-of-input — (missing)
+- [x] incomplete escape sequence (truncated CSI) — `adv-truncated-csi`
+- [x] unknown SGR parameter — `adv-unknown-sgr`
+- [x] bare ESC without bracket — `adv-bare-esc`
+- [x] ESC followed by end-of-input — `adv-esc-eof`
 
 ## Pathological
 
-- [ ] very long line (>64 KB) with no escape sequences — (missing)
-- [ ] deeply nested SGR resets (many opens before reset) — (missing)
-- [ ] thousands of color changes on one line — (missing)
+- [x] very long line (>64 KB) with no escape sequences — `path-long-line`
+- [x] deeply nested SGR resets (many opens before reset) — `path-deep-sgr`
+- [x] thousands of color changes on one line — `path-many-colors`

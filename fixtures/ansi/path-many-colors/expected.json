@@ -1,0 +1,7 @@
+{
+  "description": "Thousands of color changes on one line",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

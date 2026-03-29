@@ -1,0 +1,9 @@
+{
+  "description": "Hidden/invisible text via SGR 8",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:hidden": true } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Hidden" } }
+  ]
+}

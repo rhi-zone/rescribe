@@ -1,0 +1,7 @@
+{
+  "description": "Cursor forward (CSI 2C)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "ansi:type": "cursor-forward", "ansi:count": 2 } }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "description": "Multiple paragraphs separated by blank line",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "First" } },
+    { "path": "/1", "kind": "paragraph" },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Second" } }
+  ]
+}

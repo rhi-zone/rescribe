@@ -1,0 +1,11 @@
+{
+  "description": "Styled text inside paragraph alongside plain text",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Hello " } },
+    { "path": "/0/1", "kind": "strong" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "world" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " here" } }
+  ]
+}

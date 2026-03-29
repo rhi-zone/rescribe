@@ -1,0 +1,9 @@
+{
+  "description": "Overline text via SGR 53",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:overline": true } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Overline" } }
+  ]
+}

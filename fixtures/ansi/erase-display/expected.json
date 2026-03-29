@@ -1,0 +1,7 @@
+{
+  "description": "Erase in display (CSI 2J)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "ansi:type": "erase-display", "ansi:mode": "all" } }
+  ]
+}

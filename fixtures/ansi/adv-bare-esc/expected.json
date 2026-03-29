@@ -1,0 +1,6 @@
+{
+  "description": "Bare ESC followed by unknown character",
+  "category": "adversarial",
+  "expect_error": true,
+  "assertions": []
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Cursor up (CSI 5A)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "ansi:type": "cursor-up", "ansi:count": 5 } }
+  ]
+}

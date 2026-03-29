@@ -1,0 +1,10 @@
+{
+  "description": "Bold + color on same span (SGR 1;31)",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "strong" },
+    { "path": "/0/0/0", "kind": "span", "props": { "style:color": "ansi-red" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "BoldRed" } }
+  ]
+}

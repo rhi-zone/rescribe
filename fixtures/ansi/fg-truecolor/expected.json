@@ -1,0 +1,9 @@
+{
+  "description": "24-bit truecolor foreground via SGR 38;2;255;128;0",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:color": "#ff8000" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Orange" } }
+  ]
+}

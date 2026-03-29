@@ -1,0 +1,9 @@
+{
+  "description": "256-color background via SGR 48;5;196",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:background-color": "ansi-palette-196" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "RedBg256" } }
+  ]
+}

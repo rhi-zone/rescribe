@@ -1,0 +1,9 @@
+{
+  "description": "Blink text via SGR 5",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:blink": true } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Blink" } }
+  ]
+}

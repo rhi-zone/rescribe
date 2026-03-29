@@ -1,0 +1,9 @@
+{
+  "description": "Multiple nested SGR attributes reset correctly",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "strong" },
+    { "path": "/0/1", "kind": "text", "props": { "content": "Plain" } }
+  ]
+}

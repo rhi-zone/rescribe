@@ -1,0 +1,9 @@
+{
+  "description": "Bright background color via SGR 101",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "span", "props": { "style:background-color": "ansi-bright-red" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "BrightRedBg" } }
+  ]
+}

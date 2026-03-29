@@ -1,0 +1,7 @@
+{
+  "description": "Cursor position (CSI 10;20H)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "ansi:type": "cursor-position", "ansi:row": 10, "ansi:col": 20 } }
+  ]
+}

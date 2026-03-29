@@ -1,0 +1,7 @@
+{
+  "description": "Erase in line (CSI K — default to-end)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "ansi:type": "erase-line", "ansi:mode": "to-end" } }
+  ]
+}

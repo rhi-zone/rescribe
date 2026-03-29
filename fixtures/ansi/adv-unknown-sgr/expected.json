@@ -1,0 +1,8 @@
+{
+  "description": "Unknown SGR parameter produces diagnostic but does not panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Text" } }
+  ]
+}

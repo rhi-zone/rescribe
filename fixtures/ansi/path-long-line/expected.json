@@ -1,0 +1,7 @@
+{
+  "description": "Very long line (>64 KB) with no escape sequences",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}
