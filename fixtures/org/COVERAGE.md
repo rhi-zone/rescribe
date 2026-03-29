@@ -91,7 +91,8 @@ See `fixtures/spec.md` for category definitions.
 - [x] blockquote containing a list — `integration-blockquote-list`
 - [x] footnote containing inline markup — `integration-footnote-markup`
 - [x] nested lists (unordered inside ordered) — `integration-nested-lists`
-- [x] definition list inside a blockquote — `definition-in-blockquote` (parsed as literal text; block-recursive quote content not yet implemented)
+- [x] definition list inside a blockquote — `definition-in-blockquote`
+- [x] nested blockquote (#+BEGIN_QUOTE inside #+BEGIN_QUOTE) — `blockquote-nested`
 - [x] affiliated keyword before a table — `integration-caption-table`
 
 ## Adversarial

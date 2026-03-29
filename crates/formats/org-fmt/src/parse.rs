@@ -425,14 +425,24 @@ impl<'a> EventIter<'a> {
 
         self.advance();
 
+        let begin_marker = format!("#+BEGIN_{}", block_type);
         let end_marker = format!("#+END_{}", block_type);
         let mut content_lines = Vec::new();
+        // Track nesting depth so that e.g. a #+BEGIN_QUOTE inside a
+        // #+BEGIN_QUOTE block doesn't terminate the outer collection.
+        let mut depth: usize = 0;
 
         while !self.is_eof() {
             let line = self.current_line().unwrap();
-            if line.to_uppercase().starts_with(&end_marker) {
+            let line_upper = line.to_uppercase();
+            if line_upper.starts_with(&end_marker) && depth == 0 {
                 self.advance();
                 break;
+            }
+            if line_upper.starts_with(&begin_marker) {
+                depth += 1;
+            } else if line_upper.starts_with(&end_marker) {
+                depth = depth.saturating_sub(1);
             }
             content_lines.push(line);
             self.advance();
@@ -449,12 +459,11 @@ impl<'a> EventIter<'a> {
                 span: Span::NONE,
             }),
             "QUOTE" => {
-                let inlines = parse_inline_content(&content_str);
+                // Recursively parse the body as blocks so that nested
+                // #+BEGIN_QUOTE … #+END_QUOTE blocks are handled correctly.
+                let (sub_doc, _sub_diags) = parse(&content_str);
                 Some(Block::Blockquote {
-                    children: vec![Block::Paragraph {
-                        inlines,
-                        span: Span::NONE,
-                    }],
+                    children: sub_doc.blocks,
                     span: Span::NONE,
                 })
             }

@@ -1,8 +1,10 @@
 {
-  "description": "Definition list inside a blockquote: the QUOTE block content is parsed as inline text only (not re-parsed for blocks), so the definition list syntax appears as literal text in the blockquote paragraph",
+  "description": "Definition list inside a blockquote: QUOTE block content is recursively parsed as blocks, so the definition list is correctly represented",
   "assertions": [
-    { "path": "/0", "kind": "blockquote" },
-    { "path": "/0/0", "kind": "paragraph" },
-    { "path": "/0/0/0", "kind": "text", "props": { "content": "- term :: desc" } }
+    { "path": "/0",     "kind": "blockquote" },
+    { "path": "/0/0",   "kind": "definition_list" },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "term" } },
+    { "path": "/0/0/1", "kind": "definition_desc" }
   ]
 }

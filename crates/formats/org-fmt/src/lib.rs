@@ -117,6 +117,25 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_nested_blockquote() {
+        let input = "#+BEGIN_QUOTE\nOuter.\n\n#+BEGIN_QUOTE\nInner.\n#+END_QUOTE\n\nMore outer.\n#+END_QUOTE";
+        let doc = parse_ok(input);
+        let Block::Blockquote { ref children, .. } = doc.blocks[0] else {
+            panic!("expected outer blockquote");
+        };
+        // children: paragraph "Outer.", nested blockquote, paragraph "More outer."
+        assert_eq!(children.len(), 3);
+        assert!(matches!(children[0], Block::Paragraph { .. }));
+        assert!(matches!(children[1], Block::Blockquote { .. }));
+        assert!(matches!(children[2], Block::Paragraph { .. }));
+        // Verify inner blockquote contains a paragraph
+        let Block::Blockquote { children: ref inner, .. } = children[1] else {
+            panic!("expected inner blockquote");
+        };
+        assert!(matches!(inner[0], Block::Paragraph { .. }));
+    }
+
+    #[test]
     fn test_parse_horizontal_rule() {
         let doc = parse_ok("-----");
         assert!(matches!(doc.blocks[0], Block::HorizontalRule { .. }));
