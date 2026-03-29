@@ -148,6 +148,7 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
         node::TABLE => Some(convert_table(n, warnings)),
 
         node::FIGURE => Some(Block::Figure {
+            name: n.props.get_str("org:name").map(|s| s.to_string()),
             children: convert_nodes(&n.children, warnings),
             span: org_fmt::Span::NONE,
         }),
@@ -246,6 +247,7 @@ fn convert_node(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Block> 
                 Some(children.into_iter().next().unwrap())
             } else {
                 Some(Block::Figure {
+                    name: None,
                     children,
                     span: org_fmt::Span::NONE,
                 })

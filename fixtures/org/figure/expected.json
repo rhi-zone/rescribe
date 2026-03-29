@@ -1,9 +1,13 @@
 {
-  "description": "#+CAPTION: followed by image link becomes figure with caption and image",
+  "description": "#+CAPTION: before an image or table creates a figure wrapping caption and body; optional #+NAME: is preserved",
   "assertions": [
-    { "path": "/0",     "kind": "figure" },
-    { "path": "/0/0",   "kind": "caption" },
-    { "path": "/0/1",   "kind": "paragraph" },
-    { "path": "/0/1/0", "kind": "image" }
+    { "path": "",     "kind": "document", "children_count": 2 },
+    { "path": "/0",   "kind": "figure" },
+    { "path": "/0/0", "kind": "caption" },
+    { "path": "/0/1", "kind": "paragraph" },
+    { "path": "/0/1/0", "kind": "image" },
+    { "path": "/1",   "kind": "figure" },
+    { "path": "/1/0", "kind": "caption" },
+    { "path": "/1/1", "kind": "table" }
   ]
 }

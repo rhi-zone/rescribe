@@ -1,2 +1,7 @@
 #+CAPTION: A landscape photo
 [[file:landscape.png]]
+
+#+CAPTION: A captioned table
+#+NAME: tbl:data
+| Header 1 | Header 2 |
+| Cell 1   | Cell 2   |

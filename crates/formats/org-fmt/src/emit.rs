@@ -201,9 +201,20 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             }
         }
 
-        Block::Figure { children, .. } => {
+        Block::Figure { name, children, .. } => {
             for child in children {
-                build_block(child, ctx);
+                // Emit #+NAME: immediately after #+CAPTION: if a name is present.
+                // We detect the Caption child and inject #+NAME: right after it.
+                if let Block::Caption { .. } = child {
+                    build_block(child, ctx);
+                    if let Some(nm) = name {
+                        ctx.write("#+NAME: ");
+                        ctx.write(nm);
+                        ctx.ensure_newline();
+                    }
+                } else {
+                    build_block(child, ctx);
+                }
             }
         }
 

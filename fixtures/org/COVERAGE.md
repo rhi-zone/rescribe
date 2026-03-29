@@ -18,7 +18,7 @@ See `fixtures/spec.md` for category definitions.
 - [x] example block (#+BEGIN_EXAMPLE … #+END_EXAMPLE) — (missing; no separate fixture but related)
 - [x] horizontal rule (-----) — `horizontal-rule`
 - [x] table — `table`
-- [x] figure / image link — `figure`
+- [x] figure / caption block (#+CAPTION: before image, table, or code block; optional #+NAME:) — `figure`
 - [x] footnote definition ([fn:1] def) — `footnote-def`
 - [x] footnote reference ([fn:1]) — `footnote-ref`
 - [x] metadata / document keywords (#+TITLE:, #+AUTHOR:, etc.) — `metadata`

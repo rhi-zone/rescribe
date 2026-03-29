@@ -66,7 +66,9 @@ pub enum Event<'a> {
     EndDefinitionDesc,
     StartDiv,
     EndDiv,
-    StartFigure,
+    StartFigure {
+        name: Option<String>,
+    },
     EndFigure,
     StartCaption,
     EndCaption,
@@ -200,7 +202,7 @@ enum BlockFrame {
     DefinitionTerm { inlines: Vec<Inline> },
     DefinitionDesc { inlines: Vec<Inline> },
     Div { inlines: Vec<Inline> },
-    Figure { children: Vec<Block> },
+    Figure { name: Option<String>, children: Vec<Block> },
     Caption { inlines: Vec<Inline> },
     BlockFootnoteDef { label: String, inlines: Vec<Inline> },
 }
@@ -258,7 +260,7 @@ fn push_block(block_stack: &mut [BlockFrame], block: Block) {
     match block_stack.last_mut() {
         Some(BlockFrame::Document { blocks }) => blocks.push(block),
         Some(BlockFrame::Blockquote { children }) => children.push(block),
-        Some(BlockFrame::Figure { children }) => children.push(block),
+        Some(BlockFrame::Figure { children, .. }) => children.push(block),
         Some(BlockFrame::ListItem { children, inline_buf, .. }) => {
             // Flush any accumulated inline content before the nested block.
             if !inline_buf.is_empty() {
@@ -311,8 +313,8 @@ fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx:
         Event::StartDiv => {
             block_stack.push(BlockFrame::Div { inlines: Vec::new() });
         }
-        Event::StartFigure => {
-            block_stack.push(BlockFrame::Figure { children: Vec::new() });
+        Event::StartFigure { name } => {
+            block_stack.push(BlockFrame::Figure { name, children: Vec::new() });
         }
         Event::StartCaption => {
             block_stack.push(BlockFrame::Caption { inlines: Vec::new() });
@@ -406,8 +408,8 @@ fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx:
             }
         }
         Event::EndFigure => {
-            if let Some(BlockFrame::Figure { children }) = block_stack.pop() {
-                push_block(block_stack, Block::Figure { children, span: Span::NONE });
+            if let Some(BlockFrame::Figure { name, children }) = block_stack.pop() {
+                push_block(block_stack, Block::Figure { name, children, span: Span::NONE });
             }
         }
         Event::EndCaption => {

@@ -1,8 +1,10 @@
 {
-  "description": "#+CAPTION: affiliated keyword before a table emits caption block followed by table",
+  "description": "#+CAPTION: affiliated keyword before a table wraps into a figure block",
   "assertions": [
-    { "path": "/0",   "kind": "caption" },
-    { "path": "/1",   "kind": "table" },
-    { "path": "/1/0", "kind": "table_row" }
+    { "path": "",     "kind": "document", "children_count": 1 },
+    { "path": "/0",   "kind": "figure" },
+    { "path": "/0/0", "kind": "caption" },
+    { "path": "/0/1", "kind": "table" },
+    { "path": "/0/1/0", "kind": "table_row" }
   ]
 }

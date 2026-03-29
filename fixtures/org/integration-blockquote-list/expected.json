@@ -1,7 +1,7 @@
 {
-  "description": "#+BEGIN_QUOTE containing list markers produces blockquote with a paragraph (inline parsing only); must not panic",
+  "description": "#+BEGIN_QUOTE containing list markers produces blockquote with a list; must not panic",
   "assertions": [
     { "path": "/0",   "kind": "blockquote" },
-    { "path": "/0/0", "kind": "paragraph" }
+    { "path": "/0/0", "kind": "list" }
   ]
 }

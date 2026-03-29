@@ -139,6 +139,8 @@ pub enum Block {
         span: Span,
     },
     Figure {
+        /// Optional `#+NAME:` label for cross-references.
+        name: Option<String>,
         children: Vec<Block>,
         span: Span,
     },
@@ -218,7 +220,8 @@ impl Block {
                 content: content.clone(),
                 span: Span::NONE,
             },
-            Block::Figure { children, .. } => Block::Figure {
+            Block::Figure { name, children, .. } => Block::Figure {
+                name: name.clone(),
                 children: children.iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },

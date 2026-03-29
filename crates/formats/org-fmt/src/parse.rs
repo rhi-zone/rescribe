@@ -108,7 +108,7 @@ impl<'a> EventIter<'a> {
 
             let line = self.current_line().unwrap();
 
-            // #+CAPTION: text followed by [[file:image]] → Figure block
+            // #+CAPTION: text followed by a block → Figure block
             if line.to_uppercase().starts_with("#+CAPTION:") {
                 // Flush any pending paragraph first
                 if !self.current_para.is_empty() {
@@ -119,43 +119,76 @@ impl<'a> EventIter<'a> {
                 }
                 let caption_text = line["#+CAPTION:".len()..].trim().to_string();
                 self.advance();
-                // Skip blank lines between caption and image
+
+                // Optionally consume a #+NAME: line (may follow #+CAPTION:)
+                let mut figure_name: Option<String> = None;
+                if let Some(next_line) = self.current_line()
+                    && next_line.to_uppercase().starts_with("#+NAME:")
+                {
+                    figure_name = Some(next_line["#+NAME:".len()..].trim().to_string());
+                    self.advance();
+                }
+
+                // Skip blank lines between affiliated keywords and the body
                 while !self.is_eof() && self.current_line().unwrap().trim().is_empty() {
                     self.advance();
                 }
-                // Check if next line is an image link
-                let made_figure = if let Some(img_line) = self.current_line() {
-                    let trimmed = img_line.trim();
+
+                let caption_inlines = parse_inline_content(&caption_text);
+                let caption_block = Block::Caption { inlines: caption_inlines, span: Span::NONE };
+
+                // Try to parse the body block that the caption is affiliated with.
+                let body_block: Option<Block> = if let Some(next_line) = self.current_line() {
+                    let trimmed = next_line.trim();
                     if trimmed.starts_with("[[") {
+                        // Image link
                         let img_chars: Vec<char> = trimmed.chars().collect();
                         if let Some((Inline::Image { url, .. }, _)) = parse_link(&img_chars, 0) {
-                            let caption_inlines = parse_inline_content(&caption_text);
                             let img_inline = Inline::Image { url, span: Span::NONE };
                             self.advance();
-                            return Some(Block::Figure {
-                                children: vec![
-                                    Block::Caption {
-                                        inlines: caption_inlines,
-                                        span: Span::NONE,
-                                    },
-                                    Block::Paragraph {
-                                        inlines: vec![img_inline],
-                                        span: Span::NONE,
-                                    },
-                                ],
+                            Some(Block::Paragraph {
+                                inlines: vec![img_inline],
                                 span: Span::NONE,
-                            });
-                        } else { false }
-                    } else { false }
-                } else { false };
-                if !made_figure {
-                    // No image follows — emit standalone caption
+                            })
+                        } else {
+                            None
+                        }
+                    } else if next_line.starts_with('|') {
+                        // Table
+                        Some(self.parse_table())
+                    } else if next_line.to_uppercase().starts_with("#+BEGIN_") {
+                        // Block (src, quote, example, etc.)
+                        if let Some(mut block) = self.parse_block() {
+                            // Attach any pending #+NAME: to code blocks
+                            if let Some(name) = figure_name.take()
+                                && let Block::CodeBlock { name: ref mut n, .. } = block
+                            {
+                                *n = Some(name);
+                            }
+                            Some(block)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(body) = body_block {
+                    return Some(Block::Figure {
+                        name: figure_name,
+                        children: vec![caption_block, body],
+                        span: Span::NONE,
+                    });
+                } else {
+                    // No recognisable body follows — emit standalone caption
                     return Some(Block::Caption {
                         inlines: parse_inline_content(&caption_text),
                         span: Span::NONE,
                     });
                 }
-                continue;
             }
 
             // Parse metadata (#+KEY: value) — not #+BEGIN_*
@@ -785,12 +818,12 @@ impl<'a> EventIter<'a> {
             Block::RawBlock { format, content, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::RawBlock { format, content }));
             }
-            Block::Figure { children, .. } => {
+            Block::Figure { name, children, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndFigure));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Blocks(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartFigure));
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartFigure { name }));
             }
             Block::Caption { inlines, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndCaption));

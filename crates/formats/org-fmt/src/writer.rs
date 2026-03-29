@@ -72,7 +72,7 @@ enum Frame {
     DefinitionTerm { inlines: Vec<Inline> },
     DefinitionDesc { inlines: Vec<Inline> },
     Div { inlines: Vec<Inline> },
-    Figure { blocks: Vec<Block> },
+    Figure { name: Option<String>, blocks: Vec<Block> },
     Caption { inlines: Vec<Inline> },
     FootnoteDefinition { label: String, inlines: Vec<Inline> },
     BlockFootnoteDef { label: String, inlines: Vec<Inline> },
@@ -248,12 +248,12 @@ impl DocBuilder {
                     self.push_block(Block::Div { inlines, span: Span::NONE });
                 }
             }
-            OwnedEvent::StartFigure => {
-                self.stack.push(Frame::Figure { blocks: vec![] });
+            OwnedEvent::StartFigure { name } => {
+                self.stack.push(Frame::Figure { name, blocks: vec![] });
             }
             OwnedEvent::EndFigure => {
-                if let Some(Frame::Figure { blocks }) = self.stack.pop() {
-                    self.push_block(Block::Figure { children: blocks, span: Span::NONE });
+                if let Some(Frame::Figure { name, blocks }) = self.stack.pop() {
+                    self.push_block(Block::Figure { name, children: blocks, span: Span::NONE });
                 }
             }
             OwnedEvent::StartCaption => {
@@ -375,7 +375,7 @@ impl DocBuilder {
         match self.stack.last_mut() {
             Some(Frame::Document { blocks }) => blocks.push(block),
             Some(Frame::Blockquote { blocks }) => blocks.push(block),
-            Some(Frame::Figure { blocks }) => blocks.push(block),
+            Some(Frame::Figure { blocks, .. }) => blocks.push(block),
             Some(Frame::ListItem { children, current_inlines, .. }) => {
                 // Flush any pending inlines before pushing a block
                 if let Some(inlines) = current_inlines.take() {

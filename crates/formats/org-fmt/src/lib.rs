@@ -487,6 +487,122 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_figure_image() {
+        // #+CAPTION: before an image link → Figure with Caption + Paragraph(Image)
+        let doc = parse_ok("#+CAPTION: A photo\n[[file:photo.png]]");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Figure { name, children, .. } = &doc.blocks[0] else {
+            panic!("expected Figure, got {:?}", doc.blocks[0]);
+        };
+        assert!(name.is_none());
+        assert_eq!(children.len(), 2);
+        assert!(matches!(children[0], Block::Caption { .. }));
+        assert!(matches!(children[1], Block::Paragraph { .. }));
+        if let Block::Paragraph { ref inlines, .. } = children[1] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Image { .. })));
+        }
+    }
+
+    #[test]
+    fn test_parse_figure_table() {
+        // #+CAPTION: before a table → Figure with Caption + Table
+        let doc = parse_ok("#+CAPTION: Data\n| A | B |\n| 1 | 2 |");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Figure { children, .. } = &doc.blocks[0] else {
+            panic!("expected Figure");
+        };
+        assert_eq!(children.len(), 2);
+        assert!(matches!(children[0], Block::Caption { .. }));
+        assert!(matches!(children[1], Block::Table { .. }));
+    }
+
+    #[test]
+    fn test_parse_figure_with_name() {
+        // #+CAPTION: + #+NAME: before a table → Figure with name field set
+        let doc = parse_ok("#+CAPTION: Named figure\n#+NAME: fig:test\n| A | B |");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Figure { name, children, .. } = &doc.blocks[0] else {
+            panic!("expected Figure");
+        };
+        assert_eq!(name.as_deref(), Some("fig:test"));
+        assert_eq!(children.len(), 2);
+        assert!(matches!(children[0], Block::Caption { .. }));
+        assert!(matches!(children[1], Block::Table { .. }));
+    }
+
+    #[test]
+    fn test_parse_figure_code_block() {
+        // #+CAPTION: before a code block → Figure with Caption + CodeBlock
+        let doc = parse_ok("#+CAPTION: Example code\n#+BEGIN_SRC rust\nfn main() {}\n#+END_SRC");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Figure { children, .. } = &doc.blocks[0] else {
+            panic!("expected Figure");
+        };
+        assert_eq!(children.len(), 2);
+        assert!(matches!(children[0], Block::Caption { .. }));
+        assert!(matches!(children[1], Block::CodeBlock { .. }));
+    }
+
+    #[test]
+    fn test_build_figure_with_name() {
+        let doc = simple_doc(Block::Figure {
+            name: Some("tbl:example".into()),
+            children: vec![
+                Block::Caption {
+                    inlines: vec![Inline::Text { text: "My caption".into(), span: Span::NONE }],
+                    span: Span::NONE,
+                },
+                Block::Table {
+                    rows: vec![],
+                    span: Span::NONE,
+                },
+            ],
+            span: Span::NONE,
+        });
+        let out = build_str(&doc);
+        assert!(out.contains("#+CAPTION: My caption"), "got: {out:?}");
+        assert!(out.contains("#+NAME: tbl:example"), "got: {out:?}");
+    }
+
+    #[test]
+    fn test_roundtrip_figure_image() {
+        let input = "#+CAPTION: A landscape photo\n[[file:landscape.png]]\n";
+        let (doc, _) = parse(input);
+        let emitted = build_str(&doc);
+        let (doc2, _) = parse(&emitted);
+        assert_eq!(doc.blocks.len(), 1);
+        assert_eq!(doc2.blocks.len(), 1);
+        assert!(matches!(doc.blocks[0].strip_spans(), Block::Figure { .. }));
+        assert!(matches!(doc2.blocks[0].strip_spans(), Block::Figure { .. }));
+    }
+
+    #[test]
+    fn test_roundtrip_figure_table_with_name() {
+        let input = "#+CAPTION: Named table\n#+NAME: tbl:data\n| Col A | Col B |\n| r1c1  | r1c2  |\n";
+        let (doc, _) = parse(input);
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Figure { name, .. } = &doc.blocks[0] else {
+            panic!("expected Figure");
+        };
+        assert_eq!(name.as_deref(), Some("tbl:data"));
+        let emitted = build_str(&doc);
+        assert!(emitted.contains("#+NAME: tbl:data"), "emitted: {emitted:?}");
+        let (doc2, _) = parse(&emitted);
+        assert_eq!(doc2.blocks.len(), 1);
+        assert!(matches!(doc2.blocks[0].strip_spans(), Block::Figure { .. }));
+    }
+
+    #[test]
+    fn test_events_figure() {
+        use crate::events::OwnedEvent;
+        let evs: Vec<_> = events("#+CAPTION: A photo\n[[file:photo.png]]").collect();
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartFigure { .. })));
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartCaption)));
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndCaption)));
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndFigure)));
+    }
+
+    #[test]
     fn test_roundtrip_block_footnote_def() {
         let input = "[fn:note] Some footnote content.";
         let (doc, _) = parse(input);

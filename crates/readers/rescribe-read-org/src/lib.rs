@@ -152,12 +152,16 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             .prop(prop::FORMAT, format.clone())
             .prop(prop::CONTENT, content.clone()),
 
-        Block::Figure { children, .. } => {
+        Block::Figure { name, children, .. } => {
             let child_nodes: Vec<Node> = children
                 .iter()
                 .filter_map(|b| convert_block(b).ok().flatten())
                 .collect();
-            Node::new(node::FIGURE).children(child_nodes)
+            let mut n = Node::new(node::FIGURE).children(child_nodes);
+            if let Some(nm) = name {
+                n = n.prop("org:name", nm.clone());
+            }
+            n
         }
 
         Block::Caption { inlines, .. } => {
