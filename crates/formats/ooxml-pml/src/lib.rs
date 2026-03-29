@@ -33,6 +33,12 @@
 //! # Ok::<(), ooxml_pml::Error>(())
 //! ```
 
+// Batch reader
+#[cfg(feature = "reader-batch")]
+pub mod batch;
+#[cfg(feature = "reader-batch")]
+pub use batch::BatchParser;
+
 pub mod error;
 pub mod ext;
 pub mod presentation;

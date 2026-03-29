@@ -28,7 +28,7 @@ full = [
 # API-mode flags
 reader-ast = []       # Workbook::open / parse — materialised tree
 reader-streaming = [] # LazyWorksheet + events() — lazy/streaming row iteration
-reader-batch = []     # StreamingParser<H> — chunk-driven (stub; impl pending)
+reader-batch = ["reader-ast"] # BatchParser — chunk-driven; buffers all input, parses on finish()
 writer-streaming = [] # Writer<W> — event-driven emit (stub; impl pending)
 writer-builder = []   # WorkbookBuilder — build and write a workbook
 # Roundtrip fidelity features

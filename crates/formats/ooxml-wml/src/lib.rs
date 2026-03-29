@@ -83,6 +83,12 @@ pub use generated_serializers as serializers;
 #[cfg(feature = "reader-ast")]
 pub use document::{AppProperties, CoreProperties, Document, DocumentSettings, ImageData};
 
+// Batch reader
+#[cfg(feature = "reader-batch")]
+pub mod batch;
+#[cfg(feature = "reader-batch")]
+pub use batch::BatchParser;
+
 // Error types — always available.
 pub use error::{Error, ParseContext, Result, position_to_line_col};
 pub use ooxml_xml::{PositionedAttr, PositionedNode, RawXmlElement, RawXmlNode};

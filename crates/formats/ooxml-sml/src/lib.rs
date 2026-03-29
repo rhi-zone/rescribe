@@ -38,6 +38,12 @@ pub mod error;
 pub mod workbook;
 pub mod writer;
 
+// Batch reader
+#[cfg(feature = "reader-batch")]
+pub mod batch;
+#[cfg(feature = "reader-batch")]
+pub use batch::BatchParser;
+
 /// Generated types from the ECMA-376 SpreadsheetML schema.
 ///
 /// These types map 1:1 to XML elements and attributes defined in ECMA-376 Part 1 §18.
