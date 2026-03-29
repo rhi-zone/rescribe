@@ -1,4 +1,4 @@
 { "description": "Muse <verse>...</verse> block preserves line breaks", "category": "happy", "assertions": [
-  { "path": "/0", "kind": "verse" },
+  { "path": "/0", "kind": "blockquote", "props": { "muse:block-type": "verse" } },
   { "path": "/0/0", "kind": "paragraph" }
 ]}

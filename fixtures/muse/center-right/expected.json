@@ -1,6 +1,6 @@
 { "description": "Centered and right-aligned blocks", "category": "happy", "assertions": [
-  { "path": "/0", "kind": "centered_block" },
+  { "path": "/0", "kind": "div", "props": { "style:align": "center" } },
   { "path": "/0/0", "kind": "paragraph" },
-  { "path": "/1", "kind": "right_block" },
+  { "path": "/1", "kind": "div", "props": { "style:align": "right" } },
   { "path": "/1/0", "kind": "paragraph" }
 ]}

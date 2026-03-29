@@ -21,8 +21,15 @@ pub fn parse_with_options(
     // Convert muse_doc to rescribe Document
     let blocks = convert_blocks(&muse_doc.blocks);
     let root = Node::new(node::DOCUMENT).children(blocks);
-    let doc = Document::new().with_content(root);
 
+    let mut metadata = rescribe_core::Properties::new();
+    if let Some(t) = &muse_doc.title    { metadata.set("title",       t.clone()); }
+    if let Some(a) = &muse_doc.author   { metadata.set("author",      a.clone()); }
+    if let Some(d) = &muse_doc.date     { metadata.set("date",        d.clone()); }
+    if let Some(d) = &muse_doc.description { metadata.set("description", d.clone()); }
+    if let Some(k) = &muse_doc.keywords { metadata.set("keywords",   k.clone()); }
+
+    let doc = Document::new().with_content(root).with_metadata(metadata);
     Ok(ConversionResult::ok(doc))
 }
 

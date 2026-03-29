@@ -1,4 +1,4 @@
 { "description": "Inline image via image extension in link", "category": "happy", "assertions": [
   { "path": "/0", "kind": "paragraph" },
-  { "path": "/0/1", "kind": "image", "props": { "src": "photo.png" } }
+  { "path": "/0/1", "kind": "image", "props": { "url": "photo.png" } }
 ]}

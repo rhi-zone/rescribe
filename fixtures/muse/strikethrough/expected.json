@@ -1,5 +1,5 @@
 { "description": "Strikethrough text via double tildes", "category": "happy", "assertions": [
   { "path": "/0", "kind": "paragraph" },
-  { "path": "/0/1", "kind": "strikethrough" },
+  { "path": "/0/1", "kind": "strikeout" },
   { "path": "/0/1/0", "kind": "text", "props": { "content": "struck" } }
 ]}
