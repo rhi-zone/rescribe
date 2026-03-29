@@ -1,0 +1,8 @@
+{
+  "description": "Info macro followed by a code block",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "xwiki:macro-name": "info" } },
+    { "path": "/1", "kind": "code_block", "props": { "language": "java" } }
+  ]
+}

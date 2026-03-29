@@ -1,0 +1,7 @@
+{
+  "description": "Success macro block",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "xwiki:macro-name": "success" } }
+  ]
+}

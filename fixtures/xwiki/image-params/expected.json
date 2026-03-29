@@ -1,0 +1,8 @@
+{
+  "description": "Image with alt text and width parameter",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "photo.png", "alt": "A landscape" } }
+  ]
+}

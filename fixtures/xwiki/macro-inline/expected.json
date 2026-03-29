@@ -1,0 +1,7 @@
+{
+  "description": "Macro containing inline markup",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "xwiki:macro-name": "info" } }
+  ]
+}

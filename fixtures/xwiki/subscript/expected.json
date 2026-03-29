@@ -1,0 +1,11 @@
+{
+  "description": "Subscript via ~~text~~ syntax",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "H" } },
+    { "path": "/0/1", "kind": "subscript" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "2" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": "O" } }
+  ]
+}

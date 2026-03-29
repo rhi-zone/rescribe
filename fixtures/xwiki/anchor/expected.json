@@ -1,0 +1,7 @@
+{
+  "description": "Anchor via {{id}} self-closing macro",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_inline", "props": { "xwiki:macro-name": "id" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{{info}}
+Use this code:
+{{/info}}
+
+{{code language="java"}}
+System.out.println("hello");
+{{/code}}

@@ -1,0 +1,7 @@
+{
+  "description": "HTML passthrough macro preserved as raw block",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block", "props": { "xwiki:macro-name": "html" } }
+  ]
+}

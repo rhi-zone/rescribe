@@ -62,6 +62,13 @@ pub enum Block {
     Table { rows: Vec<TableRow>, span: Span },
     List { ordered: bool, items: Vec<Vec<Block>>, span: Span },
     HorizontalRule { span: Span },
+    Blockquote { children: Vec<Block>, span: Span },
+    /// A macro block: `{{name params}}content{{/name}}`.
+    /// Used for `{{info}}`, `{{warning}}`, `{{error}}`, `{{success}}`,
+    /// `{{velocity}}`, `{{groovy}}`, `{{html}}`, etc.
+    MacroBlock { name: String, params: String, content: String, span: Span },
+    /// A self-closing macro: `{{name params/}}` (e.g. `{{toc/}}`).
+    MacroInline { name: String, params: String, span: Span },
 }
 
 impl Block {
@@ -92,6 +99,16 @@ impl Block {
                 span: Span::NONE,
             },
             Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
+            Block::Blockquote { children, .. } => Block::Blockquote {
+                children: children.into_iter().map(Block::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::MacroBlock { name, params, content, .. } => {
+                Block::MacroBlock { name, params, content, span: Span::NONE }
+            }
+            Block::MacroInline { name, params, .. } => {
+                Block::MacroInline { name, params, span: Span::NONE }
+            }
         }
     }
 }
@@ -138,9 +155,11 @@ pub enum Inline {
     Italic(Vec<Inline>, Span),
     Underline(Vec<Inline>, Span),
     Strikeout(Vec<Inline>, Span),
+    Superscript(Vec<Inline>, Span),
+    Subscript(Vec<Inline>, Span),
     Code(String, Span),
     Link { url: String, label: String, span: Span },
-    Image { url: String, span: Span },
+    Image { url: String, alt: Option<String>, params: Vec<(String, String)>, span: Span },
     LineBreak { span: Span },
     SoftBreak { span: Span },
 }
@@ -161,9 +180,17 @@ impl Inline {
             Inline::Strikeout(c, _) => {
                 Inline::Strikeout(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
+            Inline::Superscript(c, _) => {
+                Inline::Superscript(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Subscript(c, _) => {
+                Inline::Subscript(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
             Inline::Code(s, _) => Inline::Code(s, Span::NONE),
             Inline::Link { url, label, .. } => Inline::Link { url, label, span: Span::NONE },
-            Inline::Image { url, .. } => Inline::Image { url, span: Span::NONE },
+            Inline::Image { url, alt, params, .. } => {
+                Inline::Image { url, alt, params, span: Span::NONE }
+            }
             Inline::LineBreak { .. } => Inline::LineBreak { span: Span::NONE },
             Inline::SoftBreak { .. } => Inline::SoftBreak { span: Span::NONE },
         }

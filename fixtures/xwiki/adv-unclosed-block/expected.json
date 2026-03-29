@@ -1,0 +1,5 @@
+{
+  "description": "Unclosed {{{ block handled gracefully (no panic)",
+  "category": "adversarial",
+  "assertions": []
+}

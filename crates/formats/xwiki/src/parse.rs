@@ -54,6 +54,32 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            // Block macros: {{quote}}, {{info}}, {{warning}}, {{error}}, {{success}},
+            // {{velocity}}, {{groovy}}, {{html}}, {{box}}, etc.
+            if let Some(macro_info) = try_parse_block_macro_start(line.trim()) {
+                if macro_info.name == "quote" {
+                    let (bq, end) = self.parse_blockquote_macro(&macro_info.name);
+                    result.push(bq);
+                    self.pos = end.max(self.pos + 1);
+                    continue;
+                }
+                let (mb, end) = self.parse_macro_block(&macro_info.name, &macro_info.params);
+                result.push(mb);
+                self.pos = end.max(self.pos + 1);
+                continue;
+            }
+
+            // Self-closing macros: {{toc/}}, {{include .../}}
+            if let Some(macro_info) = try_parse_self_closing_macro(line.trim()) {
+                result.push(Block::MacroInline {
+                    name: macro_info.name,
+                    params: macro_info.params,
+                    span: Span::NONE,
+                });
+                self.pos += 1;
+                continue;
+            }
+
             // Table
             if line.trim().starts_with('|') {
                 let (table_block, end) = self.parse_table();
@@ -62,8 +88,8 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            // Lists
-            if line.starts_with('*') || line.starts_with("1.") {
+            // Lists: `* item` (asterisk + space) or `1. item`
+            if line.starts_with("* ") || line.starts_with("1.") {
                 let (list_block, end) = self.parse_list();
                 result.push(list_block);
                 self.pos = end.max(self.pos + 1);
@@ -99,11 +125,13 @@ impl<'a> Parser<'a> {
             let line = self.lines[i];
             if line.trim().is_empty()
                 || line.starts_with('=')
-                || line.starts_with('*')
+                || line.starts_with("* ")
                 || line.starts_with("1.")
                 || line.trim().starts_with('|')
                 || line.trim().starts_with("{{code")
                 || line.trim() == "----"
+                || try_parse_block_macro_start(line.trim()).is_some()
+                || try_parse_self_closing_macro(line.trim()).is_some()
             {
                 break;
             }
@@ -154,6 +182,64 @@ impl<'a> Parser<'a> {
         )
     }
 
+    fn parse_blockquote_macro(&mut self, _name: &str) -> (Block, usize) {
+        let end_tag = "{{/quote}}";
+        let mut content_lines = Vec::new();
+        let mut i = self.pos + 1;
+
+        while i < self.lines.len() {
+            let line = self.lines[i];
+            if line.trim().starts_with(end_tag) || line.trim().contains(end_tag) {
+                // Parse inner content as blocks
+                let inner = content_lines.join("\n");
+                let (inner_doc, _) = parse(&inner);
+                return (
+                    Block::Blockquote { children: inner_doc.blocks, span: Span::NONE },
+                    i + 1,
+                );
+            }
+            content_lines.push(line.to_string());
+            i += 1;
+        }
+
+        let inner = content_lines.join("\n");
+        let (inner_doc, _) = parse(&inner);
+        (Block::Blockquote { children: inner_doc.blocks, span: Span::NONE }, i)
+    }
+
+    fn parse_macro_block(&mut self, name: &str, params: &str) -> (Block, usize) {
+        let end_tag = format!("{{{{/{}}}}}", name);
+        let mut content_lines = Vec::new();
+        let mut i = self.pos + 1;
+
+        while i < self.lines.len() {
+            let line = self.lines[i];
+            if line.trim().contains(&end_tag) {
+                return (
+                    Block::MacroBlock {
+                        name: name.to_string(),
+                        params: params.to_string(),
+                        content: content_lines.join("\n"),
+                        span: Span::NONE,
+                    },
+                    i + 1,
+                );
+            }
+            content_lines.push(line.to_string());
+            i += 1;
+        }
+
+        (
+            Block::MacroBlock {
+                name: name.to_string(),
+                params: params.to_string(),
+                content: content_lines.join("\n"),
+                span: Span::NONE,
+            },
+            i,
+        )
+    }
+
     fn parse_table(&mut self) -> (Block, usize) {
         let mut rows = Vec::new();
         let mut i = self.pos;
@@ -164,15 +250,21 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            let inner = line.trim_matches('|');
-            let cells: Vec<TableCell> = inner
+            // Remove trailing `|` if present
+            let line_content = if line.ends_with('|') {
+                &line[1..line.len() - 1]
+            } else {
+                &line[1..]
+            };
+
+            let cells: Vec<TableCell> = line_content
                 .split('|')
                 .map(|cell| {
                     let cell = cell.trim();
-                    if cell.starts_with('=') {
+                    if let Some(rest) = cell.strip_prefix('=') {
                         TableCell {
                             is_header: true,
-                            inlines: parse_inline(cell.trim_start_matches('=')),
+                            inlines: parse_inline(rest.trim_start()),
                             span: Span::NONE,
                         }
                     } else {
@@ -199,7 +291,7 @@ impl<'a> Parser<'a> {
 
         while i < self.lines.len() {
             let line = self.lines[i];
-            let marker = if ordered { "1." } else { "*" };
+            let marker = if ordered { "1." } else { "* " };
 
             if !line.starts_with(marker) {
                 break;
@@ -217,6 +309,58 @@ impl<'a> Parser<'a> {
     }
 }
 
+struct MacroInfo {
+    name: String,
+    params: String,
+}
+
+/// Try to parse `{{name ...}}` block macro start (non-code).
+fn try_parse_block_macro_start(line: &str) -> Option<MacroInfo> {
+    if !line.starts_with("{{") {
+        return None;
+    }
+    // Skip {{code — handled separately
+    if line.starts_with("{{code") {
+        return None;
+    }
+    // Must not be self-closing
+    if line.contains("/}}") {
+        return None;
+    }
+    // Must end with }}
+    if !line.ends_with("}}") {
+        return None;
+    }
+    let inner = &line[2..line.len() - 2];
+    let (name, params) = if let Some(space) = inner.find(' ') {
+        (&inner[..space], inner[space + 1..].to_string())
+    } else {
+        (inner, String::new())
+    };
+    // Macro names are alphabetic
+    if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return None;
+    }
+    Some(MacroInfo { name: name.to_string(), params })
+}
+
+/// Try to parse `{{name .../}}` self-closing macro.
+fn try_parse_self_closing_macro(line: &str) -> Option<MacroInfo> {
+    if !line.starts_with("{{") || !line.ends_with("/}}") {
+        return None;
+    }
+    let inner = &line[2..line.len() - 3];
+    let (name, params) = if let Some(space) = inner.find(' ') {
+        (&inner[..space], inner[space + 1..].to_string())
+    } else {
+        (inner, String::new())
+    };
+    if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return None;
+    }
+    Some(MacroInfo { name: name.to_string(), params })
+}
+
 pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
     let mut nodes = Vec::new();
     let mut current = String::new();
@@ -224,6 +368,25 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
     let mut i = 0;
 
     while i < chars.len() {
+        // Line break: \\ (backslash-backslash followed by space or end-of-text)
+        if i + 1 < chars.len()
+            && chars[i] == '\\'
+            && chars[i + 1] == '\\'
+            && (i + 2 >= chars.len() || chars[i + 2] == ' ')
+        {
+            if !current.is_empty() {
+                nodes.push(Inline::Text(current.clone(), Span::NONE));
+                current.clear();
+            }
+            nodes.push(Inline::LineBreak { span: Span::NONE });
+            i += 2;
+            // Skip trailing space after \\
+            if i < chars.len() && chars[i] == ' ' {
+                i += 1;
+            }
+            continue;
+        }
+
         // Bold: **text**
         if i + 1 < chars.len()
             && chars[i] == '*'
@@ -299,6 +462,55 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
             continue;
         }
 
+        // Superscript: ^^text^^
+        if i + 1 < chars.len()
+            && chars[i] == '^'
+            && chars[i + 1] == '^'
+            && let Some((content, end)) = find_delimited(&chars, i + 2, "^^")
+        {
+            if !current.is_empty() {
+                nodes.push(Inline::Text(current.clone(), Span::NONE));
+                current.clear();
+            }
+            nodes.push(Inline::Superscript(parse_inline(&content), Span::NONE));
+            i = end;
+            continue;
+        }
+
+        // Subscript: ~~text~~
+        if i + 1 < chars.len()
+            && chars[i] == '~'
+            && chars[i + 1] == '~'
+            && let Some((content, end)) = find_delimited(&chars, i + 2, "~~")
+        {
+            if !current.is_empty() {
+                nodes.push(Inline::Text(current.clone(), Span::NONE));
+                current.clear();
+            }
+            nodes.push(Inline::Subscript(parse_inline(&content), Span::NONE));
+            i = end;
+            continue;
+        }
+
+        // Image: [[image:...]] with optional params
+        if i + 8 < chars.len()
+            && chars[i] == '['
+            && chars[i + 1] == '['
+        {
+            let rest: String = chars[i + 2..].iter().collect();
+            if rest.starts_with("image:")
+                && let Some((img, end)) = parse_xwiki_image(&chars, i + 2)
+            {
+                if !current.is_empty() {
+                    nodes.push(Inline::Text(current.clone(), Span::NONE));
+                    current.clear();
+                }
+                nodes.push(img);
+                i = end;
+                continue;
+            }
+        }
+
         // Link: [[label>>url]] or [[url]]
         if i + 1 < chars.len()
             && chars[i] == '['
@@ -361,6 +573,92 @@ fn parse_xwiki_link(chars: &[char], start: usize) -> Option<(String, String, usi
                 let url = content.clone();
                 return Some((url.clone(), url, i + 2));
             }
+        }
+        content.push(chars[i]);
+        i += 1;
+    }
+    None
+}
+
+/// Parse image parameters like `alt="A photo" width="200"`, handling quoted values.
+fn parse_image_params(s: &str) -> Vec<(String, String)> {
+    let mut params = Vec::new();
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        // Skip whitespace and pipes
+        while i < chars.len() && (chars[i].is_whitespace() || chars[i] == '|') {
+            i += 1;
+        }
+        if i >= chars.len() {
+            break;
+        }
+        // Read key
+        let key_start = i;
+        while i < chars.len() && chars[i] != '=' {
+            i += 1;
+        }
+        if i >= chars.len() {
+            break;
+        }
+        let key: String = chars[key_start..i].iter().collect();
+        i += 1; // skip '='
+        // Read value (possibly quoted)
+        if i < chars.len() && chars[i] == '"' {
+            i += 1; // skip opening quote
+            let val_start = i;
+            while i < chars.len() && chars[i] != '"' {
+                i += 1;
+            }
+            let val: String = chars[val_start..i].iter().collect();
+            if i < chars.len() {
+                i += 1; // skip closing quote
+            }
+            params.push((key, val));
+        } else {
+            // Unquoted value: read until whitespace or pipe
+            let val_start = i;
+            while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '|' {
+                i += 1;
+            }
+            let val: String = chars[val_start..i].iter().collect();
+            params.push((key, val));
+        }
+    }
+
+    params
+}
+
+fn parse_xwiki_image(chars: &[char], start: usize) -> Option<(Inline, usize)> {
+    // start points after "[[", we expect "image:..."
+    let mut content = String::new();
+    let mut i = start;
+
+    while i + 1 < chars.len() {
+        if chars[i] == ']' && chars[i + 1] == ']' {
+            // content is "image:filename||param1=val1"
+            let rest = content.strip_prefix("image:")?;
+            let (url, alt, params) = if let Some(pipe_pos) = rest.find("||") {
+                let url = rest[..pipe_pos].to_string();
+                let params_str = &rest[pipe_pos + 2..];
+                let mut alt = None;
+                let mut params = Vec::new();
+                for (key, val) in parse_image_params(params_str) {
+                    if key == "alt" {
+                        alt = Some(val);
+                    } else {
+                        params.push((key, val));
+                    }
+                }
+                (url, alt, params)
+            } else {
+                (rest.to_string(), None, vec![])
+            };
+            return Some((
+                Inline::Image { url, alt, params, span: Span::NONE },
+                i + 2,
+            ));
         }
         content.push(chars[i]);
         i += 1;

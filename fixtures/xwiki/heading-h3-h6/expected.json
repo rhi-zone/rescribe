@@ -1,0 +1,14 @@
+{
+  "description": "Headings levels 3 through 6",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 3 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Heading 3" } },
+    { "path": "/1", "kind": "heading", "props": { "level": 4 } },
+    { "path": "/1/0", "kind": "text", "props": { "content": "Heading 4" } },
+    { "path": "/2", "kind": "heading", "props": { "level": 5 } },
+    { "path": "/2/0", "kind": "text", "props": { "content": "Heading 5" } },
+    { "path": "/3", "kind": "heading", "props": { "level": 6 } },
+    { "path": "/3/0", "kind": "text", "props": { "content": "Heading 6" } }
+  ]
+}

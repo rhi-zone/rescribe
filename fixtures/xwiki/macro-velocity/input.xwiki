@@ -1,0 +1,4 @@
+{{velocity}}
+#set($x = 1)
+$x
+{{/velocity}}
