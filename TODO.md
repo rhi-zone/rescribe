@@ -289,16 +289,15 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] **Lists** — `{\*\pn\pnlvlblt}`/`{\*\pn\pnlvlbody}` → `Block::List`
   - [x] **Zero-diagnostic corpus gate** — `#[ignore]` test; 1125 files, 0% diagnostics
   - [x] **Fuzz clean** — reader/roundtrip/writer all clean; 3 bugs fixed (slice panic, OOM, UTF-8 boundary)
-- [ ] `rst-fmt` vertical — **4-Fuzz** (demoted 2026-03-29: construct gaps disqualify 5-Production)
+- [x] `rst-fmt` vertical — **5-Production** (2026-03-29)
   - [x] No-panic fuzz gate (`fuzz_rst_reader`); roundtrip fuzz (`fuzz_rst_roundtrip`)
-  - [x] Fixtures: 80 total; COVERAGE.md all boxes checked
+  - [x] Fixtures: 80 total; COVERAGE.md all boxes checked (2 N/A items: include directive, hard break)
   - [x] Oracle harness: 100% word coverage on rst-reader.rst (ref=618)
   - [x] Benchmarks: rst_parse_small 3.3µs, rst_parse_medium 30µs, rst_emit_medium 2.5µs
   - [x] All API modes: ast + stream + batch + w-build + w-stream
   - [x] Table parsing — grid and simple tables with header support (2026-03-29)
-  - [x] Footnote parsing — numbered, auto-symbol (`*`), auto-numbered (`#`) refs (2026-03-29)
-  - [ ] Construct gaps: footnote defs with continuation lines (complex body content)
-- [ ] `asciidoc` vertical — **4-Fuzz** (demoted 2026-03-29: construct gaps disqualify 5-Production)
+  - [x] Footnote parsing — numbered, auto-symbol, auto-numbered, multi-line continuation (2026-03-29)
+- [x] `asciidoc` vertical — **5-Production** (2026-03-29)
   - [x] No-panic fuzz gate (`fuzz_asciidoc_reader`); roundtrip fuzz (`fuzz_asciidoc_roundtrip`)
   - [x] Fixtures: 84 total; COVERAGE.md all boxes checked
   - [x] Oracle harness: N/A (pandoc can't read asciidoc)
@@ -306,7 +305,7 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] All API modes: ast + stream + batch + w-build + w-stream
   - [x] Table parsing — with header row detection (2026-03-29)
   - [x] Footnote parsing — anonymous + named + back-reference forms (2026-03-29)
-  - [ ] Construct gaps: math parsing (`stem:[...]`, `latexmath:[...]`)
+  - [x] Math parsing — `stem:[...]` inline + `[stem]\n++++` block (2026-03-29)
 - [x] `textile-fmt` vertical — **5-Production** (2026-03-29)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
@@ -321,7 +320,7 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] Oracle harness (`pandoc_textile_corpus` #[ignore]) — pandoc_harness.rs (2026-03-29)
   - [x] Benchmarks: textile_parse_small ~1.9µs, textile_parse_medium ~47µs (2026-03-29)
   - [x] All API modes: ast + stream + batch + w-build + w-stream (2026-03-29)
-- [ ] `org-fmt` vertical — **4-Fuzz** (demoted 2026-03-29: construct gaps disqualify 5-Production)
+- [x] `org-fmt` vertical — **5-Production** (2026-03-29)
   - [x] No-panic fuzz gate (`fuzz_org_reader`) — 1.25M runs clean; roundtrip fuzz clean
   - [x] Fixtures: 88 total; COVERAGE.md all boxes checked
   - [x] Oracle harness: 100% word coverage on writer.org (ref=919)
@@ -329,7 +328,7 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] All API modes: ast + stream + batch + w-build + w-stream
   - [x] Nested blockquote parsing (depth counter) — (2026-03-29)
   - [x] Footnote definitions — `[fn:label]` block-level (2026-03-29)
-  - [ ] Construct gaps: figure/caption blocks
+  - [x] Figure/caption blocks — `#+CAPTION:`/`#+NAME:` wrapping image/table/code (2026-03-29)
 - [x] `muse-fmt` vertical — **4-Fuzz** (2026-03-21)
   - [x] Split monolith lib.rs into ast.rs / parse.rs / emit.rs
   - [x] Span on every AST node; Diagnostic type; strip_spans()
