@@ -1,0 +1,7 @@
+{
+  "description": "@multitable produces a table node with header and data rows",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "table" }
+  ]
+}

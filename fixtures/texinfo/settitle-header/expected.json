@@ -1,0 +1,6 @@
+{
+  "description": "@settitle sets document title metadata",
+  "category": "happy",
+  "metadata": { "title": "My Document" },
+  "assertions": []
+}

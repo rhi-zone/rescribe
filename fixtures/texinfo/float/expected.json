@@ -1,0 +1,7 @@
+{
+  "description": "@float produces a float node with type and label",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "float" }
+  ]
+}

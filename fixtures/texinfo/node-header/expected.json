@@ -1,0 +1,7 @@
+{
+  "description": "@node is skipped; the heading after it is parsed normally",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } }
+  ]
+}

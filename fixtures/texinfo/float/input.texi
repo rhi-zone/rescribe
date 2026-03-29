@@ -1,0 +1,3 @@
+@float Figure,fig:example
+A figure caption.
+@end float

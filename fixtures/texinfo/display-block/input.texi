@@ -1,0 +1,3 @@
+@display
+Displayed text
+@end display

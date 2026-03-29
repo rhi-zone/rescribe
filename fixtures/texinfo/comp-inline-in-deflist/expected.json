@@ -1,0 +1,7 @@
+{
+  "description": "Inline markup inside a definition list term",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list" }
+  ]
+}

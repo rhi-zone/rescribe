@@ -1,0 +1,6 @@
+@itemize
+@item Outer item
+@itemize
+@item Inner item
+@end itemize
+@end itemize

@@ -1,0 +1,3 @@
+@iftex
+TeX-only content.
+@end iftex

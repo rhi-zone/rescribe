@@ -1,0 +1,5 @@
+{
+  "description": "Unterminated inline command does not panic",
+  "category": "adversarial",
+  "assertions": []
+}

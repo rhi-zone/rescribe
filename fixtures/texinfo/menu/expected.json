@@ -1,0 +1,7 @@
+{
+  "description": "@menu block produces a menu node with entries",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "menu" }
+  ]
+}

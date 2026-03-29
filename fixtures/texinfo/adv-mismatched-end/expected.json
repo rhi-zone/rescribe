@@ -1,0 +1,5 @@
+{
+  "description": "Mismatched @end does not panic",
+  "category": "adversarial",
+  "assertions": []
+}

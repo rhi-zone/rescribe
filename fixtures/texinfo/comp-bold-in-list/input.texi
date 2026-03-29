@@ -1,0 +1,4 @@
+@itemize
+@item @strong{Bold} item
+@item Normal item
+@end itemize

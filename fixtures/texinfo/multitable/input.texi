@@ -1,0 +1,4 @@
+@multitable @columnfractions .5 .5
+@headitem Name @tab Age
+@item Alice @tab 30
+@end multitable

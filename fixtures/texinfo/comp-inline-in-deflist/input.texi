@@ -1,0 +1,4 @@
+@table @asis
+@item @code{function}
+A callable unit.
+@end table

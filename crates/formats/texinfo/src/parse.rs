@@ -1,6 +1,9 @@
 //! Texinfo parser — infallible, returns diagnostics instead of errors.
 
-use crate::ast::{Block, Diagnostic, Inline, Span, TexinfoDoc};
+use crate::ast::{
+    Block, CodeBlockVariant, CrossRefKind, Diagnostic, HeadingKind, Inline, MenuEntry, Span,
+    SymbolKind, TableRow, TexinfoDoc,
+};
 
 /// Parse a Texinfo string into a [`TexinfoDoc`].
 ///
@@ -74,84 +77,30 @@ impl<'a> Parser<'a> {
                 || line.starts_with("@direntry")
                 || line.starts_with("@end direntry")
                 || line.starts_with("\\input ")
+                || line.starts_with("@author ")
             {
                 i += 1;
                 continue;
             }
 
             // Handle node definitions (skip the @node line itself)
-            if line.starts_with("@node ") {
+            if line.starts_with("@node ") || line == "@node" {
+                i += 1;
+                continue;
+            }
+
+            // Handle @noindent
+            if line == "@noindent" || line.starts_with("@noindent ") {
+                self.blocks.push(Block::NoIndent { span: Span::NONE });
                 i += 1;
                 continue;
             }
 
             // Handle headings
-            if let Some(rest) = line.strip_prefix("@chapter ") {
+            if let Some((level, kind, rest)) = try_heading(line) {
                 self.blocks.push(Block::Heading {
-                    level: 1,
-                    inlines: parse_inline(rest.trim()),
-                    span: Span::NONE,
-                });
-                i += 1;
-                continue;
-            }
-            if let Some(rest) = line.strip_prefix("@unnumbered ") {
-                self.blocks.push(Block::Heading {
-                    level: 1,
-                    inlines: parse_inline(rest.trim()),
-                    span: Span::NONE,
-                });
-                i += 1;
-                continue;
-            }
-            if let Some(rest) = line.strip_prefix("@appendix ") {
-                self.blocks.push(Block::Heading {
-                    level: 1,
-                    inlines: parse_inline(rest.trim()),
-                    span: Span::NONE,
-                });
-                i += 1;
-                continue;
-            }
-            if let Some(rest) = line.strip_prefix("@section ") {
-                self.blocks.push(Block::Heading {
-                    level: 2,
-                    inlines: parse_inline(rest.trim()),
-                    span: Span::NONE,
-                });
-                i += 1;
-                continue;
-            }
-            if let Some(rest) = line.strip_prefix("@unnumberedsec ") {
-                self.blocks.push(Block::Heading {
-                    level: 2,
-                    inlines: parse_inline(rest.trim()),
-                    span: Span::NONE,
-                });
-                i += 1;
-                continue;
-            }
-            if let Some(rest) = line.strip_prefix("@appendixsec ") {
-                self.blocks.push(Block::Heading {
-                    level: 2,
-                    inlines: parse_inline(rest.trim()),
-                    span: Span::NONE,
-                });
-                i += 1;
-                continue;
-            }
-            if let Some(rest) = line.strip_prefix("@subsection ") {
-                self.blocks.push(Block::Heading {
-                    level: 3,
-                    inlines: parse_inline(rest.trim()),
-                    span: Span::NONE,
-                });
-                i += 1;
-                continue;
-            }
-            if let Some(rest) = line.strip_prefix("@subsubsection ") {
-                self.blocks.push(Block::Heading {
-                    level: 4,
+                    level,
+                    kind,
                     inlines: parse_inline(rest.trim()),
                     span: Span::NONE,
                 });
@@ -176,14 +125,18 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            // Handle multitable
+            if line.starts_with("@multitable") {
+                let (table_block, end_line) = parse_multitable(&lines, i);
+                self.blocks.push(table_block);
+                i = end_line;
+                continue;
+            }
+
             // Handle code blocks
-            if line.starts_with("@example") || line.starts_with("@verbatim") {
-                let end_marker = if line.starts_with("@example") {
-                    "@end example"
-                } else {
-                    "@end verbatim"
-                };
-                let (code_block, end_line) = parse_code_block(&lines, i, end_marker);
+            if let Some(variant) = try_code_block_start(line) {
+                let end_marker = code_block_end_marker(&variant);
+                let (code_block, end_line) = parse_code_block(&lines, i, &end_marker, variant);
                 self.blocks.push(code_block);
                 i = end_line;
                 continue;
@@ -193,6 +146,30 @@ impl<'a> Parser<'a> {
             if line.starts_with("@quotation") {
                 let (quote_block, end_line) = parse_quotation(&lines, i);
                 self.blocks.push(quote_block);
+                i = end_line;
+                continue;
+            }
+
+            // Handle @menu
+            if line.starts_with("@menu") {
+                let (menu_block, end_line) = parse_menu(&lines, i);
+                self.blocks.push(menu_block);
+                i = end_line;
+                continue;
+            }
+
+            // Handle @float
+            if line.starts_with("@float") {
+                let (float_block, end_line) = parse_float(&lines, i);
+                self.blocks.push(float_block);
+                i = end_line;
+                continue;
+            }
+
+            // Handle conditional blocks
+            if let Some(env_name) = try_conditional_start(line) {
+                let (raw_block, end_line) = parse_raw_block(&lines, i, &env_name);
+                self.blocks.push(raw_block);
                 i = end_line;
                 continue;
             }
@@ -222,6 +199,73 @@ impl<'a> Parser<'a> {
     }
 }
 
+fn try_heading(line: &str) -> Option<(u8, HeadingKind, &str)> {
+    let heading_cmds: &[(&str, u8, HeadingKind)] = &[
+        ("@chapter ", 1, HeadingKind::Numbered),
+        ("@unnumbered ", 1, HeadingKind::Unnumbered),
+        ("@appendix ", 1, HeadingKind::Appendix),
+        ("@section ", 2, HeadingKind::Numbered),
+        ("@unnumberedsec ", 2, HeadingKind::Unnumbered),
+        ("@appendixsec ", 2, HeadingKind::Appendix),
+        ("@subsection ", 3, HeadingKind::Numbered),
+        ("@unnumberedsubsec ", 3, HeadingKind::Unnumbered),
+        ("@appendixsubsec ", 3, HeadingKind::Appendix),
+        ("@subsubsection ", 4, HeadingKind::Numbered),
+        ("@unnumberedsubsubsec ", 4, HeadingKind::Unnumbered),
+        ("@appendixsubsubsec ", 4, HeadingKind::Appendix),
+    ];
+    for (prefix, level, kind) in heading_cmds {
+        if let Some(rest) = line.strip_prefix(prefix) {
+            return Some((*level, kind.clone(), rest));
+        }
+    }
+    None
+}
+
+fn try_code_block_start(line: &str) -> Option<CodeBlockVariant> {
+    if line.starts_with("@example") {
+        Some(CodeBlockVariant::Example)
+    } else if line.starts_with("@smallexample") {
+        Some(CodeBlockVariant::SmallExample)
+    } else if line.starts_with("@verbatim") {
+        Some(CodeBlockVariant::Verbatim)
+    } else if line.starts_with("@lisp") {
+        Some(CodeBlockVariant::Lisp)
+    } else if line.starts_with("@display") {
+        Some(CodeBlockVariant::Display)
+    } else if line.starts_with("@format") {
+        Some(CodeBlockVariant::Format)
+    } else {
+        None
+    }
+}
+
+fn code_block_end_marker(variant: &CodeBlockVariant) -> String {
+    match variant {
+        CodeBlockVariant::Example => "@end example".to_string(),
+        CodeBlockVariant::SmallExample => "@end smallexample".to_string(),
+        CodeBlockVariant::Verbatim => "@end verbatim".to_string(),
+        CodeBlockVariant::Lisp => "@end lisp".to_string(),
+        CodeBlockVariant::Display => "@end display".to_string(),
+        CodeBlockVariant::Format => "@end format".to_string(),
+    }
+}
+
+fn try_conditional_start(line: &str) -> Option<String> {
+    let conditionals = &[
+        "@iftex", "@ifhtml", "@ifinfo", "@ifplaintext", "@ifnottex", "@ifnothtml",
+        "@ifnotinfo", "@ifnotplaintext",
+    ];
+    for cond in conditionals {
+        if line.starts_with(cond)
+            && (line.len() == cond.len() || line.as_bytes().get(cond.len()) == Some(&b' '))
+        {
+            return Some(cond[1..].to_string()); // strip leading @
+        }
+    }
+    None
+}
+
 fn collect_paragraph<'b>(lines: &[&'b str], start: usize) -> (Vec<&'b str>, usize) {
     let mut para_lines = Vec::new();
     let mut i = start;
@@ -229,26 +273,11 @@ fn collect_paragraph<'b>(lines: &[&'b str], start: usize) -> (Vec<&'b str>, usiz
     while i < lines.len() {
         let line = lines[i].trim();
 
-        // Stop at empty line or command
-        if line.is_empty()
-            || line.starts_with('@')
-                && !line.starts_with("@code{")
-                && !line.starts_with("@emph{")
-                && !line.starts_with("@strong{")
-                && !line.starts_with("@uref{")
-                && !line.starts_with("@url{")
-                && !line.starts_with("@xref{")
-                && !line.starts_with("@pxref{")
-                && !line.starts_with("@ref{")
-                && !line.starts_with("@samp{")
-                && !line.starts_with("@var{")
-                && !line.starts_with("@file{")
-                && !line.starts_with("@dfn{")
-                && !line.starts_with("@kbd{")
-                && !line.starts_with("@key{")
-                && !line.starts_with("@acronym{")
-                && !line.starts_with("@email{")
-        {
+        // Stop at empty line or block-level command
+        if line.is_empty() {
+            break;
+        }
+        if line.starts_with('@') && !is_inline_command_at_start(line) {
             break;
         }
 
@@ -257,6 +286,24 @@ fn collect_paragraph<'b>(lines: &[&'b str], start: usize) -> (Vec<&'b str>, usiz
     }
 
     (para_lines, i)
+}
+
+/// Returns true if the line starts with an inline @-command (not a block command).
+fn is_inline_command_at_start(line: &str) -> bool {
+    let inline_prefixes = &[
+        "@code{", "@emph{", "@strong{", "@uref{", "@url{", "@xref{", "@pxref{", "@ref{",
+        "@samp{", "@var{", "@file{", "@dfn{", "@kbd{", "@key{", "@acronym{", "@email{",
+        "@command{", "@option{", "@env{", "@cite{", "@abbr{", "@sc{", "@r{", "@i{", "@b{",
+        "@t{", "@w{", "@footnote{", "@anchor{", "@dots{", "@enddots{", "@minus{",
+        "@copyright{", "@registeredsymbol{", "@LaTeX{", "@TeX{", "@tie{", "@image{",
+        "@sup{", "@sub{",
+    ];
+    for prefix in inline_prefixes {
+        if line.starts_with(prefix) {
+            return true;
+        }
+    }
+    false
 }
 
 fn parse_list(lines: &[&str], start: usize, ordered: bool) -> (Block, usize) {
@@ -347,7 +394,7 @@ fn parse_definition_list(lines: &[&str], start: usize) -> (Block, usize) {
             return (Block::DefinitionList { items, span: Span::NONE }, i + 1);
         }
 
-        if line.starts_with("@item ") {
+        if line.starts_with("@item ") || line == "@item" {
             // Flush previous entry
             if let Some(term) = current_term.take() {
                 let term_inlines = parse_inline(&term);
@@ -364,7 +411,7 @@ fn parse_definition_list(lines: &[&str], start: usize) -> (Block, usize) {
                 items.push((term_inlines, desc_blocks));
             }
 
-            let rest = line.strip_prefix("@item ").unwrap().trim();
+            let rest = line.strip_prefix("@item").unwrap().trim();
             current_term = Some(rest.to_string());
         } else if !line.is_empty() && !line.starts_with("@c ") && !line.starts_with("@itemx ") {
             current_desc.push(line.to_string());
@@ -373,19 +420,76 @@ fn parse_definition_list(lines: &[&str], start: usize) -> (Block, usize) {
         i += 1;
     }
 
+    if let Some(term) = current_term.take() {
+        let term_inlines = parse_inline(&term);
+        let mut desc_blocks = Vec::new();
+        if !current_desc.is_empty() {
+            let desc_text = current_desc.join(" ");
+            let desc_inlines = parse_inline(&desc_text);
+            desc_blocks.push(Block::Paragraph {
+                inlines: desc_inlines,
+                span: Span::NONE,
+            });
+        }
+        items.push((term_inlines, desc_blocks));
+    }
+
     (Block::DefinitionList { items, span: Span::NONE }, i)
 }
 
-fn parse_code_block(lines: &[&str], start: usize, end_marker: &str) -> (Block, usize) {
+fn parse_multitable(lines: &[&str], start: usize) -> (Block, usize) {
+    let mut rows = Vec::new();
+    let mut i = start + 1; // Skip @multitable line
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        if line.starts_with("@end multitable") {
+            return (Block::Table { rows, span: Span::NONE }, i + 1);
+        }
+
+        if line.starts_with("@headitem ") || line.starts_with("@item ") {
+            let is_header = line.starts_with("@headitem ");
+            let rest = if is_header {
+                line.strip_prefix("@headitem ").unwrap()
+            } else {
+                line.strip_prefix("@item ").unwrap()
+            };
+            let cells: Vec<Vec<Inline>> = rest
+                .split("@tab")
+                .map(|cell| parse_inline(cell.trim()))
+                .collect();
+            rows.push(TableRow { is_header, cells });
+        }
+
+        i += 1;
+    }
+
+    (Block::Table { rows, span: Span::NONE }, i)
+}
+
+fn parse_code_block(
+    lines: &[&str],
+    start: usize,
+    end_marker: &str,
+    variant: CodeBlockVariant,
+) -> (Block, usize) {
     let mut code_lines = Vec::new();
-    let mut i = start + 1; // Skip @example/@verbatim line
+    let mut i = start + 1;
 
     while i < lines.len() {
         let line = lines[i];
 
         if line.trim() == end_marker {
             let content = code_lines.join("\n");
-            return (Block::CodeBlock { content, span: Span::NONE }, i + 1);
+            return (
+                Block::CodeBlock {
+                    variant,
+                    content,
+                    span: Span::NONE,
+                },
+                i + 1,
+            );
         }
 
         code_lines.push(line);
@@ -393,12 +497,19 @@ fn parse_code_block(lines: &[&str], start: usize, end_marker: &str) -> (Block, u
     }
 
     let content = code_lines.join("\n");
-    (Block::CodeBlock { content, span: Span::NONE }, i)
+    (
+        Block::CodeBlock {
+            variant,
+            content,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 fn parse_quotation(lines: &[&str], start: usize) -> (Block, usize) {
     let mut quote_lines = Vec::new();
-    let mut i = start + 1; // Skip @quotation line
+    let mut i = start + 1;
 
     while i < lines.len() {
         let line = lines[i].trim();
@@ -439,6 +550,141 @@ fn parse_quotation(lines: &[&str], start: usize) -> (Block, usize) {
     )
 }
 
+fn parse_menu(lines: &[&str], start: usize) -> (Block, usize) {
+    let mut entries = Vec::new();
+    let mut i = start + 1;
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        if line.starts_with("@end menu") {
+            return (Block::Menu { entries, span: Span::NONE }, i + 1);
+        }
+
+        // Menu entries look like: * Node Name:: Description
+        if let Some(rest) = line.strip_prefix("* ")
+            && let Some(idx) = rest.find("::")
+        {
+            let node = rest[..idx].trim().to_string();
+            let desc = rest[idx + 2..].trim();
+            let description = if desc.is_empty() {
+                None
+            } else {
+                Some(desc.to_string())
+            };
+            entries.push(MenuEntry { node, description });
+        }
+
+        i += 1;
+    }
+
+    (Block::Menu { entries, span: Span::NONE }, i)
+}
+
+fn parse_float(lines: &[&str], start: usize) -> (Block, usize) {
+    // @float [type][,label]
+    let first_line = lines[start].trim();
+    let args = first_line
+        .strip_prefix("@float")
+        .unwrap_or("")
+        .trim();
+    let (float_type, label) = if args.is_empty() {
+        (None, None)
+    } else {
+        let parts: Vec<&str> = args.splitn(2, ',').collect();
+        let ft = if parts[0].trim().is_empty() {
+            None
+        } else {
+            Some(parts[0].trim().to_string())
+        };
+        let lb = parts.get(1).map(|s| s.trim().to_string());
+        (ft, lb)
+    };
+
+    let mut children = Vec::new();
+    let mut i = start + 1;
+
+    // Simple: collect paragraphs inside @float
+    let mut para_lines: Vec<String> = Vec::new();
+    while i < lines.len() {
+        let line = lines[i].trim();
+        if line.starts_with("@end float") {
+            if !para_lines.is_empty() {
+                let text = para_lines.join(" ");
+                let inlines = parse_inline(&text);
+                children.push(Block::Paragraph {
+                    inlines,
+                    span: Span::NONE,
+                });
+            }
+            return (
+                Block::Float {
+                    float_type,
+                    label,
+                    children,
+                    span: Span::NONE,
+                },
+                i + 1,
+            );
+        }
+        if line.is_empty() {
+            if !para_lines.is_empty() {
+                let text = para_lines.join(" ");
+                let inlines = parse_inline(&text);
+                children.push(Block::Paragraph {
+                    inlines,
+                    span: Span::NONE,
+                });
+                para_lines.clear();
+            }
+        } else {
+            para_lines.push(line.to_string());
+        }
+        i += 1;
+    }
+
+    (
+        Block::Float {
+            float_type,
+            label,
+            children,
+            span: Span::NONE,
+        },
+        i,
+    )
+}
+
+fn parse_raw_block(lines: &[&str], start: usize, env_name: &str) -> (Block, usize) {
+    let end_marker = format!("@end {}", env_name);
+    let mut content_lines = Vec::new();
+    let mut i = start + 1;
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+        if line == end_marker {
+            return (
+                Block::RawBlock {
+                    environment: env_name.to_string(),
+                    content: content_lines.join("\n"),
+                    span: Span::NONE,
+                },
+                i + 1,
+            );
+        }
+        content_lines.push(lines[i]);
+        i += 1;
+    }
+
+    (
+        Block::RawBlock {
+            environment: env_name.to_string(),
+            content: content_lines.join("\n"),
+            span: Span::NONE,
+        },
+        i,
+    )
+}
+
 pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
     let mut nodes = Vec::new();
     let mut current = String::new();
@@ -455,6 +701,34 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 }
                 nodes.push(node);
                 i = end_pos;
+                continue;
+            }
+            // Check for @@ @{ @} escapes
+            if chars[i + 1] == '@' {
+                if !current.is_empty() {
+                    nodes.push(Inline::Text(current.clone(), Span::NONE));
+                    current.clear();
+                }
+                current.push('@');
+                i += 2;
+                continue;
+            }
+            if chars[i + 1] == '{' {
+                if !current.is_empty() {
+                    nodes.push(Inline::Text(current.clone(), Span::NONE));
+                    current.clear();
+                }
+                current.push('{');
+                i += 2;
+                continue;
+            }
+            if chars[i + 1] == '}' {
+                if !current.is_empty() {
+                    nodes.push(Inline::Text(current.clone(), Span::NONE));
+                    current.clear();
+                }
+                current.push('}');
+                i += 2;
                 continue;
             }
         }
@@ -511,21 +785,31 @@ fn try_parse_inline_command(chars: &[char], start: usize) -> Option<(Inline, usi
     let content: String = chars[content_start..i - 1].iter().collect();
 
     let node = match cmd.as_str() {
-        "emph" | "i" => Inline::Emphasis(parse_inline(&content), Span::NONE),
-
-        "strong" | "b" => Inline::Strong(parse_inline(&content), Span::NONE),
+        "emph" => Inline::Emphasis(parse_inline(&content), Span::NONE),
+        "i" => Inline::DirectItalic(parse_inline(&content), Span::NONE),
+        "strong" => Inline::Strong(parse_inline(&content), Span::NONE),
+        "b" => Inline::DirectBold(parse_inline(&content), Span::NONE),
 
         "sup" => Inline::Superscript(parse_inline(&content), Span::NONE),
         "sub" => Inline::Subscript(parse_inline(&content), Span::NONE),
 
-        "code" | "samp" | "kbd" | "key" | "file" | "command" | "option" | "env" => {
-            Inline::Code(content, Span::NONE)
-        }
+        "code" => Inline::Code(content, Span::NONE),
+        "samp" => Inline::Samp(content, Span::NONE),
+        "kbd" => Inline::Kbd(content, Span::NONE),
+        "key" => Inline::Key(content, Span::NONE),
+        "file" => Inline::File(content, Span::NONE),
+        "command" => Inline::Command(content, Span::NONE),
+        "option" => Inline::Option(content, Span::NONE),
+        "env" => Inline::Env(content, Span::NONE),
+        "t" => Inline::DirectTypewriter(content, Span::NONE),
 
-        "var" | "dfn" => Inline::Emphasis(parse_inline(&content), Span::NONE),
+        "var" => Inline::Var(parse_inline(&content), Span::NONE),
+        "dfn" => Inline::Dfn(parse_inline(&content), Span::NONE),
+        "cite" => Inline::Cite(content, Span::NONE),
+        "r" => Inline::Roman(content, Span::NONE),
+        "sc" => Inline::SmallCaps(content, Span::NONE),
 
         "uref" | "url" => {
-            // Format: @uref{url} or @uref{url, text}
             let parts: Vec<&str> = content.splitn(2, ',').collect();
             let url = parts[0].trim();
             let text = if parts.len() > 1 {
@@ -542,44 +826,123 @@ fn try_parse_inline_command(chars: &[char], start: usize) -> Option<(Inline, usi
 
         "email" => {
             let parts: Vec<&str> = content.splitn(2, ',').collect();
-            let email = parts[0].trim();
-            let text = if parts.len() > 1 {
-                parts[1].trim()
-            } else {
-                email
-            };
-            Inline::Link {
-                url: format!("mailto:{}", email),
-                children: parse_inline(text),
+            let address = parts[0].trim().to_string();
+            let text = parts.get(1).map(|s| s.trim().to_string());
+            Inline::Email {
+                address,
+                text,
                 span: Span::NONE,
             }
         }
 
-        "xref" | "pxref" | "ref" => {
-            // Cross-reference - just use the node name as link
+        "xref" => {
             let parts: Vec<&str> = content.splitn(2, ',').collect();
-            let node_name = parts[0].trim();
-            Inline::Link {
-                url: format!("#{}", node_name),
-                children: parse_inline(node_name),
+            let node_name = parts[0].trim().to_string();
+            let text = parts.get(1).map(|s| s.trim().to_string());
+            Inline::CrossRef {
+                kind: CrossRefKind::Xref,
+                node: node_name,
+                text,
                 span: Span::NONE,
             }
         }
 
-        "acronym" | "abbr" => {
+        "pxref" => {
             let parts: Vec<&str> = content.splitn(2, ',').collect();
-            Inline::Text(parts[0].trim().to_string(), Span::NONE)
+            let node_name = parts[0].trim().to_string();
+            let text = parts.get(1).map(|s| s.trim().to_string());
+            Inline::CrossRef {
+                kind: CrossRefKind::Pxref,
+                node: node_name,
+                text,
+                span: Span::NONE,
+            }
         }
 
-        "sc" => {
-            // Small caps - just use text as is
-            Inline::Text(content, Span::NONE)
+        "ref" => {
+            let parts: Vec<&str> = content.splitn(2, ',').collect();
+            let node_name = parts[0].trim().to_string();
+            let text = parts.get(1).map(|s| s.trim().to_string());
+            Inline::CrossRef {
+                kind: CrossRefKind::Ref,
+                node: node_name,
+                text,
+                span: Span::NONE,
+            }
         }
+
+        "anchor" => Inline::Anchor {
+            name: content.trim().to_string(),
+            span: Span::NONE,
+        },
+
+        "acronym" => {
+            let parts: Vec<&str> = content.splitn(2, ',').collect();
+            let abbrev = parts[0].trim().to_string();
+            let expansion = parts.get(1).map(|s| s.trim().to_string());
+            Inline::Acronym {
+                abbrev,
+                expansion,
+                span: Span::NONE,
+            }
+        }
+
+        "abbr" => {
+            let parts: Vec<&str> = content.splitn(2, ',').collect();
+            let abbrev = parts[0].trim().to_string();
+            let expansion = parts.get(1).map(|s| s.trim().to_string());
+            Inline::Abbr {
+                abbrev,
+                expansion,
+                span: Span::NONE,
+            }
+        }
+
+        "w" => Inline::NoBreak(content, Span::NONE),
 
         "footnote" => Inline::FootnoteDef {
             content: parse_inline(&content),
             span: Span::NONE,
         },
+
+        "image" => {
+            let parts: Vec<&str> = content.splitn(5, ',').collect();
+            let file = parts[0].trim().to_string();
+            let width = parts.get(1).and_then(|s| {
+                let s = s.trim();
+                if s.is_empty() { None } else { Some(s.to_string()) }
+            });
+            let height = parts.get(2).and_then(|s| {
+                let s = s.trim();
+                if s.is_empty() { None } else { Some(s.to_string()) }
+            });
+            let alt = parts.get(3).and_then(|s| {
+                let s = s.trim();
+                if s.is_empty() { None } else { Some(s.to_string()) }
+            });
+            let extension = parts.get(4).and_then(|s| {
+                let s = s.trim();
+                if s.is_empty() { None } else { Some(s.to_string()) }
+            });
+            Inline::Image {
+                file,
+                width,
+                height,
+                alt,
+                extension,
+                span: Span::NONE,
+            }
+        }
+
+        // Symbol commands
+        "dots" => Inline::Symbol(SymbolKind::Dots, Span::NONE),
+        "enddots" => Inline::Symbol(SymbolKind::EndDots, Span::NONE),
+        "minus" => Inline::Symbol(SymbolKind::Minus, Span::NONE),
+        "copyright" => Inline::Symbol(SymbolKind::Copyright, Span::NONE),
+        "registeredsymbol" => Inline::Symbol(SymbolKind::Registered, Span::NONE),
+        "LaTeX" => Inline::Symbol(SymbolKind::LaTeX, Span::NONE),
+        "TeX" => Inline::Symbol(SymbolKind::TeX, Span::NONE),
+        "tie" => Inline::Symbol(SymbolKind::Tie, Span::NONE),
 
         _ => {
             // Unknown command - return None to treat as literal text

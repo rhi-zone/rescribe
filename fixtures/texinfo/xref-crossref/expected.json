@@ -1,0 +1,8 @@
+{
+  "description": "@xref{} produces a cross_ref inline node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "cross_ref" }
+  ]
+}

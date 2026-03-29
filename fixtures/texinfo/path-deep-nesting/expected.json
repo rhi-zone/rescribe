@@ -1,0 +1,7 @@
+{
+  "description": "Deeply nested @itemize lists parse without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "list" }
+  ]
+}

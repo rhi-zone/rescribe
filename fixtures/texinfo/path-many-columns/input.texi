@@ -1,0 +1,4 @@
+@multitable @columnfractions .1 .1 .1 .1 .1 .1 .1 .1 .1 .1
+@headitem A @tab B @tab C @tab D @tab E @tab F @tab G @tab H @tab I @tab J
+@item 1 @tab 2 @tab 3 @tab 4 @tab 5 @tab 6 @tab 7 @tab 8 @tab 9 @tab 10
+@end multitable

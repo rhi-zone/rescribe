@@ -1,0 +1,8 @@
+{
+  "description": "@r{} produces a roman inline node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "roman" }
+  ]
+}

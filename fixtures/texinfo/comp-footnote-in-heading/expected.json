@@ -1,0 +1,7 @@
+{
+  "description": "Footnote inside a chapter heading",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } }
+  ]
+}

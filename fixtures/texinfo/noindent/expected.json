@@ -1,0 +1,8 @@
+{
+  "description": "@noindent produces a noindent node followed by a paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "noindent" },
+    { "path": "/1", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "@w{} produces a no_break inline node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "no_break" }
+  ]
+}

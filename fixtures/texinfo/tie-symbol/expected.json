@@ -1,0 +1,8 @@
+{
+  "description": "@tie{} produces a tie symbol (non-breaking space)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "symbol" }
+  ]
+}

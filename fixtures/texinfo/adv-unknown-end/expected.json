@@ -1,0 +1,5 @@
+{
+  "description": "@end for unknown environment does not panic",
+  "category": "adversarial",
+  "assertions": []
+}

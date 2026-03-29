@@ -4,12 +4,22 @@
 //! Used by `rescribe-read-texinfo` and `rescribe-write-texinfo` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
-pub use ast::*;
+// Re-export everything callers need.
+pub use ast::{
+    Block, CodeBlockVariant, CrossRefKind, Diagnostic, HeadingKind, Inline, MenuEntry, Severity,
+    Span, SymbolKind, TableRow, TexinfoDoc,
+};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::emit;
+pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
+pub use writer::Writer;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -265,6 +275,7 @@ Still visible."#;
         let doc = TexinfoDoc {
             title: None,
             blocks: vec![Block::CodeBlock {
+                variant: CodeBlockVariant::Example,
                 content: "int main() {}".into(),
                 span: Span::NONE,
             }],
@@ -336,5 +347,70 @@ Still visible."#;
                 span: Span::NONE,
             }
         );
+    }
+
+    #[test]
+    fn test_parse_semantic_inlines() {
+        let input = "@file{test.c} and @command{gcc} and @option{-O2} and @env{PATH}";
+        let (doc, _diags) = parse(input);
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(i, Inline::File(..))));
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Command(..))));
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Option(..))));
+            assert!(inlines.iter().any(|i| matches!(i, Inline::Env(..))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_symbols() {
+        let input = "Use @dots{} and @copyright{} and @TeX{}.";
+        let (doc, _diags) = parse(input);
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Symbol(SymbolKind::Dots, _))));
+            assert!(inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Symbol(SymbolKind::Copyright, _))));
+            assert!(inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Symbol(SymbolKind::TeX, _))));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_crossref() {
+        let input = "@xref{Introduction} and @ref{Overview, display text}.";
+        let (doc, _diags) = parse(input);
+        if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
+            assert!(inlines.iter().any(|i| matches!(
+                i,
+                Inline::CrossRef {
+                    kind: CrossRefKind::Xref,
+                    node,
+                    ..
+                } if node == "Introduction"
+            )));
+        } else {
+            panic!("expected paragraph");
+        }
+    }
+
+    #[test]
+    fn test_parse_multitable() {
+        let input = "@multitable @columnfractions .5 .5\n@headitem Name @tab Age\n@item Alice @tab 30\n@end multitable";
+        let (doc, _diags) = parse(input);
+        assert!(matches!(doc.blocks[0], Block::Table { .. }));
+    }
+
+    #[test]
+    fn test_parse_menu() {
+        let input = "@menu\n* Introduction:: The intro\n* Advanced:: Advanced topics\n@end menu";
+        let (doc, _diags) = parse(input);
+        assert!(matches!(doc.blocks[0], Block::Menu { .. }));
     }
 }

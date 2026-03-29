@@ -1,0 +1,1 @@
+@anchor{my-anchor}This is anchored text.

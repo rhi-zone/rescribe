@@ -1,0 +1,3 @@
+@quotation
+Use @code{printf} here.
+@end quotation

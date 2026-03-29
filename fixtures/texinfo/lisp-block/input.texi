@@ -1,0 +1,3 @@
+@lisp
+(defun hello () (message "hi"))
+@end lisp

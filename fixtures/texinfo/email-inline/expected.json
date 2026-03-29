@@ -1,0 +1,8 @@
+{
+  "description": "@email{} produces an email inline node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "email" }
+  ]
+}

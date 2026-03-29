@@ -1,0 +1,10 @@
+{
+  "description": "@i{} @b{} @t{} produce direct font inline nodes",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "direct_italic" },
+    { "path": "/0/3", "kind": "direct_bold" },
+    { "path": "/0/5", "kind": "direct_typewriter" }
+  ]
+}

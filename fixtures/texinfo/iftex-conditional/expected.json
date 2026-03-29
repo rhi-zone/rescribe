@@ -1,0 +1,7 @@
+{
+  "description": "@iftex conditional block is preserved as raw_block",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "raw_block" }
+  ]
+}
