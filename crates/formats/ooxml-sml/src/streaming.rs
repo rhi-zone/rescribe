@@ -58,6 +58,7 @@ pub struct SmlWriter<W: Write + Seek> {
     cell_value: String,
     has_formula: bool,
     cell_formula: String,
+    shared_strings: Vec<String>,
 }
 
 impl<W: Write + Seek> SmlWriter<W> {
@@ -72,7 +73,16 @@ impl<W: Write + Seek> SmlWriter<W> {
             cell_value: String::new(),
             has_formula: false,
             cell_formula: String::new(),
+            shared_strings: Vec::new(),
         }
+    }
+
+    /// Set the shared string table used to resolve [`CellType::SharedString`] cells.
+    ///
+    /// Call this before feeding any events so that shared-string cell values are
+    /// resolved to their actual strings rather than falling back to empty.
+    pub fn set_shared_strings(&mut self, strings: Vec<String>) {
+        self.shared_strings = strings;
     }
 
     /// Process one event, updating internal state.
@@ -114,6 +124,7 @@ impl<W: Write + Seek> SmlWriter<W> {
                             &self.cell_formula,
                             self.current_cell_type,
                             &self.cell_value,
+                            &self.shared_strings,
                         );
                         sheet.set_cell(&cell_ref, value);
                     }
@@ -151,6 +162,7 @@ fn build_cell_value(
     formula: &str,
     cell_type: Option<CellType>,
     raw: &str,
+    shared_strings: &[String],
 ) -> WriteCellValue {
     if has_formula {
         return WriteCellValue::Formula(formula.to_owned());
@@ -160,9 +172,15 @@ fn build_cell_value(
         Some(CellType::InlineString) | Some(CellType::String) | Some(CellType::Error) => {
             WriteCellValue::String(raw.to_owned())
         }
-        // SharedString: value is an index — we lack the shared-string table here,
-        // so write the raw index as a number for now.
-        Some(CellType::SharedString) | Some(CellType::Number) | None => {
+        Some(CellType::SharedString) => {
+            if let Ok(idx) = raw.parse::<usize>()
+                && let Some(s) = shared_strings.get(idx)
+            {
+                return WriteCellValue::String(s.clone());
+            }
+            WriteCellValue::Empty
+        }
+        Some(CellType::Number) | None => {
             if raw.is_empty() {
                 WriteCellValue::Empty
             } else if let Ok(n) = raw.parse::<f64>() {

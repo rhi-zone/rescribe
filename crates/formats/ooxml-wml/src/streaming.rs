@@ -28,10 +28,11 @@
 //! # Ok::<(), ooxml_wml::Error>(())
 //! ```
 
+use std::collections::HashMap;
 use std::io::{Seek, Write};
 
 use crate::types;
-use crate::writer::DocumentBuilder;
+use crate::writer::{DocumentBuilder, Drawing};
 use crate::Result;
 use crate::generated_events::{OwnedWmlEvent, WmlEvent};
 
@@ -53,12 +54,29 @@ enum WmlFrame {
 pub struct WmlWriter<W: Write + Seek> {
     sink: W,
     events: Vec<OwnedWmlEvent>,
+    /// Pending images keyed by caller-supplied rel_id.
+    /// Value is (image bytes, content-type string).
+    registered_images: HashMap<String, (Vec<u8>, String)>,
 }
 
 impl<W: Write + Seek> WmlWriter<W> {
     /// Create a new writer targeting `sink`.
     pub fn new(sink: W) -> Self {
-        WmlWriter { sink, events: Vec::new() }
+        WmlWriter { sink, events: Vec::new(), registered_images: HashMap::new() }
+    }
+
+    /// Register image bytes under a caller-supplied rel_id.
+    ///
+    /// The `rel_id` must match the one used in [`WmlEvent::Image`] events.
+    /// The builder assigns its own internal rel_id when writing the package;
+    /// the mapping is handled transparently inside [`finish`](WmlWriter::finish).
+    pub fn register_image(
+        &mut self,
+        rel_id: impl Into<String>,
+        data: Vec<u8>,
+        content_type: impl Into<String>,
+    ) {
+        self.registered_images.insert(rel_id.into(), (data, content_type.into()));
     }
 
     /// Buffer one event.
@@ -69,12 +87,24 @@ impl<W: Write + Seek> WmlWriter<W> {
     /// Convert buffered events to a DOCX and write to the underlying sink.
     pub fn finish(self) -> Result<()> {
         let mut builder = DocumentBuilder::new();
-        process_events(self.events, &mut builder)?;
+
+        // Register all images with the builder and build the original→builder rel_id map.
+        let mut rel_id_map: HashMap<String, String> = HashMap::new();
+        for (orig_rel_id, (data, content_type)) in self.registered_images {
+            let assigned_rel_id = builder.add_image(data, &content_type);
+            rel_id_map.insert(orig_rel_id, assigned_rel_id);
+        }
+
+        process_events(self.events, &mut builder, &rel_id_map)?;
         builder.write(self.sink)
     }
 }
 
-fn process_events(events: Vec<OwnedWmlEvent>, builder: &mut DocumentBuilder) -> Result<()> {
+fn process_events(
+    events: Vec<OwnedWmlEvent>,
+    builder: &mut DocumentBuilder,
+    rel_id_map: &HashMap<String, String>,
+) -> Result<()> {
     let mut stack: Vec<WmlFrame> = Vec::new();
 
     for event in events {
@@ -223,10 +253,19 @@ fn process_events(events: Vec<OwnedWmlEvent>, builder: &mut DocumentBuilder) -> 
                 }
             }
 
-            // TODO: footnote, endnote, and image support in streaming writer
-            WmlEvent::FootnoteRef { .. }
-            | WmlEvent::EndnoteRef { .. }
-            | WmlEvent::Image { .. } => {}
+            WmlEvent::Image { rel_id } => {
+                if let Some(WmlFrame::Run(run)) = stack.last_mut()
+                    && let Some(builder_rel_id) = rel_id_map.get(rel_id.as_ref() as &str)
+                {
+                    let mut drawing = Drawing::new();
+                    drawing.add_image(builder_rel_id.clone());
+                    let ct_drawing = builder.build_drawing(drawing);
+                    run.run_content.push(types::RunContent::Drawing(Box::new(ct_drawing)));
+                }
+            }
+
+            // TODO: footnote and endnote support in streaming writer
+            WmlEvent::FootnoteRef { .. } | WmlEvent::EndnoteRef { .. } => {}
         }
     }
 

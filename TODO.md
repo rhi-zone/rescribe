@@ -494,6 +494,29 @@ cleanly to the original input (no escape processing). Implementation: `Frame::In
   - [x] Metadata writing (`doc.metadata` → `set_core_properties()`)
   - [x] Roundtrip fuzz target — clean
 
+  **DOCX streaming writer** (`WmlWriter<W>`):
+  - [x] Image support — `register_image(rel_id, data, content_type)` on `WmlWriter`;
+        maps caller rel_ids to builder-assigned rel_ids; `Image { rel_id }` event
+        embeds via `DocumentBuilder::add_image` + `Drawing` → `RunContent::Drawing`
+  - [ ] Footnote/endnote support — add `register_footnote(id, Vec<OwnedWmlEvent>)` /
+        `register_endnote(id, Vec<OwnedWmlEvent>)`; process via same stack machine into
+        `FootnoteEndnote` bodies; wire `FootnoteRef`/`EndnoteRef` events to registered bodies
+
+  **XLSX streaming writer** (`SmlWriter<W>`):
+  - [x] Shared-string resolution — `set_shared_strings(Vec<String>)` on `SmlWriter`;
+        `CellType::SharedString` cells now index into the table instead of emitting
+        the raw index as a number
+
+  **PPTX streaming writer** (`PmlWriter<W>`):
+  - [x] Multi-slide support — `new_slide()` method records a slide-boundary position;
+        `process_pml_events` slices the event buffer per slide and calls `process_slide`
+        once each; no `new_slide()` call = single-slide (original behaviour preserved)
+  - [x] Table content — `StartTableCell`/`EndTableCell` treated as paragraph boundaries;
+        text inside cells collected into current shape's paragraph list
+  - [ ] Shape geometry — **design decision required**: add EMU position/size fields to
+        `StartShape` in `PmlEvent` (requires YAML + codegen regen); until then, round-trip
+        fidelity for shape layout is impossible
+
   **XLSX reader**:
   - [x] Cell formatting fidelity warning — cells with style_index > 0 emit warning (2026-03-03)
   - [x] Charts fidelity warning — embedded charts per sheet emit warning (2026-03-03)

@@ -5,10 +5,13 @@
 //!
 //! # Slide layout
 //!
-//! All shapes from the event stream are placed on a single slide.  Each
-//! `StartShape` / `EndShape` pair becomes one text box stacked vertically at
-//! the default margin with a standard width.  Shape geometry is not carried by
-//! [`PmlEvent`], so positions are assigned automatically.
+//! Shapes from the event stream are placed on slides.  Call
+//! [`new_slide`](PmlWriter::new_slide) before the first event that should
+//! appear on a new slide.  If `new_slide` is never called, all events are
+//! treated as a single slide.  Each `StartShape` / `EndShape` pair becomes
+//! one text box stacked vertically at the default margin with a standard
+//! width.  Shape geometry is not carried by [`PmlEvent`], so positions are
+//! assigned automatically.
 //!
 //! # Memory model
 //!
@@ -56,12 +59,14 @@ const SHAPE_GAP: i64 = 228_600; // 0.25 in between shapes
 pub struct PmlWriter<W: Write + Seek> {
     sink: W,
     events: Vec<OwnedPmlEvent>,
+    /// Event indices at which a new slide begins.
+    slide_boundary_positions: Vec<usize>,
 }
 
 impl<W: Write + Seek> PmlWriter<W> {
     /// Create a new writer targeting `sink`.
     pub fn new(sink: W) -> Self {
-        PmlWriter { sink, events: Vec::new() }
+        PmlWriter { sink, events: Vec::new(), slide_boundary_positions: Vec::new() }
     }
 
     /// Buffer one event.
@@ -69,21 +74,29 @@ impl<W: Write + Seek> PmlWriter<W> {
         self.events.push(event.into_owned());
     }
 
+    /// Signal that all subsequent events belong to a new slide.
+    ///
+    /// Call this before writing the first event of each slide after the first.
+    /// If never called, all events are placed on a single slide.
+    pub fn new_slide(&mut self) {
+        self.slide_boundary_positions.push(self.events.len());
+    }
+
     /// Convert buffered events to a PPTX and write to the underlying sink.
     pub fn finish(self) -> Result<()> {
         let mut builder = PresentationBuilder::new();
-        process_pml_events(&self.events, &mut builder);
+        process_pml_events(&self.events, &self.slide_boundary_positions, &mut builder);
         builder.write(self.sink)
     }
 }
 
-fn process_pml_events(events: &[OwnedPmlEvent], builder: &mut PresentationBuilder) {
-    // Collect all text blocks from shapes, then add one slide.
+fn process_slide(events: &[OwnedPmlEvent], builder: &mut PresentationBuilder) {
     let mut shapes: Vec<String> = Vec::new();
     let mut current_paragraphs: Vec<String> = Vec::new();
     let mut current_para = String::new();
     let mut in_shape = false;
     let mut in_para = false;
+    let mut in_table_cell = false;
 
     for event in events {
         match event {
@@ -96,10 +109,11 @@ fn process_pml_events(events: &[OwnedPmlEvent], builder: &mut PresentationBuilde
 
             PmlEvent::EndShape | PmlEvent::EndGraphicFrame => {
                 // Finalize any open paragraph
-                if in_para && !current_para.is_empty() {
+                if (in_para || in_table_cell) && !current_para.is_empty() {
                     current_paragraphs.push(current_para.clone());
                 }
                 in_para = false;
+                in_table_cell = false;
                 current_para.clear();
 
                 if !current_paragraphs.is_empty() {
@@ -122,16 +136,30 @@ fn process_pml_events(events: &[OwnedPmlEvent], builder: &mut PresentationBuilde
                 in_para = false;
             }
 
+            // Treat table cells like paragraphs so their text is collected.
+            PmlEvent::StartTableCell { .. } => {
+                current_para.clear();
+                in_table_cell = true;
+            }
+
+            PmlEvent::EndTableCell => {
+                if in_shape && !current_para.is_empty() {
+                    current_paragraphs.push(current_para.clone());
+                    current_para.clear();
+                }
+                in_table_cell = false;
+            }
+
             PmlEvent::StartRun { .. } | PmlEvent::EndRun => {}
 
             PmlEvent::Text(text) => {
-                if in_para {
+                if in_para || in_table_cell {
                     current_para.push_str(text);
                 }
             }
 
             PmlEvent::LineBreak => {
-                if in_para {
+                if in_para || in_table_cell {
                     current_para.push('\n');
                 }
             }
@@ -139,13 +167,11 @@ fn process_pml_events(events: &[OwnedPmlEvent], builder: &mut PresentationBuilde
             // Hyperlinks: pass through, text is collected by the Text handler
             PmlEvent::StartHyperlink { .. } | PmlEvent::EndHyperlink => {}
 
-            // Table content: collect text from table cells
+            // Table structure events (not cells) are handled implicitly above
             PmlEvent::StartTable { .. }
             | PmlEvent::EndTable
             | PmlEvent::StartTableRow
             | PmlEvent::EndTableRow
-            | PmlEvent::StartTableCell { .. }
-            | PmlEvent::EndTableCell
             | PmlEvent::FieldId { .. } => {}
         }
     }
@@ -156,5 +182,33 @@ fn process_pml_events(events: &[OwnedPmlEvent], builder: &mut PresentationBuilde
             let y = MARGIN + i as i64 * (SHAPE_H + SHAPE_GAP);
             slide.add_text_at(text.as_str(), MARGIN, y, SHAPE_W, SHAPE_H);
         }
+    }
+}
+
+fn process_pml_events(
+    events: &[OwnedPmlEvent],
+    slide_boundary_positions: &[usize],
+    builder: &mut PresentationBuilder,
+) {
+    if slide_boundary_positions.is_empty() {
+        // No explicit boundaries — treat everything as one slide.
+        process_slide(events, builder);
+        return;
+    }
+
+    // Build slide slices from boundary positions.
+    // boundaries define the start of each slide after the first, so:
+    //   slide 0: events[0 .. boundaries[0]]
+    //   slide 1: events[boundaries[0] .. boundaries[1]]
+    //   ...
+    //   slide N: events[boundaries[N-1] ..]
+    let starts = std::iter::once(0).chain(slide_boundary_positions.iter().copied());
+    let ends = slide_boundary_positions
+        .iter()
+        .copied()
+        .chain(std::iter::once(events.len()));
+
+    for (start, end) in starts.zip(ends) {
+        process_slide(&events[start..end], builder);
     }
 }
