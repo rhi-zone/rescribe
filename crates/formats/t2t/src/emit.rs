@@ -5,6 +5,21 @@ use crate::ast::{Block, Inline, T2tDoc};
 /// Build a txt2tags string from a [`T2tDoc`].
 pub fn emit(doc: &T2tDoc) -> String {
     let mut ctx = BuildContext::new();
+
+    // Emit header if present
+    if let Some(ref title) = doc.title {
+        ctx.write(title);
+        ctx.write("\n");
+        if let Some(ref author) = doc.author {
+            ctx.write(author);
+        }
+        ctx.write("\n");
+        if let Some(ref date) = doc.date {
+            ctx.write(date);
+        }
+        ctx.write("\n\n");
+    }
+
     for block in &doc.blocks {
         build_block(block, &mut ctx);
     }
@@ -124,6 +139,23 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
         Block::HorizontalRule { .. } => {
             ctx.write("--------------------\n\n");
         }
+
+        Block::DefinitionList { items, .. } => {
+            for (term, desc) in items {
+                ctx.write(": ");
+                build_inlines(term, ctx);
+                ctx.write("\n");
+                for block in desc {
+                    if let Block::Paragraph { inlines, .. } = block {
+                        build_inlines(inlines, ctx);
+                        ctx.write("\n");
+                    } else {
+                        build_block(block, ctx);
+                    }
+                }
+            }
+            ctx.write("\n");
+        }
     }
 }
 
@@ -189,6 +221,18 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
 
         Inline::SoftBreak(_) => {
             ctx.write(" ");
+        }
+
+        Inline::Verbatim(s, _) => {
+            ctx.write("\"\"");
+            ctx.write(s);
+            ctx.write("\"\"");
+        }
+
+        Inline::Tagged(s, _) => {
+            ctx.write("''");
+            ctx.write(s);
+            ctx.write("''");
         }
     }
 }

@@ -1,0 +1,3 @@
+{ "description": "List items (nested lists not supported in t2t syntax, flat list)", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 3 }
+]}

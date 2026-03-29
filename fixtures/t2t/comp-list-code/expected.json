@@ -1,0 +1,5 @@
+{ "description": "List item with inline code", "category": "integration", "assertions": [
+  { "path": "/0", "kind": "list", "children_count": 2 },
+  { "path": "/0/0", "kind": "list_item" },
+  { "path": "/0/0/0", "kind": "paragraph" }
+]}

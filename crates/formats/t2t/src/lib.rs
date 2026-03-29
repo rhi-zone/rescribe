@@ -1,16 +1,28 @@
+#![allow(clippy::collapsible_if, clippy::never_loop)]
 //! txt2tags (t2t) parser, AST, and builder.
 //!
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-t2t` and `rescribe-write-t2t` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
 // Re-export the primary public API for convenience.
 pub use ast::{Block, Diagnostic, Inline, Severity, Span, T2tDoc, TableRow};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::emit;
+pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::{parse, parse_str};
+pub use writer::Writer;
+
+/// Parse `input` and return a streaming iterator of events.
+pub fn events(input: &str) -> events::EventIter {
+    events::events(input)
+}
 
 // ── Legacy compatibility (removed) ────────────────────────────────────────────
 //
@@ -183,7 +195,7 @@ mod tests {
                 inlines: vec![Inline::Text("Title".into(), Span::NONE)],
                 span: Span::NONE,
             }],
-            span: Span::NONE,
+            ..Default::default()
         };
         let output = emit(&doc);
         assert!(output.contains("= Title ="));
@@ -196,7 +208,7 @@ mod tests {
                 inlines: vec![Inline::Text("Hello, world!".into(), Span::NONE)],
                 span: Span::NONE,
             }],
-            span: Span::NONE,
+            ..Default::default()
         };
         let output = emit(&doc);
         assert!(output.contains("Hello, world!"));
@@ -212,7 +224,7 @@ mod tests {
                 )],
                 span: Span::NONE,
             }],
-            span: Span::NONE,
+            ..Default::default()
         };
         let output = emit(&doc);
         assert!(output.contains("**bold**"));
@@ -228,7 +240,7 @@ mod tests {
                 )],
                 span: Span::NONE,
             }],
-            span: Span::NONE,
+            ..Default::default()
         };
         let output = emit(&doc);
         assert!(output.contains("//italic//"));
@@ -241,7 +253,7 @@ mod tests {
                 content: "print hi".into(),
                 span: Span::NONE,
             }],
-            span: Span::NONE,
+            ..Default::default()
         };
         let output = emit(&doc);
         assert!(output.contains("```"));
@@ -256,6 +268,7 @@ mod tests {
                 span: Span::new(0, 5),
             }],
             span: Span::new(0, 5),
+            ..Default::default()
         };
         let stripped = doc.strip_spans();
         assert_eq!(stripped.span, Span::NONE);

@@ -1,0 +1,11 @@
+{ "description": "Document header with title, author, and date", "category": "happy",
+  "metadata": {
+    "title": "My Document Title",
+    "author": "John Doe",
+    "date": "2024-01-15"
+  },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "This is the body text." } }
+  ]
+}

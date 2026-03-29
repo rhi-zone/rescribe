@@ -7,9 +7,13 @@ use crate::ast::{Block, Diagnostic, Inline, Span, T2tDoc};
 /// Parsing is always infallible — malformed constructs produce diagnostics.
 pub fn parse(input: &str) -> (T2tDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
+    let (title, author, date) = p.try_parse_header();
     let blocks = p.parse();
     let doc = T2tDoc {
         blocks,
+        title,
+        author,
+        date,
         span: Span::new(0, input.len()),
     };
     (doc, p.diagnostics)
@@ -58,6 +62,54 @@ impl<'a> Parser<'a> {
         let start = self.line_start(line_idx);
         let len = self.lines.get(line_idx).map(|l| l.len()).unwrap_or(0);
         start + len
+    }
+
+    /// Try to parse the txt2tags header (first 3 lines: title, author, date).
+    /// The header is only recognized if the first line is non-empty and non-blank.
+    /// All three lines must be present (an empty line represents an empty field).
+    pub(crate) fn try_parse_header(&mut self) -> (Option<String>, Option<String>, Option<String>) {
+        // Header requires at least 3 lines and the first must be non-empty/non-comment
+        if self.lines.len() < 3 {
+            return (None, None, None);
+        }
+        let first = self.lines[0].trim();
+        // Header is only present if line 1 is non-empty and not a comment or block marker
+        if first.is_empty()
+            || first.starts_with('%')
+            || first == "```"
+            || first == "\"\"\""
+            || first.starts_with("- ")
+            || first.starts_with("+ ")
+            || first.starts_with('|')
+            || first.starts_with('\t')
+            || first.starts_with(": ")
+            || is_horizontal_rule(self.lines[0])
+        {
+            return (None, None, None);
+        }
+        // Check if line 1 looks like a heading (= ... = or + ... +)
+        if self.try_parse_heading(self.lines[0]).is_some() {
+            return (None, None, None);
+        }
+
+        let title = {
+            let t = self.lines[0].trim();
+            if t.is_empty() { None } else { Some(t.to_string()) }
+        };
+        let author = {
+            let t = self.lines[1].trim();
+            if t.is_empty() { None } else { Some(t.to_string()) }
+        };
+        let date = {
+            let t = self.lines[2].trim();
+            if t.is_empty() { None } else { Some(t.to_string()) }
+        };
+
+        // Only consume header if at least title is present
+        if title.is_some() {
+            self.pos = 3;
+        }
+        (title, author, date)
     }
 
     pub(crate) fn parse(&mut self) -> Vec<Block> {
@@ -126,6 +178,12 @@ impl<'a> Parser<'a> {
             // Table (| cell |)
             if line.trim_start().starts_with('|') {
                 blocks.push(self.parse_table());
+                continue;
+            }
+
+            // Definition list (: Term)
+            if line.starts_with(": ") {
+                blocks.push(self.parse_definition_list());
                 continue;
             }
 
@@ -343,6 +401,61 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_definition_list(&mut self) -> Block {
+        let block_start = self.line_start(self.pos);
+        let mut items: Vec<(Vec<Inline>, Vec<Block>)> = Vec::new();
+
+        while self.pos < self.lines.len() {
+            let line = self.lines[self.pos];
+            if !line.starts_with(": ") {
+                break;
+            }
+
+            let term_text = &line[2..].trim();
+            let term_start = self.line_start(self.pos);
+            let term_inlines = parse_inline(term_text, term_start + 2);
+            self.pos += 1;
+
+            // Collect description lines (non-empty lines that don't start with `: `)
+            let mut desc_text = String::new();
+            while self.pos < self.lines.len() {
+                let dline = self.lines[self.pos];
+                if dline.trim().is_empty() || dline.starts_with(": ") {
+                    break;
+                }
+                if !desc_text.is_empty() {
+                    desc_text.push(' ');
+                }
+                desc_text.push_str(dline.trim());
+                self.pos += 1;
+            }
+
+            let desc_blocks = if desc_text.is_empty() {
+                Vec::new()
+            } else {
+                let desc_span = Span::new(term_start, self.line_end(self.pos.saturating_sub(1)));
+                let desc_inlines = parse_inline(&desc_text, term_start);
+                vec![Block::Paragraph {
+                    inlines: desc_inlines,
+                    span: desc_span,
+                }]
+            };
+
+            items.push((term_inlines, desc_blocks));
+
+            // Skip blank lines between items
+            while self.pos < self.lines.len() && self.lines[self.pos].trim().is_empty() {
+                self.pos += 1;
+            }
+        }
+
+        let block_end = self.line_end(self.pos.saturating_sub(1));
+        Block::DefinitionList {
+            items,
+            span: Span::new(block_start, block_end),
+        }
+    }
+
     fn parse_paragraph(&mut self) -> Block {
         let block_start = self.line_start(self.pos);
         let mut text = String::new();
@@ -361,6 +474,7 @@ impl<'a> Parser<'a> {
                 || line.trim_start().starts_with("- ")
                 || line.trim_start().starts_with("+ ")
                 || line.trim_start().starts_with('|')
+                || line.starts_with(": ")
             {
                 break;
             }
@@ -459,6 +573,36 @@ pub(crate) fn parse_inline(text: &str, _base_offset: usize) -> Vec<Inline> {
             }
             let inner = parse_inline(&content, _base_offset);
             nodes.push(Inline::Strikethrough(inner, Span::NONE));
+            i = end + 2;
+            continue;
+        }
+
+        // Verbatim ""text""
+        if chars[i] == '"'
+            && i + 1 < chars.len()
+            && chars[i + 1] == '"'
+            && let Some((end, content)) = find_double_closing(&chars, i + 2, '"')
+        {
+            if !current.is_empty() {
+                nodes.push(Inline::Text(current.clone(), Span::NONE));
+                current.clear();
+            }
+            nodes.push(Inline::Verbatim(content, Span::NONE));
+            i = end + 2;
+            continue;
+        }
+
+        // Tagged ''text''
+        if chars[i] == '\''
+            && i + 1 < chars.len()
+            && chars[i + 1] == '\''
+            && let Some((end, content)) = find_double_closing(&chars, i + 2, '\'')
+        {
+            if !current.is_empty() {
+                nodes.push(Inline::Text(current.clone(), Span::NONE));
+                current.clear();
+            }
+            nodes.push(Inline::Tagged(content, Span::NONE));
             i = end + 2;
             continue;
         }

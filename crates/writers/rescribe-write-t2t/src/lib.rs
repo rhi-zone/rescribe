@@ -27,7 +27,7 @@ pub fn emit_with_options(
 
     let t2t_doc = t2t::T2tDoc {
         blocks,
-        span: Span::NONE,
+        ..Default::default()
     };
     let output = t2t::emit(&t2t_doc);
 

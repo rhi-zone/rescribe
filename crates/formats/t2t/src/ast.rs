@@ -44,6 +44,12 @@ pub struct Diagnostic {
 #[derive(Debug, Clone, Default)]
 pub struct T2tDoc {
     pub blocks: Vec<Block>,
+    /// Document title (first line of the header area).
+    pub title: Option<String>,
+    /// Document author (second line of the header area).
+    pub author: Option<String>,
+    /// Document date (third line of the header area).
+    pub date: Option<String>,
     pub span: Span,
 }
 
@@ -52,6 +58,9 @@ impl T2tDoc {
     pub fn strip_spans(&self) -> Self {
         T2tDoc {
             blocks: self.blocks.iter().map(Block::strip_spans).collect(),
+            title: self.title.clone(),
+            author: self.author.clone(),
+            date: self.date.clone(),
             span: Span::NONE,
         }
     }
@@ -94,6 +103,10 @@ pub enum Block {
         span: Span,
     },
     HorizontalRule {
+        span: Span,
+    },
+    DefinitionList {
+        items: Vec<(Vec<Inline>, Vec<Block>)>,
         span: Span,
     },
 }
@@ -144,6 +157,18 @@ impl Block {
                 span: Span::NONE,
             },
             Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
+            Block::DefinitionList { items, .. } => Block::DefinitionList {
+                items: items
+                    .iter()
+                    .map(|(term, desc)| {
+                        (
+                            term.iter().map(Inline::strip_spans).collect(),
+                            desc.iter().map(Block::strip_spans).collect(),
+                        )
+                    })
+                    .collect(),
+                span: Span::NONE,
+            },
         }
     }
 }
@@ -192,6 +217,10 @@ pub enum Inline {
     },
     LineBreak(Span),
     SoftBreak(Span),
+    /// Verbatim inline: `""text""` — raw passthrough.
+    Verbatim(String, Span),
+    /// Tagged inline: `''text''` — target-specific passthrough.
+    Tagged(String, Span),
 }
 
 impl Inline {
@@ -225,6 +254,8 @@ impl Inline {
             },
             Inline::LineBreak(_) => Inline::LineBreak(Span::NONE),
             Inline::SoftBreak(_) => Inline::SoftBreak(Span::NONE),
+            Inline::Verbatim(s, _) => Inline::Verbatim(s.clone(), Span::NONE),
+            Inline::Tagged(s, _) => Inline::Tagged(s.clone(), Span::NONE),
         }
     }
 }

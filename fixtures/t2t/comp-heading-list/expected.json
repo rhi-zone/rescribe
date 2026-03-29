@@ -1,0 +1,4 @@
+{ "description": "Heading followed immediately by list", "category": "integration", "assertions": [
+  { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+  { "path": "/1", "kind": "list", "children_count": 2 }
+]}

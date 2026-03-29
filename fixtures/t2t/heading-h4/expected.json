@@ -1,0 +1,4 @@
+{ "description": "Level 4 heading via quad equals", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "heading", "props": { "level": 4 } },
+  { "path": "/0/0", "kind": "text", "props": { "content": "Level Four" } }
+]}

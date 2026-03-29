@@ -1,0 +1,4 @@
+{ "description": "Verbatim inline via double quotes", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "paragraph" },
+  { "path": "/0/1", "kind": "raw_inline", "props": { "content": "verbatim text" } }
+]}

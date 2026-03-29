@@ -1,0 +1,3 @@
+{ "description": "Numbered heading level 2", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "heading", "props": { "level": 2 } }
+]}

@@ -1,0 +1,4 @@
+{ "description": "Blockquote containing text", "category": "integration", "assertions": [
+  { "path": "/0", "kind": "blockquote" },
+  { "path": "/0/0", "kind": "paragraph" }
+]}

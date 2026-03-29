@@ -1,0 +1,9 @@
+{ "description": "Definition list with term-definition pairs", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "definition_list" },
+  { "path": "/0/0", "kind": "definition_term" },
+  { "path": "/0/0/0", "kind": "text", "props": { "content": "Apple" } },
+  { "path": "/0/1", "kind": "definition_desc" },
+  { "path": "/0/2", "kind": "definition_term" },
+  { "path": "/0/2/0", "kind": "text", "props": { "content": "Banana" } },
+  { "path": "/0/3", "kind": "definition_desc" }
+]}

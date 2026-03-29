@@ -1,0 +1,4 @@
+{ "description": "Level 5 heading via quint equals", "category": "happy", "assertions": [
+  { "path": "/0", "kind": "heading", "props": { "level": 5 } },
+  { "path": "/0/0", "kind": "text", "props": { "content": "Level Five" } }
+]}

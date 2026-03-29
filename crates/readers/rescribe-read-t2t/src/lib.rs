@@ -107,6 +107,20 @@ fn block_to_node(block: &Block) -> Node {
         }
 
         Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
+
+        Block::DefinitionList { items, .. } => {
+            let children: Vec<Node> = items
+                .iter()
+                .flat_map(|(term, desc)| {
+                    let term_children: Vec<Node> = term.iter().map(inline_to_node).collect();
+                    let term_node = Node::new(node::DEFINITION_TERM).children(term_children);
+                    let desc_children: Vec<Node> = desc.iter().map(block_to_node).collect();
+                    let desc_node = Node::new(node::DEFINITION_DESC).children(desc_children);
+                    vec![term_node, desc_node]
+                })
+                .collect();
+            Node::new(node::DEFINITION_LIST).children(children)
+        }
     }
 }
 
@@ -150,6 +164,16 @@ fn inline_to_node(inline: &Inline) -> Node {
         Inline::LineBreak(_) => Node::new(node::LINE_BREAK),
 
         Inline::SoftBreak(_) => Node::new(node::SOFT_BREAK),
+
+        Inline::Verbatim(content, _) => {
+            Node::new(node::RAW_INLINE).prop(prop::CONTENT, content.clone())
+        }
+
+        Inline::Tagged(content, _) => {
+            Node::new(node::RAW_INLINE)
+                .prop(prop::CONTENT, content.clone())
+                .prop("t2t:tagged", true)
+        }
     }
 }
 
