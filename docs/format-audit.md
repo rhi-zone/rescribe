@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc writer APIs added 2026-03-23 (streaming + builder); 2026-03-29: definition of 5-Production tightened — reader-only no longer qualifies; RST/Org/AsciiDoc demoted from R:5 to R:4 due to construct gaps (tables, footnotes); writer column updated from 2→4 (API modes complete, fuzz clean, construct gaps remain). djot-fmt + textile-fmt signed off at 5-Production (2026-03-29). RST/AsciiDoc/Org signed off at 5-Production (2026-03-29; all construct gaps closed: tables, footnotes, math, nested blockquotes, figure/caption).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc writer APIs added 2026-03-23 (streaming + builder); 2026-03-29: definition of 5-Production tightened — reader-only no longer qualifies; RST/Org/AsciiDoc demoted from R:5 to R:4 due to construct gaps (tables, footnotes); writer column updated from 2→4 (API modes complete, fuzz clean, construct gaps remain). djot-fmt + textile-fmt signed off at 5-Production (2026-03-29). RST/AsciiDoc/Org signed off at 5-Production (2026-03-29; all construct gaps closed: tables, footnotes, math, nested blockquotes, figure/caption). 2026-03-30: muse/t2t/man/markua/creole/dokuwiki/vimwiki/zimwiki/xwiki/twiki/tikiwiki/jira/mediawiki all completed to R:4/W:4 (all constructs + API modes + fixtures; need fuzz re-run).
 
 ## Maturity Pipeline
 
@@ -63,15 +63,15 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| mediawiki | 4 | 4 | hand | production | harness |
-| creole | 4 | 2 | hand | production | harness |
-| dokuwiki | 4 | 2 | hand | production | harness |
-| vimwiki | 4 | 2 | hand | production | harness |
-| zimwiki | 4 | 2 | hand | production | harness |
-| xwiki | 4 | 2 | hand | production | harness |
-| twiki | 4 | 2 | hand | production | harness |
-| tikiwiki | 4 | 2 | hand | production | harness |
-| jira | 4 | 2 | hand | production | harness |
+| mediawiki | 4 | 4 | hand | re-fuzz after expansion | – |
+| creole | 4 | 4 | hand | re-fuzz after expansion | – |
+| dokuwiki | 4 | 4 | hand | re-fuzz after expansion | – |
+| vimwiki | 4 | 4 | hand | re-fuzz after expansion | – |
+| zimwiki | 4 | 4 | hand | re-fuzz after expansion | – |
+| xwiki | 4 | 4 | hand | re-fuzz after expansion | – |
+| twiki | 4 | 4 | hand | re-fuzz after expansion | – |
+| tikiwiki | 4 | 4 | hand | re-fuzz after expansion | – |
+| jira | 4 | 4 | hand | re-fuzz after expansion | – |
 
 ### Office / binary
 
