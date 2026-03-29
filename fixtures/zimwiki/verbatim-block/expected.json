@@ -1,0 +1,8 @@
+{
+  "description": "Verbatim block using triple single-quote fence",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "code_block", "props": { "content": "some verbatim text" } }
+  ]
+}

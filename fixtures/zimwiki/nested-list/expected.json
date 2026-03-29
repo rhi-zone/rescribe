@@ -1,0 +1,11 @@
+{
+  "description": "List with multiple items (Zim Wiki has flat lists; nesting via indentation is not standard)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "list", "children_count": 3 },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" },
+    { "path": "/0/2", "kind": "list_item" }
+  ]
+}

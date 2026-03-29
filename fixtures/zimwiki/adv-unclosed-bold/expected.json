@@ -1,0 +1,5 @@
+{
+  "description": "Unclosed bold markup is handled gracefully",
+  "category": "adversarial",
+  "assertions": []
+}

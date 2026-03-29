@@ -1,0 +1,9 @@
+{
+  "description": "Interwiki link using wp? prefix",
+  "category": "rare",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "link", "props": { "url": "wp?Rust_(programming_language)" } }
+  ]
+}

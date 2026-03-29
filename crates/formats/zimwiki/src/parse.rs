@@ -75,6 +75,12 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            // Blockquote (> text)
+            if trimmed.starts_with("> ") || trimmed == ">" {
+                blocks.push(self.parse_blockquote());
+                continue;
+            }
+
             // Table (| cell | cell |)
             if trimmed.starts_with('|') {
                 blocks.push(self.parse_table());
@@ -252,6 +258,27 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_blockquote(&mut self) -> Block {
+        let mut lines = Vec::new();
+        while self.pos < self.lines.len() {
+            let line = self.lines[self.pos];
+            let trimmed = line.trim_start();
+            if let Some(rest) = trimmed.strip_prefix("> ") {
+                lines.push(rest);
+                self.pos += 1;
+            } else if trimmed == ">" {
+                lines.push("");
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        let inner_text = lines.join("\n");
+        let mut inner_parser = Parser::new(&inner_text);
+        let children = inner_parser.parse();
+        Block::Blockquote { children, span: Span::NONE }
+    }
+
     fn parse_table(&mut self) -> Block {
         let mut rows = Vec::new();
         while self.pos < self.lines.len() {
@@ -291,6 +318,9 @@ impl<'a> Parser<'a> {
                 || trimmed.starts_with("[ ] ")
                 || trimmed.starts_with("[*] ")
                 || trimmed.starts_with("[x] ")
+                || trimmed.starts_with("> ")
+                || trimmed == ">"
+                || trimmed.starts_with('|')
             {
                 break;
             }
@@ -314,11 +344,11 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
     let mut i = 0;
 
     while i < chars.len() {
-        // Bold **text** or __text__
-        if (chars[i] == '*' || chars[i] == '_')
+        // Bold **text**
+        if chars[i] == '*'
             && i + 1 < chars.len()
-            && chars[i + 1] == chars[i]
-            && let Some((end, content)) = find_double_closing(&chars, i + 2, chars[i])
+            && chars[i + 1] == '*'
+            && let Some((end, content)) = find_double_closing(&chars, i + 2, '*')
         {
             if !current.is_empty() {
                 inlines.push(Inline::Text(current.clone(), Span::NONE));
@@ -326,6 +356,22 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
             }
             let inner = parse_inline(&content);
             inlines.push(Inline::Bold(inner, Span::NONE));
+            i = end + 2;
+            continue;
+        }
+
+        // Underline __text__
+        if chars[i] == '_'
+            && i + 1 < chars.len()
+            && chars[i + 1] == '_'
+            && let Some((end, content)) = find_double_closing(&chars, i + 2, '_')
+        {
+            if !current.is_empty() {
+                inlines.push(Inline::Text(current.clone(), Span::NONE));
+                current.clear();
+            }
+            let inner = parse_inline(&content);
+            inlines.push(Inline::Underline(inner, Span::NONE));
             i = end + 2;
             continue;
         }

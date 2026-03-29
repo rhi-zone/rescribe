@@ -4,14 +4,23 @@
 //! Used by `rescribe-read-zimwiki` and `rescribe-write-zimwiki` as thin adapter layers.
 
 pub mod ast;
+pub mod batch;
 pub mod emit;
+pub mod events;
 pub mod parse;
+pub mod writer;
 
-pub use ast::{
-    Block, Diagnostic, Inline, ListItem, Severity, Span, TableRow, ZimwikiDoc,
-};
+pub use ast::{Block, Diagnostic, Inline, ListItem, Severity, Span, TableRow, ZimwikiDoc};
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::{build, collect_inline_text};
+pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
+pub use writer::Writer;
+
+/// Parse `input` and return a streaming iterator of [`OwnedEvent`] items.
+pub fn events(input: &str) -> EventIter {
+    events::events(input)
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -34,6 +43,33 @@ mod tests {
         let (doc, _) = parse("===== Subtitle =====\n");
         match &doc.blocks[0] {
             Block::Heading { level, .. } => assert_eq!(*level, 2),
+            _ => panic!("expected heading"),
+        }
+    }
+
+    #[test]
+    fn test_parse_heading_level3() {
+        let (doc, _) = parse("==== Level 3 ====\n");
+        match &doc.blocks[0] {
+            Block::Heading { level, .. } => assert_eq!(*level, 3),
+            _ => panic!("expected heading"),
+        }
+    }
+
+    #[test]
+    fn test_parse_heading_level4() {
+        let (doc, _) = parse("=== Level 4 ===\n");
+        match &doc.blocks[0] {
+            Block::Heading { level, .. } => assert_eq!(*level, 4),
+            _ => panic!("expected heading"),
+        }
+    }
+
+    #[test]
+    fn test_parse_heading_level5() {
+        let (doc, _) = parse("== Level 5 ==\n");
+        match &doc.blocks[0] {
+            Block::Heading { level, .. } => assert_eq!(*level, 5),
             _ => panic!("expected heading"),
         }
     }
@@ -64,12 +100,26 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_underline() {
+        let (doc, _) = parse("__underlined__\n");
+        let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(
+            inlines.iter().any(|i| matches!(i, Inline::Underline(_, _))),
+            "expected underline, got: {inlines:?}"
+        );
+    }
+
+    #[test]
     fn test_parse_strikethrough() {
         let (doc, _) = parse("~~strike~~\n");
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|i| matches!(i, Inline::Strikethrough(_, _))));
+        assert!(inlines
+            .iter()
+            .any(|i| matches!(i, Inline::Strikethrough(_, _))));
     }
 
     #[test]
@@ -129,6 +179,15 @@ mod tests {
     fn test_parse_verbatim() {
         let (doc, _) = parse("'''\ncode here\n'''\n");
         assert!(matches!(doc.blocks[0], Block::CodeBlock { .. }));
+    }
+
+    #[test]
+    fn test_parse_blockquote() {
+        let (doc, _) = parse("> quoted text\n");
+        assert!(matches!(doc.blocks[0], Block::Blockquote { .. }));
+        if let Block::Blockquote { children, .. } = &doc.blocks[0] {
+            assert!(!children.is_empty());
+        }
     }
 
     #[test]
@@ -320,5 +379,21 @@ mod tests {
         };
         let out = build(&doc);
         assert!(out.contains("{{image.png}}"));
+    }
+
+    #[test]
+    fn test_build_underline() {
+        let doc = ZimwikiDoc {
+            blocks: vec![Block::Paragraph {
+                inlines: vec![Inline::Underline(
+                    vec![Inline::Text("underlined".into(), Span::NONE)],
+                    Span::NONE,
+                )],
+                span: Span::NONE,
+            }],
+            span: Span::NONE,
+        };
+        let out = build(&doc);
+        assert!(out.contains("__underlined__"), "got: {out:?}");
     }
 }

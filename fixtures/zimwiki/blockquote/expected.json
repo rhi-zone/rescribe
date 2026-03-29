@@ -1,0 +1,10 @@
+{
+  "description": "Blockquote using > prefix",
+  "category": "happy",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "blockquote" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "This is a quoted line." } }
+  ]
+}

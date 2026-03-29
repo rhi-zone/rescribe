@@ -1,0 +1,47 @@
+====== ZimWiki Sample Document ======
+
+This is a sample document with many ZimWiki constructs.
+
+===== Inline Formatting =====
+
+Here is **bold text**, //italic text//, __underlined text__, and ~~deleted text~~.
+
+Inline ''code'' and a [[https://example.com|link]].
+
+Superscript: E = mc^{2} and subscript: H_{2}O.
+
+An image: {{./photo.png}}
+
+===== Lists =====
+
+* First item
+* Second item
+* Third item
+
+1. Ordered one
+2. Ordered two
+
+[ ] Unchecked
+[*] Checked
+[x] Also checked
+
+===== Code Block =====
+
+'''
+fn main() {
+    println!("Hello, ZimWiki!");
+}
+'''
+
+===== Table =====
+
+| Name  | Age |
+| Alice | 30  |
+| Bob   | 25  |
+
+===== Blockquote =====
+
+> This is a quote.
+> It spans two lines.
+
+----

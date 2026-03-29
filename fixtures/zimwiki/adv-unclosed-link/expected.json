@@ -1,0 +1,5 @@
+{
+  "description": "Unclosed link is handled gracefully",
+  "category": "adversarial",
+  "assertions": []
+}

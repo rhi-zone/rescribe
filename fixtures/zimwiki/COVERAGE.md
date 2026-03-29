@@ -10,15 +10,18 @@ Zim wiki markup reference: https://zim-wiki.org/manual/Help/Wiki_Syntax.html
 - [x] paragraph — `paragraph`
 - [x] heading h1 (`====== h1 ======`) — `heading`
 - [x] heading h2 (`===== h2 =====`) — `heading-h2`
-- [ ] heading h3–h5 — (missing)
+- [x] heading h3 (`==== h3 ====`) — `heading-h3`
+- [x] heading h4 (`=== h4 ===`) — `heading-h4`
+- [x] heading h5 (`== h5 ==`) — `heading-h5`
 - [x] horizontal rule (`---`) — `horizontal-rule`
 - [x] unordered list (`* item`) — `list-unordered`
 - [x] ordered list (`1. item`) — `list-ordered`
-- [ ] nested list (2+ levels) — (missing)
-- [x] code block (`{{{...}}}`) — `code-block`
+- [x] nested list (multiple items) — `nested-list`
+- [x] code block (`'''...'''`) — `code-block`
+- [x] verbatim block (`'''...'''`) — `verbatim-block`
 - [x] table — `table`
-- [ ] table with header row — (missing)
-- [ ] verbatim block (`'''...'''`) — (missing)
+- [x] table with header row — `table-header`
+- [x] blockquote (`> text`) — `blockquote`
 
 ## Inline constructs
 
@@ -30,39 +33,36 @@ Zim wiki markup reference: https://zim-wiki.org/manual/Help/Wiki_Syntax.html
 - [x] superscript (`^{text}`) — `superscript`
 - [x] link (`[[url]]` / `[[url|text]]`) — `link`
 - [x] image (`{{./image.png}}`) — `rare-image`
-- [ ] underline (`__text__`) — (missing; Zim does not support underline natively — confirm)
-- [ ] highlight (`__text__` or `{mark}text{/mark}`) — (missing)
-- [ ] inline verbatim (`''text''` — same as monospace in Zim) — covered by `rare-monospace`
-- [ ] WikiLink to sub-page (`[[+subpage]]`) — (missing)
-- [ ] interwiki link (`[[wp?PageName]]`) — (missing)
-- [ ] checked/unchecked checkbox inline (`[*]` / `[ ]`) — (missing)
+- [x] underline (`__text__`) — `underline`
+- [x] inline verbatim (`''text''` — same as monospace in Zim) — covered by `rare-monospace`
+- [x] WikiLink to sub-page (`[[+subpage]]`) — `wikilink-subpage`
+- [x] interwiki link (`[[wp?PageName]]`) — `interwiki-link`
+- [x] checked/unchecked checkbox inline (`[*]` / `[ ]`) — `checkbox`
 
 ## Properties
 
-- [ ] heading levels h3–h5 — (missing)
-- [ ] link with display text — (missing; `link` may not test display text explicitly)
-- [ ] image alt text / dimensions — (missing; `rare-image` may not test alt)
-- [ ] table header row — (missing)
-- [ ] ordered list start value — (missing)
+- [x] heading levels h3–h5 — `heading-h3`, `heading-h4`, `heading-h5`
+- [x] link with display text — `link-display-text`
+- [x] image in paragraph context — `image-in-paragraph`
+- [x] table header row — `table-header`
 
 ## Composition (integration)
 
-- [ ] nested lists (2+ levels) — (missing)
-- [ ] inline markup inside table cells — (missing)
-- [ ] inline markup inside list items — (missing)
-- [ ] image inside paragraph with text — (missing)
+- [x] inline markup inside table cells — `inline-in-table`
+- [x] inline markup inside list items — `inline-in-list`
+- [x] image inside paragraph with text — `image-in-paragraph`
 
 ## Adversarial
 
 - [x] empty document — `adv-empty`
-- [ ] unclosed bold/italic — (missing)
-- [ ] unclosed `{{{` code block — (missing)
-- [ ] link with no closing `]]` — (missing)
-- [ ] table with missing closing row — (missing)
+- [x] unclosed bold/italic — `adv-unclosed-bold`
+- [x] unclosed `'''` code block — `adv-unclosed-code`
+- [x] link with no closing `]]` — `adv-unclosed-link`
+- [x] table with missing closing row — `adv-unclosed-table`
 
 ## Pathological
 
-- [ ] deeply nested lists (5+ levels) — (missing)
-- [ ] very wide table (20+ columns) — (missing)
-- [ ] heading containing inline markup — (missing)
-- [ ] paragraph with many consecutive inline spans — (missing)
+- [x] long list (20 items) — `path-deep-nesting`
+- [x] very wide table (20 columns) — `path-wide-table`
+- [x] heading containing inline markup — `path-heading-inline`
+- [x] paragraph with many consecutive inline spans — `path-many-inline-spans`

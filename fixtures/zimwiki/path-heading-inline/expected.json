@@ -1,0 +1,9 @@
+{
+  "description": "Heading containing various inline markup",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0", "kind": "strong" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Bold" } }
+  ]
+}
