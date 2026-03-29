@@ -7,6 +7,20 @@ use std::borrow::Cow;
 use super::generated::*;
 use ooxml_dml::types::{CTTableCellProperties, CTTableProperties, TextCharacterProperties, TextParagraphProperties};
 
+/// Shape transform (position and size) extracted from `<p:spPr><a:xfrm>`.
+/// All values are in EMU (English Metric Units; 914400 EMU = 1 inch).
+#[derive(Debug, Clone, Copy)]
+pub struct ShapeTransform {
+    /// Left edge offset from slide origin, in EMU.
+    pub x: i64,
+    /// Top edge offset from slide origin, in EMU.
+    pub y: i64,
+    /// Width, in EMU.
+    pub cx: i64,
+    /// Height, in EMU.
+    pub cy: i64,
+}
+
 /// Streaming events emitted by the DOCX SAX iterator.
 /// Each container element produces a `Start…` / `End…` pair;
 /// leaf elements produce a single variant.
@@ -14,7 +28,9 @@ use ooxml_dml::types::{CTTableCellProperties, CTTableProperties, TextCharacterPr
 pub enum PmlEvent<'a> {
     StartPresentation,
     EndPresentation,
-    StartShape,
+    StartShape {
+        transform: Option<ShapeTransform>,
+    },
     EndShape,
     StartGraphicFrame,
     EndGraphicFrame,
@@ -56,7 +72,7 @@ impl<'a> PmlEvent<'a> {
         match self {
             PmlEvent::StartPresentation => PmlEvent::StartPresentation,
             PmlEvent::EndPresentation => PmlEvent::EndPresentation,
-            PmlEvent::StartShape => PmlEvent::StartShape,
+            PmlEvent::StartShape { transform } => PmlEvent::StartShape { transform },
             PmlEvent::EndShape => PmlEvent::EndShape,
             PmlEvent::StartGraphicFrame => PmlEvent::StartGraphicFrame,
             PmlEvent::EndGraphicFrame => PmlEvent::EndGraphicFrame,

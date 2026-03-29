@@ -29,7 +29,7 @@ use quick_xml::Reader;
 
 use ooxml_dml::types::{CTTableCellProperties, CTTableProperties, TextCharacterProperties,
     TextParagraphProperties};
-use super::generated_events::{PmlEvent, PmlStartKind, dispatch_start, is_text_element};
+use super::generated_events::{PmlEvent, PmlStartKind, ShapeTransform, dispatch_start, is_text_element};
 use ooxml_xml::FromXml;
 
 /// Return a streaming iterator over the PML events in the given slide XML bytes.
@@ -75,6 +75,9 @@ pub struct PmlEventIter<'input> {
     pending: [Option<PmlEventOwned>; 2],
     started: bool,
     done: bool,
+    /// Set when `read_shape_transform` consumes `</p:sp>` before finding `<p:spPr>`.
+    /// Signals the ContainerStart handler to skip pushing a frame and queue EndShape.
+    shape_ended_during_scan: bool,
 }
 
 impl<'input> PmlEventIter<'input> {
@@ -88,6 +91,7 @@ impl<'input> PmlEventIter<'input> {
             pending: [None, None],
             started: false,
             done: false,
+            shape_ended_during_scan: false,
         }
     }
 
@@ -126,7 +130,14 @@ impl<'input> Iterator for PmlEventIter<'input> {
             match info {
                 XmlInfo::ContainerStart(kind) => {
                     let start_event = self.build_start_event(kind);
-                    self.stack.push(ContextFrame { kind });
+                    if self.shape_ended_during_scan {
+                        // build_start_event consumed </p:sp> — emit Start then End
+                        // without pushing a frame (there is no matching end tag left).
+                        self.shape_ended_during_scan = false;
+                        self.pending[0] = Some(end_event_for(kind));
+                    } else {
+                        self.stack.push(ContextFrame { kind });
+                    }
                     return Some(start_event);
                 }
                 XmlInfo::HyperlinkStart { rel_id } => {
@@ -277,10 +288,89 @@ impl<'input> PmlEventIter<'input> {
                 let props = self.read_props::<CTTableCellProperties>(b"tcPr");
                 PmlEvent::StartTableCell { props: Box::new(props) }
             }
-            PmlStartKind::Shape => PmlEvent::StartShape,
+            PmlStartKind::Shape => {
+                let transform = self.read_shape_transform();
+                PmlEvent::StartShape { transform }
+            }
             PmlStartKind::GraphicFrame => PmlEvent::StartGraphicFrame,
             PmlStartKind::TableRow => PmlEvent::StartTableRow,
             PmlStartKind::Hyperlink => unreachable!(),
+        }
+    }
+
+    /// Scan children of `<p:sp>` for `<p:spPr>` and extract `<a:xfrm>` geometry.
+    ///
+    /// Consumes children up to and including `<p:spPr>`. Remaining children
+    /// (`<p:style>`, `<p:txBody>`, etc.) are left for the normal SAX loop.
+    /// On malformed input where `</p:sp>` is consumed before `<p:spPr>` is found,
+    /// sets `self.shape_ended_during_scan` so the caller skips the frame push.
+    fn read_shape_transform(&mut self) -> Option<ShapeTransform> {
+        let mut buf = Vec::new();
+        loop {
+            buf.clear();
+            match self.reader.read_event_into(&mut buf) {
+                Ok(XmlEvent::Start(ref e)) => {
+                    let local = local_name_owned(e.local_name().as_ref());
+                    if local == b"spPr" {
+                        return self.extract_xfrm_from_sppr();
+                    }
+                    skip_element(&mut self.reader);
+                }
+                Ok(XmlEvent::Empty(_)) => {}
+                Ok(XmlEvent::End(_)) => {
+                    // Consumed </p:sp> — signal caller not to push frame.
+                    self.shape_ended_during_scan = true;
+                    break;
+                }
+                Ok(XmlEvent::Eof) | Err(_) => {
+                    self.done = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// Read the contents of an already-opened `<p:spPr>` element and extract
+    /// the `<a:off>` and `<a:ext>` attributes from `<a:xfrm>`.
+    fn extract_xfrm_from_sppr(&mut self) -> Option<ShapeTransform> {
+        let mut x: Option<i64> = None;
+        let mut y: Option<i64> = None;
+        let mut cx: Option<i64> = None;
+        let mut cy: Option<i64> = None;
+        let mut depth = 1u32;
+        let mut buf = Vec::new();
+        loop {
+            buf.clear();
+            match self.reader.read_event_into(&mut buf) {
+                Ok(XmlEvent::Start(_)) => depth += 1,
+                Ok(XmlEvent::Empty(ref e)) => {
+                    let local = local_name_owned(e.local_name().as_ref());
+                    if local == b"off" {
+                        x = attr_string(e, b"x").and_then(|s| s.parse().ok());
+                        y = attr_string(e, b"y").and_then(|s| s.parse().ok());
+                    } else if local == b"ext" {
+                        cx = attr_string(e, b"cx").and_then(|s| s.parse().ok());
+                        cy = attr_string(e, b"cy").and_then(|s| s.parse().ok());
+                    }
+                }
+                Ok(XmlEvent::End(_)) => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                Ok(XmlEvent::Eof) | Err(_) => {
+                    self.done = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        match (x, y, cx, cy) {
+            (Some(x), Some(y), Some(cx), Some(cy)) => Some(ShapeTransform { x, y, cx, cy }),
+            _ => None,
         }
     }
 

@@ -43,7 +43,7 @@ use std::io::{Seek, Write};
 
 use crate::writer::PresentationBuilder;
 use crate::Result;
-use crate::generated_events::{OwnedPmlEvent, PmlEvent};
+use crate::generated_events::{OwnedPmlEvent, PmlEvent, ShapeTransform};
 
 // Default slide dimensions: 10 in × 7.5 in in EMU (914400 EMU/in).
 const SLIDE_W: i64 = 9_144_000;
@@ -91,20 +91,28 @@ impl<W: Write + Seek> PmlWriter<W> {
 }
 
 fn process_slide(events: &[OwnedPmlEvent], builder: &mut PresentationBuilder) {
-    let mut shapes: Vec<String> = Vec::new();
+    let mut shapes: Vec<(String, Option<ShapeTransform>)> = Vec::new();
     let mut current_paragraphs: Vec<String> = Vec::new();
     let mut current_para = String::new();
     let mut in_shape = false;
     let mut in_para = false;
     let mut in_table_cell = false;
+    let mut current_transform: Option<ShapeTransform> = None;
 
     for event in events {
         match event {
             PmlEvent::StartPresentation | PmlEvent::EndPresentation => {}
 
-            PmlEvent::StartShape | PmlEvent::StartGraphicFrame => {
+            PmlEvent::StartShape { transform } => {
                 in_shape = true;
                 current_paragraphs.clear();
+                current_transform = *transform;
+            }
+
+            PmlEvent::StartGraphicFrame => {
+                in_shape = true;
+                current_paragraphs.clear();
+                current_transform = None;
             }
 
             PmlEvent::EndShape | PmlEvent::EndGraphicFrame => {
@@ -117,10 +125,11 @@ fn process_slide(events: &[OwnedPmlEvent], builder: &mut PresentationBuilder) {
                 current_para.clear();
 
                 if !current_paragraphs.is_empty() {
-                    shapes.push(current_paragraphs.join("\n"));
+                    shapes.push((current_paragraphs.join("\n"), current_transform));
                     current_paragraphs.clear();
                 }
                 in_shape = false;
+                current_transform = None;
             }
 
             PmlEvent::StartParagraph { .. } => {
@@ -178,9 +187,13 @@ fn process_slide(events: &[OwnedPmlEvent], builder: &mut PresentationBuilder) {
 
     if !shapes.is_empty() {
         let slide = builder.add_slide();
-        for (i, text) in shapes.iter().enumerate() {
-            let y = MARGIN + i as i64 * (SHAPE_H + SHAPE_GAP);
-            slide.add_text_at(text.as_str(), MARGIN, y, SHAPE_W, SHAPE_H);
+        for (i, (text, transform)) in shapes.iter().enumerate() {
+            if let Some(t) = transform {
+                slide.add_text_at(text.as_str(), t.x, t.y, t.cx, t.cy);
+            } else {
+                let y = MARGIN + i as i64 * (SHAPE_H + SHAPE_GAP);
+                slide.add_text_at(text.as_str(), MARGIN, y, SHAPE_W, SHAPE_H);
+            }
         }
     }
 }
