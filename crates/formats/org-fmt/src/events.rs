@@ -70,6 +70,11 @@ pub enum Event<'a> {
     EndFigure,
     StartCaption,
     EndCaption,
+    /// Block-level footnote definition `[fn:label] content`.
+    StartBlockFootnoteDef {
+        label: String,
+    },
+    EndBlockFootnoteDef,
     /// Unknown block kind (preserved for diagnostics).
     UnknownBlock {
         kind: String,
@@ -197,6 +202,7 @@ enum BlockFrame {
     Div { inlines: Vec<Inline> },
     Figure { children: Vec<Block> },
     Caption { inlines: Vec<Inline> },
+    BlockFootnoteDef { label: String, inlines: Vec<Inline> },
 }
 
 // ── Inline frame stack ────────────────────────────────────────────────────────
@@ -241,6 +247,7 @@ fn push_inline(block_stack: &mut [BlockFrame], inline_ctx: &mut [InlineFrame], i
         Some(BlockFrame::TableCell { inlines }) => inlines.push(inline),
         Some(BlockFrame::Div { inlines }) => inlines.push(inline),
         Some(BlockFrame::Caption { inlines }) => inlines.push(inline),
+        Some(BlockFrame::BlockFootnoteDef { inlines, .. }) => inlines.push(inline),
         Some(BlockFrame::ListItem { inline_buf, .. }) => inline_buf.push(inline),
         _ => {}
     }
@@ -312,6 +319,9 @@ fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx:
         }
         Event::StartFootnoteDefinition { label } => {
             inline_ctx.push(InlineFrame::FootnoteDefinition { label, inlines: Vec::new() });
+        }
+        Event::StartBlockFootnoteDef { label } => {
+            block_stack.push(BlockFrame::BlockFootnoteDef { label, inlines: Vec::new() });
         }
 
         // ── Block end events ───────────────────────────────────────────────
@@ -403,6 +413,11 @@ fn handle_event(event: Event<'_>, block_stack: &mut Vec<BlockFrame>, inline_ctx:
         Event::EndCaption => {
             if let Some(BlockFrame::Caption { inlines }) = block_stack.pop() {
                 push_block(block_stack, Block::Caption { inlines, span: Span::NONE });
+            }
+        }
+        Event::EndBlockFootnoteDef => {
+            if let Some(BlockFrame::BlockFootnoteDef { label, inlines }) = block_stack.pop() {
+                push_block(block_stack, Block::FootnoteDef { label, content: inlines, span: Span::NONE });
             }
         }
         Event::EndFootnoteDefinition => {

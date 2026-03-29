@@ -75,6 +75,7 @@ enum Frame {
     Figure { blocks: Vec<Block> },
     Caption { inlines: Vec<Inline> },
     FootnoteDefinition { label: String, inlines: Vec<Inline> },
+    BlockFootnoteDef { label: String, inlines: Vec<Inline> },
     // Inline spans
     Bold { inlines: Vec<Inline> },
     Italic { inlines: Vec<Inline> },
@@ -350,6 +351,14 @@ impl DocBuilder {
                     self.push_inline(Inline::FootnoteDefinition { label, children: inlines, span: Span::NONE });
                 }
             }
+            OwnedEvent::StartBlockFootnoteDef { label } => {
+                self.stack.push(Frame::BlockFootnoteDef { label, inlines: vec![] });
+            }
+            OwnedEvent::EndBlockFootnoteDef => {
+                if let Some(Frame::BlockFootnoteDef { label, inlines }) = self.stack.pop() {
+                    self.push_block(Block::FootnoteDef { label, content: inlines, span: Span::NONE });
+                }
+            }
             OwnedEvent::MathInline { source } => {
                 self.push_inline(Inline::MathInline { source, span: Span::NONE });
             }
@@ -397,6 +406,7 @@ impl DocBuilder {
             Some(Frame::Div { inlines }) => inlines.push(inline),
             Some(Frame::Caption { inlines }) => inlines.push(inline),
             Some(Frame::FootnoteDefinition { inlines, .. }) => inlines.push(inline),
+            Some(Frame::BlockFootnoteDef { inlines, .. }) => inlines.push(inline),
             Some(Frame::ListItem { current_inlines: Some(inlines), .. }) => inlines.push(inline),
             _ => {} // unexpected context, discard
         }

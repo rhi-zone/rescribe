@@ -146,6 +146,12 @@ pub enum Block {
         inlines: Vec<Inline>,
         span: Span,
     },
+    /// Block-level footnote definition: `[fn:label] content`
+    FootnoteDef {
+        label: String,
+        content: Vec<Inline>,
+        span: Span,
+    },
     /// Unknown block type logged as diagnostic
     Unknown {
         kind: String,
@@ -218,6 +224,11 @@ impl Block {
             },
             Block::Caption { inlines, .. } => Block::Caption {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
+                span: Span::NONE,
+            },
+            Block::FootnoteDef { label, content, .. } => Block::FootnoteDef {
+                label: label.clone(),
+                content: content.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
             Block::Unknown { kind, .. } => Block::Unknown {

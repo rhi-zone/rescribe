@@ -439,4 +439,49 @@ mod tests {
             panic!("expected paragraph");
         }
     }
+
+    #[test]
+    fn test_parse_block_footnote_def() {
+        let doc = parse_ok("[fn:1] This is the footnote text.");
+        assert_eq!(doc.blocks.len(), 1);
+        if let Block::FootnoteDef { ref label, ref content, .. } = doc.blocks[0] {
+            assert_eq!(label, "1");
+            assert!(content.iter().any(|n| matches!(n, Inline::Text { text, .. } if text.contains("footnote text"))));
+        } else {
+            panic!("expected FootnoteDef block, got {:?}", doc.blocks[0]);
+        }
+    }
+
+    #[test]
+    fn test_build_block_footnote_def() {
+        let doc = simple_doc(Block::FootnoteDef {
+            label: "1".into(),
+            content: vec![Inline::Text {
+                text: "Footnote content here.".into(),
+                span: Span::NONE,
+            }],
+            span: Span::NONE,
+        });
+        let out = build_str(&doc);
+        assert!(out.contains("[fn:1]"), "expected [fn:1] in: {out}");
+        assert!(out.contains("Footnote content here."), "expected content in: {out}");
+    }
+
+    #[test]
+    fn test_roundtrip_block_footnote_def() {
+        let input = "[fn:note] Some footnote content.";
+        let (doc, _) = parse(input);
+        let emitted = build_str(&doc);
+        let (doc2, _) = parse(&emitted);
+        assert_eq!(doc.blocks.len(), 1);
+        assert_eq!(doc2.blocks.len(), 1);
+        // strip_spans equality
+        assert!(matches!(doc.blocks[0].strip_spans(), Block::FootnoteDef { .. }));
+        assert!(matches!(doc2.blocks[0].strip_spans(), Block::FootnoteDef { .. }));
+        if let (Block::FootnoteDef { label: l1, .. }, Block::FootnoteDef { label: l2, .. }) =
+            (&doc.blocks[0], &doc2.blocks[0])
+        {
+            assert_eq!(l1, l2);
+        }
+    }
 }

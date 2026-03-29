@@ -1,7 +1,7 @@
 {
-  "description": "Inline footnote definition via [fn:label: content]",
+  "description": "Block-level footnote definition [fn:label] content on its own line",
   "assertions": [
-    { "path": "/0",   "kind": "paragraph" },
-    { "path": "/0/1", "kind": "footnote_def" }
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/1", "kind": "footnote_def", "props": { "label": "1" } }
   ]
 }

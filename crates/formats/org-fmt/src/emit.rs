@@ -213,6 +213,15 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.ensure_newline();
         }
 
+        Block::FootnoteDef { label, content, .. } => {
+            ctx.ensure_newline();
+            ctx.write("[fn:");
+            ctx.write(label);
+            ctx.write("] ");
+            build_inlines(content, ctx);
+            ctx.ensure_blank_line();
+        }
+
         Block::Unknown { .. } => {
             // Unknown block — silently skip (diagnostic already emitted at parse time)
         }

@@ -247,6 +247,28 @@ impl<'a> EventIter<'a> {
                 return Some(self.parse_table());
             }
 
+            // Block-level footnote definition: `[fn:label] content`
+            // Must start at column 0 with "[fn:" and label must not contain ":"
+            // (colon in label would make it an inline definition [fn:label: content]).
+            if let Some(rest) = line.strip_prefix("[fn:")
+                && let Some(bracket_end) = rest.find(']')
+            {
+                let label_part = &rest[..bracket_end];
+                // Block-level: label has no colon (no inline-def colon separator)
+                if !label_part.is_empty() && !label_part.contains(':') {
+                    if !self.current_para.is_empty() {
+                        let inlines = parse_para_lines(&self.current_para);
+                        self.current_para.clear();
+                        return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    }
+                    let label = label_part.to_string();
+                    let body = rest[bracket_end + 1..].trim().to_string();
+                    let content = parse_inline_content(&body);
+                    self.advance();
+                    return Some(Block::FootnoteDef { label, content, span: Span::NONE });
+                }
+            }
+
             // Horizontal rule
             if line.trim() == "-----" || (line.chars().all(|c| c == '-') && line.len() >= 5) {
                 if !self.current_para.is_empty() {
@@ -767,6 +789,13 @@ impl<'a> EventIter<'a> {
                     self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
                 }
                 self.frame_stack.push(Frame::Event(OwnedEvent::StartCaption));
+            }
+            Block::FootnoteDef { label, content, .. } => {
+                self.frame_stack.push(Frame::Event(OwnedEvent::EndBlockFootnoteDef));
+                if !content.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(content.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(OwnedEvent::StartBlockFootnoteDef { label }));
             }
             Block::Unknown { kind, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::UnknownBlock { kind }));

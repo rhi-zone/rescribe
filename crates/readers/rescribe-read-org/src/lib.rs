@@ -164,6 +164,12 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             Node::new(node::CAPTION).children(convert_inlines(inlines))
         }
 
+        Block::FootnoteDef { label, content, .. } => {
+            Node::new(node::FOOTNOTE_DEF)
+                .prop(prop::LABEL, label.clone())
+                .children(convert_inlines(content))
+        }
+
         Block::Unknown { kind, .. } => {
             return Err(FidelityWarning::new(
                 Severity::Minor,
