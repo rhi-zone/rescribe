@@ -1,0 +1,3 @@
+* Regular item
+* [X] Done task
+* [ ] Pending task

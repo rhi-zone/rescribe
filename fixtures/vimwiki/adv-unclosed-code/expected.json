@@ -1,0 +1,7 @@
+{
+  "description": "Unclosed code block consumed to end of document",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "code_block", "props": { "content": "unclosed code block" } }
+  ]
+}

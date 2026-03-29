@@ -1,0 +1,3 @@
+* Item with *bold* text
+* Item with _italic_ text
+* Item with `code` text

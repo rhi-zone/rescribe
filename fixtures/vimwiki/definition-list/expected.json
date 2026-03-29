@@ -1,0 +1,11 @@
+{
+  "description": "Definition list with ; term and : definition syntax",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "definition_list", "children_count": 2 },
+    { "path": "/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Term One" } },
+    { "path": "/0/1", "kind": "definition_desc" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Definition of term one" } }
+  ]
+}

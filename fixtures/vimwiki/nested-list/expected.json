@@ -1,0 +1,8 @@
+{
+  "description": "Nested unordered list with 2 levels of indentation",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0", "kind": "list_item" }
+  ]
+}

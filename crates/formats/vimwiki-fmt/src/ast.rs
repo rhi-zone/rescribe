@@ -1,6 +1,6 @@
 //! VimWiki AST types with span information.
 
-// ── Span / Diagnostic ─────────────────────────────────────────────────────────
+// -- Span / Diagnostic -------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Span {
@@ -35,7 +35,7 @@ impl Diagnostic {
     }
 }
 
-// ── AST ───────────────────────────────────────────────────────────────────────
+// -- AST ----------------------------------------------------------------------
 
 /// A parsed VimWiki document.
 #[derive(Debug, Clone, Default)]
@@ -86,6 +86,10 @@ pub enum Block {
     HorizontalRule {
         span: Span,
     },
+    DefinitionList {
+        items: Vec<DefinitionItem>,
+        span: Span,
+    },
 }
 
 impl Block {
@@ -117,6 +121,28 @@ impl Block {
                 span: Span::NONE,
             },
             Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
+            Block::DefinitionList { items, .. } => Block::DefinitionList {
+                items: items.into_iter().map(DefinitionItem::strip_spans).collect(),
+                span: Span::NONE,
+            },
+        }
+    }
+}
+
+/// A definition list item.
+#[derive(Debug, Clone)]
+pub struct DefinitionItem {
+    pub term: Vec<Inline>,
+    pub desc: Vec<Inline>,
+    pub span: Span,
+}
+
+impl DefinitionItem {
+    pub fn strip_spans(self) -> Self {
+        DefinitionItem {
+            term: self.term.into_iter().map(Inline::strip_spans).collect(),
+            desc: self.desc.into_iter().map(Inline::strip_spans).collect(),
+            span: Span::NONE,
         }
     }
 }
@@ -166,9 +192,11 @@ pub enum Inline {
     Bold(Vec<Inline>, Span),
     Italic(Vec<Inline>, Span),
     Strikethrough(Vec<Inline>, Span),
+    Superscript(Vec<Inline>, Span),
+    Subscript(Vec<Inline>, Span),
     Code(String, Span),
     Link { url: String, label: String, span: Span },
-    Image { url: String, alt: Option<String>, span: Span },
+    Image { url: String, alt: Option<String>, style: Option<String>, span: Span },
 }
 
 impl Inline {
@@ -185,9 +213,19 @@ impl Inline {
                 children.into_iter().map(Inline::strip_spans).collect(),
                 Span::NONE,
             ),
+            Inline::Superscript(children, _) => Inline::Superscript(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Subscript(children, _) => Inline::Subscript(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::Code(s, _) => Inline::Code(s, Span::NONE),
             Inline::Link { url, label, .. } => Inline::Link { url, label, span: Span::NONE },
-            Inline::Image { url, alt, .. } => Inline::Image { url, alt, span: Span::NONE },
+            Inline::Image { url, alt, style, .. } => {
+                Inline::Image { url, alt, style, span: Span::NONE }
+            }
         }
     }
 }

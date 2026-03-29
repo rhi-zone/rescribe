@@ -33,6 +33,12 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            // Comment line (skip)
+            if line.trim_start().starts_with("%% ") || line.trim() == "%%" {
+                self.pos += 1;
+                continue;
+            }
+
             // Heading = Title = to ====== Title ======
             if let Some(block) = self.try_parse_heading(line) {
                 blocks.push(block);
@@ -48,13 +54,20 @@ impl<'a> Parser<'a> {
             }
 
             // Preformatted block {{{ ... }}}
-            if line.trim_start().starts_with("{{{") {
+            if line.trim_start().starts_with("{{{") && !is_inline_preformatted(line) {
                 blocks.push(self.parse_preformatted());
                 continue;
             }
 
-            // Unordered list (* or -)
             let trimmed = line.trim_start();
+
+            // Definition list (; term\n: definition)
+            if trimmed.starts_with("; ") {
+                blocks.push(self.parse_definition_list());
+                continue;
+            }
+
+            // Unordered list (* or -)
             if (trimmed.starts_with("* ") && !trimmed.starts_with("**"))
                 || trimmed.starts_with("- ")
             {
@@ -62,8 +75,8 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
-            // Ordered list (1. or a))
-            if self.is_ordered_list_item(line) {
+            // Ordered list (# or 1. or a))
+            if trimmed.starts_with("# ") || self.is_ordered_list_item(line) {
                 blocks.push(self.parse_list(true));
                 continue;
             }
@@ -125,7 +138,13 @@ impl<'a> Parser<'a> {
         let language = if first_line.len() > 3 {
             let after = first_line[3..].trim();
             if !after.is_empty() {
-                Some(after.to_string())
+                // Handle class="lang" style
+                let lang = if let Some(rest) = after.strip_prefix("class=\"") {
+                    rest.strip_suffix('"').unwrap_or(rest).to_string()
+                } else {
+                    after.to_string()
+                };
+                Some(lang)
             } else {
                 None
             }
@@ -153,11 +172,16 @@ impl<'a> Parser<'a> {
 
     fn is_ordered_list_item(&self, line: &str) -> bool {
         let trimmed = line.trim_start();
-        // Check for 1. or a) style
+        // Check for # style
+        if trimmed.starts_with("# ") {
+            return true;
+        }
+        // Check for 1. style
         if let Some(dot_pos) = trimmed.find(". ") {
             let prefix = &trimmed[..dot_pos];
             return prefix.chars().all(|c| c.is_ascii_digit());
         }
+        // Check for a) style
         if let Some(paren_pos) = trimmed.find(") ") {
             let prefix = &trimmed[..paren_pos];
             return prefix.len() == 1 && prefix.chars().all(|c| c.is_ascii_lowercase());
@@ -186,14 +210,15 @@ impl<'a> Parser<'a> {
 
             let is_bullet = (trimmed.starts_with("* ") && !trimmed.starts_with("**"))
                 || trimmed.starts_with("- ");
+            let is_hash = trimmed.starts_with("# ");
             let is_numbered = self.is_ordered_list_item(line);
 
-            if !is_bullet && !is_numbered {
+            if !is_bullet && !is_numbered && !is_hash {
                 break;
             }
 
             // Extract item content
-            let content = if is_bullet {
+            let content = if is_bullet || is_hash {
                 &trimmed[2..]
             } else if let Some(pos) = trimmed.find(". ") {
                 &trimmed[pos + 2..]
@@ -296,6 +321,40 @@ impl<'a> Parser<'a> {
         Block::Table { rows, span: Span::NONE }
     }
 
+    fn parse_definition_list(&mut self) -> Block {
+        let mut items = Vec::new();
+
+        while self.pos < self.lines.len() {
+            let line = self.lines[self.pos];
+            let trimmed = line.trim_start();
+
+            if !trimmed.starts_with("; ") {
+                break;
+            }
+
+            let term_text = &trimmed[2..];
+            let term = parse_inline(term_text);
+            self.pos += 1;
+
+            // Expect : definition line
+            let desc = if self.pos < self.lines.len() {
+                let dline = self.lines[self.pos].trim_start();
+                if let Some(rest) = dline.strip_prefix(": ") {
+                    self.pos += 1;
+                    parse_inline(rest)
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+
+            items.push(DefinitionItem { term, desc, span: Span::NONE });
+        }
+
+        Block::DefinitionList { items, span: Span::NONE }
+    }
+
     fn parse_paragraph(&mut self) -> Block {
         let mut text = String::new();
 
@@ -307,14 +366,19 @@ impl<'a> Parser<'a> {
             }
 
             // Check for block elements
+            let trimmed = line.trim_start();
             if self.try_parse_heading(line).is_some()
                 || (line.trim().chars().all(|c| c == '-') && line.trim().len() >= 4)
-                || line.trim_start().starts_with("{{{")
-                || line.trim_start().starts_with("* ")
-                || line.trim_start().starts_with("- ")
+                || (trimmed.starts_with("{{{") && !is_inline_preformatted(line))
+                || (trimmed.starts_with("* ") && !trimmed.starts_with("**"))
+                || trimmed.starts_with("- ")
+                || trimmed.starts_with("# ")
                 || self.is_ordered_list_item(line)
-                || line.trim_start().starts_with("> ")
-                || line.trim_start().starts_with('|')
+                || trimmed.starts_with("> ")
+                || trimmed.starts_with('|')
+                || trimmed.starts_with("; ")
+                || trimmed.starts_with("%% ")
+                || trimmed == "%%"
             {
                 break;
             }
@@ -328,6 +392,20 @@ impl<'a> Parser<'a> {
 
         let inlines = parse_inline(&text);
         Block::Paragraph { inlines, span: Span::NONE }
+    }
+}
+
+/// Public wrapper for batch module use.
+pub(crate) fn is_inline_preformatted_pub(line: &str) -> bool {
+    is_inline_preformatted(line)
+}
+
+/// Check if a line with `{{{` is an inline preformatted span (contains `}}}` on the same line).
+fn is_inline_preformatted(line: &str) -> bool {
+    if let Some(start) = line.find("{{{") {
+        line[start + 3..].contains("}}}")
+    } else {
+        false
     }
 }
 
@@ -387,6 +465,54 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
             continue;
         }
 
+        // Superscript ^text^
+        if chars[i] == '^'
+            && i + 1 < chars.len()
+            && chars[i + 1] != ' '
+            && let Some((end, content)) = find_closing(&chars, i + 1, '^')
+        {
+            if !current.is_empty() {
+                inlines.push(Inline::Text(current.clone(), Span::NONE));
+                current.clear();
+            }
+            let inner = parse_inline(&content);
+            inlines.push(Inline::Superscript(inner, Span::NONE));
+            i = end + 1;
+            continue;
+        }
+
+        // Subscript ,,text,,
+        if chars[i] == ','
+            && i + 1 < chars.len()
+            && chars[i + 1] == ','
+            && let Some((end, content)) = find_double_closing(&chars, i + 2, ',')
+        {
+            if !current.is_empty() {
+                inlines.push(Inline::Text(current.clone(), Span::NONE));
+                current.clear();
+            }
+            let inner = parse_inline(&content);
+            inlines.push(Inline::Subscript(inner, Span::NONE));
+            i = end + 2;
+            continue;
+        }
+
+        // Inline preformatted {{{text}}}
+        if chars[i] == '{'
+            && i + 2 < chars.len()
+            && chars[i + 1] == '{'
+            && chars[i + 2] == '{'
+            && let Some((end, content)) = find_triple_closing(&chars, i + 3, '}')
+        {
+            if !current.is_empty() {
+                inlines.push(Inline::Text(current.clone(), Span::NONE));
+                current.clear();
+            }
+            inlines.push(Inline::Code(content, Span::NONE));
+            i = end + 3;
+            continue;
+        }
+
         // Code `text`
         if chars[i] == '`'
             && let Some((end, content)) = find_closing(&chars, i + 1, '`')
@@ -415,17 +541,18 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
             continue;
         }
 
-        // Image {{image.png}} or {{image.png|alt}}
+        // Image {{image.png}} or {{image.png|alt}} or {{image.png|alt|style}}
         if chars[i] == '{'
             && i + 1 < chars.len()
             && chars[i + 1] == '{'
-            && let Some((end, url, alt)) = parse_image(&chars, i)
+            && (i + 2 >= chars.len() || chars[i + 2] != '{')
+            && let Some((end, url, alt, style)) = parse_image(&chars, i)
         {
             if !current.is_empty() {
                 inlines.push(Inline::Text(current.clone(), Span::NONE));
                 current.clear();
             }
-            inlines.push(Inline::Image { url, alt, span: Span::NONE });
+            inlines.push(Inline::Image { url, alt, style, span: Span::NONE });
             i = end;
             continue;
         }
@@ -471,6 +598,20 @@ fn find_double_closing(chars: &[char], start: usize, marker: char) -> Option<(us
     None
 }
 
+fn find_triple_closing(chars: &[char], start: usize, marker: char) -> Option<(usize, String)> {
+    let mut i = start;
+    let mut content = String::new();
+
+    while i + 2 < chars.len() {
+        if chars[i] == marker && chars[i + 1] == marker && chars[i + 2] == marker {
+            return Some((i, content));
+        }
+        content.push(chars[i]);
+        i += 1;
+    }
+    None
+}
+
 fn parse_wiki_link(chars: &[char], start: usize) -> Option<(usize, String, String)> {
     // [[link]] or [[link|description]]
     if start + 1 >= chars.len() || chars[start] != '[' || chars[start + 1] != '[' {
@@ -498,8 +639,8 @@ fn parse_wiki_link(chars: &[char], start: usize) -> Option<(usize, String, Strin
     None
 }
 
-fn parse_image(chars: &[char], start: usize) -> Option<(usize, String, Option<String>)> {
-    // {{image.png}} or {{image.png|alt}}
+fn parse_image(chars: &[char], start: usize) -> Option<(usize, String, Option<String>, Option<String>)> {
+    // {{image.png}} or {{image.png|alt}} or {{image.png|alt|style}}
     if start + 1 >= chars.len() || chars[start] != '{' || chars[start + 1] != '{' {
         return None;
     }
@@ -509,15 +650,11 @@ fn parse_image(chars: &[char], start: usize) -> Option<(usize, String, Option<St
 
     while i < chars.len() {
         if chars[i] == '}' && i + 1 < chars.len() && chars[i + 1] == '}' {
-            let (url, alt) = if let Some(pipe_pos) = content.find('|') {
-                (
-                    content[..pipe_pos].to_string(),
-                    Some(content[pipe_pos + 1..].to_string()),
-                )
-            } else {
-                (content, None)
-            };
-            return Some((i + 2, url, alt));
+            let parts: Vec<&str> = content.splitn(3, '|').collect();
+            let url = parts[0].to_string();
+            let alt = parts.get(1).map(|s| s.to_string());
+            let style = parts.get(2).map(|s| s.to_string());
+            return Some((i + 2, url, alt, style));
         }
         content.push(chars[i]);
         i += 1;

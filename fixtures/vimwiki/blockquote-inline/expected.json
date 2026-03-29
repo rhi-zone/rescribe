@@ -1,0 +1,7 @@
+{
+  "description": "Blockquote containing inline markup",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "blockquote" }
+  ]
+}

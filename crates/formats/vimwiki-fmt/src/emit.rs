@@ -19,7 +19,9 @@ pub fn collect_inline_text(inlines: &[Inline]) -> String {
             Inline::Text(t, _) => s.push_str(t),
             Inline::Bold(children, _)
             | Inline::Italic(children, _)
-            | Inline::Strikethrough(children, _) => {
+            | Inline::Strikethrough(children, _)
+            | Inline::Superscript(children, _)
+            | Inline::Subscript(children, _) => {
                 s.push_str(&collect_inline_text(children));
             }
             Inline::Code(t, _) => s.push_str(t),
@@ -127,6 +129,18 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
         Block::HorizontalRule { .. } => {
             ctx.write("----\n\n");
         }
+
+        Block::DefinitionList { items, .. } => {
+            for item in items {
+                ctx.write("; ");
+                build_inlines(&item.term, ctx);
+                ctx.write("\n");
+                ctx.write(": ");
+                build_inlines(&item.desc, ctx);
+                ctx.write("\n");
+            }
+            ctx.write("\n");
+        }
     }
 }
 
@@ -158,6 +172,18 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("~~");
         }
 
+        Inline::Superscript(children, _) => {
+            ctx.write("^");
+            build_inlines(children, ctx);
+            ctx.write("^");
+        }
+
+        Inline::Subscript(children, _) => {
+            ctx.write(",,");
+            build_inlines(children, ctx);
+            ctx.write(",,");
+        }
+
         Inline::Code(s, _) => {
             ctx.write("`");
             ctx.write(s);
@@ -174,12 +200,19 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("]]");
         }
 
-        Inline::Image { url, alt, .. } => {
+        Inline::Image { url, alt, style, .. } => {
             ctx.write("{{");
             ctx.write(url);
             if let Some(a) = alt {
                 ctx.write("|");
                 ctx.write(a);
+            }
+            if let Some(s) = style {
+                if alt.is_none() {
+                    ctx.write("|");
+                }
+                ctx.write("|");
+                ctx.write(s);
             }
             ctx.write("}}");
         }

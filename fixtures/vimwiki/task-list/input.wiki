@@ -1,0 +1,2 @@
+* [X] Done task
+* [ ] Pending task

@@ -1,0 +1,58 @@
+= VimWiki Sample Document =
+
+== Introduction ==
+
+This is a paragraph with *bold*, _italic_, and `inline code` text.
+It also has ~~strikethrough~~, ^superscript^, and ,,subscript,, markup.
+
+== Lists ==
+
+* First item
+* Second item with *bold*
+* Third item
+
+1. Ordered first
+2. Ordered second
+3. Ordered third
+
+* [ ] Unchecked task
+* [X] Checked task
+
+== Links and Images ==
+
+Visit [[https://example.com|Example Site]] for more info.
+
+{{image.png|Alt text}}
+
+== Code ==
+
+{{{python
+def hello():
+    print("Hello, VimWiki!")
+}}}
+
+Inline code: `x = 42` and also {{{more code}}}.
+
+== Blockquote ==
+
+> This is a quoted passage.
+
+== Table ==
+
+| Name  | Age | City     |
+| Alice |  30 | New York |
+| Bob   |  25 | London   |
+
+== Definition List ==
+
+; Term
+: The definition of the term.
+; Another Term
+: Another definition.
+
+----
+
+=== Heading 3 ===
+==== Heading 4 ====
+
+End of document.

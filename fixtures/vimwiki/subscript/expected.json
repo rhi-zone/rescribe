@@ -1,0 +1,9 @@
+{
+  "description": "Subscript inline text with double commas",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "subscript" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "subscript" } }
+  ]
+}

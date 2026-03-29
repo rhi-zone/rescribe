@@ -1,0 +1,7 @@
+{
+  "description": "Table row with missing trailing pipe still parsed",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "table" }
+  ]
+}

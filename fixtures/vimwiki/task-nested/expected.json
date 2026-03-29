@@ -1,0 +1,10 @@
+{
+  "description": "Task list items mixed with regular list items",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 3 },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item", "props": { "checked": true } },
+    { "path": "/0/2", "kind": "list_item", "props": { "checked": false } }
+  ]
+}

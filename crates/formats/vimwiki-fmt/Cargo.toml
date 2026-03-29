@@ -6,4 +6,17 @@ license.workspace = true
 repository.workspace = true
 description = "VimWiki parser, AST, and builder — no rescribe dependency"
 
-[dependencies]
+[features]
+default = ["reader-ast", "reader-streaming", "reader-batch", "writer-streaming", "writer-builder"]
+reader-ast = []
+reader-streaming = ["reader-ast"]
+reader-batch = []
+writer-streaming = []
+writer-builder = ["reader-ast", "writer-streaming"]
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "vimwiki_bench"
+harness = false

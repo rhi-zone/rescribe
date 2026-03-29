@@ -1,0 +1,9 @@
+{
+  "description": "Superscript inline text with carets",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "superscript" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "superscript" } }
+  ]
+}

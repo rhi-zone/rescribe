@@ -1,0 +1,8 @@
+{
+  "description": "List items containing inline markup",
+  "category": "composition",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 3 },
+    { "path": "/0/0", "kind": "list_item" }
+  ]
+}

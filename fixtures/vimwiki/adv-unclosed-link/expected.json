@@ -1,0 +1,8 @@
+{
+  "description": "Unclosed wiki link treated as plain text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "[[unclosed link" } }
+  ]
+}
