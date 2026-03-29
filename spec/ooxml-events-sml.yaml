@@ -1,0 +1,57 @@
+# Streaming event configuration for SpreadsheetML (XLSX).
+# Used by ooxml-codegen event_gen to generate src/generated_events.rs in ooxml-sml.
+#
+# Design: XLSX-faithful streaming.
+# Row and cell props come from element attributes (no child props element),
+# so props_from_attrs: true is used for both.
+
+enum_name: SmlEvent
+kind_enum_name: SmlStartKind
+document_start: StartWorkbook
+document_end: EndWorkbook
+
+containers:
+  - xml_local: worksheet
+    start_variant: StartWorksheet
+    end_variant: EndWorksheet
+    # No props — worksheet identity comes from OPC relationships, not element attrs.
+
+  - xml_local: sheetData
+    start_variant: StartSheetData
+    end_variant: EndSheetData
+    # No props — purely structural.
+
+  - xml_local: row
+    start_variant: StartRow
+    end_variant: EndRow
+    props_from_attrs: true
+    props_rust_type: Row
+    # Row carries r (row index), ht (height), s (style), hidden, outlineLevel, etc.
+
+  - xml_local: c
+    start_variant: StartCell
+    end_variant: EndCell
+    props_from_attrs: true
+    props_rust_type: Cell
+    # Cell carries r (A1 ref), t (type: s/n/b/e/str/inlineStr), s (style index).
+
+  - xml_local: is
+    start_variant: StartInlineString
+    end_variant: EndInlineString
+    # Inline string container; text comes from nested <t> leaves.
+
+leaves:
+  - xml_local: v
+    variant: CellValue
+    text_content: true
+    # Raw cell value (number, shared-string index, boolean 0/1, error code).
+
+  - xml_local: t
+    variant: StringFragment
+    text_content: true
+    # Text run in an inline string (<is><t>text</t></is>) or rich text.
+
+  - xml_local: f
+    variant: Formula
+    text_content: true
+    # Cell formula text.

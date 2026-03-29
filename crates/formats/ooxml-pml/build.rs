@@ -1,6 +1,6 @@
 use ooxml_codegen::{
-    CodegenConfig, FeatureMappings, NameMappings, Schema, analyze_schema, generate,
-    generate_parsers, generate_serializers, parse_rnc,
+    CodegenConfig, EventConfig, FeatureMappings, NameMappings, Schema, analyze_schema, generate,
+    generate_events, generate_parsers, generate_serializers, parse_rnc,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -16,6 +16,10 @@ fn main() {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../spec/ooxml-features.yaml"
     );
+    let events_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../spec/ooxml-events-pml.yaml"
+    );
 
     // Paths to schemas
     let pml_path = format!("{}/pml.rnc", spec_dir);
@@ -29,6 +33,7 @@ fn main() {
     println!("cargo::rerun-if-changed={}", shared_path);
     println!("cargo::rerun-if-changed={}", names_path);
     println!("cargo::rerun-if-changed={}", features_path);
+    println!("cargo::rerun-if-changed={}", events_path);
     println!("cargo::rerun-if-changed=build.rs");
 
     // The generated file is committed at src/generated.rs
@@ -174,6 +179,33 @@ fn main() {
         eprintln!(
             "Generated {} bytes to src/generated_serializers.rs",
             serializer_dest.metadata().map(|m| m.len()).unwrap_or(0)
+        );
+    }
+
+    // Generate streaming event types (SmlEvent enum + dispatch table).
+    // Enable with OOXML_GENERATE_EVENTS=1
+    if std::env::var("OOXML_GENERATE_EVENTS").is_ok() {
+        let event_dest = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/generated_events.rs");
+        let event_config = if Path::new(events_path).exists() {
+            match EventConfig::from_yaml_file(Path::new(events_path)) {
+                Ok(cfg) => {
+                    eprintln!("Loaded event config from {}", events_path);
+                    cfg
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to load event config: {}", e);
+                    return;
+                }
+            }
+        } else {
+            eprintln!("Warning: Event config not found at {}", events_path);
+            return;
+        };
+        let event_code = generate_events(&event_config);
+        fs::write(&event_dest, event_code).expect("failed to write generated events");
+        eprintln!(
+            "Generated {} bytes to src/generated_events.rs",
+            event_dest.metadata().map(|m| m.len()).unwrap_or(0)
         );
     }
 }

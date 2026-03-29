@@ -1,0 +1,84 @@
+# Streaming event configuration for PresentationML (PPTX).
+# Used by ooxml-codegen event_gen to generate src/generated_events.rs in ooxml-pml.
+#
+# Design: PML-faithful streaming.
+# Text is in the DrawingML namespace (a:p, a:r, a:t) — same XML local names as
+# DML text inside shapes, tables, and text boxes.
+
+enum_name: PmlEvent
+kind_enum_name: PmlStartKind
+document_start: StartPresentation
+document_end: EndPresentation
+cross_crate_imports:
+  - "ooxml_dml::types::{CTTableCellProperties, CTTableProperties, TextCharacterProperties, TextParagraphProperties}"
+
+containers:
+  - xml_local: sp
+    start_variant: StartShape
+    end_variant: EndShape
+    # Shape container (text box, title, content placeholder, etc.).
+    # spPr (shape properties) is a child element but contains geometry, not semantic text.
+
+  - xml_local: graphicFrame
+    start_variant: StartGraphicFrame
+    end_variant: EndGraphicFrame
+    # Graphic frame: wraps tables, charts, SmartArt.
+
+  - xml_local: tbl
+    start_variant: StartTable
+    end_variant: EndTable
+    props_xml_local: tblPr
+    props_rust_type: CTTableProperties
+    # CTTableProperties is defined in ooxml-dml
+
+  - xml_local: tr
+    start_variant: StartTableRow
+    end_variant: EndTableRow
+
+  - xml_local: tc
+    start_variant: StartTableCell
+    end_variant: EndTableCell
+    props_xml_local: tcPr
+    props_rust_type: CTTableCellProperties
+    # CTTableCellProperties is defined in ooxml-dml
+
+  # DrawingML text paragraph and run (used inside shapes and table cells)
+  - xml_local: p
+    start_variant: StartParagraph
+    end_variant: EndParagraph
+    props_xml_local: pPr
+    props_rust_type: TextParagraphProperties
+    # TextParagraphProperties is defined in ooxml-dml
+
+  - xml_local: r
+    start_variant: StartRun
+    end_variant: EndRun
+    props_xml_local: rPr
+    props_rust_type: TextCharacterProperties
+    # TextCharacterProperties is defined in ooxml-dml
+
+  - xml_local: hyperlink
+    start_variant: StartHyperlink
+    end_variant: EndHyperlink
+    attrs:
+      - xml_attr: "r:id"
+        field_name: rel_id
+        rust_type: "Option<Cow<'a, str>>"
+
+leaves:
+  - xml_local: t
+    variant: Text
+    text_content: true
+    # Text content of a DML run (<a:t>).
+
+  - xml_local: br
+    variant: LineBreak
+    # Line break within a paragraph.
+
+  - xml_local: fldId
+    variant: FieldId
+    attrs:
+      - xml_attr: "type"
+        field_name: field_type
+        rust_type: "Option<Cow<'a, str>>"
+    # Slide number / date / footer field placeholder.

@@ -38,6 +38,22 @@ pub mod ext;
 pub mod presentation;
 pub mod writer;
 
+/// Generated streaming event types (`PmlEvent`, `OwnedPmlEvent`, dispatch helpers).
+#[cfg(feature = "reader-streaming")]
+pub mod generated_events;
+/// Streaming event types. See [`generated_events`] for details.
+#[cfg(feature = "reader-streaming")]
+pub use generated_events as event_types;
+
+/// True SAX iterator emitting [`PmlEvent`] items without materialising the full tree.
+#[cfg(feature = "reader-streaming")]
+pub mod events;
+
+#[cfg(feature = "reader-streaming")]
+pub use events::{PmlEventIter, events as pml_events};
+#[cfg(feature = "reader-streaming")]
+pub use generated_events::{OwnedPmlEvent, PmlEvent, PmlStartKind, dispatch_start, is_text_element};
+
 /// Generated types from the ECMA-376 PresentationML schema.
 ///
 /// These types map 1:1 to XML elements and attributes defined in ECMA-376 Part 1 §19.

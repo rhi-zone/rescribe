@@ -13,8 +13,18 @@ use std::fmt::Write;
 /// Top-level event configuration for one OOXML module.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct EventConfig {
-    /// Name of the generated enum (e.g. `"WmlEvent"`).
+    /// Name of the generated event enum (e.g. `"WmlEvent"`).
     pub enum_name: String,
+
+    /// Name of the generated container-kind enum (e.g. `"WmlStartKind"`).
+    /// Defaults to `"{enum_name}StartKind"` if omitted.
+    #[serde(default)]
+    pub kind_enum_name: Option<String>,
+
+    /// Additional `use` paths needed for cross-crate types referenced in the enum
+    /// (e.g. `"ooxml_dml::types::*"` when DML types appear in PML events).
+    #[serde(default)]
+    pub cross_crate_imports: Vec<String>,
 
     /// Variant name for the start-of-document sentinel (e.g. `"StartDocument"`).
     #[serde(default)]
@@ -59,12 +69,22 @@ pub struct ContainerDef {
     pub end_variant: String,
 
     /// XML local name of the properties child element, if any (e.g. `"pPr"`).
+    ///
+    /// Mutually exclusive with `props_from_attrs`.
     #[serde(default)]
     pub props_xml_local: Option<String>,
 
     /// Rust type of the props struct, if any (e.g. `"ParagraphProperties"`).
     #[serde(default)]
     pub props_rust_type: Option<String>,
+
+    /// If true, parse `props_rust_type` from the container element's own attributes
+    /// (using `FromXml::from_xml(..., is_empty=true)`) instead of looking for a child
+    /// element.  Used for XLSX `<row>` and `<c>` which carry all metadata as attributes.
+    ///
+    /// Mutually exclusive with `props_xml_local`.
+    #[serde(default)]
+    pub props_from_attrs: bool,
 
     /// Extra fields on the start variant, read from XML attributes of the container element.
     #[serde(default)]
@@ -133,6 +153,13 @@ impl<'a> EventGenerator<'a> {
         }
     }
 
+    fn kind_enum_name(&self) -> String {
+        self.config
+            .kind_enum_name
+            .clone()
+            .unwrap_or_else(|| format!("{}StartKind", self.config.enum_name))
+    }
+
     fn run(&mut self) -> String {
         self.write_header();
         self.gen_event_enum();
@@ -141,6 +168,8 @@ impl<'a> EventGenerator<'a> {
         self.gen_start_kind_enum();
         self.gen_dispatch_start();
         self.gen_props_element();
+        self.gen_props_strategy();
+        self.gen_is_text_element();
         std::mem::take(&mut self.output)
     }
 
@@ -160,6 +189,9 @@ impl<'a> EventGenerator<'a> {
         writeln!(self.output).unwrap();
         writeln!(self.output, "use std::borrow::Cow;").unwrap();
         writeln!(self.output, "use super::generated::*;").unwrap();
+        for import in &self.config.cross_crate_imports {
+            writeln!(self.output, "use {};", import).unwrap();
+        }
         writeln!(self.output).unwrap();
     }
 
@@ -426,15 +458,15 @@ impl<'a> EventGenerator<'a> {
         if self.config.containers.is_empty() {
             return;
         }
+        let kname = self.kind_enum_name();
         writeln!(
             self.output,
             "/// Which container element was opened — used by the SAX state machine."
         )
         .unwrap();
         writeln!(self.output, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]").unwrap();
-        writeln!(self.output, "pub enum WmlStartKind {{").unwrap();
+        writeln!(self.output, "pub enum {} {{", kname).unwrap();
         for c in &self.config.containers {
-            // Derive a variant name by stripping "Start" prefix from start_variant
             let kind = c
                 .start_variant
                 .strip_prefix("Start")
@@ -449,14 +481,17 @@ impl<'a> EventGenerator<'a> {
         if self.config.containers.is_empty() {
             return;
         }
+        let kname = self.kind_enum_name();
         writeln!(
             self.output,
-            "/// Map an XML local element name to [`WmlStartKind`], if it is a tracked container."
+            "/// Map an XML local element name to [`{0}`], if it is a tracked container.",
+            kname
         )
         .unwrap();
         writeln!(
             self.output,
-            "pub fn dispatch_start(local: &[u8]) -> Option<WmlStartKind> {{"
+            "pub fn dispatch_start(local: &[u8]) -> Option<{0}> {{",
+            kname
         )
         .unwrap();
         writeln!(self.output, "    match local {{").unwrap();
@@ -467,8 +502,8 @@ impl<'a> EventGenerator<'a> {
                 .unwrap_or(&c.start_variant);
             writeln!(
                 self.output,
-                "        b\"{}\" => Some(WmlStartKind::{}),",
-                c.xml_local, kind
+                "        b\"{}\" => Some({}::{}),",
+                c.xml_local, kname, kind
             )
             .unwrap();
         }
@@ -483,6 +518,7 @@ impl<'a> EventGenerator<'a> {
         if !has_any_props {
             return;
         }
+        let kname = self.kind_enum_name();
         writeln!(
             self.output,
             "/// Return the XML local name of the properties child element for a container, if any."
@@ -490,7 +526,8 @@ impl<'a> EventGenerator<'a> {
         .unwrap();
         writeln!(
             self.output,
-            "pub fn props_element(kind: WmlStartKind) -> Option<&'static [u8]> {{"
+            "pub fn props_element(kind: {0}) -> Option<&'static [u8]> {{",
+            kname
         )
         .unwrap();
         writeln!(self.output, "    match kind {{").unwrap();
@@ -502,15 +539,163 @@ impl<'a> EventGenerator<'a> {
             if let Some(ref px) = c.props_xml_local {
                 writeln!(
                     self.output,
-                    "        WmlStartKind::{} => Some(b\"{}\"),",
-                    kind, px
+                    "        {}::{} => Some(b\"{}\"),",
+                    kname, kind, px
                 )
                 .unwrap();
             } else {
-                writeln!(self.output, "        WmlStartKind::{} => None,", kind).unwrap();
+                writeln!(self.output, "        {}::{} => None,", kname, kind).unwrap();
             }
         }
         writeln!(self.output, "    }}").unwrap();
+        writeln!(self.output, "}}").unwrap();
+        writeln!(self.output).unwrap();
+    }
+
+    // -----------------------------------------------------------------------
+    // Props-strategy enum
+    // -----------------------------------------------------------------------
+
+    /// Generate a `PropsStrategy` enum and a `props_strategy(kind) -> PropsStrategy` fn.
+    ///
+    /// Three strategies:
+    /// - `ChildElement(&'static [u8])` — look for a named child element (pPr, rPr, …)
+    /// - `FromAttrs` — parse `is_empty=true` from the container's own start tag
+    /// - `None` — no props, container is purely structural
+    fn gen_props_strategy(&mut self) {
+        if self.config.containers.is_empty() {
+            return;
+        }
+        let has_child = self
+            .config
+            .containers
+            .iter()
+            .any(|c| c.props_xml_local.is_some());
+        let has_attrs = self
+            .config
+            .containers
+            .iter()
+            .any(|c| c.props_from_attrs && c.props_rust_type.is_some());
+
+        if !has_child && !has_attrs {
+            return;
+        }
+
+        writeln!(self.output, "/// How props are obtained for a container element.").unwrap();
+        writeln!(self.output, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]").unwrap();
+        writeln!(self.output, "pub enum PropsStrategy {{").unwrap();
+        if has_child {
+            writeln!(
+                self.output,
+                "    /// Buffer and parse this named child element."
+            )
+            .unwrap();
+            writeln!(self.output, "    ChildElement(&'static [u8]),").unwrap();
+        }
+        if has_attrs {
+            writeln!(
+                self.output,
+                "    /// Parse the container start tag's own attributes (is_empty=true)."
+            )
+            .unwrap();
+            writeln!(self.output, "    FromAttrs,").unwrap();
+        }
+        writeln!(
+            self.output,
+            "    /// No props; container is purely structural."
+        )
+        .unwrap();
+        writeln!(self.output, "    None,").unwrap();
+        writeln!(self.output, "}}").unwrap();
+        writeln!(self.output).unwrap();
+
+        let kname = self.kind_enum_name();
+        writeln!(
+            self.output,
+            "/// Return the props strategy for a container kind."
+        )
+        .unwrap();
+        writeln!(
+            self.output,
+            "pub fn props_strategy(kind: {0}) -> PropsStrategy {{",
+            kname
+        )
+        .unwrap();
+        writeln!(self.output, "    match kind {{").unwrap();
+        for c in &self.config.containers {
+            let kind = c
+                .start_variant
+                .strip_prefix("Start")
+                .unwrap_or(&c.start_variant);
+            if let Some(ref px) = c.props_xml_local {
+                writeln!(
+                    self.output,
+                    "        {}::{} => PropsStrategy::ChildElement(b\"{}\"),",
+                    kname, kind, px
+                )
+                .unwrap();
+            } else if c.props_from_attrs && c.props_rust_type.is_some() {
+                writeln!(
+                    self.output,
+                    "        {}::{} => PropsStrategy::FromAttrs,",
+                    kname, kind
+                )
+                .unwrap();
+            } else {
+                writeln!(
+                    self.output,
+                    "        {}::{} => PropsStrategy::None,",
+                    kname, kind
+                )
+                .unwrap();
+            }
+        }
+        writeln!(self.output, "    }}").unwrap();
+        writeln!(self.output, "}}").unwrap();
+        writeln!(self.output).unwrap();
+    }
+
+    // -----------------------------------------------------------------------
+    // is_text_element dispatch
+    // -----------------------------------------------------------------------
+
+    /// Generate `is_text_element(local: &[u8]) -> bool` for leaves with `text_content: true`.
+    ///
+    /// These elements carry text content (start/text/end) rather than being self-closing.
+    /// The SAX iterator must read their text rather than skipping them.
+    fn gen_is_text_element(&mut self) {
+        let text_leaves: Vec<_> = self
+            .config
+            .leaves
+            .iter()
+            .filter(|l| l.text_content)
+            .collect();
+
+        if text_leaves.is_empty() {
+            return;
+        }
+
+        writeln!(
+            self.output,
+            "/// Return true if this XML local element name is a text-content leaf."
+        )
+        .unwrap();
+        writeln!(
+            self.output,
+            "/// The SAX iterator reads the element's text content and emits a text event."
+        )
+        .unwrap();
+        writeln!(
+            self.output,
+            "pub fn is_text_element(local: &[u8]) -> bool {{"
+        )
+        .unwrap();
+        writeln!(self.output, "    matches!(local,").unwrap();
+        for (i, leaf) in text_leaves.iter().enumerate() {
+            let sep = if i + 1 < text_leaves.len() { " |" } else { "" };
+            writeln!(self.output, "        b\"{}\"{}", leaf.xml_local, sep).unwrap();
+        }
+        writeln!(self.output, "    )").unwrap();
         writeln!(self.output, "}}").unwrap();
         writeln!(self.output).unwrap();
     }

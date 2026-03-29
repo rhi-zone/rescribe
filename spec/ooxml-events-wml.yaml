@@ -51,6 +51,8 @@ containers:
         field_name: anchor
         rust_type: "Option<Cow<'a, str>>"
 
+kind_enum_name: WmlStartKind
+
 leaves:
   - xml_local: t
     variant: Text

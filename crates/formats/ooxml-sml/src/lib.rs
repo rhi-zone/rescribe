@@ -70,6 +70,22 @@ pub mod lazy;
 #[cfg(feature = "reader-streaming")]
 pub use lazy::{LazyCell, LazyRow, LazyWorksheet};
 
+/// Generated streaming event types (`SmlEvent`, `OwnedSmlEvent`, dispatch helpers).
+#[cfg(feature = "reader-streaming")]
+pub mod generated_events;
+/// Streaming event types. See [`generated_events`] for details.
+#[cfg(feature = "reader-streaming")]
+pub use generated_events as event_types;
+
+/// True SAX iterator emitting [`SmlEvent`] items without materialising the full tree.
+#[cfg(feature = "reader-streaming")]
+pub mod events;
+
+#[cfg(feature = "reader-streaming")]
+pub use events::{SmlEventIter, events as sml_events};
+#[cfg(feature = "reader-streaming")]
+pub use generated_events::{OwnedSmlEvent, SmlEvent, SmlStartKind, dispatch_start, is_text_element, props_strategy};
+
 // Extension traits for generated types (see ADR-003)
 pub mod ext;
 #[cfg(feature = "sml-pivot")]

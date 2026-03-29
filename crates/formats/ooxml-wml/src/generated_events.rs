@@ -136,3 +136,32 @@ pub fn props_element(kind: WmlStartKind) -> Option<&'static [u8]> {
     }
 }
 
+/// How props are obtained for a container element.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PropsStrategy {
+    /// Buffer and parse this named child element.
+    ChildElement(&'static [u8]),
+    /// No props; container is purely structural.
+    None,
+}
+
+/// Return the props strategy for a container kind.
+pub fn props_strategy(kind: WmlStartKind) -> PropsStrategy {
+    match kind {
+        WmlStartKind::Paragraph => PropsStrategy::ChildElement(b"pPr"),
+        WmlStartKind::Run => PropsStrategy::ChildElement(b"rPr"),
+        WmlStartKind::Table => PropsStrategy::ChildElement(b"tblPr"),
+        WmlStartKind::TableRow => PropsStrategy::ChildElement(b"trPr"),
+        WmlStartKind::TableCell => PropsStrategy::ChildElement(b"tcPr"),
+        WmlStartKind::Hyperlink => PropsStrategy::None,
+    }
+}
+
+/// Return true if this XML local element name is a text-content leaf.
+/// The SAX iterator reads the element's text content and emits a text event.
+pub fn is_text_element(local: &[u8]) -> bool {
+    matches!(local,
+        b"t"
+    )
+}
+

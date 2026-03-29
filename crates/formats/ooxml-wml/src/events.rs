@@ -19,7 +19,7 @@ use quick_xml::Reader;
 use super::generated::{
     ParagraphProperties, RunProperties, TableCellProperties, TableProperties, TableRowProperties,
 };
-use super::generated_events::{WmlEvent, WmlStartKind, dispatch_start};
+use super::generated_events::{WmlEvent, WmlStartKind, dispatch_start, is_text_element};
 use ooxml_xml::FromXml;
 
 /// Return a streaming iterator over the WML events in the given XML bytes.
@@ -196,6 +196,11 @@ impl<'input> WmlEventIter<'input> {
                 if let Some(kind) = dispatch_start(&local) {
                     return XmlInfo::ContainerStart(kind);
                 }
+                // Text-content element (e.g. <w:t>): read its text and return it.
+                if is_text_element(&local) {
+                    let text = read_text_content(&mut self.reader);
+                    return XmlInfo::Text(text);
+                }
                 // Untracked start — skip entire element.
                 skip_element(&mut self.reader);
                 XmlInfo::Other
@@ -240,6 +245,10 @@ impl<'input> WmlEventIter<'input> {
                 }
                 if let Some(kind) = dispatch_start(&local) {
                     return PropsOrInfo::Info(XmlInfo::ContainerStart(kind));
+                }
+                if is_text_element(&local) {
+                    let text = read_text_content(&mut self.reader);
+                    return PropsOrInfo::Info(XmlInfo::Text(text));
                 }
                 skip_element(&mut self.reader);
                 PropsOrInfo::Info(XmlInfo::Other)
@@ -395,6 +404,26 @@ fn local_name_owned(raw: &[u8]) -> Vec<u8> {
     raw.iter()
         .position(|&b| b == b':')
         .map_or_else(|| raw.to_vec(), |i| raw[i + 1..].to_vec())
+}
+
+/// Read all text content of an already-opened element until its end tag.
+fn read_text_content(reader: &mut Reader<&[u8]>) -> String {
+    let mut text = String::new();
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        match reader.read_event_into(&mut buf) {
+            Ok(XmlEvent::Text(ref e)) => {
+                text.push_str(&e.decode().unwrap_or_default());
+            }
+            Ok(XmlEvent::CData(ref e)) => {
+                text.push_str(&e.decode().unwrap_or_default());
+            }
+            Ok(XmlEvent::End(_)) | Ok(XmlEvent::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+    text
 }
 
 /// Skip an open element and all its children.
