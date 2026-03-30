@@ -186,8 +186,13 @@ fn parse_fenced_code_direct(iter: &mut EventIter<'_>) -> Option<Block> {
                     }
                 }
                 let stripped = if indent > 0 {
-                    if l.len() >= indent && l[..indent].chars().all(|c| c == ' ') {
-                        l[indent..].to_string()
+                    // l.get(..indent) is None if indent falls inside a multi-byte char.
+                    if let Some(prefix) = l.get(..indent) {
+                        if prefix.chars().all(|c| c == ' ') {
+                            l[indent..].to_string()
+                        } else {
+                            l.to_string()
+                        }
                     } else {
                         l.to_string()
                     }
@@ -1276,8 +1281,13 @@ fn push_fenced_code_frames<C: ParseContext>(ctx: &mut C) -> bool {
                     }
                 }
                 let stripped = if indent > 0 {
-                    if l.len() >= indent && l[..indent].chars().all(|c| c == ' ') {
-                        l[indent..].to_string()
+                    // l.get(..indent) is None if indent falls inside a multi-byte char.
+                    if let Some(prefix) = l.get(..indent) {
+                        if prefix.chars().all(|c| c == ' ') {
+                            l[indent..].to_string()
+                        } else {
+                            l.to_string()
+                        }
                     } else {
                         l.to_string()
                     }
@@ -2094,7 +2104,10 @@ impl<'a> InlineParser<'a> {
         let search_from = tick_start + n;
         let ticks_str: String = std::iter::repeat('`').take(n).collect();
         let remaining: String = self.chars[search_from..].iter().collect();
-        if let Some(close_pos) = remaining.find(&ticks_str) {
+        if let Some(close_pos_bytes) = remaining.find(&ticks_str) {
+            // close_pos_bytes is a byte index in `remaining` (a UTF-8 string).
+            // Convert to a char count for indexing into self.chars.
+            let close_pos = remaining[..close_pos_bytes].chars().count();
             let content: String = self.chars[search_from..search_from + close_pos].iter().collect();
             // Trim single space on each side if content is non-empty and starts/ends with space
             let content = if content.starts_with(' ') && content.ends_with(' ') && content.len() > 2
@@ -2145,6 +2158,11 @@ impl<'a> InlineParser<'a> {
                     _ => { self.pos += 1; }
                 }
             }
+            if depth > 0 {
+                // Unclosed brace — restore and return default (not a valid attr)
+                self.pos = saved;
+                return (Attr::default(), None);
+            }
             let inner: String = self.chars[brace_start..self.pos - 1].iter().collect();
             let inner = inner.trim();
             if inner.starts_with('=') {
@@ -2194,8 +2212,8 @@ impl<'a> InlineParser<'a> {
         // `<` followed by url/email up to `>`
         let search_start = self.pos + 1;
         let remaining: String = self.chars[search_start..].iter().collect();
-        if let Some(close) = remaining.find('>') {
-            let inner = &remaining[..close];
+        if let Some(close_bytes) = remaining.find('>') {
+            let inner = &remaining[..close_bytes];
             // Must look like a URL or email
             let is_url = inner.starts_with("http://")
                 || inner.starts_with("https://")
@@ -2203,6 +2221,8 @@ impl<'a> InlineParser<'a> {
                 || inner.starts_with("mailto:");
             let is_email = !is_url && inner.contains('@') && !inner.contains(' ');
             if is_url || is_email {
+                // close_bytes is a byte index; convert to char count for self.pos.
+                let close = remaining[..close_bytes].chars().count();
                 self.pos = search_start + close + 1; // past `>`
                 let end_offset = self.current_byte_offset();
                 let url = if is_email && !inner.starts_with("mailto:") {
@@ -2433,7 +2453,9 @@ impl<'a> InlineParser<'a> {
         // Find `marker}`
         let close_pattern: String = format!("{close_marker}}}");
         let remaining: String = self.chars[content_start..].iter().collect();
-        if let Some(close_pos) = remaining.find(&close_pattern) {
+        if let Some(close_pos_bytes) = remaining.find(&close_pattern) {
+            // close_pos_bytes is a byte index in `remaining`; convert to char count.
+            let close_pos = remaining[..close_pos_bytes].chars().count();
             let content: String = self.chars[content_start..content_start + close_pos].iter().collect();
             self.pos = content_start + close_pos + 2; // past `marker}`
             let end_offset = self.current_byte_offset();
