@@ -78,6 +78,7 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
                     let level = (h.level % 4) + 1;
                     Some(Block::Heading {
                         level,
+                        kind: texinfo::HeadingKind::Numbered,
                         inlines: vec![Inline::Text(text, Span::NONE)],
                         span: Span::NONE,
                     })
@@ -85,7 +86,7 @@ fuzz_target!(|blocks: Vec<FuzzBlock>| {
             }
             FuzzBlock::Code(c) => {
                 let content = sanitise_code(&c.content);
-                Some(Block::CodeBlock { content, span: Span::NONE })
+                Some(Block::CodeBlock { variant: texinfo::CodeBlockVariant::Example, content, span: Span::NONE })
             }
         })
         .collect();

@@ -84,10 +84,28 @@ fn sanitise(s: &str) -> Option<String> {
 
     let out = out.trim().to_string();
     if out.is_empty() {
-        None
-    } else {
-        Some(out)
+        return None;
     }
+
+    // TWiki WikiWords (CamelCase like WikiWord, GKpeMI) are auto-linked by the parser.
+    // A WikiWord is a single word where a lowercase letter is followed by an uppercase letter
+    // after position 0. Reject such tokens to prevent roundtrip loss via auto-linking.
+    for word in out.split_whitespace() {
+        let has_wiki_pattern = {
+            let mut saw_lower = false;
+            let mut found = false;
+            for c in word.chars().skip(1) {
+                if c.is_lowercase() { saw_lower = true; }
+                if c.is_uppercase() && saw_lower { found = true; break; }
+            }
+            found
+        };
+        if has_wiki_pattern {
+            return None;
+        }
+    }
+
+    Some(out)
 }
 
 fn make_inline(fi: &FuzzInline) -> Option<Node> {
@@ -98,8 +116,35 @@ fn make_inline(fi: &FuzzInline) -> Option<Node> {
     })
 }
 
+fn has_wikiword(text: &str) -> bool {
+    // A TWiki WikiWord: any word (no spaces) with a lowercase→uppercase transition
+    // after position 0. Adjacent text nodes are concatenated by the emitter, so
+    // check each whitespace-delimited token in the full text.
+    text.split_whitespace().any(|word| {
+        let mut saw_lower = false;
+        word.chars().skip(1).any(|c| {
+            if c.is_lowercase() {
+                saw_lower = true;
+                false
+            } else {
+                c.is_uppercase() && saw_lower
+            }
+        })
+    })
+}
+
 fn make_para_children(inlines: &[FuzzInline]) -> Vec<Node> {
-    inlines.iter().filter_map(make_inline).collect()
+    let nodes: Vec<Node> = inlines.iter().filter_map(make_inline).collect();
+    // TWiki emits adjacent text nodes concatenated. Check the full result for
+    // WikiWord patterns that would be auto-linked and thus lost on round-trip.
+    let concat: String = nodes
+        .iter()
+        .filter_map(|n| n.props.get_str(prop::CONTENT).map(str::to_string))
+        .collect();
+    if has_wikiword(&concat) {
+        return vec![];
+    }
+    nodes
 }
 
 fn make_list_item(inlines: &[FuzzInline]) -> Option<Node> {
