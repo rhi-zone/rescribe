@@ -67,7 +67,9 @@ fn sanitise(s: &str) -> Option<String> {
                 // All ASCII control chars 0x00–0x1f
                 '\x00'..='\x1f'
                     // Muse inline markup delimiters
-                    | '*' | '='
+                    | '*' | '=' | '_'
+                    // Definition list markers: "; term" / ": desc" and " :: " inline trigger
+                    | ';' | ':'
                     // Link syntax
                     | '[' | ']'
                     // XML-like tag syntax (verse/quote/example blocks)
@@ -82,6 +84,8 @@ fn sanitise(s: &str) -> Option<String> {
                     | '-'
                     // Superscript/subscript delimiters
                     | '^' | '~'
+                    // Table cell separator: || is a table header marker
+                    | '|'
             )
         })
         .collect();

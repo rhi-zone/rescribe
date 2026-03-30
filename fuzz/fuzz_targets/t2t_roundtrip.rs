@@ -77,7 +77,7 @@ fn sanitise(s: &str) -> Option<String> {
                 // All ASCII control chars 0x00–0x1f
                 '\x00'..='\x1f'
                     // t2t inline markup delimiters
-                    | '*' | '/' | '`' | '-' | '_'
+                    | '*' | '/' | '`' | '-' | '_' | '\''
                     // Link / image brackets
                     | '[' | ']'
                     // Other t2t special chars

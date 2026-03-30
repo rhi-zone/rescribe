@@ -76,9 +76,11 @@ fn sanitise(s: &str) -> Option<String> {
                 *c,
                 '\x00'..='\x1f'
                     | '*' | '_' | '~' | '`' | '[' | ']' | '(' | ')' | '!'
-                    | '#' | '>' | '-' | '+'
+                    | '#' | '>' | '-' | '+' | '|'
                     // Math delimiter
                     | '$'
+                    // Superscript delimiter
+                    | '^'
             )
         })
         .collect();

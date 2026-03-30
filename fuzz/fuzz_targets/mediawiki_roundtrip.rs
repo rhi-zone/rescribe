@@ -32,7 +32,7 @@ enum FuzzBlock {
 /// - `;`, `:` → definition list markers (problematic at line start)
 fn sanitise(s: &str) -> String {
     s.chars()
-        .filter(|c| !matches!(*c, '\'' | '[' | ']' | '{' | '}' | '|' | '!' | '#' | '*' | '=' | '<' | '>' | ';' | ':' | '\x00'..='\x1f'))
+        .filter(|c| !matches!(*c, '\'' | '[' | ']' | '{' | '}' | '|' | '!' | '#' | '*' | '=' | '<' | '>' | ';' | ':' | '_' | '\x00'..='\x1f'))
         .collect::<String>()
         .trim()
         .to_string()

@@ -65,9 +65,15 @@ fn sanitise(s: &str) -> Option<String> {
             !matches!(
                 *c,
                 '\x00'..='\x1f'
+                    // DEL (0x7f): control character that can break @code@ span parsing
+                    | '\x7f'
                     | '_' | '/' | '@' | '<' | '>' | '"' | '\'' | '[' | ']' | '*' | '=' | '(' | ')'
                     // Backtick: module identifier / code fence in Haddock
                     | '`'
+                    // Anchor syntax: #anchor# — # inside @code@ breaks delimiter parsing
+                    | '#'
+                    // Template variable syntax: $name
+                    | '$'
             )
         })
         .collect();
@@ -106,6 +112,14 @@ fn sanitise(s: &str) -> Option<String> {
 
 fn make_inline(fi: &FuzzInline) -> Option<Node> {
     let text = sanitise(&fi.text)?;
+    // CODE inlines emit as @content@. If content starts with a letter, Haddock
+    // may parse @word as a paragraph-level annotation (@deprecated, @param, etc.).
+    // Skip such CODE spans to avoid ambiguity with annotation syntax.
+    if matches!(fi.kind, FuzzInlineKind::Code)
+        && text.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false)
+    {
+        return None;
+    }
     let leaf = Node::new(node::TEXT).prop(prop::CONTENT, text.clone());
     Some(match fi.kind {
         FuzzInlineKind::Plain => leaf,
