@@ -6,7 +6,15 @@ license.workspace = true
 repository.workspace = true
 description = "Typst reader for rescribe"
 
+[features]
+default = ["syntax"]
+syntax = []
+eval = ["dep:typst", "dep:typst-kit", "dep:typst-html"]
+
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
 typst-syntax.workspace = true
+typst = { workspace = true, optional = true }
+typst-kit = { workspace = true, optional = true }
+typst-html = { workspace = true, optional = true }
