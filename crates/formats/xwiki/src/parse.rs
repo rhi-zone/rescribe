@@ -250,8 +250,8 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            // Remove trailing `|` if present
-            let line_content = if line.ends_with('|') {
+            // Remove trailing `|` if present (guard len > 1 to avoid empty-slice panic)
+            let line_content = if line.len() > 1 && line.ends_with('|') {
                 &line[1..line.len() - 1]
             } else {
                 &line[1..]

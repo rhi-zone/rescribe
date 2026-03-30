@@ -66,6 +66,8 @@ fn sanitise(s: &str) -> Option<String> {
                 *c,
                 '\x00'..='\x1f'
                     | '_' | '/' | '@' | '<' | '>' | '"' | '\'' | '[' | ']' | '*' | '=' | '(' | ')'
+                    // Backtick: module identifier / code fence in Haddock
+                    | '`'
             )
         })
         .collect();

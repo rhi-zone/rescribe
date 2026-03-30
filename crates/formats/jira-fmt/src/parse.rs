@@ -381,6 +381,10 @@ impl<'a> Parser<'a> {
                 {
                     let color = &color_content[..close_brace];
                     let after_open = i + 7 + close_brace + 1; // past {color:xxx}
+                    if after_open > chars.len() {
+                        i += 1;
+                        continue;
+                    }
                     // Find matching {color}
                     let remaining: String = chars[after_open..].iter().collect();
                     if let Some(end_pos) = remaining.find("{color}") {

@@ -460,6 +460,8 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
     let mut nodes = Vec::new();
     let mut current = String::new();
     let chars: Vec<char> = text.chars().collect();
+    // Precompute byte offset for each char position (needed for byte-string ops).
+    let byte_offsets: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
     let mut i = 0;
 
     while i < chars.len() {
@@ -549,44 +551,56 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
         }
 
         // Strikethrough: <del>text</del>
-        if i + 4 < chars.len() && text[i..].get(..5) == Some("<del>") {
-            if !current.is_empty() {
-                nodes.push(Inline::Text(current.clone(), Span::NONE));
-                current.clear();
-            }
-            if let Some(end_pos) = text[i + 5..].find("</del>") {
-                let content = &text[i + 5..i + 5 + end_pos];
-                nodes.push(Inline::Strikethrough(parse_inline(content), Span::NONE));
-                i += 5 + end_pos + 6;
-                continue;
+        if i + 4 < chars.len() {
+            let b = byte_offsets[i];
+            if text.get(b..b + 5) == Some("<del>") {
+                if !current.is_empty() {
+                    nodes.push(Inline::Text(current.clone(), Span::NONE));
+                    current.clear();
+                }
+                let b5 = byte_offsets.get(i + 5).copied().unwrap_or(text.len());
+                if let Some(end_pos) = text[b5..].find("</del>") {
+                    let content = &text[b5..b5 + end_pos];
+                    nodes.push(Inline::Strikethrough(parse_inline(content), Span::NONE));
+                    i += 5 + content.chars().count() + 6;
+                    continue;
+                }
             }
         }
 
         // Superscript: <sup>text</sup>
-        if i + 4 < chars.len() && text[i..].get(..5) == Some("<sup>") {
-            if !current.is_empty() {
-                nodes.push(Inline::Text(current.clone(), Span::NONE));
-                current.clear();
-            }
-            if let Some(end_pos) = text[i + 5..].find("</sup>") {
-                let content = &text[i + 5..i + 5 + end_pos];
-                nodes.push(Inline::Superscript(parse_inline(content), Span::NONE));
-                i += 5 + end_pos + 6;
-                continue;
+        if i + 4 < chars.len() {
+            let b = byte_offsets[i];
+            if text.get(b..b + 5) == Some("<sup>") {
+                if !current.is_empty() {
+                    nodes.push(Inline::Text(current.clone(), Span::NONE));
+                    current.clear();
+                }
+                let b5 = byte_offsets.get(i + 5).copied().unwrap_or(text.len());
+                if let Some(end_pos) = text[b5..].find("</sup>") {
+                    let content = &text[b5..b5 + end_pos];
+                    nodes.push(Inline::Superscript(parse_inline(content), Span::NONE));
+                    i += 5 + content.chars().count() + 6;
+                    continue;
+                }
             }
         }
 
         // Subscript: <sub>text</sub>
-        if i + 4 < chars.len() && text[i..].get(..5) == Some("<sub>") {
-            if !current.is_empty() {
-                nodes.push(Inline::Text(current.clone(), Span::NONE));
-                current.clear();
-            }
-            if let Some(end_pos) = text[i + 5..].find("</sub>") {
-                let content = &text[i + 5..i + 5 + end_pos];
-                nodes.push(Inline::Subscript(parse_inline(content), Span::NONE));
-                i += 5 + end_pos + 6;
-                continue;
+        if i + 4 < chars.len() {
+            let b = byte_offsets[i];
+            if text.get(b..b + 5) == Some("<sub>") {
+                if !current.is_empty() {
+                    nodes.push(Inline::Text(current.clone(), Span::NONE));
+                    current.clear();
+                }
+                let b5 = byte_offsets.get(i + 5).copied().unwrap_or(text.len());
+                if let Some(end_pos) = text[b5..].find("</sub>") {
+                    let content = &text[b5..b5 + end_pos];
+                    nodes.push(Inline::Subscript(parse_inline(content), Span::NONE));
+                    i += 5 + content.chars().count() + 6;
+                    continue;
+                }
             }
         }
 

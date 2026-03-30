@@ -119,7 +119,7 @@ pub fn parse(input: &str) -> (TwikiDoc, Vec<Diagnostic>) {
 fn is_macro_block(line: &str) -> bool {
     let trimmed = line.trim();
     // Matches %INCLUDE{...}%, %SEARCH{...}%, %TOC%, etc. as standalone block
-    if trimmed.starts_with('%') && trimmed.ends_with('%') {
+    if trimmed.len() >= 2 && trimmed.starts_with('%') && trimmed.ends_with('%') {
         let inner = &trimmed[1..trimmed.len() - 1];
         // Must be a single macro (uppercase letters, possibly with {})
         if let Some(name_end) = inner.find(['{', '%']) {

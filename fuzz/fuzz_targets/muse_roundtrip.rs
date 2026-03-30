@@ -80,6 +80,8 @@ fn sanitise(s: &str) -> Option<String> {
                     // all dashes to avoid spurious `----` runs when multiple text
                     // nodes are concatenated by extract_text.
                     | '-'
+                    // Superscript/subscript delimiters
+                    | '^' | '~'
             )
         })
         .collect();

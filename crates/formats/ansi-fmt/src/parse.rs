@@ -14,16 +14,16 @@ pub fn parse(input: &[u8]) -> (AnsiDoc, Vec<Diagnostic>) {
     let mut style = Style::default();
     let mut pos = 0;
     let mut text_start = pos;
-    let mut text_buf = String::new();
+    let mut text_bytes: Vec<u8> = Vec::new();
 
     while pos < input.len() {
         let b = input[pos];
 
         if b == 0x1b {
             // Flush accumulated plain text.
-            if !text_buf.is_empty() {
+            if !text_bytes.is_empty() {
                 nodes.push(AnsiNode::Text {
-                    text: std::mem::take(&mut text_buf),
+                    text: String::from_utf8_lossy(&std::mem::take(&mut text_bytes)).into_owned(),
                     style: style.clone(),
                     span: Span::new(text_start, pos),
                 });
@@ -110,9 +110,9 @@ pub fn parse(input: &[u8]) -> (AnsiDoc, Vec<Diagnostic>) {
             text_start = pos;
         } else if b == b'\n' {
             // Flush text, then emit newline.
-            if !text_buf.is_empty() {
+            if !text_bytes.is_empty() {
                 nodes.push(AnsiNode::Text {
-                    text: std::mem::take(&mut text_buf),
+                    text: String::from_utf8_lossy(&std::mem::take(&mut text_bytes)).into_owned(),
                     style: style.clone(),
                     span: Span::new(text_start, pos),
                 });
@@ -123,19 +123,19 @@ pub fn parse(input: &[u8]) -> (AnsiDoc, Vec<Diagnostic>) {
             pos += 1;
             text_start = pos;
         } else {
-            if text_buf.is_empty() {
+            if text_bytes.is_empty() {
                 text_start = pos;
             }
-            // Accumulate plain text (as UTF-8 if valid, lossy otherwise).
-            text_buf.push(b as char);
+            // Accumulate raw bytes; decoded as UTF-8 at flush time.
+            text_bytes.push(b);
             pos += 1;
         }
     }
 
     // Flush trailing text.
-    if !text_buf.is_empty() {
+    if !text_bytes.is_empty() {
         nodes.push(AnsiNode::Text {
-            text: text_buf,
+            text: String::from_utf8_lossy(&std::mem::take(&mut text_bytes)).into_owned(),
             style: style.clone(),
             span: Span::new(text_start, pos),
         });

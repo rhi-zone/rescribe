@@ -6,19 +6,14 @@ use crate::ast::{Block, Inline, T2tDoc};
 pub fn emit(doc: &T2tDoc) -> String {
     let mut ctx = BuildContext::new();
 
-    // Emit header if present
-    if let Some(ref title) = doc.title {
-        ctx.write(title);
-        ctx.write("\n");
-        if let Some(ref author) = doc.author {
-            ctx.write(author);
-        }
-        ctx.write("\n");
-        if let Some(ref date) = doc.date {
-            ctx.write(date);
-        }
-        ctx.write("\n\n");
-    }
+    // Always emit the 3-line header section (title / author / date).
+    // Without it the reader treats the first body paragraph as the title.
+    ctx.write(doc.title.as_deref().unwrap_or(""));
+    ctx.write("\n");
+    ctx.write(doc.author.as_deref().unwrap_or(""));
+    ctx.write("\n");
+    ctx.write(doc.date.as_deref().unwrap_or(""));
+    ctx.write("\n\n");
 
     for block in &doc.blocks {
         build_block(block, &mut ctx);
