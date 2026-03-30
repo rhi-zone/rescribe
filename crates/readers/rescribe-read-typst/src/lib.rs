@@ -720,14 +720,8 @@ mod eval_impl {
             }
             _ => {
                 // Try as an inline element wrapped in a paragraph.
-                if let Some(inline) = convert_html_inline(elem) {
-                    Some(
-                        Node::new(node::PARAGRAPH)
-                            .children(vec![inline]),
-                    )
-                } else {
-                    None
-                }
+                convert_html_inline(elem)
+                    .map(|inline| Node::new(node::PARAGRAPH).children(vec![inline]))
             }
         }
     }
