@@ -53,16 +53,19 @@ fn block_to_node(block: &tikiwiki::Block) -> Node {
             n
         }
 
-        Block::Blockquote { inlines, .. } => Node::new(node::BLOCKQUOTE)
-            .child(Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))),
+        Block::Blockquote { blocks, .. } => {
+            let block_nodes: Vec<_> = blocks.iter().map(block_to_node).collect();
+            Node::new(node::BLOCKQUOTE).children(block_nodes)
+        }
 
         Block::List { ordered, items, .. } => {
             let mut list_items = Vec::new();
-            for item_inlines in items {
-                list_items
-                    .push(Node::new(node::LIST_ITEM).child(
-                        Node::new(node::PARAGRAPH).children(inlines_to_nodes(item_inlines)),
-                    ));
+            for item in items {
+                let mut item_children = inlines_to_nodes(&item.inlines);
+                for child_block in &item.children {
+                    item_children.push(block_to_node(child_block));
+                }
+                list_items.push(Node::new(node::LIST_ITEM).children(item_children));
             }
             Node::new(node::LIST)
                 .prop(prop::ORDERED, *ordered)
@@ -73,9 +76,10 @@ fn block_to_node(block: &tikiwiki::Block) -> Node {
             let mut table_rows = Vec::new();
             for row in rows {
                 let mut cells = Vec::new();
-                for cell_inlines in &row.cells {
-                    cells
-                        .push(Node::new(node::TABLE_CELL).children(inlines_to_nodes(cell_inlines)));
+                for cell in &row.cells {
+                    cells.push(
+                        Node::new(node::TABLE_CELL).children(inlines_to_nodes(&cell.inlines)),
+                    );
                 }
                 table_rows.push(Node::new(node::TABLE_ROW).children(cells));
             }
@@ -121,6 +125,25 @@ fn inline_to_node(inline: &TwInline) -> Node {
             }
             n
         }
+
+        Inline::Superscript(children, _) => {
+            Node::new(node::SUPERSCRIPT).children(inlines_to_nodes(children))
+        }
+
+        Inline::Subscript(children, _) => {
+            Node::new(node::SUBSCRIPT).children(inlines_to_nodes(children))
+        }
+
+        Inline::WikiLink { page, children, .. } => {
+            let label_nodes = if children.is_empty() {
+                vec![Node::new(node::TEXT).prop(prop::CONTENT, page.clone())]
+            } else {
+                inlines_to_nodes(children)
+            };
+            Node::new("wikilink").prop("page", page.clone()).children(label_nodes)
+        }
+
+        Inline::Nowiki(s, _) => Node::new("nowiki").prop(prop::CONTENT, s.clone()),
 
         Inline::LineBreak { .. } => Node::new(node::LINE_BREAK),
     }

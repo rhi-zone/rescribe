@@ -61,8 +61,9 @@ fn node_to_block(node: &Node) -> Block {
                 .map(|s| s == "panel")
                 .unwrap_or(false);
             if is_panel {
+                let title = node.props.get_str("jira:panel-title").map(|s| s.to_owned());
                 let children: Vec<Block> = node.children.iter().map(node_to_block).collect();
-                Block::Panel { children, span: Span::NONE }
+                Block::Panel { title, children, span: Span::NONE }
             } else {
                 let children: Vec<Block> = node.children.iter().map(node_to_block).collect();
                 Block::Blockquote { children, span: Span::NONE }
@@ -74,9 +75,20 @@ fn node_to_block(node: &Node) -> Block {
             let mut items = Vec::new();
             for child in &node.children {
                 if child.kind.as_str() == node::LIST_ITEM {
-                    let item_blocks: Vec<Block> =
-                        child.children.iter().map(node_to_block).collect();
-                    items.push(item_blocks);
+                    let mut content = Vec::new();
+                    for block_node in &child.children {
+                        if block_node.kind.as_str() == node::LIST {
+                            content.push(jira_fmt::ast::ListItemContent::NestedList(
+                                node_to_block(block_node),
+                            ));
+                        } else {
+                            // Treat any other block as inline content
+                            content.push(jira_fmt::ast::ListItemContent::Inline(
+                                nodes_to_inlines(&block_node.children),
+                            ));
+                        }
+                    }
+                    items.push(jira_fmt::ast::ListItem { children: content });
                 }
             }
             Block::List { ordered, items, span: Span::NONE }

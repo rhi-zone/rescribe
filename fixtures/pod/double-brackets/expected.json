@@ -2,7 +2,6 @@
   "description": "Double angle brackets C<< ... >> allow > and < in content",
   "assertions": [
     { "path": "/0",     "kind": "paragraph" },
-    { "path": "/0/1",   "kind": "code" },
-    { "path": "/0/1/0", "kind": "text", "props": { "content": "$a <=> $b" } }
+    { "path": "/0/1",   "kind": "code", "props": { "content": "$a <=> $b" } }
   ]
 }

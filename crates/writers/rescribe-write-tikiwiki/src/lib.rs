@@ -4,7 +4,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use tikiwiki::{Block as TwBlock, Inline as TwInline, Span};
+use tikiwiki::{Block as TwBlock, Inline as TwInline, ListItem as TwListItem, Span, TableCell as TwTableCell};
 
 /// Emit a document to TikiWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -54,8 +54,8 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
         }
 
         node::BLOCKQUOTE => {
-            let inlines = nodes_to_inlines(&node.children);
-            Some(TwBlock::Blockquote { inlines, span: Span::NONE })
+            let blocks = node.children.iter().filter_map(node_to_block).collect();
+            Some(TwBlock::Blockquote { blocks, span: Span::NONE })
         }
 
         node::LIST => {
@@ -64,7 +64,7 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
             for child in &node.children {
                 if child.kind.as_str() == node::LIST_ITEM {
                     let inlines = nodes_to_inlines(&child.children);
-                    items.push(inlines);
+                    items.push(TwListItem { inlines, children: Vec::new(), span: Span::NONE });
                 }
             }
             Some(TwBlock::List { ordered, items, span: Span::NONE })
@@ -76,12 +76,14 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
                 if row_node.kind.as_str() == node::TABLE_ROW {
                     let mut cells = Vec::new();
                     for cell_node in &row_node.children {
-                        if cell_node.kind.as_str() == node::TABLE_CELL {
+                        if cell_node.kind.as_str() == node::TABLE_CELL
+                            || cell_node.kind.as_str() == node::TABLE_HEADER
+                        {
                             let inlines = nodes_to_inlines(&cell_node.children);
-                            cells.push(inlines);
+                            cells.push(TwTableCell { inlines, span: Span::NONE });
                         }
                     }
-                    rows.push(tikiwiki::TableRow { cells, span: Span::NONE });
+                    rows.push(tikiwiki::TableRow { cells, is_header: false, span: Span::NONE });
                 }
             }
             Some(TwBlock::Table { rows, span: Span::NONE })
@@ -224,13 +226,13 @@ mod tests {
     #[test]
     fn test_emit_heading() {
         let doc = doc(|d| d.heading(1, |h| h.text("Title")));
-        assert!(emit_str(&doc).contains("!Title"));
+        assert!(emit_str(&doc).contains("! Title"));
     }
 
     #[test]
     fn test_emit_heading_level2() {
         let doc = doc(|d| d.heading(2, |h| h.text("Section")));
-        assert!(emit_str(&doc).contains("!!Section"));
+        assert!(emit_str(&doc).contains("!! Section"));
     }
 
     #[test]
@@ -255,8 +257,8 @@ mod tests {
     fn test_emit_list() {
         let doc = doc(|d| d.bullet_list(|l| l.item(|i| i.text("one")).item(|i| i.text("two"))));
         let output = emit_str(&doc);
-        assert!(output.contains("*one"));
-        assert!(output.contains("*two"));
+        assert!(output.contains("* one"));
+        assert!(output.contains("* two"));
     }
 
     #[test]

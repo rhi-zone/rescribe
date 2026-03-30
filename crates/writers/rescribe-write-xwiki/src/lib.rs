@@ -138,7 +138,8 @@ fn node_to_inline(node: &Node) -> Inline {
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
-            Inline::Image { url, span: Span::NONE }
+            let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
+            Inline::Image { url, alt, params: vec![], span: Span::NONE }
         }
 
         node::LINE_BREAK => Inline::LineBreak { span: Span::NONE },

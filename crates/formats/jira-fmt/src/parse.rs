@@ -203,11 +203,7 @@ impl<'a> Parser<'a> {
             // Parse key=value pairs separated by |
             params.split('|').find_map(|pair| {
                 let pair = pair.trim();
-                if let Some(val) = pair.strip_prefix("title=") {
-                    Some(val.to_string())
-                } else {
-                    None
-                }
+                pair.strip_prefix("title=").map(|val| val.to_string())
             })
         } else {
             None
@@ -380,27 +376,27 @@ impl<'a> Parser<'a> {
             // Color macro: {color:xxx}...{color}
             if chars[i] == '{' && i + 6 < chars.len() {
                 let rest: String = chars[i..].iter().collect();
-                if let Some(color_content) = rest.strip_prefix("{color:") {
-                    if let Some(close_brace) = color_content.find('}') {
-                        let color = &color_content[..close_brace];
-                        let after_open = i + 7 + close_brace; // past {color:xxx}
-                        // Find matching {color}
-                        let remaining: String = chars[after_open..].iter().collect();
-                        if let Some(end_pos) = remaining.find("{color}") {
-                            if !current.is_empty() {
-                                inlines.push(Inline::Text(current.clone(), Span::NONE));
-                                current.clear();
-                            }
-                            let inner = &remaining[..end_pos];
-                            let children = self.parse_inline(inner);
-                            inlines.push(Inline::ColorSpan {
-                                color: color.to_string(),
-                                children,
-                                span: Span::NONE,
-                            });
-                            i = after_open + end_pos + 7; // past {color}
-                            continue;
+                if let Some(color_content) = rest.strip_prefix("{color:")
+                    && let Some(close_brace) = color_content.find('}')
+                {
+                    let color = &color_content[..close_brace];
+                    let after_open = i + 7 + close_brace + 1; // past {color:xxx}
+                    // Find matching {color}
+                    let remaining: String = chars[after_open..].iter().collect();
+                    if let Some(end_pos) = remaining.find("{color}") {
+                        if !current.is_empty() {
+                            inlines.push(Inline::Text(current.clone(), Span::NONE));
+                            current.clear();
                         }
+                        let inner = &remaining[..end_pos];
+                        let children = self.parse_inline(inner);
+                        inlines.push(Inline::ColorSpan {
+                            color: color.to_string(),
+                            children,
+                            span: Span::NONE,
+                        });
+                        i = after_open + end_pos + 7; // past {color}
+                        continue;
                     }
                 }
             }

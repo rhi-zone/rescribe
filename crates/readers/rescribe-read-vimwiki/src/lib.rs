@@ -93,6 +93,19 @@ fn block_to_node(block: &Block) -> Node {
         }
 
         Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
+
+        Block::DefinitionList { items, .. } => {
+            let mut children = Vec::new();
+            for item in items {
+                let term = Node::new(node::DEFINITION_TERM)
+                    .children(item.term.iter().map(inline_to_node).collect::<Vec<_>>());
+                let desc = Node::new(node::DEFINITION_DESC)
+                    .children(item.desc.iter().map(inline_to_node).collect::<Vec<_>>());
+                children.push(term);
+                children.push(desc);
+            }
+            Node::new(node::DEFINITION_LIST).children(children)
+        }
     }
 }
 
@@ -124,12 +137,23 @@ fn inline_to_node(inline: &Inline) -> Node {
                 .children(vec![text_node])
         }
 
-        Inline::Image { url, alt, .. } => {
+        Inline::Image { url, alt, style, .. } => {
             let mut img = Node::new(node::IMAGE).prop(prop::URL, url.clone());
             if let Some(a) = alt {
                 img = img.prop(prop::ALT, a.clone());
             }
+            if let Some(s) = style {
+                img = img.prop("vimwiki:style", s.clone());
+            }
             img
+        }
+
+        Inline::Superscript(children, _) => {
+            Node::new(node::SUPERSCRIPT).children(children.iter().map(inline_to_node).collect::<Vec<_>>())
+        }
+
+        Inline::Subscript(children, _) => {
+            Node::new(node::SUBSCRIPT).children(children.iter().map(inline_to_node).collect::<Vec<_>>())
         }
     }
 }

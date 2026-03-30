@@ -4,7 +4,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use twiki::{self, Block, Inline, Span, TableCell, TableRow, TwikiDoc};
+use twiki::{self, Block, Inline, ListItem, Span, TableCell, TableRow, TwikiDoc};
 
 /// Emit a document to TWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -60,16 +60,18 @@ fn node_to_block(node: &Node) -> Option<Block> {
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let items: Vec<Vec<Inline>> = node
+            let items: Vec<ListItem> = node
                 .children
                 .iter()
                 .filter(|child| child.kind.as_str() == node::LIST_ITEM)
                 .map(|item| {
-                    item.children
+                    let inlines = item
+                        .children
                         .iter()
                         .find(|c| c.kind.as_str() == node::PARAGRAPH)
                         .map(|para| node_children_to_inlines(&para.children))
-                        .unwrap_or_default()
+                        .unwrap_or_default();
+                    ListItem { inlines, children: Vec::new(), span: Span::NONE }
                 })
                 .collect();
             Some(Block::List { ordered, items, span: Span::NONE })

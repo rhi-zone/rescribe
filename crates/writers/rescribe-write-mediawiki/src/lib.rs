@@ -47,7 +47,8 @@ fn node_to_block(node: &Node) -> Vec<Block> {
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            vec![Block::CodeBlock { content, span: Span::NONE }]
+            let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
+            vec![Block::CodeBlock { language, content, span: Span::NONE }]
         }
 
         node::LIST => {
@@ -92,7 +93,7 @@ fn node_to_block(node: &Node) -> Vec<Block> {
                     TableRow { cells, span: Span::NONE }
                 })
                 .collect();
-            vec![Block::Table { rows, span: Span::NONE }]
+            vec![Block::Table { rows, caption: None, span: Span::NONE }]
         }
 
         _ => {

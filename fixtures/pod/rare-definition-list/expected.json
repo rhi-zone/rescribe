@@ -1,12 +1,12 @@
 {
-  "description": "=item with plain text (no bullet or number) puts the item text as a paragraph inside list_item",
+  "description": "=item with plain text (no bullet or number) produces a definition_list with term and desc",
   "category": "rare",
   "assertions": [
-    { "path": "/0",       "kind": "list", "props": { "ordered": false }, "children_count": 1 },
-    { "path": "/0/0",     "kind": "list_item" },
-    { "path": "/0/0/0",   "kind": "paragraph" },
-    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "First" } },
-    { "path": "/0/0/1",   "kind": "paragraph" },
-    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Description of first item." } }
+    { "path": "/0",     "kind": "definition_list" },
+    { "path": "/0/0",   "kind": "definition_term" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "First" } },
+    { "path": "/0/1",   "kind": "definition_desc" },
+    { "path": "/0/1/0", "kind": "paragraph" },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Description of first item." } }
   ]
 }

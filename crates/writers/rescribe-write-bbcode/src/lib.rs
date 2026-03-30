@@ -48,7 +48,9 @@ fn node_to_block(node: &Node) -> Block {
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
             Block::CodeBlock {
+                language,
                 content,
                 span: Span::NONE,
             }
@@ -57,6 +59,7 @@ fn node_to_block(node: &Node) -> Block {
         node::BLOCKQUOTE => {
             let children = node.children.iter().map(node_to_block).collect();
             Block::Blockquote {
+                author: None,
                 children,
                 span: Span::NONE,
             }
@@ -187,6 +190,8 @@ fn node_to_inline(node: &Node) -> Inline {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             Inline::Image {
                 url,
+                width: None,
+                height: None,
                 span: Span::NONE,
             }
         }

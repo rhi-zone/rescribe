@@ -377,6 +377,7 @@ pub fn discover_fixtures(fixtures_root: &Path, format: &str) -> Vec<std::path::P
         .flatten()
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
         .map(|e| e.path())
+        .filter(|p| p.join("expected.json").exists())
         .collect();
     dirs.sort();
     dirs

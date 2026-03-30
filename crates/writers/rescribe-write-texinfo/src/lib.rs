@@ -21,7 +21,7 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use texinfo::{Block, Inline, Span, TexinfoDoc};
+use texinfo::{Block, CodeBlockVariant, HeadingKind, Inline, Span, TexinfoDoc};
 
 /// Emit a document to Texinfo format.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -54,7 +54,7 @@ fn node_to_block(node: &Node) -> Option<Block> {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Some(Block::Heading { level, inlines, span: Span::NONE })
+            Some(Block::Heading { level, kind: HeadingKind::Numbered, inlines, span: Span::NONE })
         }
 
         node::PARAGRAPH => {
@@ -64,7 +64,7 @@ fn node_to_block(node: &Node) -> Option<Block> {
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Some(Block::CodeBlock { content, span: Span::NONE })
+            Some(Block::CodeBlock { variant: CodeBlockVariant::Example, content, span: Span::NONE })
         }
 
         node::BLOCKQUOTE => {

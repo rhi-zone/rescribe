@@ -41,22 +41,29 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::PARAGRAPH).children(children)
         }
 
-        Block::CodeBlock { content, .. } => {
-            Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
+        Block::CodeBlock { language, content, .. } => {
+            let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
+            if let Some(lang) = language {
+                n = n.prop(prop::LANGUAGE, lang.clone());
+            }
+            n
         }
 
-        Block::Blockquote { children, .. } => {
+        Block::Blockquote { author, children, .. } => {
             let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
-            Node::new(node::BLOCKQUOTE).children(block_children)
+            let mut n = Node::new(node::BLOCKQUOTE);
+            if let Some(a) = author {
+                n = n.prop("bbcode:author", a.clone());
+            }
+            n.children(block_children)
         }
 
         Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|inlines| {
-                    let para_children: Vec<Node> = inlines.iter().map(inline_to_node).collect();
-                    Node::new(node::LIST_ITEM)
-                        .child(Node::new(node::PARAGRAPH).children(para_children))
+                    let inline_nodes: Vec<Node> = inlines.iter().map(inline_to_node).collect();
+                    Node::new(node::LIST_ITEM).children(inline_nodes)
                 })
                 .collect();
             Node::new(node::LIST)
@@ -85,6 +92,43 @@ fn block_to_node(block: &Block) -> Node {
                 })
                 .collect();
             Node::new(node::TABLE).children(table_rows)
+        }
+
+        Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
+
+        Block::Heading { level, children, .. } => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::HEADING)
+                .prop(prop::LEVEL, *level as i64)
+                .children(child_nodes)
+        }
+
+        Block::Alignment { kind, children, .. } => {
+            let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
+            let align = match kind {
+                bbcode_fmt::AlignKind::Center => "center",
+                bbcode_fmt::AlignKind::Left => "left",
+                bbcode_fmt::AlignKind::Right => "right",
+            };
+            Node::new(node::DIV)
+                .prop("style:align", align)
+                .children(block_children)
+        }
+
+        Block::Spoiler { children, .. } => {
+            let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
+            Node::new(node::DIV)
+                .prop("bbcode:spoiler", true)
+                .children(block_children)
+        }
+
+        Block::Preformatted { content, .. } => {
+            Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
+        }
+
+        Block::Indent { children, .. } => {
+            let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
+            Node::new(node::BLOCKQUOTE).children(block_children)
         }
     }
 }
@@ -122,7 +166,16 @@ fn inline_to_node(inline: &Inline) -> Node {
                 .children(child_nodes)
         }
 
-        Inline::Image { url, .. } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
+        Inline::Image { url, width, height, .. } => {
+            let mut n = Node::new(node::IMAGE).prop(prop::URL, url.clone());
+            if let Some(w) = width {
+                n = n.prop("bbcode:width", *w as i64);
+            }
+            if let Some(h) = height {
+                n = n.prop("bbcode:height", *h as i64);
+            }
+            n
+        }
 
         Inline::Subscript(children, _) => {
             let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
@@ -133,6 +186,36 @@ fn inline_to_node(inline: &Inline) -> Node {
             let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
             Node::new(node::SUPERSCRIPT).children(child_nodes)
         }
+
+        Inline::Color { value, children, .. } => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::SPAN)
+                .prop("style:color", value.clone())
+                .children(child_nodes)
+        }
+
+        Inline::Size { value, children, .. } => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::SPAN)
+                .prop("style:size", value.clone())
+                .children(child_nodes)
+        }
+
+        Inline::Font { name, children, .. } => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::SPAN)
+                .prop("style:font", name.clone())
+                .children(child_nodes)
+        }
+
+        Inline::Email { addr, children, .. } => {
+            let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
+            Node::new(node::LINK)
+                .prop(prop::URL, format!("mailto:{}", addr))
+                .children(child_nodes)
+        }
+
+        Inline::Noparse(s, _) => Node::new(node::RAW_INLINE).prop(prop::CONTENT, s.clone()),
 
         Inline::Span {
             attr,

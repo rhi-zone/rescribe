@@ -139,10 +139,8 @@ impl DocBuilder {
             }
             OwnedEvent::EndListItem => {
                 if let Some(Frame::ListItem { mut children, current_inlines }) = self.stack.pop() {
-                    if let Some(inlines) = current_inlines {
-                        if !inlines.is_empty() {
-                            children.push(ListItemContent::Inline(inlines));
-                        }
+                    if let Some(inlines) = current_inlines && !inlines.is_empty() {
+                        children.push(ListItemContent::Inline(inlines));
                     }
                     if let Some(Frame::List { items, .. }) = self.stack.last_mut() {
                         items.push(ListItem { children });
@@ -177,20 +175,20 @@ impl DocBuilder {
                 self.stack.push(Frame::TableRow { cells: vec![] });
             }
             OwnedEvent::EndTableRow => {
-                if let Some(Frame::TableRow { cells }) = self.stack.pop() {
-                    if let Some(Frame::Table { rows }) = self.stack.last_mut() {
-                        rows.push(TableRow { cells, span: Span::NONE });
-                    }
+                if let Some(Frame::TableRow { cells }) = self.stack.pop()
+                    && let Some(Frame::Table { rows }) = self.stack.last_mut()
+                {
+                    rows.push(TableRow { cells, span: Span::NONE });
                 }
             }
             OwnedEvent::StartTableCell { is_header } => {
                 self.stack.push(Frame::TableCell { is_header, inlines: vec![] });
             }
             OwnedEvent::EndTableCell => {
-                if let Some(Frame::TableCell { is_header, inlines }) = self.stack.pop() {
-                    if let Some(Frame::TableRow { cells }) = self.stack.last_mut() {
-                        cells.push(TableCell { is_header, inlines, span: Span::NONE });
-                    }
+                if let Some(Frame::TableCell { is_header, inlines }) = self.stack.pop()
+                    && let Some(Frame::TableRow { cells }) = self.stack.last_mut()
+                {
+                    cells.push(TableCell { is_header, inlines, span: Span::NONE });
                 }
             }
 
@@ -284,10 +282,8 @@ impl DocBuilder {
             Some(Frame::Blockquote { blocks }) => blocks.push(block),
             Some(Frame::Panel { blocks, .. }) => blocks.push(block),
             Some(Frame::ListItem { children, current_inlines, .. }) => {
-                if let Some(inlines) = current_inlines.take() {
-                    if !inlines.is_empty() {
-                        children.push(ListItemContent::Inline(inlines));
-                    }
+                if let Some(inlines) = current_inlines.take() && !inlines.is_empty() {
+                    children.push(ListItemContent::Inline(inlines));
                 }
                 // A Paragraph inside a list item is stored as inline content,
                 // not as a nested block, to preserve list structure on roundtrip.

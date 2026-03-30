@@ -1,6 +1,6 @@
 {
   "description": "=begin/=end region produces a raw_block with format and content",
   "assertions": [
-    { "path": "/0", "kind": "raw_block", "props": { "format": "html", "content": "\n<p>Raw HTML</p>" } }
+    { "path": "/0", "kind": "raw_block", "props": { "format": "html", "content": "<p>Raw HTML</p>\n" } }
   ]
 }

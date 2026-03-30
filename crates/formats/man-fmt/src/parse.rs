@@ -335,9 +335,37 @@ impl<'a> Parser<'a> {
             }
 
             // URL (groff extension)
+            // .UR url [text]   or   .UR url \n text-lines \n .UE
             "URL" | "UR" => {
                 let url = args.first().cloned().unwrap_or_default();
-                let text = args.get(1).cloned().unwrap_or_else(|| url.clone());
+                // Collect text lines between .UR and .UE (if no inline text arg)
+                let text = if let Some(inline_text) = args.get(1) {
+                    inline_text.clone()
+                } else {
+                    // Consume lines until .UE or end of input
+                    let mut text_lines: Vec<&str> = Vec::new();
+                    while let Some(next) = self.current_line() {
+                        if next.trim_start().starts_with(".UE")
+                            || next.trim_start().starts_with(".UR")
+                        {
+                            break;
+                        }
+                        if next.starts_with('.') {
+                            // Any other macro stops the URL text
+                            break;
+                        }
+                        let trimmed = next.trim();
+                        if !trimmed.is_empty() {
+                            text_lines.push(trimmed);
+                        }
+                        self.advance();
+                    }
+                    if text_lines.is_empty() {
+                        url.clone()
+                    } else {
+                        text_lines.join(" ")
+                    }
+                };
                 let block = Block::Paragraph {
                     inlines: vec![Inline::Link {
                         url,

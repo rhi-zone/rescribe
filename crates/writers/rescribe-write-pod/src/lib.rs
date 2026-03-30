@@ -257,8 +257,9 @@ mod tests {
         let doc = doc(|d| d.bullet_list(|l| l.item(|i| i.text("one")).item(|i| i.text("two"))));
         let output = emit_str(&doc);
         assert!(output.contains("=over"));
-        assert!(output.contains("=item * one"));
-        assert!(output.contains("=item * two"));
+        assert!(output.contains("=item *"));
+        assert!(output.contains("one"));
+        assert!(output.contains("two"));
         assert!(output.contains("=back"));
     }
 

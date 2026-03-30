@@ -23,16 +23,16 @@ fn convert_to_document(man: ManDoc) -> Document {
         metadata.set("title", title);
     }
     if let Some(section) = man.section {
-        metadata.set("man:section", section);
+        metadata.set("section", section);
     }
     if let Some(date) = man.date {
-        metadata.set("man:date", date);
+        metadata.set("date", date);
     }
     if let Some(source) = man.source {
-        metadata.set("man:source", source);
+        metadata.set("source", source);
     }
     if let Some(manual) = man.manual {
-        metadata.set("man:manual", manual);
+        metadata.set("manual", manual);
     }
 
     let mut children = Vec::new();
@@ -122,16 +122,15 @@ fn convert_block(block: &Block) -> Option<Node> {
 
         Block::IndentedParagraph { inlines, .. } => {
             let children = convert_inlines(inlines);
-            Some(Node::new(node::PARAGRAPH).children(children))
+            Some(Node::new("indented_paragraph").children(children))
         }
 
         Block::ExampleBlock { content, .. } => {
-            Some(Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone()))
+            Some(Node::new("example_block").prop(prop::CONTENT, content.clone()))
         }
 
-        Block::Comment { .. } => {
-            // Comments are not represented in the IR
-            None
+        Block::Comment { text, .. } => {
+            Some(Node::new("comment").prop(prop::CONTENT, text.clone()))
         }
 
         Block::HorizontalRule { .. } => Some(Node::new(node::HORIZONTAL_RULE)),
@@ -199,7 +198,7 @@ mod tests {
     fn test_parse_title() {
         let doc = parse_str(".TH TEST 1 \"2024-01-01\" \"Version 1.0\"");
         assert_eq!(doc.metadata.get_str("title"), Some("TEST"));
-        assert_eq!(doc.metadata.get_str("man:section"), Some("1"));
+        assert_eq!(doc.metadata.get_str("section"), Some("1"));
     }
 
     #[test]

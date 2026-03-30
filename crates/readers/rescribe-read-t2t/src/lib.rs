@@ -3,7 +3,7 @@
 //! Thin adapter that uses the `t2t` crate to parse txt2tags markup
 //! into the rescribe document model.
 
-use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
+use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions, Properties};
 use rescribe_std::{node, prop};
 use t2t::{Block, Inline};
 
@@ -19,13 +19,24 @@ pub fn parse_with_options(
 ) -> Result<ConversionResult<Document>, ParseError> {
     let (t2t_doc, _diagnostics) = t2t::parse(input);
 
+    let mut metadata = Properties::new();
+    if let Some(title) = &t2t_doc.title {
+        metadata.set(prop::TITLE, title.clone());
+    }
+    if let Some(author) = &t2t_doc.author {
+        metadata.set("author", author.clone());
+    }
+    if let Some(date) = &t2t_doc.date {
+        metadata.set("date", date.clone());
+    }
+
     let mut nodes = Vec::new();
     for block in &t2t_doc.blocks {
         nodes.push(block_to_node(block));
     }
 
     let root = Node::new(node::DOCUMENT).children(nodes);
-    let doc = Document::new().with_content(root);
+    let doc = Document::new().with_content(root).with_metadata(metadata);
 
     Ok(ConversionResult::ok(doc))
 }

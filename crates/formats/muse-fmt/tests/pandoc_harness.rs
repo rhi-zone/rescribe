@@ -28,13 +28,13 @@ fn corpus_dir() -> Option<PathBuf> {
 }
 
 fn find_pandoc() -> Option<PathBuf> {
-    if let Ok(out) = Command::new("sh").args(["-c", "command -v pandoc"]).output() {
-        if out.status.success() {
-            let s = String::from_utf8_lossy(&out.stdout);
-            let p = PathBuf::from(s.trim());
-            if p.is_file() {
-                return Some(p);
-            }
+    if let Ok(out) = Command::new("sh").args(["-c", "command -v pandoc"]).output()
+        && out.status.success()
+    {
+        let s = String::from_utf8_lossy(&out.stdout);
+        let p = PathBuf::from(s.trim());
+        if p.is_file() {
+            return Some(p);
         }
     }
     for prefix in &[

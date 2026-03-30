@@ -3,7 +3,7 @@
 //! Parses Jira/Confluence wiki markup into rescribe documents.
 //! Thin adapter over `jira-fmt` standalone library.
 
-use jira_fmt::{Block, Inline, parse as jira_parse};
+use jira_fmt::{Block, Inline, ListItem, ListItemContent, parse as jira_parse};
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
 use rescribe_std::{node, prop};
 
@@ -52,66 +52,81 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::BLOCKQUOTE).children(block_children)
         }
 
-        Block::Panel { children, .. } => {
+        Block::Panel { title, children, .. } => {
             let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
-            Node::new(node::DIV)
-                .prop("jira:type", "panel")
-                .children(block_children)
+            let mut n = Node::new(node::DIV).prop("jira:type", "panel");
+            if let Some(t) = title {
+                n = n.prop("title", t.clone());
+            }
+            n.children(block_children)
         }
 
         Block::List { ordered, items, .. } => {
-            let mut list_items = Vec::new();
-            for item_blocks in items {
-                let mut item_children = Vec::new();
-                for item_block in item_blocks {
-                    item_children.push(block_to_node(item_block));
-                }
-                list_items.push(Node::new(node::LIST_ITEM).children(item_children));
-            }
+            let list_items: Vec<Node> = items.iter().map(list_item_to_node).collect();
             Node::new(node::LIST)
                 .prop(prop::ORDERED, *ordered)
                 .children(list_items)
         }
 
+        Block::Noformat { content, .. } => {
+            Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
+        }
+
         Block::Table { rows, .. } => {
-            let mut table_rows = Vec::new();
-            let mut first_row = true;
-            let mut has_header = false;
+            let mut result_rows = Vec::new();
+            let has_header =
+                rows.first().is_some_and(|r| r.cells.iter().all(|c| c.is_header));
 
-            for row in rows {
-                let has_header_cells = row.cells.iter().any(|c| c.is_header);
-                if first_row && has_header_cells {
-                    has_header = true;
-                }
-                first_row = false;
+            let mut row_iter = rows.iter().peekable();
+            if has_header && let Some(header_row) = row_iter.next() {
+                let cells: Vec<Node> = header_row
+                    .cells
+                    .iter()
+                    .map(|cell| {
+                        Node::new(node::TABLE_HEADER)
+                            .children(inlines_to_nodes(&cell.inlines))
+                    })
+                    .collect();
+                result_rows.push(
+                    Node::new(node::TABLE_HEAD)
+                        .child(Node::new(node::TABLE_ROW).children(cells)),
+                );
             }
 
-            first_row = true;
-            for row in rows {
-                let mut cells = Vec::new();
-                for cell in &row.cells {
-                    let cell_kind = if cell.is_header {
-                        node::TABLE_HEADER
-                    } else {
-                        node::TABLE_CELL
-                    };
-                    cells.push(Node::new(cell_kind).children(inlines_to_nodes(&cell.inlines)));
-                }
-
-                let table_row = Node::new(node::TABLE_ROW).children(cells);
-                if first_row && has_header {
-                    table_rows.push(Node::new(node::TABLE_HEAD).child(table_row));
-                } else {
-                    table_rows.push(table_row);
-                }
-                first_row = false;
+            for row in row_iter {
+                let cells: Vec<Node> = row
+                    .cells
+                    .iter()
+                    .map(|cell| {
+                        let kind =
+                            if cell.is_header { node::TABLE_HEADER } else { node::TABLE_CELL };
+                        Node::new(kind).children(inlines_to_nodes(&cell.inlines))
+                    })
+                    .collect();
+                result_rows.push(Node::new(node::TABLE_ROW).children(cells));
             }
 
-            Node::new(node::TABLE).children(table_rows)
+            Node::new(node::TABLE).children(result_rows)
         }
 
         Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
     }
+}
+
+fn list_item_to_node(item: &ListItem) -> Node {
+    let mut item_children = Vec::new();
+    for content in &item.children {
+        match content {
+            ListItemContent::Inline(inlines) => {
+                let para = Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines));
+                item_children.push(para);
+            }
+            ListItemContent::NestedList(block) => {
+                item_children.push(block_to_node(block));
+            }
+        }
+    }
+    Node::new(node::LIST_ITEM).children(item_children)
 }
 
 fn inlines_to_nodes(inlines: &[Inline]) -> Vec<Node> {
@@ -155,6 +170,14 @@ fn inline_to_node(inline: &Inline) -> Node {
         Inline::Subscript(children, _) => {
             Node::new(node::SUBSCRIPT).children(inlines_to_nodes(children))
         }
+
+        Inline::ColorSpan { color, children, .. } => Node::new(node::SPAN)
+            .prop("style:color", color.clone())
+            .children(inlines_to_nodes(children)),
+
+        Inline::Mention(name, _) => Node::new(node::RAW_INLINE)
+            .prop(prop::FORMAT, "jira")
+            .prop(prop::CONTENT, format!("@{}", name)),
     }
 }
 

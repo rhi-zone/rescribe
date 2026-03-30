@@ -87,6 +87,26 @@ fn block_to_node(block: &Block) -> Node {
         }
 
         Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
+
+        Block::Blockquote { children, .. } => {
+            let child_nodes: Vec<Node> = children.iter().map(block_to_node).collect();
+            Node::new(node::BLOCKQUOTE).children(child_nodes)
+        }
+
+        Block::MacroBlock { name, params, content, .. } => {
+            Node::new(node::RAW_BLOCK)
+                .prop(prop::FORMAT, "xwiki")
+                .prop("xwiki:macro-name", name.clone())
+                .prop("xwiki:macro-params", params.clone())
+                .prop(prop::CONTENT, content.clone())
+        }
+
+        Block::MacroInline { name, params, .. } => {
+            Node::new(node::RAW_INLINE)
+                .prop(prop::FORMAT, "xwiki")
+                .prop("xwiki:macro-name", name.clone())
+                .prop("xwiki:macro-params", params.clone())
+        }
     }
 }
 
@@ -116,7 +136,21 @@ fn inline_to_node(inline: &Inline) -> Node {
             .prop(prop::URL, url.clone())
             .child(Node::new(node::TEXT).prop(prop::CONTENT, label.clone())),
 
-        Inline::Image { url, .. } => Node::new(node::IMAGE).prop(prop::URL, url.clone()),
+        Inline::Image { url, alt, .. } => {
+            let mut n = Node::new(node::IMAGE).prop(prop::URL, url.clone());
+            if let Some(alt_text) = alt {
+                n = n.prop(prop::ALT, alt_text.clone());
+            }
+            n
+        }
+
+        Inline::Superscript(children, _) => {
+            Node::new(node::SUPERSCRIPT).children(inlines_to_nodes(children))
+        }
+
+        Inline::Subscript(children, _) => {
+            Node::new(node::SUBSCRIPT).children(inlines_to_nodes(children))
+        }
 
         Inline::LineBreak { .. } => Node::new(node::LINE_BREAK),
 

@@ -1213,12 +1213,11 @@ mod tests {
             let doc = &result.value;
             // Walk all text nodes to find "Alice".
             fn has_text(node: &rescribe_core::Node, needle: &str) -> bool {
-                if node.kind.as_str() == rescribe_std::node::TEXT {
-                    if let Some(content) = node.props.get_str(rescribe_std::prop::CONTENT) {
-                        if content.contains(needle) {
-                            return true;
-                        }
-                    }
+                if node.kind.as_str() == rescribe_std::node::TEXT
+                    && let Some(content) = node.props.get_str(rescribe_std::prop::CONTENT)
+                    && content.contains(needle)
+                {
+                    return true;
                 }
                 node.children.iter().any(|c| has_text(c, needle))
             }

@@ -171,19 +171,6 @@ fn block_to_node(block: &Block, warnings: &mut Vec<FidelityWarning>) -> Node {
                 .children(child_nodes)
         }
 
-        Block::LineBlock { lines } => {
-            // Each line becomes a paragraph; lines are separated by line_break nodes.
-            // The whole block is wrapped in a div with class "line-block".
-            let line_nodes: Vec<Node> = lines
-                .iter()
-                .map(|inlines| {
-                    Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines, warnings))
-                })
-                .collect();
-            Node::new(node::DIV)
-                .prop("class", "line-block")
-                .children(line_nodes)
-        }
     }
 }
 
@@ -280,9 +267,17 @@ fn inline_to_node(inline: &Inline, warnings: &mut Vec<FidelityWarning>) -> Node 
             Node::new("math_inline").prop("math:source", source.clone())
         }
 
-        Inline::RstSpan { role, children } => Node::new(node::SPAN)
-            .prop("rst:role", role.clone())
-            .children(inlines_to_nodes(children, warnings)),
+        Inline::RstSpan { role, children } => {
+            let child_nodes = inlines_to_nodes(children, warnings);
+            match role.as_str() {
+                "small-caps" | "sc" => Node::new(node::SMALL_CAPS).children(child_nodes),
+                "strike" | "del" | "s" => Node::new(node::STRIKEOUT).children(child_nodes),
+                "underline" | "u" => Node::new(node::UNDERLINE).children(child_nodes),
+                _ => Node::new(node::SPAN)
+                    .prop("rst:role", role.clone())
+                    .children(child_nodes),
+            }
+        }
     }
 }
 

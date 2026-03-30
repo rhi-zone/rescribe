@@ -47,14 +47,46 @@ fn block_to_node(block: &Block) -> Node {
         Block::List { ordered, items, .. } => {
             let list_items: Vec<Node> = items
                 .iter()
-                .map(|item_inlines| {
-                    Node::new(node::LIST_ITEM)
-                        .child(Node::new(node::PARAGRAPH).children(inlines_to_nodes(item_inlines)))
+                .map(|item| {
+                    let mut item_node = Node::new(node::LIST_ITEM).child(
+                        Node::new(node::PARAGRAPH).children(inlines_to_nodes(&item.inlines)),
+                    );
+                    for child_block in &item.children {
+                        item_node = item_node.child(block_to_node(child_block));
+                    }
+                    item_node
                 })
                 .collect();
             Node::new(node::LIST)
                 .prop(prop::ORDERED, *ordered)
                 .children(list_items)
+        }
+        Block::RawBlock { content, .. } => {
+            Node::new(node::RAW_BLOCK)
+                .prop(prop::FORMAT, "twiki")
+                .prop(prop::CONTENT, content.clone())
+        }
+        Block::DefinitionList { items, .. } => {
+            let def_nodes: Vec<Node> = items
+                .iter()
+                .map(|item| {
+                    Node::new("definition_item")
+                        .child(
+                            Node::new(node::DEFINITION_TERM)
+                                .children(inlines_to_nodes(&item.term)),
+                        )
+                        .child(
+                            Node::new(node::DEFINITION_DESC)
+                                .children(inlines_to_nodes(&item.desc)),
+                        )
+                })
+                .collect();
+            Node::new(node::DEFINITION_LIST).children(def_nodes)
+        }
+
+        Block::Blockquote { children, .. } => {
+            let block_nodes: Vec<_> = children.iter().map(block_to_node).collect();
+            Node::new(node::BLOCKQUOTE).children(block_nodes)
         }
         Block::Table { rows, .. } => {
             let row_nodes: Vec<Node> = rows
@@ -103,6 +135,29 @@ fn inline_to_node(inline: &Inline) -> Node {
         Inline::Link { url, label, .. } => Node::new(node::LINK)
             .prop(prop::URL, url.clone())
             .child(Node::new(node::TEXT).prop(prop::CONTENT, label.clone())),
+        Inline::Strikethrough(children, _) => {
+            Node::new("strikethrough").children(inlines_to_nodes(children))
+        }
+        Inline::Superscript(children, _) => {
+            Node::new(node::SUPERSCRIPT).children(inlines_to_nodes(children))
+        }
+        Inline::Subscript(children, _) => {
+            Node::new(node::SUBSCRIPT).children(inlines_to_nodes(children))
+        }
+        Inline::Underline(children, _) => {
+            Node::new(node::UNDERLINE).children(inlines_to_nodes(children))
+        }
+        Inline::Image { url, alt, .. } => {
+            let mut n = Node::new(node::IMAGE).prop(prop::URL, url.clone());
+            if !alt.is_empty() {
+                n = n.prop(prop::ALT, alt.clone());
+            }
+            n
+        }
+        Inline::RawInline { content, .. } => Node::new(node::RAW_INLINE)
+            .prop(prop::FORMAT, "twiki")
+            .prop(prop::CONTENT, content.clone()),
+        Inline::WikiWord { word, .. } => Node::new("wikiword").prop("word", word.clone()),
         Inline::LineBreak { .. } => Node::new(node::LINE_BREAK),
     }
 }
@@ -112,13 +167,22 @@ fn children_to_text(children: &[Inline]) -> String {
     for child in children {
         match child {
             Inline::Text(t, _) => s.push_str(t),
-            Inline::Bold(ch, _) | Inline::Italic(ch, _) | Inline::BoldItalic(ch, _) => {
+            Inline::Bold(ch, _)
+            | Inline::Italic(ch, _)
+            | Inline::BoldItalic(ch, _)
+            | Inline::Strikethrough(ch, _)
+            | Inline::Superscript(ch, _)
+            | Inline::Subscript(ch, _)
+            | Inline::Underline(ch, _) => {
                 s.push_str(&children_to_text(ch));
             }
             Inline::Code(c, _) => s.push_str(c),
             Inline::BoldCode(ch, _) => s.push_str(&children_to_text(ch)),
             Inline::Link { label, .. } => s.push_str(label),
             Inline::LineBreak { .. } => s.push('\n'),
+            Inline::Image { alt, .. } => s.push_str(alt),
+            Inline::RawInline { content, .. } => s.push_str(content),
+            Inline::WikiWord { word, .. } => s.push_str(word),
         }
     }
     s

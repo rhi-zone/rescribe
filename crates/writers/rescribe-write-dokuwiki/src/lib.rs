@@ -90,8 +90,32 @@ fn convert_node(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<FmtB
             let mut items = Vec::new();
             for child in &node.children {
                 if child.kind.as_str() == node::LIST_ITEM {
-                    let item_blocks = convert_nodes(&child.children, warnings);
-                    items.push(item_blocks);
+                    // Collect inlines: direct inline children OR paragraph children's inlines
+                    let mut inlines: Vec<dokuwiki::Inline> = Vec::new();
+                    let mut nested_children: Vec<dokuwiki::Block> = Vec::new();
+                    for item_child in &child.children {
+                        match item_child.kind.as_str() {
+                            node::PARAGRAPH => {
+                                inlines.extend(
+                                    item_child
+                                        .children
+                                        .iter()
+                                        .filter_map(|n| convert_inline(n, warnings)),
+                                );
+                            }
+                            node::LIST => {
+                                if let Some(b) = convert_node(item_child, warnings) {
+                                    nested_children.push(b);
+                                }
+                            }
+                            _ => {
+                                if let Some(il) = convert_inline(item_child, warnings) {
+                                    inlines.push(il);
+                                }
+                            }
+                        }
+                    }
+                    items.push(dokuwiki::ListItem { inlines, children: nested_children });
                 }
             }
             Some(FmtBlock::List { ordered, items, span: dokuwiki::Span::NONE })

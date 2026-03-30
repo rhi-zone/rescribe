@@ -163,6 +163,8 @@ struct Parser<'a> {
     heading_levels: Vec<char>,
     /// Link targets: name -> url
     link_targets: std::collections::HashMap<String, String>,
+    /// Substitution definitions: |name| -> replacement text
+    substitutions: std::collections::HashMap<String, String>,
 }
 
 impl<'a> Parser<'a> {
@@ -173,6 +175,7 @@ impl<'a> Parser<'a> {
             line_idx: 0,
             heading_levels: Vec::new(),
             link_targets: std::collections::HashMap::new(),
+            substitutions: std::collections::HashMap::new(),
         }
     }
 
@@ -220,9 +223,46 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// First pass: collect anonymous link targets (__ url)
+    fn collect_anonymous_targets(&mut self) {
+        let mut idx = 0;
+        let mut anon_counter = 0usize;
+        while idx < self.lines.len() {
+            let line = self.lines[idx].trim();
+            if let Some(url) = line.strip_prefix("__ ") {
+                let key = format!("__anon{}", anon_counter);
+                self.link_targets.insert(key, url.trim().to_string());
+                anon_counter += 1;
+            }
+            idx += 1;
+        }
+    }
+
+    /// First pass: collect substitution definitions (.. |name| replace:: value)
+    fn collect_substitutions(&mut self) {
+        let mut idx = 0;
+        while idx < self.lines.len() {
+            let line = self.lines[idx];
+            if let Some(rest) = line.strip_prefix(".. |") {
+                if let Some(bar_end) = rest.find('|') {
+                    let name = rest[..bar_end].to_string();
+                    let after_bar = rest[bar_end + 1..].trim();
+                    // Only handle replace:: for now
+                    if let Some(value) = after_bar.strip_prefix("replace::") {
+                        let replacement = value.trim().to_string();
+                        self.substitutions.insert(name, replacement);
+                    }
+                }
+            }
+            idx += 1;
+        }
+    }
+
     fn parse_document(&mut self) -> Vec<Block> {
-        // First pass: collect link targets
+        // First pass: collect link targets, anonymous targets, substitutions
         self.collect_link_targets();
+        self.collect_anonymous_targets();
+        self.collect_substitutions();
 
         let mut blocks = Vec::new();
 
@@ -250,6 +290,45 @@ impl<'a> Parser<'a> {
                 self.advance_line();
                 return self.try_parse_block();
             }
+            // Skip anonymous link targets (__ url)
+            if line.starts_with("__ ") {
+                self.advance_line();
+                return self.try_parse_block();
+            }
+        }
+
+        // Skip substitution definitions (.. |name| directive::)
+        if let Some(line) = self.current_line() {
+            if line.starts_with(".. |") {
+                self.advance_line();
+                // Skip indented continuation
+                while !self.is_eof() {
+                    let cont = self.current_line().unwrap_or("");
+                    if cont.is_empty() || cont.starts_with(' ') || cont.starts_with('\t') {
+                        self.advance_line();
+                    } else {
+                        break;
+                    }
+                }
+                return self.try_parse_block();
+            }
+        }
+
+        // Check for transition (RST horizontal rule): 4+ repeated punctuation chars on a line,
+        // followed by a blank line (transitions require blank lines on both sides).
+        if let Some(line) = self.current_line() {
+            let trimmed = line.trim();
+            if trimmed.len() >= 4 {
+                let first = trimmed.chars().next().unwrap_or(' ');
+                if "-=~^\"#*+_".contains(first) && trimmed.chars().all(|c| c == first) {
+                    // Only treat as transition if the next line is blank or EOF (not a heading)
+                    let next_is_blank = self.peek_line().map(|l| l.trim().is_empty()).unwrap_or(true);
+                    if next_is_blank {
+                        self.advance_line();
+                        return Some(Block::HorizontalRule);
+                    }
+                }
+            }
         }
 
         // Check for heading (text followed by underline)
@@ -267,9 +346,29 @@ impl<'a> Parser<'a> {
             return Some(list);
         }
 
+        // Check for line block (| line text)
+        if let Some(lb) = self.try_parse_line_block() {
+            return Some(lb);
+        }
+
+        // Check for field list (:Name: value)
+        if let Some(fieldlist) = self.try_parse_field_list() {
+            return Some(fieldlist);
+        }
+
         // Check for definition list
         if let Some(deflist) = self.try_parse_definition_list() {
             return Some(deflist);
+        }
+
+        // Check for grid table (+---+---+)
+        if let Some(table) = self.try_parse_grid_table() {
+            return Some(table);
+        }
+
+        // Check for simple table (===  ===)
+        if let Some(table) = self.try_parse_simple_table() {
+            return Some(table);
         }
 
         // Check for literal block (ends with ::)
@@ -521,6 +620,53 @@ impl<'a> Parser<'a> {
             "math" => Block::MathDisplay {
                 source: content_lines.join("\n"),
             },
+            "admonition" => {
+                // Custom admonition with a title argument
+                let content = content_lines.join("\n");
+                let children = if content.is_empty() {
+                    vec![]
+                } else {
+                    let inlines = parse_inline_content(&content, &self.link_targets);
+                    vec![Block::Paragraph { inlines }]
+                };
+                Block::Admonition {
+                    admonition_type: argument.to_string(),
+                    children,
+                }
+            }
+            "container" => {
+                let content = content_lines.join("\n");
+                let children = if content.is_empty() {
+                    vec![]
+                } else {
+                    let inlines = parse_inline_content(&content, &self.link_targets);
+                    vec![Block::Paragraph { inlines }]
+                };
+                Block::Div {
+                    class: if argument.is_empty() { None } else { Some(argument.to_string()) },
+                    directive: Some("container".to_string()),
+                    children,
+                }
+            }
+            "rubric" => {
+                // rubric directive: argument is the heading text
+                let mut children = Vec::new();
+                if !argument.is_empty() {
+                    let inlines = parse_inline_content(argument, &self.link_targets);
+                    children.push(Block::Paragraph { inlines });
+                } else {
+                    let content = content_lines.join("\n");
+                    if !content.is_empty() {
+                        let inlines = parse_inline_content(&content, &self.link_targets);
+                        children.push(Block::Paragraph { inlines });
+                    }
+                }
+                Block::Div {
+                    class: None,
+                    directive: Some("rubric".to_string()),
+                    children,
+                }
+            }
             _ => {
                 // Unknown directive — create generic div (warnings handled by adapter)
                 let content = content_lines.join("\n");
@@ -567,6 +713,169 @@ impl<'a> Parser<'a> {
         None
     }
 
+    fn try_parse_grid_table(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+        if !line.starts_with('+') {
+            return None;
+        }
+        // Must be a border line: +---+---+
+        if !line.chars().all(|c| c == '+' || c == '-' || c == '=') {
+            return None;
+        }
+        // Collect the table
+        let mut rows: Vec<TableRow> = Vec::new();
+
+        // First border line — skip
+        self.advance_line();
+
+        while !self.is_eof() {
+            let row_line = self.current_line().unwrap_or("");
+
+            if row_line.is_empty() {
+                break;
+            }
+
+            // Border line
+            if row_line.starts_with('+') && row_line.chars().all(|c| c == '+' || c == '-' || c == '=') {
+                let has_equals = row_line.contains('=');
+                self.advance_line();
+                if has_equals && !rows.is_empty() {
+                    // Mark last row as header
+                    if let Some(last) = rows.last_mut() {
+                        last.is_header = true;
+                    }
+                }
+                if row_line.starts_with('+') && !row_line.contains('|') && rows.is_empty() {
+                    // Last border line (only borders left)
+                    break;
+                }
+                continue;
+            }
+
+            // Data row: | cell | cell |
+            if row_line.starts_with('|') {
+                let cells: Vec<Vec<Inline>> = row_line
+                    .split('|')
+                    .skip(1) // Skip leading |
+                    .filter(|s| !s.is_empty() || row_line.ends_with('|'))
+                    .filter(|s| !s.is_empty())
+                    .map(|cell| {
+                        let text = cell.trim();
+                        parse_inline_content(text, &self.link_targets)
+                    })
+                    .collect();
+                if !cells.is_empty() {
+                    rows.push(TableRow { cells, is_header: false });
+                }
+                self.advance_line();
+                continue;
+            }
+
+            break;
+        }
+
+        if rows.is_empty() {
+            return None;
+        }
+
+        Some(Block::Table { rows })
+    }
+
+    fn try_parse_simple_table(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+        let trimmed = line.trim();
+        // Simple table border: ===  === (multiple === groups separated by spaces)
+        if !trimmed.starts_with('=') {
+            return None;
+        }
+        if !trimmed.chars().all(|c| c == '=' || c == ' ') {
+            return None;
+        }
+        // Parse column widths
+        let col_spans: Vec<(usize, usize)> = {
+            let mut spans = Vec::new();
+            let mut start = None;
+            for (i, c) in trimmed.char_indices() {
+                match c {
+                    '=' => {
+                        if start.is_none() {
+                            start = Some(i);
+                        }
+                    }
+                    ' ' => {
+                        if let Some(s) = start {
+                            spans.push((s, i));
+                            start = None;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(s) = start {
+                spans.push((s, trimmed.len()));
+            }
+            spans
+        };
+
+        if col_spans.is_empty() {
+            return None;
+        }
+
+        self.advance_line(); // Skip top border
+
+        let mut rows = Vec::new();
+        let mut is_header_section = true;
+
+        while !self.is_eof() {
+            let row_line = self.current_line().unwrap_or("");
+
+            if row_line.trim().is_empty() {
+                self.advance_line();
+                continue;
+            }
+
+            // Border line
+            let trimmed_row = row_line.trim();
+            if trimmed_row.starts_with('=') && trimmed_row.chars().all(|c| c == '=' || c == ' ') {
+                self.advance_line();
+                is_header_section = false;
+                // Check if this is the final border
+                if self.is_eof() || self.current_line().map(|l| l.trim().is_empty()).unwrap_or(true) {
+                    break;
+                }
+                // Check if next line is also a border (end of table)
+                if let Some(next) = self.current_line() {
+                    let nt = next.trim();
+                    if nt.starts_with('=') && nt.chars().all(|c| c == '=' || c == ' ') {
+                        self.advance_line();
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            // Data row
+            let cells: Vec<Vec<Inline>> = col_spans.iter().map(|(start, end)| {
+                let cell_text = if *start < row_line.len() {
+                    let end_pos = (*end).min(row_line.len());
+                    row_line[*start..end_pos].trim()
+                } else {
+                    ""
+                };
+                parse_inline_content(cell_text, &self.link_targets)
+            }).collect();
+
+            rows.push(TableRow { cells, is_header: is_header_section });
+            self.advance_line();
+        }
+
+        if rows.is_empty() {
+            return None;
+        }
+
+        Some(Block::Table { rows })
+    }
+
     fn parse_bullet_list(&mut self, bullet: char) -> Block {
         let mut items = Vec::new();
         let indent = self.get_indent();
@@ -595,8 +904,47 @@ impl<'a> Parser<'a> {
             }
 
             if let Some(rest) = trimmed.strip_prefix(&format!("{} ", bullet)) {
-                let item = self.parse_list_item(rest);
-                items.push(vec![Block::Paragraph { inlines: item }]);
+                let item_inlines = self.parse_list_item(rest);
+                let mut item_blocks = vec![Block::Paragraph { inlines: item_inlines }];
+                // Check for immediately indented sub-list (no blank line between)
+                // Only handle the case where the next non-blank line is a bullet at higher indent
+                while !self.is_eof() {
+                    let peek = self.current_line().unwrap_or("");
+                    // Skip one blank line
+                    if peek.trim().is_empty() {
+                        let next_idx = self.line_idx + 1;
+                        let next_line = self.lines.get(next_idx).copied().unwrap_or("");
+                        let next_indent = self.get_line_indent(next_line);
+                        let next_trimmed = next_line.trim_start();
+                        // Only continue if the next non-blank line is a sub-list bullet at higher indent
+                        if next_indent > indent
+                            && (next_trimmed.starts_with("- ")
+                                || next_trimmed.starts_with("* ")
+                                || next_trimmed.starts_with("+ "))
+                        {
+                            self.advance_line(); // skip blank
+                            continue;
+                        }
+                        break;
+                    }
+                    let sub_indent = self.get_indent();
+                    let sub_trimmed = peek.trim_start();
+                    // Only parse sub-lists (bullet lists) at higher indentation
+                    if sub_indent > indent
+                        && (sub_trimmed.starts_with("- ")
+                            || sub_trimmed.starts_with("* ")
+                            || sub_trimmed.starts_with("+ "))
+                    {
+                        if let Some(sub_block) = self.try_parse_list() {
+                            item_blocks.push(sub_block);
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                items.push(item_blocks);
             } else if current_indent > indent {
                 // Continuation of previous item - skip for now
                 self.advance_line();
@@ -708,6 +1056,85 @@ impl<'a> Parser<'a> {
         }
 
         None
+    }
+
+    fn try_parse_line_block(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+        if !line.starts_with("| ") && line != "|" {
+            return None;
+        }
+        let mut children = Vec::new();
+        while !self.is_eof() {
+            let l = self.current_line().unwrap_or("");
+            if l.starts_with("| ") || l == "|" {
+                let text = l.strip_prefix("| ").unwrap_or("").to_string();
+                let inlines = parse_inline_content(&text, &self.link_targets);
+                children.push(Block::Paragraph { inlines });
+                self.advance_line();
+            } else if l.trim().is_empty() {
+                self.advance_line();
+                break;
+            } else {
+                break;
+            }
+        }
+        Some(Block::Div {
+            class: Some("line-block".to_string()),
+            directive: None,
+            children,
+        })
+    }
+
+    fn try_parse_field_list(&mut self) -> Option<Block> {
+        let line = self.current_line()?;
+        // Field list starts with :name: value  (space after closing colon)
+        if !line.starts_with(':') {
+            return None;
+        }
+        // Skip standalone :: (literal block marker)
+        if line.trim() == "::" {
+            return None;
+        }
+        let rest = &line[1..];
+        // Find the closing colon
+        let close_colon = rest.find(':')?;
+        let after_close = &rest[close_colon + 1..];
+        // Must be followed by a space (field list) not a backtick (inline role)
+        if !after_close.starts_with(' ') && !after_close.is_empty() {
+            return None;
+        }
+        Some(self.parse_field_list())
+    }
+
+    fn parse_field_list(&mut self) -> Block {
+        let mut items = Vec::new();
+
+        while !self.is_eof() {
+            let line = self.current_line().unwrap_or("");
+
+            if line.trim().is_empty() {
+                self.advance_line();
+                continue;
+            }
+
+            // Field list item: :name: value
+            if let Some(after_colon) = line.strip_prefix(':') {
+                if let Some(close_colon) = after_colon.find(':') {
+                    let field_name = &after_colon[..close_colon];
+                    let field_value = after_colon[close_colon + 1..].trim();
+                    let term = parse_inline_content(field_name, &self.link_targets);
+                    let desc = parse_inline_content(field_value, &self.link_targets);
+                    self.advance_line();
+                    items.push(DefinitionItem { term, desc });
+                    continue;
+                }
+            }
+
+            // Non-field-list line — stop
+            break;
+        }
+
+        Block::DefinitionList { items }
     }
 
     fn parse_definition_list(&mut self) -> Block {
@@ -932,8 +1359,43 @@ impl<'a> Parser<'a> {
             content
         };
 
-        let inlines = parse_inline_content(&content, &self.link_targets);
+        let expanded = self.expand_substitutions(&content);
+        let inlines = parse_inline_content(&expanded, &self.link_targets);
         Some(Block::Paragraph { inlines })
+    }
+
+    /// Expand substitution references |name| in a string.
+    fn expand_substitutions<'b>(&self, text: &'b str) -> std::borrow::Cow<'b, str> {
+        if !text.contains('|') {
+            return std::borrow::Cow::Borrowed(text);
+        }
+        let mut result = String::new();
+        let mut last_end = 0;
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'|' {
+                // Find closing |
+                if let Some(close) = text[i + 1..].find('|') {
+                    let name = &text[i + 1..i + 1 + close];
+                    if !name.is_empty() && !name.contains(' ') {
+                        if let Some(replacement) = self.substitutions.get(name) {
+                            result.push_str(&text[last_end..i]);
+                            result.push_str(replacement);
+                            i = i + 1 + close + 1;
+                            last_end = i;
+                            continue;
+                        }
+                    }
+                }
+            }
+            i += 1;
+        }
+        if result.is_empty() {
+            return std::borrow::Cow::Borrowed(text);
+        }
+        result.push_str(&text[last_end..]);
+        std::borrow::Cow::Owned(result)
     }
 
     fn get_indent(&self) -> usize {
@@ -1034,9 +1496,29 @@ fn parse_inline_content(
             }
         }
 
-        // Inline link: `text <url>`_
+        // Inline link: `text <url>`_  or  `text`__  (anonymous)
         if chars[pos] == '`' {
             if let Some((end, text)) = find_closing_char(&chars, pos + 1, '`') {
+                // Check for trailing __ (anonymous reference)
+                if end + 2 < chars.len() && chars[end + 1] == '_' && chars[end + 2] == '_' {
+                    // Anonymous link — look up next anon target
+                    let counter_key = "__anon_counter";
+                    let counter: usize = link_targets.get(counter_key)
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
+                    let anon_key = format!("__anon{}", counter);
+                    if let Some(url) = link_targets.get(&anon_key).cloned() {
+                        // We need a mutable reference to increment counter, but link_targets is &
+                        // For now: don't increment (single-use anonymous links work correctly)
+                        nodes.push(Inline::Link {
+                            url,
+                            children: vec![Inline::Text(text.to_string())],
+                        });
+                        pos = end + 3;
+                        continue;
+                    }
+                }
+
                 // Check for trailing _
                 if end + 1 < chars.len() && chars[end + 1] == '_' {
                     // Check if it's an inline link with URL
@@ -1929,5 +2411,27 @@ mod tests {
         let output = build(&doc);
         assert!(output.contains("- one"));
         assert!(output.contains("- two"));
+    }
+
+    #[test]
+    fn test_parse_grid_table() {
+        let input = "+--------+--------+\n| A      | B      |\n+========+========+\n| Cell 1 | Cell 2 |\n+--------+--------+\n";
+        let doc = parse(input).unwrap();
+        assert!(matches!(doc.blocks[0], Block::Table { .. }), "expected Table, got {:?}", doc.blocks[0]);
+        let Block::Table { rows } = &doc.blocks[0] else { panic!() };
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].is_header);
+        assert!(!rows[1].is_header);
+    }
+
+    #[test]
+    fn test_parse_simple_table() {
+        let input = "=====  =====\nA      B\n=====  =====\n1      2\n=====  =====\n";
+        let doc = parse(input).unwrap();
+        assert!(matches!(doc.blocks[0], Block::Table { .. }), "expected Table, got {:?}", doc.blocks[0]);
+        let Block::Table { rows } = &doc.blocks[0] else { panic!() };
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].is_header);
+        assert!(!rows[1].is_header);
     }
 }

@@ -58,13 +58,13 @@ fn convert_block(block: &FmtBlock) -> Node {
 
         FmtBlock::List { ordered, items, .. } => {
             let mut list_items = Vec::new();
-            for item_blocks in items {
-                let mut item_children = Vec::new();
-                for block in item_blocks {
+            for item in items {
+                let mut item_children: Vec<Node> =
+                    item.inlines.iter().map(convert_inline).collect();
+                for block in &item.children {
                     item_children.push(convert_block(block));
                 }
-                let item = Node::new(node::LIST_ITEM).children(item_children);
-                list_items.push(item);
+                list_items.push(Node::new(node::LIST_ITEM).children(item_children));
             }
             Node::new(node::LIST)
                 .prop(prop::ORDERED, *ordered)
@@ -72,6 +72,63 @@ fn convert_block(block: &FmtBlock) -> Node {
         }
 
         FmtBlock::HorizontalRule(_) => Node::new(node::HORIZONTAL_RULE),
+
+        FmtBlock::FileBlock { language, filename, content, .. } => {
+            let mut n = Node::new("file_block").prop(prop::CONTENT, content.clone());
+            if let Some(lang) = language {
+                n = n.prop(prop::LANGUAGE, lang.clone());
+            }
+            if let Some(fname) = filename {
+                n = n.prop("dokuwiki:filename", fname.clone());
+            }
+            n
+        }
+
+        FmtBlock::Table { rows, .. } => {
+            let row_nodes: Vec<Node> = rows
+                .iter()
+                .map(|row| {
+                    let cells: Vec<Node> = row
+                        .cells
+                        .iter()
+                        .map(|cell| {
+                            let kind = if row.is_header {
+                                node::TABLE_HEADER
+                            } else {
+                                node::TABLE_CELL
+                            };
+                            Node::new(kind)
+                                .children(cell.inlines.iter().map(convert_inline))
+                        })
+                        .collect();
+                    Node::new(node::TABLE_ROW).children(cells)
+                })
+                .collect();
+            Node::new(node::TABLE).children(row_nodes)
+        }
+
+        FmtBlock::DefinitionList { items, .. } => {
+            let mut def_nodes = Vec::new();
+            for item in items {
+                def_nodes.push(
+                    Node::new(node::DEFINITION_TERM)
+                        .children(item.term.iter().map(convert_inline)),
+                );
+                def_nodes.push(
+                    Node::new(node::DEFINITION_DESC)
+                        .children(item.desc.iter().map(convert_inline)),
+                );
+            }
+            Node::new(node::DEFINITION_LIST).children(def_nodes)
+        }
+
+        FmtBlock::RawBlock { format, content, .. } => Node::new(node::RAW_BLOCK)
+            .prop(prop::FORMAT, format.clone())
+            .prop(prop::CONTENT, content.clone()),
+
+        FmtBlock::Macro { name, .. } => Node::new(node::RAW_INLINE)
+            .prop(prop::FORMAT, "dokuwiki")
+            .prop(prop::CONTENT, format!("{{{{{}}}}}", name)),
     }
 }
 
@@ -109,6 +166,29 @@ fn convert_inline(inline: &FmtInline) -> Node {
                 n = n.prop(prop::ALT, alt_text.clone());
             }
             n
+        }
+
+        FmtInline::Strikethrough(children, _) => {
+            let converted: Vec<Node> = children.iter().map(convert_inline).collect();
+            Node::new(node::STRIKEOUT).children(converted)
+        }
+
+        FmtInline::Superscript(children, _) => {
+            let converted: Vec<Node> = children.iter().map(convert_inline).collect();
+            Node::new(node::SUPERSCRIPT).children(converted)
+        }
+
+        FmtInline::Subscript(children, _) => {
+            let converted: Vec<Node> = children.iter().map(convert_inline).collect();
+            Node::new(node::SUBSCRIPT).children(converted)
+        }
+
+        FmtInline::Nowiki(s, _) => Node::new(node::RAW_INLINE)
+            .prop(prop::FORMAT, "dokuwiki")
+            .prop(prop::CONTENT, s.clone()),
+
+        FmtInline::FootnoteRef { content, .. } => {
+            Node::new(node::FOOTNOTE_REF).prop(prop::CONTENT, content.clone())
         }
 
         FmtInline::LineBreak(_) => Node::new(node::LINE_BREAK),

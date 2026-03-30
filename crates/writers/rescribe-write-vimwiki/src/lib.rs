@@ -172,7 +172,7 @@ fn node_to_inline(node: &Node) -> Inline {
                 .map(|s| s.to_string())
                 .unwrap_or_default();
             let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
-            Inline::Image { url, alt, span: Span::NONE }
+            Inline::Image { url, alt, style: None, span: Span::NONE }
         }
 
         // Fallback for inline nodes: wrap in text or return text representation

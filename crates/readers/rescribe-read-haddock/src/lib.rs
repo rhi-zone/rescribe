@@ -46,14 +46,11 @@ fn convert_block(block: &haddock_fmt::Block) -> Node {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_inlines| {
-                    let para = Node::new(node::PARAGRAPH).children(convert_inlines(item_inlines));
-                    Node::new(node::LIST_ITEM).children(vec![para])
+                    Node::new(node::LIST_ITEM).children(convert_inlines(item_inlines))
                 })
                 .collect();
 
-            Node::new(node::LIST)
-                .prop(prop::ORDERED, false)
-                .children(list_items)
+            Node::new("unordered_list").children(list_items)
         }
 
         haddock_fmt::Block::OrderedList { items, .. } => {
@@ -81,6 +78,31 @@ fn convert_block(block: &haddock_fmt::Block) -> Node {
             }
             Node::new(node::DEFINITION_LIST).children(def_items)
         }
+
+        haddock_fmt::Block::AtCodeBlock { content, .. } => {
+            Node::new("at_code_block").prop(prop::CONTENT, content.clone())
+        }
+
+        haddock_fmt::Block::DocTest { expression, result, .. } => {
+            let mut n = Node::new("doc_test").prop("expression", expression.clone());
+            if let Some(res) = result {
+                n = n.prop("result", res.clone());
+            }
+            n
+        }
+
+        haddock_fmt::Block::Blockquote { inlines, .. } => {
+            Node::new(node::BLOCKQUOTE)
+                .children(vec![Node::new(node::PARAGRAPH).children(convert_inlines(inlines))])
+        }
+
+        haddock_fmt::Block::Property { key, name, description, .. } => {
+            let mut n = Node::new("property").prop("key", key.clone());
+            if let Some(n_name) = name {
+                n = n.prop("name", n_name.clone());
+            }
+            n.children(convert_inlines(description))
+        }
     }
 }
 
@@ -107,6 +129,10 @@ fn convert_inline(inline: &haddock_fmt::Inline) -> Node {
             Node::new(node::LINK)
                 .prop(prop::URL, url.clone())
                 .children(vec![text_node])
+        }
+
+        haddock_fmt::Inline::ModuleLink { module, .. } => {
+            Node::new("module_link").prop("module", module.clone())
         }
     }
 }
@@ -180,7 +206,7 @@ mod tests {
         let doc = parse_str("* item1\n* item2\n");
         assert_eq!(doc.content.children.len(), 1);
         let list = &doc.content.children[0];
-        assert_eq!(list.kind.as_str(), node::LIST);
+        assert_eq!(list.kind.as_str(), "unordered_list");
         assert_eq!(list.children.len(), 2);
     }
 

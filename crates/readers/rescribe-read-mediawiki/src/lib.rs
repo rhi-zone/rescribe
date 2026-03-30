@@ -46,8 +46,12 @@ fn block_to_node(block: &Block) -> Node {
                 .children(children)
         }
 
-        Block::CodeBlock { content, .. } => {
-            Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone())
+        Block::CodeBlock { language, content, .. } => {
+            let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
+            if let Some(lang) = language {
+                n = n.prop(prop::LANGUAGE, lang.clone());
+            }
+            n
         }
 
         Block::List { ordered, items, .. } => {
@@ -75,7 +79,37 @@ fn block_to_node(block: &Block) -> Node {
                 .children(children)
         }
 
+        Block::DefinitionList { items, .. } => {
+            let children: Vec<Node> = items
+                .iter()
+                .flat_map(|item| {
+                    let term_children: Vec<Node> = item.term.iter().map(inline_to_node).collect();
+                    let desc_children: Vec<Node> = item.desc.iter().map(inline_to_node).collect();
+                    vec![
+                        Node::new(node::DEFINITION_TERM).children(term_children),
+                        Node::new(node::DEFINITION_DESC).children(desc_children),
+                    ]
+                })
+                .collect();
+            Node::new(node::DEFINITION_LIST).children(children)
+        }
+
         Block::HorizontalRule => Node::new(node::HORIZONTAL_RULE),
+
+        Block::Blockquote { children, .. } => {
+            let child_nodes: Vec<Node> = children.iter().map(block_to_node).collect();
+            Node::new(node::BLOCKQUOTE).children(child_nodes)
+        }
+
+        Block::PreBlock { content, .. } => {
+            Node::new("pre_block").prop(prop::CONTENT, content.clone())
+        }
+
+        Block::RawBlock { content, .. } => {
+            Node::new(node::RAW_BLOCK)
+                .prop(prop::FORMAT, "mediawiki")
+                .prop(prop::CONTENT, content.clone())
+        }
 
         Block::Table { rows, .. } => {
             let children: Vec<Node> = rows
@@ -148,6 +182,26 @@ fn inline_to_node(inline: &Inline) -> Node {
         Inline::Superscript(children) => {
             let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
             Node::new(node::SUPERSCRIPT).children(child_nodes)
+        }
+
+        Inline::FootnoteRef { label, content } => {
+            let mut n = Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, label.clone());
+            if let Some(c) = content {
+                n = n.prop(prop::CONTENT, c.clone());
+            }
+            n
+        }
+
+        Inline::MathInline { source } => {
+            Node::new("math_inline").prop(prop::CONTENT, source.clone())
+        }
+
+        Inline::Template { content } => {
+            Node::new("template").prop(prop::CONTENT, content.clone())
+        }
+
+        Inline::Nowiki { content } => {
+            Node::new("nowiki").prop(prop::CONTENT, content.clone())
         }
     }
 }

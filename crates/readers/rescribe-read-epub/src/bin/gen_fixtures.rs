@@ -194,10 +194,8 @@ fn generate_expected_json(desc: &str, epub_bytes: &[u8]) -> String {
     let important_meta = ["title", "author", "language", "publisher", "date", "identifier"];
     let mut meta_map = serde_json::Map::new();
     for key in &important_meta {
-        if let Some(val) = doc.metadata.get_str(key) {
-            if !val.is_empty() {
-                meta_map.insert(key.to_string(), serde_json::Value::String(val.to_string()));
-            }
+        if let Some(val) = doc.metadata.get_str(key) && !val.is_empty() {
+            meta_map.insert(key.to_string(), serde_json::Value::String(val.to_string()));
         }
     }
     if !meta_map.is_empty() {

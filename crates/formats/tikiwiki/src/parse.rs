@@ -547,19 +547,19 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
 fn extract_img_param(params: &str, key: &str) -> Option<String> {
     // Handle both src=value and src="value" forms
     let prefix = format!("{}=", key);
-    for part in params.split_whitespace() {
-        if let Some(val) = part.strip_prefix(&prefix) {
-            let val = val.trim_matches('"');
-            return Some(val.to_string());
-        }
-    }
-    // Also try key= with spaces after =
+    // Try quoted form first (handles values with spaces)
     if let Some(pos) = params.find(&prefix) {
         let rest = &params[pos + prefix.len()..];
         if let Some(stripped) = rest.strip_prefix('"')
             && let Some(end) = stripped.find('"')
         {
             return Some(stripped[..end].to_string());
+        }
+    }
+    // Fall back to unquoted whitespace-separated token
+    for part in params.split_whitespace() {
+        if let Some(val) = part.strip_prefix(&prefix) {
+            return Some(val.to_string());
         }
     }
     None

@@ -79,6 +79,21 @@ fn convert_block(block: &creole::Block) -> Node {
             Node::new(node::TABLE).children(table_rows)
         }
 
+        creole::Block::DefinitionList { items, .. } => {
+            let children: Vec<Node> = items
+                .iter()
+                .flat_map(|item| {
+                    let term_children: Vec<Node> = item.term.iter().map(convert_inline).collect();
+                    let desc_children: Vec<Node> = item.desc.iter().map(convert_inline).collect();
+                    vec![
+                        Node::new(node::DEFINITION_TERM).children(term_children),
+                        Node::new(node::DEFINITION_DESC).children(desc_children),
+                    ]
+                })
+                .collect();
+            Node::new(node::DEFINITION_LIST).children(children)
+        }
+
         creole::Block::HorizontalRule(_) => Node::new(node::HORIZONTAL_RULE),
     }
 }

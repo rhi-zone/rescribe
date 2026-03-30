@@ -1,6 +1,8 @@
 //! ANSI terminal writer for rescribe.
 //!
-//! Thin adapter converting rescribe's document IR to ansi-fmt's AST.
+//! Converts rescribe's document IR directly to ANSI escape sequences.
+//! Does not go through the ansi-fmt AST — sequences are emitted directly
+//! as bytes for efficiency.
 
 use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
@@ -18,545 +20,419 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = ConvertContext::new();
-
-    let blocks = doc
-        .content
-        .children
-        .iter()
-        .map(|n| node_to_ansi_block(n, &mut ctx))
-        .collect();
-    let ansi_doc = ansi_fmt::AnsiDoc { blocks, span: ansi_fmt::Span::NONE };
-
-    let output = ansi_fmt::build(&ansi_doc);
-
-    Ok(ConversionResult::with_warnings(
-        output.into_bytes(),
-        ctx.warnings,
-    ))
+    let mut ctx = EmitContext::new();
+    for child in &doc.content.children {
+        emit_block(child, &mut ctx);
+    }
+    Ok(ConversionResult::with_warnings(ctx.output, ctx.warnings))
 }
 
-struct ConvertContext {
+// ── Context ───────────────────────────────────────────────────────────────────
+
+struct EmitContext {
+    output: Vec<u8>,
     warnings: Vec<FidelityWarning>,
 }
 
-impl ConvertContext {
+impl EmitContext {
     fn new() -> Self {
-        Self {
-            warnings: Vec::new(),
-        }
+        Self { output: Vec::new(), warnings: Vec::new() }
+    }
+
+    fn push(&mut self, s: &str) {
+        self.output.extend_from_slice(s.as_bytes());
     }
 
     fn warn(&mut self, kind: WarningKind, msg: impl Into<String>) {
-        self.warnings
-            .push(FidelityWarning::new(Severity::Minor, kind, msg.into()));
+        self.warnings.push(FidelityWarning::new(Severity::Minor, kind, msg.into()));
     }
 }
 
-fn node_to_ansi_block(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block {
-    match node.kind.as_str() {
+// ── Block emission ────────────────────────────────────────────────────────────
+
+fn emit_block(n: &Node, ctx: &mut EmitContext) {
+    match n.kind.as_str() {
         node::DOCUMENT => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_block(n, ctx))
-                .collect::<Vec<_>>();
-            if children.len() == 1 {
-                children[0].clone()
-            } else {
-                ansi_fmt::Block::Div { children, span: ansi_fmt::Span::NONE }
+            for child in &n.children {
+                emit_block(child, ctx);
             }
         }
 
         node::PARAGRAPH => {
-            let inlines = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Block::Paragraph { inlines, span: ansi_fmt::Span::NONE }
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+            ctx.push("\n\n");
         }
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
-            let inlines = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Block::Heading { level, inlines, span: ansi_fmt::Span::NONE }
+            let level = n.props.get_int(prop::LEVEL).unwrap_or(1) as usize;
+            let prefix = "#".repeat(level);
+            ctx.push("\x1b[1m");
+            ctx.push(&prefix);
+            ctx.push(" ");
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+            ctx.push("\x1b[0m");
+            ctx.push("\n\n");
         }
 
         node::CODE_BLOCK => {
-            let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            let content = node
-                .props
-                .get_str(prop::CONTENT)
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            ansi_fmt::Block::CodeBlock { language, content, span: ansi_fmt::Span::NONE }
+            let lang = n.props.get_str(prop::LANGUAGE).unwrap_or("");
+            let content = n.props.get_str(prop::CONTENT).unwrap_or("");
+            if !lang.is_empty() {
+                ctx.push("\x1b[2m");
+                ctx.push(lang);
+                ctx.push("\x1b[0m");
+                ctx.push("\n");
+            }
+            ctx.push(content);
+            ctx.push("\n\n");
         }
 
         node::BLOCKQUOTE => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_block(n, ctx))
-                .collect();
-            ansi_fmt::Block::Blockquote { children, span: ansi_fmt::Span::NONE }
+            // Emit children, but prefix each line with "│ ".
+            // Simple approach: collect content, then prefix lines.
+            let mut sub = EmitContext::new();
+            for child in &n.children {
+                emit_block(child, &mut sub);
+            }
+            ctx.warnings.extend(sub.warnings);
+            let text = String::from_utf8_lossy(&sub.output);
+            for line in text.lines() {
+                ctx.push("│ ");
+                ctx.push(line);
+                ctx.push("\n");
+            }
+            ctx.push("\n");
         }
 
         node::LIST => {
-            let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let items = node
-                .children
-                .iter()
-                .filter(|n| n.kind.as_str() == node::LIST_ITEM)
-                .map(|n| {
-                    n.children
-                        .iter()
-                        .map(|c| node_to_ansi_block(c, ctx))
-                        .collect()
-                })
-                .collect();
-            ansi_fmt::Block::List { ordered, items, span: ansi_fmt::Span::NONE }
+            let ordered = n.props.get_bool(prop::ORDERED).unwrap_or(false);
+            let mut index = 1usize;
+            for child in &n.children {
+                if child.kind.as_str() == node::LIST_ITEM {
+                    emit_list_item(child, ordered, index, ctx);
+                    index += 1;
+                } else {
+                    emit_block(child, ctx);
+                }
+            }
+            ctx.push("\n");
         }
 
         node::LIST_ITEM => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_block(n, ctx))
-                .collect();
-            ansi_fmt::Block::ListItem { children, span: ansi_fmt::Span::NONE }
+            // Standalone list item (not inside LIST): use bullet.
+            emit_list_item(n, false, 1, ctx);
         }
 
         node::TABLE => {
-            let rows: Vec<ansi_fmt::TableRow> = node
-                .children
-                .iter()
-                .filter_map(|n| {
-                    if n.kind.as_str() == node::TABLE_ROW {
-                        match node_to_table_row(n, ctx) {
-                            ansi_fmt::Block::TableRow { cells, .. } => {
-                                Some(ansi_fmt::TableRow { cells, span: ansi_fmt::Span::NONE })
-                            }
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            ansi_fmt::Block::Table { rows, span: ansi_fmt::Span::NONE }
+            for child in &n.children {
+                emit_block(child, ctx);
+            }
+            ctx.push("\n");
         }
 
-        node::TABLE_ROW => node_to_table_row(node, ctx),
+        node::TABLE_ROW => {
+            for child in &n.children {
+                ctx.push("│ ");
+                for inline in &child.children {
+                    emit_inline(inline, ctx);
+                }
+                ctx.push(" ");
+            }
+            ctx.push("│\n");
+        }
 
         node::TABLE_CELL | node::TABLE_HEADER => {
-            let inlines = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Block::TableCell { inlines, span: ansi_fmt::Span::NONE }
+            ctx.push("│ ");
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+            ctx.push(" │\n");
         }
 
-        node::TABLE_HEAD => {
-            let cells = node
-                .children
-                .iter()
-                .filter_map(|n| {
-                    if n.kind.as_str() == node::TABLE_CELL {
-                        Some(ansi_fmt::TableCell {
-                            inlines: n
-                                .children
-                                .iter()
-                                .map(|c| node_to_ansi_inline(c, ctx))
-                                .collect(),
-                            span: ansi_fmt::Span::NONE,
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            ansi_fmt::Block::TableHeader { cells, span: ansi_fmt::Span::NONE }
+        node::TABLE_HEAD | node::TABLE_BODY | node::TABLE_FOOT => {
+            for child in &n.children {
+                emit_block(child, ctx);
+            }
         }
 
-        node::TABLE_BODY => {
-            let rows: Vec<ansi_fmt::TableRow> = node
-                .children
-                .iter()
-                .filter_map(|n| {
-                    if n.kind.as_str() == node::TABLE_ROW {
-                        match node_to_table_row(n, ctx) {
-                            ansi_fmt::Block::TableRow { cells, .. } => {
-                                Some(ansi_fmt::TableRow { cells, span: ansi_fmt::Span::NONE })
-                            }
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            ansi_fmt::Block::TableBody { rows, span: ansi_fmt::Span::NONE }
+        node::HORIZONTAL_RULE => {
+            ctx.push("───────────────────────────────────────────────────────\n\n");
         }
 
-        node::TABLE_FOOT => {
-            let rows: Vec<ansi_fmt::TableRow> = node
-                .children
-                .iter()
-                .filter_map(|n| {
-                    if n.kind.as_str() == node::TABLE_ROW {
-                        match node_to_table_row(n, ctx) {
-                            ansi_fmt::Block::TableRow { cells, .. } => {
-                                Some(ansi_fmt::TableRow { cells, span: ansi_fmt::Span::NONE })
-                            }
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            ansi_fmt::Block::TableFoot { rows, span: ansi_fmt::Span::NONE }
-        }
-
-        node::HORIZONTAL_RULE => ansi_fmt::Block::HorizontalRule { span: ansi_fmt::Span::NONE },
-
-        node::DIV => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_block(n, ctx))
-                .collect();
-            ansi_fmt::Block::Div { children, span: ansi_fmt::Span::NONE }
+        node::DIV | node::FIGURE => {
+            for child in &n.children {
+                emit_block(child, ctx);
+            }
         }
 
         node::SPAN => {
-            let inlines = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Block::SpanBlock { inlines, span: ansi_fmt::Span::NONE }
+            // Block-level span: emit inline content + newline.
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+            ctx.push("\n\n");
         }
 
         node::RAW_BLOCK => {
-            let content = node
-                .props
-                .get_str(prop::CONTENT)
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            ansi_fmt::Block::RawBlock { content, span: ansi_fmt::Span::NONE }
-        }
-
-        node::RAW_INLINE => {
-            let content = node
-                .props
-                .get_str(prop::CONTENT)
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            ansi_fmt::Block::RawInline { content, span: ansi_fmt::Span::NONE }
+            let format = n.props.get_str(prop::FORMAT).unwrap_or("");
+            let content = n.props.get_str(prop::CONTENT).unwrap_or("");
+            if format == "ansi" || format.is_empty() {
+                ctx.push(content);
+            }
+            // Other formats: silently drop (they are format-specific raw content).
         }
 
         node::DEFINITION_LIST => {
-            let items = collect_definition_items(&node.children, ctx);
-            ansi_fmt::Block::DefinitionList { items, span: ansi_fmt::Span::NONE }
+            for child in &n.children {
+                emit_block(child, ctx);
+            }
+            ctx.push("\n");
         }
 
         node::DEFINITION_TERM => {
-            let inlines = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Block::DefinitionTerm { inlines, span: ansi_fmt::Span::NONE }
+            ctx.push("\x1b[1m");
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+            ctx.push("\x1b[0m");
+            ctx.push("\n");
         }
 
         node::DEFINITION_DESC => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_block(n, ctx))
-                .collect();
-            ansi_fmt::Block::DefinitionDesc { children, span: ansi_fmt::Span::NONE }
-        }
-
-        node::FIGURE => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_block(n, ctx))
-                .collect();
-            ansi_fmt::Block::Figure { children, span: ansi_fmt::Span::NONE }
+            ctx.push("  ");
+            for child in &n.children {
+                emit_block(child, ctx);
+            }
         }
 
         _ => {
+            // Unknown block: try to render children, warn.
+            let has_children = !n.children.is_empty();
+            if has_children {
+                for child in &n.children {
+                    emit_block(child, ctx);
+                }
+            } else {
+                // Leaf unknown node: try inline rendering.
+                emit_inline(n, ctx);
+                ctx.push("\n");
+            }
             ctx.warn(
-                WarningKind::UnsupportedNode(node.kind.as_str().to_string()),
-                format!("Unknown node type for ANSI: {}", node.kind.as_str()),
+                WarningKind::UnsupportedNode(n.kind.as_str().to_string()),
+                format!("Unknown block node type for ANSI: {}", n.kind.as_str()),
             );
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_block(n, ctx))
-                .collect();
-            ansi_fmt::Block::Div { children, span: ansi_fmt::Span::NONE }
         }
     }
 }
 
-fn node_to_table_row(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Block {
-    let cells = node
-        .children
-        .iter()
-        .filter(|n| {
-            let k = n.kind.as_str();
-            k == node::TABLE_CELL || k == node::TABLE_HEADER
-        })
-        .map(|n| ansi_fmt::TableCell {
-            inlines: n
-                .children
-                .iter()
-                .map(|c| node_to_ansi_inline(c, ctx))
-                .collect(),
-            span: ansi_fmt::Span::NONE,
-        })
-        .collect();
-
-    ansi_fmt::Block::TableRow { cells, span: ansi_fmt::Span::NONE }
+fn emit_list_item(n: &Node, ordered: bool, index: usize, ctx: &mut EmitContext) {
+    let bullet = if ordered { format!("{}. ", index) } else { "• ".to_string() };
+    ctx.push(&bullet);
+    for child in &n.children {
+        // If child is a paragraph, emit its inlines without the trailing newlines.
+        if child.kind.as_str() == node::PARAGRAPH {
+            for inline in &child.children {
+                emit_inline(inline, ctx);
+            }
+        } else {
+            emit_inline(child, ctx);
+        }
+    }
+    ctx.push("\n");
 }
 
-fn node_to_ansi_inline(node: &Node, ctx: &mut ConvertContext) -> ansi_fmt::Inline {
-    match node.kind.as_str() {
-        node::TEXT => {
-            let content = node
-                .props
-                .get_str(prop::CONTENT)
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            ansi_fmt::Inline::Text(content, ansi_fmt::Span::NONE)
-        }
+// ── Inline emission ───────────────────────────────────────────────────────────
 
-        node::EMPHASIS => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Inline::Italic(children, ansi_fmt::Span::NONE)
+fn emit_inline(n: &Node, ctx: &mut EmitContext) {
+    match n.kind.as_str() {
+        node::TEXT => {
+            let content = n.props.get_str(prop::CONTENT).unwrap_or("");
+            ctx.push(content);
         }
 
         node::STRONG => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Inline::Bold(children, ansi_fmt::Span::NONE)
+            ctx.push("\x1b[1m");
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+            ctx.push("\x1b[0m");
         }
 
-        node::STRIKEOUT => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Inline::Strikethrough(children, ansi_fmt::Span::NONE)
+        node::EMPHASIS => {
+            ctx.push("\x1b[3m");
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+            ctx.push("\x1b[0m");
         }
 
         node::UNDERLINE => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Inline::Underline(children, ansi_fmt::Span::NONE)
+            ctx.push("\x1b[4m");
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+            ctx.push("\x1b[0m");
+        }
+
+        node::STRIKEOUT => {
+            ctx.push("\x1b[9m");
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+            ctx.push("\x1b[0m");
         }
 
         node::CODE => {
-            let content = node
-                .props
-                .get_str(prop::CONTENT)
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            ansi_fmt::Inline::Text(content, ansi_fmt::Span::NONE)
+            // Dim for inline code.
+            ctx.push("\x1b[2m");
+            let content = n.props.get_str(prop::CONTENT).unwrap_or("");
+            ctx.push(content);
+            ctx.push("\x1b[0m");
         }
 
-        node::LINE_BREAK => ansi_fmt::Inline::Text("\n".to_string(), ansi_fmt::Span::NONE),
-
-        node::SOFT_BREAK => ansi_fmt::Inline::Text(" ".to_string(), ansi_fmt::Span::NONE),
-
         node::LINK => {
-            let url = node
-                .props
-                .get_str(prop::URL)
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            let mut children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect::<Vec<_>>();
-
-            if !url.is_empty() {
-                children.push(ansi_fmt::Inline::Text(format!(" ({})", url), ansi_fmt::Span::NONE));
-            }
-
-            if children.is_empty() {
-                ansi_fmt::Inline::Text(url, ansi_fmt::Span::NONE)
-            } else if children.len() == 1 {
-                children.pop().unwrap()
+            let url = n.props.get_str(prop::URL).unwrap_or("");
+            // Text content from children or CONTENT prop.
+            let has_children = !n.children.is_empty();
+            if has_children {
+                for child in &n.children {
+                    emit_inline(child, ctx);
+                }
+            } else if let Some(content) = n.props.get_str(prop::CONTENT) {
+                ctx.push(content);
             } else {
-                ansi_fmt::Inline::Text(format!("{} ({})", collect_inline_text(&children), url), ansi_fmt::Span::NONE)
+                ctx.push(url);
+            }
+            if !url.is_empty() {
+                ctx.push(" (");
+                ctx.push(url);
+                ctx.push(")");
             }
         }
 
         node::IMAGE => {
-            let alt = node
-                .props
-                .get_str(prop::ALT)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "Image".to_string());
-            ansi_fmt::Inline::Text(format!("[{}]", alt), ansi_fmt::Span::NONE)
+            let alt = n.props.get_str(prop::ALT).unwrap_or("Image");
+            ctx.push("[");
+            ctx.push(alt);
+            ctx.push("]");
+        }
+
+        node::LINE_BREAK => {
+            ctx.push("\n");
+        }
+
+        node::SOFT_BREAK => {
+            ctx.push(" ");
+        }
+
+        node::SPAN => {
+            // Apply style from properties.
+            let bold = n.props.get_bool("style:bold").unwrap_or(false);
+            let italic = n.props.get_bool("style:italic").unwrap_or(false);
+            let underline = n.props.get_bool("style:underline").unwrap_or(false);
+            let strikethrough = n.props.get_bool("style:strikethrough").unwrap_or(false);
+            let dim = n.props.get_bool("style:dim").unwrap_or(false);
+            let fg_color = n.props.get_str("style:color");
+
+            let any_style = bold || italic || underline || strikethrough || dim || fg_color.is_some();
+
+            if any_style {
+                let mut codes: Vec<&str> = Vec::new();
+                if bold { codes.push("1"); }
+                if dim { codes.push("2"); }
+                if italic { codes.push("3"); }
+                if underline { codes.push("4"); }
+                if strikethrough { codes.push("9"); }
+                let sgr = format!("\x1b[{}m", codes.join(";"));
+                ctx.push(&sgr);
+            }
+
+            // Content can be in prop or children.
+            if let Some(content) = n.props.get_str(prop::CONTENT) {
+                ctx.push(content);
+            }
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+
+            if any_style {
+                ctx.push("\x1b[0m");
+            }
+        }
+
+        node::RAW_INLINE => {
+            let format = n.props.get_str(prop::FORMAT).unwrap_or("");
+            let content = n.props.get_str(prop::CONTENT).unwrap_or("");
+            if format == "ansi" || format.is_empty() {
+                ctx.push(content);
+            }
+            // Other formats: silently drop.
         }
 
         node::SUBSCRIPT | node::SUPERSCRIPT => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Inline::Italic(children, ansi_fmt::Span::NONE)
-        }
-
-        node::SMALL_CAPS => {
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Inline::Bold(children, ansi_fmt::Span::NONE)
-        }
-
-        node::QUOTED => {
-            let quote_type = node.props.get_str(prop::QUOTE_TYPE).unwrap_or("double");
-            let (left, right) = if quote_type == "single" {
-                ("'", "'")
-            } else {
-                ("\u{201C}", "\u{201D}")
-            };
-
-            let inner = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect::<Vec<_>>();
-
-            let mut result = vec![ansi_fmt::Inline::Text(left.to_string(), ansi_fmt::Span::NONE)];
-            result.extend(inner);
-            result.push(ansi_fmt::Inline::Text(right.to_string(), ansi_fmt::Span::NONE));
-            ansi_fmt::Inline::Text(collect_inline_text(&result), ansi_fmt::Span::NONE)
+            // No terminal representation; emit content as-is.
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
         }
 
         node::FOOTNOTE_REF => {
-            let label = node
-                .props
-                .get_str(prop::LABEL)
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            ansi_fmt::Inline::Text(format!("[{}]", label), ansi_fmt::Span::NONE)
+            let label = n.props.get_str(prop::LABEL).unwrap_or("");
+            ctx.push("[");
+            ctx.push(label);
+            ctx.push("]");
         }
 
         node::FOOTNOTE_DEF => {
-            let label = node
-                .props
-                .get_str(prop::LABEL)
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect::<Vec<_>>();
-            let text = collect_inline_text(&children);
-            ansi_fmt::Inline::Text(format!("[{}] {}", label, text), ansi_fmt::Span::NONE)
+            let label = n.props.get_str(prop::LABEL).unwrap_or("");
+            ctx.push("[");
+            ctx.push(label);
+            ctx.push("] ");
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+        }
+
+        node::SMALL_CAPS | node::ALL_CAPS => {
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+        }
+
+        node::QUOTED => {
+            let quote_type = n.props.get_str(prop::QUOTE_TYPE).unwrap_or("double");
+            let (left, right) = if quote_type == "single" {
+                ("\u{2018}", "\u{2019}")
+            } else {
+                ("\u{201C}", "\u{201D}")
+            };
+            ctx.push(left);
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
+            ctx.push(right);
         }
 
         "math_inline" | "math_display" => {
-            let source = node
-                .props
-                .get_str("math:source")
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            ansi_fmt::Inline::Text(source, ansi_fmt::Span::NONE)
+            let source = n.props.get_str("math:source").unwrap_or("");
+            ctx.push(source);
         }
 
         _ => {
+            // Unknown inline: emit children.
+            for child in &n.children {
+                emit_inline(child, ctx);
+            }
             ctx.warn(
-                WarningKind::UnsupportedNode(node.kind.as_str().to_string()),
-                format!("Unknown inline node type for ANSI: {}", node.kind.as_str()),
+                WarningKind::UnsupportedNode(n.kind.as_str().to_string()),
+                format!("Unknown inline node type for ANSI: {}", n.kind.as_str()),
             );
-            let children = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-            ansi_fmt::Inline::Italic(children, ansi_fmt::Span::NONE)
         }
     }
-}
-
-fn collect_definition_items(
-    nodes: &[Node],
-    ctx: &mut ConvertContext,
-) -> Vec<ansi_fmt::DefinitionItem> {
-    let mut items = Vec::new();
-    let mut i = 0;
-
-    while i < nodes.len() {
-        let node = &nodes[i];
-        if node.kind.as_str() == node::DEFINITION_TERM {
-            let term = node
-                .children
-                .iter()
-                .map(|n| node_to_ansi_inline(n, ctx))
-                .collect();
-
-            let mut desc = Vec::new();
-            i += 1;
-
-            while i < nodes.len() && nodes[i].kind.as_str() == node::DEFINITION_DESC {
-                desc.extend(nodes[i].children.iter().map(|n| node_to_ansi_block(n, ctx)));
-                i += 1;
-            }
-
-            items.push(ansi_fmt::DefinitionItem { term, desc, span: ansi_fmt::Span::NONE });
-        } else {
-            i += 1;
-        }
-    }
-
-    items
-}
-
-fn collect_inline_text(inlines: &[ansi_fmt::Inline]) -> String {
-    let mut text = String::new();
-    for inline in inlines {
-        match inline {
-            ansi_fmt::Inline::Text(s, _) => text.push_str(s),
-            ansi_fmt::Inline::Bold(c, _)
-            | ansi_fmt::Inline::Italic(c, _)
-            | ansi_fmt::Inline::Underline(c, _)
-            | ansi_fmt::Inline::Strikethrough(c, _) => {
-                text.push_str(&collect_inline_text(c));
-            }
-        }
-    }
-    text
 }
 
 #[cfg(test)]

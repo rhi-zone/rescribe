@@ -3,8 +3,10 @@
   "category": "composition",
   "assertions": [
     { "path": "/0",         "kind": "definition_list" },
-    { "path": "/0/0/term/0",   "kind": "strong" },
-    { "path": "/0/0/term/0/0", "kind": "text", "props": { "content": "Term" } },
-    { "path": "/0/0/desc/0",   "kind": "paragraph" }
+    { "path": "/0/0",     "kind": "definition_term" },
+    { "path": "/0/0/0",   "kind": "strong" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Term" } },
+    { "path": "/0/1",     "kind": "definition_desc" },
+    { "path": "/0/1/0",   "kind": "paragraph" }
   ]
 }
