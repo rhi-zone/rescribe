@@ -93,7 +93,21 @@ impl<'a> Gen<'a> {
         let count = (self.byte() as usize % 3) + min;
         let raw: Vec<Inline> = (0..count).map(|_| self.inline(depth)).collect();
         // Merge adjacent Text nodes — roundtrip may collapse them.
-        merge_text(raw)
+        let merged = merge_text(raw);
+        // Textile closing delimiters (*bold*, _italic_) require the character
+        // after the delimiter to be non-alphanumeric. Since safe_text produces
+        // only a-z, a formatted span followed by any other inline would produce
+        // e.g. "*x*abc" which the parser treats as plain text. To avoid
+        // roundtrip failure, if any Bold/Italic appears with siblings, keep
+        // only that formatted span (as the sole inline).
+        let needs_isolation = merged.len() > 1
+            && merged.iter().any(|i| matches!(i, Inline::Bold(..) | Inline::Italic(..)));
+        if needs_isolation {
+            // Keep only the first Bold or Italic inline (guaranteed to exist by any()).
+            let fmt = merged.into_iter().find(|i| matches!(i, Inline::Bold(..) | Inline::Italic(..))).unwrap();
+            return vec![fmt];
+        }
+        merged
     }
 
     fn block(&mut self, depth: u8) -> Block {
