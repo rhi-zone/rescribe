@@ -81,6 +81,16 @@ fn sanitise(s: &str) -> Option<String> {
                     // as block markers without requiring a trailing space, so any text
                     // containing '.' could produce ambiguous leading sequences.
                     | '.'
+                    // ':' and ';' at line start trigger definition list in Textile
+                    | ':' | ';'
+                    // '==' triggers raw HTML passthrough; '=' also used in table alignment
+                    | '='
+                    // '$' can interact with Textile span markers in unexpected ways
+                    | '$'
+                    // '(' ')' used in Textile CSS class/id notation and span syntax
+                    | '(' | ')'
+                    // DEL (0x7f) control character
+                    | '\x7f'
             )
         })
         .collect();
