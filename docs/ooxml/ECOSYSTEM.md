@@ -1,12 +1,12 @@
 # OOXML Ecosystem Resources
 
-## Context: Rhizome Ecosystem
+## Context: rhi Ecosystem
 
-This library is part of the [Rhizome](https://rhizome-lab.github.io/) ecosystem:
+This library is part of the [rhi ecosystem](https://rhi.zone/):
 
 ```
-Rhizome (data manipulation ecosystem)
-└── Cambium (pipeline orchestrator for data conversion)
+rhi (a glue layer for computers)
+└── Paraphase (pipeline orchestrator for data conversion)
     └── rescribe (document conversion, pandoc-style)
         └── ooxml (OOXML format support) ← you are here
 ```

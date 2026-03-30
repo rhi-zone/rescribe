@@ -480,24 +480,24 @@ docir/
 └── docir-wasm/         # WebAssembly bindings
 ```
 
-## Integration with Cambium
+## Integration with Paraphase
 
-Cambium would use this IR through a thin integration crate:
+Paraphase would use this IR through a thin integration crate:
 
 ```rust
-// cambium-document/src/lib.rs
+// paraphase-document/src/lib.rs
 
-use cambium::{Converter, Registry};
+use paraphase::{Converter, Registry};
 use docir::{Parser, Emitter};
 
-/// Register document converters with Cambium.
+/// Register document converters with Paraphase.
 pub fn register_all(registry: &mut Registry) {
     // For each parser/emitter combination, register a converter
     // that goes: input format → Document IR → output format
 }
 ```
 
-Cambium handles:
+Paraphase handles:
 - Routing (which converter to use)
 - Execution (memory management, parallelism)
 - Property matching
