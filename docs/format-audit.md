@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc writer APIs added 2026-03-23 (streaming + builder); 2026-03-29: definition of 5-Production tightened — reader-only no longer qualifies; RST/Org/AsciiDoc demoted from R:5 to R:4 due to construct gaps (tables, footnotes); writer column updated from 2→4 (API modes complete, fuzz clean, construct gaps remain). djot-fmt + textile-fmt signed off at 5-Production (2026-03-29). RST/AsciiDoc/Org signed off at 5-Production (2026-03-29; all construct gaps closed: tables, footnotes, math, nested blockquotes, figure/caption). 2026-03-30: muse/t2t/man/markua/creole/dokuwiki/vimwiki/zimwiki/xwiki/twiki/tikiwiki/jira/mediawiki all completed to R:4/W:4; fountain/texinfo/bbcode/pod/haddock/ansi same (all constructs + API modes + fixtures; need fuzz re-run).
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc writer APIs added 2026-03-23 (streaming + builder); 2026-03-29: definition of 5-Production tightened — reader-only no longer qualifies; RST/Org/AsciiDoc demoted from R:5 to R:4 due to construct gaps (tables, footnotes); writer column updated from 2→4 (API modes complete, fuzz clean, construct gaps remain). djot-fmt + textile-fmt signed off at 5-Production (2026-03-29). RST/AsciiDoc/Org signed off at 5-Production (2026-03-29; all construct gaps closed: tables, footnotes, math, nested blockquotes, figure/caption). 2026-03-30: muse/t2t/man/markua/creole/dokuwiki/vimwiki/zimwiki/xwiki/twiki/tikiwiki/jira/mediawiki all completed to R:4/W:4; fountain/texinfo/bbcode/pod/haddock/ansi same (all constructs + API modes + fixtures; need fuzz re-run). 2026-03-31: all 44 fuzz targets (22 format pairs) ran clean — 12 fuzz failures found and fixed (djot-fmt char/byte panics, sanitiser gaps across textile/twiki/muse/mediawiki/haddock/t2t/markua); all 19 R:4/W:4 formats promoted to 5-Production.
 
 ## Maturity Pipeline
 
@@ -45,17 +45,17 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | rst | 5 | 5 | hand | – | – |
 | asciidoc | 5 | 5 | hand | – | – |
 | textile | 5 | 5 | hand | – | – |
-| muse | 4 | 4 | hand | re-fuzz after expansion | – |
-| t2t | 4 | 4 | hand | re-fuzz after expansion | – |
-| markua | 4 | 4 | hand | re-fuzz after expansion | – |
-| fountain | 4 | 4 | hand | re-fuzz after expansion | – |
+| muse | 5 | 5 | hand | – | – |
+| t2t | 5 | 5 | hand | – | – |
+| markua | 5 | 5 | hand | – | – |
+| fountain | 5 | 5 | hand | – | – |
 | typst | 1 | 2 | hand | partial→fixtures | harness |
-| texinfo | 4 | 4 | hand | re-fuzz after expansion | – |
-| bbcode | 4 | 4 | hand | re-fuzz after expansion | – |
-| pod | 4 | 4 | hand | re-fuzz after expansion | – |
-| haddock | 4 | 4 | hand | re-fuzz after expansion | – |
-| ansi | 4 | 4 | hand | re-fuzz after expansion | – |
-| man | 4 | 4 | hand | re-fuzz after expansion | – |
+| texinfo | 5 | 5 | hand | – | – |
+| bbcode | 5 | 5 | hand | – | – |
+| pod | 5 | 5 | hand | – | – |
+| haddock | 5 | 5 | hand | – | – |
+| ansi | 5 | 5 | hand | – | – |
+| man | 5 | 5 | hand | – | – |
 
 † Pandoc cannot read AsciiDoc (`--from asciidoc` unsupported); consider asciidoctor as alternate oracle.
 
@@ -63,15 +63,15 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
-| mediawiki | 4 | 4 | hand | re-fuzz after expansion | – |
-| creole | 4 | 4 | hand | re-fuzz after expansion | – |
-| dokuwiki | 4 | 4 | hand | re-fuzz after expansion | – |
-| vimwiki | 4 | 4 | hand | re-fuzz after expansion | – |
-| zimwiki | 4 | 4 | hand | re-fuzz after expansion | – |
-| xwiki | 4 | 4 | hand | re-fuzz after expansion | – |
-| twiki | 4 | 4 | hand | re-fuzz after expansion | – |
-| tikiwiki | 4 | 4 | hand | re-fuzz after expansion | – |
-| jira | 4 | 4 | hand | re-fuzz after expansion | – |
+| mediawiki | 5 | 5 | hand | – | – |
+| creole | 5 | 5 | hand | – | – |
+| dokuwiki | 5 | 5 | hand | – | – |
+| vimwiki | 5 | 5 | hand | – | – |
+| zimwiki | 5 | 5 | hand | – | – |
+| xwiki | 5 | 5 | hand | – | – |
+| twiki | 5 | 5 | hand | – | – |
+| tikiwiki | 5 | 5 | hand | – | – |
+| jira | 5 | 5 | hand | – | – |
 
 ### Office / binary
 
