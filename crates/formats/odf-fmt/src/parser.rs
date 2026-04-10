@@ -1277,7 +1277,7 @@ fn parse_style_element_attrs(
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+            Ok(Event::Start(ref e)) => {
                 let name = element_name(e.name().as_ref());
                 let prop_attrs = collect_attrs(e);
                 buf.clear();
@@ -1291,6 +1291,23 @@ fn parse_style_element_attrs(
                         skip_element_children(reader, "style:paragraph-properties");
                     }
                     _ => { skip_element(reader); }
+                }
+                continue;
+            }
+            Ok(Event::Empty(ref e)) => {
+                // Self-closing element — parse attributes but do NOT call skip_element_children,
+                // as there is no matching end tag to consume.
+                let name = element_name(e.name().as_ref());
+                let prop_attrs = collect_attrs(e);
+                buf.clear();
+                match name.as_str() {
+                    "style:text-properties" => {
+                        parse_text_props_into(&prop_attrs, &mut entry.text_props);
+                    }
+                    "style:paragraph-properties" => {
+                        parse_para_props_into(&prop_attrs, &mut entry.para_props);
+                    }
+                    _ => {}
                 }
                 continue;
             }

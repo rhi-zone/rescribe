@@ -3300,7 +3300,7 @@ dependencies = [
 name = "rescribe-read-odt"
 version = "0.1.0"
 dependencies = [
- "quick-xml 0.39.0",
+ "odf-fmt",
  "rescribe-core",
  "rescribe-std",
  "zip 2.4.2",
@@ -3856,9 +3856,9 @@ dependencies = [
 name = "rescribe-write-odt"
 version = "0.1.0"
 dependencies = [
+ "odf-fmt",
  "rescribe-core",
  "rescribe-std",
- "zip 2.4.2",
 ]
 
 [[package]]
