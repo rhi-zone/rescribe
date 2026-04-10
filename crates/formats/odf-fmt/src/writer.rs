@@ -523,6 +523,7 @@ fn write_inline(s: &mut String, inline: &Inline) {
             }
         }
         Inline::SoftPageBreak => s.push_str("<text:soft-page-break/>"),
+        Inline::SoftHyphen => s.push_str("<text:soft-hyphen/>"),
         Inline::Note(note) => {
             s.push_str("<text:note");
             let class = match note.note_class {

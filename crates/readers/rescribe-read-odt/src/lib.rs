@@ -348,13 +348,28 @@ fn convert_list_item(item: &ListItem, ctx: &StyleCtx<'_>) -> (Node, Vec<Node>) {
 // ── Inline conversion ─────────────────────────────────────────────────────────
 
 fn convert_inlines(inlines: &[Inline], ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>) {
-    let mut nodes = Vec::new();
+    let mut nodes: Vec<Node> = Vec::new();
     let mut footnotes = Vec::new();
 
     for inline in inlines {
         let (mut ns, mut fns) = convert_inline(inline, ctx);
-        nodes.append(&mut ns);
         footnotes.append(&mut fns);
+        for n in ns.drain(..) {
+            // Coalesce adjacent text nodes into a single node.
+            if n.kind.as_str() == node::TEXT {
+                let new_content = n.props.get_str(prop::CONTENT).unwrap_or("").to_owned();
+                if let Some(last) = nodes.last_mut()
+                    && last.kind.as_str() == node::TEXT
+                    && last.children.is_empty()
+                {
+                    let prev = last.props.get_str(prop::CONTENT).unwrap_or("").to_owned();
+                    let merged = prev + &new_content;
+                    last.props.set(prop::CONTENT, merged.as_str());
+                    continue;
+                }
+            }
+            nodes.push(n);
+        }
     }
 
     (nodes, footnotes)
@@ -372,6 +387,11 @@ fn convert_inline(inline: &Inline, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>)
 
         Inline::Tab => (
             vec![Node::new(node::TEXT).prop(prop::CONTENT, "\t")],
+            Vec::new(),
+        ),
+
+        Inline::SoftHyphen => (
+            vec![Node::new(node::TEXT).prop(prop::CONTENT, "\u{00AD}")],
             Vec::new(),
         ),
 
@@ -487,14 +507,15 @@ fn inline_kind_from_style(style_name: &str, ctx: &StyleCtx<'_>) -> InlineKind {
         if p.italic { return InlineKind::Emphasis; }
         if p.underline { return InlineKind::Underline; }
         if p.strikethrough { return InlineKind::Strikeout; }
-        if p.color.is_some() || p.font_size.is_some() || p.font_name.is_some() {
+        let is_small_caps = p.font_variant.as_deref() == Some("small-caps");
+        if is_small_caps || p.color.is_some() || p.font_size.is_some() || p.font_name.is_some() {
             let is_non_mono_font = p.font_name.as_ref().map(|_f| !is_mono).unwrap_or(false);
             let font_name_for_span = if is_non_mono_font { p.font_name.clone() } else { None };
             return InlineKind::Span {
                 color: p.color.clone(),
                 font_size: p.font_size.clone(),
                 font_name: font_name_for_span,
-                small_caps: false,
+                small_caps: is_small_caps,
             };
         }
     }

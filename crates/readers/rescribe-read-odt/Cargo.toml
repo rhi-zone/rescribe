@@ -7,6 +7,8 @@ edition = "2024"
 rescribe-core = { path = "../../rescribe-core" }
 rescribe-std = { path = "../../nodes/rescribe-std" }
 odf-fmt = { path = "../../formats/odf-fmt" }
+# Used by the gen_fixtures binary tool.
+zip = "2"
 
 [dev-dependencies]
 zip = "2"

@@ -1112,6 +1112,7 @@ fn parse_inlines(
                         inlines.push(Inline::Space { count });
                     }
                     "text:soft-page-break" => inlines.push(Inline::SoftPageBreak),
+                    "text:soft-hyphen" => inlines.push(Inline::SoftHyphen),
                     _ => {}
                 }
             }
@@ -1341,6 +1342,7 @@ fn parse_text_props_into(attrs: &[(String, String)], props: &mut TextProperties)
             "style:font-size-asian" if props.font_size.is_none() => props.font_size = Some(val.clone()),
             "style:font-name" if props.font_name.is_none() => props.font_name = Some(val.clone()),
             "fo:font-family" if props.font_name.is_none() => props.font_name = Some(val.clone()),
+            "fo:font-variant" => props.font_variant = Some(val.clone()),
             _ => {}
         }
     }

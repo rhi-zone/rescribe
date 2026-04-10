@@ -187,6 +187,8 @@ pub enum Inline {
     LineBreak,
     /// `<text:tab>` — a tab character.
     Tab,
+    /// `<text:soft-hyphen>` — a soft hyphen (U+00AD).
+    SoftHyphen,
     /// `<text:s>` — one or more consecutive spaces.
     Space { count: u32 },
     /// `<text:soft-page-break>` — a soft page break.
@@ -279,6 +281,8 @@ pub struct TextProperties {
     pub color: Option<String>,
     /// Background color.
     pub background_color: Option<String>,
+    /// `fo:font-variant`: `"small-caps"` or `"normal"`.
+    pub font_variant: Option<String>,
 }
 
 /// Resolved paragraph properties from `<style:paragraph-properties>`.
