@@ -1,616 +1,277 @@
 //! FictionBook 2 (FB2) reader for rescribe.
 //!
-//! Parses FB2 XML (a Russian ebook format) into rescribe's document IR.
-//!
-//! # Example
-//!
-//! ```
-//! use rescribe_read_fb2::parse;
-//!
-//! let fb2 = r#"<?xml version="1.0" encoding="UTF-8"?>
-//! <FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
-//!   <description>
-//!     <title-info><book-title>Example</book-title></title-info>
-//!   </description>
-//!   <body>
-//!     <section><p>Hello, world!</p></section>
-//!   </body>
-//! </FictionBook>"#;
-//!
-//! let result = parse(fb2).unwrap();
-//! let doc = result.value;
-//! ```
+//! Thin adapter over `fb2-fmt`. Converts native FB2 AST → rescribe IR.
 
-use base64::Engine;
-use quick_xml::Reader;
-use quick_xml::events::{BytesStart, Event};
+use fb2_fmt::{
+    Body, Cite, CiteContent, Epigraph, EpigraphContent, FictionBook, InlineElement, Poem,
+    Section, SectionContent, Stanza, Table, TitlePara,
+};
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Resource,
-    ResourceId, ResourceMap,
+    ResourceId, ResourceMap, Severity, WarningKind,
 };
 use rescribe_std::{node, prop};
 
 /// Parse FB2 XML into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    parse_with_options(input, &ParseOptions::default())
-}
+    let (fb, diags) = fb2_fmt::parse_str(input);
 
-/// Parse options for FB2.
-#[derive(Default)]
-pub struct ParseOptions {
-    /// Whether to extract binary resources (images).
-    pub extract_binaries: bool,
-}
+    let warnings: Vec<FidelityWarning> = diags
+        .iter()
+        .map(|d| {
+            FidelityWarning::new(
+                Severity::Minor,
+                WarningKind::FeatureLost(d.message.clone()),
+                d.message.clone(),
+            )
+        })
+        .collect();
 
-/// Parse FB2 XML with options.
-pub fn parse_with_options(
-    input: &str,
-    options: &ParseOptions,
-) -> Result<ConversionResult<Document>, ParseError> {
-    let mut reader = Reader::from_str(input);
-    // Do not use trim_text(true) — it strips spaces adjacent to entity refs
-    // (&amp; etc.) which breaks inline text. Whitespace-only nodes are filtered
-    // in flush_text() instead.
-
-    let mut converter = Converter::new(options.extract_binaries);
-    converter.parse(&mut reader)?;
+    let metadata = build_metadata(&fb);
+    let content_nodes = convert_fb(&fb);
+    let resources = convert_resources(&fb);
 
     let document = Document {
-        content: Node::new(node::DOCUMENT).children(converter.result),
-        resources: converter.resources,
-        metadata: converter.metadata,
+        content: Node::new(node::DOCUMENT).children(content_nodes),
+        resources,
+        metadata,
         source: None,
     };
 
-    Ok(ConversionResult::with_warnings(
-        document,
-        converter.warnings,
-    ))
+    Ok(ConversionResult::with_warnings(document, warnings))
 }
 
-struct Converter {
-    result: Vec<Node>,
-    metadata: Properties,
-    warnings: Vec<FidelityWarning>,
-    resources: ResourceMap,
-    stack: Vec<StackFrame>,
-    current_text: String,
-    extract_binaries: bool,
-    in_description: bool,
-    current_binary_id: Option<String>,
-    current_binary_type: Option<String>,
+fn build_metadata(fb: &FictionBook) -> Properties {
+    let mut meta = Properties::new();
+    let ti = &fb.description.title_info;
+    if !ti.book_title.is_empty() {
+        meta.set("title", ti.book_title.clone());
+    }
+    if let Some(author) = ti.author.first() {
+        let name = author.display_name();
+        if !name.is_empty() {
+            meta.set("author", name);
+        }
+    }
+    if let Some(genre) = ti.genre.first()
+        && !genre.is_empty()
+    {
+        meta.set("genre", genre.clone());
+    }
+    if !ti.lang.is_empty() {
+        meta.set("lang", ti.lang.clone());
+    }
+    if let Some(kw) = &ti.keywords {
+        meta.set("keywords", kw.clone());
+    }
+    meta
 }
 
-#[derive(Debug)]
-struct StackFrame {
-    element: String,
-    children: Vec<Node>,
-    attrs: FrameAttrs,
+fn convert_fb(fb: &FictionBook) -> Vec<Node> {
+    fb.bodies.iter().flat_map(convert_body).collect()
 }
 
-#[derive(Debug, Default)]
-struct FrameAttrs {
-    href: Option<String>,
-    id: Option<String>,
+fn convert_body(body: &Body) -> Vec<Node> {
+    let sections: Vec<Node> = body.section.iter().map(|s| convert_section(s, 1)).collect();
+    vec![Node::new(node::DIV).children(sections)]
 }
 
-impl Converter {
-    fn new(extract_binaries: bool) -> Self {
-        Self {
-            result: Vec::new(),
-            metadata: Properties::new(),
-            warnings: Vec::new(),
-            resources: ResourceMap::default(),
-            stack: Vec::new(),
-            current_text: String::new(),
-            extract_binaries,
-            in_description: false,
-            current_binary_id: None,
-            current_binary_type: None,
+fn convert_section(section: &Section, depth: usize) -> Node {
+    let mut children: Vec<Node> = Vec::new();
+    let level = depth.clamp(1, 6) as i64;
+
+    if let Some(title) = &section.title {
+        let mut inlines = Vec::new();
+        for para in &title.para {
+            if let TitlePara::Para(il) = para {
+                inlines.extend(convert_inlines(il));
+            }
+        }
+        if !inlines.is_empty() {
+            children.push(Node::new(node::HEADING).prop(prop::LEVEL, level).children(inlines));
         }
     }
 
-    fn parse(&mut self, reader: &mut Reader<&[u8]>) -> Result<(), ParseError> {
-        let mut buf = Vec::new();
-
-        loop {
-            match reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) => {
-                    self.flush_text();
-                    self.handle_start(&e)?;
-                }
-                Ok(Event::Empty(e)) => {
-                    self.flush_text();
-                    self.handle_empty(&e)?;
-                }
-                Ok(Event::End(e)) => {
-                    self.flush_text();
-                    self.handle_end(&e)?;
-                }
-                Ok(Event::Text(e)) => {
-                    self.current_text
-                        .push_str(&String::from_utf8_lossy(e.as_ref()));
-                }
-                Ok(Event::CData(e)) => {
-                    self.current_text
-                        .push_str(&String::from_utf8_lossy(e.as_ref()));
-                }
-                Ok(Event::GeneralRef(e)) => {
-                    // Decode predefined XML entities and numeric character references.
-                    let name = String::from_utf8_lossy(&e);
-                    match name.as_ref() {
-                        "amp" => self.current_text.push('&'),
-                        "lt" => self.current_text.push('<'),
-                        "gt" => self.current_text.push('>'),
-                        "apos" => self.current_text.push('\''),
-                        "quot" => self.current_text.push('"'),
-                        s if s.starts_with('#') => {
-                            // Numeric character reference: &#NNN; or &#xHHH;
-                            let digits = &s[1..];
-                            let code = if let Some(hex) = digits.strip_prefix('x') {
-                                u32::from_str_radix(hex, 16).ok()
-                            } else {
-                                digits.parse::<u32>().ok()
-                            };
-                            if let Some(c) = code.and_then(char::from_u32) {
-                                self.current_text.push(c);
-                            }
-                        }
-                        // Undefined entity — emit nothing (already warned by caller or ignored)
-                        _ => {}
-                    }
-                }
-                Ok(Event::Eof) => break,
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(ParseError::Invalid(format!("XML parse error: {}", e)));
-                }
-            }
-            buf.clear();
-        }
-
-        Ok(())
+    for epigraph in &section.epigraph {
+        children.push(convert_epigraph(epigraph));
     }
 
-    fn flush_text(&mut self) {
-        if self.current_text.is_empty() {
-            return;
-        }
-
-        let text = std::mem::take(&mut self.current_text);
-
-        // Handle binary content
-        if self.current_binary_id.is_some() {
-            return; // Text handled in handle_end for binary
-        }
-
-        if text.trim().is_empty() {
-            return;
-        }
-
-        let text_node = Node::new(node::TEXT).prop(prop::CONTENT, text);
-        if let Some(frame) = self.stack.last_mut() {
-            frame.children.push(text_node);
-        }
+    for item in &section.content {
+        children.extend(convert_section_content(item));
     }
 
-    fn handle_start(&mut self, e: &BytesStart<'_>) -> Result<(), ParseError> {
-        let name = String::from_utf8_lossy(e.local_name().as_ref()).to_string();
-        let mut attrs = FrameAttrs::default();
-
-        for attr in e.attributes().flatten() {
-            let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).to_string();
-            let value = String::from_utf8_lossy(&attr.value).to_string();
-            match key.as_str() {
-                "href" => attrs.href = Some(value),
-                "id" => attrs.id = Some(value),
-                _ => {}
-            }
-        }
-
-        // Track description section
-        if name == "description" {
-            self.in_description = true;
-        }
-
-        // Track binary elements
-        if name == "binary" {
-            for attr in e.attributes().flatten() {
-                let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).to_string();
-                let value = String::from_utf8_lossy(&attr.value).to_string();
-                match key.as_str() {
-                    "id" => self.current_binary_id = Some(value),
-                    "content-type" => self.current_binary_type = Some(value),
-                    _ => {}
-                }
-            }
-        }
-
-        self.stack.push(StackFrame {
-            element: name,
-            children: Vec::new(),
-            attrs,
-        });
-
-        Ok(())
+    for nested in &section.section {
+        children.push(convert_section(nested, depth + 1));
     }
 
-    fn handle_empty(&mut self, e: &BytesStart<'_>) -> Result<(), ParseError> {
-        let name = String::from_utf8_lossy(e.local_name().as_ref()).to_string();
-
-        let node = match name.as_str() {
-            "empty-line" => Some(Node::new(node::PARAGRAPH)),
-            "image" => {
-                let mut href = None;
-                for attr in e.attributes().flatten() {
-                    let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).to_string();
-                    if key == "href" {
-                        href = Some(String::from_utf8_lossy(&attr.value).to_string());
-                    }
-                }
-                href.map(|h| {
-                    // Remove # prefix if present
-                    let url = h.strip_prefix('#').unwrap_or(&h);
-                    Node::new(node::IMAGE).prop(prop::URL, url.to_string())
-                })
-            }
-            _ => None,
-        };
-
-        if let Some(n) = node {
-            if let Some(frame) = self.stack.last_mut() {
-                frame.children.push(n);
-            } else {
-                self.result.push(n);
-            }
-        }
-
-        Ok(())
+    let mut n = Node::new(node::DIV).children(children);
+    if let Some(id) = &section.id {
+        n = n.prop("id", id.clone());
     }
+    n
+}
 
-    fn handle_end(&mut self, e: &quick_xml::events::BytesEnd<'_>) -> Result<(), ParseError> {
-        let name = String::from_utf8_lossy(e.local_name().as_ref()).to_string();
-
-        // Track description section
-        if name == "description" {
-            self.in_description = false;
+fn convert_section_content(item: &SectionContent) -> Vec<Node> {
+    match item {
+        SectionContent::Para(inlines) => {
+            vec![Node::new(node::PARAGRAPH).children(convert_inlines(inlines))]
         }
-
-        // Handle binary content
-        if name == "binary" {
-            if self.extract_binaries {
-                if let Some(id) = self.current_binary_id.take() {
-                    let content_type = self.current_binary_type.take();
-                    let text = std::mem::take(&mut self.current_text);
-                    let text = text.trim();
-                    if !text.is_empty()
-                        && let Ok(data) = base64::engine::general_purpose::STANDARD.decode(text)
-                    {
-                        self.resources.insert(
-                            ResourceId::from_string(id.clone()),
-                            Resource {
-                                name: Some(id),
-                                mime_type: content_type
-                                    .unwrap_or_else(|| "application/octet-stream".to_string()),
-                                data,
-                                metadata: Properties::new(),
-                            },
-                        );
-                    }
-                }
-            } else {
-                self.current_binary_id = None;
-                self.current_binary_type = None;
-                self.current_text.clear();
-            }
-            self.stack.pop();
-            return Ok(());
+        SectionContent::EmptyLine => vec![Node::new(node::PARAGRAPH)],
+        SectionContent::Image(img) => {
+            let url = img.href.strip_prefix('#').unwrap_or(&img.href);
+            vec![Node::new(node::IMAGE).prop(prop::URL, url.to_string())]
         }
-
-        if let Some(frame) = self.stack.pop() {
-            if frame.element != name {
-                self.stack.push(frame);
-                return Ok(());
-            }
-
-            let node = self.convert_element(&frame);
-
-            // Metadata containers: their children (text nodes from genre, book-title, lang,
-            // etc.) must not leak into the document content. Discard children when convert_element
-            // returns None for these elements.
-            let discard_children = node.is_none()
-                && matches!(
-                    frame.element.as_str(),
-                    "description"
-                        | "title-info"
-                        | "document-info"
-                        | "publish-info"
-                        | "custom-info"
-                );
-
-            if let Some(parent) = self.stack.last_mut() {
-                if let Some(n) = node {
-                    parent.children.push(n);
-                } else if !discard_children {
-                    parent.children.extend(frame.children);
-                }
-            } else if let Some(n) = node {
-                self.result.push(n);
-            } else if !discard_children {
-                self.result.extend(frame.children);
-            }
+        SectionContent::Poem(poem) => vec![convert_poem(poem)],
+        SectionContent::Subtitle(inlines) => {
+            let il = convert_inlines(inlines);
+            vec![Node::new(node::HEADING).prop(prop::LEVEL, 4i64).children(il)]
         }
-
-        Ok(())
+        SectionContent::Cite(cite) => vec![convert_cite(cite)],
+        SectionContent::Table(table) => vec![convert_table(table)],
     }
+}
 
-    fn convert_element(&mut self, frame: &StackFrame) -> Option<Node> {
-        match frame.element.as_str() {
-            // Document structure
-            "FictionBook" => None, // Pass through
-
-            // Description/metadata elements
-            "description" | "title-info" | "document-info" | "publish-info" | "custom-info" => {
-                // Extract metadata
-                self.extract_metadata_from(&frame.children);
-                None
+fn convert_epigraph(epigraph: &Epigraph) -> Node {
+    let mut children = Vec::new();
+    for item in &epigraph.content {
+        match item {
+            EpigraphContent::Para(inlines) => {
+                children.push(Node::new(node::PARAGRAPH).children(convert_inlines(inlines)));
             }
-
-            "book-title" => {
-                let title = extract_text(&frame.children);
-                if !title.is_empty() {
-                    self.metadata.set("title", title);
-                }
-                None
+            EpigraphContent::EmptyLine => {
+                children.push(Node::new(node::PARAGRAPH));
             }
-
-            "author" => {
-                // Combine name parts
-                let mut parts = Vec::new();
-                for child in &frame.children {
-                    if matches!(
-                        child.kind.as_str(),
-                        "fb2:first-name" | "fb2:middle-name" | "fb2:last-name"
-                    ) {
-                        let text = extract_text(&child.children);
-                        if !text.is_empty() {
-                            parts.push(text);
-                        }
-                    }
-                }
-                if !parts.is_empty() {
-                    self.metadata.set("author", parts.join(" "));
-                }
-                None
+            EpigraphContent::Poem(poem) => {
+                children.push(convert_poem(poem));
             }
-
-            "first-name" | "middle-name" | "last-name" | "nickname" => {
-                // Return as fb2: prefixed node for parent to handle
-                let text = extract_text(&frame.children);
-                if !text.is_empty() {
-                    Some(
-                        Node::new(format!("fb2:{}", frame.element))
-                            .child(Node::new(node::TEXT).prop(prop::CONTENT, text)),
-                    )
-                } else {
-                    None
-                }
+            EpigraphContent::Cite(cite) => {
+                children.push(convert_cite(cite));
             }
+        }
+    }
+    for ta in &epigraph.text_author {
+        let il = convert_inlines(ta);
+        children.push(
+            Node::new(node::PARAGRAPH)
+                .prop("html:class", "text-author")
+                .children(il),
+        );
+    }
+    Node::new(node::BLOCKQUOTE)
+        .prop("fb2:type", "epigraph")
+        .children(children)
+}
 
-            "annotation" => {
-                if !frame.children.is_empty() {
-                    Some(
-                        Node::new(node::DIV)
-                            .prop("html:class", "annotation")
-                            .children(frame.children.clone()),
-                    )
-                } else {
-                    None
-                }
+fn convert_cite(cite: &Cite) -> Node {
+    let mut children = Vec::new();
+    for item in &cite.content {
+        match item {
+            CiteContent::Para(inlines) => {
+                children.push(Node::new(node::PARAGRAPH).children(convert_inlines(inlines)));
             }
-
-            "lang" => {
-                let text = extract_text(&frame.children);
-                if !text.is_empty() {
-                    self.metadata.set("lang", text);
-                }
-                None
+            CiteContent::EmptyLine => {
+                children.push(Node::new(node::PARAGRAPH));
             }
-
-            "genre" => {
-                let text = extract_text(&frame.children);
-                if !text.is_empty() {
-                    self.metadata.set("genre", text);
-                }
-                None
+            CiteContent::Poem(poem) => {
+                children.push(convert_poem(poem));
             }
-
-            "keywords" => {
-                let text = extract_text(&frame.children);
-                if !text.is_empty() {
-                    self.metadata.set("keywords", text);
-                }
-                None
+            CiteContent::Table(table) => {
+                children.push(convert_table(table));
             }
+        }
+    }
+    for ta in &cite.text_author {
+        let il = convert_inlines(ta);
+        children.push(
+            Node::new(node::PARAGRAPH)
+                .prop("html:class", "text-author")
+                .children(il),
+        );
+    }
+    Node::new(node::BLOCKQUOTE).children(children)
+}
 
-            "src-lang" | "date" | "version" | "program-used" => None,
+fn convert_poem(poem: &Poem) -> Node {
+    let children: Vec<Node> = poem.stanza.iter().map(convert_stanza).collect();
+    Node::new(node::DIV).prop("html:class", "poem").children(children)
+}
 
-            // Body content
-            "body" => Some(Node::new(node::DIV).children(frame.children.clone())),
+fn convert_stanza(stanza: &Stanza) -> Node {
+    let mut children = Vec::new();
+    for v in &stanza.v {
+        let mut line_children = convert_inlines(v);
+        line_children.push(Node::new(node::LINE_BREAK));
+        children.push(Node::new(node::SPAN).children(line_children));
+    }
+    Node::new(node::DIV).prop("html:class", "stanza").children(children)
+}
 
-            "section" => {
-                let mut n = Node::new(node::DIV).children(frame.children.clone());
-                if let Some(id) = &frame.attrs.id {
-                    n = n.prop("id", id.clone());
-                }
-                Some(n)
-            }
-
-            "title" => {
-                // Title in body is a heading (level based on nesting)
-                if !self.in_description && !frame.children.is_empty() {
-                    // Count section nesting for heading level
-                    let level = self
-                        .stack
-                        .iter()
-                        .filter(|f| f.element == "section")
-                        .count()
-                        .clamp(1, 6) as i64;
-
-                    // Title contains <p> elements - extract their content
-                    let mut inline_children = Vec::new();
-                    for child in &frame.children {
-                        if child.kind.as_str() == node::PARAGRAPH {
-                            inline_children.extend(child.children.clone());
-                        } else {
-                            inline_children.push(child.clone());
-                        }
-                    }
-
-                    Some(
-                        Node::new(node::HEADING)
-                            .prop(prop::LEVEL, level)
-                            .children(inline_children),
-                    )
-                } else {
-                    None
-                }
-            }
-
-            "subtitle" => {
-                // Subtitle as h4
-                let mut inline_children = Vec::new();
-                for child in &frame.children {
-                    if child.kind.as_str() == node::PARAGRAPH {
-                        inline_children.extend(child.children.clone());
+fn convert_table(table: &Table) -> Node {
+    let rows: Vec<Node> = table
+        .row
+        .iter()
+        .map(|row| {
+            let cells: Vec<Node> = row
+                .cell
+                .iter()
+                .map(|cell| {
+                    let kind = if cell.is_header {
+                        node::TABLE_HEADER
                     } else {
-                        inline_children.push(child.clone());
-                    }
-                }
-                Some(
-                    Node::new(node::HEADING)
-                        .prop(prop::LEVEL, 4i64)
-                        .children(inline_children),
-                )
-            }
-
-            "p" => Some(Node::new(node::PARAGRAPH).children(frame.children.clone())),
-
-            "empty-line" => Some(Node::new(node::PARAGRAPH)),
-
-            // Quote/cite
-            "cite" => Some(Node::new(node::BLOCKQUOTE).children(frame.children.clone())),
-
-            "text-author" => Some(
-                Node::new(node::PARAGRAPH)
-                    .prop("html:class", "text-author")
-                    .children(frame.children.clone()),
-            ),
-
-            "epigraph" => Some(
-                Node::new(node::BLOCKQUOTE)
-                    .prop("fb2:type", "epigraph")
-                    .children(frame.children.clone()),
-            ),
-
-            // Poetry
-            "poem" => Some(
-                Node::new(node::DIV)
-                    .prop("html:class", "poem")
-                    .children(frame.children.clone()),
-            ),
-
-            "stanza" => Some(
-                Node::new(node::DIV)
-                    .prop("html:class", "stanza")
-                    .children(frame.children.clone()),
-            ),
-
-            "v" => {
-                // Verse line
-                let mut children = frame.children.clone();
-                children.push(Node::new(node::LINE_BREAK));
-                Some(Node::new(node::SPAN).children(children))
-            }
-
-            // Inline formatting
-            "emphasis" => Some(Node::new(node::EMPHASIS).children(frame.children.clone())),
-
-            "strong" => Some(Node::new(node::STRONG).children(frame.children.clone())),
-
-            "strikethrough" => Some(Node::new(node::STRIKEOUT).children(frame.children.clone())),
-
-            "code" => {
-                let text = extract_text(&frame.children);
-                Some(Node::new(node::CODE).prop(prop::CONTENT, text))
-            }
-
-            "sub" => Some(Node::new(node::SUBSCRIPT).children(frame.children.clone())),
-
-            "sup" => Some(Node::new(node::SUPERSCRIPT).children(frame.children.clone())),
-
-            // Links
-            "a" => {
-                let mut node = Node::new(node::LINK).children(frame.children.clone());
-                if let Some(href) = &frame.attrs.href {
-                    // Remove # prefix for internal links
-                    let url = if href.starts_with('#') {
-                        href.to_string()
-                    } else {
-                        href.clone()
+                        node::TABLE_CELL
                     };
-                    node = node.prop(prop::URL, url);
-                }
-                Some(node)
-            }
+                    Node::new(kind).children(convert_inlines(&cell.content))
+                })
+                .collect();
+            Node::new(node::TABLE_ROW).children(cells)
+        })
+        .collect();
+    Node::new(node::TABLE).children(rows)
+}
 
-            // Images (handled in empty, but in case of non-empty)
-            "image" => {
-                if let Some(href) = &frame.attrs.href {
-                    let url = href.strip_prefix('#').unwrap_or(href);
-                    Some(Node::new(node::IMAGE).prop(prop::URL, url.to_string()))
-                } else {
-                    None
-                }
-            }
+fn convert_inlines(inlines: &[InlineElement]) -> Vec<Node> {
+    inlines.iter().map(convert_inline).collect()
+}
 
-            // Tables (FB2 has limited table support)
-            "table" => Some(Node::new(node::TABLE).children(frame.children.clone())),
-
-            "tr" => Some(Node::new(node::TABLE_ROW).children(frame.children.clone())),
-
-            "td" => Some(Node::new(node::TABLE_CELL).children(frame.children.clone())),
-
-            "th" => Some(Node::new(node::TABLE_HEADER).children(frame.children.clone())),
-
-            // Default: pass through
-            _ => None,
+fn convert_inline(el: &InlineElement) -> Node {
+    match el {
+        InlineElement::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        InlineElement::Strong(ch) => {
+            Node::new(node::STRONG).children(convert_inlines(ch))
         }
-    }
-
-    fn extract_metadata_from(&mut self, nodes: &[Node]) {
-        for node in nodes {
-            // Extract any additional metadata from nodes if needed
-            // Currently, title and author are handled directly in convert_element
-            if let Some(title) = node.props.get_str("fb2:title") {
-                self.metadata.set("title", title.to_string());
-            }
-            self.extract_metadata_from(&node.children);
+        InlineElement::Emphasis(ch) => {
+            Node::new(node::EMPHASIS).children(convert_inlines(ch))
         }
+        InlineElement::Strikethrough(ch) => {
+            Node::new(node::STRIKEOUT).children(convert_inlines(ch))
+        }
+        InlineElement::Sub(ch) => Node::new(node::SUBSCRIPT).children(convert_inlines(ch)),
+        InlineElement::Sup(ch) => Node::new(node::SUPERSCRIPT).children(convert_inlines(ch)),
+        InlineElement::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        InlineElement::Image(img) => {
+            let url = img.href.strip_prefix('#').unwrap_or(&img.href);
+            Node::new(node::IMAGE).prop(prop::URL, url.to_string())
+        }
+        InlineElement::Link { href, children, .. } => Node::new(node::LINK)
+            .prop(prop::URL, href.clone())
+            .children(convert_inlines(children)),
     }
 }
 
-fn extract_text(nodes: &[Node]) -> String {
-    let mut text = String::new();
-    for node in nodes {
-        if node.kind.as_str() == node::TEXT
-            && let Some(content) = node.props.get_str(prop::CONTENT)
-        {
-            text.push_str(content);
-        }
-        text.push_str(&extract_text(&node.children));
+fn convert_resources(fb: &FictionBook) -> ResourceMap {
+    let mut resources = ResourceMap::default();
+    for binary in &fb.binaries {
+        resources.insert(
+            ResourceId::from_string(binary.id.clone()),
+            Resource {
+                name: Some(binary.id.clone()),
+                mime_type: binary.content_type.clone(),
+                data: binary.data.clone(),
+                metadata: Properties::new(),
+            },
+        );
     }
-    text
+    resources
 }
 
 #[cfg(test)]
@@ -649,7 +310,7 @@ mod tests {
         let fb2 = r#"<?xml version="1.0" encoding="UTF-8"?>
 <FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
   <description>
-    <title-info><book-title>Test Book</book-title></title-info>
+    <title-info><book-title>Test Book</book-title><lang>en</lang></title-info>
   </description>
   <body>
     <section><p>Hello, world!</p></section>
@@ -667,7 +328,6 @@ mod tests {
         let fb2 = r#"<?xml version="1.0"?>
 <FictionBook>
   <body>
-    <title><p>Book Title</p></title>
     <section>
       <title><p>Chapter 1</p></title>
       <p>Content here.</p>

@@ -125,6 +125,35 @@ corpus analysis tool. These use cases exist whether rescribe does or not.
 - Format crate design decisions (AST shape, event types, error model, span semantics)
   must be made for the widest plausible user, not the narrowest known consumer.
 
+### The adapter layer must never contain parsing or writing logic
+
+**`rescribe-read-{format}` and `rescribe-write-{format}` are not the format library.**
+They are thin translators between the format's native `Ast` and rescribe's `Document`.
+All parsing and writing logic belongs in `{format}-fmt`.
+
+**Rule:** Before writing a single line of `rescribe-read-{format}` or
+`rescribe-write-{format}`, the `{format}-fmt` standalone crate must already exist (or
+be created first in the same vertical). The adapter crate's only job is:
+```
+rescribe-read-{fmt}: {fmt}-fmt::parse(bytes) → {fmt}_fmt::Ast → rescribe Document
+rescribe-write-{fmt}: rescribe Document → {fmt}_fmt::Ast → {fmt}-fmt::emit(ast) → bytes
+```
+
+**Hard limits:**
+- `rescribe-read-{format}/src/lib.rs` must be ≤300 lines — if it's longer, logic leaked in
+- `rescribe-write-{format}/src/lib.rs` must be ≤300 lines — same rule
+- No XML parsing, no regex, no format-specific state machines in adapter crates
+- No `quick-xml`, `roxmltree`, or other format-parsing deps in adapter `Cargo.toml`
+
+**This mistake is insidious because it "works" locally** — the rescribe tests pass. But
+it means the Rust ecosystem gets no reusable FB2/ODT/etc. library. Every Rust project
+that needs FB2 will have to roll their own parser, or reach into rescribe's internals.
+That is the failure this rule prevents.
+
+**Catch it at `Cargo.toml` time:** if `rescribe-read-{fmt}` depends on a format parser
+crate (`quick-xml`, `zip`, `calamine`, etc.) instead of `{fmt}-fmt`, the architecture
+is wrong before the first line of logic is written.
+
 ## Priority hierarchy: broadest reach first
 
 Work should be prioritized by how many people benefit:

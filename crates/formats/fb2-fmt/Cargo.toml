@@ -1,0 +1,19 @@
+[package]
+name = "fb2-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "FictionBook 2 (FB2) tokenizer, AST, and builder — no rescribe dependency"
+
+[features]
+default = ["reader-ast", "reader-streaming", "reader-batch", "writer-streaming", "writer-builder"]
+reader-ast = []
+reader-streaming = []
+reader-batch = []
+writer-streaming = []
+writer-builder = []
+
+[dependencies]
+quick-xml = "0.39"
+base64 = "0.22"

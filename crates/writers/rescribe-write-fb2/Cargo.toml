@@ -9,5 +9,4 @@ description = "FictionBook 2 (FB2) writer for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
-quick-xml = "0.39"
-base64 = "0.22"
+fb2-fmt = { workspace = true }
