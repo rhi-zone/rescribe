@@ -499,7 +499,7 @@ cleanly to the original input (no escape processing). Implementation: `Frame::In
 - [x] StreamingParser<H> Tier 2 — O(largest block) streaming (2026-03-28)
 - [ ] Parser gaps: table parsing, footnote parsing, math parsing
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
-- [x] HTML (html5ever backed) — R:5†/W:5†; 82/85 COVERAGE.md items (2026-04-10); deferred: footnote anchor convention, MathML, megabyte pathological fixture
+- [ ] HTML (html5ever backed) — R:4†/W:4†; 82/85 COVERAGE.md items (2026-04-10); gaps blocking 5-Production: footnote anchor convention, inline MathML, megabyte pathological fixture
 - [ ] DOCX, PPTX, XLSX (ooxml-* backed; same) — DOCX reader at 5-Production (2026-03-03); others at 4-Fuzz; gaps below
 
   **DOCX reader** (closest to production):
