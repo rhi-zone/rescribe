@@ -57,6 +57,7 @@ enum StackItem {
     Binary { id: String, content_type: String },
     InlineWrapper { kind: InlineKind, children: Vec<InlineElement> },
     Link { href: String, link_kind: Option<String>, children: Vec<InlineElement> },
+    FootnoteRef { href: String, children: Vec<InlineElement> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -190,6 +191,7 @@ impl Parser {
                 | StackItem::TextAuthor { .. }
                 | StackItem::InlineWrapper { .. }
                 | StackItem::Link { .. }
+                | StackItem::FootnoteRef { .. }
                 | StackItem::TableCell { .. } => return true,
                 // Block contexts stop the search
                 StackItem::Section { .. }
@@ -222,7 +224,9 @@ impl Parser {
                     inlines.push(InlineElement::Text(text));
                     return;
                 }
-                StackItem::InlineWrapper { children, .. } | StackItem::Link { children, .. } => {
+                StackItem::InlineWrapper { children, .. }
+                | StackItem::Link { children, .. }
+                | StackItem::FootnoteRef { children, .. } => {
                     children.push(InlineElement::Text(text));
                     return;
                 }
@@ -406,11 +410,18 @@ impl Parser {
             "a" => {
                 let href = attrs.get("href").cloned().unwrap_or_default();
                 let kind = attrs.get("type").cloned();
-                self.stack.push(StackItem::Link {
-                    href,
-                    link_kind: kind,
-                    children: Vec::new(),
-                });
+                if kind.as_deref() == Some("note") && href.starts_with('#') {
+                    self.stack.push(StackItem::FootnoteRef {
+                        href,
+                        children: Vec::new(),
+                    });
+                } else {
+                    self.stack.push(StackItem::Link {
+                        href,
+                        link_kind: kind,
+                        children: Vec::new(),
+                    });
+                }
             }
             "binary" => {
                 let id = attrs.get("id").cloned().unwrap_or_default();
@@ -465,7 +476,9 @@ impl Parser {
                     inlines.push(el);
                     return;
                 }
-                StackItem::InlineWrapper { children, .. } | StackItem::Link { children, .. } => {
+                StackItem::InlineWrapper { children, .. }
+                | StackItem::Link { children, .. }
+                | StackItem::FootnoteRef { children, .. } => {
                     children.push(el);
                     return;
                 }
@@ -770,6 +783,9 @@ impl Parser {
             }
             StackItem::Link { href, link_kind, children } => {
                 self.push_inline(InlineElement::Link { href, kind: link_kind, children });
+            }
+            StackItem::FootnoteRef { href, children } => {
+                self.push_inline(InlineElement::FootnoteRef { href, children });
             }
 
             StackItem::Binary { id, content_type } => {

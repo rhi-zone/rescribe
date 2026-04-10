@@ -69,6 +69,18 @@ fn doc_to_fb(doc: &Document) -> FictionBook {
         ..Default::default()
     };
 
+    // Collect footnote_def nodes from document content into a notes body
+    let footnote_defs = collect_footnote_defs(&doc.content.children);
+    let mut bodies = vec![body];
+    if !footnote_defs.is_empty() {
+        let notes_body = Body {
+            name: Some("notes".to_string()),
+            section: footnote_defs,
+            ..Default::default()
+        };
+        bodies.push(notes_body);
+    }
+
     let binaries: Vec<Binary> = doc
         .resources
         .iter()
@@ -81,9 +93,31 @@ fn doc_to_fb(doc: &Document) -> FictionBook {
 
     FictionBook {
         description,
-        bodies: vec![body],
+        bodies,
         binaries,
     }
+}
+
+/// Recursively collect all `footnote_def` nodes and convert them to FB2 sections.
+fn collect_footnote_defs(nodes: &[Node]) -> Vec<Section> {
+    let mut sections = Vec::new();
+    for node in nodes {
+        if node.kind.as_str() == node::FOOTNOTE_DEF {
+            let id = node.props.get_str(prop::ID).map(|s| s.to_string());
+            let section = nodes_to_section(&node.children);
+            sections.push(Section {
+                id,
+                content: section.content,
+                section: section.section,
+                title: section.title,
+                ..Default::default()
+            });
+        } else {
+            // Recurse into children
+            sections.extend(collect_footnote_defs(&node.children));
+        }
+    }
+    sections
 }
 
 /// Convert a flat list of rescribe nodes into a single FB2 section.
@@ -343,6 +377,13 @@ fn node_to_inline(node: &Node) -> InlineElement {
             InlineElement::Link {
                 href,
                 kind: None,
+                children: nodes_to_inlines(&node.children),
+            }
+        }
+        node::FOOTNOTE_REF => {
+            let href = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            InlineElement::FootnoteRef {
+                href,
                 children: nodes_to_inlines(&node.children),
             }
         }

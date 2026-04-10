@@ -1,0 +1,10 @@
+{
+  "description": "complete footnote roundtrip: inline footnote_ref in body and footnote_def from notes body",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0/0/1", "kind": "footnote_ref", "props": { "url": "#fn1" } },
+    { "path": "/1",       "kind": "footnote_def", "props": { "id": "fn1" } },
+    { "path": "/1/0",     "kind": "paragraph" },
+    { "path": "/1/0/0",   "kind": "text", "props": { "content": "Footnote content." } }
+  ]
+}

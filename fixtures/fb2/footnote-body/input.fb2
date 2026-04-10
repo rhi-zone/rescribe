@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0"
+             xmlns:l="http://www.w3.org/1999/xlink">
+  <description>
+    <title-info>
+      <book-title>Footnote Body Test</book-title>
+      <lang>en</lang>
+    </title-info>
+  </description>
+  <body>
+    <section>
+      <p>Text with reference.</p>
+    </section>
+  </body>
+  <body name="notes">
+    <section id="fn1">
+      <p>This is the footnote text.</p>
+    </section>
+  </body>
+</FictionBook>

@@ -253,6 +253,10 @@ pub enum InlineElement {
         kind: Option<String>,
         children: Vec<InlineElement>,
     },
+    FootnoteRef {
+        href: String,
+        children: Vec<InlineElement>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

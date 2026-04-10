@@ -1,0 +1,10 @@
+{
+  "description": "a element with type=note and l:href starting with # becomes a footnote_ref node with url prop",
+  "assertions": [
+    { "path": "/0/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/0/0",   "kind": "text",         "props": { "content": "Some text" } },
+    { "path": "/0/0/0/1",   "kind": "footnote_ref", "props": { "url": "#fn1" } },
+    { "path": "/0/0/0/1/0", "kind": "text",         "props": { "content": "1" } },
+    { "path": "/0/0/0/2",   "kind": "text",         "props": { "content": " with a footnote." } }
+  ]
+}

@@ -480,6 +480,14 @@ fn write_inline(w: &mut Writer<Cursor<Vec<u8>>>, el: &InlineElement) {
             write_inlines(w, children);
             end(w, "a");
         }
+        InlineElement::FootnoteRef { href, children } => {
+            let mut e = BytesStart::new("a");
+            e.push_attribute(("l:href", href.as_str()));
+            e.push_attribute(("type", "note"));
+            w.write_event(Event::Start(e)).unwrap();
+            write_inlines(w, children);
+            end(w, "a");
+        }
     }
 }
 

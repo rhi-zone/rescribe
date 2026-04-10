@@ -32,8 +32,8 @@ FictionBook 2 schema reference: http://www.fictionbook.org/index.php/Eng:Fiction
 - [x] link — `link` (`<a l:href="…">` external)
 - [x] internal link (anchor) — `internal-link` (`<a l:href="#…">` with section `id`)
 - [x] image (inline / block) — `image` (`<image l:href="#…">`)
-- [ ] footnote reference — (missing; `<a l:href="#fn1" type="note">`)
-- [ ] footnote body (note section) — (missing; `<body name="notes"><section id="fn1">`)
+- [x] footnote reference — `footnote-ref` (`<a l:href="#fn1" type="note">`)
+- [x] footnote body (note section) — `footnote-body` (`<body name="notes"><section id="fn1">`)
 
 ## Metadata
 
@@ -66,7 +66,7 @@ FictionBook 2 schema reference: http://www.fictionbook.org/index.php/Eng:Fiction
 
 ## Composition (integration)
 
-- [ ] footnotes (note body + inline ref) — (missing; full footnote roundtrip)
+- [x] footnotes (note body + inline ref) — `footnotes-roundtrip` (full footnote roundtrip)
 - [x] poem with epigraph — `poem-epigraph` (`<poem>` with `<epigraph>` before stanzas)
 - [ ] section with epigraph and body — covered in `epigraph` fixture
 - [x] inline image inside paragraph — `inline-image` (`<image>` as inline child of `<p>`)

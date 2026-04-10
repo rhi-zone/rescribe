@@ -1,0 +1,9 @@
+{
+  "description": "body with name=notes has its sections converted to footnote_def nodes with id prop",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/1",     "kind": "footnote_def", "props": { "id": "fn1" } },
+    { "path": "/1/0",   "kind": "paragraph" },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "This is the footnote text." } }
+  ]
+}

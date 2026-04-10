@@ -72,8 +72,31 @@ fn convert_fb(fb: &FictionBook) -> Vec<Node> {
 }
 
 fn convert_body(body: &Body) -> Vec<Node> {
+    if body.name.as_deref() == Some("notes") {
+        // Notes body: each section is a footnote definition
+        return body
+            .section
+            .iter()
+            .map(convert_footnote_def)
+            .collect();
+    }
     let sections: Vec<Node> = body.section.iter().map(|s| convert_section(s, 1)).collect();
     vec![Node::new(node::DIV).children(sections)]
+}
+
+fn convert_footnote_def(section: &Section) -> Node {
+    let mut children: Vec<Node> = Vec::new();
+    for item in &section.content {
+        children.extend(convert_section_content(item));
+    }
+    for nested in &section.section {
+        children.push(convert_section(nested, 1));
+    }
+    let mut n = Node::new(node::FOOTNOTE_DEF).children(children);
+    if let Some(id) = &section.id {
+        n = n.prop(prop::ID, id.clone());
+    }
+    n
 }
 
 fn convert_section(section: &Section, depth: usize) -> Node {
@@ -253,6 +276,9 @@ fn convert_inline(el: &InlineElement) -> Node {
             Node::new(node::IMAGE).prop(prop::URL, url.to_string())
         }
         InlineElement::Link { href, children, .. } => Node::new(node::LINK)
+            .prop(prop::URL, href.clone())
+            .children(convert_inlines(children)),
+        InlineElement::FootnoteRef { href, children } => Node::new(node::FOOTNOTE_REF)
             .prop(prop::URL, href.clone())
             .children(convert_inlines(children)),
     }
