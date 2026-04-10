@@ -1,0 +1,10 @@
+{
+  "description": "image referencing a non-existent binary id still produces an image node without panicking",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div" },
+    { "path": "/0/0/0", "kind": "image", "props": { "url": "nonexistent" } },
+    { "path": "/0/0/1", "kind": "paragraph" }
+  ]
+}

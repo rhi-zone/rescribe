@@ -1,0 +1,7 @@
+{
+  "description": "coverpage with image in title-info is present in source; document parses without error",
+  "metadata": { "title": "Illustrated Book" },
+  "assertions": [
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

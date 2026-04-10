@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <body>
+    <section>
+      <title><p>Level 1</p></title>
+      <section>
+        <title><p>Level 2</p></title>
+        <section>
+          <title><p>Level 3</p></title>
+          <section>
+            <title><p>Level 4</p></title>
+            <section>
+              <title><p>Level 5</p></title>
+              <section>
+                <title><p>Level 6</p></title>
+                <p>Deep content here.</p>
+              </section>
+            </section>
+          </section>
+        </section>
+      </section>
+    </section>
+  </body>
+</FictionBook>

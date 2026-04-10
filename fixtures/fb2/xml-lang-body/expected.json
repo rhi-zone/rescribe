@@ -1,0 +1,8 @@
+{
+  "description": "xml:lang attribute on body element is present in source; body is parsed as div node",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div" },
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

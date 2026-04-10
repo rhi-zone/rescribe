@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <book-title>Translated Work</book-title>
+      <author>
+        <first-name>Ivan</first-name>
+        <last-name>Petrov</last-name>
+      </author>
+      <lang>en</lang>
+      <src-lang>ru</src-lang>
+      <translator>
+        <first-name>Jane</first-name>
+        <last-name>Smith</last-name>
+      </translator>
+    </title-info>
+  </description>
+  <body>
+    <section>
+      <p>Translated content.</p>
+    </section>
+  </body>
+</FictionBook>

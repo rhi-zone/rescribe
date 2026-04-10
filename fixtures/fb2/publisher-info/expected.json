@@ -1,0 +1,7 @@
+{
+  "description": "publish-info block with publisher, city, year, and isbn is present in source; document parses without error",
+  "metadata": { "title": "Published Book" },
+  "assertions": [
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

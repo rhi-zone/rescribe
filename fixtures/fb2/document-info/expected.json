@@ -1,0 +1,7 @@
+{
+  "description": "document-info block with author, date, id, and version is present in source; document parses without error",
+  "metadata": { "title": "Document Info Test" },
+  "assertions": [
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

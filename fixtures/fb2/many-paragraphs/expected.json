@@ -1,0 +1,10 @@
+{
+  "description": "section with 50 paragraphs is parsed completely without performance issues",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "div", "children_count": 50 },
+    { "path": "/0/0/0",  "kind": "paragraph" },
+    { "path": "/0/0/49", "kind": "paragraph" }
+  ]
+}

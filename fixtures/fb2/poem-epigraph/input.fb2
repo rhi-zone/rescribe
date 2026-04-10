@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <body>
+    <section>
+      <poem>
+        <epigraph>
+          <p>Before the poem begins.</p>
+          <text-author>Unknown</text-author>
+        </epigraph>
+        <stanza>
+          <v>First line of the poem</v>
+          <v>Second line of the poem</v>
+        </stanza>
+      </poem>
+    </section>
+  </body>
+</FictionBook>

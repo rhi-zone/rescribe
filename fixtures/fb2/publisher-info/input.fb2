@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <book-title>Published Book</book-title>
+      <lang>en</lang>
+    </title-info>
+    <publish-info>
+      <publisher>Example Press</publisher>
+      <city>New York</city>
+      <year>2023</year>
+      <isbn>978-0-000-00000-0</isbn>
+    </publish-info>
+  </description>
+  <body>
+    <section>
+      <p>Content.</p>
+    </section>
+  </body>
+</FictionBook>

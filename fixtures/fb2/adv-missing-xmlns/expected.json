@@ -1,0 +1,9 @@
+{
+  "description": "FB2 without xmlns declaration still parses correctly since reader uses local element names",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div" },
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

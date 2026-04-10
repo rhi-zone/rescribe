@@ -1,0 +1,8 @@
+{
+  "description": "image with alt attribute is parsed; url prop is set; alt is present in source",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div" },
+    { "path": "/0/0/0", "kind": "image", "props": { "url": "cover" } }
+  ]
+}

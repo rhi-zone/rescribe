@@ -1,0 +1,7 @@
+{
+  "description": "date element in title-info is present in source; document parses without error",
+  "metadata": { "title": "Dated Book" },
+  "assertions": [
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

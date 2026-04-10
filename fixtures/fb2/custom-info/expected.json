@@ -1,0 +1,7 @@
+{
+  "description": "custom-info element with info-type attribute is present in source; document parses without error",
+  "metadata": { "title": "Custom Info Test" },
+  "assertions": [
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

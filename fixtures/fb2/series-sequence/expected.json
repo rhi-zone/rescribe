@@ -1,0 +1,7 @@
+{
+  "description": "sequence element with name and number attributes is present in source; document parses without error",
+  "metadata": { "title": "Book Three" },
+  "assertions": [
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

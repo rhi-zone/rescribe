@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook>
+  <description>
+    <title-info>
+      <book-title>No Namespace</book-title>
+      <lang>en</lang>
+    </title-info>
+  </description>
+  <body>
+    <section>
+      <p>Paragraph without namespace declaration.</p>
+    </section>
+  </body>
+</FictionBook>

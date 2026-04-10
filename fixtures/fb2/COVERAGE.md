@@ -41,15 +41,15 @@ FictionBook 2 schema reference: http://www.fictionbook.org/index.php/Eng:Fiction
 - [x] author — `author-metadata` (`<author>` with `<first-name>`, `<last-name>` in `<title-info>`)
 - [x] genre — `genre-metadata` (`<genre>` in `<title-info>`)
 - [x] language — `lang-metadata` (`<lang>` in `<title-info>`)
-- [ ] date — (missing; `<date>` in `<title-info>` or `<publish-info>`)
-- [ ] series / sequence — (missing; `<sequence name="…" number="…">`)
-- [ ] cover image — (missing; `<coverpage>` with `<image>` in `<title-info>`)
-- [ ] publisher info — (missing; `<publish-info>` with `<publisher>`, `<year>`, `<isbn>`)
-- [ ] document info — (missing; `<document-info>` with `<author>`, `<date>`, `<id>`, `<version>`)
-- [ ] custom info — (missing; `<custom-info info-type="…">`)
-- [ ] keywords — (missing; `<keywords>` in `<title-info>`)
-- [ ] translator — (missing; `<translator>` in `<title-info>`)
-- [ ] src-lang — (missing; `<src-lang>` in `<title-info>`)
+- [x] date — `date` (`<date>` in `<title-info>` or `<publish-info>`)
+- [x] series / sequence — `series-sequence` (`<sequence name="…" number="…">`)
+- [x] cover image — `cover-image` (`<coverpage>` with `<image>` in `<title-info>`)
+- [x] publisher info — `publisher-info` (`<publish-info>` with `<publisher>`, `<year>`, `<isbn>`)
+- [x] document info — `document-info` (`<document-info>` with `<author>`, `<date>`, `<id>`, `<version>`)
+- [x] custom info — `custom-info` (`<custom-info info-type="…">`)
+- [x] keywords — `keywords` (`<keywords>` in `<title-info>`)
+- [x] translator — `translator` (`<translator>` in `<title-info>`)
+- [x] src-lang — `src-lang` (`<src-lang>` in `<title-info>`)
 
 ## Binary resources
 
@@ -59,17 +59,17 @@ FictionBook 2 schema reference: http://www.fictionbook.org/index.php/Eng:Fiction
 ## Properties
 
 - [x] section id attribute — `internal-link` (`id` on `<section>`)
-- [ ] image alt text — (missing; `alt` attribute on `<image>`)
+- [x] image alt text — `image-alt-text` (`alt` attribute on `<image>`; parsed by fb2-fmt, url prop set on image node)
 - [ ] link title — (missing; `type` or title attributes on `<a>`)
 - [ ] table alignment (align attribute) — (missing)
-- [ ] xml:lang on body — (missing)
+- [x] xml:lang on body — `xml-lang-body` (`xml:lang` on `<body>`; body parsed as div node)
 
 ## Composition (integration)
 
 - [ ] footnotes (note body + inline ref) — (missing; full footnote roundtrip)
-- [ ] poem with epigraph — (missing)
+- [x] poem with epigraph — `poem-epigraph` (`<poem>` with `<epigraph>` before stanzas)
 - [ ] section with epigraph and body — covered in `epigraph` fixture
-- [ ] inline image inside paragraph — (missing; `<image>` as inline child of `<p>`)
+- [x] inline image inside paragraph — `inline-image` (`<image>` as inline child of `<p>`)
 - [ ] multiple bodies (notes body) — (missing; separate `<body name="notes">`)
 - [ ] nested list — (missing; FB2 has no native list; typically done with `<p>` + custom prefix, but `<ul>`/`<ol>` extensions exist in some FB2 dialects)
 
@@ -79,15 +79,15 @@ FictionBook 2 schema reference: http://www.fictionbook.org/index.php/Eng:Fiction
 - [x] malformed XML (broken opening tag) — `adv-malformed`
 - [x] entity references (&amp;, &lt;, etc.) — `adv-entity-refs`
 - [x] empty section (no title, no content) — `adv-empty-section`
-- [ ] missing xmlns declaration — (missing; should parse fine since reader uses local names)
+- [x] missing xmlns declaration — `adv-missing-xmlns` (should parse fine since reader uses local names)
 - [ ] binary with invalid base64 — (missing)
-- [ ] broken internal image ref — (missing; `<image l:href="#nonexistent">`)
+- [x] broken internal image ref — `adv-broken-image-ref` (`<image l:href="#nonexistent">`)
 - [ ] broken internal footnote ref — (missing)
-- [ ] numeric character references — (missing)
+- [x] numeric character references — `adv-numeric-charref` (decimal `&#65;` and hex `&#x41;` references)
 
 ## Pathological
 
-- [ ] deeply nested sections — (missing; 5+ levels of `<section>`)
+- [x] deeply nested sections — `deeply-nested-sections` (6 levels of `<section>`; heading levels clamped to 6)
 - [ ] large binary image — (missing)
-- [ ] many paragraphs — (missing)
-- [ ] table with many cells — (missing)
+- [x] many paragraphs — `many-paragraphs` (50 paragraphs in a single section)
+- [x] table with many cells — `table-many-cells` (6 rows × 5 columns)

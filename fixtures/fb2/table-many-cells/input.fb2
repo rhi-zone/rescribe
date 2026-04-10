@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <body>
+    <section>
+      <table>
+        <tr><th>Col 1</th><th>Col 2</th><th>Col 3</th><th>Col 4</th><th>Col 5</th></tr>
+        <tr><td>R1C1</td><td>R1C2</td><td>R1C3</td><td>R1C4</td><td>R1C5</td></tr>
+        <tr><td>R2C1</td><td>R2C2</td><td>R2C3</td><td>R2C4</td><td>R2C5</td></tr>
+        <tr><td>R3C1</td><td>R3C2</td><td>R3C3</td><td>R3C4</td><td>R3C5</td></tr>
+        <tr><td>R4C1</td><td>R4C2</td><td>R4C3</td><td>R4C4</td><td>R4C5</td></tr>
+        <tr><td>R5C1</td><td>R5C2</td><td>R5C3</td><td>R5C4</td><td>R5C5</td></tr>
+      </table>
+    </section>
+  </body>
+</FictionBook>

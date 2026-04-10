@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <body>
+    <section>
+      <p>Decimal: &#65; &#66; &#67;</p>
+      <p>Hex: &#x41; &#x42; &#x43;</p>
+      <p>Unicode: &#8212; &#8220; &#8221;</p>
+    </section>
+  </body>
+</FictionBook>

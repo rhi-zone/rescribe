@@ -1,0 +1,12 @@
+{
+  "description": "table with 6 rows and 5 columns each is parsed completely",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0/0/0",       "kind": "table", "children_count": 6 },
+    { "path": "/0/0/0/0",     "kind": "table_row", "children_count": 5 },
+    { "path": "/0/0/0/0/0",   "kind": "table_header" },
+    { "path": "/0/0/0/1",     "kind": "table_row", "children_count": 5 },
+    { "path": "/0/0/0/1/0",   "kind": "table_cell" },
+    { "path": "/0/0/0/5",     "kind": "table_row", "children_count": 5 }
+  ]
+}

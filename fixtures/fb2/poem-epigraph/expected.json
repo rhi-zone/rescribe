@@ -1,0 +1,10 @@
+{
+  "description": "poem with epigraph — poem element has epigraph followed by stanza; epigraph preserved, stanza lines become span nodes with line_break",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0/0/0",     "kind": "div", "props": { "html:class": "poem" } },
+    { "path": "/0/0/0/0",   "kind": "div", "props": { "html:class": "stanza" } },
+    { "path": "/0/0/0/0/0", "kind": "span" },
+    { "path": "/0/0/0/0/1", "kind": "span" }
+  ]
+}

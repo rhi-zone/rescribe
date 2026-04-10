@@ -1,0 +1,12 @@
+{
+  "description": "image element as inline child of p becomes an image node inside a paragraph",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div" },
+    { "path": "/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "See figure " } },
+    { "path": "/0/0/0/1", "kind": "image", "props": { "url": "fig1" } },
+    { "path": "/0/0/0/2", "kind": "text", "props": { "content": " for details." } }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "description": "six levels of nested sections are parsed without stack overflow; heading levels are clamped to 6",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",                       "kind": "div" },
+    { "path": "/0/0",                     "kind": "div" },
+    { "path": "/0/0/0",                   "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/0/1",                   "kind": "div" },
+    { "path": "/0/0/1/0",                 "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0/1/1",                 "kind": "div" },
+    { "path": "/0/0/1/1/0",               "kind": "heading", "props": { "level": 3 } },
+    { "path": "/0/0/1/1/1",               "kind": "div" },
+    { "path": "/0/0/1/1/1/0",             "kind": "heading", "props": { "level": 4 } },
+    { "path": "/0/0/1/1/1/1",             "kind": "div" },
+    { "path": "/0/0/1/1/1/1/0",           "kind": "heading", "props": { "level": 5 } },
+    { "path": "/0/0/1/1/1/1/1",           "kind": "div" },
+    { "path": "/0/0/1/1/1/1/1/0",         "kind": "heading", "props": { "level": 6 } },
+    { "path": "/0/0/1/1/1/1/1/1",         "kind": "paragraph" }
+  ]
+}

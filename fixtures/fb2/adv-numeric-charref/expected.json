@@ -1,0 +1,11 @@
+{
+  "description": "numeric character references (decimal and hex) are handled by the XML parser without panicking",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "paragraph" },
+    { "path": "/0/0/2", "kind": "paragraph" }
+  ]
+}

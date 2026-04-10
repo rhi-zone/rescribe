@@ -1,0 +1,7 @@
+{
+  "description": "src-lang element in title-info indicates the source language; document parses without error",
+  "metadata": { "title": "Source Language Test" },
+  "assertions": [
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

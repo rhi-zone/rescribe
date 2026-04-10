@@ -1,0 +1,7 @@
+{
+  "description": "keywords in title-info are parsed into document metadata",
+  "metadata": { "keywords": "fiction, adventure, fantasy" },
+  "assertions": [
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "translator element in title-info is present in source alongside src-lang; document parses without error",
+  "metadata": { "title": "Translated Work" },
+  "assertions": [
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}
