@@ -117,8 +117,8 @@ corpus analysis tool. These use cases exist whether rescribe does or not.
   (77M+ weekly downloads) is a non-goal. Callers needing true chunked CommonMark
   streaming should use pulldown-cmark directly or wait for a future native parser.
 
-- **Library-backed ("Tier B") formats still require a proper `-fmt` crate.** Wrapping
-  an upstream library does not reduce the requirements — the `-fmt` crate must still
+- **Library-backed formats still require a proper `-fmt` crate.** Wrapping an
+  upstream library does not reduce the requirements — the `-fmt` crate must still
   expose all three reader APIs and both writer APIs, each independently optimal.
   When the upstream library supports multiple modes (tree building, event/SAX,
   chunked input), the `-fmt` crate must use the right mode for each API. A wrapper
