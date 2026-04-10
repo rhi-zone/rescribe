@@ -8,7 +8,9 @@ This directory contains Architecture Decision Records (ADRs) documenting signifi
 |-----|-------|--------|
 | [001](./001-custom-rnc-parser.md) | Custom RNC Parser for Code Generation | Accepted |
 | [002](./002-event-based-parsing.md) | Event-Based XML Parsing for Generated Types | Accepted |
+| [003](./003-generated-types-architecture.md) | Generated Types as Primary Data Model | Accepted |
 | [004](./004-position-indexed-extra-children.md) | Position-Indexed Extra Children for Roundtrip Fidelity | Accepted |
+| [005](./005-per-application-crate-split.md) | Per-Application Crate Split (wml / sml / pml) | Accepted |
 
 ## Template
 
