@@ -1,0 +1,8 @@
+{
+  "description": "Single paragraph with plain text",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Hello, world!" } }
+  ]
+}

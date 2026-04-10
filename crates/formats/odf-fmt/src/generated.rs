@@ -1,6 +1,8 @@
 // Generated from ECMA-376 RELAX NG schema.
 // Do not edit manually.
 
+#![allow(nonstandard_style)]
+
 use serde::{Deserialize, Serialize};
 
 /// XML namespace URIs used in this schema.

@@ -1,0 +1,9 @@
+{
+  "description": "Footnote inline element with citation and body",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/1", "kind": "note", "props": { "note_class": "footnote", "id": "ftn1", "citation": "1" } },
+    { "path": "/body/0/1/body/0/0", "kind": "text", "props": { "content": "This is the footnote text." } }
+  ]
+}

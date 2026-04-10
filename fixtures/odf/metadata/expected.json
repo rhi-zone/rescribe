@@ -1,0 +1,14 @@
+{
+  "description": "Document with Dublin Core metadata fields",
+  "category": "happy",
+  "metadata": {
+    "title": "My Document Title",
+    "creator": "Jane Author",
+    "description": "A test document with metadata.",
+    "subject": "Testing",
+    "language": "en-US"
+  },
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "Hyperlink inline element with href and title",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/1", "kind": "hyperlink", "props": { "href": "https://example.com", "title": "Example" } },
+    { "path": "/body/0/1/0", "kind": "text", "props": { "content": "this link" } }
+  ]
+}

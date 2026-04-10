@@ -1,4 +1,4 @@
-use ooxml_codegen::{CodegenConfig, FeatureMappings, NameMappings, Schema, generate, parse_rnc};
+use ooxml_codegen::{CodegenConfig, FeatureMappings, NameMappings, generate, parse_rnc};
 use std::fs;
 use std::path::Path;
 

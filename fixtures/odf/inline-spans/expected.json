@@ -1,0 +1,13 @@
+{
+  "description": "Inline bold and italic spans plus a line break",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Normal " } },
+    { "path": "/body/0/1", "kind": "span", "props": { "style_name": "Bold" } },
+    { "path": "/body/0/1/0", "kind": "text", "props": { "content": "bold" } },
+    { "path": "/body/0/3", "kind": "span", "props": { "style_name": "Italic" } },
+    { "path": "/body/0/3/0", "kind": "text", "props": { "content": "italic" } },
+    { "path": "/body/0/5", "kind": "line_break" }
+  ]
+}

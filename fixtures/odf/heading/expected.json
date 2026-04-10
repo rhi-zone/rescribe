@@ -1,0 +1,12 @@
+{
+  "description": "Headings at levels 1 and 2, followed by a paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "heading", "props": { "outline_level": 1 } },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Chapter One" } },
+    { "path": "/body/1", "kind": "heading", "props": { "outline_level": 2 } },
+    { "path": "/body/1/0", "kind": "text", "props": { "content": "Section 1.1" } },
+    { "path": "/body/2", "kind": "paragraph" },
+    { "path": "/body/2/0", "kind": "text", "props": { "content": "Paragraph text." } }
+  ]
+}
