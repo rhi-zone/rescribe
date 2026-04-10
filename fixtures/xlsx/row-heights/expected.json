@@ -27,25 +27,7 @@
       "kind": "text",
       "path": "/0/0/0/0/0",
       "props": {
-        "content": "Name"
-      }
-    },
-    {
-      "kind": "table_header",
-      "path": "/0/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/0/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0/1/0/0",
-      "props": {
-        "content": "Value"
+        "content": "Header"
       }
     },
     {
@@ -67,28 +49,32 @@
       "kind": "text",
       "path": "/0/1/0/0/0",
       "props": {
-        "content": "Alice"
+        "content": "Tall row"
       }
     },
     {
+      "kind": "table_row",
+      "path": "/0/2"
+    },
+    {
       "kind": "table_cell",
-      "path": "/0/1/1"
+      "path": "/0/2/0"
     },
     {
       "kind": "paragraph",
-      "path": "/0/1/1/0",
+      "path": "/0/2/0/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
-      "path": "/0/1/1/0/0",
+      "path": "/0/2/0/0/0",
       "props": {
-        "content": "42"
+        "content": "Normal row"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX spreadsheet with header row and one data row"
+  "description": "XLSX custom row heights — not represented in IR, cell content preserved"
 }

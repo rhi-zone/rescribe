@@ -27,7 +27,7 @@
       "kind": "text",
       "path": "/0/0/0/0/0",
       "props": {
-        "content": "A"
+        "content": "Section Header"
       }
     },
     {
@@ -36,16 +36,13 @@
     },
     {
       "kind": "paragraph",
-      "path": "/0/0/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
+      "path": "/0/0/1/0"
     },
     {
       "kind": "text",
       "path": "/0/0/1/0/0",
       "props": {
-        "content": "B"
+        "content": ""
       }
     },
     {
@@ -54,16 +51,13 @@
     },
     {
       "kind": "paragraph",
-      "path": "/0/0/2/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
+      "path": "/0/0/2/0"
     },
     {
       "kind": "text",
       "path": "/0/0/2/0/0",
       "props": {
-        "content": "Sum"
+        "content": ""
       }
     },
     {
@@ -78,14 +72,14 @@
       "kind": "paragraph",
       "path": "/0/1/0/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
       "path": "/0/1/0/0/0",
       "props": {
-        "content": "10"
+        "content": "Col1"
       }
     },
     {
@@ -96,14 +90,14 @@
       "kind": "paragraph",
       "path": "/0/1/1/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
       "path": "/0/1/1/0/0",
       "props": {
-        "content": "20"
+        "content": "Col2"
       }
     },
     {
@@ -114,17 +108,75 @@
       "kind": "paragraph",
       "path": "/0/1/2/0",
       "props": {
-        "xlsx:formula": "A2+B2"
+        "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
       "path": "/0/1/2/0/0",
       "props": {
-        "content": ""
+        "content": "Col3"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/0/2"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/2/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/2/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2/0/0/0",
+      "props": {
+        "content": "data1"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/2/1"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/2/1/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2/1/0/0",
+      "props": {
+        "content": "data2"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/2/2"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/2/2/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2/2/0/0",
+      "props": {
+        "content": "data3"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX formula cells have xlsx:formula property preserved for round-trip"
+  "description": "XLSX merged cells — fidelity warning emitted, cell content still parsed"
 }

@@ -3476,6 +3476,7 @@ dependencies = [
  "ooxml-sml",
  "rescribe-core",
  "rescribe-std",
+ "serde_json",
 ]
 
 [[package]]

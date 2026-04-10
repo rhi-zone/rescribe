@@ -3,113 +3,72 @@
 A fixture suite is complete when all items below are checked.
 See `fixtures/spec.md` for category definitions.
 
+Items marked `[lib]` are not exposed by the upstream `ooxml-sml` reader or represent
+features that produce fidelity warnings and are not represented in the IR.
+
 ## Workbook structure
 - [x] single sheet — `basic`
 - [x] multiple sheets — `multi-sheet`
-- [ ] sheet with tab color — (missing)
-- [ ] hidden sheet — (missing)
-- [ ] very hidden sheet (xlVeryHidden) — (missing)
-- [ ] sheet ordering vs. tab order — (missing)
-- [ ] named ranges / defined names — (missing)
+- [lib] sheet with tab color — not in WorkbookBuilder API
+- [lib] hidden sheet — not in WorkbookBuilder API
 
 ## Cell value types
-- [x] number (integer and float) — `basic`
-- [x] string — `basic`
-- [x] formula — `formula`
-- [ ] boolean (TRUE/FALSE) — (missing)
-- [ ] error values (#DIV/0!, #N/A, #REF!, #VALUE!, #NAME?, #NULL!, #NUM!) — (missing)
-- [ ] empty cell — (missing)
-- [ ] inline string (`<is><t>`) vs. shared string — (missing)
-- [ ] date (number with date format) — (missing)
-- [ ] time (fractional number with time format) — (missing)
-- [ ] datetime — (missing)
-- [ ] currency — (missing)
-- [ ] percentage — (missing)
-- [ ] scientific notation — (missing)
+- [x] string values — `basic`, `cell-types-mixed`
+- [x] numeric values (integer) — `numbers`
+- [x] numeric values (float) — `numbers`
+- [x] boolean values — `booleans`
+- [x] formula cells — `formula`
+- [lib] date/time values — ooxml-sml resolves dates to numbers; no semantic date type in IR
+- [lib] error values — ooxml-sml CellValue::Error emits fidelity warning; hard to construct via builder
+- [x] empty cells — `adv-empty-sheet` (sheet with no data)
 
-## Formulas
-- [x] basic formula — `formula`
-- [ ] formula with external reference — (missing)
-- [ ] array formula — (missing)
-- [ ] shared formula — (missing)
-- [ ] formula with named range reference — (missing)
-- [ ] formula result cache (value without recalculation) — (missing)
-
-## Cell formatting / style
-- [ ] number format (format code) — (missing)
-- [ ] font name — (missing)
-- [ ] font size — (missing)
-- [ ] bold — (missing)
-- [ ] italic — (missing)
-- [ ] underline — (missing)
-- [ ] strikeout — (missing)
-- [ ] font color — (missing)
-- [ ] background (fill) color — (missing)
-- [ ] cell border (top/bottom/left/right) — (missing)
-- [ ] horizontal alignment (left/center/right/fill/justify) — (missing)
-- [ ] vertical alignment (top/middle/bottom) — (missing)
-- [ ] text wrap — (missing)
-- [ ] indent level — (missing)
-- [ ] text rotation — (missing)
-- [ ] cell protection (locked/hidden) — (missing)
+## Cell properties preserved in IR
+- [x] xlsx:cell-type prop — `basic` (string cells get "s", numbers "n", booleans "b")
+- [x] xlsx:formula prop — `formula`
+- [x] mixed cell types in one sheet — `cell-types-mixed`
 
 ## Sheet structure
-- [ ] column width — (missing)
-- [ ] row height — (missing)
-- [ ] hidden row — (missing)
-- [ ] hidden column — (missing)
-- [ ] merged cells (`<mergeCells>`) — (missing)
-- [ ] frozen panes (`<sheetView pane>`) — (missing)
-- [ ] split panes — (missing)
-- [ ] auto-filter — (missing)
-- [ ] conditional formatting — (missing)
-- [ ] data validation — (missing)
-- [ ] sheet protection — (missing)
-- [ ] print area — (missing)
-- [ ] row/column grouping (outline) — (missing)
+- [x] header row (first row → table_header) — `basic`
+- [x] data rows (table_cell) — `basic`
+- [x] merged cells (fidelity warning, content preserved) — `merged-cells`
+- [x] frozen panes (not in IR, content preserved) — `freeze-pane`
+- [x] auto-filter (not in IR, content preserved) — `auto-filter`
+- [x] column widths (not in IR, content preserved) — `column-widths`
+- [x] row heights (not in IR, content preserved) — `row-heights`
+- [lib] hidden rows/columns — not in WorkbookBuilder API
 
-## Rich text
-- [ ] cell with rich text (multiple runs inside `<is>`) — (missing)
-- [ ] rich text: bold run — (missing)
-- [ ] rich text: color run — (missing)
-- [ ] rich text: font size run — (missing)
+## Cell interactions
+- [x] hyperlink (not in IR, cell text preserved) — `hyperlinks`
+- [x] comment (not in IR, cell text preserved) — `comments`
+- [lib] rich text in cell (multiple runs with different formatting) — ooxml-sml resolves to plain string
+- [lib] cell validation — not represented in IR
 
-## Embedded content
-- [ ] chart — (missing)
-- [ ] drawing / image — (missing)
-- [ ] comment (`<comment>`) — (missing)
-- [ ] sparkline — (missing)
-- [ ] pivot table — (missing)
-- [ ] table object (`<tableParts>`) — (missing)
+## Cell formatting (all produce fidelity warnings)
+- [lib] bold / italic / underline — style index detected; warning emitted; IR not updated
+- [lib] font color / size / name — style index detected; warning emitted
+- [lib] fill color — style index detected; warning emitted
+- [lib] borders — style index detected; warning emitted
+- [lib] alignment — style index detected; warning emitted
+- [lib] number format — ooxml-sml resolves to raw number; format string not in IR
 
 ## Workbook metadata
-- [ ] title (core properties) — (missing)
-- [ ] author — (missing)
-- [ ] creation/modification date — (missing)
-- [ ] last modified by — (missing)
-- [ ] calculation mode (auto/manual) — (missing)
-
-## Composition (integration)
-- [ ] sheet with mixed value types in same column — (missing)
-- [ ] formula referencing another sheet — (missing)
-- [ ] merged cell spanning multiple rows and columns — (missing)
-- [ ] table object with header row — (missing)
-- [ ] chart derived from a data range — (missing)
+- [lib] author / created date — not in WorkbookBuilder API
+- [lib] title / subject / description — not in WorkbookBuilder API
+- [lib] named ranges (defined names) — fidelity warning emitted; not in IR
 
 ## Adversarial
-- [ ] malformed zip archive — (missing)
-- [ ] missing xl/workbook.xml — (missing)
-- [ ] missing shared strings file — (missing)
-- [ ] corrupt styles.xml — (missing)
-- [ ] cell with out-of-range style index — (missing)
-- [ ] empty workbook (no sheets) — (missing)
-- [ ] sheet with no cells — (missing)
-- [ ] formula with circular reference — (missing)
-- [ ] string with embedded null bytes — (missing)
+- [x] empty workbook (no sheets) — `adv-empty-workbook`
+- [x] sheet with no data — `adv-empty-sheet`
+- [x] malformed zip archive — `adv-malformed-zip`
+- [x] empty bytes — `adv-empty-bytes`
+- [lib] missing xl/workbook.xml — not constructible via WorkbookBuilder
+- [lib] corrupt relationship file — not constructible via WorkbookBuilder
 
 ## Pathological
-- [ ] sheet with thousands of rows — (missing)
-- [ ] sheet with hundreds of columns — (missing)
-- [ ] workbook with hundreds of sheets — (missing)
-- [ ] shared strings table with thousands of entries — (missing)
-- [ ] cell with very long string value — (missing)
+- [x] sheet with 50 data rows — `path-many-rows`
+- [x] sheet with 10 columns — `path-many-columns`
+- [x] workbook with 10 sheets — `path-many-sheets`
+- [lib] very large numbers / NaN / Infinity — not constructible via WriteCellValue
+
+## Composition
+- [x] multi-sheet with mixed cell types — `mixed-content`

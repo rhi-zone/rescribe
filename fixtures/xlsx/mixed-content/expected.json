@@ -15,7 +15,7 @@
       "kind": "text",
       "path": "/0/0",
       "props": {
-        "content": "People"
+        "content": "Summary"
       }
     },
     {
@@ -41,7 +41,7 @@
       "kind": "text",
       "path": "/1/0/0/0/0",
       "props": {
-        "content": "Name"
+        "content": "Metric"
       }
     },
     {
@@ -59,7 +59,7 @@
       "kind": "text",
       "path": "/1/0/1/0/0",
       "props": {
-        "content": "Age"
+        "content": "Value"
       }
     },
     {
@@ -81,7 +81,7 @@
       "kind": "text",
       "path": "/1/1/0/0/0",
       "props": {
-        "content": "Alice"
+        "content": "Total"
       }
     },
     {
@@ -99,7 +99,7 @@
       "kind": "text",
       "path": "/1/1/1/0/0",
       "props": {
-        "content": "30"
+        "content": "100"
       }
     },
     {
@@ -121,7 +121,7 @@
       "kind": "text",
       "path": "/1/2/0/0/0",
       "props": {
-        "content": "Bob"
+        "content": "Passed"
       }
     },
     {
@@ -132,14 +132,54 @@
       "kind": "paragraph",
       "path": "/1/2/1/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "xlsx:cell-type": "b"
       }
     },
     {
       "kind": "text",
       "path": "/1/2/1/0/0",
       "props": {
-        "content": "25"
+        "content": "TRUE"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/1/3"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/1/3/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1/3/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/1/3/0/0/0",
+      "props": {
+        "content": "Rate"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/1/3/1"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1/3/1/0",
+      "props": {
+        "xlsx:formula": "B3/B2"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/1/3/1/0/0",
+      "props": {
+        "content": ""
       }
     },
     {
@@ -153,7 +193,7 @@
       "kind": "text",
       "path": "/2/0",
       "props": {
-        "content": "Products"
+        "content": "Details"
       }
     },
     {
@@ -179,7 +219,7 @@
       "kind": "text",
       "path": "/3/0/0/0/0",
       "props": {
-        "content": "Product"
+        "content": "Name"
       }
     },
     {
@@ -197,7 +237,7 @@
       "kind": "text",
       "path": "/3/0/1/0/0",
       "props": {
-        "content": "Price"
+        "content": "Result"
       }
     },
     {
@@ -219,7 +259,7 @@
       "kind": "text",
       "path": "/3/1/0/0/0",
       "props": {
-        "content": "Widget"
+        "content": "Test A"
       }
     },
     {
@@ -230,17 +270,57 @@
       "kind": "paragraph",
       "path": "/3/1/1/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
       "path": "/3/1/1/0/0",
       "props": {
-        "content": "9.99"
+        "content": "passed"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/3/2"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/3/2/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/3/2/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/3/2/0/0/0",
+      "props": {
+        "content": "Test B"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/3/2/1"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/3/2/1/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/3/2/1/0/0",
+      "props": {
+        "content": "passed"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX workbook with two sheets — each sheet produces heading + table"
+  "description": "XLSX multi-sheet workbook with mixed cell types including formula"
 }

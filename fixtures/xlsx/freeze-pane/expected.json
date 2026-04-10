@@ -5,242 +5,210 @@
       "path": "/"
     },
     {
-      "kind": "heading",
-      "path": "/0",
-      "props": {
-        "level": 2
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/0",
-      "props": {
-        "content": "People"
-      }
-    },
-    {
       "kind": "table",
-      "path": "/1"
+      "path": "/0"
     },
     {
       "kind": "table_row",
-      "path": "/1/0"
+      "path": "/0/0"
     },
     {
       "kind": "table_header",
-      "path": "/1/0/0"
+      "path": "/0/0/0"
     },
     {
       "kind": "paragraph",
-      "path": "/1/0/0/0",
+      "path": "/0/0/0/0",
       "props": {
         "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
-      "path": "/1/0/0/0/0",
+      "path": "/0/0/0/0/0",
       "props": {
         "content": "Name"
       }
     },
     {
       "kind": "table_header",
-      "path": "/1/0/1"
+      "path": "/0/0/1"
     },
     {
       "kind": "paragraph",
-      "path": "/1/0/1/0",
+      "path": "/0/0/1/0",
       "props": {
         "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
-      "path": "/1/0/1/0/0",
+      "path": "/0/0/1/0/0",
       "props": {
-        "content": "Age"
+        "content": "Value"
       }
     },
     {
       "kind": "table_row",
-      "path": "/1/1"
+      "path": "/0/1"
     },
     {
       "kind": "table_cell",
-      "path": "/1/1/0"
+      "path": "/0/1/0"
     },
     {
       "kind": "paragraph",
-      "path": "/1/1/0/0",
+      "path": "/0/1/0/0",
       "props": {
         "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
-      "path": "/1/1/0/0/0",
+      "path": "/0/1/0/0/0",
       "props": {
-        "content": "Alice"
+        "content": "Row 2"
       }
     },
     {
       "kind": "table_cell",
-      "path": "/1/1/1"
+      "path": "/0/1/1"
     },
     {
       "kind": "paragraph",
-      "path": "/1/1/1/0",
+      "path": "/0/1/1/0",
       "props": {
         "xlsx:cell-type": "n"
       }
     },
     {
       "kind": "text",
-      "path": "/1/1/1/0/0",
+      "path": "/0/1/1/0/0",
       "props": {
-        "content": "30"
+        "content": "2"
       }
     },
     {
       "kind": "table_row",
-      "path": "/1/2"
+      "path": "/0/2"
     },
     {
       "kind": "table_cell",
-      "path": "/1/2/0"
+      "path": "/0/2/0"
     },
     {
       "kind": "paragraph",
-      "path": "/1/2/0/0",
+      "path": "/0/2/0/0",
       "props": {
         "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
-      "path": "/1/2/0/0/0",
+      "path": "/0/2/0/0/0",
       "props": {
-        "content": "Bob"
+        "content": "Row 3"
       }
     },
     {
       "kind": "table_cell",
-      "path": "/1/2/1"
+      "path": "/0/2/1"
     },
     {
       "kind": "paragraph",
-      "path": "/1/2/1/0",
+      "path": "/0/2/1/0",
       "props": {
         "xlsx:cell-type": "n"
       }
     },
     {
       "kind": "text",
-      "path": "/1/2/1/0/0",
+      "path": "/0/2/1/0/0",
       "props": {
-        "content": "25"
-      }
-    },
-    {
-      "kind": "heading",
-      "path": "/2",
-      "props": {
-        "level": 2
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/2/0",
-      "props": {
-        "content": "Products"
-      }
-    },
-    {
-      "kind": "table",
-      "path": "/3"
-    },
-    {
-      "kind": "table_row",
-      "path": "/3/0"
-    },
-    {
-      "kind": "table_header",
-      "path": "/3/0/0"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/3/0/0/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/3/0/0/0/0",
-      "props": {
-        "content": "Product"
-      }
-    },
-    {
-      "kind": "table_header",
-      "path": "/3/0/1"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/3/0/1/0",
-      "props": {
-        "xlsx:cell-type": "s"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/3/0/1/0/0",
-      "props": {
-        "content": "Price"
+        "content": "3"
       }
     },
     {
       "kind": "table_row",
-      "path": "/3/1"
+      "path": "/0/3"
     },
     {
       "kind": "table_cell",
-      "path": "/3/1/0"
+      "path": "/0/3/0"
     },
     {
       "kind": "paragraph",
-      "path": "/3/1/0/0",
+      "path": "/0/3/0/0",
       "props": {
         "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
-      "path": "/3/1/0/0/0",
+      "path": "/0/3/0/0/0",
       "props": {
-        "content": "Widget"
+        "content": "Row 4"
       }
     },
     {
       "kind": "table_cell",
-      "path": "/3/1/1"
+      "path": "/0/3/1"
     },
     {
       "kind": "paragraph",
-      "path": "/3/1/1/0",
+      "path": "/0/3/1/0",
       "props": {
         "xlsx:cell-type": "n"
       }
     },
     {
       "kind": "text",
-      "path": "/3/1/1/0/0",
+      "path": "/0/3/1/0/0",
       "props": {
-        "content": "9.99"
+        "content": "4"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/0/4"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/4/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/4/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/4/0/0/0",
+      "props": {
+        "content": "Row 5"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/4/1"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/4/1/0",
+      "props": {
+        "xlsx:cell-type": "n"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/4/1/0/0",
+      "props": {
+        "content": "5"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX workbook with two sheets — each sheet produces heading + table"
+  "description": "XLSX frozen header row — freeze not represented in IR, content preserved"
 }

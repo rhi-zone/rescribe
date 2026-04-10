@@ -1,0 +1,630 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "path": "/"
+    },
+    {
+      "kind": "heading",
+      "path": "/0",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Sheet1"
+      }
+    },
+    {
+      "kind": "table",
+      "path": "/1"
+    },
+    {
+      "kind": "table_row",
+      "path": "/1/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/1/0/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1/0/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/1/0/0/0/0",
+      "props": {
+        "content": "Sheet 1 Header"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/1/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/1/1/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1/1/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/1/1/0/0/0",
+      "props": {
+        "content": "Sheet 1 Data"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/2",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/2/0",
+      "props": {
+        "content": "Sheet2"
+      }
+    },
+    {
+      "kind": "table",
+      "path": "/3"
+    },
+    {
+      "kind": "table_row",
+      "path": "/3/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/3/0/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/3/0/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/3/0/0/0/0",
+      "props": {
+        "content": "Sheet 2 Header"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/3/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/3/1/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/3/1/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/3/1/0/0/0",
+      "props": {
+        "content": "Sheet 2 Data"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/4",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/4/0",
+      "props": {
+        "content": "Sheet3"
+      }
+    },
+    {
+      "kind": "table",
+      "path": "/5"
+    },
+    {
+      "kind": "table_row",
+      "path": "/5/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/5/0/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/5/0/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/5/0/0/0/0",
+      "props": {
+        "content": "Sheet 3 Header"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/5/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/5/1/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/5/1/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/5/1/0/0/0",
+      "props": {
+        "content": "Sheet 3 Data"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/6",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/6/0",
+      "props": {
+        "content": "Sheet4"
+      }
+    },
+    {
+      "kind": "table",
+      "path": "/7"
+    },
+    {
+      "kind": "table_row",
+      "path": "/7/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/7/0/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/7/0/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/7/0/0/0/0",
+      "props": {
+        "content": "Sheet 4 Header"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/7/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/7/1/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/7/1/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/7/1/0/0/0",
+      "props": {
+        "content": "Sheet 4 Data"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/8",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/8/0",
+      "props": {
+        "content": "Sheet5"
+      }
+    },
+    {
+      "kind": "table",
+      "path": "/9"
+    },
+    {
+      "kind": "table_row",
+      "path": "/9/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/9/0/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/9/0/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/9/0/0/0/0",
+      "props": {
+        "content": "Sheet 5 Header"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/9/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/9/1/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/9/1/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/9/1/0/0/0",
+      "props": {
+        "content": "Sheet 5 Data"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/10",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/10/0",
+      "props": {
+        "content": "Sheet6"
+      }
+    },
+    {
+      "kind": "table",
+      "path": "/11"
+    },
+    {
+      "kind": "table_row",
+      "path": "/11/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/11/0/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/11/0/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/11/0/0/0/0",
+      "props": {
+        "content": "Sheet 6 Header"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/11/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/11/1/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/11/1/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/11/1/0/0/0",
+      "props": {
+        "content": "Sheet 6 Data"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/12",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/12/0",
+      "props": {
+        "content": "Sheet7"
+      }
+    },
+    {
+      "kind": "table",
+      "path": "/13"
+    },
+    {
+      "kind": "table_row",
+      "path": "/13/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/13/0/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/13/0/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/13/0/0/0/0",
+      "props": {
+        "content": "Sheet 7 Header"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/13/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/13/1/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/13/1/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/13/1/0/0/0",
+      "props": {
+        "content": "Sheet 7 Data"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/14",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/14/0",
+      "props": {
+        "content": "Sheet8"
+      }
+    },
+    {
+      "kind": "table",
+      "path": "/15"
+    },
+    {
+      "kind": "table_row",
+      "path": "/15/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/15/0/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/15/0/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/15/0/0/0/0",
+      "props": {
+        "content": "Sheet 8 Header"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/15/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/15/1/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/15/1/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/15/1/0/0/0",
+      "props": {
+        "content": "Sheet 8 Data"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/16",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/16/0",
+      "props": {
+        "content": "Sheet9"
+      }
+    },
+    {
+      "kind": "table",
+      "path": "/17"
+    },
+    {
+      "kind": "table_row",
+      "path": "/17/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/17/0/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/17/0/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/17/0/0/0/0",
+      "props": {
+        "content": "Sheet 9 Header"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/17/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/17/1/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/17/1/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/17/1/0/0/0",
+      "props": {
+        "content": "Sheet 9 Data"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/18",
+      "props": {
+        "level": 2
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/18/0",
+      "props": {
+        "content": "Sheet10"
+      }
+    },
+    {
+      "kind": "table",
+      "path": "/19"
+    },
+    {
+      "kind": "table_row",
+      "path": "/19/0"
+    },
+    {
+      "kind": "table_header",
+      "path": "/19/0/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/19/0/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/19/0/0/0/0",
+      "props": {
+        "content": "Sheet 10 Header"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/19/1"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/19/1/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/19/1/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/19/1/0/0/0",
+      "props": {
+        "content": "Sheet 10 Data"
+      }
+    }
+  ],
+  "category": "pathological",
+  "description": "XLSX workbook with 10 sheets — all parsed without panic"
+}

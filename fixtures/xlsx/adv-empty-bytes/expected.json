@@ -1,0 +1,6 @@
+{
+  "assertions": [],
+  "category": "adversarial",
+  "description": "Empty input bytes return a parse error without panic",
+  "expect_error": true
+}

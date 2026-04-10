@@ -27,7 +27,7 @@
       "kind": "text",
       "path": "/0/0/0/0/0",
       "props": {
-        "content": "Name"
+        "content": "Description"
       }
     },
     {
@@ -45,7 +45,7 @@
       "kind": "text",
       "path": "/0/0/1/0/0",
       "props": {
-        "content": "Value"
+        "content": "URL"
       }
     },
     {
@@ -67,7 +67,7 @@
       "kind": "text",
       "path": "/0/1/0/0/0",
       "props": {
-        "content": "Alice"
+        "content": "Example site"
       }
     },
     {
@@ -78,17 +78,17 @@
       "kind": "paragraph",
       "path": "/0/1/1/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
       "path": "/0/1/1/0/0",
       "props": {
-        "content": "42"
+        "content": "https://example.com"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX spreadsheet with header row and one data row"
+  "description": "XLSX cell with hyperlink — URL not represented in IR, cell text preserved"
 }

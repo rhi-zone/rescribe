@@ -27,7 +27,7 @@
       "kind": "text",
       "path": "/0/0/0/0/0",
       "props": {
-        "content": "Name"
+        "content": "Narrow"
       }
     },
     {
@@ -45,7 +45,25 @@
       "kind": "text",
       "path": "/0/0/1/0/0",
       "props": {
-        "content": "Value"
+        "content": "Wide"
+      }
+    },
+    {
+      "kind": "table_header",
+      "path": "/0/0/2"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/0/2/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/2/0/0",
+      "props": {
+        "content": "Normal"
       }
     },
     {
@@ -67,7 +85,7 @@
       "kind": "text",
       "path": "/0/1/0/0/0",
       "props": {
-        "content": "Alice"
+        "content": "short"
       }
     },
     {
@@ -78,17 +96,35 @@
       "kind": "paragraph",
       "path": "/0/1/1/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
       "path": "/0/1/1/0/0",
       "props": {
-        "content": "42"
+        "content": "a longer piece of text"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/1/2"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/1/2/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/2/0/0",
+      "props": {
+        "content": "medium text"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX spreadsheet with header row and one data row"
+  "description": "XLSX column widths — not represented in IR, cell content preserved"
 }

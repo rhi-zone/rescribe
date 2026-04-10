@@ -27,7 +27,7 @@
       "kind": "text",
       "path": "/0/0/0/0/0",
       "props": {
-        "content": "A"
+        "content": "Product"
       }
     },
     {
@@ -45,7 +45,7 @@
       "kind": "text",
       "path": "/0/0/1/0/0",
       "props": {
-        "content": "B"
+        "content": "Category"
       }
     },
     {
@@ -63,7 +63,7 @@
       "kind": "text",
       "path": "/0/0/2/0/0",
       "props": {
-        "content": "Sum"
+        "content": "Price"
       }
     },
     {
@@ -78,14 +78,14 @@
       "kind": "paragraph",
       "path": "/0/1/0/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
       "path": "/0/1/0/0/0",
       "props": {
-        "content": "10"
+        "content": "Widget"
       }
     },
     {
@@ -96,14 +96,14 @@
       "kind": "paragraph",
       "path": "/0/1/1/0",
       "props": {
-        "xlsx:cell-type": "n"
+        "xlsx:cell-type": "s"
       }
     },
     {
       "kind": "text",
       "path": "/0/1/1/0/0",
       "props": {
-        "content": "20"
+        "content": "Tools"
       }
     },
     {
@@ -114,17 +114,75 @@
       "kind": "paragraph",
       "path": "/0/1/2/0",
       "props": {
-        "xlsx:formula": "A2+B2"
+        "xlsx:cell-type": "n"
       }
     },
     {
       "kind": "text",
       "path": "/0/1/2/0/0",
       "props": {
-        "content": ""
+        "content": "9.99"
+      }
+    },
+    {
+      "kind": "table_row",
+      "path": "/0/2"
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/2/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/2/0/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2/0/0/0",
+      "props": {
+        "content": "Gadget"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/2/1"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/2/1/0",
+      "props": {
+        "xlsx:cell-type": "s"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2/1/0/0",
+      "props": {
+        "content": "Electronics"
+      }
+    },
+    {
+      "kind": "table_cell",
+      "path": "/0/2/2"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/2/2/0",
+      "props": {
+        "xlsx:cell-type": "n"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2/2/0/0",
+      "props": {
+        "content": "29.99"
       }
     }
   ],
   "category": "happy",
-  "description": "XLSX formula cells have xlsx:formula property preserved for round-trip"
+  "description": "XLSX auto-filter range — filter not represented in IR, content preserved"
 }

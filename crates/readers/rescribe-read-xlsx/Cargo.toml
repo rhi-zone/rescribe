@@ -10,3 +10,8 @@ description = "XLSX (Excel) reader for rescribe"
 rescribe-core.workspace = true
 rescribe-std.workspace = true
 ooxml-sml.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "gen_fixtures"
+path = "src/bin/gen_fixtures.rs"
