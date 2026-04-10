@@ -1,0 +1,11 @@
+{
+  "description": "binary element is decoded and stored as a resource; inline image references it by id",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div" },
+    { "path": "/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text",  "props": { "content": "See " } },
+    { "path": "/0/0/0/1", "kind": "image", "props": { "url": "cover" } },
+    { "path": "/0/0/0/2", "kind": "text",  "props": { "content": "." } }
+  ]
+}

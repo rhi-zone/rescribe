@@ -1,0 +1,15 @@
+{
+  "description": "multiple binary elements are each decoded and stored as resources; inline images reference them by id",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div" },
+    { "path": "/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text",  "props": { "content": "Cover: " } },
+    { "path": "/0/0/0/1", "kind": "image", "props": { "url": "cover" } },
+    { "path": "/0/0/0/2", "kind": "text",  "props": { "content": "." } },
+    { "path": "/0/0/1",   "kind": "paragraph" },
+    { "path": "/0/0/1/0", "kind": "text",  "props": { "content": "Logo: " } },
+    { "path": "/0/0/1/1", "kind": "image", "props": { "url": "logo" } },
+    { "path": "/0/0/1/2", "kind": "text",  "props": { "content": "." } }
+  ]
+}

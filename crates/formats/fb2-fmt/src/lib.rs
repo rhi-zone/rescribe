@@ -22,6 +22,7 @@ pub mod ast;
 mod emit;
 mod events;
 mod parse;
+pub mod writer;
 
 pub use ast::*;
 pub use emit::emit;

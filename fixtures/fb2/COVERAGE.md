@@ -53,8 +53,8 @@ FictionBook 2 schema reference: http://www.fictionbook.org/index.php/Eng:Fiction
 
 ## Binary resources
 
-- [ ] binary image embedding — (missing; `<binary id="…" content-type="image/png">base64…</binary>`)
-- [ ] multiple binaries — (missing; document with several embedded image resources)
+- [x] binary image embedding — `binary-image` (`<binary id="…" content-type="image/png">base64…</binary>`)
+- [x] multiple binaries — `multiple-binaries` (document with two embedded image resources)
 
 ## Properties
 
