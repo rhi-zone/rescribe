@@ -117,6 +117,17 @@ corpus analysis tool. These use cases exist whether rescribe does or not.
   (77M+ weekly downloads) is a non-goal. Callers needing true chunked CommonMark
   streaming should use pulldown-cmark directly or wait for a future native parser.
 
+- **Library-backed ("Tier B") formats still require a proper `-fmt` crate.** Wrapping
+  an upstream library does not reduce the requirements — the `-fmt` crate must still
+  expose all three reader APIs and both writer APIs, each independently optimal.
+  When the upstream library supports multiple modes (tree building, event/SAX,
+  chunked input), the `-fmt` crate must use the right mode for each API. A wrapper
+  that funnels everything through the tree builder is a fake streaming API.
+  pulldown-cmark's `StreamingParser` buffering is the documented exception
+  (upstream requires full `&str`), not the template. **Performance cannot be
+  sacrificed — full stop — except in very extenuating circumstances that must be
+  documented and justified per-library.**
+
 - **`ooxml-fmt` is the priority target for the full three-API architecture.** DOCX,
   XLSX, and PPTX routinely exceed RAM on large corpora; `StreamingParser` is not
   optional there. The ooxml-fmt rework (after commonmark-fmt and the five hand-rolled
