@@ -7,13 +7,21 @@ use fb2_fmt::{
     Section, SectionContent, Stanza, Table, TitlePara,
 };
 use rescribe_core::{
-    ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Resource,
-    ResourceId, ResourceMap, Severity, WarningKind,
+    ConversionResult, Document, FidelityWarning, Node, ParseError, ParseOptions, Properties,
+    Resource, ResourceId, ResourceMap, Severity, WarningKind,
 };
 use rescribe_std::{node, prop};
 
 /// Parse FB2 XML into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
+    parse_with_options(input, &ParseOptions::default())
+}
+
+/// Parse FB2 XML into a document with custom options.
+pub fn parse_with_options(
+    input: &str,
+    _options: &ParseOptions,
+) -> Result<ConversionResult<Document>, ParseError> {
     let (fb, diags) = fb2_fmt::parse_str(input);
 
     let warnings: Vec<FidelityWarning> = diags
