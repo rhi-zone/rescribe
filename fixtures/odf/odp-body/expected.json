@@ -1,0 +1,12 @@
+{
+  "description": "ODP presentation body with one slide containing a title and subtitle shape",
+  "category": "happy",
+  "metadata": {
+    "title": "Test Presentation"
+  },
+  "assertions": [
+    { "path": "/body/pages/0", "kind": "draw_page", "props": { "name": "slide1", "master_page_name": "Default" } },
+    { "path": "/body/pages/0/shapes/0", "kind": "draw_shape", "props": { "presentation_class": "title" } },
+    { "path": "/body/pages/0/shapes/1", "kind": "draw_shape", "props": { "presentation_class": "subtitle" } }
+  ]
+}

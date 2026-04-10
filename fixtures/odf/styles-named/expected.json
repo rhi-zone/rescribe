@@ -1,0 +1,8 @@
+{
+  "description": "Named paragraph style (from styles.xml) with bold text and font-size properties",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph", "props": { "style_name": "MyHeading" } },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Styled heading." } }
+  ]
+}

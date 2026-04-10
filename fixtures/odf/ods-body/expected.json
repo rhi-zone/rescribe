@@ -1,0 +1,14 @@
+{
+  "description": "ODS spreadsheet body with one sheet, a header row, and a data row with a float cell",
+  "category": "happy",
+  "metadata": {
+    "title": "Sales Data"
+  },
+  "assertions": [
+    { "path": "/body/sheets/0", "kind": "sheet", "props": { "name": "Sales" } },
+    { "path": "/body/sheets/0/rows/0/cells/0", "kind": "sheet_cell", "props": { "value_type": "string", "value": "Product" } },
+    { "path": "/body/sheets/0/rows/0/cells/1", "kind": "sheet_cell", "props": { "value_type": "string", "value": "Revenue" } },
+    { "path": "/body/sheets/0/rows/1/cells/0", "kind": "sheet_cell", "props": { "value_type": "string", "value": "Widget" } },
+    { "path": "/body/sheets/0/rows/1/cells/1", "kind": "sheet_cell", "props": { "value_type": "float", "value": "1500" } }
+  ]
+}

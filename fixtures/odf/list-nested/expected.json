@@ -1,0 +1,12 @@
+{
+  "description": "Nested list: outer list with an inner sub-list inside the first item",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "list" },
+    { "path": "/body/0/items/0/content/0/0", "kind": "text", "props": { "content": "Outer item 1" } },
+    { "path": "/body/0/items/0/content/1", "kind": "list" },
+    { "path": "/body/0/items/0/content/1/items/0/content/0/0", "kind": "text", "props": { "content": "Inner item A" } },
+    { "path": "/body/0/items/0/content/1/items/1/content/0/0", "kind": "text", "props": { "content": "Inner item B" } },
+    { "path": "/body/0/items/1/content/0/0", "kind": "text", "props": { "content": "Outer item 2" } }
+  ]
+}

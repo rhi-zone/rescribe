@@ -1,0 +1,7 @@
+{
+  "description": "List nested 20 levels deep — tests stack-depth robustness",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/body/0", "kind": "list" }
+  ]
+}

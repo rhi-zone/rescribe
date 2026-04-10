@@ -1,0 +1,12 @@
+{
+  "description": "Paragraph with text:tab elements used as column separators",
+  "category": "rare",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Column A" } },
+    { "path": "/body/0/1", "kind": "tab" },
+    { "path": "/body/0/2", "kind": "text", "props": { "content": "Column B" } },
+    { "path": "/body/0/3", "kind": "tab" },
+    { "path": "/body/0/4", "kind": "text", "props": { "content": "Column C" } }
+  ]
+}

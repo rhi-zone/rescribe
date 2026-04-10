@@ -1,0 +1,10 @@
+{
+  "description": "Paragraph with a text:s space-run element representing multiple consecutive spaces",
+  "category": "rare",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Before" } },
+    { "path": "/body/0/1", "kind": "space", "props": { "count": 5 } },
+    { "path": "/body/0/2", "kind": "text", "props": { "content": "After" } }
+  ]
+}

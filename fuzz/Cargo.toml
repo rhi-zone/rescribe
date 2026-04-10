@@ -307,6 +307,9 @@ path = "../crates/writers/rescribe-write-slideous"
 [dependencies.rescribe-write-slidy]
 path = "../crates/writers/rescribe-write-slidy"
 
+[dependencies.odf-fmt]
+path = "../crates/formats/odf-fmt"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -1003,3 +1006,17 @@ name = "fuzz_slidy_writer"
 path = "fuzz_targets/slidy_writer.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "fuzz_odf_fmt_reader"
+path = "fuzz_targets/odf_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_odf_fmt_roundtrip"
+path = "fuzz_targets/odf_fmt_roundtrip.rs"
+test = false
+doc = false
+bench = false

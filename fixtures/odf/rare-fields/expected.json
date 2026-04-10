@@ -1,0 +1,11 @@
+{
+  "description": "Inline field elements: page-number and page-count",
+  "category": "rare",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Page " } },
+    { "path": "/body/0/1", "kind": "field", "props": { "name": "text:page-number", "value": "1" } },
+    { "path": "/body/0/2", "kind": "text", "props": { "content": " of " } },
+    { "path": "/body/0/3", "kind": "field", "props": { "name": "text:page-count", "value": "10" } }
+  ]
+}

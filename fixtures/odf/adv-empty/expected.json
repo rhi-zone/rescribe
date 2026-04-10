@@ -1,0 +1,5 @@
+{
+  "description": "Document with an empty body (OdfBody::Empty) — must parse without panic or error",
+  "category": "adversarial",
+  "assertions": []
+}

@@ -1,0 +1,10 @@
+{
+  "description": "Endnote inline element (text:note with note-class=endnote)",
+  "category": "rare",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Text with an endnote" } },
+    { "path": "/body/0/1", "kind": "note", "props": { "note_class": "endnote", "id": "edn1", "citation": "i" } },
+    { "path": "/body/0/1/body/0/0", "kind": "text", "props": { "content": "This is the endnote text." } }
+  ]
+}

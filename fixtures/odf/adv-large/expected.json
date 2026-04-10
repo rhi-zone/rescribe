@@ -1,0 +1,10 @@
+{
+  "description": "Document with 500 paragraphs — tests performance and absence of pathological slowdowns",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Paragraph number 1 with some filler text to make it non-trivial." } },
+    { "path": "/body/499", "kind": "paragraph" },
+    { "path": "/body/499/0", "kind": "text", "props": { "content": "Paragraph number 500 with some filler text to make it non-trivial." } }
+  ]
+}

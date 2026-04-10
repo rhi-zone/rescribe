@@ -1,0 +1,12 @@
+{
+  "description": "Table with a cell that spans two columns, followed by a covered cell",
+  "category": "rare",
+  "assertions": [
+    { "path": "/body/0", "kind": "table", "props": { "name": "SpanTable" } },
+    { "path": "/body/0/rows/0/cells/0", "kind": "table_cell", "props": { "col_span": 2 } },
+    { "path": "/body/0/rows/0/cells/0/content/0/0", "kind": "text", "props": { "content": "Wide cell" } },
+    { "path": "/body/0/rows/0/cells/1", "kind": "table_cell", "props": { "covered": true } },
+    { "path": "/body/0/rows/1/cells/0/content/0/0", "kind": "text", "props": { "content": "A" } },
+    { "path": "/body/0/rows/1/cells/1/content/0/0", "kind": "text", "props": { "content": "B" } }
+  ]
+}

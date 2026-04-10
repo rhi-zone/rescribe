@@ -27,6 +27,8 @@
 //! - **`parse()`** — full [`OdfDocument`] AST
 //! - **`events()`** — SAX-style iterator, yields [`OdfEvent`] per element
 //! - **`emit()`** — serialise an [`OdfDocument`] back to a ZIP archive
+//! - **[`batch::BatchParser`]** — chunk-driven (feed/finish) reader
+//! - **[`batch::Writer`]** — event-driven writer (feed events, flush ZIP on finish)
 //!
 //! # ODF version coverage
 //!
@@ -37,6 +39,7 @@
 //! [`generated`] module and provide attribute structs and simple-type enums.
 
 pub mod ast;
+pub mod batch;
 pub mod error;
 pub mod events;
 pub mod generated;

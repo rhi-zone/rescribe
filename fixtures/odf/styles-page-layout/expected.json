@@ -1,0 +1,8 @@
+{
+  "description": "Document with a page layout definition (A4 portrait with margins)",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Document with custom page layout." } }
+  ]
+}

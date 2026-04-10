@@ -1,0 +1,10 @@
+{
+  "description": "Inline draw:frame with a draw:image inside a paragraph",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph" },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "See image: " } },
+    { "path": "/body/0/1", "kind": "frame", "props": { "name": "Image1", "anchor_type": "as-char" } },
+    { "path": "/body/0/2", "kind": "text", "props": { "content": " caption here." } }
+  ]
+}

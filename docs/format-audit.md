@@ -1,6 +1,6 @@
 # Format Implementation Audit
 
-Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc writer APIs added 2026-03-23 (streaming + builder); 2026-03-29: definition of 5-Production tightened — reader-only no longer qualifies; RST/Org/AsciiDoc demoted from R:5 to R:4 due to construct gaps (tables, footnotes); writer column updated from 2→4 (API modes complete, fuzz clean, construct gaps remain). djot-fmt + textile-fmt signed off at 5-Production (2026-03-29). RST/AsciiDoc/Org signed off at 5-Production (2026-03-29; all construct gaps closed: tables, footnotes, math, nested blockquotes, figure/caption). 2026-03-30: muse/t2t/man/markua/creole/dokuwiki/vimwiki/zimwiki/xwiki/twiki/tikiwiki/jira/mediawiki all completed to R:4/W:4; fountain/texinfo/bbcode/pod/haddock/ansi same (all constructs + API modes + fixtures; need fuzz re-run). 2026-04-10: commonmark/gfm writers promoted W:3→W:5 (fuzz_commonmark_reader 284K runs clean, fuzz_commonmark_roundtrip 197K runs clean; all writer API modes already implemented). 2026-03-31: all 44 fuzz targets (22 format pairs) ran clean — 12 fuzz failures found and fixed (djot-fmt char/byte panics, sanitiser gaps across textile/twiki/muse/mediawiki/haddock/t2t/markua); all 19 R:4/W:4 formats promoted to 5-Production.
+Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/texinfo 2→4; mediawiki 3→4; odt/fb2/docbook/jats/opml/tei 3→4; commonmark/gfm/markdown-strict/multimarkdown 3→4; pulldown-cmark upgraded to 0.13; beamer/revealjs/slidy/s5/dzslides/slideous/context/ms/icml/chunkedhtml/plaintext writers 2→4); RST/Org/AsciiDoc writer APIs added 2026-03-23 (streaming + builder); 2026-03-29: definition of 5-Production tightened — reader-only no longer qualifies; RST/Org/AsciiDoc demoted from R:5 to R:4 due to construct gaps (tables, footnotes); writer column updated from 2→4 (API modes complete, fuzz clean, construct gaps remain). djot-fmt + textile-fmt signed off at 5-Production (2026-03-29). RST/AsciiDoc/Org signed off at 5-Production (2026-03-29; all construct gaps closed: tables, footnotes, math, nested blockquotes, figure/caption). 2026-03-30: muse/t2t/man/markua/creole/dokuwiki/vimwiki/zimwiki/xwiki/twiki/tikiwiki/jira/mediawiki all completed to R:4/W:4; fountain/texinfo/bbcode/pod/haddock/ansi same (all constructs + API modes + fixtures; need fuzz re-run). 2026-04-10: commonmark/gfm writers promoted W:3→W:5 (fuzz_commonmark_reader 284K runs clean, fuzz_commonmark_roundtrip 197K runs clean; all writer API modes already implemented). 2026-03-31: all 44 fuzz targets (22 format pairs) ran clean — 12 fuzz failures found and fixed (djot-fmt char/byte panics, sanitiser gaps across textile/twiki/muse/mediawiki/haddock/t2t/markua); all 19 R:4/W:4 formats promoted to 5-Production. 2026-04-10: odf-fmt signed off at 5-Production (ODS/ODP full AST support, complete fixture suite, batch API, streaming writer, fuzz targets wired).
 
 ## Maturity Pipeline
 
@@ -78,7 +78,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | Format | R | W | Library | R-next | W-next |
 |--------|---|---|---------|--------|--------|
 | docx | 5† | 4† | ooxml-wml | – | production |
-| odt | 4 | 2 | quick-xml / hand | production | harness |
+| odt | 5 | 5 | odf-fmt (standalone) | – | – |
 | epub | 4† | 3† | epub / epub-builder | production | fuzz |
 | fb2 | 4 | 2 | hand | production | harness |
 | pptx | 4† | 3† | ooxml-pml | production | fuzz |
@@ -260,11 +260,13 @@ odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native
   - **0 files (0%) with diagnostics** — complete elimination via char-props + triage
   - ~150 layout/formatting/revision-tracking control words in ignored list
 
-### ODT writer — medium risk
-- 404 lines building ODF zip by hand (no schema library)
-- Reader uses `quick-xml`; writer generates raw XML strings
-- No ODT equivalent of `ooxml-wml`/`ooxml-pml` exists in the ecosystem
-- Reader promoted to 3-Harness (100% coverage, 6 corpus files, 2026-03-01)
+### odf-fmt — 5-Production (2026-04-10)
+- Standalone `odf-fmt` crate covering ODT/ODS/ODP; no rescribe dependency
+- Full AST: TextBlock, Inline, SpreadsheetBody, PresentationBody, styles, metadata
+- API modes: parse(), events(), emit(), batch::BatchParser, batch::Writer
+- Fixture suite complete: 30 fixtures, all COVERAGE.md boxes checked
+- Fuzz targets: fuzz_odf_fmt_reader (no-panic) + fuzz_odf_fmt_roundtrip (AST roundtrip)
+- ADR-001 documents unified-crate decision (vs per-application-type split)
 
 ### RST reader — 5-Production (2026-03-22)
 - Pandoc harness: 100% word coverage on rst-reader.rst (ref=618, ours=668)

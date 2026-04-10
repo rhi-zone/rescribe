@@ -1,0 +1,10 @@
+{
+  "description": "Ordered list with three items and a named list style",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "list", "props": { "style_name": "Ordered_20_List_20_1" } },
+    { "path": "/body/0/items/0/content/0/0", "kind": "text", "props": { "content": "First step" } },
+    { "path": "/body/0/items/1/content/0/0", "kind": "text", "props": { "content": "Second step" } },
+    { "path": "/body/0/items/2/content/0/0", "kind": "text", "props": { "content": "Third step" } }
+  ]
+}

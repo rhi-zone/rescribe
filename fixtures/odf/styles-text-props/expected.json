@@ -1,0 +1,9 @@
+{
+  "description": "Automatic style with text properties: bold=true, color=#cc0000, font-size=14pt",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph", "props": { "style_name": "Default" } },
+    { "path": "/body/0/0", "kind": "span", "props": { "style_name": "BoldStyle" } },
+    { "path": "/body/0/0/0", "kind": "text", "props": { "content": "Bold red text" } }
+  ]
+}

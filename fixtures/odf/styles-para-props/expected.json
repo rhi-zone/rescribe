@@ -1,0 +1,8 @@
+{
+  "description": "Automatic paragraph style with alignment=center and margin properties",
+  "category": "happy",
+  "assertions": [
+    { "path": "/body/0", "kind": "paragraph", "props": { "style_name": "CenteredPara" } },
+    { "path": "/body/0/0", "kind": "text", "props": { "content": "Centered paragraph." } }
+  ]
+}
