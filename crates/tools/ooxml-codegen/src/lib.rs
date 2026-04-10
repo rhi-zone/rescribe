@@ -21,9 +21,65 @@ pub use event_gen::{AttrFieldDef, ContainerDef, EventConfig, LeafDef, generate_e
 pub use parser_gen::generate_parsers;
 pub use serializer_gen::generate_serializers;
 
+/// Strip RNC annotations from input before parsing.
+///
+/// Handles two annotation forms used in ODF schemas (not present in OOXML):
+/// - Abbreviated: `>> QName [ ... ]`
+/// - Inline block: `[ QName [ ... ] ... ]` (standalone annotation block)
+///
+/// Annotations carry no schema semantics; stripping them is safe for codegen.
+/// String literals (`"..."`) are passed through unchanged so `[` inside strings
+/// (e.g. inside xsd:string patterns) is never mis-identified as an annotation.
+fn strip_rnc_annotations(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+
+    /// Skip a balanced `[ ... ]` block, consuming the opening `[`.
+    fn skip_bracket_block(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+        let mut depth = 1usize;
+        loop {
+            match chars.next() {
+                None => break,
+                Some('"') => { while !matches!(chars.next(), None | Some('"')) {} }
+                Some('[') => depth += 1,
+                Some(']') => { depth -= 1; if depth == 0 { break; } }
+                _ => {}
+            }
+        }
+    }
+
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                // Pass string literals through verbatim
+                out.push('"');
+                for sc in chars.by_ref() {
+                    out.push(sc);
+                    if sc == '"' { break; }
+                }
+            }
+            '>' if chars.peek() == Some(&'>') => {
+                // >> QName [ ... ] — skip the whole annotation
+                chars.next(); // second '>'
+                while chars.peek().map(|c| c.is_whitespace()).unwrap_or(false) { chars.next(); }
+                while chars.peek().map(|c| !c.is_whitespace() && *c != '[').unwrap_or(false) { chars.next(); }
+                while chars.peek().map(|c| c.is_whitespace()).unwrap_or(false) { chars.next(); }
+                if chars.peek() == Some(&'[') { chars.next(); skip_bracket_block(&mut chars); }
+            }
+            '[' => {
+                // Standalone annotation block — skip entirely
+                skip_bracket_block(&mut chars);
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// Parse an RNC schema from a string.
 pub fn parse_rnc(input: &str) -> Result<Schema, Error> {
-    let tokens = Lexer::new(input).tokenize()?;
+    let stripped = strip_rnc_annotations(input);
+    let tokens = Lexer::new(&stripped).tokenize()?;
     let schema = Parser::new(tokens).parse()?;
     Ok(schema)
 }

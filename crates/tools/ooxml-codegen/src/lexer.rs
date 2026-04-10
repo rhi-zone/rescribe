@@ -127,6 +127,25 @@ impl<'a> Lexer<'a> {
                 Ok(Token::Colon)
             }
             '"' => self.read_quoted_string(),
+            // RNC escaped keyword: \identifier — strip backslash, always return Ident
+            // (the \ escape explicitly means "treat as identifier, not keyword")
+            '\\' => {
+                self.input.next();
+                let mut s = String::new();
+                while let Some(&ch) = self.input.peek() {
+                    if ch.is_alphanumeric() || ch == '_' || ch == '-' {
+                        s.push(ch);
+                        self.input.next();
+                    } else {
+                        break;
+                    }
+                }
+                if s.is_empty() {
+                    Err(LexError::UnexpectedChar('\\', self.current_line))
+                } else {
+                    Ok(Token::Ident(s))
+                }
+            }
             _ if ch.is_alphabetic() || ch == '_' => self.read_ident(),
             _ => Err(LexError::UnexpectedChar(ch, self.current_line)),
         }

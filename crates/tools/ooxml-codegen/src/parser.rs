@@ -297,18 +297,58 @@ impl Parser {
         })
     }
 
+    /// Returns true if, after consuming the `|` at `self.pos`, what follows looks like
+    /// a name class start (qualified name, `*`, `(`), not a pattern keyword.
+    /// Called when `self.pos` points at the `|` token.
+    fn pipe_followed_by_name_class(&self) -> bool {
+        // self.pos = Pipe; self.pos+1 = potential name class start; self.pos+2 = potential Colon
+        let after_pipe = self.tokens.get(self.pos + 1);
+        match after_pipe {
+            Some(Token::Star) | Some(Token::LParen) => true,
+            // A keyword/ident is a name class start only if followed by `:` (prefix:local form)
+            Some(
+                Token::Ident(_)
+                | Token::Text
+                | Token::Mixed
+                | Token::List
+                | Token::Empty
+                | Token::String
+                | Token::Namespace
+                | Token::Attribute
+                | Token::Element
+            ) => {
+                matches!(self.tokens.get(self.pos + 2), Some(Token::Colon))
+            }
+            _ => false,
+        }
+    }
+
     /// Parse a name class (handles wildcards, namespace wildcards, and exclusions).
     fn parse_name_class(&mut self) -> Result<NameClass, ParseError> {
         let left = self.parse_name_class_primary()?;
 
-        // Check for subtraction: `nc - nc`
-        if self.check(&Token::Minus) {
+        // Check for name class alternation: `nc | nc | nc`
+        // Only consume `|` if what follows looks like another name class, not a pattern.
+        if self.check(&Token::Pipe) && self.pipe_followed_by_name_class() {
+            // Already have `left`; collect more alternatives
+        } else if self.check(&Token::Minus) {
             self.advance();
             let right = self.parse_name_class_primary()?;
             return Ok(NameClass::Except(Box::new(left), Box::new(right)));
+        } else {
+            return Ok(left);
         }
 
-        Ok(left)
+        let mut choices = vec![left];
+        while self.check(&Token::Pipe) && self.pipe_followed_by_name_class() {
+            self.advance();
+            choices.push(self.parse_name_class_primary()?);
+        }
+        if choices.len() == 1 {
+            Ok(choices.pop().unwrap())
+        } else {
+            Ok(NameClass::Choice(choices))
+        }
     }
 
     fn parse_name_class_primary(&mut self) -> Result<NameClass, ParseError> {
@@ -470,30 +510,27 @@ impl Parser {
     }
 
     fn expect_ident(&mut self) -> Result<String, ParseError> {
+        // In ODF schemas, RNC keywords (text, list, mixed, etc.) are also used as
+        // namespace prefixes and definition-name components. Accept any keyword as an
+        // identifier — their keyword role is determined by syntactic position, not by
+        // being forbidden as names.
         match self.peek() {
-            Some(Token::Ident(s)) => {
-                let s = s.clone();
-                self.advance();
-                Ok(s)
-            }
+            Some(Token::Ident(s)) => { let s = s.clone(); self.advance(); Ok(s) }
+            Some(Token::Text) => { self.advance(); Ok("text".to_string()) }
+            Some(Token::String) => { self.advance(); Ok("string".to_string()) }
+            Some(Token::Mixed) => { self.advance(); Ok("mixed".to_string()) }
+            Some(Token::List) => { self.advance(); Ok("list".to_string()) }
+            Some(Token::Empty) => { self.advance(); Ok("empty".to_string()) }
+            Some(Token::Element) => { self.advance(); Ok("element".to_string()) }
+            Some(Token::Attribute) => { self.advance(); Ok("attribute".to_string()) }
+            Some(Token::Namespace) => { self.advance(); Ok("namespace".to_string()) }
             _ => Err(self.error("expected identifier")),
         }
     }
 
     /// Like expect_ident but also accepts keywords that can be type names (e.g., "string" in xsd:string).
     fn expect_ident_or_keyword(&mut self) -> Result<String, ParseError> {
-        match self.peek() {
-            Some(Token::Ident(s)) => {
-                let s = s.clone();
-                self.advance();
-                Ok(s)
-            }
-            Some(Token::String) => {
-                self.advance();
-                Ok("string".to_string())
-            }
-            _ => Err(self.error("expected identifier or type name")),
-        }
+        self.expect_ident()
     }
 
     fn expect_string(&mut self) -> Result<String, ParseError> {
