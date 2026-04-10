@@ -22,21 +22,17 @@
       "kind": "text",
       "path": "/0/0/0",
       "props": {
-        "content": "Slide Title"
+        "content": "Image With Alt Text"
       }
     },
     {
-      "kind": "paragraph",
-      "path": "/0/1"
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/0",
+      "kind": "image",
+      "path": "/0/1",
       "props": {
-        "content": "Content paragraph."
+        "alt": "A decorative red square"
       }
     }
   ],
   "category": "happy",
-  "description": "PPTX slide with title and content paragraph"
+  "description": "PPTX image with description mapped to image node with alt property"
 }

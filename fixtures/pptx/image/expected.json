@@ -22,21 +22,14 @@
       "kind": "text",
       "path": "/0/0/0",
       "props": {
-        "content": "Slide Title"
+        "content": "Image Slide"
       }
     },
     {
-      "kind": "paragraph",
+      "kind": "image",
       "path": "/0/1"
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/0",
-      "props": {
-        "content": "Content paragraph."
-      }
     }
   ],
   "category": "happy",
-  "description": "PPTX slide with title and content paragraph"
+  "description": "PPTX inline image mapped to image node with url property"
 }

@@ -22,7 +22,7 @@
       "kind": "text",
       "path": "/0/0/0",
       "props": {
-        "content": "Formatting Test"
+        "content": "Hyperlink Test"
       }
     },
     {
@@ -33,28 +33,10 @@
       "kind": "text",
       "path": "/0/1/0",
       "props": {
-        "content": "This is "
-      }
-    },
-    {
-      "kind": "strong",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/1/0",
-      "props": {
-        "content": "bold"
-      }
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/2",
-      "props": {
-        "content": " text."
+        "content": "Visit Example"
       }
     }
   ],
   "category": "happy",
-  "description": "PPTX bold text run mapped to strong node"
+  "description": "PPTX hyperlink in text run mapped to link node"
 }

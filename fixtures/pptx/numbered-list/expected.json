@@ -22,14 +22,14 @@
       "kind": "text",
       "path": "/0/0/0",
       "props": {
-        "content": "Bullet Slide"
+        "content": "Numbered List"
       }
     },
     {
       "kind": "list",
       "path": "/0/1",
       "props": {
-        "ordered": false
+        "ordered": true
       }
     },
     {
@@ -44,7 +44,7 @@
       "kind": "text",
       "path": "/0/1/0/0/0",
       "props": {
-        "content": "First bullet"
+        "content": "First item"
       }
     },
     {
@@ -59,7 +59,7 @@
       "kind": "text",
       "path": "/0/1/1/0/0",
       "props": {
-        "content": "Second bullet"
+        "content": "Second item"
       }
     },
     {
@@ -74,10 +74,10 @@
       "kind": "text",
       "path": "/0/1/2/0/0",
       "props": {
-        "content": "Third bullet"
+        "content": "Third item"
       }
     }
   ],
   "category": "happy",
-  "description": "PPTX bullet paragraphs grouped into list/list_item nodes"
+  "description": "PPTX numbered (auto-numbered) paragraphs grouped into ordered list"
 }

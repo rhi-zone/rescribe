@@ -1,0 +1,118 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "path": "/"
+    },
+    {
+      "kind": "div",
+      "path": "/0",
+      "props": {
+        "slide": 1
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/0/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0",
+      "props": {
+        "content": "Formatting Mix"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "Plain, "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/1/0",
+      "props": {
+        "content": "bold"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/2",
+      "props": {
+        "content": ", "
+      }
+    },
+    {
+      "kind": "emphasis",
+      "path": "/0/1/3"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/3/0",
+      "props": {
+        "content": "italic"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/4",
+      "props": {
+        "content": ", "
+      }
+    },
+    {
+      "kind": "underline",
+      "path": "/0/1/5"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/5/0",
+      "props": {
+        "content": "underline"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/6",
+      "props": {
+        "content": ", and "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/7"
+    },
+    {
+      "kind": "emphasis",
+      "path": "/0/1/7/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/7/0/0",
+      "props": {
+        "content": "bold-italic"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/8",
+      "props": {
+        "content": "."
+      }
+    }
+  ],
+  "category": "happy",
+  "description": "PPTX slide with mixed inline formatting in a single text shape"
+}

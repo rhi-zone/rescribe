@@ -22,7 +22,7 @@
       "kind": "text",
       "path": "/0/0/0",
       "props": {
-        "content": "Table Slide"
+        "content": "Summary"
       }
     },
     {
@@ -45,7 +45,7 @@
       "kind": "text",
       "path": "/0/1/0/0/0/0",
       "props": {
-        "content": "Name"
+        "content": "Item"
       }
     },
     {
@@ -60,22 +60,7 @@
       "kind": "text",
       "path": "/0/1/0/1/0/0",
       "props": {
-        "content": "Age"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/0/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/0/2/0"
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/0/2/0/0",
-      "props": {
-        "content": "City"
+        "content": "Status"
       }
     },
     {
@@ -94,7 +79,7 @@
       "kind": "text",
       "path": "/0/1/1/0/0/0",
       "props": {
-        "content": "Alice"
+        "content": "Task A"
       }
     },
     {
@@ -109,22 +94,7 @@
       "kind": "text",
       "path": "/0/1/1/1/0/0",
       "props": {
-        "content": "30"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/1/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/1/2/0"
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/1/2/0/0",
-      "props": {
-        "content": "London"
+        "content": "Done"
       }
     },
     {
@@ -143,7 +113,7 @@
       "kind": "text",
       "path": "/0/1/2/0/0/0",
       "props": {
-        "content": "Bob"
+        "content": "Task B"
       }
     },
     {
@@ -158,25 +128,10 @@
       "kind": "text",
       "path": "/0/1/2/1/0/0",
       "props": {
-        "content": "25"
-      }
-    },
-    {
-      "kind": "table_cell",
-      "path": "/0/1/2/2"
-    },
-    {
-      "kind": "paragraph",
-      "path": "/0/1/2/2/0"
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/2/2/0/0",
-      "props": {
-        "content": "Paris"
+        "content": "In Progress"
       }
     }
   ],
   "category": "happy",
-  "description": "PPTX table shape mapped to table/table_row/table_cell nodes"
+  "description": "PPTX slide combining title and table"
 }

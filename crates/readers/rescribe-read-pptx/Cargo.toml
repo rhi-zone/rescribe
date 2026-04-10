@@ -9,8 +9,13 @@ description = "PPTX (PowerPoint) reader for rescribe"
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+
 ooxml-pml.workspace = true
 ooxml-dml.workspace = true
-
-[dev-dependencies]
+serde_json.workspace = true
 zip = "2"
+
+
+[[bin]]
+name = "gen_fixtures"
+path = "src/bin/gen_fixtures.rs"

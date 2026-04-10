@@ -1,0 +1,110 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "path": "/"
+    },
+    {
+      "kind": "div",
+      "path": "/0",
+      "props": {
+        "slide": 1
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/0/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0",
+      "props": {
+        "content": "Slide One"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "First slide content."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/0/2",
+      "props": {
+        "notes": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/2/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/2/0/0",
+      "props": {
+        "content": "Notes for slide one."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/1",
+      "props": {
+        "slide": 2
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/1/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/1/0/0",
+      "props": {
+        "content": "Slide Two"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1/1"
+    },
+    {
+      "kind": "text",
+      "path": "/1/1/0",
+      "props": {
+        "content": "Second slide content."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/1/2",
+      "props": {
+        "notes": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1/2/0"
+    },
+    {
+      "kind": "text",
+      "path": "/1/2/0/0",
+      "props": {
+        "content": "Notes for slide two."
+      }
+    }
+  ],
+  "category": "happy",
+  "description": "PPTX multi-slide presentation where each slide has speaker notes"
+}

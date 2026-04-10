@@ -22,7 +22,7 @@
       "kind": "text",
       "path": "/0/0/0",
       "props": {
-        "content": "Formatting Test"
+        "content": "Underline Test"
       }
     },
     {
@@ -37,14 +37,14 @@
       }
     },
     {
-      "kind": "strong",
+      "kind": "underline",
       "path": "/0/1/1"
     },
     {
       "kind": "text",
       "path": "/0/1/1/0",
       "props": {
-        "content": "bold"
+        "content": "underlined"
       }
     },
     {
@@ -56,5 +56,5 @@
     }
   ],
   "category": "happy",
-  "description": "PPTX bold text run mapped to strong node"
+  "description": "PPTX underlined text run mapped to underline node"
 }

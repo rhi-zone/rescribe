@@ -1,0 +1,10 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "path": "/"
+    }
+  ],
+  "category": "adversarial",
+  "description": "PPTX presentation with zero slides produces empty document"
+}

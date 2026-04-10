@@ -1,0 +1,935 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "path": "/"
+    },
+    {
+      "kind": "div",
+      "path": "/0",
+      "props": {
+        "slide": 1
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/0/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0",
+      "props": {
+        "content": "Many Text Runs"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "word0 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/1/0",
+      "props": {
+        "content": "bold0 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/2",
+      "props": {
+        "content": "word1 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/3"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/3/0",
+      "props": {
+        "content": "bold1 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/4",
+      "props": {
+        "content": "word2 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/5"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/5/0",
+      "props": {
+        "content": "bold2 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/6",
+      "props": {
+        "content": "word3 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/7"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/7/0",
+      "props": {
+        "content": "bold3 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/8",
+      "props": {
+        "content": "word4 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/9"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/9/0",
+      "props": {
+        "content": "bold4 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/10",
+      "props": {
+        "content": "word5 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/11"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/11/0",
+      "props": {
+        "content": "bold5 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/12",
+      "props": {
+        "content": "word6 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/13"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/13/0",
+      "props": {
+        "content": "bold6 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/14",
+      "props": {
+        "content": "word7 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/15"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/15/0",
+      "props": {
+        "content": "bold7 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/16",
+      "props": {
+        "content": "word8 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/17"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/17/0",
+      "props": {
+        "content": "bold8 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/18",
+      "props": {
+        "content": "word9 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/19"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/19/0",
+      "props": {
+        "content": "bold9 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/20",
+      "props": {
+        "content": "word10 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/21"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/21/0",
+      "props": {
+        "content": "bold10 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/22",
+      "props": {
+        "content": "word11 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/23"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/23/0",
+      "props": {
+        "content": "bold11 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/24",
+      "props": {
+        "content": "word12 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/25"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/25/0",
+      "props": {
+        "content": "bold12 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/26",
+      "props": {
+        "content": "word13 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/27"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/27/0",
+      "props": {
+        "content": "bold13 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/28",
+      "props": {
+        "content": "word14 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/29"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/29/0",
+      "props": {
+        "content": "bold14 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/30",
+      "props": {
+        "content": "word15 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/31"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/31/0",
+      "props": {
+        "content": "bold15 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/32",
+      "props": {
+        "content": "word16 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/33"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/33/0",
+      "props": {
+        "content": "bold16 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/34",
+      "props": {
+        "content": "word17 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/35"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/35/0",
+      "props": {
+        "content": "bold17 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/36",
+      "props": {
+        "content": "word18 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/37"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/37/0",
+      "props": {
+        "content": "bold18 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/38",
+      "props": {
+        "content": "word19 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/39"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/39/0",
+      "props": {
+        "content": "bold19 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/40",
+      "props": {
+        "content": "word20 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/41"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/41/0",
+      "props": {
+        "content": "bold20 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/42",
+      "props": {
+        "content": "word21 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/43"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/43/0",
+      "props": {
+        "content": "bold21 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/44",
+      "props": {
+        "content": "word22 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/45"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/45/0",
+      "props": {
+        "content": "bold22 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/46",
+      "props": {
+        "content": "word23 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/47"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/47/0",
+      "props": {
+        "content": "bold23 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/48",
+      "props": {
+        "content": "word24 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/49"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/49/0",
+      "props": {
+        "content": "bold24 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/50",
+      "props": {
+        "content": "word25 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/51"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/51/0",
+      "props": {
+        "content": "bold25 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/52",
+      "props": {
+        "content": "word26 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/53"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/53/0",
+      "props": {
+        "content": "bold26 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/54",
+      "props": {
+        "content": "word27 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/55"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/55/0",
+      "props": {
+        "content": "bold27 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/56",
+      "props": {
+        "content": "word28 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/57"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/57/0",
+      "props": {
+        "content": "bold28 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/58",
+      "props": {
+        "content": "word29 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/59"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/59/0",
+      "props": {
+        "content": "bold29 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/60",
+      "props": {
+        "content": "word30 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/61"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/61/0",
+      "props": {
+        "content": "bold30 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/62",
+      "props": {
+        "content": "word31 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/63"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/63/0",
+      "props": {
+        "content": "bold31 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/64",
+      "props": {
+        "content": "word32 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/65"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/65/0",
+      "props": {
+        "content": "bold32 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/66",
+      "props": {
+        "content": "word33 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/67"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/67/0",
+      "props": {
+        "content": "bold33 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/68",
+      "props": {
+        "content": "word34 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/69"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/69/0",
+      "props": {
+        "content": "bold34 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/70",
+      "props": {
+        "content": "word35 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/71"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/71/0",
+      "props": {
+        "content": "bold35 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/72",
+      "props": {
+        "content": "word36 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/73"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/73/0",
+      "props": {
+        "content": "bold36 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/74",
+      "props": {
+        "content": "word37 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/75"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/75/0",
+      "props": {
+        "content": "bold37 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/76",
+      "props": {
+        "content": "word38 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/77"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/77/0",
+      "props": {
+        "content": "bold38 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/78",
+      "props": {
+        "content": "word39 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/79"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/79/0",
+      "props": {
+        "content": "bold39 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/80",
+      "props": {
+        "content": "word40 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/81"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/81/0",
+      "props": {
+        "content": "bold40 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/82",
+      "props": {
+        "content": "word41 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/83"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/83/0",
+      "props": {
+        "content": "bold41 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/84",
+      "props": {
+        "content": "word42 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/85"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/85/0",
+      "props": {
+        "content": "bold42 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/86",
+      "props": {
+        "content": "word43 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/87"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/87/0",
+      "props": {
+        "content": "bold43 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/88",
+      "props": {
+        "content": "word44 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/89"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/89/0",
+      "props": {
+        "content": "bold44 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/90",
+      "props": {
+        "content": "word45 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/91"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/91/0",
+      "props": {
+        "content": "bold45 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/92",
+      "props": {
+        "content": "word46 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/93"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/93/0",
+      "props": {
+        "content": "bold46 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/94",
+      "props": {
+        "content": "word47 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/95"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/95/0",
+      "props": {
+        "content": "bold47 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/96",
+      "props": {
+        "content": "word48 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/97"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/97/0",
+      "props": {
+        "content": "bold48 "
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/98",
+      "props": {
+        "content": "word49 "
+      }
+    },
+    {
+      "kind": "strong",
+      "path": "/0/1/99"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/99/0",
+      "props": {
+        "content": "bold49 "
+      }
+    }
+  ],
+  "category": "pathological",
+  "description": "PPTX slide with 100 text runs (alternating plain and bold)"
+}

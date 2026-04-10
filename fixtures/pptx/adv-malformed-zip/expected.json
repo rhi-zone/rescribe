@@ -1,0 +1,6 @@
+{
+  "assertions": [],
+  "category": "adversarial",
+  "description": "Malformed zip bytes return a parse error without panic",
+  "expect_error": true
+}

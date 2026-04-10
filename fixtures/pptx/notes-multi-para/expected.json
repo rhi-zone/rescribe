@@ -22,7 +22,7 @@
       "kind": "text",
       "path": "/0/0/0",
       "props": {
-        "content": "Formatting Test"
+        "content": "Multi-Para Notes"
       }
     },
     {
@@ -33,28 +33,28 @@
       "kind": "text",
       "path": "/0/1/0",
       "props": {
-        "content": "This is "
+        "content": "Content."
       }
     },
     {
-      "kind": "strong",
-      "path": "/0/1/1"
-    },
-    {
-      "kind": "text",
-      "path": "/0/1/1/0",
+      "kind": "div",
+      "path": "/0/2",
       "props": {
-        "content": "bold"
+        "notes": true
       }
     },
     {
+      "kind": "paragraph",
+      "path": "/0/2/0"
+    },
+    {
       "kind": "text",
-      "path": "/0/1/2",
+      "path": "/0/2/0/0",
       "props": {
-        "content": " text."
+        "content": "First paragraph of notes.\nSecond paragraph of notes.\nThird paragraph."
       }
     }
   ],
   "category": "happy",
-  "description": "PPTX bold text run mapped to strong node"
+  "description": "PPTX speaker notes with multiple paragraphs produce multiple paragraph nodes"
 }

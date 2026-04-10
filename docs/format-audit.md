@@ -81,7 +81,7 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | odt | 5 | 5 | odf-fmt (standalone) | – | – |
 | epub | 5† | 5† | epub / epub-builder | – | – |
 | fb2 | 4 | 2 | hand | production | harness |
-| pptx | 4† | 3† | ooxml-pml | production | fuzz |
+| pptx | 5† | 4† | ooxml-pml | – | fuzz |
 | xlsx | 4† | 3† | ooxml-sml | production | fuzz |
 | pdf | 4† | – | pdf-extract | production | – |
 | rtf | 5 | 5 | rtf-fmt (standalone) | – | – |

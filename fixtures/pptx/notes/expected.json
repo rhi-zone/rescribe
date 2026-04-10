@@ -1,14 +1,60 @@
 {
-  "description": "PPTX slide with speaker notes; notes rendered as plain text in a nested div",
-  "category": "happy",
   "assertions": [
-    { "path": "/", "kind": "document" },
-    { "path": "/0", "kind": "div", "props": { "slide": 1 } },
-    { "path": "/0/0", "kind": "heading", "props": { "level": 1 } },
-    { "path": "/0/0/0", "kind": "text", "props": { "content": "Slide Title" } },
-    { "path": "/0/1", "kind": "paragraph" },
-    { "path": "/0/1/0", "kind": "text", "props": { "content": "Content paragraph." } },
-    { "path": "/0/2", "kind": "div", "props": { "notes": true } },
-    { "path": "/0/2/0", "kind": "paragraph" }
-  ]
+    {
+      "kind": "document",
+      "path": "/"
+    },
+    {
+      "kind": "div",
+      "path": "/0",
+      "props": {
+        "slide": 1
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/0/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0",
+      "props": {
+        "content": "Slide With Notes"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "Main content."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/0/2",
+      "props": {
+        "notes": true
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/2/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/2/0/0",
+      "props": {
+        "content": "These are the speaker notes for this slide."
+      }
+    }
+  ],
+  "category": "happy",
+  "description": "PPTX speaker notes become a div[notes] node"
 }

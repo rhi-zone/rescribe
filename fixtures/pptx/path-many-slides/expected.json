@@ -1,0 +1,650 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "path": "/"
+    },
+    {
+      "kind": "div",
+      "path": "/0",
+      "props": {
+        "slide": 1
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/0/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0",
+      "props": {
+        "content": "Slide 1"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "Content of slide 1."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/1",
+      "props": {
+        "slide": 2
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/1/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/1/0/0",
+      "props": {
+        "content": "Slide 2"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1/1"
+    },
+    {
+      "kind": "text",
+      "path": "/1/1/0",
+      "props": {
+        "content": "Content of slide 2."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/2",
+      "props": {
+        "slide": 3
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/2/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/2/0/0",
+      "props": {
+        "content": "Slide 3"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/2/1"
+    },
+    {
+      "kind": "text",
+      "path": "/2/1/0",
+      "props": {
+        "content": "Content of slide 3."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/3",
+      "props": {
+        "slide": 4
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/3/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/3/0/0",
+      "props": {
+        "content": "Slide 4"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/3/1"
+    },
+    {
+      "kind": "text",
+      "path": "/3/1/0",
+      "props": {
+        "content": "Content of slide 4."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/4",
+      "props": {
+        "slide": 5
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/4/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/4/0/0",
+      "props": {
+        "content": "Slide 5"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/4/1"
+    },
+    {
+      "kind": "text",
+      "path": "/4/1/0",
+      "props": {
+        "content": "Content of slide 5."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/5",
+      "props": {
+        "slide": 6
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/5/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/5/0/0",
+      "props": {
+        "content": "Slide 6"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/5/1"
+    },
+    {
+      "kind": "text",
+      "path": "/5/1/0",
+      "props": {
+        "content": "Content of slide 6."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/6",
+      "props": {
+        "slide": 7
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/6/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/6/0/0",
+      "props": {
+        "content": "Slide 7"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/6/1"
+    },
+    {
+      "kind": "text",
+      "path": "/6/1/0",
+      "props": {
+        "content": "Content of slide 7."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/7",
+      "props": {
+        "slide": 8
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/7/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/7/0/0",
+      "props": {
+        "content": "Slide 8"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/7/1"
+    },
+    {
+      "kind": "text",
+      "path": "/7/1/0",
+      "props": {
+        "content": "Content of slide 8."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/8",
+      "props": {
+        "slide": 9
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/8/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/8/0/0",
+      "props": {
+        "content": "Slide 9"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/8/1"
+    },
+    {
+      "kind": "text",
+      "path": "/8/1/0",
+      "props": {
+        "content": "Content of slide 9."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/9",
+      "props": {
+        "slide": 10
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/9/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/9/0/0",
+      "props": {
+        "content": "Slide 10"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/9/1"
+    },
+    {
+      "kind": "text",
+      "path": "/9/1/0",
+      "props": {
+        "content": "Content of slide 10."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/10",
+      "props": {
+        "slide": 11
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/10/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/10/0/0",
+      "props": {
+        "content": "Slide 11"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/10/1"
+    },
+    {
+      "kind": "text",
+      "path": "/10/1/0",
+      "props": {
+        "content": "Content of slide 11."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/11",
+      "props": {
+        "slide": 12
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/11/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/11/0/0",
+      "props": {
+        "content": "Slide 12"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/11/1"
+    },
+    {
+      "kind": "text",
+      "path": "/11/1/0",
+      "props": {
+        "content": "Content of slide 12."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/12",
+      "props": {
+        "slide": 13
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/12/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/12/0/0",
+      "props": {
+        "content": "Slide 13"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/12/1"
+    },
+    {
+      "kind": "text",
+      "path": "/12/1/0",
+      "props": {
+        "content": "Content of slide 13."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/13",
+      "props": {
+        "slide": 14
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/13/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/13/0/0",
+      "props": {
+        "content": "Slide 14"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/13/1"
+    },
+    {
+      "kind": "text",
+      "path": "/13/1/0",
+      "props": {
+        "content": "Content of slide 14."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/14",
+      "props": {
+        "slide": 15
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/14/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/14/0/0",
+      "props": {
+        "content": "Slide 15"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/14/1"
+    },
+    {
+      "kind": "text",
+      "path": "/14/1/0",
+      "props": {
+        "content": "Content of slide 15."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/15",
+      "props": {
+        "slide": 16
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/15/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/15/0/0",
+      "props": {
+        "content": "Slide 16"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/15/1"
+    },
+    {
+      "kind": "text",
+      "path": "/15/1/0",
+      "props": {
+        "content": "Content of slide 16."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/16",
+      "props": {
+        "slide": 17
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/16/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/16/0/0",
+      "props": {
+        "content": "Slide 17"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/16/1"
+    },
+    {
+      "kind": "text",
+      "path": "/16/1/0",
+      "props": {
+        "content": "Content of slide 17."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/17",
+      "props": {
+        "slide": 18
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/17/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/17/0/0",
+      "props": {
+        "content": "Slide 18"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/17/1"
+    },
+    {
+      "kind": "text",
+      "path": "/17/1/0",
+      "props": {
+        "content": "Content of slide 18."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/18",
+      "props": {
+        "slide": 19
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/18/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/18/0/0",
+      "props": {
+        "content": "Slide 19"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/18/1"
+    },
+    {
+      "kind": "text",
+      "path": "/18/1/0",
+      "props": {
+        "content": "Content of slide 19."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/19",
+      "props": {
+        "slide": 20
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/19/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/19/0/0",
+      "props": {
+        "content": "Slide 20"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/19/1"
+    },
+    {
+      "kind": "text",
+      "path": "/19/1/0",
+      "props": {
+        "content": "Content of slide 20."
+      }
+    }
+  ],
+  "category": "pathological",
+  "description": "PPTX with 20 slides — all parsed without panic"
+}

@@ -9,6 +9,7 @@ use zip::write::SimpleFileOptions;
 // ── EPUB construction helpers ──────────────────────────────────────────────
 
 /// Full OPF package document with extended metadata fields.
+#[allow(clippy::too_many_arguments)]
 fn opf_extended(
     title: &str,
     author: &str,

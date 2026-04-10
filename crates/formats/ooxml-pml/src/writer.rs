@@ -2361,9 +2361,28 @@ impl SlideBuilder {
         self
     }
 
+    /// Add text runs as body content, auto-positioned below the title (or at the top if no title).
+    ///
+    /// Mirrors [`add_text`] but accepts a [`Vec<TextRun>`] for mixed formatting.
+    /// For explicit positioning use [`add_text_with_runs`].
+    pub fn add_content_runs(&mut self, runs: Vec<TextRun>) -> &mut Self {
+        let has_title = self
+            .slide
+            .common_slide_data
+            .shape_tree
+            .shape
+            .iter()
+            .any(|s| s.non_visual_properties.c_nv_pr.name == "Title")
+            || self.hyperlink_elements.iter().any(|e| e.is_title);
+
+        let y_offset = if has_title { 1600200 } else { 274638 };
+        self.add_text_with_runs(runs, 457200, y_offset, 8229600, 4525963)
+    }
+
     /// Add text with mixed content (including hyperlinks) at a specific position.
     ///
     /// Use [`TextRun`] to create runs with or without hyperlinks and formatting.
+    /// For auto-positioned body content, use [`add_content_runs`].
     pub fn add_text_with_runs(
         &mut self,
         runs: Vec<TextRun>,
