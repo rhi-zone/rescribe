@@ -424,10 +424,9 @@ The rule: adapter production code must not contain format parsing/writing.
 Large line counts from AST↔IR translation are acceptable (DOCX, PPTX are genuinely complex).
 The violation is format-parsing deps (quick-xml, zip, etc.) called from production functions.
 
-- **`rescribe-read-docx`**: `parse_numbering_order()` uses `quick-xml` to parse
-  `numbering.xml` in production code. This belongs in `ooxml-wml`.
-- **`rescribe-read-odt`**: ~1828 lines. Has `odf-fmt` but adapter doesn't use it at all —
-  calls `quick-xml` and `zip` directly. Real violation. Fix when working odt vertical.
+- **`rescribe-read-docx`**: CLEAN — `parse_numbering_order()` moved to `ooxml-wml` (fixed 2026-04-10).
+- **`rescribe-read-odt`**: CLEAN — rewritten to use `odf_fmt::parse()` (fixed 2026-04-10).
+- **`rescribe-write-odt`**: CLEAN — rewritten to use `odf_fmt::emit()` (fixed 2026-04-10).
 - **`rescribe-read-pptx`**: `zip` in `[dependencies]` but only used by `gen_fixtures`
   binary and `#[cfg(test)]`. Production parsing path is clean. Acceptable.
 - **`rescribe-read-fb2`**: CLEAN — uses `fb2-fmt` (fixed 2026-04-10).
