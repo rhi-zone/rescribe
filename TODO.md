@@ -174,7 +174,7 @@ full design spec and per-vertical checklist. Short version:
 - `parse(input) -> (Ast, Vec<Diagnostic>)` + `events()` pull iterator
 - `emit(ast) -> String` with round-trip guarantee
 - No `Document`, `Node`, or `Properties` anywhere in the standalone crate
-- Thin rescribe adapter (≤300 lines each side)
+- Rescribe adapter does only AST↔IR translation (no format parsing/writing)
 
 ---
 
@@ -418,20 +418,20 @@ from scratch as a proper standalone library.
 - [x] `w-build`: `emit()` builder writer
 - [x] `w-stream`: Writer<W: Write> streaming writer — exists as writer::Writer<W> (token-level; 2026-03-28)
 
-### DEBT: Fat IR adapter crates — identified 2026-04-10
+### DEBT: Adapter crates containing format parsing logic — identified 2026-04-10
 
-The architectural rule (≤300 lines per adapter; no parsing logic in adapter) is violated
-by several crates. `fb2-fmt` was created 2026-04-10 and the adapters are now clean.
-Remaining violations to fix when working each format's vertical:
+The rule: adapter production code must not contain format parsing/writing.
+Large line counts from AST↔IR translation are acceptable (DOCX, PPTX are genuinely complex).
+The violation is format-parsing deps (quick-xml, zip, etc.) called from production functions.
 
-- **`rescribe-read-docx`**: ~1019 lines (3.4× limit). Uses `ooxml-wml`. Needs thinning.
-- **`rescribe-write-docx`**: ~931 lines (3.1× limit). Same.
-- **`rescribe-read-pptx`**: ~476 lines (1.6× limit). Uses `ooxml-pml`. Needs thinning.
-- **`rescribe-write-pptx`**: ~425 lines (1.4× limit). Same.
-- **`rescribe-read-odt`**: ~1828 lines (SEVERE). Has `odf-fmt` crate but reader doesn't use it.
-- **`rescribe-write-odt`**: unknown size. Same issue.
-- **`rescribe-read-fb2`**: ~276 non-test lines. NOW CLEAN (uses `fb2-fmt`).
-- **`rescribe-write-fb2`**: ~354 non-test lines. Minor trim opportunity but no parsing logic.
+- **`rescribe-read-docx`**: `parse_numbering_order()` uses `quick-xml` to parse
+  `numbering.xml` in production code. This belongs in `ooxml-wml`.
+- **`rescribe-read-odt`**: ~1828 lines. Has `odf-fmt` but adapter doesn't use it at all —
+  calls `quick-xml` and `zip` directly. Real violation. Fix when working odt vertical.
+- **`rescribe-read-pptx`**: `zip` in `[dependencies]` but only used by `gen_fixtures`
+  binary and `#[cfg(test)]`. Production parsing path is clean. Acceptable.
+- **`rescribe-read-fb2`**: CLEAN — uses `fb2-fmt` (fixed 2026-04-10).
+- **`rescribe-write-fb2`**: CLEAN — uses `fb2-fmt` (fixed 2026-04-10).
 
 Fix each when doing that format's vertical. Do NOT fix all at once (horizontal sweep).
 

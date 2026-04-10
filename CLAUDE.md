@@ -128,7 +128,7 @@ corpus analysis tool. These use cases exist whether rescribe does or not.
 ### The adapter layer must never contain parsing or writing logic
 
 **`rescribe-read-{format}` and `rescribe-write-{format}` are not the format library.**
-They are thin translators between the format's native `Ast` and rescribe's `Document`.
+They are translators between the format's native `Ast` and rescribe's `Document`.
 All parsing and writing logic belongs in `{format}-fmt`.
 
 **Rule:** Before writing a single line of `rescribe-read-{format}` or
@@ -139,20 +139,34 @@ rescribe-read-{fmt}: {fmt}-fmt::parse(bytes) → {fmt}_fmt::Ast → rescribe Doc
 rescribe-write-{fmt}: rescribe Document → {fmt}_fmt::Ast → {fmt}-fmt::emit(ast) → bytes
 ```
 
-**Hard limits:**
-- `rescribe-read-{format}/src/lib.rs` must be ≤300 lines — if it's longer, logic leaked in
-- `rescribe-write-{format}/src/lib.rs` must be ≤300 lines — same rule
-- No XML parsing, no regex, no format-specific state machines in adapter crates
-- No `quick-xml`, `roxmltree`, or other format-parsing deps in adapter `Cargo.toml`
+**The violation is format parsing in production adapter code, not line count.**
+An adapter that does only AST→IR translation can legitimately be 500+ lines for a
+complex format (DOCX, PPTX). A 50-line adapter that calls `quick_xml::Reader` is
+broken regardless of its size. The correct test:
+
+> Does the adapter's **production code** contain any tokenizing, parsing, or emitting
+> of format bytes? If yes, that code belongs in the `-fmt` crate.
+
+**What counts as parsing/writing logic in production code:**
+- Any `quick_xml::Reader`, `quick_xml::Writer`, `regex::Regex`, `zip::ZipArchive`, etc.
+  called from functions that are not `#[cfg(test)]` and not in `[[bin]]` tools
+- A `parse_something_xml()` helper in the adapter that reads raw bytes
+- Format-specific state machines, tokenizers, or emitters
+
+**What does NOT count as a violation:**
+- Large adapters doing complex AST→IR translation (DOCX, PPTX are genuinely complex)
+- `[[bin]]` binaries (e.g., `gen_fixtures`) using `zip` or `quick-xml` to construct test fixtures
+- `#[cfg(test)]` blocks using any dep to build test inputs
+
+**Catch it by reading the production functions:** open `src/lib.rs`, find non-test
+functions, check their imports. If you see `quick_xml::Reader`, that's a violation.
+`Cargo.toml` is a weaker signal because `[[bin]]` tools and tests legitimately need
+format-parser crates.
 
 **This mistake is insidious because it "works" locally** — the rescribe tests pass. But
 it means the Rust ecosystem gets no reusable FB2/ODT/etc. library. Every Rust project
 that needs FB2 will have to roll their own parser, or reach into rescribe's internals.
 That is the failure this rule prevents.
-
-**Catch it at `Cargo.toml` time:** if `rescribe-read-{fmt}` depends on a format parser
-crate (`quick-xml`, `zip`, `calamine`, etc.) instead of `{fmt}-fmt`, the architecture
-is wrong before the first line of logic is written.
 
 ## Priority hierarchy: broadest reach first
 
@@ -167,7 +181,7 @@ Work should be prioritized by how many people benefit:
 
 3. **Rust ecosystem (single consumer)** — completing the reader/writer API modes matrix.
 
-4. **rescribe** — the IR adapter layer. Thin (≤300 lines per side); doesn't drive
+4. **rescribe** — the IR adapter layer. Only AST↔IR translation; doesn't drive
    format crate design.
 
 **When choosing what to work on next, ask which level it serves.** Don't invest in level
