@@ -1,0 +1,10 @@
+{
+  "description": "definition list with one term and two descriptions produces three children",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",   "kind": "definition_list", "children_count": 3 },
+    { "path": "/0/0", "kind": "definition_term" },
+    { "path": "/0/1", "kind": "definition_desc" },
+    { "path": "/0/2", "kind": "definition_desc" }
+  ]
+}

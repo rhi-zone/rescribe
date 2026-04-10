@@ -1,0 +1,10 @@
+{
+  "description": "colgroup/col elements are stripped; table body and cells remain",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",       "kind": "table" },
+    { "path": "/0/0",     "kind": "table_body" },
+    { "path": "/0/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0/0", "kind": "table_cell" }
+  ]
+}

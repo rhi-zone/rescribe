@@ -1,0 +1,10 @@
+{
+  "description": "blockquote nested inside blockquote produces two levels of blockquote nodes",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",     "kind": "blockquote", "children_count": 2 },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "blockquote" },
+    { "path": "/0/1/0", "kind": "paragraph" }
+  ]
+}

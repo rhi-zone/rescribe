@@ -1,0 +1,5 @@
+{
+  "description": "block element nested inside inline element is handled gracefully by the HTML5 parser",
+  "category": "adversarial",
+  "assertions": []
+}

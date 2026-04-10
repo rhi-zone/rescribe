@@ -1,0 +1,9 @@
+{
+  "description": "samp element becomes span with html:tag=samp",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "text", "props": { "content": "Output: " } },
+    { "path": "/0/1",   "kind": "span", "props": { "html:tag": "samp" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Hello, World!" } }
+  ]
+}

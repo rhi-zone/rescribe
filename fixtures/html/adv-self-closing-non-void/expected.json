@@ -1,0 +1,5 @@
+{
+  "description": "self-closing syntax on non-void elements is handled gracefully by the HTML5 parser",
+  "category": "adversarial",
+  "assertions": []
+}

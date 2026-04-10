@@ -1,0 +1,7 @@
+{
+  "description": "null byte encoded as numeric character reference is handled gracefully without panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

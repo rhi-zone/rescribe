@@ -1,0 +1,10 @@
+{
+  "description": "cite element becomes span with html:tag=cite",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "text", "props": { "content": "As written in " } },
+    { "path": "/0/1",   "kind": "span", "props": { "html:tag": "cite" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "The Art of War" } },
+    { "path": "/0/2",   "kind": "text", "props": { "content": "." } }
+  ]
+}

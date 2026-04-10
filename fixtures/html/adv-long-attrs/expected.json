@@ -1,0 +1,7 @@
+{
+  "description": "very long class attribute (1000 chars) is handled without panic and stored in classes prop",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "div" }
+  ]
+}

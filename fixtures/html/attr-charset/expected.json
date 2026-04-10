@@ -1,0 +1,8 @@
+{
+  "description": "meta charset attribute is stored in document metadata",
+  "category": "rare",
+  "metadata": { "charset": "utf-8" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

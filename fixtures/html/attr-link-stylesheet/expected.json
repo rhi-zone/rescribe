@@ -1,0 +1,8 @@
+{
+  "description": "link rel=stylesheet href is stored in document metadata as stylesheet",
+  "category": "rare",
+  "metadata": { "stylesheet": "style.css" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

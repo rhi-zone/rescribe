@@ -1,0 +1,8 @@
+{
+  "description": "details/summary elements become div nodes with html:tag prop",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "html:tag": "details" } },
+    { "path": "/0/0", "kind": "div", "props": { "html:tag": "summary" } },
+    { "path": "/0/1", "kind": "paragraph" }
+  ]
+}

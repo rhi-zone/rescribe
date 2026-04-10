@@ -1,0 +1,12 @@
+{
+  "description": "article/aside/nav/header/footer/main become div nodes with html:tag preserving the element name",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "html:tag": "article" } },
+    { "path": "/1", "kind": "div", "props": { "html:tag": "aside" } },
+    { "path": "/2", "kind": "div", "props": { "html:tag": "nav" } },
+    { "path": "/3", "kind": "div", "props": { "html:tag": "header" } },
+    { "path": "/4", "kind": "div", "props": { "html:tag": "footer" } },
+    { "path": "/5", "kind": "div", "props": { "html:tag": "main" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "class attribute on div becomes classes prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "classes": "container highlight" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "description": "ins element becomes span with html:tag=ins, not underline",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "text", "props": { "content": "The " } },
+    { "path": "/0/1",   "kind": "span", "props": { "html:tag": "ins" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "inserted" } },
+    { "path": "/0/2",   "kind": "text", "props": { "content": " text." } }
+  ]
+}

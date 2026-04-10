@@ -1,0 +1,11 @@
+{
+  "description": "figcaption with inline formatting produces caption node with inline children",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",     "kind": "figure", "children_count": 2 },
+    { "path": "/0/0",   "kind": "image", "props": { "url": "photo.jpg", "alt": "A photo" } },
+    { "path": "/0/1",   "kind": "caption" },
+    { "path": "/0/1/0", "kind": "text" },
+    { "path": "/0/1/1", "kind": "emphasis" }
+  ]
+}

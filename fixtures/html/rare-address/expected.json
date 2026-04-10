@@ -1,0 +1,8 @@
+{
+  "description": "<address> becomes a div node with html:tag=address",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "html:tag": "address" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

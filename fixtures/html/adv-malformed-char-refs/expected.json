@@ -1,0 +1,7 @@
+{
+  "description": "malformed and unknown character references are handled gracefully without panic",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

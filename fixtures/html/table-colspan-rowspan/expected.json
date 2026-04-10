@@ -1,0 +1,12 @@
+{
+  "description": "table cells with colspan and rowspan attributes preserve those props",
+  "assertions": [
+    { "path": "/0",         "kind": "table" },
+    { "path": "/0/0",       "kind": "table_head" },
+    { "path": "/0/0/0",     "kind": "table_row" },
+    { "path": "/0/0/0/0",   "kind": "table_header", "props": { "colspan": 2 } },
+    { "path": "/0/1",       "kind": "table_body" },
+    { "path": "/0/1/0",     "kind": "table_row" },
+    { "path": "/0/1/0/0",   "kind": "table_cell", "props": { "rowspan": 2 } }
+  ]
+}

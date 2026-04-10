@@ -1,0 +1,8 @@
+{
+  "description": "document with 50 paragraphs produces 50 top-level paragraph nodes without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/",  "children_count": 50 },
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

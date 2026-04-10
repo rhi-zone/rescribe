@@ -1,0 +1,8 @@
+{
+  "description": "id attribute on div becomes id prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "id": "main" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "section element becomes div node with html:tag=section",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "html:tag": "section" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

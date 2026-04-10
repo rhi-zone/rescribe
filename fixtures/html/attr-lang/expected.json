@@ -1,0 +1,8 @@
+{
+  "description": "lang attribute on paragraph becomes html:lang prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph", "props": { "html:lang": "fr" } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Bonjour" } }
+  ]
+}

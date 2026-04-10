@@ -21,3 +21,4 @@ tree-sitter-html = { version = "0.23", optional = true }
 
 [dev-dependencies]
 rescribe-write-html.workspace = true
+rescribe-fixtures.workspace = true

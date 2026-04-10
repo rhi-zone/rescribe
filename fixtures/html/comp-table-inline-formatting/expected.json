@@ -1,0 +1,13 @@
+{
+  "description": "inline formatting inside table cells is preserved as child nodes",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",         "kind": "table" },
+    { "path": "/0/0",       "kind": "table_body" },
+    { "path": "/0/0/0",     "kind": "table_row" },
+    { "path": "/0/0/0/0",   "kind": "table_cell" },
+    { "path": "/0/0/0/0/0", "kind": "strong" },
+    { "path": "/0/0/0/0/1", "kind": "text" },
+    { "path": "/0/0/0/0/2", "kind": "emphasis" }
+  ]
+}

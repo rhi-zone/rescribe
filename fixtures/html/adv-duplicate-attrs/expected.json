@@ -1,0 +1,7 @@
+{
+  "description": "duplicate attributes on the same element are handled without panic; first value wins",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "id": "a" } }
+  ]
+}

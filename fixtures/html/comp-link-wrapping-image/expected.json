@@ -1,0 +1,8 @@
+{
+  "description": "anchor wrapping an image produces link node with image child",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",   "kind": "link", "props": { "url": "https://example.com" } },
+    { "path": "/0/0", "kind": "image", "props": { "url": "banner.jpg", "alt": "Banner" } }
+  ]
+}

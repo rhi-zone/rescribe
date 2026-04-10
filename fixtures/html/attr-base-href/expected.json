@@ -1,0 +1,8 @@
+{
+  "description": "base href is stored in document metadata as base",
+  "category": "rare",
+  "metadata": { "base": "https://example.com/" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

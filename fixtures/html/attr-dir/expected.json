@@ -1,0 +1,8 @@
+{
+  "description": "dir attribute on paragraph becomes html:dir prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph", "props": { "html:dir": "rtl" } },
+    { "path": "/0/0", "kind": "text" }
+  ]
+}

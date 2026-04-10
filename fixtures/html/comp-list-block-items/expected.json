@@ -1,0 +1,11 @@
+{
+  "description": "list items containing block-level paragraphs produce paragraph children in list_item",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",     "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0",   "kind": "list_item" },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "list_item" }
+  ]
+}

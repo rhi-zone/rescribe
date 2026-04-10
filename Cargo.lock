@@ -3170,6 +3170,7 @@ dependencies = [
  "html5ever",
  "markup5ever_rcdom",
  "rescribe-core",
+ "rescribe-fixtures",
  "rescribe-std",
  "rescribe-write-html",
  "tree-sitter",

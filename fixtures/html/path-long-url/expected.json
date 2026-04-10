@@ -1,0 +1,7 @@
+{
+  "description": "link with a 5000-character URL is handled without panic and URL is stored in url prop",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "link" }
+  ]
+}

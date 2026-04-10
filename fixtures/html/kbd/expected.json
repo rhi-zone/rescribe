@@ -1,0 +1,10 @@
+{
+  "description": "kbd element becomes span with html:tag=kbd",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "text", "props": { "content": "Press " } },
+    { "path": "/0/1",   "kind": "span", "props": { "html:tag": "kbd" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Ctrl+C" } },
+    { "path": "/0/2",   "kind": "text", "props": { "content": " to copy." } }
+  ]
+}

@@ -33,7 +33,7 @@ pub fn parse_with_options(
         .read_from(&mut input.as_bytes())
         .map_err(|e| ParseError::Invalid(format!("HTML parse error: {:?}", e)))?;
 
-    // Extract metadata from <head>
+    // Extract metadata from <head> (and <html> lang attribute)
     extract_metadata(&dom.document, &mut metadata);
 
     // Convert DOM to rescribe nodes
@@ -52,6 +52,12 @@ fn extract_metadata(handle: &Handle, metadata: &mut Properties) {
         let tag = name.local.as_ref();
 
         match tag {
+            "html" => {
+                let attrs = attrs.borrow();
+                if let Some(lang) = get_attr(&attrs, "lang") {
+                    metadata.set("lang", lang);
+                }
+            }
             "title" => {
                 let title = extract_element_text(handle);
                 if !title.is_empty() {
@@ -60,16 +66,45 @@ fn extract_metadata(handle: &Handle, metadata: &mut Properties) {
             }
             "meta" => {
                 let attrs = attrs.borrow();
+                // charset declaration: <meta charset="utf-8">
+                if let Some(charset) = get_attr(&attrs, "charset") {
+                    metadata.set("charset", charset);
+                }
+                // http-equiv content-type: <meta http-equiv="content-type" content="text/html; charset=utf-8">
+                if get_attr(&attrs, "http-equiv")
+                    .as_deref()
+                    .map(|v| v.eq_ignore_ascii_case("content-type"))
+                    == Some(true)
+                    && let Some(content) = get_attr(&attrs, "content")
+                {
+                    metadata.set("content-type", content);
+                }
+                // Standard name/content pairs
                 if let Some(name) = get_attr(&attrs, "name")
                     && let Some(content) = get_attr(&attrs, "content")
                 {
                     metadata.set(&name, content);
                 }
+                // Open Graph properties (og: prefix stripped)
                 if let Some(property) = get_attr(&attrs, "property")
                     && let Some(content) = get_attr(&attrs, "content")
                 {
                     let key = property.strip_prefix("og:").unwrap_or(&property);
                     metadata.set(key, content);
+                }
+            }
+            "link" => {
+                let attrs = attrs.borrow();
+                if get_attr(&attrs, "rel").as_deref() == Some("stylesheet")
+                    && let Some(href) = get_attr(&attrs, "href")
+                {
+                    metadata.set("stylesheet", href);
+                }
+            }
+            "base" => {
+                let attrs = attrs.borrow();
+                if let Some(href) = get_attr(&attrs, "href") {
+                    metadata.set("base", href);
                 }
             }
             _ => {}
@@ -91,6 +126,26 @@ fn extract_element_text(handle: &Handle) -> String {
         text.push_str(&extract_element_text(child));
     }
     text
+}
+
+/// Apply global HTML attributes (id, class, lang, dir, style) to a node.
+fn apply_global_attrs(mut node: Node, attrs: &[Attribute]) -> Node {
+    if let Some(id) = get_attr(attrs, "id") {
+        node = node.prop(prop::ID, id);
+    }
+    if let Some(class) = get_attr(attrs, "class") {
+        node = node.prop(prop::CLASSES, class);
+    }
+    if let Some(lang) = get_attr(attrs, "lang") {
+        node = node.prop("html:lang", lang);
+    }
+    if let Some(dir) = get_attr(attrs, "dir") {
+        node = node.prop("html:dir", dir);
+    }
+    if let Some(style) = get_attr(attrs, "style") {
+        node = node.prop("html:style", style);
+    }
+    node
 }
 
 /// Convert child nodes of a DOM node.
@@ -158,28 +213,49 @@ fn convert_element(
     let node = match tag {
         "html" | "body" => return children,
 
-        "head" | "script" | "style" | "meta" | "link" | "title" => return vec![],
+        "head" | "script" | "style" | "meta" | "link" | "title" | "base" => return vec![],
 
-        "p" => Node::new(node::PARAGRAPH).children(children),
+        // Layout-only table elements — no semantic content, skip silently.
+        "colgroup" | "col" => return vec![],
 
-        "h1" => Node::new(node::HEADING)
-            .prop(prop::LEVEL, 1i64)
-            .children(children),
-        "h2" => Node::new(node::HEADING)
-            .prop(prop::LEVEL, 2i64)
-            .children(children),
-        "h3" => Node::new(node::HEADING)
-            .prop(prop::LEVEL, 3i64)
-            .children(children),
-        "h4" => Node::new(node::HEADING)
-            .prop(prop::LEVEL, 4i64)
-            .children(children),
-        "h5" => Node::new(node::HEADING)
-            .prop(prop::LEVEL, 5i64)
-            .children(children),
-        "h6" => Node::new(node::HEADING)
-            .prop(prop::LEVEL, 6i64)
-            .children(children),
+        "p" => apply_global_attrs(Node::new(node::PARAGRAPH).children(children), attrs),
+
+        "h1" => apply_global_attrs(
+            Node::new(node::HEADING)
+                .prop(prop::LEVEL, 1i64)
+                .children(children),
+            attrs,
+        ),
+        "h2" => apply_global_attrs(
+            Node::new(node::HEADING)
+                .prop(prop::LEVEL, 2i64)
+                .children(children),
+            attrs,
+        ),
+        "h3" => apply_global_attrs(
+            Node::new(node::HEADING)
+                .prop(prop::LEVEL, 3i64)
+                .children(children),
+            attrs,
+        ),
+        "h4" => apply_global_attrs(
+            Node::new(node::HEADING)
+                .prop(prop::LEVEL, 4i64)
+                .children(children),
+            attrs,
+        ),
+        "h5" => apply_global_attrs(
+            Node::new(node::HEADING)
+                .prop(prop::LEVEL, 5i64)
+                .children(children),
+            attrs,
+        ),
+        "h6" => apply_global_attrs(
+            Node::new(node::HEADING)
+                .prop(prop::LEVEL, 6i64)
+                .children(children),
+            attrs,
+        ),
 
         "pre" => {
             let content = extract_text_content(&children);
@@ -191,11 +267,16 @@ fn convert_element(
             node
         }
 
-        "blockquote" => Node::new(node::BLOCKQUOTE).children(children),
+        "blockquote" => {
+            apply_global_attrs(Node::new(node::BLOCKQUOTE).children(children), attrs)
+        }
 
-        "ul" => Node::new(node::LIST)
-            .prop(prop::ORDERED, false)
-            .children(children),
+        "ul" => apply_global_attrs(
+            Node::new(node::LIST)
+                .prop(prop::ORDERED, false)
+                .children(children),
+            attrs,
+        ),
 
         "ol" => {
             let mut list = Node::new(node::LIST).prop(prop::ORDERED, true);
@@ -204,10 +285,10 @@ fn convert_element(
             {
                 list = list.prop(prop::START, n);
             }
-            list.children(children)
+            apply_global_attrs(list.children(children), attrs)
         }
 
-        "li" => Node::new(node::LIST_ITEM).children(children),
+        "li" => apply_global_attrs(Node::new(node::LIST_ITEM).children(children), attrs),
 
         "dl" => Node::new(node::DEFINITION_LIST).children(children),
         "dt" => Node::new(node::DEFINITION_TERM).children(children),
@@ -252,21 +333,38 @@ fn convert_element(
 
         "hr" => Node::new(node::HORIZONTAL_RULE),
 
-        "div" | "section" | "article" | "main" | "aside" | "nav" | "header" | "footer" => {
-            let mut div = Node::new(node::DIV).children(children);
-            if let Some(id) = get_attr(attrs, "id") {
-                div = div.prop(prop::ID, id);
-            }
-            if let Some(class) = get_attr(attrs, "class") {
-                div = div.prop(prop::CLASSES, class);
-            }
-            div
+        // Generic block container — no html:tag prop (it IS a div).
+        "div" => apply_global_attrs(Node::new(node::DIV).children(children), attrs),
+
+        // Semantic HTML5 section-like elements: preserved as div with html:tag.
+        "section" | "article" | "main" | "aside" | "nav" | "header" | "footer" | "address" => {
+            apply_global_attrs(
+                Node::new(node::DIV)
+                    .prop("html:tag", tag.to_string())
+                    .children(children),
+                attrs,
+            )
         }
+
+        // Interactive/disclosure elements.
+        "details" | "summary" => apply_global_attrs(
+            Node::new(node::DIV)
+                .prop("html:tag", tag.to_string())
+                .children(children),
+            attrs,
+        ),
 
         "em" | "i" => Node::new(node::EMPHASIS).children(children),
         "strong" | "b" => Node::new(node::STRONG).children(children),
         "s" | "strike" | "del" => Node::new(node::STRIKEOUT).children(children),
-        "u" | "ins" => Node::new(node::UNDERLINE).children(children),
+        "u" => Node::new(node::UNDERLINE).children(children),
+        // <ins> is "inserted text" (tracked change), not just underline.
+        "ins" => apply_global_attrs(
+            Node::new(node::SPAN)
+                .prop("html:tag", "ins")
+                .children(children),
+            attrs,
+        ),
         "sub" => Node::new(node::SUBSCRIPT).children(children),
         "sup" => Node::new(node::SUPERSCRIPT).children(children),
 
@@ -317,22 +415,31 @@ fn convert_element(
 
         "br" => Node::new(node::LINE_BREAK),
 
-        "span" => {
-            let mut span = Node::new(node::SPAN).children(children);
-            if let Some(id) = get_attr(attrs, "id") {
-                span = span.prop(prop::ID, id);
-            }
-            if let Some(class) = get_attr(attrs, "class") {
-                span = span.prop(prop::CLASSES, class);
-            }
-            span
-        }
+        "span" => apply_global_attrs(Node::new(node::SPAN).children(children), attrs),
 
         "q" => Node::new(node::QUOTED)
             .prop(prop::QUOTE_TYPE, "double")
             .children(children),
 
         "small" => Node::new(node::SMALL_CAPS).children(children),
+
+        // Semantic annotation elements — preserved as span with html:tag.
+        "abbr" => {
+            let mut span = Node::new(node::SPAN)
+                .prop("html:tag", "abbr")
+                .children(children);
+            if let Some(title) = get_attr(attrs, "title") {
+                span = span.prop(prop::TITLE, title);
+            }
+            apply_global_attrs(span, attrs)
+        }
+
+        "mark" | "kbd" | "var" | "samp" | "cite" => apply_global_attrs(
+            Node::new(node::SPAN)
+                .prop("html:tag", tag.to_string())
+                .children(children),
+            attrs,
+        ),
 
         _ => {
             warnings.push(FidelityWarning::new(

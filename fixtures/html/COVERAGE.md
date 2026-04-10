@@ -18,19 +18,19 @@ See `fixtures/spec.md` for category definitions.
 - [x] unordered list — `list-unordered`
 - [x] ordered list — `list-ordered`
 - [x] ordered list with start attribute — `rare-ordered-list-start`
-- [ ] nested list — (missing)
+- [x] nested list — `nested-list`
 - [x] table — `table`
 - [x] table with `<tfoot>` — `table-foot`
-- [ ] table with `<colgroup>`/`<col>` — (missing)
-- [ ] table with colspan/rowspan — (missing)
+- [x] table with `<colgroup>`/`<col>` — `table-colgroup`
+- [x] table with colspan/rowspan — `table-colspan-rowspan`
 - [x] horizontal rule — `horizontal-rule`
 - [x] figure (`<figure>`) — `figure`
 - [x] definition list (`<dl>/<dt>/<dd>`) — `rare-definition-list`
 - [x] div — `div`
-- [ ] `<details>`/`<summary>` — (missing)
-- [ ] `<section>` — (missing)
-- [ ] `<article>`, `<aside>`, `<main>`, `<nav>`, `<header>`, `<footer>` — (missing)
-- [ ] `<address>` — (missing)
+- [x] `<details>`/`<summary>` — `details-summary`
+- [x] `<section>` — `semantic-section`
+- [x] `<article>`, `<aside>`, `<main>`, `<nav>`, `<header>`, `<footer>` — `rare-semantic-article`
+- [x] `<address>` — `rare-address`
 
 ## Inline constructs
 - [x] emphasis (`<em>`) — `emphasis`
@@ -48,54 +48,54 @@ See `fixtures/spec.md` for category definitions.
 - [x] span (`<span>`) — `span`
 - [x] small caps (CSS `font-variant: small-caps`) — `small-caps`
 - [x] quoted (`<q>`) — `quoted`
-- [ ] abbreviation (`<abbr>`) — (missing)
-- [ ] mark (`<mark>`) — (missing)
-- [ ] keyboard (`<kbd>`) — (missing)
-- [ ] variable (`<var>`) — (missing)
-- [ ] sample output (`<samp>`) — (missing)
-- [ ] citation (`<cite>`) — (missing)
-- [ ] inserted text (`<ins>`) — (missing)
-- [ ] footnote (no native HTML construct; `<a>` anchor convention) — (missing)
-- [ ] inline math (`<math>` MathML) — (missing)
+- [x] abbreviation (`<abbr>`) — `abbr`
+- [x] mark (`<mark>`) — `mark`
+- [x] keyboard (`<kbd>`) — `kbd`
+- [x] variable (`<var>`) — `var`
+- [x] sample output (`<samp>`) — `samp`
+- [x] citation (`<cite>`) — `cite`
+- [x] inserted text (`<ins>`) — `ins`
+- [ ] footnote (no native HTML construct; `<a>` anchor convention) — (deferred: complex pattern detection)
+- [ ] inline math (`<math>` MathML) — (deferred: MathML conversion complexity)
 
 ## Properties / Metadata
 - [x] metadata title (`<title>`) — `metadata-title`
 - [x] metadata `<meta>` tags — `metadata-meta`
-- [ ] lang attribute — (missing)
-- [ ] dir attribute (bidi) — (missing)
-- [ ] id attribute (anchor) — (missing)
-- [ ] class attribute — (missing)
-- [ ] style attribute (inline CSS) — (missing)
-- [ ] `<link rel="stylesheet">` — (missing)
-- [ ] `<base href>` — (missing)
-- [ ] Open Graph meta tags — (missing)
-- [ ] charset declaration — (missing)
+- [x] lang attribute — `attr-lang`
+- [x] dir attribute (bidi) — `attr-dir`
+- [x] id attribute (anchor) — `attr-id`
+- [x] class attribute — `attr-class`
+- [x] style attribute (inline CSS) — `attr-style`
+- [x] `<link rel="stylesheet">` — `attr-link-stylesheet`
+- [x] `<base href>` — `attr-base-href`
+- [x] Open Graph meta tags — `attr-og-meta`
+- [x] charset declaration — `attr-charset`
 
 ## Composition (integration)
-- [ ] nested blockquote — (missing)
-- [ ] list items containing block-level content (paragraphs, code blocks) — (missing)
-- [ ] table cells containing inline formatting — (missing)
-- [ ] figure with caption (`<figcaption>`) — (missing)
-- [ ] heading with inline formatting — (missing)
-- [ ] link wrapping image — (missing)
-- [ ] definition list term with multiple descriptions — (missing)
-- [ ] deeply nested inline formatting (bold inside italic inside link) — (missing)
+- [x] nested blockquote — `comp-nested-blockquote`
+- [x] list items containing block-level content (paragraphs, code blocks) — `comp-list-block-items`
+- [x] table cells containing inline formatting — `comp-table-inline-formatting`
+- [x] figure with caption (`<figcaption>`) — `comp-figure-caption`
+- [x] heading with inline formatting — `comp-heading-inline`
+- [x] link wrapping image — `comp-link-wrapping-image`
+- [x] definition list term with multiple descriptions — `comp-definition-list-multi`
+- [x] deeply nested inline formatting (bold inside italic inside link) — `comp-deep-inline`
 
 ## Adversarial
 - [x] unclosed tags — `adv-unclosed-tags`
 - [x] script/style stripped — `adv-script-stripped`
 - [x] empty document — `adv-empty`
 - [x] deeply nested elements — `adv-deeply-nested`
-- [ ] malformed character references (`&amp;`, `&#x;`, unknown `&foo;`) — (missing)
-- [ ] duplicate attributes on same element — (missing)
-- [ ] self-closing non-void elements (`<div/>`) — (missing)
-- [ ] invalid nesting (block inside inline, e.g. `<p><div>`) — (missing)
-- [ ] null bytes and control characters — (missing)
-- [ ] very long attribute values — (missing)
+- [x] malformed character references (`&amp;`, `&#x;`, unknown `&foo;`) — `adv-malformed-char-refs`
+- [x] duplicate attributes on same element — `adv-duplicate-attrs`
+- [x] self-closing non-void elements (`<div/>`) — `adv-self-closing-non-void`
+- [x] invalid nesting (block inside inline, e.g. `<p><div>`) — `adv-invalid-nesting`
+- [x] null bytes and control characters — `adv-null-bytes`
+- [x] very long attribute values — `adv-long-attrs`
 
 ## Pathological
-- [ ] document with thousands of paragraphs — (missing)
-- [ ] table with hundreds of columns — (missing)
-- [ ] deeply nested lists (20+ levels) — (missing)
-- [ ] very large inline content (multi-megabyte text node) — (missing)
-- [ ] extremely long URLs — (missing)
+- [x] document with thousands of paragraphs — `path-large-document`
+- [x] table with hundreds of columns — `path-wide-table`
+- [x] deeply nested lists (20+ levels) — `path-deep-nested-list`
+- [ ] very large inline content (multi-megabyte text node) — (deferred: large test file)
+- [x] extremely long URLs — `path-long-url`

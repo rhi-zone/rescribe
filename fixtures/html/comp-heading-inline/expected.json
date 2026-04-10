@@ -1,0 +1,11 @@
+{
+  "description": "heading with mixed inline content produces text, emphasis, and strong child nodes",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",   "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Title with " } },
+    { "path": "/0/1", "kind": "emphasis" },
+    { "path": "/0/2", "kind": "text", "props": { "content": " and " } },
+    { "path": "/0/3", "kind": "strong" }
+  ]
+}

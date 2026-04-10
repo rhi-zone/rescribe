@@ -1,0 +1,8 @@
+{
+  "description": "style attribute on div becomes html:style prop",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "html:style": "color: red; font-size: 16px" } },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

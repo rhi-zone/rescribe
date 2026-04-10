@@ -1,0 +1,11 @@
+{
+  "description": "nested ul: inner list appears as child of list_item alongside the text node",
+  "assertions": [
+    { "path": "/0",       "kind": "list", "props": { "ordered": false }, "children_count": 2 },
+    { "path": "/0/0",     "kind": "list_item" },
+    { "path": "/0/0/0",   "kind": "text", "props": { "content": "first" } },
+    { "path": "/0/0/1",   "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0/1/0", "kind": "list_item" },
+    { "path": "/0/1",     "kind": "list_item" }
+  ]
+}

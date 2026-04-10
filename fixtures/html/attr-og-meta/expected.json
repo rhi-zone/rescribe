@@ -1,0 +1,8 @@
+{
+  "description": "og: prefixed meta property attributes are stored in metadata with og: prefix stripped",
+  "category": "rare",
+  "metadata": { "title": "My Page", "description": "A great page" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

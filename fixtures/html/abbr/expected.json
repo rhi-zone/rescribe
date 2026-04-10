@@ -1,0 +1,8 @@
+{
+  "description": "abbr element becomes span with html:tag=abbr and title prop preserved",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/0",   "kind": "span", "props": { "html:tag": "abbr", "title": "HyperText Markup Language" } },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "HTML" } }
+  ]
+}

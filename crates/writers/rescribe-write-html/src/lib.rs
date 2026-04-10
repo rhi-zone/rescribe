@@ -232,7 +232,7 @@ fn emit_inline_tag(tag: &str, node: &Node, ctx: &mut EmitContext) {
     ctx.write(">");
 }
 
-/// Emit common attributes (id, class).
+/// Emit common attributes (id, class, lang, dir, style).
 fn emit_common_attrs(node: &Node, ctx: &mut EmitContext) {
     if let Some(id) = node.props.get_str(prop::ID) {
         ctx.write(" id=\"");
@@ -242,6 +242,21 @@ fn emit_common_attrs(node: &Node, ctx: &mut EmitContext) {
     if let Some(classes) = node.props.get_str(prop::CLASSES) {
         ctx.write(" class=\"");
         ctx.write(&escape_attr(classes));
+        ctx.write("\"");
+    }
+    if let Some(lang) = node.props.get_str("html:lang") {
+        ctx.write(" lang=\"");
+        ctx.write(&escape_attr(lang));
+        ctx.write("\"");
+    }
+    if let Some(dir) = node.props.get_str("html:dir") {
+        ctx.write(" dir=\"");
+        ctx.write(&escape_attr(dir));
+        ctx.write("\"");
+    }
+    if let Some(style) = node.props.get_str("html:style") {
+        ctx.write(" style=\"");
+        ctx.write(&escape_attr(style));
         ctx.write("\"");
     }
 }
@@ -337,10 +352,12 @@ fn emit_table_cell(node: &Node, tag: &str, ctx: &mut EmitContext) {
     ctx.write(">");
 }
 
-/// Emit a div element.
+/// Emit a div element (or a semantic HTML5 element preserved via html:tag).
 fn emit_div(node: &Node, ctx: &mut EmitContext) {
+    let tag = node.props.get_str("html:tag").unwrap_or("div");
     ctx.newline();
-    ctx.write("<div");
+    ctx.write("<");
+    ctx.write(tag);
     emit_common_attrs(node, ctx);
     ctx.write(">");
 
@@ -354,7 +371,9 @@ fn emit_div(node: &Node, ctx: &mut EmitContext) {
         emit_nodes(&node.children, ctx);
     }
 
-    ctx.write("</div>");
+    ctx.write("</");
+    ctx.write(tag);
+    ctx.write(">");
 }
 
 /// Emit raw content (pass-through).
@@ -440,13 +459,23 @@ fn emit_image(node: &Node, ctx: &mut EmitContext) {
     ctx.write(">");
 }
 
-/// Emit a span element.
+/// Emit a span element (or a semantic inline element preserved via html:tag).
 fn emit_span(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("<span");
+    let tag = node.props.get_str("html:tag").unwrap_or("span");
+    ctx.write("<");
+    ctx.write(tag);
     emit_common_attrs(node, ctx);
+    // <abbr> carries its expansion in the title attribute.
+    if tag == "abbr" && let Some(title) = node.props.get_str(prop::TITLE) {
+        ctx.write(" title=\"");
+        ctx.write(&escape_attr(title));
+        ctx.write("\"");
+    }
     ctx.write(">");
     emit_nodes(&node.children, ctx);
-    ctx.write("</span>");
+    ctx.write("</");
+    ctx.write(tag);
+    ctx.write(">");
 }
 
 /// Emit a footnote reference.

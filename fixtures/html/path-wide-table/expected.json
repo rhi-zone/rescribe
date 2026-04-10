@@ -1,0 +1,9 @@
+{
+  "description": "table with 20 cells in a single row is handled without panic",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",     "kind": "table" },
+    { "path": "/0/0",   "kind": "table_body" },
+    { "path": "/0/0/0", "kind": "table_row", "children_count": 20 }
+  ]
+}
