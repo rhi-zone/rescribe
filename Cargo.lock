@@ -3092,7 +3092,6 @@ name = "rescribe-read-docx"
 version = "0.1.0"
 dependencies = [
  "ooxml-wml",
- "quick-xml 0.39.0",
  "rescribe-core",
  "rescribe-std",
 ]

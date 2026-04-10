@@ -28,6 +28,7 @@ pub mod convenience;
 pub mod document;
 pub mod error;
 pub mod ext;
+pub mod numbering;
 pub mod writer;
 
 /// Generated types from the ECMA-376 WordprocessingML schema.
@@ -113,3 +114,6 @@ pub use types::ns;
 // Re-export MathZone from ooxml-omml for convenience.
 #[cfg(feature = "wml-math")]
 pub use ooxml_omml::MathZone;
+
+// Re-export numbering helpers.
+pub use numbering::{is_ordered_num_fmt, parse_numbering_order};
