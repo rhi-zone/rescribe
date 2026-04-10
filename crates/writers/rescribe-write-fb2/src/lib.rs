@@ -496,3 +496,4 @@ mod tests {
         assert!(xml.contains("2. second"));
     }
 }
+

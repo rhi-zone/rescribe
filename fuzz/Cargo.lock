@@ -437,6 +437,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
+name = "fb2-fmt"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "quick-xml",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1507,7 +1515,6 @@ name = "rescribe-read-docx"
 version = "0.1.0"
 dependencies = [
  "ooxml-wml",
- "quick-xml",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1546,8 +1553,7 @@ dependencies = [
 name = "rescribe-read-fb2"
 version = "0.1.0"
 dependencies = [
- "base64",
- "quick-xml",
+ "fb2-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1697,7 +1703,7 @@ dependencies = [
 name = "rescribe-read-odt"
 version = "0.1.0"
 dependencies = [
- "quick-xml",
+ "odf-fmt",
  "rescribe-core",
  "rescribe-std",
  "zip 2.4.2",
@@ -1976,8 +1982,7 @@ dependencies = [
 name = "rescribe-write-fb2"
 version = "0.1.0"
 dependencies = [
- "base64",
- "quick-xml",
+ "fb2-fmt",
  "rescribe-core",
  "rescribe-std",
 ]

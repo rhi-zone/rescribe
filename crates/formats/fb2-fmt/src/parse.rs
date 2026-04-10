@@ -568,10 +568,12 @@ impl Parser {
         // Leaf text elements: consume current_text
         if is_leaf_tag(name) {
             if let Some(StackItem::LeafText) = self.stack.pop() {
-                let text = std::mem::take(&mut self.current_text).trim().to_string();
                 if name == "code" {
+                    // Inline code: preserve whitespace (trim only for metadata elements)
+                    let text = std::mem::take(&mut self.current_text);
                     self.push_inline(InlineElement::Code(text));
                 } else {
+                    let text = std::mem::take(&mut self.current_text).trim().to_string();
                     self.commit_leaf_text(name, text);
                 }
             }
