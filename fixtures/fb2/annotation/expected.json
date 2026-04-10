@@ -1,0 +1,8 @@
+{
+  "description": "annotation inside title-info is exposed as meta:annotation metadata property",
+  "category": "happy",
+  "metadata": { "meta:annotation": "A short summary of the book." },
+  "assertions": [
+    { "path": "/0", "kind": "div" }
+  ]
+}

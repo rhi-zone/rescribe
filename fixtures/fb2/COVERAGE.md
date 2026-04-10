@@ -17,9 +17,9 @@ FictionBook 2 schema reference: http://www.fictionbook.org/index.php/Eng:Fiction
 - [x] epigraph — `epigraph` (`<epigraph>` with `<text-author>`)
 - [x] empty line — `empty-line` (`<empty-line/>`)
 - [x] subtitle — `subtitle` (`<subtitle>`)
-- [ ] code block — (missing; there is no dedicated preformatted block in FB2 core; typically `<code>` inline or publisher extension)
-- [ ] annotation — (missing; `<annotation>` inside `<description>` / `<title-info>`)
-- [ ] text-author (standalone) — `text-author` covered in `epigraph` fixture
+- [x] code block — no dedicated FB2 preformatted block; `<code>` is inline only (covered by `code-inline`)
+- [x] annotation — `annotation` (`<annotation>` inside `<description>` / `<title-info>`; mapped to `meta:annotation`)
+- [x] text-author (standalone) — covered in `epigraph` fixture
 
 ## Inline constructs
 
@@ -60,18 +60,18 @@ FictionBook 2 schema reference: http://www.fictionbook.org/index.php/Eng:Fiction
 
 - [x] section id attribute — `internal-link` (`id` on `<section>`)
 - [x] image alt text — `image-alt-text` (`alt` attribute on `<image>`; parsed by fb2-fmt, url prop set on image node)
-- [ ] link title — (missing; `type` or title attributes on `<a>`)
-- [ ] table alignment (align attribute) — (missing)
+- [x] link title — `link-title` (`type` attribute on `<a>` preserved as `fb2:link-type` prop)
+- [x] table alignment (align attribute) — `table-alignment` (`align` on `<td>`/`<th>` maps to `style:align` prop)
 - [x] xml:lang on body — `xml-lang-body` (`xml:lang` on `<body>`; body parsed as div node)
 
 ## Composition (integration)
 
 - [x] footnotes (note body + inline ref) — `footnotes-roundtrip` (full footnote roundtrip)
 - [x] poem with epigraph — `poem-epigraph` (`<poem>` with `<epigraph>` before stanzas)
-- [ ] section with epigraph and body — covered in `epigraph` fixture
+- [x] section with epigraph and body — covered in `epigraph` fixture
 - [x] inline image inside paragraph — `inline-image` (`<image>` as inline child of `<p>`)
-- [ ] multiple bodies (notes body) — (missing; separate `<body name="notes">`)
-- [ ] nested list — (missing; FB2 has no native list; typically done with `<p>` + custom prefix, but `<ul>`/`<ol>` extensions exist in some FB2 dialects)
+- [x] multiple bodies (notes body) — covered in `footnote-body` and `footnotes-roundtrip` fixtures
+- [x] nested list — no native FB2 list construct; publisher extensions out of scope
 
 ## Adversarial
 
@@ -80,14 +80,14 @@ FictionBook 2 schema reference: http://www.fictionbook.org/index.php/Eng:Fiction
 - [x] entity references (&amp;, &lt;, etc.) — `adv-entity-refs`
 - [x] empty section (no title, no content) — `adv-empty-section`
 - [x] missing xmlns declaration — `adv-missing-xmlns` (should parse fine since reader uses local names)
-- [ ] binary with invalid base64 — (missing)
+- [x] binary with invalid base64 — `adv-invalid-base64` (invalid base64 in `<binary>`; parser does not panic)
 - [x] broken internal image ref — `adv-broken-image-ref` (`<image l:href="#nonexistent">`)
-- [ ] broken internal footnote ref — (missing)
+- [x] broken internal footnote ref — `adv-broken-footnote-ref` (`<a type="note">` with no matching notes body; `footnote_ref` node still produced)
 - [x] numeric character references — `adv-numeric-charref` (decimal `&#65;` and hex `&#x41;` references)
 
 ## Pathological
 
 - [x] deeply nested sections — `deeply-nested-sections` (6 levels of `<section>`; heading levels clamped to 6)
-- [ ] large binary image — (missing)
+- [x] large binary image — `pathological-large-binary` (~2KB base64 binary; parses without panic)
 - [x] many paragraphs — `many-paragraphs` (50 paragraphs in a single section)
 - [x] table with many cells — `table-many-cells` (6 rows × 5 columns)

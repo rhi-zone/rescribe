@@ -1,0 +1,11 @@
+{
+  "description": "a element with type attribute preserves type as fb2:link-type prop on link node",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "div" },
+    { "path": "/0/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/0/0",   "kind": "link", "props": { "url": "https://example.com", "fb2:link-type": "external" } },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "click" } }
+  ]
+}

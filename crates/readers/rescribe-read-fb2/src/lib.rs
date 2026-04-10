@@ -3,8 +3,8 @@
 //! Thin adapter over `fb2-fmt`. Converts native FB2 AST → rescribe IR.
 
 use fb2_fmt::{
-    Body, Cite, CiteContent, Epigraph, EpigraphContent, FictionBook, InlineElement, Poem,
-    Section, SectionContent, Stanza, Table, TitlePara,
+    AnnotationContent, Body, Cite, CiteContent, Epigraph, EpigraphContent, FictionBook,
+    InlineElement, Poem, Section, SectionContent, Stanza, Table, TitlePara,
 };
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, Node, ParseError, ParseOptions, Properties,
@@ -72,7 +72,51 @@ fn build_metadata(fb: &FictionBook) -> Properties {
     if let Some(kw) = &ti.keywords {
         meta.set("keywords", kw.clone());
     }
+    if let Some(ann) = &ti.annotation {
+        let text = extract_annotation_text(ann);
+        if !text.is_empty() {
+            meta.set("meta:annotation", text);
+        }
+    }
     meta
+}
+
+/// Extract plain text from an Annotation by concatenating text content of all paragraphs.
+fn extract_annotation_text(ann: &fb2_fmt::Annotation) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for item in &ann.content {
+        match item {
+            AnnotationContent::Para(inlines) => {
+                parts.push(extract_inline_text(inlines));
+            }
+            AnnotationContent::Subtitle(inlines) => {
+                parts.push(extract_inline_text(inlines));
+            }
+            _ => {}
+        }
+    }
+    parts.join(" ")
+}
+
+fn extract_inline_text(inlines: &[InlineElement]) -> String {
+    let mut s = String::new();
+    for el in inlines {
+        match el {
+            InlineElement::Text(t) => s.push_str(t),
+            InlineElement::Strong(ch)
+            | InlineElement::Emphasis(ch)
+            | InlineElement::Strikethrough(ch)
+            | InlineElement::Sub(ch)
+            | InlineElement::Sup(ch) => s.push_str(&extract_inline_text(ch)),
+            InlineElement::Code(t) => s.push_str(t),
+            InlineElement::Link { children, .. } => s.push_str(&extract_inline_text(children)),
+            InlineElement::FootnoteRef { children, .. } => {
+                s.push_str(&extract_inline_text(children));
+            }
+            InlineElement::Image(_) => {}
+        }
+    }
+    s
 }
 
 fn convert_fb(fb: &FictionBook) -> Vec<Node> {
@@ -251,7 +295,11 @@ fn convert_table(table: &Table) -> Node {
                     } else {
                         node::TABLE_CELL
                     };
-                    Node::new(kind).children(convert_inlines(&cell.content))
+                    let mut n = Node::new(kind).children(convert_inlines(&cell.content));
+                    if let Some(align) = &cell.align {
+                        n = n.prop("style:align", align.clone());
+                    }
+                    n
                 })
                 .collect();
             Node::new(node::TABLE_ROW).children(cells)
@@ -283,9 +331,15 @@ fn convert_inline(el: &InlineElement) -> Node {
             let url = img.href.strip_prefix('#').unwrap_or(&img.href);
             Node::new(node::IMAGE).prop(prop::URL, url.to_string())
         }
-        InlineElement::Link { href, children, .. } => Node::new(node::LINK)
-            .prop(prop::URL, href.clone())
-            .children(convert_inlines(children)),
+        InlineElement::Link { href, kind, children } => {
+            let mut n = Node::new(node::LINK)
+                .prop(prop::URL, href.clone())
+                .children(convert_inlines(children));
+            if let Some(k) = kind {
+                n = n.prop("fb2:link-type", k.clone());
+            }
+            n
+        }
         InlineElement::FootnoteRef { href, children } => Node::new(node::FOOTNOTE_REF)
             .prop(prop::URL, href.clone())
             .children(convert_inlines(children)),

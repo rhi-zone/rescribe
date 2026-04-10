@@ -1,0 +1,13 @@
+{
+  "description": "td elements with align attribute map to style:align prop on table_cell nodes",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "div" },
+    { "path": "/0/0/0",     "kind": "table" },
+    { "path": "/0/0/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0/0/0", "kind": "table_cell", "props": { "style:align": "center" } },
+    { "path": "/0/0/0/0/1", "kind": "table_cell", "props": { "style:align": "right" } },
+    { "path": "/0/0/0/0/2", "kind": "table_cell" }
+  ]
+}

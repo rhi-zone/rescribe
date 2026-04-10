@@ -1,0 +1,10 @@
+{
+  "description": "footnote ref pointing to a nonexistent target still produces a footnote_ref node with the url preserved",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "div" },
+    { "path": "/0/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/0/1",   "kind": "footnote_ref", "props": { "url": "#nonexistent" } }
+  ]
+}

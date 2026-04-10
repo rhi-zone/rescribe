@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
+  <description>
+    <title-info>
+      <book-title>Bad Binary</book-title>
+      <lang>en</lang>
+    </title-info>
+  </description>
+  <body>
+    <section>
+      <p>A document with an invalid binary attachment.</p>
+    </section>
+  </body>
+  <binary id="bad.png" content-type="image/png">NOT_VALID_BASE64!!!</binary>
+</FictionBook>

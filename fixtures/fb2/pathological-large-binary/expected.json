@@ -1,0 +1,7 @@
+{
+  "description": "document with a ~2KB embedded binary parses without panic or OOM",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/", "kind": "document" }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "binary element with invalid base64 content does not panic; document root is still produced",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/", "kind": "document" }
+  ]
+}
