@@ -2053,6 +2053,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "odf-fmt"
+version = "0.1.0"
+dependencies = [
+ "ooxml-codegen",
+ "quick-xml 0.39.0",
+ "serde",
+ "serde_yaml",
+ "thiserror",
+ "zip 7.2.0",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

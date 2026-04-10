@@ -1,0 +1,59 @@
+[package]
+name = "odf-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "OpenDocument Format (ODF) text document support — parser, emitter, and API"
+readme.workspace = true
+keywords = ["odt", "odf", "opendocument", "libreoffice", "document"]
+categories = ["encoding", "parser-implementations"]
+
+[features]
+default = ["full"]
+full = [
+    "reader-ast",
+    "reader-streaming",
+    "reader-batch",
+    "writer-streaming",
+    "writer-builder",
+    "odf-text",
+    "odf-styles",
+    "odf-tables",
+    "odf-drawings",
+    "odf-meta",
+    "odf-settings",
+    "odf-1-2",
+    "odf-1-3",
+    "extra-attrs",
+    "extra-children",
+]
+# API-mode flags
+reader-ast = []
+reader-streaming = []
+reader-batch = ["reader-ast"]
+writer-streaming = ["reader-streaming", "writer-builder"]
+writer-builder = []
+# ODF domain flags
+odf-text = []       # text:* — paragraphs, headings, lists, notes, fields
+odf-styles = []     # style:* — automatic and named styles
+odf-tables = []     # table:* — tables, rows, cells
+odf-drawings = []   # draw:* — frames, images, shapes
+odf-meta = []       # office:meta / dc:* — document metadata
+odf-settings = []   # office:settings / config:* — application settings
+# ODF version flags — both on by default
+odf-1-2 = []       # constructs introduced in ODF 1.2 (ISO 26300:2015)
+odf-1-3 = []       # constructs introduced in ODF 1.3 (OASIS 2021)
+extra-attrs = []
+extra-children = []
+
+[dependencies]
+quick-xml.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+zip.workspace = true
+
+[build-dependencies]
+ooxml-codegen.workspace = true
+serde_yaml.workspace = true
+serde.workspace = true

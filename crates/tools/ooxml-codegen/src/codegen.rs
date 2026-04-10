@@ -213,6 +213,11 @@ pub struct CodegenConfig {
     /// When a reference like "a_CT_Color" is not found locally, it's resolved using the
     /// module's name mappings (if available) or converted to PascalCase.
     pub cross_crate_type_prefix: HashMap<String, (String, String)>,
+    /// Type to use for the `extra_children` field (captures unknown child elements).
+    /// Defaults to `"ooxml_xml::PositionedNode"` when `None`.
+    /// Set to `Some("()".to_string())` or equivalent to disable extra_children generation,
+    /// or `Some("crate::MyNode".to_string())` to use a custom type.
+    pub extra_children_type: Option<String>,
 }
 
 /// Generate Rust code from a parsed schema.
@@ -273,6 +278,12 @@ impl<'a> Generator<'a> {
         // Generate enums for simple types (string literal choices)
         for def in &simple_types {
             let rust_name = self.to_rust_type_name(&def.name);
+            // Skip aliases that would shadow built-in Rust types or std prelude items
+            if matches!(rust_name.as_str(), "String" | "Vec" | "Option" | "Result" | "Box"
+                | "bool" | "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
+                | "f32" | "f64" | "usize" | "isize" | "char" | "str") {
+                continue;
+            }
             if !self.generated_names.insert(rust_name) {
                 continue; // Skip duplicate Rust type names from merged schemas
             }
@@ -369,12 +380,13 @@ impl<'a> Generator<'a> {
     }
 
     /// Check if a definition is a pure attribute reference that should be inlined.
-    /// These are attribute patterns (like r_id, r_embed) that don't have CT_ in their name.
-    /// CT_* types with single attributes are element content types and need structs.
+    /// These are OOXML relationship attribute patterns (r_id, r_embed, etc.) that are
+    /// inlined directly into parent structs as fields.
+    /// ODF uses hyphenated names (change-mark-attr, text-id) which generate real structs.
     fn is_inline_attribute_ref(&self, name: &str, pattern: &Pattern) -> bool {
-        // Only skip non-CT types that are pure attribute patterns
-        // CT_* types with single attributes are element content types
-        !name.contains("_CT_") && matches!(pattern, Pattern::Attribute { .. })
+        // Only inline single-attribute defs that use underscore naming (OOXML r_* refs).
+        // Hyphenated names (ODF convention) are legitimate *-attlist types that need structs.
+        !name.contains('-') && !name.contains("_CT_") && matches!(pattern, Pattern::Attribute { .. })
     }
 
     /// Check if a pattern resolves to a string type (for text content detection).
@@ -769,14 +781,12 @@ impl<'a> Generator<'a> {
                         "    /// Unknown child elements captured for roundtrip fidelity."
                     )
                     .unwrap();
+                    let ec_type = self.config.extra_children_type.as_deref()
+                        .unwrap_or("ooxml_xml::PositionedNode");
                     writeln!(code, "    #[cfg(feature = \"extra-children\")]").unwrap();
                     writeln!(code, "    #[serde(skip)]").unwrap();
                     writeln!(code, "    #[cfg(feature = \"extra-children\")]").unwrap();
-                    writeln!(
-                        code,
-                        "    pub extra_children: Vec<ooxml_xml::PositionedNode>,"
-                    )
-                    .unwrap();
+                    writeln!(code, "    pub extra_children: Vec<{}>,", ec_type).unwrap();
                 }
                 writeln!(code, "}}").unwrap();
             } else {
@@ -906,14 +916,12 @@ impl<'a> Generator<'a> {
                     "    /// Unknown child elements captured for roundtrip fidelity."
                 )
                 .unwrap();
+                let ec_type = self.config.extra_children_type.as_deref()
+                    .unwrap_or("ooxml_xml::PositionedNode");
                 writeln!(code, "    #[cfg(feature = \"extra-children\")]").unwrap();
                 writeln!(code, "    #[serde(skip)]").unwrap();
                 writeln!(code, "    #[cfg(feature = \"extra-children\")]").unwrap();
-                writeln!(
-                    code,
-                    "    pub extra_children: Vec<ooxml_xml::PositionedNode>,"
-                )
-                .unwrap();
+                writeln!(code, "    pub extra_children: Vec<{}>,", ec_type).unwrap();
             }
 
             writeln!(code, "}}").unwrap();
@@ -1394,10 +1402,15 @@ fn to_snake_case(s: &str) -> String {
     let mut result = String::new();
 
     for (i, ch) in s.chars().enumerate() {
-        if ch.is_uppercase() && i > 0 {
+        if ch == '-' {
+            // ODF attribute names use hyphens (e.g. `color-interpolation`); map to underscores
             result.push('_');
+        } else if ch.is_uppercase() && i > 0 {
+            result.push('_');
+            result.extend(ch.to_lowercase());
+        } else {
+            result.extend(ch.to_lowercase());
         }
-        result.extend(ch.to_lowercase());
     }
 
     // Handle reserved keywords

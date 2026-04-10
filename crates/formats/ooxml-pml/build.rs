@@ -137,6 +137,7 @@ fn main() {
         // Map DML schema names to ooxml_dml crate types
         cross_crate_type_prefix,
         warn_unmapped: true,
+        ..Default::default()
     };
 
     // Run static analysis if OOXML_ANALYZE is set
