@@ -40,6 +40,8 @@
             bun
             # Pandoc — used by the local fixture harness (tests/pandoc.rs)
             pandoc
+            # trang — RNG↔RNC schema conversion (for odf-fmt codegen)
+            jing-trang
           ];
           LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH";
         };
