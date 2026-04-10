@@ -67,10 +67,10 @@ pub fn parse(input: &[u8]) -> Result<ParseResult<OdfDocument>, Error> {
     };
 
     // content.xml
-    let (body, automatic_styles) = if let Some(xml) = read_zip_text(&mut archive, "content.xml") {
+    let (body, automatic_styles, list_styles) = if let Some(xml) = read_zip_text(&mut archive, "content.xml") {
         parse_content_xml(&xml, &mut diags)
     } else {
-        (OdfBody::Empty, Vec::new())
+        (OdfBody::Empty, Vec::new(), Vec::new())
     };
 
     let doc = OdfDocument {
@@ -79,6 +79,7 @@ pub fn parse(input: &[u8]) -> Result<ParseResult<OdfDocument>, Error> {
         automatic_styles,
         named_styles,
         page_layouts,
+        list_styles,
         meta,
         images,
     };
@@ -100,12 +101,13 @@ fn read_zip_text(archive: &mut ZipArchive<Cursor<&[u8]>>, name: &str) -> Option<
 fn parse_content_xml(
     xml: &str,
     diags: &mut Vec<Diagnostic>,
-) -> (OdfBody, Vec<StyleEntry>) {
+) -> (OdfBody, Vec<StyleEntry>, Vec<(String, bool)>) {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
 
     let mut automatic_styles = Vec::new();
+    let mut list_styles: Vec<(String, bool)> = Vec::new();
     let mut body = OdfBody::Empty;
     let mut in_body = false;
 
@@ -115,8 +117,9 @@ fn parse_content_xml(
                 let name = element_name(e.name().as_ref());
                 match name.as_str() {
                     "office:automatic-styles" => {
-                        automatic_styles =
-                            parse_styles_block(&mut reader, "office:automatic-styles");
+                        let (styles, ls) = parse_auto_styles_block(&mut reader);
+                        automatic_styles = styles;
+                        list_styles = ls;
                     }
                     "office:body" => {
                         in_body = true;
@@ -137,7 +140,15 @@ fn parse_content_xml(
                     _ => {}
                 }
             }
-            Ok(Event::End(_)) | Ok(Event::Empty(_)) => {}
+            Ok(Event::End(_)) => {}
+            Ok(Event::Empty(ref e)) => {
+                // Handle self-closing body elements (e.g. <office:text/>)
+                let name = element_name(e.name().as_ref());
+                if name == "office:text" && in_body {
+                    body = OdfBody::Text(Vec::new());
+                    in_body = false;
+                }
+            }
             Ok(Event::Eof) => break,
             Err(_) => break,
             _ => {}
@@ -145,7 +156,7 @@ fn parse_content_xml(
         buf.clear();
     }
 
-    (body, automatic_styles)
+    (body, automatic_styles, list_styles)
 }
 
 // ── Text body ─────────────────────────────────────────────────────────────────
@@ -1001,15 +1012,21 @@ fn parse_frame_content(reader: &mut Reader<&[u8]>) -> FrameContent {
                         let href = attr_from_list(&attrs, "xlink:href").unwrap_or_default();
                         let mime_type = attr_from_list(&attrs, "draw:mime-type");
                         skip_element(reader);
+                        // Image takes priority over any other content already found
                         content = FrameContent::Image { href, mime_type };
                     }
                     "draw:text-box" => {
                         let text = parse_text_blocks(reader, "draw:text-box", &mut Vec::new());
-                        content = FrameContent::TextBox(text);
+                        // Only use TextBox if we don't already have an Image
+                        if matches!(content, FrameContent::Empty | FrameContent::Other(_)) {
+                            content = FrameContent::TextBox(text);
+                        }
                     }
                     _ => {
                         let raw = capture_raw_from_name_attrs(&tag, &attrs, reader);
-                        content = FrameContent::Other(raw);
+                        if matches!(content, FrameContent::Empty) {
+                            content = FrameContent::Other(raw);
+                        }
                     }
                 }
                 continue;
@@ -1020,6 +1037,7 @@ fn parse_frame_content(reader: &mut Reader<&[u8]>) -> FrameContent {
                     let attrs = collect_attrs(e);
                     let href = attr_from_list(&attrs, "xlink:href").unwrap_or_default();
                     let mime_type = attr_from_list(&attrs, "draw:mime-type");
+                    // Image always takes priority
                     content = FrameContent::Image { href, mime_type };
                 }
             }
@@ -1052,6 +1070,12 @@ fn parse_inlines(
                 let s = e.decode().unwrap_or_default().into_owned();
                 if !s.is_empty() {
                     inlines.push(Inline::Text(s));
+                }
+            }
+            Ok(Event::GeneralRef(ref e)) => {
+                let decoded = decode_general_ref(e);
+                if !decoded.is_empty() {
+                    inlines.push(Inline::Text(decoded));
                 }
             }
             Ok(Event::Start(ref e)) => {
@@ -1091,6 +1115,11 @@ fn parse_inlines(
                         let value = read_text_until(reader, &name);
                         inlines.push(Inline::Field { name: field_name, value });
                     }
+                    "office:annotation" => {
+                        // Extract text content from the annotation body
+                        let content = read_annotation_text(reader);
+                        inlines.push(Inline::Annotation { content });
+                    }
                     _ => {
                         let raw = capture_raw_from_name_attrs(&name, &attrs, reader);
                         inlines.push(Inline::Unknown { name, raw });
@@ -1113,6 +1142,14 @@ fn parse_inlines(
                     }
                     "text:soft-page-break" => inlines.push(Inline::SoftPageBreak),
                     "text:soft-hyphen" => inlines.push(Inline::SoftHyphen),
+                    "text:bookmark" | "text:bookmark-start" => {
+                        let attrs = collect_attrs(e);
+                        let bm_name = attr_from_list(&attrs, "text:name").unwrap_or_default();
+                        inlines.push(Inline::Bookmark { name: bm_name });
+                    }
+                    "text:bookmark-end" => {
+                        // Closing bookmark marker — no content, ignore
+                    }
                     _ => {}
                 }
             }
@@ -1190,9 +1227,15 @@ fn parse_styles_xml(
             Ok(Event::Start(ref e)) => {
                 let name = element_name(e.name().as_ref());
                 match name.as_str() {
-                    "office:styles" | "office:automatic-styles" => {
-                        let styles = parse_styles_block(&mut reader, &name);
+                    "office:styles" => {
+                        let styles = parse_styles_block(&mut reader, "office:styles");
                         named_styles.extend(styles);
+                    }
+                    "office:automatic-styles" => {
+                        // Parse styles and page-layouts that appear in this section
+                        let (styles, pls) = parse_styles_xml_auto_block(&mut reader);
+                        named_styles.extend(styles);
+                        page_layouts.extend(pls);
                     }
                     "style:page-layout" => {
                         let attrs = collect_attrs(e);
@@ -1212,6 +1255,139 @@ fn parse_styles_xml(
     }
 
     (named_styles, page_layouts)
+}
+
+/// Parse `<office:automatic-styles>` from styles.xml, collecting both
+/// `<style:style>` entries and `<style:page-layout>` definitions.
+fn parse_styles_xml_auto_block(
+    reader: &mut Reader<&[u8]>,
+) -> (Vec<StyleEntry>, Vec<PageLayout>) {
+    let mut styles = Vec::new();
+    let mut page_layouts = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let name = element_name(e.name().as_ref());
+                let attrs = collect_attrs(e);
+                buf.clear();
+                match name.as_str() {
+                    "style:style" => {
+                        let entry = parse_style_element_attrs(&attrs, reader);
+                        styles.push(entry);
+                    }
+                    "style:page-layout" => {
+                        let layout = parse_page_layout_attrs(&attrs, reader);
+                        page_layouts.push(layout);
+                    }
+                    _ => { skip_element(reader); }
+                }
+                continue;
+            }
+            Ok(Event::Empty(ref e)) => {
+                if element_name(e.name().as_ref()) == "style:style" {
+                    let attrs = collect_attrs(e);
+                    styles.push(StyleEntry {
+                        name: attr_from_list(&attrs, "style:name").unwrap_or_default(),
+                        family: attr_from_list(&attrs, "style:family"),
+                        display_name: attr_from_list(&attrs, "style:display-name"),
+                        parent_style_name: attr_from_list(&attrs, "style:parent-style-name"),
+                        list_style_name: attr_from_list(&attrs, "style:list-style-name"),
+                        ..Default::default()
+                    });
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "office:automatic-styles" { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    (styles, page_layouts)
+}
+
+/// Parse `<office:automatic-styles>` from content.xml.
+///
+/// Returns (style_entries, list_styles) where list_styles is (name, is_ordered).
+fn parse_auto_styles_block(
+    reader: &mut Reader<&[u8]>,
+) -> (Vec<StyleEntry>, Vec<(String, bool)>) {
+    let mut styles = Vec::new();
+    let mut list_styles: Vec<(String, bool)> = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let name = element_name(e.name().as_ref());
+                let attrs = collect_attrs(e);
+                buf.clear();
+                match name.as_str() {
+                    "style:style" => {
+                        let entry = parse_style_element_attrs(&attrs, reader);
+                        styles.push(entry);
+                    }
+                    "text:list-style" => {
+                        let style_name = attr_from_list(&attrs, "style:name").unwrap_or_default();
+                        let is_ordered = parse_list_style_is_ordered(reader);
+                        list_styles.push((style_name, is_ordered));
+                    }
+                    _ => { skip_element(reader); }
+                }
+                continue;
+            }
+            Ok(Event::Empty(ref e)) => {
+                if element_name(e.name().as_ref()) == "style:style" {
+                    let attrs = collect_attrs(e);
+                    styles.push(StyleEntry {
+                        name: attr_from_list(&attrs, "style:name").unwrap_or_default(),
+                        family: attr_from_list(&attrs, "style:family"),
+                        display_name: attr_from_list(&attrs, "style:display-name"),
+                        parent_style_name: attr_from_list(&attrs, "style:parent-style-name"),
+                        list_style_name: attr_from_list(&attrs, "style:list-style-name"),
+                        ..Default::default()
+                    });
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "office:automatic-styles" { break; }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    (styles, list_styles)
+}
+
+/// Parse a `<text:list-style>` element and return whether it's ordered (numbered).
+/// An ordered list has at least one `<text:list-level-style-number>` child.
+fn parse_list_style_is_ordered(reader: &mut Reader<&[u8]>) -> bool {
+    let mut is_ordered = false;
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let name = element_name(e.name().as_ref());
+                if name == "text:list-level-style-number" {
+                    is_ordered = true;
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "text:list-style" { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    is_ordered
 }
 
 fn parse_styles_block(
@@ -1434,6 +1610,7 @@ fn parse_meta_xml(xml: &str) -> OdfMeta {
                 if name == "office:meta" {
                     in_meta = true;
                 } else if in_meta {
+                    let elem_attrs = collect_attrs(e);
                     buf.clear();
                     let text = read_text_until(&mut reader, &name);
                     match name.as_str() {
@@ -1447,6 +1624,11 @@ fn parse_meta_xml(xml: &str) -> OdfMeta {
                         "meta:editing-duration" => meta.editing_duration = Some(text),
                         "meta:generator" => meta.generator = Some(text),
                         "meta:keyword" => meta.keywords.push(text),
+                        "meta:user-defined" => {
+                            if let Some(ud_name) = attr_from_list(&elem_attrs, "meta:name") {
+                                meta.user_defined.push((ud_name, text));
+                            }
+                        }
                         _ => {}
                     }
                     continue;
@@ -1507,6 +1689,34 @@ fn attr_from_list(attrs: &[(String, String)], key: &str) -> Option<String> {
     attrs.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
 }
 
+/// Read the text content of an `<office:annotation>` element.
+/// Collects text from any `<text:p>` children and skips other children.
+fn read_annotation_text(reader: &mut Reader<&[u8]>) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let name = element_name(e.name().as_ref());
+                buf.clear();
+                if name == "text:p" {
+                    parts.push(read_text_until(reader, "text:p"));
+                } else {
+                    skip_element(reader);
+                }
+                continue;
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "office:annotation" { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    parts.join(" ")
+}
+
 /// Skip an element and all its children.
 fn skip_element(reader: &mut Reader<&[u8]>) {
     let mut depth = 1u32;
@@ -1555,6 +1765,9 @@ fn read_text_until(reader: &mut Reader<&[u8]>, end_tag: &str) -> String {
             Ok(Event::Text(ref e)) => {
                 text.push_str(&e.decode().unwrap_or_default());
             }
+            Ok(Event::GeneralRef(ref e)) => {
+                text.push_str(&decode_general_ref(e));
+            }
             Ok(Event::Start(_)) => depth += 1,
             Ok(Event::End(ref e)) => {
                 if depth == 0 && element_name(e.name().as_ref()) == end_tag { break; }
@@ -1577,6 +1790,11 @@ fn capture_raw_until(reader: &mut Reader<&[u8]>, end_tag: &str) -> String {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Text(ref e)) => {
                 raw.push_str(&e.decode().unwrap_or_default());
+            }
+            Ok(Event::GeneralRef(ref e)) => {
+                // Preserve as numeric character reference for roundtrip fidelity
+                let s = std::str::from_utf8(e).unwrap_or("");
+                raw.push_str(&format!("&{s};"));
             }
             Ok(Event::Start(ref e)) => {
                 depth += 1;
@@ -1635,6 +1853,39 @@ fn capture_raw_from_attrs(
     capture_raw_from_name_attrs(name, attrs, reader)
 }
 
+/// Decode a `GeneralRef` event payload (the bytes between `&` and `;`) to a string.
+///
+/// Handles numeric character references (`#N` and `#xN`) and common named HTML entities.
+/// Unknown named entities are returned as empty string (silent drop is acceptable for
+/// format-specific entities that have no Unicode equivalent).
+fn decode_general_ref(raw: &[u8]) -> String {
+    let s = std::str::from_utf8(raw).unwrap_or("");
+    if let Some(hex) = s.strip_prefix("#x").or_else(|| s.strip_prefix("#X"))
+        && let Ok(n) = u32::from_str_radix(hex, 16)
+        && let Some(c) = char::from_u32(n)
+    {
+        return c.to_string();
+    } else if let Some(dec) = s.strip_prefix('#')
+        && let Ok(n) = dec.parse::<u32>()
+        && let Some(c) = char::from_u32(n)
+    {
+        return c.to_string();
+    } else {
+        // Named HTML/XML entities
+        match s {
+            "nbsp" => return "\u{00A0}".to_string(),
+            "amp" => return "&".to_string(),
+            "lt" => return "<".to_string(),
+            "gt" => return ">".to_string(),
+            "apos" => return "'".to_string(),
+            "quot" => return "\"".to_string(),
+            "shy" => return "\u{00AD}".to_string(),
+            _ => {}
+        }
+    }
+    String::new()
+}
+
 /// Return `Some(s)` if `s` is not an "effectively zero" measurement.
 fn non_zero_measure(val: &str) -> Option<String> {
     let trimmed = val.trim();
@@ -1650,3 +1901,4 @@ fn non_zero_measure(val: &str) -> Option<String> {
         Some(val.to_string())
     }
 }
+

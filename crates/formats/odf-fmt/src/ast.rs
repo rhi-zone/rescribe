@@ -20,6 +20,9 @@ pub struct OdfDocument {
     pub automatic_styles: Vec<StyleEntry>,
     /// Named styles declared in `styles.xml` `<office:styles>`.
     pub named_styles: Vec<StyleEntry>,
+    /// List styles from `<text:list-style>` in `content.xml` automatic-styles.
+    /// Each entry is (style-name, is_ordered).
+    pub list_styles: Vec<(String, bool)>,
     /// Page layout and master page definitions from `styles.xml`.
     pub page_layouts: Vec<PageLayout>,
     /// Document metadata from `meta.xml`.
@@ -197,6 +200,10 @@ pub enum Inline {
     Note(Note),
     /// `<draw:frame>` inline (anchor-type="as-char").
     Frame(Frame),
+    /// `<text:bookmark>` or `<text:bookmark-start>` — a named anchor point.
+    Bookmark { name: String },
+    /// `<office:annotation>` — an inline comment/annotation.
+    Annotation { content: String },
     /// Inline field (page number, date, etc.) — captured as raw element name + value.
     Field { name: String, value: String },
     /// An inline element not otherwise handled; preserved as raw XML string.
@@ -332,6 +339,8 @@ pub struct OdfMeta {
     pub generator: Option<String>,
     pub editing_duration: Option<String>,
     pub document_statistics: Option<DocumentStatistics>,
+    /// `<meta:user-defined>` entries: (name, value).
+    pub user_defined: Vec<(String, String)>,
 }
 
 /// Word/page counts from `<meta:document-statistic>`.

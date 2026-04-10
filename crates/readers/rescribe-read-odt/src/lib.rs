@@ -37,6 +37,9 @@ fn convert_document(odf: OdfDocument) -> Result<ConversionResult<Document>, Pars
     }
     if let Some(v) = &odf.meta.description { metadata.set("description", v.as_str()); }
     if let Some(v) = &odf.meta.language { metadata.set("language", v.as_str()); }
+    for (name, value) in &odf.meta.user_defined {
+        metadata.set(format!("meta:{name}"), value.as_str());
+    }
 
     // Page layout from first page layout entry
     if let Some(pl) = odf.page_layouts.first() {
@@ -69,11 +72,14 @@ fn convert_document(odf: OdfDocument) -> Result<ConversionResult<Document>, Pars
         named: &odf.named_styles,
         auto: &odf.automatic_styles,
         image_map: &image_map,
+        list_styles: &odf.list_styles,
     };
 
     // Convert body
+    let empty_blocks: Vec<odf_fmt::ast::TextBlock> = Vec::new();
     let body_blocks = match &odf.body {
         OdfBody::Text(blocks) => blocks,
+        OdfBody::Empty => &empty_blocks,
         _ => {
             return Err(ParseError::Invalid(
                 "Not an ODT text document (body is not office:text)".to_owned(),
@@ -122,12 +128,17 @@ struct StyleCtx<'a> {
     named: &'a [StyleEntry],
     auto: &'a [StyleEntry],
     image_map: &'a std::collections::HashMap<String, String>,
+    list_styles: &'a [(String, bool)],
 }
 
 impl<'a> StyleCtx<'a> {
     fn find_style(&self, name: &str) -> Option<&StyleEntry> {
         self.auto.iter().find(|s| s.name == name)
             .or_else(|| self.named.iter().find(|s| s.name == name))
+    }
+
+    fn is_ordered_list_style(&self, name: &str) -> Option<bool> {
+        self.list_styles.iter().find(|(n, _)| n == name).map(|(_, o)| *o)
     }
 }
 
@@ -461,6 +472,20 @@ fn convert_inline(inline: &Inline, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>)
             }
         }
 
+        Inline::Bookmark { name } => {
+            if name.is_empty() {
+                (Vec::new(), Vec::new())
+            } else {
+                let n = Node::new(node::SPAN).prop(prop::ID, name.as_str());
+                (vec![n], Vec::new())
+            }
+        }
+
+        Inline::Annotation { content } => {
+            let n = Node::new(node::SPAN).prop("odt:annotation", content.as_str());
+            (vec![n], Vec::new())
+        }
+
         Inline::Unknown { .. } => (Vec::new(), Vec::new()),
     }
 }
@@ -605,12 +630,16 @@ fn extract_text_node(n: &Node) -> String {
     }
 }
 
-fn is_ordered_list(style_name: Option<&str>, _ctx: &StyleCtx<'_>) -> bool {
+fn is_ordered_list(style_name: Option<&str>, ctx: &StyleCtx<'_>) -> bool {
     let name = match style_name {
         Some(n) if !n.is_empty() => n,
         _ => return false,
     };
-    // odf-fmt doesn't parse list-level-style in StyleEntry directly, fall through to heuristic
+    // Check parsed list style info first
+    if let Some(ordered) = ctx.is_ordered_list_style(name) {
+        return ordered;
+    }
+    // Fall through to heuristic on style name
     let lower = name.to_lowercase();
     lower.contains("numb") || lower.contains("order") || lower.contains("decimal")
         || lower == "list number" || lower == "list_number"

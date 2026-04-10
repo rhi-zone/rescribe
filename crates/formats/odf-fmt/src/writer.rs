@@ -549,6 +549,14 @@ fn write_inline(s: &mut String, inline: &Inline) {
         Inline::Field { name, value } => {
             s.push_str(&format!("<{name}>{}</{name}>", xml_escape(value)));
         }
+        Inline::Bookmark { name } => {
+            s.push_str(&format!("<text:bookmark text:name=\"{}\"/>", xml_escape(name)));
+        }
+        Inline::Annotation { content } => {
+            s.push_str("<office:annotation><text:p>");
+            s.push_str(&xml_escape(content));
+            s.push_str("</text:p></office:annotation>");
+        }
         Inline::Unknown { raw, .. } => s.push_str(raw),
     }
 }
