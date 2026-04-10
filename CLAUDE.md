@@ -123,10 +123,10 @@ corpus analysis tool. These use cases exist whether rescribe does or not.
   When the upstream library supports multiple modes (tree building, event/SAX,
   chunked input), the `-fmt` crate must use the right mode for each API. A wrapper
   that funnels everything through the tree builder is a fake streaming API.
-  pulldown-cmark's `StreamingParser` buffering is the documented exception
-  (upstream requires full `&str`), not the template. **Performance cannot be
-  sacrificed — full stop — except in very extenuating circumstances that must be
-  documented and justified per-library.**
+  **If a library cannot support all five APIs at full performance, we cannot use
+  that library.** The library must enable performance, not constrain it.
+  pulldown-cmark is the sole exception (superseding 77M weekly downloads is a
+  non-goal); its `StreamingParser` buffering limitation is documented explicitly.
 
 - **`ooxml-fmt` is the priority target for the full three-API architecture.** DOCX,
   XLSX, and PPTX routinely exceed RAM on large corpora; `StreamingParser` is not
