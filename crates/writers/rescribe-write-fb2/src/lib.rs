@@ -83,8 +83,9 @@ fn write_description(
         .write_event(Event::Start(BytesStart::new("title-info")))
         .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
 
-    // Genre (default to prose)
-    write_simple_element(writer, "genre", "prose")?;
+    // Genre (from metadata, or default to prose)
+    let genre = doc.metadata.get_str("genre").unwrap_or("prose");
+    write_simple_element(writer, "genre", genre)?;
 
     // Author
     if let Some(author) = doc.metadata.get_str("author") {
@@ -211,7 +212,45 @@ fn write_simple_element(
 
 fn write_node(writer: &mut Writer<Cursor<Vec<u8>>>, node: &Node) -> Result<(), EmitError> {
     match node.kind.as_str() {
-        node::DOCUMENT | node::DIV | node::SPAN => {
+        node::DOCUMENT => {
+            for child in &node.children {
+                write_node(writer, child)?;
+            }
+        }
+
+        node::DIV => {
+            match node.props.get_str("html:class") {
+                Some("poem") => {
+                    writer
+                        .write_event(Event::Start(BytesStart::new("poem")))
+                        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+                    for child in &node.children {
+                        write_node(writer, child)?;
+                    }
+                    writer
+                        .write_event(Event::End(BytesEnd::new("poem")))
+                        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+                }
+                Some("stanza") => {
+                    writer
+                        .write_event(Event::Start(BytesStart::new("stanza")))
+                        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+                    for child in &node.children {
+                        write_node(writer, child)?;
+                    }
+                    writer
+                        .write_event(Event::End(BytesEnd::new("stanza")))
+                        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+                }
+                _ => {
+                    for child in &node.children {
+                        write_node(writer, child)?;
+                    }
+                }
+            }
+        }
+
+        node::SPAN => {
             for child in &node.children {
                 write_node(writer, child)?;
             }
@@ -241,26 +280,36 @@ fn write_node(writer: &mut Writer<Cursor<Vec<u8>>>, node: &Node) -> Result<(), E
         }
 
         node::PARAGRAPH => {
+            let tag = if node.props.get_str("html:class") == Some("text-author") {
+                "text-author"
+            } else {
+                "p"
+            };
             writer
-                .write_event(Event::Start(BytesStart::new("p")))
+                .write_event(Event::Start(BytesStart::new(tag)))
                 .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
             for child in &node.children {
                 write_inline(writer, child)?;
             }
             writer
-                .write_event(Event::End(BytesEnd::new("p")))
+                .write_event(Event::End(BytesEnd::new(tag)))
                 .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
         }
 
         node::BLOCKQUOTE => {
+            let tag = if node.props.get_str("fb2:type") == Some("epigraph") {
+                "epigraph"
+            } else {
+                "cite"
+            };
             writer
-                .write_event(Event::Start(BytesStart::new("cite")))
+                .write_event(Event::Start(BytesStart::new(tag)))
                 .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
             for child in &node.children {
                 write_node(writer, child)?;
             }
             writer
-                .write_event(Event::End(BytesEnd::new("cite")))
+                .write_event(Event::End(BytesEnd::new(tag)))
                 .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
         }
 

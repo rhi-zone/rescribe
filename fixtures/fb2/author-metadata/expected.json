@@ -1,0 +1,5 @@
+{
+  "description": "FB2 author with first-name and last-name combines them into author metadata field",
+  "metadata": { "author": "Ivan Turgenev", "title": "Fathers and Sons" },
+  "assertions": []
+}

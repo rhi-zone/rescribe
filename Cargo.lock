@@ -3126,6 +3126,7 @@ dependencies = [
  "base64",
  "quick-xml 0.39.0",
  "rescribe-core",
+ "rescribe-fixtures",
  "rescribe-std",
 ]
 

@@ -1,0 +1,9 @@
+{
+  "description": "FB2 epigraph becomes a blockquote with fb2:type epigraph; text-author becomes a paragraph with html:class text-author",
+  "assertions": [
+    { "path": "/0/0/0",   "kind": "blockquote", "props": { "fb2:type": "epigraph" } },
+    { "path": "/0/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/1", "kind": "paragraph", "props": { "html:class": "text-author" } },
+    { "path": "/0/0/1",   "kind": "paragraph" }
+  ]
+}

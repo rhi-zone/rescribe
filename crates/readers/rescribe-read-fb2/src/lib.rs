@@ -48,7 +48,9 @@ pub fn parse_with_options(
     options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
     let mut reader = Reader::from_str(input);
-    reader.config_mut().trim_text(true);
+    // Do not use trim_text(true) — it strips spaces adjacent to entity refs
+    // (&amp; etc.) which breaks inline text. Whitespace-only nodes are filtered
+    // in flush_text() instead.
 
     let mut converter = Converter::new(options.extract_binaries);
     converter.parse(&mut reader)?;
@@ -132,6 +134,31 @@ impl Converter {
                 Ok(Event::CData(e)) => {
                     self.current_text
                         .push_str(&String::from_utf8_lossy(e.as_ref()));
+                }
+                Ok(Event::GeneralRef(e)) => {
+                    // Decode predefined XML entities and numeric character references.
+                    let name = String::from_utf8_lossy(&e);
+                    match name.as_ref() {
+                        "amp" => self.current_text.push('&'),
+                        "lt" => self.current_text.push('<'),
+                        "gt" => self.current_text.push('>'),
+                        "apos" => self.current_text.push('\''),
+                        "quot" => self.current_text.push('"'),
+                        s if s.starts_with('#') => {
+                            // Numeric character reference: &#NNN; or &#xHHH;
+                            let digits = &s[1..];
+                            let code = if let Some(hex) = digits.strip_prefix('x') {
+                                u32::from_str_radix(hex, 16).ok()
+                            } else {
+                                digits.parse::<u32>().ok()
+                            };
+                            if let Some(c) = code.and_then(char::from_u32) {
+                                self.current_text.push(c);
+                            }
+                        }
+                        // Undefined entity — emit nothing (already warned by caller or ignored)
+                        _ => {}
+                    }
                 }
                 Ok(Event::Eof) => break,
                 Ok(_) => {}
@@ -288,15 +315,28 @@ impl Converter {
 
             let node = self.convert_element(&frame);
 
+            // Metadata containers: their children (text nodes from genre, book-title, lang,
+            // etc.) must not leak into the document content. Discard children when convert_element
+            // returns None for these elements.
+            let discard_children = node.is_none()
+                && matches!(
+                    frame.element.as_str(),
+                    "description"
+                        | "title-info"
+                        | "document-info"
+                        | "publish-info"
+                        | "custom-info"
+                );
+
             if let Some(parent) = self.stack.last_mut() {
                 if let Some(n) = node {
                     parent.children.push(n);
-                } else {
+                } else if !discard_children {
                     parent.children.extend(frame.children);
                 }
             } else if let Some(n) = node {
                 self.result.push(n);
-            } else {
+            } else if !discard_children {
                 self.result.extend(frame.children);
             }
         }
@@ -369,15 +409,42 @@ impl Converter {
                 }
             }
 
-            "lang" | "src-lang" | "genre" | "keywords" | "date" | "version" | "program-used" => {
-                // Metadata elements - handled in extract_metadata
+            "lang" => {
+                let text = extract_text(&frame.children);
+                if !text.is_empty() {
+                    self.metadata.set("lang", text);
+                }
                 None
             }
+
+            "genre" => {
+                let text = extract_text(&frame.children);
+                if !text.is_empty() {
+                    self.metadata.set("genre", text);
+                }
+                None
+            }
+
+            "keywords" => {
+                let text = extract_text(&frame.children);
+                if !text.is_empty() {
+                    self.metadata.set("keywords", text);
+                }
+                None
+            }
+
+            "src-lang" | "date" | "version" | "program-used" => None,
 
             // Body content
             "body" => Some(Node::new(node::DIV).children(frame.children.clone())),
 
-            "section" => Some(Node::new(node::DIV).children(frame.children.clone())),
+            "section" => {
+                let mut n = Node::new(node::DIV).children(frame.children.clone());
+                if let Some(id) = &frame.attrs.id {
+                    n = n.prop("id", id.clone());
+                }
+                Some(n)
+            }
 
             "title" => {
                 // Title in body is a heading (level based on nesting)
@@ -544,6 +611,33 @@ fn extract_text(nodes: &[Node]) -> String {
         text.push_str(&extract_text(&node.children));
     }
     text
+}
+
+#[cfg(test)]
+mod fixture_tests {
+    use rescribe_fixtures::run_format_fixtures;
+    use std::path::PathBuf;
+
+    fn fixtures_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap() // crates/readers/
+            .parent()
+            .unwrap() // crates/
+            .parent()
+            .unwrap() // workspace root
+            .join("fixtures")
+    }
+
+    #[test]
+    fn fb2_fixtures() {
+        run_format_fixtures(&fixtures_root(), "fb2", |input| {
+            let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
+            super::parse(s)
+                .map(|r| r.value)
+                .map_err(|e| e.to_string())
+        });
+    }
 }
 
 #[cfg(test)]

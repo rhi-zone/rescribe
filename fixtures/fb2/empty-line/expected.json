@@ -1,0 +1,8 @@
+{
+  "description": "FB2 empty-line element becomes an empty paragraph node between surrounding paragraphs",
+  "assertions": [
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "paragraph" },
+    { "path": "/0/0/2", "kind": "paragraph" }
+  ]
+}

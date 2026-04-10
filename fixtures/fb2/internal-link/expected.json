@@ -1,0 +1,7 @@
+{
+  "description": "FB2 internal link (l:href with #) becomes a link node preserving the # prefix; section id attribute is preserved on the div",
+  "assertions": [
+    { "path": "/0/0/0/1", "kind": "link", "props": { "url": "#chapter2" } },
+    { "path": "/0/1",     "kind": "div",  "props": { "id": "chapter2" } }
+  ]
+}

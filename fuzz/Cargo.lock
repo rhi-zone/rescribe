@@ -1375,6 +1375,7 @@ dependencies = [
  "rescribe-write-dokuwiki",
  "rescribe-write-dzslides",
  "rescribe-write-epub",
+ "rescribe-write-fb2",
  "rescribe-write-fountain",
  "rescribe-write-haddock",
  "rescribe-write-html",
@@ -1756,6 +1757,8 @@ dependencies = [
  "ooxml-pml",
  "rescribe-core",
  "rescribe-std",
+ "serde_json",
+ "zip 2.4.2",
 ]
 
 [[package]]
@@ -1837,6 +1840,7 @@ dependencies = [
  "ooxml-sml",
  "rescribe-core",
  "rescribe-std",
+ "serde_json",
 ]
 
 [[package]]
@@ -1966,6 +1970,16 @@ dependencies = [
  "rescribe-core",
  "rescribe-std",
  "rescribe-write-html",
+]
+
+[[package]]
+name = "rescribe-write-fb2"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "quick-xml",
+ "rescribe-core",
+ "rescribe-std",
 ]
 
 [[package]]

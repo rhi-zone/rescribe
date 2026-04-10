@@ -225,6 +225,9 @@ path = "../crates/readers/rescribe-read-odt"
 [dependencies.rescribe-read-fb2]
 path = "../crates/readers/rescribe-read-fb2"
 
+[dependencies.rescribe-write-fb2]
+path = "../crates/writers/rescribe-write-fb2"
+
 [dependencies.rescribe-read-docbook]
 path = "../crates/readers/rescribe-read-docbook"
 
@@ -845,6 +848,12 @@ doc = false
 [[bin]]
 name = "fuzz_fb2_reader"
 path = "fuzz_targets/fb2_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_fb2_roundtrip"
+path = "fuzz_targets/fb2_roundtrip.rs"
 test = false
 doc = false
 

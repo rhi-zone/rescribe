@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <body>
+    <section>
+      <epigraph>
+        <p>To be or not to be, that is the question.</p>
+        <text-author>William Shakespeare</text-author>
+      </epigraph>
+      <p>Main content.</p>
+    </section>
+  </body>
+</FictionBook>

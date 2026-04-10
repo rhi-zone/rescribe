@@ -1,0 +1,5 @@
+{
+  "description": "FB2 with an undefined XML entity reference causes a parse error",
+  "expect_error": true,
+  "assertions": []
+}

@@ -11,3 +11,6 @@ rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
 quick-xml = "0.39"
 base64 = "0.22"
+
+[dev-dependencies]
+rescribe-fixtures = { workspace = true }

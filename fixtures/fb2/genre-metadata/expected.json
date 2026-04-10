@@ -1,0 +1,5 @@
+{
+  "description": "FB2 genre element inside title-info sets the genre metadata field",
+  "metadata": { "genre": "science_fiction" },
+  "assertions": []
+}

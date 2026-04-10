@@ -1,0 +1,8 @@
+{
+  "description": "Empty section produces a div with no children; subsequent sections parse normally",
+  "assertions": [
+    { "path": "/0/0", "kind": "div" },
+    { "path": "/0/1", "kind": "div" },
+    { "path": "/0/1/0", "kind": "paragraph" }
+  ]
+}

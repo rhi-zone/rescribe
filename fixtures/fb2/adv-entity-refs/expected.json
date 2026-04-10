@@ -1,0 +1,7 @@
+{
+  "description": "Predefined XML entity references (&amp; &lt; &gt; &apos;) are decoded to their character equivalents",
+  "assertions": [
+    { "path": "/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Text with & ampersand, <less-than>, and 'apostrophe'." } }
+  ]
+}

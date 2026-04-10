@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <description>
+    <title-info>
+      <genre>science_fiction</genre>
+      <book-title>The Left Hand of Darkness</book-title>
+    </title-info>
+  </description>
+  <body>
+    <section><p>Content.</p></section>
+  </body>
+</FictionBook>

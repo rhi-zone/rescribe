@@ -1,0 +1,5 @@
+{
+  "description": "FB2 lang element inside title-info sets the lang metadata field",
+  "metadata": { "lang": "ru" },
+  "assertions": []
+}
