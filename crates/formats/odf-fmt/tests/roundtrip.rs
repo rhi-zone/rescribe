@@ -211,3 +211,376 @@ fn emit_empty_doc() {
     // Can be parsed back
     let _ = parse(&bytes).expect("should parse back");
 }
+
+// ── ODS (spreadsheet) ─────────────────────────────────────────────────────────
+
+#[test]
+fn roundtrip_spreadsheet_basic() {
+    let doc = OdfDocument {
+        mimetype: "application/vnd.oasis.opendocument.spreadsheet".to_string(),
+        body: OdfBody::Spreadsheet(SpreadsheetBody {
+            sheets: vec![Sheet {
+                name: Some("Sheet1".to_string()),
+                print: true,
+                rows: vec![
+                    SheetRow {
+                        cells: vec![
+                            SheetCell {
+                                value_type: Some("string".to_string()),
+                                value: Some("Name".to_string()),
+                                content: vec![TextBlock::Paragraph(Paragraph {
+                                    content: vec![Inline::Text("Name".to_string())],
+                                    ..Default::default()
+                                })],
+                                ..Default::default()
+                            },
+                            SheetCell {
+                                value_type: Some("string".to_string()),
+                                value: Some("Score".to_string()),
+                                content: vec![TextBlock::Paragraph(Paragraph {
+                                    content: vec![Inline::Text("Score".to_string())],
+                                    ..Default::default()
+                                })],
+                                ..Default::default()
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                    SheetRow {
+                        cells: vec![
+                            SheetCell {
+                                value_type: Some("string".to_string()),
+                                value: Some("Alice".to_string()),
+                                content: vec![TextBlock::Paragraph(Paragraph {
+                                    content: vec![Inline::Text("Alice".to_string())],
+                                    ..Default::default()
+                                })],
+                                ..Default::default()
+                            },
+                            SheetCell {
+                                value_type: Some("float".to_string()),
+                                value: Some("42".to_string()),
+                                content: vec![TextBlock::Paragraph(Paragraph {
+                                    content: vec![Inline::Text("42".to_string())],
+                                    ..Default::default()
+                                })],
+                                ..Default::default()
+                            },
+                        ],
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            }],
+            named_ranges: vec![],
+        }),
+        meta: OdfMeta {
+            title: Some("Test Spreadsheet".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let bytes = emit(&doc).expect("emit failed");
+    assert!(!bytes.is_empty());
+
+    let result = parse(&bytes).expect("parse failed");
+    let doc2 = result.value;
+
+    assert_eq!(doc2.mimetype, "application/vnd.oasis.opendocument.spreadsheet");
+    assert_eq!(doc2.meta.title, Some("Test Spreadsheet".to_string()));
+
+    let OdfBody::Spreadsheet(body) = &doc2.body else {
+        panic!("expected Spreadsheet body, got {:?}", doc2.body);
+    };
+    assert_eq!(body.sheets.len(), 1);
+    let sheet = &body.sheets[0];
+    assert_eq!(sheet.name, Some("Sheet1".to_string()));
+    assert!(sheet.print);
+    assert_eq!(sheet.rows.len(), 2);
+
+    // Header row
+    assert_eq!(sheet.rows[0].cells.len(), 2);
+    assert_eq!(sheet.rows[0].cells[0].value_type, Some("string".to_string()));
+    assert_eq!(sheet.rows[0].cells[0].value, Some("Name".to_string()));
+
+    // Data row
+    assert_eq!(sheet.rows[1].cells[1].value_type, Some("float".to_string()));
+    assert_eq!(sheet.rows[1].cells[1].value, Some("42".to_string()));
+}
+
+#[test]
+fn roundtrip_spreadsheet_formula() {
+    let doc = OdfDocument {
+        mimetype: "application/vnd.oasis.opendocument.spreadsheet".to_string(),
+        body: OdfBody::Spreadsheet(SpreadsheetBody {
+            sheets: vec![Sheet {
+                name: Some("Calc".to_string()),
+                rows: vec![SheetRow {
+                    cells: vec![
+                        SheetCell {
+                            value_type: Some("float".to_string()),
+                            value: Some("10".to_string()),
+                            ..Default::default()
+                        },
+                        SheetCell {
+                            value_type: Some("float".to_string()),
+                            value: Some("20".to_string()),
+                            ..Default::default()
+                        },
+                        SheetCell {
+                            value_type: Some("float".to_string()),
+                            value: Some("30".to_string()),
+                            formula: Some("of:=[.A1]+[.B1]".to_string()),
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            named_ranges: vec![NamedRange {
+                name: "TotalRange".to_string(),
+                cell_range_address: Some("Calc.$A$1:.$C$1".to_string()),
+                base_cell_address: Some("Calc.$A$1".to_string()),
+            }],
+        }),
+        ..Default::default()
+    };
+
+    let bytes = emit(&doc).unwrap();
+    let result = parse(&bytes).unwrap();
+    let doc2 = result.value;
+
+    let OdfBody::Spreadsheet(body) = &doc2.body else {
+        panic!("expected Spreadsheet body");
+    };
+    let cell = &body.sheets[0].rows[0].cells[2];
+    assert_eq!(cell.formula, Some("of:=[.A1]+[.B1]".to_string()));
+    assert_eq!(cell.value, Some("30".to_string()));
+    assert_eq!(body.named_ranges.len(), 1);
+    assert_eq!(body.named_ranges[0].name, "TotalRange");
+}
+
+// ── ODP (presentation) ────────────────────────────────────────────────────────
+
+#[test]
+fn roundtrip_presentation_basic() {
+    let doc = OdfDocument {
+        mimetype: "application/vnd.oasis.opendocument.presentation".to_string(),
+        body: OdfBody::Presentation(PresentationBody {
+            pages: vec![
+                DrawPage {
+                    name: Some("page1".to_string()),
+                    master_page_name: Some("Default".to_string()),
+                    shapes: vec![
+                        DrawShape {
+                            presentation_class: Some("title".to_string()),
+                            x: Some("5.0cm".to_string()),
+                            y: Some("4.0cm".to_string()),
+                            width: Some("20.0cm".to_string()),
+                            height: Some("3.0cm".to_string()),
+                            content: DrawShapeContent::TextBox(vec![
+                                TextBlock::Paragraph(Paragraph {
+                                    content: vec![Inline::Text("Hello Presentation".to_string())],
+                                    ..Default::default()
+                                }),
+                            ]),
+                            ..Default::default()
+                        },
+                        DrawShape {
+                            presentation_class: Some("subtitle".to_string()),
+                            content: DrawShapeContent::TextBox(vec![
+                                TextBlock::Paragraph(Paragraph {
+                                    content: vec![Inline::Text("Subtitle text".to_string())],
+                                    ..Default::default()
+                                }),
+                            ]),
+                            ..Default::default()
+                        },
+                    ],
+                    notes: None,
+                    ..Default::default()
+                },
+            ],
+        }),
+        meta: OdfMeta {
+            title: Some("My Presentation".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let bytes = emit(&doc).expect("emit failed");
+    assert!(!bytes.is_empty());
+
+    let result = parse(&bytes).expect("parse failed");
+    let doc2 = result.value;
+
+    assert_eq!(doc2.mimetype, "application/vnd.oasis.opendocument.presentation");
+    assert_eq!(doc2.meta.title, Some("My Presentation".to_string()));
+
+    let OdfBody::Presentation(body) = &doc2.body else {
+        panic!("expected Presentation body, got {:?}", doc2.body);
+    };
+    assert_eq!(body.pages.len(), 1);
+
+    let page = &body.pages[0];
+    assert_eq!(page.name, Some("page1".to_string()));
+    assert_eq!(page.master_page_name, Some("Default".to_string()));
+    assert_eq!(page.shapes.len(), 2);
+
+    // Title shape
+    let title = &page.shapes[0];
+    assert_eq!(title.presentation_class, Some("title".to_string()));
+    assert_eq!(title.x, Some("5.0cm".to_string()));
+    let DrawShapeContent::TextBox(blocks) = &title.content else {
+        panic!("expected TextBox");
+    };
+    assert_eq!(blocks.len(), 1);
+    let TextBlock::Paragraph(p) = &blocks[0] else { panic!("expected Paragraph") };
+    let Inline::Text(t) = &p.content[0] else { panic!("expected Text") };
+    assert_eq!(t, "Hello Presentation");
+}
+
+#[test]
+fn roundtrip_presentation_notes() {
+    let doc = OdfDocument {
+        mimetype: "application/vnd.oasis.opendocument.presentation".to_string(),
+        body: OdfBody::Presentation(PresentationBody {
+            pages: vec![DrawPage {
+                name: Some("slide1".to_string()),
+                shapes: vec![DrawShape {
+                    presentation_class: Some("body".to_string()),
+                    content: DrawShapeContent::TextBox(vec![
+                        TextBlock::Paragraph(Paragraph {
+                            content: vec![Inline::Text("Slide body".to_string())],
+                            ..Default::default()
+                        }),
+                    ]),
+                    ..Default::default()
+                }],
+                notes: Some(Box::new(NotesPage {
+                    shapes: vec![DrawShape {
+                        presentation_class: Some("notes".to_string()),
+                        content: DrawShapeContent::TextBox(vec![
+                            TextBlock::Paragraph(Paragraph {
+                                content: vec![Inline::Text("Speaker notes here".to_string())],
+                                ..Default::default()
+                            }),
+                        ]),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+        }),
+        ..Default::default()
+    };
+
+    let bytes = emit(&doc).unwrap();
+    let result = parse(&bytes).unwrap();
+    let doc2 = result.value;
+
+    let OdfBody::Presentation(body) = &doc2.body else {
+        panic!("expected Presentation body");
+    };
+    let page = &body.pages[0];
+    let notes = page.notes.as_ref().expect("expected notes page");
+    assert_eq!(notes.shapes.len(), 1);
+    let DrawShapeContent::TextBox(blocks) = &notes.shapes[0].content else {
+        panic!("expected TextBox in notes");
+    };
+    let TextBlock::Paragraph(p) = &blocks[0] else { panic!("expected Paragraph") };
+    let Inline::Text(t) = &p.content[0] else { panic!("expected Text") };
+    assert_eq!(t, "Speaker notes here");
+}
+
+// ── Events: ODS ───────────────────────────────────────────────────────────────
+
+#[test]
+fn events_spreadsheet() {
+    let doc = OdfDocument {
+        mimetype: "application/vnd.oasis.opendocument.spreadsheet".to_string(),
+        body: OdfBody::Spreadsheet(SpreadsheetBody {
+            sheets: vec![Sheet {
+                name: Some("Data".to_string()),
+                rows: vec![SheetRow {
+                    cells: vec![SheetCell {
+                        value_type: Some("float".to_string()),
+                        value: Some("99".to_string()),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            named_ranges: vec![],
+        }),
+        ..Default::default()
+    };
+
+    let bytes = emit(&doc).unwrap();
+    let evts: Vec<_> = odf_fmt::events(&bytes).collect();
+
+    assert!(evts.iter().any(|e| matches!(e, OdfEvent::StartSpreadsheet)), "missing StartSpreadsheet");
+    assert!(evts.iter().any(|e| matches!(e, OdfEvent::EndSpreadsheet)), "missing EndSpreadsheet");
+    assert!(
+        evts.iter().any(|e| matches!(e, OdfEvent::StartSheet { name, .. } if name.as_deref() == Some("Data"))),
+        "missing StartSheet with name=Data"
+    );
+    assert!(evts.iter().any(|e| matches!(e, OdfEvent::EndSheet)), "missing EndSheet");
+    assert!(evts.iter().any(|e| matches!(e, OdfEvent::StartSheetRow { .. })), "missing StartSheetRow");
+    assert!(
+        evts.iter().any(|e| matches!(e, OdfEvent::StartSheetCell { value_type, .. } if value_type.as_deref() == Some("float"))),
+        "missing StartSheetCell with value_type=float"
+    );
+}
+
+// ── Events: ODP ───────────────────────────────────────────────────────────────
+
+#[test]
+fn events_presentation() {
+    let doc = OdfDocument {
+        mimetype: "application/vnd.oasis.opendocument.presentation".to_string(),
+        body: OdfBody::Presentation(PresentationBody {
+            pages: vec![DrawPage {
+                name: Some("slide1".to_string()),
+                shapes: vec![DrawShape {
+                    presentation_class: Some("title".to_string()),
+                    content: DrawShapeContent::TextBox(vec![
+                        TextBlock::Paragraph(Paragraph {
+                            content: vec![Inline::Text("My Title".to_string())],
+                            ..Default::default()
+                        }),
+                    ]),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+        }),
+        ..Default::default()
+    };
+
+    let bytes = emit(&doc).unwrap();
+    let evts: Vec<_> = odf_fmt::events(&bytes).collect();
+
+    assert!(evts.iter().any(|e| matches!(e, OdfEvent::StartPresentation)), "missing StartPresentation");
+    assert!(evts.iter().any(|e| matches!(e, OdfEvent::EndPresentation)), "missing EndPresentation");
+    assert!(
+        evts.iter().any(|e| matches!(e, OdfEvent::StartSlide { name, .. } if name.as_deref() == Some("slide1"))),
+        "missing StartSlide with name=slide1"
+    );
+    assert!(evts.iter().any(|e| matches!(e, OdfEvent::EndSlide)), "missing EndSlide");
+    assert!(
+        evts.iter().any(|e| matches!(e, OdfEvent::StartShape { presentation_class, .. } if presentation_class.as_deref() == Some("title"))),
+        "missing StartShape with presentation_class=title"
+    );
+    assert!(evts.iter().any(|e| matches!(e, OdfEvent::StartTextBox)), "missing StartTextBox");
+    assert!(evts.iter().any(|e| matches!(e, OdfEvent::StartParagraph { .. })), "missing StartParagraph");
+    assert!(
+        evts.iter().any(|e| matches!(e, OdfEvent::Text(t) if t.contains("My Title"))),
+        "missing Text 'My Title'"
+    );
+}

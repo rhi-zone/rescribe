@@ -127,13 +127,11 @@ fn parse_content_xml(
                         in_body = false;
                     }
                     "office:spreadsheet" if in_body => {
-                        let raw = capture_raw_until(&mut reader, "office:spreadsheet");
-                        body = OdfBody::Spreadsheet(raw);
+                        body = OdfBody::Spreadsheet(parse_spreadsheet_body(&mut reader, diags));
                         in_body = false;
                     }
                     "office:presentation" if in_body => {
-                        let raw = capture_raw_until(&mut reader, "office:presentation");
-                        body = OdfBody::Presentation(raw);
+                        body = OdfBody::Presentation(parse_presentation_body(&mut reader, diags));
                         in_body = false;
                     }
                     _ => {}
@@ -154,6 +152,503 @@ fn parse_content_xml(
 
 fn parse_text_body(reader: &mut Reader<&[u8]>, diags: &mut Vec<Diagnostic>) -> Vec<TextBlock> {
     parse_text_blocks(reader, "office:text", diags)
+}
+
+// ── Spreadsheet body ──────────────────────────────────────────────────────────
+
+fn parse_spreadsheet_body(
+    reader: &mut Reader<&[u8]>,
+    diags: &mut Vec<Diagnostic>,
+) -> SpreadsheetBody {
+    let mut sheets = Vec::new();
+    let mut named_ranges = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let name = element_name(e.name().as_ref());
+                let attrs = collect_attrs(e);
+                buf.clear();
+                match name.as_str() {
+                    "table:table" => {
+                        sheets.push(parse_sheet_attrs(&attrs, reader, diags));
+                    }
+                    "table:named-expressions" => {
+                        named_ranges.extend(parse_named_ranges(reader));
+                    }
+                    _ => { skip_element(reader); }
+                }
+                continue;
+            }
+            Ok(Event::Empty(_)) => {}
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "office:spreadsheet" { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    SpreadsheetBody { sheets, named_ranges }
+}
+
+fn parse_sheet_attrs(
+    attrs: &[(String, String)],
+    reader: &mut Reader<&[u8]>,
+    diags: &mut Vec<Diagnostic>,
+) -> Sheet {
+    let name = attr_from_list(attrs, "table:name");
+    let style_name = attr_from_list(attrs, "table:style-name");
+    let print = attr_from_list(attrs, "table:print").map(|v| v != "false").unwrap_or(true);
+    let mut columns = Vec::new();
+    let mut rows = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let a = collect_attrs(e);
+                buf.clear();
+                match tag.as_str() {
+                    "table:table-column" => {
+                        columns.push(parse_column_def_attrs(&a, reader));
+                    }
+                    "table:table-columns" | "table:table-header-columns" => {
+                        // group wrapper — parse columns inside
+                        columns.extend(parse_column_group(reader, &tag));
+                    }
+                    "table:table-row" => {
+                        rows.push(parse_sheet_row_attrs(&a, reader, diags));
+                    }
+                    "table:table-rows" | "table:table-header-rows" => {
+                        rows.extend(parse_row_group(reader, &tag, diags));
+                    }
+                    _ => { skip_element(reader); }
+                }
+                continue;
+            }
+            Ok(Event::Empty(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                if tag == "table:table-column" {
+                    let a = collect_attrs(e);
+                    columns.push(ColumnDef {
+                        style_name: attr_from_list(&a, "table:style-name"),
+                        default_cell_style_name: attr_from_list(&a, "table:default-cell-style-name"),
+                        repeated: attr_from_list(&a, "table:number-columns-repeated").and_then(|v| v.parse().ok()),
+                        visibility: attr_from_list(&a, "table:visibility"),
+                    });
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "table:table" { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    Sheet { name, style_name, print, columns, rows }
+}
+
+fn parse_column_def_attrs(
+    attrs: &[(String, String)],
+    reader: &mut Reader<&[u8]>,
+) -> ColumnDef {
+    let col = ColumnDef {
+        style_name: attr_from_list(attrs, "table:style-name"),
+        default_cell_style_name: attr_from_list(attrs, "table:default-cell-style-name"),
+        repeated: attr_from_list(attrs, "table:number-columns-repeated").and_then(|v| v.parse().ok()),
+        visibility: attr_from_list(attrs, "table:visibility"),
+    };
+    skip_element_children(reader, "table:table-column");
+    col
+}
+
+fn parse_column_group(reader: &mut Reader<&[u8]>, end_tag: &str) -> Vec<ColumnDef> {
+    let mut cols = Vec::new();
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let a = collect_attrs(e);
+                buf.clear();
+                if tag == "table:table-column" {
+                    cols.push(parse_column_def_attrs(&a, reader));
+                } else {
+                    skip_element(reader);
+                }
+                continue;
+            }
+            Ok(Event::Empty(ref e)) => {
+                if element_name(e.name().as_ref()) == "table:table-column" {
+                    let a = collect_attrs(e);
+                    cols.push(ColumnDef {
+                        style_name: attr_from_list(&a, "table:style-name"),
+                        default_cell_style_name: attr_from_list(&a, "table:default-cell-style-name"),
+                        repeated: attr_from_list(&a, "table:number-columns-repeated").and_then(|v| v.parse().ok()),
+                        visibility: attr_from_list(&a, "table:visibility"),
+                    });
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == end_tag { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    cols
+}
+
+fn parse_sheet_row_attrs(
+    attrs: &[(String, String)],
+    reader: &mut Reader<&[u8]>,
+    diags: &mut Vec<Diagnostic>,
+) -> SheetRow {
+    let style_name = attr_from_list(attrs, "table:style-name");
+    let default_cell_style_name = attr_from_list(attrs, "table:default-cell-style-name");
+    let repeated = attr_from_list(attrs, "table:number-rows-repeated").and_then(|v| v.parse().ok());
+    let mut cells = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let covered = tag == "table:covered-table-cell";
+                let a = collect_attrs(e);
+                buf.clear();
+                if tag == "table:table-cell" || covered {
+                    cells.push(parse_sheet_cell_attrs(&a, covered, reader, diags));
+                } else {
+                    skip_element(reader);
+                }
+                continue;
+            }
+            Ok(Event::Empty(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let covered = tag == "table:covered-table-cell";
+                if tag == "table:table-cell" || covered {
+                    let a = collect_attrs(e);
+                    cells.push(SheetCell {
+                        style_name: attr_from_list(&a, "table:style-name"),
+                        value_type: attr_from_list(&a, "office:value-type"),
+                        value: sheet_cell_value(&a),
+                        formula: attr_from_list(&a, "table:formula"),
+                        col_span: attr_from_list(&a, "table:number-columns-spanned").and_then(|v| v.parse().ok()),
+                        row_span: attr_from_list(&a, "table:number-rows-spanned").and_then(|v| v.parse().ok()),
+                        repeated: attr_from_list(&a, "table:number-columns-repeated").and_then(|v| v.parse().ok()),
+                        covered,
+                        content: Vec::new(),
+                    });
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "table:table-row" { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    SheetRow { style_name, default_cell_style_name, repeated, cells }
+}
+
+fn parse_sheet_cell_attrs(
+    attrs: &[(String, String)],
+    covered: bool,
+    reader: &mut Reader<&[u8]>,
+    diags: &mut Vec<Diagnostic>,
+) -> SheetCell {
+    let end_tag = if covered { "table:covered-table-cell" } else { "table:table-cell" };
+    SheetCell {
+        style_name: attr_from_list(attrs, "table:style-name"),
+        value_type: attr_from_list(attrs, "office:value-type"),
+        value: sheet_cell_value(attrs),
+        formula: attr_from_list(attrs, "table:formula"),
+        col_span: attr_from_list(attrs, "table:number-columns-spanned").and_then(|v| v.parse().ok()),
+        row_span: attr_from_list(attrs, "table:number-rows-spanned").and_then(|v| v.parse().ok()),
+        repeated: attr_from_list(attrs, "table:number-columns-repeated").and_then(|v| v.parse().ok()),
+        covered,
+        content: parse_text_blocks(reader, end_tag, diags),
+    }
+}
+
+fn sheet_cell_value(attrs: &[(String, String)]) -> Option<String> {
+    for key in ["office:value", "office:date-value", "office:time-value",
+                "office:boolean-value", "office:string-value", "office:currency-value"] {
+        if let Some(v) = attr_from_list(attrs, key) {
+            return Some(v);
+        }
+    }
+    None
+}
+
+fn parse_row_group(
+    reader: &mut Reader<&[u8]>,
+    end_tag: &str,
+    diags: &mut Vec<Diagnostic>,
+) -> Vec<SheetRow> {
+    let mut rows = Vec::new();
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let a = collect_attrs(e);
+                buf.clear();
+                if tag == "table:table-row" {
+                    rows.push(parse_sheet_row_attrs(&a, reader, diags));
+                } else {
+                    skip_element(reader);
+                }
+                continue;
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == end_tag { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    rows
+}
+
+fn parse_named_ranges(reader: &mut Reader<&[u8]>) -> Vec<NamedRange> {
+    let mut ranges = Vec::new();
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                if tag == "table:named-range" {
+                    let a = collect_attrs(e);
+                    ranges.push(NamedRange {
+                        name: attr_from_list(&a, "table:name").unwrap_or_default(),
+                        cell_range_address: attr_from_list(&a, "table:cell-range-address"),
+                        base_cell_address: attr_from_list(&a, "table:base-cell-address"),
+                    });
+                }
+                // skip children if any
+                buf.clear();
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "table:named-expressions" { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    ranges
+}
+
+// ── Presentation body ─────────────────────────────────────────────────────────
+
+fn parse_presentation_body(
+    reader: &mut Reader<&[u8]>,
+    diags: &mut Vec<Diagnostic>,
+) -> PresentationBody {
+    let mut pages = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let attrs = collect_attrs(e);
+                buf.clear();
+                if tag == "draw:page" {
+                    pages.push(parse_draw_page_attrs(&attrs, reader, diags));
+                } else {
+                    skip_element(reader);
+                }
+                continue;
+            }
+            Ok(Event::Empty(_)) => {}
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "office:presentation" { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    PresentationBody { pages }
+}
+
+fn parse_draw_page_attrs(
+    attrs: &[(String, String)],
+    reader: &mut Reader<&[u8]>,
+    diags: &mut Vec<Diagnostic>,
+) -> DrawPage {
+    let name = attr_from_list(attrs, "draw:name");
+    let style_name = attr_from_list(attrs, "draw:style-name");
+    let master_page_name = attr_from_list(attrs, "draw:master-page-name");
+    let layout_name = attr_from_list(attrs, "presentation:presentation-page-layout-name");
+    let mut shapes = Vec::new();
+    let mut notes = None;
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let a = collect_attrs(e);
+                buf.clear();
+                match tag.as_str() {
+                    "draw:frame" | "draw:custom-shape" | "draw:g" => {
+                        shapes.push(parse_draw_shape_attrs(&a, &tag, reader, diags));
+                    }
+                    "presentation:notes" => {
+                        notes = Some(Box::new(parse_notes_page_attrs(&a, reader, diags)));
+                    }
+                    _ => { skip_element(reader); }
+                }
+                continue;
+            }
+            Ok(Event::Empty(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                if tag == "draw:frame" || tag == "draw:custom-shape" {
+                    let a = collect_attrs(e);
+                    shapes.push(DrawShape {
+                        style_name: attr_from_list(&a, "draw:style-name"),
+                        text_style_name: attr_from_list(&a, "draw:text-style-name"),
+                        name: attr_from_list(&a, "draw:name"),
+                        presentation_class: attr_from_list(&a, "presentation:class"),
+                        x: attr_from_list(&a, "svg:x"),
+                        y: attr_from_list(&a, "svg:y"),
+                        width: attr_from_list(&a, "svg:width"),
+                        height: attr_from_list(&a, "svg:height"),
+                        content: DrawShapeContent::Empty,
+                    });
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "draw:page" { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    DrawPage { name, style_name, master_page_name, layout_name, shapes, notes }
+}
+
+fn parse_draw_shape_attrs(
+    attrs: &[(String, String)],
+    outer_tag: &str,
+    reader: &mut Reader<&[u8]>,
+    diags: &mut Vec<Diagnostic>,
+) -> DrawShape {
+    let style_name = attr_from_list(attrs, "draw:style-name");
+    let text_style_name = attr_from_list(attrs, "draw:text-style-name");
+    let name = attr_from_list(attrs, "draw:name");
+    let presentation_class = attr_from_list(attrs, "presentation:class");
+    let x = attr_from_list(attrs, "svg:x");
+    let y = attr_from_list(attrs, "svg:y");
+    let width = attr_from_list(attrs, "svg:width");
+    let height = attr_from_list(attrs, "svg:height");
+    let content = parse_draw_shape_content(outer_tag, reader, diags);
+    DrawShape { style_name, text_style_name, name, presentation_class, x, y, width, height, content }
+}
+
+fn parse_draw_shape_content(
+    end_tag: &str,
+    reader: &mut Reader<&[u8]>,
+    diags: &mut Vec<Diagnostic>,
+) -> DrawShapeContent {
+    let mut content = DrawShapeContent::Empty;
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let a = collect_attrs(e);
+                buf.clear();
+                match tag.as_str() {
+                    "draw:text-box" => {
+                        let blocks = parse_text_blocks(reader, "draw:text-box", diags);
+                        content = DrawShapeContent::TextBox(blocks);
+                    }
+                    "draw:image" => {
+                        let href = attr_from_list(&a, "xlink:href").unwrap_or_default();
+                        let mime_type = attr_from_list(&a, "draw:mime-type");
+                        skip_element(reader);
+                        content = DrawShapeContent::Image { href, mime_type };
+                    }
+                    _ => {
+                        let raw = capture_raw_from_name_attrs(&tag, &a, reader);
+                        content = DrawShapeContent::Other(raw);
+                    }
+                }
+                continue;
+            }
+            Ok(Event::Empty(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                if tag == "draw:image" {
+                    let a = collect_attrs(e);
+                    let href = attr_from_list(&a, "xlink:href").unwrap_or_default();
+                    let mime_type = attr_from_list(&a, "draw:mime-type");
+                    content = DrawShapeContent::Image { href, mime_type };
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == end_tag { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    content
+}
+
+fn parse_notes_page_attrs(
+    attrs: &[(String, String)],
+    reader: &mut Reader<&[u8]>,
+    diags: &mut Vec<Diagnostic>,
+) -> NotesPage {
+    let style_name = attr_from_list(attrs, "draw:style-name");
+    let mut shapes = Vec::new();
+    let mut buf = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let tag = element_name(e.name().as_ref());
+                let a = collect_attrs(e);
+                buf.clear();
+                if tag == "draw:frame" || tag == "draw:custom-shape" {
+                    shapes.push(parse_draw_shape_attrs(&a, &tag, reader, diags));
+                } else {
+                    skip_element(reader);
+                }
+                continue;
+            }
+            Ok(Event::Empty(_)) => {}
+            Ok(Event::End(ref e)) => {
+                if element_name(e.name().as_ref()) == "presentation:notes" { break; }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    NotesPage { style_name, shapes }
 }
 
 fn parse_text_blocks(

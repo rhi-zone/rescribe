@@ -33,10 +33,10 @@ pub struct OdfDocument {
 pub enum OdfBody {
     /// Text document body (`office:text`).
     Text(Vec<TextBlock>),
-    /// Spreadsheet body (`office:spreadsheet`) — raw XML for now.
-    Spreadsheet(String),
-    /// Presentation body (`office:presentation`) — raw XML for now.
-    Presentation(String),
+    /// Spreadsheet body (`office:spreadsheet`).
+    Spreadsheet(SpreadsheetBody),
+    /// Presentation body (`office:presentation`).
+    Presentation(PresentationBody),
     /// Unknown or empty body.
     #[default]
     Empty,
@@ -340,4 +340,152 @@ pub struct DocumentStatistics {
     pub table_count: Option<u32>,
     pub image_count: Option<u32>,
     pub object_count: Option<u32>,
+}
+
+// ── Spreadsheet (ODS) ────────────────────────────────────────────────────────
+
+/// The body of an `.ods` spreadsheet document (`<office:spreadsheet>`).
+#[derive(Debug, Clone, Default)]
+pub struct SpreadsheetBody {
+    /// Sheets in document order.
+    pub sheets: Vec<Sheet>,
+    /// Named ranges declared at workbook level.
+    pub named_ranges: Vec<NamedRange>,
+}
+
+/// A single sheet (`<table:table>`).
+#[derive(Debug, Clone, Default)]
+pub struct Sheet {
+    /// `table:name` attribute.
+    pub name: Option<String>,
+    /// `table:style-name` attribute.
+    pub style_name: Option<String>,
+    /// Whether this sheet is printed (`table:print`).
+    pub print: bool,
+    /// Column definitions, in order.
+    pub columns: Vec<ColumnDef>,
+    /// Row data, in order.
+    pub rows: Vec<SheetRow>,
+}
+
+/// A column definition (`<table:table-column>`).
+#[derive(Debug, Clone, Default)]
+pub struct ColumnDef {
+    pub style_name: Option<String>,
+    pub default_cell_style_name: Option<String>,
+    /// `table:number-columns-repeated` — how many consecutive identical columns this represents.
+    pub repeated: Option<u32>,
+    /// `table:visibility`: `"visible"`, `"collapse"`, or `"filter"`.
+    pub visibility: Option<String>,
+}
+
+/// A row (`<table:table-row>`).
+#[derive(Debug, Clone, Default)]
+pub struct SheetRow {
+    pub style_name: Option<String>,
+    pub default_cell_style_name: Option<String>,
+    /// `table:number-rows-repeated`.
+    pub repeated: Option<u32>,
+    pub cells: Vec<SheetCell>,
+}
+
+/// A spreadsheet cell (`<table:table-cell>` or `<table:covered-table-cell>`).
+#[derive(Debug, Clone, Default)]
+pub struct SheetCell {
+    pub style_name: Option<String>,
+    /// `office:value-type`: `"float"`, `"string"`, `"date"`, `"time"`, `"boolean"`, `"currency"`, etc.
+    pub value_type: Option<String>,
+    /// The typed value attribute (`office:value`, `office:date-value`, etc.).
+    pub value: Option<String>,
+    /// `table:formula` — OpenFormula expression.
+    pub formula: Option<String>,
+    /// Number of columns this cell spans.
+    pub col_span: Option<u32>,
+    /// Number of rows this cell spans.
+    pub row_span: Option<u32>,
+    /// `table:number-columns-repeated` — consecutive identical cells.
+    pub repeated: Option<u32>,
+    /// True if this is a `<table:covered-table-cell>`.
+    pub covered: bool,
+    /// Display content — typically one or more `<text:p>` paragraphs.
+    pub content: Vec<TextBlock>,
+}
+
+/// A named range (`<table:named-range>`).
+#[derive(Debug, Clone, Default)]
+pub struct NamedRange {
+    pub name: String,
+    /// `table:cell-range-address` — the range this name refers to.
+    pub cell_range_address: Option<String>,
+    /// `table:base-cell-address` — the anchor cell for relative addressing.
+    pub base_cell_address: Option<String>,
+}
+
+// ── Presentation (ODP) ────────────────────────────────────────────────────────
+
+/// The body of an `.odp` presentation document (`<office:presentation>`).
+#[derive(Debug, Clone, Default)]
+pub struct PresentationBody {
+    /// Slides in presentation order.
+    pub pages: Vec<DrawPage>,
+}
+
+/// A slide (`<draw:page>`).
+#[derive(Debug, Clone, Default)]
+pub struct DrawPage {
+    /// `draw:name` attribute.
+    pub name: Option<String>,
+    /// `draw:style-name` attribute.
+    pub style_name: Option<String>,
+    /// `draw:master-page-name` — which master page this slide uses.
+    pub master_page_name: Option<String>,
+    /// `presentation:presentation-page-layout-name`.
+    pub layout_name: Option<String>,
+    /// Shapes and frames on this slide.
+    pub shapes: Vec<DrawShape>,
+    /// Speaker notes for this slide.
+    pub notes: Option<Box<NotesPage>>,
+}
+
+/// A shape on a slide or in a text frame (`<draw:frame>`, `<draw:custom-shape>`, etc.).
+#[derive(Debug, Clone, Default)]
+pub struct DrawShape {
+    /// `draw:style-name`.
+    pub style_name: Option<String>,
+    /// `draw:text-style-name`.
+    pub text_style_name: Option<String>,
+    /// `draw:name`.
+    pub name: Option<String>,
+    /// `presentation:class` — `"title"`, `"subtitle"`, `"body"`, `"notes"`, etc.
+    pub presentation_class: Option<String>,
+    /// `svg:x` — horizontal position.
+    pub x: Option<String>,
+    /// `svg:y` — vertical position.
+    pub y: Option<String>,
+    /// `svg:width`.
+    pub width: Option<String>,
+    /// `svg:height`.
+    pub height: Option<String>,
+    /// The shape's content.
+    pub content: DrawShapeContent,
+}
+
+/// What lives inside a `<draw:frame>` or `<draw:custom-shape>`.
+#[derive(Debug, Clone, Default)]
+pub enum DrawShapeContent {
+    /// `<draw:text-box>` with block content.
+    TextBox(Vec<TextBlock>),
+    /// `<draw:image>` with `xlink:href`.
+    Image { href: String, mime_type: Option<String> },
+    /// Anything else preserved as raw XML.
+    Other(String),
+    #[default]
+    Empty,
+}
+
+/// Speaker notes for a slide (`<presentation:notes>`).
+#[derive(Debug, Clone, Default)]
+pub struct NotesPage {
+    pub style_name: Option<String>,
+    pub shapes: Vec<DrawShape>,
 }

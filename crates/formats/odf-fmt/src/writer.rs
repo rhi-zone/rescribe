@@ -284,14 +284,14 @@ fn build_content_xml(doc: &OdfDocument) -> String {
             }
             s.push_str("</office:text>\n");
         }
-        OdfBody::Spreadsheet(raw) => {
-            s.push_str("<office:spreadsheet>");
-            s.push_str(raw);
+        OdfBody::Spreadsheet(body) => {
+            s.push_str("<office:spreadsheet>\n");
+            write_spreadsheet_body(&mut s, body);
             s.push_str("</office:spreadsheet>\n");
         }
-        OdfBody::Presentation(raw) => {
-            s.push_str("<office:presentation>");
-            s.push_str(raw);
+        OdfBody::Presentation(body) => {
+            s.push_str("<office:presentation>\n");
+            write_presentation_body(&mut s, body);
             s.push_str("</office:presentation>\n");
         }
         OdfBody::Empty => {}
@@ -550,6 +550,142 @@ fn write_inline(s: &mut String, inline: &Inline) {
         }
         Inline::Unknown { raw, .. } => s.push_str(raw),
     }
+}
+
+// ── Spreadsheet writer ────────────────────────────────────────────────────────
+
+fn write_spreadsheet_body(s: &mut String, body: &SpreadsheetBody) {
+    for sheet in &body.sheets {
+        write_sheet(s, sheet);
+    }
+    if !body.named_ranges.is_empty() {
+        s.push_str("<table:named-expressions>\n");
+        for nr in &body.named_ranges {
+            s.push_str(&format!("<table:named-range table:name=\"{}\"", xml_escape(&nr.name)));
+            if let Some(v) = &nr.cell_range_address {
+                s.push_str(&format!(" table:cell-range-address=\"{}\"", xml_escape(v)));
+            }
+            if let Some(v) = &nr.base_cell_address {
+                s.push_str(&format!(" table:base-cell-address=\"{}\"", xml_escape(v)));
+            }
+            s.push_str("/>\n");
+        }
+        s.push_str("</table:named-expressions>\n");
+    }
+}
+
+fn write_sheet(s: &mut String, sheet: &Sheet) {
+    s.push_str("<table:table");
+    if let Some(n) = &sheet.name { s.push_str(&format!(" table:name=\"{}\"", xml_escape(n))); }
+    if let Some(sn) = &sheet.style_name { s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn))); }
+    if !sheet.print { s.push_str(" table:print=\"false\""); }
+    s.push_str(">\n");
+
+    for col in &sheet.columns {
+        s.push_str("<table:table-column");
+        if let Some(sn) = &col.style_name { s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn))); }
+        if let Some(ds) = &col.default_cell_style_name { s.push_str(&format!(" table:default-cell-style-name=\"{}\"", xml_escape(ds))); }
+        if let Some(r) = col.repeated { s.push_str(&format!(" table:number-columns-repeated=\"{r}\"")); }
+        if let Some(v) = &col.visibility { s.push_str(&format!(" table:visibility=\"{}\"", xml_escape(v))); }
+        s.push_str("/>\n");
+    }
+
+    for row in &sheet.rows {
+        s.push_str("<table:table-row");
+        if let Some(sn) = &row.style_name { s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn))); }
+        if let Some(ds) = &row.default_cell_style_name { s.push_str(&format!(" table:default-cell-style-name=\"{}\"", xml_escape(ds))); }
+        if let Some(r) = row.repeated { s.push_str(&format!(" table:number-rows-repeated=\"{r}\"")); }
+        s.push_str(">\n");
+
+        for cell in &row.cells {
+            let tag = if cell.covered { "table:covered-table-cell" } else { "table:table-cell" };
+            s.push_str(&format!("<{tag}"));
+            if let Some(sn) = &cell.style_name { s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn))); }
+            if let Some(vt) = &cell.value_type {
+                s.push_str(&format!(" office:value-type=\"{}\"", xml_escape(vt)));
+                if let Some(v) = &cell.value {
+                    let attr = match vt.as_str() {
+                        "date" => "office:date-value",
+                        "time" => "office:time-value",
+                        "boolean" => "office:boolean-value",
+                        "string" => "office:string-value",
+                        _ => "office:value",
+                    };
+                    s.push_str(&format!(" {attr}=\"{}\"", xml_escape(v)));
+                }
+            }
+            if let Some(f) = &cell.formula { s.push_str(&format!(" table:formula=\"{}\"", xml_escape(f))); }
+            if let Some(cs) = cell.col_span { s.push_str(&format!(" table:number-columns-spanned=\"{cs}\"")); }
+            if let Some(rs) = cell.row_span { s.push_str(&format!(" table:number-rows-spanned=\"{rs}\"")); }
+            if let Some(r) = cell.repeated { s.push_str(&format!(" table:number-columns-repeated=\"{r}\"")); }
+            if cell.content.is_empty() {
+                s.push_str("/>\n");
+            } else {
+                s.push_str(">\n");
+                for block in &cell.content {
+                    write_block(s, block);
+                }
+                s.push_str(&format!("</{tag}>\n"));
+            }
+        }
+        s.push_str("</table:table-row>\n");
+    }
+    s.push_str("</table:table>\n");
+}
+
+// ── Presentation writer ───────────────────────────────────────────────────────
+
+fn write_presentation_body(s: &mut String, body: &PresentationBody) {
+    for page in &body.pages {
+        write_draw_page(s, page);
+    }
+}
+
+fn write_draw_page(s: &mut String, page: &DrawPage) {
+    s.push_str("<draw:page");
+    if let Some(n) = &page.name { s.push_str(&format!(" draw:name=\"{}\"", xml_escape(n))); }
+    if let Some(sn) = &page.style_name { s.push_str(&format!(" draw:style-name=\"{}\"", xml_escape(sn))); }
+    if let Some(mp) = &page.master_page_name { s.push_str(&format!(" draw:master-page-name=\"{}\"", xml_escape(mp))); }
+    if let Some(l) = &page.layout_name { s.push_str(&format!(" presentation:presentation-page-layout-name=\"{}\"", xml_escape(l))); }
+    s.push_str(">\n");
+    for shape in &page.shapes { write_draw_shape(s, shape); }
+    if let Some(notes) = &page.notes {
+        s.push_str("<presentation:notes");
+        if let Some(sn) = &notes.style_name { s.push_str(&format!(" draw:style-name=\"{}\"", xml_escape(sn))); }
+        s.push_str(">\n");
+        for shape in &notes.shapes { write_draw_shape(s, shape); }
+        s.push_str("</presentation:notes>\n");
+    }
+    s.push_str("</draw:page>\n");
+}
+
+fn write_draw_shape(s: &mut String, shape: &DrawShape) {
+    s.push_str("<draw:frame");
+    if let Some(sn) = &shape.style_name { s.push_str(&format!(" draw:style-name=\"{}\"", xml_escape(sn))); }
+    if let Some(ts) = &shape.text_style_name { s.push_str(&format!(" draw:text-style-name=\"{}\"", xml_escape(ts))); }
+    if let Some(n) = &shape.name { s.push_str(&format!(" draw:name=\"{}\"", xml_escape(n))); }
+    if let Some(pc) = &shape.presentation_class { s.push_str(&format!(" presentation:class=\"{}\"", xml_escape(pc))); }
+    if let Some(x) = &shape.x { s.push_str(&format!(" svg:x=\"{}\"", xml_escape(x))); }
+    if let Some(y) = &shape.y { s.push_str(&format!(" svg:y=\"{}\"", xml_escape(y))); }
+    if let Some(w) = &shape.width { s.push_str(&format!(" svg:width=\"{}\"", xml_escape(w))); }
+    if let Some(h) = &shape.height { s.push_str(&format!(" svg:height=\"{}\"", xml_escape(h))); }
+    s.push_str(">\n");
+    match &shape.content {
+        DrawShapeContent::TextBox(blocks) => {
+            s.push_str("<draw:text-box>\n");
+            for block in blocks { write_block(s, block); }
+            s.push_str("</draw:text-box>\n");
+        }
+        DrawShapeContent::Image { href, mime_type } => {
+            s.push_str(&format!("<draw:image xlink:href=\"{}\" xlink:type=\"simple\" xlink:show=\"embed\" xlink:actuate=\"onLoad\"",
+                xml_escape(href)));
+            if let Some(mt) = mime_type { s.push_str(&format!(" draw:mime-type=\"{}\"", xml_escape(mt))); }
+            s.push_str("/>\n");
+        }
+        DrawShapeContent::Other(raw) => { s.push_str(raw); s.push('\n'); }
+        DrawShapeContent::Empty => {}
+    }
+    s.push_str("</draw:frame>\n");
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
