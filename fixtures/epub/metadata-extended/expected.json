@@ -1,0 +1,28 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Jane Author",
+        "date": "2024-01-15",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "publisher": "Acme Publishing",
+        "title": "Extended Metadata Book"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Content here."
+      }
+    }
+  ],
+  "description": "EPUB extended metadata: publisher, description, date, subject extracted"
+}

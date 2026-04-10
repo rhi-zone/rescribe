@@ -1,0 +1,114 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Cross-Links"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "heading",
+      "path": "/0",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "ch1"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/1",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/1/0",
+      "props": {
+        "content": "Chapter 1"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/2"
+    },
+    {
+      "kind": "text",
+      "path": "/2/0",
+      "props": {
+        "content": "First chapter content."
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/3",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/3/0",
+      "props": {
+        "content": "ch2"
+      }
+    },
+    {
+      "kind": "heading",
+      "path": "/4",
+      "props": {
+        "level": 1
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/4/0",
+      "props": {
+        "content": "Chapter 2"
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/5"
+    },
+    {
+      "kind": "text",
+      "path": "/5/0",
+      "props": {
+        "content": "See also "
+      }
+    },
+    {
+      "kind": "link",
+      "path": "/5/1",
+      "props": {
+        "url": "chapter1.xhtml"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/5/1/0",
+      "props": {
+        "content": "Chapter 1"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/5/2",
+      "props": {
+        "content": "."
+      }
+    }
+  ],
+  "description": "EPUB cross-document link (href to another spine item) parsed as link node"
+}

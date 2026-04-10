@@ -11,3 +11,4 @@ rescribe-core.workspace = true
 rescribe-std.workspace = true
 rescribe-write-html.workspace = true
 epub-builder = "0.8"
+

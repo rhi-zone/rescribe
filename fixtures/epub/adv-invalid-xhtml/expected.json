@@ -1,0 +1,52 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Valid paragraph."
+      }
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1"
+    },
+    {
+      "kind": "text",
+      "path": "/1/0",
+      "props": {
+        "content": "Unclosed tag "
+      }
+    },
+    {
+      "kind": "emphasis",
+      "path": "/1/1"
+    },
+    {
+      "kind": "text",
+      "path": "/1/1/0",
+      "props": {
+        "content": "emphasis without close"
+      }
+    },
+    {
+      "kind": "emphasis",
+      "path": "/2"
+    }
+  ],
+  "description": "EPUB chapter with unclosed tag is recovered by the HTML parser"
+}

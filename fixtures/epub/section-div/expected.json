@@ -1,0 +1,45 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "div",
+      "path": "/0"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0",
+      "props": {
+        "content": "Inside a section."
+      }
+    },
+    {
+      "kind": "div",
+      "path": "/1"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/1/0"
+    },
+    {
+      "kind": "text",
+      "path": "/1/0/0",
+      "props": {
+        "content": "Inside a div."
+      }
+    }
+  ],
+  "description": "EPUB section and div elements produce their contained block content"
+}

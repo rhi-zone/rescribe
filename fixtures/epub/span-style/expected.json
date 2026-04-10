@@ -1,0 +1,62 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "paragraph",
+      "path": "/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0",
+      "props": {
+        "content": "Text with "
+      }
+    },
+    {
+      "kind": "span",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "red"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/2",
+      "props": {
+        "content": " and "
+      }
+    },
+    {
+      "kind": "span",
+      "path": "/0/3"
+    },
+    {
+      "kind": "text",
+      "path": "/0/3/0",
+      "props": {
+        "content": "highlighted"
+      }
+    },
+    {
+      "kind": "text",
+      "path": "/0/4",
+      "props": {
+        "content": " spans."
+      }
+    }
+  ],
+  "description": "EPUB span elements with style/class attributes produce span nodes"
+}

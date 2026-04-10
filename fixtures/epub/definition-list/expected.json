@@ -1,0 +1,63 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "definition_list",
+      "path": "/0"
+    },
+    {
+      "kind": "definition_term",
+      "path": "/0/0"
+    },
+    {
+      "kind": "text",
+      "path": "/0/0/0",
+      "props": {
+        "content": "Term 1"
+      }
+    },
+    {
+      "kind": "definition_desc",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "Definition of term 1."
+      }
+    },
+    {
+      "kind": "definition_term",
+      "path": "/0/2"
+    },
+    {
+      "kind": "text",
+      "path": "/0/2/0",
+      "props": {
+        "content": "Term 2"
+      }
+    },
+    {
+      "kind": "definition_desc",
+      "path": "/0/3"
+    },
+    {
+      "kind": "text",
+      "path": "/0/3/0",
+      "props": {
+        "content": "Definition of term 2."
+      }
+    }
+  ],
+  "description": "EPUB definition list (dl/dt/dd) mapped to definition_list nodes"
+}

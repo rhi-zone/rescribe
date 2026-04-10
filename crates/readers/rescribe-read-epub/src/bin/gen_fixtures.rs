@@ -8,6 +8,61 @@ use zip::write::SimpleFileOptions;
 
 // ── EPUB construction helpers ──────────────────────────────────────────────
 
+/// Full OPF package document with extended metadata fields.
+fn opf_extended(
+    title: &str,
+    author: &str,
+    lang: &str,
+    publisher: Option<&str>,
+    description: Option<&str>,
+    date: Option<&str>,
+    subject: Option<&str>,
+    spine_items: &[(&str, &str)],
+) -> String {
+    let manifest_items: String = spine_items
+        .iter()
+        .map(|(id, href)| {
+            format!(
+                r#"    <item id="{id}" href="{href}" media-type="application/xhtml+xml"/>"#
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let spine_itemrefs: String = spine_items
+        .iter()
+        .map(|(id, _)| format!(r#"    <itemref idref="{id}"/>"#))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let extra: String = [
+        publisher.map(|v| format!("    <dc:publisher>{v}</dc:publisher>")),
+        description.map(|v| format!("    <dc:description>{v}</dc:description>")),
+        date.map(|v| format!("    <dc:date>{v}</dc:date>")),
+        subject.map(|v| format!("    <dc:subject>{v}</dc:subject>")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join("\n");
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>{title}</dc:title>
+    <dc:creator>{author}</dc:creator>
+    <dc:language>{lang}</dc:language>
+    <dc:identifier id="uid">urn:uuid:test-epub</dc:identifier>
+{extra}
+  </metadata>
+  <manifest>
+{manifest_items}
+  </manifest>
+  <spine>
+{spine_itemrefs}
+  </spine>
+</package>"#
+    )
+}
+
 /// Minimal OPF package document.
 fn opf(title: &str, author: &str, lang: &str, spine_items: &[(&str, &str)]) -> String {
     let manifest_items: String = spine_items
@@ -149,15 +204,14 @@ fn node_to_assertions(node: &Node, path: &str, out: &mut Vec<serde_json::Value>)
             props_map.insert(key.to_string(), serde_json::Value::String(format!("{val:?}")));
         }
     }
-    // Use raw string for content
-    if let Some(content) = node.props.get_str("content") {
-        props_map.insert("content".to_string(), serde_json::Value::String(content.to_string()));
+    // Use raw string for string props (override the debug-format values above)
+    for key in &["content", "url", "alt", "title", "language"] {
+        if let Some(val) = node.props.get_str(key) {
+            props_map.insert(key.to_string(), serde_json::Value::String(val.to_string()));
+        }
     }
     if let Some(level) = node.props.get_int("level") {
         props_map.insert("level".to_string(), serde_json::Value::Number(level.into()));
-    }
-    if let Some(url) = node.props.get_str("url") {
-        props_map.insert("url".to_string(), serde_json::Value::String(url.to_string()));
     }
     if let Some(ordered) = node.props.get_bool("ordered") {
         props_map.insert("ordered".to_string(), serde_json::Value::Bool(ordered));
@@ -448,6 +502,138 @@ fn main() {
         "path-many-paragraphs",
         make_epub(&many_paras),
         "Chapter with 50 paragraphs produces 50 paragraph nodes",
+    );
+
+    // ── Block constructs (additional) ─────────────────────────────────────
+
+    write_fixture(
+        "figure-with-caption",
+        make_epub(
+            r#"<figure><img src="" alt="A diagram"/><figcaption>Figure 1: A diagram caption</figcaption></figure>"#,
+        ),
+        "EPUB figure with figcaption mapped to figure node",
+    );
+
+    write_fixture(
+        "definition-list",
+        make_epub(
+            "<dl><dt>Term 1</dt><dd>Definition of term 1.</dd><dt>Term 2</dt><dd>Definition of term 2.</dd></dl>",
+        ),
+        "EPUB definition list (dl/dt/dd) mapped to definition_list nodes",
+    );
+
+    write_fixture(
+        "section-div",
+        make_epub(
+            r#"<section><p>Inside a section.</p></section><div><p>Inside a div.</p></div>"#,
+        ),
+        "EPUB section and div elements produce their contained block content",
+    );
+
+    // ── Inline constructs (additional) ────────────────────────────────────
+
+    write_fixture(
+        "span-style",
+        make_epub(
+            r#"<p>Text with <span style="color:red">red</span> and <span class="highlight">highlighted</span> spans.</p>"#,
+        ),
+        "EPUB span elements with style/class attributes produce span nodes",
+    );
+
+    write_fixture(
+        "cross-document-link",
+        {
+            let opf_str = opf(
+                "Cross-Links",
+                "Author",
+                "en",
+                &[("ch1", "chapter1.xhtml"), ("ch2", "chapter2.xhtml")],
+            );
+            let ch1 = xhtml("Chapter 1", "<h1>Chapter 1</h1><p>First chapter content.</p>");
+            let ch2 = xhtml(
+                "Chapter 2",
+                r#"<h1>Chapter 2</h1><p>See also <a href="chapter1.xhtml">Chapter 1</a>.</p>"#,
+            );
+            make_epub_chapters(&opf_str, &[("chapter1.xhtml", &ch1), ("chapter2.xhtml", &ch2)])
+        },
+        "EPUB cross-document link (href to another spine item) parsed as link node",
+    );
+
+    // ── Metadata (additional) ─────────────────────────────────────────────
+
+    write_fixture(
+        "metadata-extended",
+        {
+            let opf_str = opf_extended(
+                "Extended Metadata Book",
+                "Jane Author",
+                "en",
+                Some("Acme Publishing"),
+                Some("A book about testing EPUB metadata"),
+                Some("2024-01-15"),
+                Some("Testing; EPUB; Metadata"),
+                &[("ch1", "chapter1.xhtml")],
+            );
+            let ch = xhtml("Test", "<p>Content here.</p>");
+            make_epub_chapters(&opf_str, &[("chapter1.xhtml", &ch)])
+        },
+        "EPUB extended metadata: publisher, description, date, subject extracted",
+    );
+
+    // ── Adversarial (additional) ──────────────────────────────────────────
+
+    // Invalid XHTML (well-formed enough for the ZIP, but bad body content)
+    write_fixture(
+        "adv-invalid-xhtml",
+        make_epub("<p>Valid paragraph.</p><p>Unclosed tag <em>emphasis without close</p>"),
+        "EPUB chapter with unclosed tag is recovered by the HTML parser",
+    );
+
+    // Empty spine: OPF exists but spine has no items
+    write_fixture(
+        "adv-empty-spine",
+        {
+            let opf_str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Empty Spine</dc:title>
+    <dc:language>en</dc:language>
+    <dc:identifier id="uid">urn:uuid:empty-spine</dc:identifier>
+  </metadata>
+  <manifest/>
+  <spine/>
+</package>"#;
+            make_epub_chapters(opf_str, &[])
+        },
+        "EPUB with no spine items produces an empty document without panic",
+    );
+
+    // ── Pathological (additional) ─────────────────────────────────────────
+
+    write_fixture(
+        "path-many-chapters",
+        {
+            let num = 20u32;
+            let spine_items: Vec<(String, String)> = (1..=num)
+                .map(|i| (format!("ch{i}"), format!("chapter{i}.xhtml")))
+                .collect();
+            let spine_refs: Vec<(&str, &str)> = spine_items
+                .iter()
+                .map(|(id, href)| (id.as_str(), href.as_str()))
+                .collect();
+            let opf_str = opf("Many Chapters", "Author", "en", &spine_refs);
+            let chapters: Vec<(String, String)> = (1..=num)
+                .map(|i| {
+                    let href = format!("chapter{i}.xhtml");
+                    let content = xhtml(&format!("Chapter {i}"), &format!("<p>Content of chapter {i}.</p>"));
+                    (href, content)
+                })
+                .collect();
+            let chapter_refs: Vec<(&str, &str)> =
+                chapters.iter().map(|(h, c)| (h.as_str(), c.as_str())).collect();
+            make_epub_chapters(&opf_str, &chapter_refs)
+        },
+        "EPUB with 20 chapters all parsed without panic",
     );
 
     println!("Done.");

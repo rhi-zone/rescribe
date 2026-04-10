@@ -256,6 +256,9 @@ path = "../crates/readers/rescribe-read-multimarkdown"
 [dependencies.rescribe-read-epub]
 path = "../crates/readers/rescribe-read-epub"
 
+[dependencies.rescribe-write-epub]
+path = "../crates/writers/rescribe-write-epub"
+
 [dependencies.rescribe-read-bibtex]
 path = "../crates/readers/rescribe-read-bibtex"
 
@@ -902,6 +905,12 @@ doc = false
 [[bin]]
 name = "fuzz_epub_reader"
 path = "fuzz_targets/epub_reader.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_epub_roundtrip"
+path = "fuzz_targets/epub_roundtrip.rs"
 test = false
 doc = false
 

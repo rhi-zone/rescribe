@@ -1,0 +1,14 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "identifier": "urn:uuid:empty-spine",
+        "language": "en",
+        "title": "Empty Spine"
+      },
+      "path": "/"
+    }
+  ],
+  "description": "EPUB with no spine items produces an empty document without panic"
+}

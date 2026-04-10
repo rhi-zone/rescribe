@@ -1,0 +1,38 @@
+{
+  "assertions": [
+    {
+      "kind": "document",
+      "metadata": {
+        "author": "Author",
+        "identifier": "urn:uuid:test-epub",
+        "language": "en",
+        "title": "Test"
+      },
+      "path": "/"
+    },
+    {
+      "kind": "figure",
+      "path": "/0"
+    },
+    {
+      "kind": "image",
+      "path": "/0/0",
+      "props": {
+        "alt": "A diagram",
+        "url": ""
+      }
+    },
+    {
+      "kind": "caption",
+      "path": "/0/1"
+    },
+    {
+      "kind": "text",
+      "path": "/0/1/0",
+      "props": {
+        "content": "Figure 1: A diagram caption"
+      }
+    }
+  ],
+  "description": "EPUB figure with figcaption mapped to figure node"
+}
