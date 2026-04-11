@@ -114,6 +114,7 @@ xwiki = { path = "crates/formats/xwiki" }
 bbcode-fmt = { path = "crates/formats/bbcode-fmt" }
 dokuwiki = { path = "crates/formats/dokuwiki" }
 ansi-fmt = { path = "crates/formats/ansi-fmt" }
+html-fmt = { path = "crates/formats/html-fmt" }
 ris = { path = "crates/formats/ris" }
 native = { path = "crates/formats/native" }
 tsv-fmt = { path = "crates/formats/tsv-fmt" }

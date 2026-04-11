@@ -1,8 +1,6 @@
-//! HTML parser using html5ever.
+//! HTML parser using html-fmt (wraps html5ever).
 
-use html5ever::tendril::TendrilSink;
-use html5ever::{Attribute, QualName, parse_document};
-use markup5ever_rcdom::{Handle, NodeData, RcDom};
+use html_fmt::Node as HtmlNode;
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Properties, Resource,
     ResourceId, ResourceMap, Severity, WarningKind,
@@ -27,17 +25,20 @@ pub fn parse_with_options(
     let mut metadata = Properties::new();
     let mut resources = ResourceMap::new();
 
-    // Parse HTML using html5ever
-    let dom = parse_document(RcDom::default(), Default::default())
-        .from_utf8()
-        .read_from(&mut input.as_bytes())
-        .map_err(|e| ParseError::Invalid(format!("HTML parse error: {:?}", e)))?;
+    // Parse HTML using html-fmt (which wraps html5ever)
+    let (doc, _diagnostics) = html_fmt::parse(input.as_bytes());
 
     // Extract metadata from <head> (and <html> lang attribute)
-    extract_metadata(&dom.document, &mut metadata);
+    for node in &doc.nodes {
+        extract_metadata(node, &mut metadata);
+    }
 
-    // Convert DOM to rescribe nodes
-    let children = convert_children(&dom.document, &mut warnings, &mut resources, options);
+    // Convert html-fmt AST to rescribe nodes
+    let mut children = Vec::new();
+    for node in &doc.nodes {
+        children.extend(convert_node(node, &mut warnings, &mut resources, options));
+    }
+    merge_text_nodes(&mut children);
 
     let root = Node::new(node::DOCUMENT).children(children);
     let mut doc = Document::new().with_content(root).with_metadata(metadata);
@@ -47,89 +48,94 @@ pub fn parse_with_options(
 }
 
 /// Extract metadata from HTML head element.
-fn extract_metadata(handle: &Handle, metadata: &mut Properties) {
-    if let NodeData::Element { name, attrs, .. } = &handle.data {
-        let tag = name.local.as_ref();
+fn extract_metadata(node: &HtmlNode, metadata: &mut Properties) {
+    let HtmlNode::Element {
+        tag,
+        attrs,
+        children,
+        ..
+    } = node
+    else {
+        return;
+    };
 
-        match tag {
-            "html" => {
-                let attrs = attrs.borrow();
-                if let Some(lang) = get_attr(&attrs, "lang") {
-                    metadata.set("lang", lang);
-                }
+    match tag.as_str() {
+        "html" => {
+            if let Some(lang) = get_attr(attrs, "lang") {
+                metadata.set("lang", lang);
             }
-            "title" => {
-                let title = extract_element_text(handle);
-                if !title.is_empty() {
-                    metadata.set("title", title);
-                }
-            }
-            "meta" => {
-                let attrs = attrs.borrow();
-                // charset declaration: <meta charset="utf-8">
-                if let Some(charset) = get_attr(&attrs, "charset") {
-                    metadata.set("charset", charset);
-                }
-                // http-equiv content-type: <meta http-equiv="content-type" content="text/html; charset=utf-8">
-                if get_attr(&attrs, "http-equiv")
-                    .as_deref()
-                    .map(|v| v.eq_ignore_ascii_case("content-type"))
-                    == Some(true)
-                    && let Some(content) = get_attr(&attrs, "content")
-                {
-                    metadata.set("content-type", content);
-                }
-                // Standard name/content pairs
-                if let Some(name) = get_attr(&attrs, "name")
-                    && let Some(content) = get_attr(&attrs, "content")
-                {
-                    metadata.set(&name, content);
-                }
-                // Open Graph properties (og: prefix stripped)
-                if let Some(property) = get_attr(&attrs, "property")
-                    && let Some(content) = get_attr(&attrs, "content")
-                {
-                    let key = property.strip_prefix("og:").unwrap_or(&property);
-                    metadata.set(key, content);
-                }
-            }
-            "link" => {
-                let attrs = attrs.borrow();
-                if get_attr(&attrs, "rel").as_deref() == Some("stylesheet")
-                    && let Some(href) = get_attr(&attrs, "href")
-                {
-                    metadata.set("stylesheet", href);
-                }
-            }
-            "base" => {
-                let attrs = attrs.borrow();
-                if let Some(href) = get_attr(&attrs, "href") {
-                    metadata.set("base", href);
-                }
-            }
-            _ => {}
         }
+        "title" => {
+            let title = extract_element_text(node);
+            if !title.is_empty() {
+                metadata.set("title", title);
+            }
+        }
+        "meta" => {
+            // charset declaration: <meta charset="utf-8">
+            if let Some(charset) = get_attr(attrs, "charset") {
+                metadata.set("charset", charset);
+            }
+            // http-equiv content-type
+            if get_attr(attrs, "http-equiv")
+                .as_deref()
+                .map(|v| v.eq_ignore_ascii_case("content-type"))
+                == Some(true)
+                && let Some(content) = get_attr(attrs, "content")
+            {
+                metadata.set("content-type", content);
+            }
+            // Standard name/content pairs
+            if let Some(name) = get_attr(attrs, "name")
+                && let Some(content) = get_attr(attrs, "content")
+            {
+                metadata.set(&name, content);
+            }
+            // Open Graph properties (og: prefix stripped)
+            if let Some(property) = get_attr(attrs, "property")
+                && let Some(content) = get_attr(attrs, "content")
+            {
+                let key = property.strip_prefix("og:").unwrap_or(&property);
+                metadata.set(key, content);
+            }
+        }
+        "link" => {
+            if get_attr(attrs, "rel").as_deref() == Some("stylesheet")
+                && let Some(href) = get_attr(attrs, "href")
+            {
+                metadata.set("stylesheet", href);
+            }
+        }
+        "base" => {
+            if let Some(href) = get_attr(attrs, "href") {
+                metadata.set("base", href);
+            }
+        }
+        _ => {}
     }
 
-    for child in handle.children.borrow().iter() {
+    for child in children {
         extract_metadata(child, metadata);
     }
 }
 
-/// Extract text content from an element.
-fn extract_element_text(handle: &Handle) -> String {
+/// Extract text content from an html-fmt element.
+fn extract_element_text(node: &HtmlNode) -> String {
     let mut text = String::new();
-    for child in handle.children.borrow().iter() {
-        if let NodeData::Text { contents } = &child.data {
-            text.push_str(&contents.borrow());
+    match node {
+        HtmlNode::Text { content, .. } => text.push_str(content),
+        HtmlNode::Element { children, .. } => {
+            for child in children {
+                text.push_str(&extract_element_text(child));
+            }
         }
-        text.push_str(&extract_element_text(child));
+        _ => {}
     }
     text
 }
 
 /// Apply global HTML attributes (id, class, lang, dir, style) to a node.
-fn apply_global_attrs(mut node: Node, attrs: &[Attribute]) -> Node {
+fn apply_global_attrs(mut node: Node, attrs: &[(String, String)]) -> Node {
     if let Some(id) = get_attr(attrs, "id") {
         node = node.prop(prop::ID, id);
     }
@@ -148,67 +154,57 @@ fn apply_global_attrs(mut node: Node, attrs: &[Attribute]) -> Node {
     node
 }
 
-/// Convert child nodes of a DOM node.
+/// Convert child nodes of an html-fmt element.
 fn convert_children(
-    handle: &Handle,
+    children: &[HtmlNode],
     warnings: &mut Vec<FidelityWarning>,
     resources: &mut ResourceMap,
     options: &ParseOptions,
 ) -> Vec<Node> {
     let mut nodes = Vec::new();
-
-    for child in handle.children.borrow().iter() {
+    for child in children {
         nodes.extend(convert_node(child, warnings, resources, options));
     }
-
     merge_text_nodes(&mut nodes);
-
     nodes
 }
 
-/// Convert a single DOM node to rescribe Node(s).
+/// Convert a single html-fmt node to rescribe Node(s).
 fn convert_node(
-    handle: &Handle,
+    html_node: &HtmlNode,
     warnings: &mut Vec<FidelityWarning>,
     resources: &mut ResourceMap,
     options: &ParseOptions,
 ) -> Vec<Node> {
-    match &handle.data {
-        NodeData::Document => {
-            let children = convert_children(handle, warnings, resources, options);
-            vec![Node::new(node::DOCUMENT).children(children)]
-        }
-
-        NodeData::Text { contents } => {
-            let text = contents.borrow().to_string();
+    match html_node {
+        HtmlNode::Text { content, .. } => {
+            let text = content.to_string();
             if text.trim().is_empty() {
                 return vec![];
             }
             vec![Node::new(node::TEXT).prop(prop::CONTENT, text)]
         }
-
-        NodeData::Element { name, attrs, .. } => {
-            let attrs_borrowed = attrs.borrow();
-            convert_element(name, &attrs_borrowed, handle, warnings, resources, options)
-        }
-
-        NodeData::Comment { .. } => vec![],
-        NodeData::Doctype { .. } => vec![],
-        NodeData::ProcessingInstruction { .. } => vec![],
+        HtmlNode::Element {
+            tag,
+            attrs,
+            children,
+            ..
+        } => convert_element(tag, attrs, children, warnings, resources, options),
+        // Skip doctype, comments
+        _ => vec![],
     }
 }
 
 /// Convert an HTML element to a rescribe Node.
 fn convert_element(
-    name: &QualName,
-    attrs: &[Attribute],
-    handle: &Handle,
+    tag: &str,
+    attrs: &[(String, String)],
+    children_nodes: &[HtmlNode],
     warnings: &mut Vec<FidelityWarning>,
     resources: &mut ResourceMap,
     options: &ParseOptions,
 ) -> Vec<Node> {
-    let tag = name.local.as_ref();
-    let children = convert_children(handle, warnings, resources, options);
+    let children = convert_children(children_nodes, warnings, resources, options);
 
     let node = match tag {
         "html" | "body" => return children,
@@ -460,9 +456,9 @@ fn convert_element(
 }
 
 /// Get an attribute value by name.
-fn get_attr(attrs: &[Attribute], name: &str) -> Option<String> {
+fn get_attr(attrs: &[(String, String)], name: &str) -> Option<String> {
     attrs
         .iter()
-        .find(|a| a.name.local.as_ref() == name)
-        .map(|a| a.value.to_string())
+        .find(|(n, _)| n == name)
+        .map(|(_, v)| v.to_string())
 }

@@ -500,8 +500,8 @@ cleanly to the original input (no escape processing). Implementation: `Frame::In
 - [ ] Parser gaps: table parsing, footnote parsing, math parsing
 - [ ] Markdown family (pulldown-cmark backed; adapter hardening + fuzz)
 - [ ] HTML (html5ever backed) — R:4†/W:4†; 82/85 COVERAGE.md items (2026-04-10)
-  - **ARCH GAP**: `html-fmt` crate does not exist. `rescribe-read-html` and `rescribe-write-html` call html5ever directly. Must create `html-fmt` with three independently optimal reader APIs: `parse()` via html5ever's tree builder (RcDom), `events()` via custom TreeSink that yields events without materializing a tree, `StreamingParser<H>` via html5ever's chunked Tokenizer.feed(). html5ever natively supports all three modes — no buffering excuse (unlike pulldown-cmark). Each API must be max-perf for its use case, not derived from another. Adapters must then become thin translators over `html_fmt::Ast`.
-  - Gaps blocking 5-Production (after html-fmt): footnote anchor convention, inline MathML, megabyte pathological fixture
+  - [x] `html-fmt` crate created (2026-04-11): standalone HTML5 AST, parse (html5ever RcDom), events (AST walk), batch (StreamingParser/BatchParser), emit (with pretty-print), streaming writer. `rescribe-read-html` and `rescribe-write-html` rewired as thin adapters over `html_fmt::HtmlDoc`. Note: HTML5 tree construction algorithm requires full tree for correctness (foster parenting, adoption agency), so `events()` and `StreamingParser` build the tree internally — this is a spec limitation, not a library choice, documented in `batch.rs`.
+  - Gaps blocking 5-Production: footnote anchor convention, inline MathML, megabyte pathological fixture
 - [ ] DOCX, PPTX, XLSX (ooxml-* backed; same) — DOCX reader at 5-Production (2026-03-03); others at 4-Fuzz; gaps below
 
   **DOCX reader** (closest to production):

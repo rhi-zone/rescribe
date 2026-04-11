@@ -1,9 +1,13 @@
 //! HTML writer for rescribe.
 //!
-//! Emits rescribe's document IR as HTML5.
+//! Translates rescribe's document IR to `html_fmt::HtmlDoc`, then emits
+//! via `html_fmt::emit()`. All HTML serialization lives in `html-fmt`;
+//! this crate is a thin adapter.
 
 pub mod builder;
 
+use html_fmt::ast::Span;
+use html_fmt::Node as HtmlNode;
 use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, ResourceId,
     ResourceMap, Severity, WarningKind,
@@ -20,15 +24,17 @@ pub fn emit_with_options(
     doc: &Document,
     options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new(&doc.resources, options.pretty);
+    let mut ctx = ConvertContext::new(&doc.resources);
 
-    // Emit children of the root document node
-    emit_nodes(&doc.content.children, &mut ctx);
+    let nodes = convert_nodes(&doc.content.children, &mut ctx);
+    let html_doc = html_fmt::HtmlDoc { nodes };
 
-    Ok(ConversionResult::with_warnings(
-        ctx.output.into_bytes(),
-        ctx.warnings,
-    ))
+    let emit_opts = html_fmt::EmitOptions {
+        pretty: options.pretty,
+    };
+    let bytes = html_fmt::emit_with_options(&html_doc, &emit_opts);
+
+    Ok(ConversionResult::with_warnings(bytes, ctx.warnings))
 }
 
 /// Emit a document as a complete HTML document with doctype.
@@ -41,228 +47,185 @@ pub fn emit_full_document_with_options(
     doc: &Document,
     options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut ctx = EmitContext::new(&doc.resources, options.pretty);
+    let mut ctx = ConvertContext::new(&doc.resources);
 
-    if ctx.pretty {
-        ctx.write("<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n</head>\n<body>\n");
-    } else {
-        ctx.write("<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n</head>\n<body>\n");
-    }
-    emit_nodes(&doc.content.children, &mut ctx);
-    ctx.write("\n</body>\n</html>\n");
+    let body_nodes = convert_nodes(&doc.content.children, &mut ctx);
 
-    Ok(ConversionResult::with_warnings(
-        ctx.output.into_bytes(),
-        ctx.warnings,
-    ))
+    let meta_charset = HtmlNode::Element {
+        tag: "meta".into(),
+        attrs: vec![("charset".into(), "utf-8".into())],
+        children: vec![],
+        self_closing: true,
+        span: Span::NONE,
+    };
+    let head = HtmlNode::Element {
+        tag: "head".into(),
+        attrs: vec![],
+        children: vec![meta_charset],
+        self_closing: false,
+        span: Span::NONE,
+    };
+    let body = HtmlNode::Element {
+        tag: "body".into(),
+        attrs: vec![],
+        children: body_nodes,
+        self_closing: false,
+        span: Span::NONE,
+    };
+    let html_el = HtmlNode::Element {
+        tag: "html".into(),
+        attrs: vec![],
+        children: vec![head, body],
+        self_closing: false,
+        span: Span::NONE,
+    };
+    let doctype = HtmlNode::Doctype {
+        name: "html".into(),
+        public_id: String::new(),
+        system_id: String::new(),
+        span: Span::NONE,
+    };
+
+    let html_doc = html_fmt::HtmlDoc {
+        nodes: vec![doctype, html_el],
+    };
+
+    let emit_opts = html_fmt::EmitOptions {
+        pretty: options.pretty,
+    };
+    let bytes = html_fmt::emit_with_options(&html_doc, &emit_opts);
+
+    Ok(ConversionResult::with_warnings(bytes, ctx.warnings))
 }
 
-/// Emit context for tracking state during emission.
-struct EmitContext<'a> {
-    output: String,
+/// Context for Document → HtmlDoc conversion.
+struct ConvertContext<'a> {
     warnings: Vec<FidelityWarning>,
     resources: &'a ResourceMap,
-    pretty: bool,
-    indent: usize,
 }
 
-impl<'a> EmitContext<'a> {
-    fn new(resources: &'a ResourceMap, pretty: bool) -> Self {
+impl<'a> ConvertContext<'a> {
+    fn new(resources: &'a ResourceMap) -> Self {
         Self {
-            output: String::new(),
             warnings: Vec::new(),
             resources,
-            pretty,
-            indent: 0,
         }
-    }
-
-    fn write(&mut self, s: &str) {
-        self.output.push_str(s);
-    }
-
-    /// Write a newline and indentation (only in pretty mode).
-    fn newline(&mut self) {
-        if self.pretty {
-            self.output.push('\n');
-            for _ in 0..self.indent {
-                self.output.push_str("  ");
-            }
-        }
-    }
-
-    /// Increase indentation level.
-    fn indent(&mut self) {
-        self.indent += 1;
-    }
-
-    /// Decrease indentation level.
-    fn dedent(&mut self) {
-        self.indent = self.indent.saturating_sub(1);
     }
 }
 
-/// Check if a node kind is a block element.
-fn is_block_node(kind: &str) -> bool {
-    matches!(
-        kind,
-        node::PARAGRAPH
-            | node::HEADING
-            | node::CODE_BLOCK
-            | node::BLOCKQUOTE
-            | node::LIST
-            | node::LIST_ITEM
-            | node::TABLE
-            | node::TABLE_HEAD
-            | node::TABLE_BODY
-            | node::TABLE_FOOT
-            | node::TABLE_ROW
-            | node::FIGURE
-            | node::HORIZONTAL_RULE
-            | node::DIV
-            | node::RAW_BLOCK
-            | node::DEFINITION_LIST
-            | node::DEFINITION_TERM
-            | node::DEFINITION_DESC
-            | node::FOOTNOTE_DEF
-    )
-}
-
-/// Emit a sequence of nodes.
-fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
+/// Convert a sequence of rescribe nodes to html-fmt nodes.
+fn convert_nodes(nodes: &[Node], ctx: &mut ConvertContext) -> Vec<HtmlNode> {
+    let mut result = Vec::new();
     for node in nodes {
-        emit_node(node, ctx);
+        result.extend(convert_node(node, ctx));
     }
+    result
 }
 
-/// Emit a single node.
-fn emit_node(node: &Node, ctx: &mut EmitContext) {
+/// Convert a single rescribe node to html-fmt node(s).
+fn convert_node(node: &Node, ctx: &mut ConvertContext) -> Vec<HtmlNode> {
     match node.kind.as_str() {
-        node::DOCUMENT => emit_nodes(&node.children, ctx),
-        node::PARAGRAPH => emit_block_tag("p", node, ctx),
-        node::HEADING => emit_heading(node, ctx),
-        node::CODE_BLOCK => emit_code_block(node, ctx),
-        node::BLOCKQUOTE => emit_block_tag("blockquote", node, ctx),
-        node::LIST => emit_list(node, ctx),
-        node::LIST_ITEM => emit_block_tag("li", node, ctx),
-        node::TABLE => emit_block_tag("table", node, ctx),
-        node::TABLE_HEAD => emit_block_tag("thead", node, ctx),
-        node::TABLE_BODY => emit_block_tag("tbody", node, ctx),
-        node::TABLE_FOOT => emit_block_tag("tfoot", node, ctx),
-        node::TABLE_ROW => emit_block_tag("tr", node, ctx),
-        node::TABLE_CELL => emit_table_cell(node, "td", ctx),
-        node::TABLE_HEADER => emit_table_cell(node, "th", ctx),
-        node::FIGURE => emit_block_tag("figure", node, ctx),
-        node::CAPTION => emit_block_tag("figcaption", node, ctx),
-        node::HORIZONTAL_RULE => {
-            ctx.newline();
-            ctx.write("<hr>");
-        }
-        node::DIV => emit_div(node, ctx),
-        node::RAW_BLOCK => emit_raw(node, ctx),
-        node::DEFINITION_LIST => emit_block_tag("dl", node, ctx),
-        node::DEFINITION_TERM => emit_block_tag("dt", node, ctx),
-        node::DEFINITION_DESC => emit_block_tag("dd", node, ctx),
-        node::TEXT => emit_text(node, ctx),
-        node::EMPHASIS => emit_inline_tag("em", node, ctx),
-        node::STRONG => emit_inline_tag("strong", node, ctx),
-        node::STRIKEOUT => emit_inline_tag("del", node, ctx),
-        node::UNDERLINE => emit_inline_tag("u", node, ctx),
-        node::SUBSCRIPT => emit_inline_tag("sub", node, ctx),
-        node::SUPERSCRIPT => emit_inline_tag("sup", node, ctx),
-        node::CODE => emit_inline_code(node, ctx),
-        node::LINK => emit_link(node, ctx),
-        node::IMAGE => emit_image(node, ctx),
-        node::LINE_BREAK => ctx.write("<br>"),
-        node::SOFT_BREAK => ctx.write("\n"),
-        node::SPAN => emit_span(node, ctx),
-        node::RAW_INLINE => emit_raw(node, ctx),
-        node::FOOTNOTE_REF => emit_footnote_ref(node, ctx),
-        node::FOOTNOTE_DEF => emit_footnote_def(node, ctx),
-        node::SMALL_CAPS => emit_inline_tag("small", node, ctx),
-        node::QUOTED => emit_quoted(node, ctx),
-        "math_inline" => emit_math_inline(node, ctx),
-        "math_display" => emit_math_display(node, ctx),
+        node::DOCUMENT => convert_nodes(&node.children, ctx),
+        node::PARAGRAPH => vec![element("p", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::HEADING => vec![convert_heading(node, ctx)],
+        node::CODE_BLOCK => vec![convert_code_block(node)],
+        node::BLOCKQUOTE => vec![element("blockquote", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::LIST => vec![convert_list(node, ctx)],
+        node::LIST_ITEM => vec![element("li", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::TABLE => vec![element("table", vec![], convert_nodes(&node.children, ctx))],
+        node::TABLE_HEAD => vec![element("thead", vec![], convert_nodes(&node.children, ctx))],
+        node::TABLE_BODY => vec![element("tbody", vec![], convert_nodes(&node.children, ctx))],
+        node::TABLE_FOOT => vec![element("tfoot", vec![], convert_nodes(&node.children, ctx))],
+        node::TABLE_ROW => vec![element("tr", vec![], convert_nodes(&node.children, ctx))],
+        node::TABLE_CELL => vec![convert_table_cell(node, "td", ctx)],
+        node::TABLE_HEADER => vec![convert_table_cell(node, "th", ctx)],
+        node::FIGURE => vec![element("figure", vec![], convert_nodes(&node.children, ctx))],
+        node::CAPTION => vec![element("figcaption", vec![], convert_nodes(&node.children, ctx))],
+        node::HORIZONTAL_RULE => vec![void_element("hr", vec![])],
+        node::DIV => vec![convert_div(node, ctx)],
+        node::RAW_BLOCK => convert_raw(node),
+        node::DEFINITION_LIST => vec![element("dl", vec![], convert_nodes(&node.children, ctx))],
+        node::DEFINITION_TERM => vec![element("dt", vec![], convert_nodes(&node.children, ctx))],
+        node::DEFINITION_DESC => vec![element("dd", vec![], convert_nodes(&node.children, ctx))],
+        node::TEXT => convert_text(node),
+        node::EMPHASIS => vec![element("em", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::STRONG => vec![element("strong", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::STRIKEOUT => vec![element("del", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::UNDERLINE => vec![element("u", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::SUBSCRIPT => vec![element("sub", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::SUPERSCRIPT => vec![element("sup", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::CODE => vec![convert_inline_code(node)],
+        node::LINK => vec![convert_link(node, ctx)],
+        node::IMAGE => vec![convert_image(node, ctx)],
+        node::LINE_BREAK => vec![void_element("br", vec![])],
+        node::SOFT_BREAK => vec![HtmlNode::Text { content: "\n".into(), span: Span::NONE }],
+        node::SPAN => vec![convert_span(node, ctx)],
+        node::RAW_INLINE => convert_raw(node),
+        node::FOOTNOTE_REF => vec![convert_footnote_ref(node)],
+        node::FOOTNOTE_DEF => vec![convert_footnote_def(node, ctx)],
+        node::SMALL_CAPS => vec![element("small", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::QUOTED => vec![element("q", vec![], convert_nodes(&node.children, ctx))],
+        "math_inline" => convert_math_inline(node),
+        "math_display" => convert_math_display(node),
         _ => {
             ctx.warnings.push(FidelityWarning::new(
                 Severity::Minor,
                 WarningKind::UnsupportedNode(node.kind.as_str().to_string()),
                 format!("Unknown node type: {}", node.kind.as_str()),
             ));
-            // Try to emit children
-            emit_nodes(&node.children, ctx);
+            convert_nodes(&node.children, ctx)
         }
     }
 }
 
-/// Emit a block-level tag with children (adds newlines in pretty mode).
-fn emit_block_tag(tag: &str, node: &Node, ctx: &mut EmitContext) {
-    ctx.newline();
-    ctx.write("<");
-    ctx.write(tag);
-    emit_common_attrs(node, ctx);
-    ctx.write(">");
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-    // Check if children are all inline
-    let has_block_children = node.children.iter().any(|c| is_block_node(c.kind.as_str()));
-
-    if has_block_children {
-        ctx.indent();
-        emit_nodes(&node.children, ctx);
-        ctx.dedent();
-        ctx.newline();
-    } else {
-        emit_nodes(&node.children, ctx);
+/// Build an html-fmt element node.
+fn element(tag: &str, attrs: Vec<(String, String)>, children: Vec<HtmlNode>) -> HtmlNode {
+    HtmlNode::Element {
+        tag: tag.into(),
+        attrs,
+        children,
+        self_closing: false,
+        span: Span::NONE,
     }
-
-    ctx.write("</");
-    ctx.write(tag);
-    ctx.write(">");
 }
 
-/// Emit an inline tag with children (no newlines).
-fn emit_inline_tag(tag: &str, node: &Node, ctx: &mut EmitContext) {
-    ctx.write("<");
-    ctx.write(tag);
-    emit_common_attrs(node, ctx);
-    ctx.write(">");
-    emit_nodes(&node.children, ctx);
-    ctx.write("</");
-    ctx.write(tag);
-    ctx.write(">");
+/// Build a void (self-closing) html-fmt element.
+fn void_element(tag: &str, attrs: Vec<(String, String)>) -> HtmlNode {
+    HtmlNode::Element {
+        tag: tag.into(),
+        attrs,
+        children: vec![],
+        self_closing: true,
+        span: Span::NONE,
+    }
 }
 
-/// Emit common attributes (id, class, lang, dir, style).
-fn emit_common_attrs(node: &Node, ctx: &mut EmitContext) {
+/// Extract common HTML attributes (id, class, lang, dir, style) from a rescribe node.
+fn common_attrs(node: &Node) -> Vec<(String, String)> {
+    let mut attrs = Vec::new();
     if let Some(id) = node.props.get_str(prop::ID) {
-        ctx.write(" id=\"");
-        ctx.write(&escape_attr(id));
-        ctx.write("\"");
+        attrs.push(("id".into(), id.into()));
     }
     if let Some(classes) = node.props.get_str(prop::CLASSES) {
-        ctx.write(" class=\"");
-        ctx.write(&escape_attr(classes));
-        ctx.write("\"");
+        attrs.push(("class".into(), classes.into()));
     }
     if let Some(lang) = node.props.get_str("html:lang") {
-        ctx.write(" lang=\"");
-        ctx.write(&escape_attr(lang));
-        ctx.write("\"");
+        attrs.push(("lang".into(), lang.into()));
     }
     if let Some(dir) = node.props.get_str("html:dir") {
-        ctx.write(" dir=\"");
-        ctx.write(&escape_attr(dir));
-        ctx.write("\"");
+        attrs.push(("dir".into(), dir.into()));
     }
     if let Some(style) = node.props.get_str("html:style") {
-        ctx.write(" style=\"");
-        ctx.write(&escape_attr(style));
-        ctx.write("\"");
+        attrs.push(("style".into(), style.into()));
     }
+    attrs
 }
 
-/// Emit a heading element.
-fn emit_heading(node: &Node, ctx: &mut EmitContext) {
+// ── Node-specific converters ────────────────────────────────────────────────
+
+fn convert_heading(node: &Node, ctx: &mut ConvertContext) -> HtmlNode {
     let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
     let tag = match level {
         1 => "h1",
@@ -272,288 +235,219 @@ fn emit_heading(node: &Node, ctx: &mut EmitContext) {
         5 => "h5",
         _ => "h6",
     };
-    emit_block_tag(tag, node, ctx);
+    element(tag, common_attrs(node), convert_nodes(&node.children, ctx))
 }
 
-/// Emit a code block.
-fn emit_code_block(node: &Node, ctx: &mut EmitContext) {
-    ctx.newline();
-    ctx.write("<pre><code");
-
+fn convert_code_block(node: &Node) -> HtmlNode {
+    let mut code_attrs = Vec::new();
     if let Some(lang) = node.props.get_str(prop::LANGUAGE) {
-        ctx.write(" class=\"language-");
-        ctx.write(&escape_attr(lang));
-        ctx.write("\"");
+        code_attrs.push(("class".into(), format!("language-{lang}")));
     }
 
-    ctx.write(">");
-
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        ctx.write(&escape_html(content));
-    }
-
-    ctx.write("</code></pre>");
+    let content = node.props.get_str(prop::CONTENT).unwrap_or("");
+    let code = element(
+        "code",
+        code_attrs,
+        vec![HtmlNode::Text {
+            content: content.into(),
+            span: Span::NONE,
+        }],
+    );
+    element("pre", vec![], vec![code])
 }
 
-/// Emit a list.
-fn emit_list(node: &Node, ctx: &mut EmitContext) {
+fn convert_list(node: &Node, ctx: &mut ConvertContext) -> HtmlNode {
     let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
     let tag = if ordered { "ol" } else { "ul" };
-
-    ctx.newline();
-    ctx.write("<");
-    ctx.write(tag);
-
+    let mut attrs = Vec::new();
     if ordered
         && let Some(start) = node.props.get_int(prop::START)
         && start != 1
     {
-        ctx.write(" start=\"");
-        ctx.write(&start.to_string());
-        ctx.write("\"");
+        attrs.push(("start".into(), start.to_string()));
     }
-
-    ctx.write(">");
-    ctx.indent();
-    emit_nodes(&node.children, ctx);
-    ctx.dedent();
-    ctx.newline();
-    ctx.write("</");
-    ctx.write(tag);
-    ctx.write(">");
+    element(tag, attrs, convert_nodes(&node.children, ctx))
 }
 
-/// Emit a table cell.
-fn emit_table_cell(node: &Node, tag: &str, ctx: &mut EmitContext) {
-    ctx.newline();
-    ctx.write("<");
-    ctx.write(tag);
-
+fn convert_table_cell(node: &Node, tag: &str, ctx: &mut ConvertContext) -> HtmlNode {
+    let mut attrs = Vec::new();
     if let Some(colspan) = node.props.get_int(prop::COLSPAN)
         && colspan > 1
     {
-        ctx.write(" colspan=\"");
-        ctx.write(&colspan.to_string());
-        ctx.write("\"");
+        attrs.push(("colspan".into(), colspan.to_string()));
     }
-
     if let Some(rowspan) = node.props.get_int(prop::ROWSPAN)
         && rowspan > 1
     {
-        ctx.write(" rowspan=\"");
-        ctx.write(&rowspan.to_string());
-        ctx.write("\"");
+        attrs.push(("rowspan".into(), rowspan.to_string()));
     }
-
-    ctx.write(">");
-    emit_nodes(&node.children, ctx);
-    ctx.write("</");
-    ctx.write(tag);
-    ctx.write(">");
+    element(tag, attrs, convert_nodes(&node.children, ctx))
 }
 
-/// Emit a div element (or a semantic HTML5 element preserved via html:tag).
-fn emit_div(node: &Node, ctx: &mut EmitContext) {
+fn convert_div(node: &Node, ctx: &mut ConvertContext) -> HtmlNode {
     let tag = node.props.get_str("html:tag").unwrap_or("div");
-    ctx.newline();
-    ctx.write("<");
-    ctx.write(tag);
-    emit_common_attrs(node, ctx);
-    ctx.write(">");
-
-    let has_block_children = node.children.iter().any(|c| is_block_node(c.kind.as_str()));
-    if has_block_children {
-        ctx.indent();
-        emit_nodes(&node.children, ctx);
-        ctx.dedent();
-        ctx.newline();
-    } else {
-        emit_nodes(&node.children, ctx);
-    }
-
-    ctx.write("</");
-    ctx.write(tag);
-    ctx.write(">");
+    element(tag, common_attrs(node), convert_nodes(&node.children, ctx))
 }
 
-/// Emit raw content (pass-through).
-fn emit_raw(node: &Node, ctx: &mut EmitContext) {
+fn convert_raw(node: &Node) -> Vec<HtmlNode> {
     let format = node.props.get_str(prop::FORMAT).unwrap_or("html");
     if format == "html"
         && let Some(content) = node.props.get_str(prop::CONTENT)
     {
-        ctx.write(content);
+        return vec![HtmlNode::Raw {
+            content: content.into(),
+            span: Span::NONE,
+        }];
     }
+    vec![]
 }
 
-/// Emit text content.
-fn emit_text(node: &Node, ctx: &mut EmitContext) {
+fn convert_text(node: &Node) -> Vec<HtmlNode> {
     if let Some(content) = node.props.get_str(prop::CONTENT) {
-        ctx.write(&escape_html(content));
+        vec![HtmlNode::Text {
+            content: content.into(),
+            span: Span::NONE,
+        }]
+    } else {
+        vec![]
     }
 }
 
-/// Emit inline code.
-fn emit_inline_code(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("<code>");
-    if let Some(content) = node.props.get_str(prop::CONTENT) {
-        ctx.write(&escape_html(content));
-    }
-    ctx.write("</code>");
+fn convert_inline_code(node: &Node) -> HtmlNode {
+    let content = node.props.get_str(prop::CONTENT).unwrap_or("");
+    element(
+        "code",
+        vec![],
+        vec![HtmlNode::Text {
+            content: content.into(),
+            span: Span::NONE,
+        }],
+    )
 }
 
-/// Emit a link.
-fn emit_link(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("<a");
-
+fn convert_link(node: &Node, ctx: &mut ConvertContext) -> HtmlNode {
+    let mut attrs = Vec::new();
     if let Some(url) = node.props.get_str(prop::URL) {
-        ctx.write(" href=\"");
-        ctx.write(&escape_attr(url));
-        ctx.write("\"");
+        attrs.push(("href".into(), url.into()));
     }
-
     if let Some(title) = node.props.get_str(prop::TITLE) {
-        ctx.write(" title=\"");
-        ctx.write(&escape_attr(title));
-        ctx.write("\"");
+        attrs.push(("title".into(), title.into()));
     }
-
-    ctx.write(">");
-    emit_nodes(&node.children, ctx);
-    ctx.write("</a>");
+    element("a", attrs, convert_nodes(&node.children, ctx))
 }
 
-/// Emit an image.
-fn emit_image(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("<img");
+fn convert_image(node: &Node, ctx: &mut ConvertContext) -> HtmlNode {
+    let mut attrs = Vec::new();
 
     // Check for embedded resource first
     if let Some(resource_id_str) = node.props.get_str(prop::RESOURCE_ID) {
         let resource_id = ResourceId::from_string(resource_id_str);
         if let Some(resource) = ctx.resources.get(&resource_id) {
-            // Emit as data URI
-            ctx.write(" src=\"data:");
-            ctx.write(&resource.mime_type);
-            ctx.write(";base64,");
-            ctx.write(&base64_encode(&resource.data));
-            ctx.write("\"");
+            let data_uri = format!(
+                "data:{};base64,{}",
+                resource.mime_type,
+                base64_encode(&resource.data)
+            );
+            attrs.push(("src".into(), data_uri));
         }
     } else if let Some(url) = node.props.get_str(prop::URL) {
-        ctx.write(" src=\"");
-        ctx.write(&escape_attr(url));
-        ctx.write("\"");
+        attrs.push(("src".into(), url.into()));
     }
 
     if let Some(alt) = node.props.get_str(prop::ALT) {
-        ctx.write(" alt=\"");
-        ctx.write(&escape_attr(alt));
-        ctx.write("\"");
+        attrs.push(("alt".into(), alt.into()));
     }
-
     if let Some(title) = node.props.get_str(prop::TITLE) {
-        ctx.write(" title=\"");
-        ctx.write(&escape_attr(title));
-        ctx.write("\"");
+        attrs.push(("title".into(), title.into()));
     }
 
-    ctx.write(">");
+    void_element("img", attrs)
 }
 
-/// Emit a span element (or a semantic inline element preserved via html:tag).
-fn emit_span(node: &Node, ctx: &mut EmitContext) {
+fn convert_span(node: &Node, ctx: &mut ConvertContext) -> HtmlNode {
     let tag = node.props.get_str("html:tag").unwrap_or("span");
-    ctx.write("<");
-    ctx.write(tag);
-    emit_common_attrs(node, ctx);
+    let mut attrs = common_attrs(node);
     // <abbr> carries its expansion in the title attribute.
-    if tag == "abbr" && let Some(title) = node.props.get_str(prop::TITLE) {
-        ctx.write(" title=\"");
-        ctx.write(&escape_attr(title));
-        ctx.write("\"");
+    if tag == "abbr"
+        && let Some(title) = node.props.get_str(prop::TITLE)
+    {
+        attrs.push(("title".into(), title.into()));
     }
-    ctx.write(">");
-    emit_nodes(&node.children, ctx);
-    ctx.write("</");
-    ctx.write(tag);
-    ctx.write(">");
+    element(tag, attrs, convert_nodes(&node.children, ctx))
 }
 
-/// Emit a footnote reference.
-fn emit_footnote_ref(node: &Node, ctx: &mut EmitContext) {
+fn convert_footnote_ref(node: &Node) -> HtmlNode {
     let label = node.props.get_str(prop::LABEL).unwrap_or("?");
-    ctx.write("<sup><a href=\"#fn-");
-    ctx.write(&escape_attr(label));
-    ctx.write("\">");
-    ctx.write(&escape_html(label));
-    ctx.write("</a></sup>");
+    element(
+        "sup",
+        vec![],
+        vec![element(
+            "a",
+            vec![("href".into(), format!("#fn-{label}"))],
+            vec![HtmlNode::Text {
+                content: label.into(),
+                span: Span::NONE,
+            }],
+        )],
+    )
 }
 
-/// Emit a footnote definition.
-fn emit_footnote_def(node: &Node, ctx: &mut EmitContext) {
+fn convert_footnote_def(node: &Node, ctx: &mut ConvertContext) -> HtmlNode {
     let label = node.props.get_str(prop::LABEL).unwrap_or("?");
-    ctx.newline();
-    ctx.write("<div id=\"fn-");
-    ctx.write(&escape_attr(label));
-    ctx.write("\" class=\"footnote\"><sup>");
-    ctx.write(&escape_html(label));
-    ctx.write("</sup> ");
-    emit_nodes(&node.children, ctx);
-    ctx.write("</div>");
+    let mut children = vec![element(
+        "sup",
+        vec![],
+        vec![HtmlNode::Text {
+            content: label.into(),
+            span: Span::NONE,
+        }],
+    )];
+    children.push(HtmlNode::Text {
+        content: " ".into(),
+        span: Span::NONE,
+    });
+    children.extend(convert_nodes(&node.children, ctx));
+
+    element(
+        "div",
+        vec![
+            ("id".into(), format!("fn-{label}")),
+            ("class".into(), "footnote".into()),
+        ],
+        children,
+    )
 }
 
-/// Emit quoted text.
-fn emit_quoted(node: &Node, ctx: &mut EmitContext) {
-    ctx.write("<q>");
-    emit_nodes(&node.children, ctx);
-    ctx.write("</q>");
-}
-
-/// Emit inline math.
-fn emit_math_inline(node: &Node, ctx: &mut EmitContext) {
+fn convert_math_inline(node: &Node) -> Vec<HtmlNode> {
     if let Some(source) = node.props.get_str("math:source") {
-        ctx.write("<span class=\"math math-inline\">\\(");
-        ctx.write(&escape_html(source));
-        ctx.write("\\)</span>");
+        let content = format!("\\({source}\\)");
+        vec![element(
+            "span",
+            vec![("class".into(), "math math-inline".into())],
+            vec![HtmlNode::Text {
+                content,
+                span: Span::NONE,
+            }],
+        )]
+    } else {
+        vec![]
     }
 }
 
-/// Emit display math.
-fn emit_math_display(node: &Node, ctx: &mut EmitContext) {
+fn convert_math_display(node: &Node) -> Vec<HtmlNode> {
     if let Some(source) = node.props.get_str("math:source") {
-        ctx.write("<div class=\"math math-display\">\\[");
-        ctx.write(&escape_html(source));
-        ctx.write("\\]</div>");
+        let content = format!("\\[{source}\\]");
+        vec![element(
+            "div",
+            vec![("class".into(), "math math-display".into())],
+            vec![HtmlNode::Text {
+                content,
+                span: Span::NONE,
+            }],
+        )]
+    } else {
+        vec![]
     }
-}
-
-/// Escape HTML special characters.
-fn escape_html(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '&' => result.push_str("&amp;"),
-            '<' => result.push_str("&lt;"),
-            '>' => result.push_str("&gt;"),
-            _ => result.push(c),
-        }
-    }
-    result
-}
-
-/// Escape attribute values.
-fn escape_attr(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '&' => result.push_str("&amp;"),
-            '<' => result.push_str("&lt;"),
-            '>' => result.push_str("&gt;"),
-            '"' => result.push_str("&quot;"),
-            '\'' => result.push_str("&#x27;"),
-            _ => result.push(c),
-        }
-    }
-    result
 }
 
 /// Base64 encode bytes.

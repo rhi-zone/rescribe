@@ -1282,6 +1282,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "html-fmt"
+version = "0.1.0"
+dependencies = [
+ "html5ever",
+ "markup5ever_rcdom",
+]
+
+[[package]]
 name = "html5ever"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3167,8 +3175,7 @@ dependencies = [
 name = "rescribe-read-html"
 version = "0.1.0"
 dependencies = [
- "html5ever",
- "markup5ever_rcdom",
+ "html-fmt",
  "rescribe-core",
  "rescribe-fixtures",
  "rescribe-std",
@@ -3725,6 +3732,7 @@ dependencies = [
 name = "rescribe-write-html"
 version = "0.1.0"
 dependencies = [
+ "html-fmt",
  "rescribe-core",
  "rescribe-std",
 ]

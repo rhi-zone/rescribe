@@ -9,3 +9,4 @@ description = "HTML writer for rescribe"
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
+html-fmt.workspace = true
