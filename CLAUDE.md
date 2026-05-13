@@ -472,7 +472,6 @@ files containing what they shouldn't — stop and ask why before continuing.
 ## Negative Constraints
 
 Do not:
-- Use Claude Code's auto-memory system (`~/.claude/projects/.../memory/`) — it is unversioned, invisible to the user, and can't be diffed or backed up. Write behavioral changes and project context to CLAUDE.md instead
 - Announce actions ("I will now...") - just do them
 - Leave work uncommitted
 - Use interactive git commands (`git add -p`, `git add -i`, `git rebase -i`) — these block on stdin and hang in non-interactive shells; stage files by name instead
@@ -504,14 +503,14 @@ After editing multiple files, run the full check once — not after each edit. F
 
 ## Context Management
 
-**Use subagents to protect the main context window.** For broad exploration or mechanical multi-file work, delegate to an Explore or general-purpose subagent.
+**ALL exploration goes in subagents.** Any tool call whose purpose is "find out what's here" — grep, find, broad reads, surveys, audits — runs in a subagent. Raw exploratory output in the main context is active context poisoning: it lingers in cache, shapes downstream reasoning, can't be unsent. The subagent returns a distilled summary; the noise stays in the subagent.
 
-Rules of thumb:
-- Research tasks → subagent
-- Searching >5 files or running >3 rounds of grep/read → use a subagent
-- Codebase-wide analysis → always subagent
-- Mechanical work across many files → parallel subagents
-- Single targeted lookup → inline is fine
+Inline tool use in the main context is reserved for:
+- Reading a known file at a known path
+- Edits/writes you're committing to
+- A single targeted lookup whose result you'll act on immediately
+
+If you find yourself running a second grep to refine the first, you should have spawned a subagent.
 
 ## Commit Convention
 
