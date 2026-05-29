@@ -693,3 +693,11 @@ Add to the Session Handoff section:
 > **Initiate a handoff after a significant mid-session correction.** When a correction happens after substantial wrong-path work, the wrong reasoning is still in context and keeps pulling. Writing down the invariant and starting fresh beats continuing with poisoned context — the next session loads the invariant from turn 1 before any wrong reasoning exists.
 
 Conventional commit: `docs: add corrections-as-documentation-lag + context-poisoning handoff rule`
+
+---
+
+## Ad-hoc dispatch findings (2026-05-29)
+
+From an ecosystem-wide investigation of ad-hoc dispatch architecture (2026-05-29). The recurring anti-pattern: N parallel dispatch tables keyed on a closed name/enum set where one registry/trait/visitor belongs — strongest tell is DRIFT (parallel tables disagreeing). Each finding names the general mechanism it should have been.
+
+- **R1 — 3 parallel format-match arms bypass the `Parser`/`Emitter` traits.** `rescribe-cli/src/main.rs`: `parse_text` (line ~805), `parse_binary` (line ~874), `emit` (line ~900) each manually enumerate every format and call format-specific free functions; plus a 60-entry `const FORMATS` (lines ~80–676). The library's `Parser`/`Emitter` traits expose `fn formats(&self)` — the exact dispatch mechanism — but the CLI ignores it. Adding a format = 4-place edit, compiler can't enforce consistency. SHOULD BE: registry dispatch via `Parser::formats()`/`Emitter`. This is the cleanest bypassed-abstraction finding in the conversion cluster.
