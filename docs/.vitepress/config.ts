@@ -8,6 +8,8 @@ export default withMermaid(
 
     base: '/rescribe/',
 
+    srcExclude: ['**/CLAUDE.md'],
+
     themeConfig: {
       nav: [
         { text: 'Guide', link: '/introduction' },
