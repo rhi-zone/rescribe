@@ -1,6 +1,9 @@
 {
-  "description": "encodingDesc content is flattened into encoding_desc metadata (structure not fully modeled; a fidelity warning is emitted)",
-  "metadata": { "encoding_desc": "Encoded according to house style." },
+  "description": "encodingDesc content is raw-preserved verbatim (encoding_desc_raw) alongside a flattened encoding_desc summary for convenience — no fidelity warning since the original XML round-trips",
+  "metadata": {
+    "encoding_desc": "Encoded according to house style.",
+    "encoding_desc_raw": "<encodingDesc>\n      <p>Encoded according to house style.</p>\n    </encodingDesc>"
+  },
   "assertions": [
     { "path": "/0", "kind": "paragraph" }
   ]

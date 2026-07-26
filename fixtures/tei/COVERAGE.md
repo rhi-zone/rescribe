@@ -89,11 +89,13 @@ TEI All tagset (tei_all). Primary module focus: tei, core, textstructure, linkin
 - [x] publicationStmt — `header-publication-stmt`
 - [x] sourceDesc — `header-source-desc`
 - [x] profileDesc / langUsage — `header-lang-usage`
-- [x] encodingDesc — `header-encoding-desc`
+- [x] encodingDesc — `header-encoding-desc` (raw-preserved verbatim via
+  `encoding_desc_raw` metadata, alongside a flattened `encoding_desc` summary)
 - [x] revisionDesc / change — `header-revision-desc`
 - [x] abstract (in profileDesc) — `header-abstract`
 - [x] keywords (in profileDesc) — `header-keywords`
-- [x] msDesc (manuscript description) — `header-ms-desc`
+- [x] msDesc (manuscript description) — `header-ms-desc` (raw-preserved
+  verbatim via `ms_desc_raw` metadata, alongside a flattened `ms_desc` summary)
 
 ## Properties
 
@@ -129,7 +131,11 @@ TEI All tagset (tei_all). Primary module focus: tei, core, textstructure, linkin
 - [x] empty document — `adv-empty`
 - [x] malformed XML (unclosed tag) — `adv-malformed-xml`
 - [x] missing TEI namespace — `adv-no-namespace`
-- [x] unknown element — `adv-unknown-element`
+- [x] unknown element — `adv-unknown-element` (non-block-vocabulary element at
+  block-dispatch position, stays a bare span), `adv-unknown-block-element`
+  (block-vocabulary element, raw-preserved as a tagged `div` — no `<p>`-wrap
+  round-trip drift), `adv-unknown-inline-element` (unrecognized element nested
+  inline within running text, stays a tagged span in place)
 - [x] entity references — `adv-entity-references`
 - [x] numeric character references — `adv-numeric-char-ref`
 - [x] empty paragraph — `adv-empty-paragraph` (`<p/>`)

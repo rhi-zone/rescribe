@@ -1,0 +1,7 @@
+{
+  "description": "an unrecognized element name that TEI's content model treats as block-level (<closer>, not otherwise given dedicated IR handling) is raw-preserved as a tagged div, not wrapped in a bare span the writer would then <p>-wrap",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/1", "kind": "div", "props": { "tei:tag": "closer" } }
+  ]
+}

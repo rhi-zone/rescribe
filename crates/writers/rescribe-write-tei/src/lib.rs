@@ -23,7 +23,7 @@
 //! let xml = String::from_utf8(result.value).unwrap();
 //! ```
 
-use tei_fmt::{Node as TNode, TeiDoc, XmlDecl};
+use tei_fmt::{Node as TNode, Span as TSpan, TeiDoc, XmlDecl};
 
 use rescribe_core::{ConversionResult, Document, EmitError, Node};
 use rescribe_std::{node, prop};
@@ -46,7 +46,9 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         || doc.metadata.get_str("keywords").is_some()
         || doc.metadata.get_str("revisions").is_some()
         || doc.metadata.get_str("encoding_desc").is_some()
-        || doc.metadata.get_str("ms_desc").is_some();
+        || doc.metadata.get_str("ms_desc").is_some()
+        || doc.metadata.get_str("encoding_desc_raw").is_some()
+        || doc.metadata.get_str("ms_desc_raw").is_some();
     if has_header_metadata {
         let mut title_stmt_children = Vec::new();
         title_stmt_children.push(tei_element(
@@ -127,7 +129,16 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
                 vec![tei_element("keywords", vec![], terms)],
             ));
         }
-        if let Some(ms_desc) = doc.metadata.get_str("ms_desc") {
+        // Prefer the byte-verbatim raw XML captured by the reader (see
+        // `rescribe-read-tei`'s `tei:raw` handling) over reconstructing
+        // `<msDesc>` from its flattened text — splicing the original
+        // subtree back in is lossless where the reconstruction is not.
+        if let Some(ms_desc_raw) = doc.metadata.get_str("ms_desc_raw") {
+            file_desc_children.push(TNode::Raw {
+                content: ms_desc_raw.to_string(),
+                span: TSpan::NONE,
+            });
+        } else if let Some(ms_desc) = doc.metadata.get_str("ms_desc") {
             file_desc_children.push(tei_element("msDesc", vec![], vec![tei_text(ms_desc)]));
         }
 
@@ -137,7 +148,12 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         // flat scan regardless, but matching real TEI element structure
         // keeps emitted documents schema-valid.
         let mut header_children = vec![tei_element("fileDesc", vec![], file_desc_children)];
-        if let Some(encoding_desc) = doc.metadata.get_str("encoding_desc") {
+        if let Some(encoding_desc_raw) = doc.metadata.get_str("encoding_desc_raw") {
+            header_children.push(TNode::Raw {
+                content: encoding_desc_raw.to_string(),
+                span: TSpan::NONE,
+            });
+        } else if let Some(encoding_desc) = doc.metadata.get_str("encoding_desc") {
             header_children.push(tei_element(
                 "encodingDesc",
                 vec![],
@@ -338,7 +354,12 @@ fn write_node(node: &Node) -> Vec<TNode> {
                 Some("sp") => "sp",
                 Some("epigraph") => "epigraph",
                 Some("argument") => "argument",
-                _ => "div",
+                // No dedicated `tei:type` — this may be a `generic_div`
+                // (an unrecognized block-level element raw-preserved by
+                // the reader's catch-all, see
+                // `rescribe-read-tei::generic_div`); re-emit its original
+                // tag name if so, falling back to plain `div`.
+                _ => node.props.get_str("tei:tag").unwrap_or("div"),
             };
             vec![tei_element(
                 name,

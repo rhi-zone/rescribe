@@ -621,20 +621,45 @@ required real reader/writer changes, not just fixture-writing:
 - [x] `cargo clippy --all-targets --all-features -p tei-fmt -p rescribe-read-tei
   -p rescribe-write-tei -- -D warnings` and full test/fixture suite clean
   (all 111 `fixtures/tei/*` fixtures + all existing unit tests pass)
-- [ ] Known limitation: teiHeader is a flat `Properties` bag, not part of the
-  document content tree, so genuinely unrecognized header sub-structure
-  (e.g. `msDesc`'s internal `msIdentifier`/`physDesc`) can only be flattened to
-  text + warned about, never raw-preserved node-for-node the way body content
-  can be. A structural metadata representation (nested `PropValue::Map`, or a
-  dedicated header-subtree slot) would be needed to close this properly —
-  out of scope for this pass.
-- [ ] Known limitation: an unrecognized element at block level (outside
-  teiHeader) round-trips as content wrapped in an extra `<p>` (since the
-  generic `span` fallback is inline-shaped and the writer's block dispatch
-  wraps bare inline/span nodes in `<p>` to stay valid XML) — element name and
-  content survive, but a block-level unknown element is not byte-identical
-  after round-trip. A block-shaped raw-preservation node (mirroring
-  `raw_block`) would close this.
+- [x] **Fixed (2026-07-27)**: teiHeader sub-structure (`msDesc`, `encodingDesc`)
+  is now raw-preserved byte-for-byte, not just flattened to text. `tei-fmt`
+  gained a `Node::Raw { content, span }` AST variant (mirroring `html-fmt`'s)
+  plus `emit_fragment(nodes: &[Node]) -> Vec<u8>` (mirroring
+  `html_fmt::emit_fragment`, used there to raw-capture inline MathML).
+  `rescribe-read-tei` captures the `<msDesc>`/`<encodingDesc>` subtree's
+  original XML via `emit_fragment` at the point it still holds the raw
+  `tei_fmt::Node` (before IR conversion) and stores it as `ms_desc_raw`/
+  `encoding_desc_raw` string metadata, alongside the existing flattened
+  `ms_desc`/`encoding_desc` text kept for convenience. `rescribe-write-tei`
+  prefers the raw metadata when present, splicing it back in via a
+  `tei_fmt::Node::Raw` node; the fidelity warning now only fires if raw
+  capture genuinely fails (should not happen for any XML that parsed
+  successfully). `fixtures/tei/header-ms-desc` and `header-encoding-desc`
+  updated to assert the new `*_raw` metadata keys and the no-warning case.
+  Residual gap: this closes `msDesc`/`encodingDesc` specifically (the two
+  named in this note); other teiHeader leaves this reader doesn't recognize
+  by name still hit the generic "unmodeled teiHeader field" warning path
+  (`extract_metadata`'s `other =>` arm) rather than raw-preservation — a
+  narrower version of the same gap remains for those, tracked separately
+  if it comes up.
+- [x] **Fixed (2026-07-27)**: an unrecognized element at block level no
+  longer round-trips wrapped in an extra `<p>`. `rescribe-read-tei` gained
+  `is_block_element(tag: &str) -> bool` (mirroring
+  `rescribe-read-html::is_block_element`) listing TEI's block-level
+  vocabulary, plus a `generic_div` helper (the block-level counterpart to
+  `generic_span`). The catch-all fallback in `convert_element` now branches:
+  unrecognized block-level elements become a `div` tagged `tei:tag`
+  (`generic_div`), unrecognized inline elements keep the existing `span`
+  path (`generic_span`). `rescribe-write-tei`'s `node::DIV` arm now falls
+  back to `tei:tag` (re-emitting the original element name) when no
+  `tei:type` matches, mirroring `rescribe-write-html::convert_div`'s
+  `html:tag` handling. New fixtures `adv-unknown-block-element` (`<closer>`)
+  and `adv-unknown-inline-element` (`<mysteryTag>` nested in running text)
+  regression-test both branches; `adv-unknown-element` (the pre-existing
+  fixture, an unrecognized element that is *not* in the block-level
+  vocabulary, sitting at block-dispatch position) continues to assert the
+  bare-span behavior for that case, which is correct — the classification is
+  by TEI content-model shape, not by dispatch position.
 - [ ] DTD-aware entity resolution remains out of scope for this pass (Tier B
   target is 3-Harness, not 5-Production; fixture-suite-complete is step 1 of 5
   in the vertical checklist — reader/writer completeness beyond the fixture

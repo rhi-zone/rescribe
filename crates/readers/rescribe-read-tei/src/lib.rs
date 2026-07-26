@@ -88,7 +88,28 @@ fn convert_children(
                 ..
             } => {
                 let converted_kids = convert_children(kids, name, metadata, warnings);
-                match convert_element(name, attrs, converted_kids.clone(), Some(parent_name)) {
+                let mut converted =
+                    convert_element(name, attrs, converted_kids.clone(), Some(parent_name));
+                // `<msDesc>`/`<encodingDesc>` are deeply nested TEI-specific
+                // teiHeader sub-structures with no dedicated IR modeling.
+                // Alongside the flattened-text summary `extract_metadata`
+                // keeps for backward compatibility, capture the whole
+                // subtree's original XML verbatim (mirroring how
+                // `rescribe-read-html` raw-preserves `<math>` via
+                // `html_fmt::emit_fragment`) so the writer can splice it
+                // back byte-for-byte instead of reconstructing a lossy
+                // approximation from flattened text.
+                if matches!(name.as_str(), "msDesc" | "encodingDesc")
+                    && let Some(node) = converted.take()
+                {
+                    let raw =
+                        String::from_utf8(tei_fmt::emit_fragment(std::slice::from_ref(child))).ok();
+                    converted = Some(match raw {
+                        Some(raw) => node.prop("tei:raw", raw),
+                        None => node,
+                    });
+                }
+                match converted {
                     Some(node) => out.push(node),
                     None => {
                         if name == "teiHeader" {
@@ -129,6 +150,15 @@ fn convert_children(
                     WarningKind::FeatureLost("comment-or-pi".to_string()),
                     format!("dropped non-content TEI node inside <{parent_name}>"),
                 ));
+            }
+            TNode::Raw { content, .. } => {
+                // `TNode::Raw` is never produced by `tei_fmt::parse` itself
+                // (see its doc comment) — it only exists for downstream
+                // consumers to construct directly. This arm exists purely
+                // so the match stays exhaustive; raw-preserve the content
+                // verbatim rather than drop it if a `TeiDoc` containing one
+                // is ever fed through this reader.
+                out.push(Node::new(node::RAW_BLOCK).prop(prop::CONTENT, content.clone()));
             }
         }
     }
@@ -198,6 +228,123 @@ fn generic_span(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> 
         .children(children);
     n = attach_generic_attrs(n, attrs);
     n
+}
+
+/// A generic block-level "wrapper" element: the block-level counterpart to
+/// [`generic_span`]. TEI markup with no dedicated IR node kind, but whose
+/// content model is block-shaped in TEI (per [`is_block_element`]) rather
+/// than running inline text — represented as a `div` tagged with the
+/// original element name (`tei:tag`) so the writer can re-emit the exact
+/// tag rather than `<p>`-wrapping a bare span, which would misrepresent an
+/// unrecognized block element as an inline one.
+fn generic_div(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let mut n = Node::new(node::DIV)
+        .prop("tei:tag", name.to_string())
+        .children(children);
+    n = attach_generic_attrs(n, attrs);
+    n
+}
+
+/// Known TEI block-level elements — the block-level counterpart to
+/// `rescribe-read-html`'s `is_block_element` allow-list. Used only by the
+/// catch-all fallback in [`convert_element`] to decide whether an element
+/// name this reader doesn't specifically recognize should become a
+/// [`generic_div`] (block position) or a [`generic_span`] (inline
+/// position); every element `convert_element` already gives dedicated
+/// handling to never reaches the catch-all, so this list exists purely to
+/// classify the *unrecognized* remainder — it deliberately includes both
+/// this reader's own recognized block vocabulary (as a cross-reference) and
+/// additional TEI P5 elements that are unambiguously block-shaped but have
+/// no dedicated IR mapping yet (front-matter and manuscript-description
+/// apparatus in particular).
+pub(crate) fn is_block_element(tag: &str) -> bool {
+    matches!(
+        tag,
+        // Divisions / structural grouping
+        "div" | "div1"
+            | "div2"
+            | "div3"
+            | "div4"
+            | "div5"
+            | "div6"
+            | "div7"
+            | "group"
+            | "floatingText"
+            // Paragraph-shaped block content
+            | "p"
+            | "ab"
+            | "head"
+            | "speaker"
+            | "stage"
+            | "byline"
+            | "dateline"
+            | "salute"
+            | "signed"
+            | "trailer"
+            | "opener"
+            | "closer"
+            | "postscript"
+            | "argument"
+            | "epigraph"
+            | "l"
+            // Lists / tables / drama
+            | "list"
+            | "item"
+            | "gloss"
+            | "table"
+            | "row"
+            | "cell"
+            | "castList"
+            | "castItem"
+            // Quotes / verse
+            | "quote"
+            | "cit"
+            | "lg"
+            // Figures / code listings
+            | "figure"
+            | "figDesc"
+            | "eg"
+            // Notes (block-shaped at block-dispatch position)
+            | "note"
+            // Bibliography
+            | "listBibl"
+            | "biblStruct"
+            | "biblFull"
+            // Manuscript description / title page apparatus
+            | "msContents"
+            | "msItem"
+            | "msIdentifier"
+            | "physDesc"
+            | "handDesc"
+            | "handNote"
+            | "typeDesc"
+            | "layoutDesc"
+            | "layout"
+            | "scriptDesc"
+            | "decoDesc"
+            | "decoNote"
+            | "additions"
+            | "bindingDesc"
+            | "binding"
+            | "sealDesc"
+            | "seal"
+            | "accMat"
+            | "provenance"
+            | "acquisition"
+            | "condition"
+            | "recordHist"
+            | "source"
+            | "sourceDoc"
+            | "history"
+            | "titlePage"
+            | "docTitle"
+            | "docAuthor"
+            | "docDate"
+            | "docEdition"
+            | "docImprint"
+            | "imprimatur"
+            | "performance"
+    )
 }
 
 /// Convert one TEI element (with its already-converted children) into a
@@ -620,15 +767,26 @@ fn convert_element(
         "pb" => Some(Node::new(node::HORIZONTAL_RULE)),
 
         // Default: an element name this reader doesn't specifically
-        // recognize. Raw-preserve it as a generic tagged span rather than
-        // silently unwrapping it into its parent — losing the fact that
-        // `<foo>` ever existed (as opposed to its text just being loose in
-        // the parent) is exactly the silent-drop CLAUDE.md forbids. Known
-        // structural wrapper elements (`TEI`, `text`, `body`, `teiHeader`,
-        // etc.) are matched explicitly above and return `None` on purpose —
-        // this arm only catches names genuinely outside the vocabulary this
-        // reader models.
-        _ => Some(generic_span(name, attrs, children)),
+        // recognize. Raw-preserve it as a generic tagged span/div rather
+        // than silently unwrapping it into its parent — losing the fact
+        // that `<foo>` ever existed (as opposed to its text just being
+        // loose in the parent) is exactly the silent-drop CLAUDE.md
+        // forbids. Known structural wrapper elements (`TEI`, `text`,
+        // `body`, `teiHeader`, etc.) are matched explicitly above and
+        // return `None` on purpose — this arm only catches names genuinely
+        // outside the vocabulary this reader models. Branching on
+        // `is_block_element` (mirroring `rescribe-read-html`'s
+        // `is_block_element` + bare-span/div split) keeps an unrecognized
+        // *block*-level element block-shaped instead of producing a bare
+        // `span` that the writer would then `<p>`-wrap, which would
+        // misrepresent it as inline content.
+        _ => {
+            if is_block_element(name) {
+                Some(generic_div(name, attrs, children))
+            } else {
+                Some(generic_span(name, attrs, children))
+            }
+        }
     };
 
     node.map(|n| attach_generic_attrs(n, attrs))
@@ -691,25 +849,42 @@ fn extract_metadata(
                     };
                     append_metadata(metadata, "revisions", &entry);
                 }
-                "encodingDesc" if !text.is_empty() => {
-                    metadata.set("encoding_desc", text);
-                    warnings.push(FidelityWarning::new(
-                        Severity::Minor,
-                        WarningKind::FeatureLost("encoding-desc-structure".to_string()),
-                        "teiHeader <encodingDesc> internal structure (classDecl, tagsDecl, \
-                             etc.) is not modeled; only its flattened text was kept in metadata"
-                            .to_string(),
-                    ));
+                "encodingDesc" if !text.is_empty() || node.props.get_str("tei:raw").is_some() => {
+                    let raw = node.props.get_str("tei:raw").map(str::to_string);
+                    if !text.is_empty() {
+                        metadata.set("encoding_desc", text);
+                    }
+                    match raw {
+                        // Raw XML captured: the writer can splice it back
+                        // byte-for-byte, so the flattened text above is
+                        // just a convenience — nothing was actually lost.
+                        Some(raw) => metadata.set("encoding_desc_raw", raw),
+                        None => warnings.push(FidelityWarning::new(
+                            Severity::Minor,
+                            WarningKind::FeatureLost("encoding-desc-structure".to_string()),
+                            "teiHeader <encodingDesc> internal structure (classDecl, \
+                                 tagsDecl, etc.) is not modeled and its raw XML could not be \
+                                 captured; only its flattened text was kept in metadata"
+                                .to_string(),
+                        )),
+                    }
                 }
-                "msDesc" if !text.is_empty() => {
-                    metadata.set("ms_desc", text);
-                    warnings.push(FidelityWarning::new(
-                        Severity::Minor,
-                        WarningKind::FeatureLost("ms-desc-structure".to_string()),
-                        "teiHeader <msDesc> internal structure (msIdentifier, physDesc, \
-                             etc.) is not modeled; only its flattened text was kept in metadata"
-                            .to_string(),
-                    ));
+                "msDesc" if !text.is_empty() || node.props.get_str("tei:raw").is_some() => {
+                    let raw = node.props.get_str("tei:raw").map(str::to_string);
+                    if !text.is_empty() {
+                        metadata.set("ms_desc", text);
+                    }
+                    match raw {
+                        Some(raw) => metadata.set("ms_desc_raw", raw),
+                        None => warnings.push(FidelityWarning::new(
+                            Severity::Minor,
+                            WarningKind::FeatureLost("ms-desc-structure".to_string()),
+                            "teiHeader <msDesc> internal structure (msIdentifier, physDesc, \
+                                 etc.) is not modeled and its raw XML could not be captured; \
+                                 only its flattened text was kept in metadata"
+                                .to_string(),
+                        )),
+                    }
                 }
                 // A teiHeader field this reader doesn't specifically
                 // recognize. teiHeader metadata is a flat property bag,
