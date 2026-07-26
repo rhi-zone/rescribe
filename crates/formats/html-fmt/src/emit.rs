@@ -23,6 +23,23 @@ pub fn emit_with_options(doc: &HtmlDoc, options: &EmitOptions) -> Vec<u8> {
     out.finish()
 }
 
+/// Emit a bare fragment (a slice of nodes with no surrounding document) as
+/// HTML bytes. Useful for serializing a subtree in isolation — e.g. to
+/// capture a foreign-namespace element (`<math>`, `<svg>`) verbatim for
+/// raw preservation by a downstream consumer.
+pub fn emit_fragment(nodes: &[Node]) -> Vec<u8> {
+    emit_fragment_with_options(nodes, &EmitOptions::default())
+}
+
+/// Emit a bare fragment with options. See [`emit_fragment`].
+pub fn emit_fragment_with_options(nodes: &[Node], options: &EmitOptions) -> Vec<u8> {
+    let mut out = Emitter::new(options.pretty);
+    for node in nodes {
+        out.emit_node(node);
+    }
+    out.finish()
+}
+
 struct Emitter {
     buf: String,
     pretty: bool,
@@ -101,8 +118,9 @@ impl Emitter {
                 self.buf.push('>');
 
                 if !*self_closing {
-                    let has_block_children =
-                        children.iter().any(|c| matches!(c, Node::Element { tag, .. } if is_block_element(tag)));
+                    let has_block_children = children
+                        .iter()
+                        .any(|c| matches!(c, Node::Element { tag, .. } if is_block_element(tag)));
 
                     if has_block_children {
                         self.indent += 1;

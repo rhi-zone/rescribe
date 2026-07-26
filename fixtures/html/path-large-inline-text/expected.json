@@ -1,0 +1,9 @@
+{
+  "description": "a single paragraph with a multi-megabyte text node parses without panicking or blowing up memory",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/",   "children_count": 1 },
+    { "path": "/0",  "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text" }
+  ]
+}

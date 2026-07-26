@@ -6,8 +6,8 @@
 
 pub mod builder;
 
-use html_fmt::ast::Span;
 use html_fmt::Node as HtmlNode;
+use html_fmt::ast::Span;
 use rescribe_core::{
     ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, ResourceId,
     ResourceMap, Severity, WarningKind,
@@ -126,12 +126,24 @@ fn convert_nodes(nodes: &[Node], ctx: &mut ConvertContext) -> Vec<HtmlNode> {
 fn convert_node(node: &Node, ctx: &mut ConvertContext) -> Vec<HtmlNode> {
     match node.kind.as_str() {
         node::DOCUMENT => convert_nodes(&node.children, ctx),
-        node::PARAGRAPH => vec![element("p", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::PARAGRAPH => vec![element(
+            "p",
+            common_attrs(node),
+            convert_nodes(&node.children, ctx),
+        )],
         node::HEADING => vec![convert_heading(node, ctx)],
         node::CODE_BLOCK => vec![convert_code_block(node)],
-        node::BLOCKQUOTE => vec![element("blockquote", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::BLOCKQUOTE => vec![element(
+            "blockquote",
+            common_attrs(node),
+            convert_nodes(&node.children, ctx),
+        )],
         node::LIST => vec![convert_list(node, ctx)],
-        node::LIST_ITEM => vec![element("li", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::LIST_ITEM => vec![element(
+            "li",
+            common_attrs(node),
+            convert_nodes(&node.children, ctx),
+        )],
         node::TABLE => vec![element("table", vec![], convert_nodes(&node.children, ctx))],
         node::TABLE_HEAD => vec![element("thead", vec![], convert_nodes(&node.children, ctx))],
         node::TABLE_BODY => vec![element("tbody", vec![], convert_nodes(&node.children, ctx))],
@@ -139,8 +151,16 @@ fn convert_node(node: &Node, ctx: &mut ConvertContext) -> Vec<HtmlNode> {
         node::TABLE_ROW => vec![element("tr", vec![], convert_nodes(&node.children, ctx))],
         node::TABLE_CELL => vec![convert_table_cell(node, "td", ctx)],
         node::TABLE_HEADER => vec![convert_table_cell(node, "th", ctx)],
-        node::FIGURE => vec![element("figure", vec![], convert_nodes(&node.children, ctx))],
-        node::CAPTION => vec![element("figcaption", vec![], convert_nodes(&node.children, ctx))],
+        node::FIGURE => vec![element(
+            "figure",
+            vec![],
+            convert_nodes(&node.children, ctx),
+        )],
+        node::CAPTION => vec![element(
+            "figcaption",
+            vec![],
+            convert_nodes(&node.children, ctx),
+        )],
         node::HORIZONTAL_RULE => vec![void_element("hr", vec![])],
         node::DIV => vec![convert_div(node, ctx)],
         node::RAW_BLOCK => convert_raw(node),
@@ -148,22 +168,53 @@ fn convert_node(node: &Node, ctx: &mut ConvertContext) -> Vec<HtmlNode> {
         node::DEFINITION_TERM => vec![element("dt", vec![], convert_nodes(&node.children, ctx))],
         node::DEFINITION_DESC => vec![element("dd", vec![], convert_nodes(&node.children, ctx))],
         node::TEXT => convert_text(node),
-        node::EMPHASIS => vec![element("em", common_attrs(node), convert_nodes(&node.children, ctx))],
-        node::STRONG => vec![element("strong", common_attrs(node), convert_nodes(&node.children, ctx))],
-        node::STRIKEOUT => vec![element("del", common_attrs(node), convert_nodes(&node.children, ctx))],
-        node::UNDERLINE => vec![element("u", common_attrs(node), convert_nodes(&node.children, ctx))],
-        node::SUBSCRIPT => vec![element("sub", common_attrs(node), convert_nodes(&node.children, ctx))],
-        node::SUPERSCRIPT => vec![element("sup", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::EMPHASIS => vec![element(
+            "em",
+            common_attrs(node),
+            convert_nodes(&node.children, ctx),
+        )],
+        node::STRONG => vec![element(
+            "strong",
+            common_attrs(node),
+            convert_nodes(&node.children, ctx),
+        )],
+        node::STRIKEOUT => vec![element(
+            "del",
+            common_attrs(node),
+            convert_nodes(&node.children, ctx),
+        )],
+        node::UNDERLINE => vec![element(
+            "u",
+            common_attrs(node),
+            convert_nodes(&node.children, ctx),
+        )],
+        node::SUBSCRIPT => vec![element(
+            "sub",
+            common_attrs(node),
+            convert_nodes(&node.children, ctx),
+        )],
+        node::SUPERSCRIPT => vec![element(
+            "sup",
+            common_attrs(node),
+            convert_nodes(&node.children, ctx),
+        )],
         node::CODE => vec![convert_inline_code(node)],
         node::LINK => vec![convert_link(node, ctx)],
         node::IMAGE => vec![convert_image(node, ctx)],
         node::LINE_BREAK => vec![void_element("br", vec![])],
-        node::SOFT_BREAK => vec![HtmlNode::Text { content: "\n".into(), span: Span::NONE }],
+        node::SOFT_BREAK => vec![HtmlNode::Text {
+            content: "\n".into(),
+            span: Span::NONE,
+        }],
         node::SPAN => vec![convert_span(node, ctx)],
         node::RAW_INLINE => convert_raw(node),
         node::FOOTNOTE_REF => vec![convert_footnote_ref(node)],
         node::FOOTNOTE_DEF => vec![convert_footnote_def(node, ctx)],
-        node::SMALL_CAPS => vec![element("small", common_attrs(node), convert_nodes(&node.children, ctx))],
+        node::SMALL_CAPS => vec![element(
+            "small",
+            common_attrs(node),
+            convert_nodes(&node.children, ctx),
+        )],
         node::QUOTED => vec![element("q", vec![], convert_nodes(&node.children, ctx))],
         "math_inline" => convert_math_inline(node),
         "math_display" => convert_math_display(node),
@@ -376,14 +427,21 @@ fn convert_span(node: &Node, ctx: &mut ConvertContext) -> HtmlNode {
     element(tag, attrs, convert_nodes(&node.children, ctx))
 }
 
+/// Footnote reference convention: `<sup class="footnote-ref"><a href="#fn-{label}">{label}</a></sup>`.
+/// The `footnote-ref` class name and `#fn-{label}` href are the anchor the
+/// reader (rescribe-read-html) pattern-matches on to reconstruct
+/// `footnote_ref`; see `convert_element`'s "sup" arm there.
 fn convert_footnote_ref(node: &Node) -> HtmlNode {
     let label = node.props.get_str(prop::LABEL).unwrap_or("?");
     element(
         "sup",
-        vec![],
+        vec![("class".into(), "footnote-ref".into())],
         vec![element(
             "a",
-            vec![("href".into(), format!("#fn-{label}"))],
+            vec![
+                ("href".into(), format!("#fn-{label}")),
+                ("id".into(), format!("fnref-{label}")),
+            ],
             vec![HtmlNode::Text {
                 content: label.into(),
                 span: Span::NONE,
@@ -392,21 +450,39 @@ fn convert_footnote_ref(node: &Node) -> HtmlNode {
     )
 }
 
+/// Footnote definition convention: a `<div id="fn-{label}" class="footnote">`
+/// wrapping a visible `<sup class="footnote-label">` marker, the real content
+/// in a `<span class="footnote-content">` (the part the reader extracts
+/// back out), and a `<a class="footnote-back">` backlink to the reference.
+/// The marker and backlink are purely derived from `label` and are not
+/// read back — only the content span round-trips — so this stays lossless
+/// while still rendering like the common CMS "backlink" convention.
 fn convert_footnote_def(node: &Node, ctx: &mut ConvertContext) -> HtmlNode {
     let label = node.props.get_str(prop::LABEL).unwrap_or("?");
-    let mut children = vec![element(
+    let marker = element(
         "sup",
-        vec![],
+        vec![("class".into(), "footnote-label".into())],
         vec![HtmlNode::Text {
             content: label.into(),
             span: Span::NONE,
         }],
-    )];
-    children.push(HtmlNode::Text {
-        content: " ".into(),
-        span: Span::NONE,
-    });
-    children.extend(convert_nodes(&node.children, ctx));
+    );
+    let content = element(
+        "span",
+        vec![("class".into(), "footnote-content".into())],
+        convert_nodes(&node.children, ctx),
+    );
+    let backlink = element(
+        "a",
+        vec![
+            ("href".into(), format!("#fnref-{label}")),
+            ("class".into(), "footnote-back".into()),
+        ],
+        vec![HtmlNode::Text {
+            content: "\u{21a9}".into(),
+            span: Span::NONE,
+        }],
+    );
 
     element(
         "div",
@@ -414,40 +490,55 @@ fn convert_footnote_def(node: &Node, ctx: &mut ConvertContext) -> HtmlNode {
             ("id".into(), format!("fn-{label}")),
             ("class".into(), "footnote".into()),
         ],
-        children,
+        vec![marker, content, backlink],
     )
 }
 
 fn convert_math_inline(node: &Node) -> Vec<HtmlNode> {
-    if let Some(source) = node.props.get_str("math:source") {
-        let content = format!("\\({source}\\)");
-        vec![element(
-            "span",
-            vec![("class".into(), "math math-inline".into())],
-            vec![HtmlNode::Text {
-                content,
-                span: Span::NONE,
-            }],
-        )]
-    } else {
-        vec![]
-    }
+    convert_math(node, false)
 }
 
 fn convert_math_display(node: &Node) -> Vec<HtmlNode> {
-    if let Some(source) = node.props.get_str("math:source") {
-        let content = format!("\\[{source}\\]");
-        vec![element(
-            "div",
-            vec![("class".into(), "math math-display".into())],
-            vec![HtmlNode::Text {
-                content,
-                span: Span::NONE,
-            }],
-        )]
-    } else {
-        vec![]
+    convert_math(node, true)
+}
+
+/// Convert a math_inline/math_display node to HTML.
+///
+/// If `math:format` is `mathml`, `math:source` already holds a verbatim
+/// `<math>…</math>` fragment (captured raw by the reader — see
+/// `convert_mathml` in rescribe-read-html) and is spliced back in unescaped.
+/// Otherwise `math:source` is treated as LaTeX and wrapped in the
+/// `\(…\)` / `\[…\]` convention.
+fn convert_math(node: &Node, display: bool) -> Vec<HtmlNode> {
+    let Some(source) = node.props.get_str("math:source") else {
+        return vec![];
+    };
+
+    if node.props.get_str("math:format") == Some("mathml") {
+        return vec![HtmlNode::Raw {
+            content: source.into(),
+            span: Span::NONE,
+        }];
     }
+
+    let (tag, content) = if display {
+        ("div", format!("\\[{source}\\]"))
+    } else {
+        ("span", format!("\\({source}\\)"))
+    };
+    let class = if display {
+        "math math-display"
+    } else {
+        "math math-inline"
+    };
+    vec![element(
+        tag,
+        vec![("class".into(), class.into())],
+        vec![HtmlNode::Text {
+            content,
+            span: Span::NONE,
+        }],
+    )]
 }
 
 /// Base64 encode bytes.
@@ -572,6 +663,49 @@ mod tests {
         // Should have newlines and indentation
         assert!(pretty_output.contains('\n'));
         assert!(pretty_output.contains("  <li>"));
+    }
+
+    #[test]
+    fn test_emit_footnote() {
+        let footnote_ref = Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, "1");
+        let footnote_def = Node::new(node::FOOTNOTE_DEF)
+            .prop(prop::LABEL, "1")
+            .children(vec![Node::new(node::TEXT).prop(prop::CONTENT, "A note.")]);
+        let para = Node::new(node::PARAGRAPH).children(vec![
+            Node::new(node::TEXT).prop(prop::CONTENT, "Text."),
+            footnote_ref,
+        ]);
+        let root = Node::new(node::DOCUMENT).children(vec![para, footnote_def]);
+        let doc = Document::new().with_content(root);
+
+        let output = emit_str(&doc);
+        assert_eq!(
+            output,
+            "<p>Text.<sup class=\"footnote-ref\"><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup></p>\
+             <div id=\"fn-1\" class=\"footnote\">\
+             <sup class=\"footnote-label\">1</sup>\
+             <span class=\"footnote-content\">A note.</span>\
+             <a href=\"#fnref-1\" class=\"footnote-back\">\u{21a9}</a></div>"
+        );
+    }
+
+    #[test]
+    fn test_emit_math_inline_latex() {
+        let math = Node::new("math_inline").prop("math:source", "x^2");
+        let doc = Document::new().with_content(Node::new(node::DOCUMENT).children(vec![math]));
+        let output = emit_str(&doc);
+        assert_eq!(output, "<span class=\"math math-inline\">\\(x^2\\)</span>");
+    }
+
+    #[test]
+    fn test_emit_math_inline_mathml_raw() {
+        let source = "<math><mi>x</mi></math>";
+        let math = Node::new("math_inline")
+            .prop("math:format", "mathml")
+            .prop("math:source", source);
+        let doc = Document::new().with_content(Node::new(node::DOCUMENT).children(vec![math]));
+        let output = emit_str(&doc);
+        assert_eq!(output, source);
     }
 
     #[test]

@@ -46,7 +46,7 @@ pub mod writer;
 
 pub use ast::{Diagnostic, HtmlDoc, Node, Span, is_void_element};
 pub use batch::{BatchParser, Handler, StreamingParser};
-pub use emit::{EmitOptions, emit, emit_with_options};
+pub use emit::{EmitOptions, emit, emit_fragment, emit_fragment_with_options, emit_with_options};
 pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
 pub use writer::Writer;
@@ -93,9 +93,10 @@ mod smoke {
         let evts: Vec<_> = events(input).collect();
         assert!(!evts.is_empty());
         // Should contain StartElement for p
-        assert!(evts
-            .iter()
-            .any(|e| matches!(e, Event::StartElement { tag, .. } if tag == "p")));
+        assert!(
+            evts.iter()
+                .any(|e| matches!(e, Event::StartElement { tag, .. } if tag == "p"))
+        );
     }
 
     #[test]
@@ -114,12 +115,14 @@ mod smoke {
         p.feed(b"<h1>Hello</h1>");
         p.feed(b"<p>World</p>");
         p.finish();
-        assert!(evts
-            .iter()
-            .any(|e| matches!(e, Event::StartElement { tag, .. } if tag == "h1")));
-        assert!(evts
-            .iter()
-            .any(|e| matches!(e, Event::StartElement { tag, .. } if tag == "p")));
+        assert!(
+            evts.iter()
+                .any(|e| matches!(e, Event::StartElement { tag, .. } if tag == "h1"))
+        );
+        assert!(
+            evts.iter()
+                .any(|e| matches!(e, Event::StartElement { tag, .. } if tag == "p"))
+        );
     }
 
     #[test]

@@ -55,8 +55,8 @@ See `fixtures/spec.md` for category definitions.
 - [x] sample output (`<samp>`) — `samp`
 - [x] citation (`<cite>`) — `cite`
 - [x] inserted text (`<ins>`) — `ins`
-- [ ] footnote (no native HTML construct; `<a>` anchor convention) — (deferred: complex pattern detection)
-- [ ] inline math (`<math>` MathML) — (deferred: MathML conversion complexity)
+- [x] footnote (no native HTML construct; `<a>` anchor convention) — `footnote`
+- [x] inline math (`<math>` MathML) — `inline-math-mathml`
 
 ## Properties / Metadata
 - [x] metadata title (`<title>`) — `metadata-title`
@@ -97,5 +97,5 @@ See `fixtures/spec.md` for category definitions.
 - [x] document with thousands of paragraphs — `path-large-document`
 - [x] table with hundreds of columns — `path-wide-table`
 - [x] deeply nested lists (20+ levels) — `path-deep-nested-list`
-- [ ] very large inline content (multi-megabyte text node) — (deferred: large test file)
+- [x] very large inline content (multi-megabyte text node) — `path-large-inline-text`
 - [x] extremely long URLs — `path-long-url`

@@ -435,6 +435,122 @@ mod tests {
 
     #[test]
     #[cfg(feature = "html5ever")]
+    fn test_parse_footnote_convention() {
+        let input = concat!(
+            "<p>Text.<sup class=\"footnote-ref\"><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup></p>",
+            "<div id=\"fn-1\" class=\"footnote\">",
+            "<sup class=\"footnote-label\">1</sup>",
+            "<span class=\"footnote-content\">A note.</span>",
+            "<a href=\"#fnref-1\" class=\"footnote-back\">\u{21a9}</a></div>",
+        );
+        let result = parse(input).unwrap();
+        let doc = result.value;
+        let children = root_children(&doc);
+
+        let para = &children[0];
+        let footnote_ref = para
+            .children
+            .iter()
+            .find(|n| n.kind.as_str() == node::FOOTNOTE_REF)
+            .expect("footnote_ref");
+        assert_eq!(footnote_ref.props.get_str(prop::LABEL), Some("1"));
+
+        let footnote_def = children
+            .iter()
+            .find(|n| n.kind.as_str() == node::FOOTNOTE_DEF)
+            .expect("footnote_def");
+        assert_eq!(footnote_def.props.get_str(prop::LABEL), Some("1"));
+        assert_eq!(footnote_def.children.len(), 1);
+        assert_eq!(
+            footnote_def.children[0].props.get_str(prop::CONTENT),
+            Some("A note.")
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "html5ever")]
+    fn test_footnote_roundtrip() {
+        let input = "<p>Text.</p><p>More<sup class=\"footnote-ref\"><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup> text.</p>";
+        let doc = parse(input).unwrap().value;
+        let output = rescribe_write_html::emit(&doc).unwrap().value;
+        let html = String::from_utf8(output).unwrap();
+        let doc2 = parse(&html).unwrap().value;
+
+        assert_eq!(
+            doc.content, doc2.content,
+            "footnote ref roundtrip mismatch:\n{html}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "html5ever")]
+    fn test_footnote_def_roundtrip() {
+        let input = concat!(
+            "<div id=\"fn-1\" class=\"footnote\">",
+            "<sup class=\"footnote-label\">1</sup>",
+            "<span class=\"footnote-content\"><em>A</em> note.</span>",
+            "<a href=\"#fnref-1\" class=\"footnote-back\">\u{21a9}</a></div>",
+        );
+        let doc = parse(input).unwrap().value;
+        let children = root_children(&doc);
+        assert_eq!(children[0].kind.as_str(), node::FOOTNOTE_DEF);
+
+        let output = rescribe_write_html::emit(&doc).unwrap().value;
+        let html = String::from_utf8(output).unwrap();
+        let doc2 = parse(&html).unwrap().value;
+        assert_eq!(
+            doc.content, doc2.content,
+            "footnote def roundtrip mismatch:\n{html}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "html5ever")]
+    fn test_parse_mathml_inline() {
+        let input = "<p>Area is <math><mi>x</mi><mo>+</mo><mi>y</mi></math>.</p>";
+        let result = parse(input).unwrap();
+        let doc = result.value;
+        let para = &root_children(&doc)[0];
+
+        let math = para
+            .children
+            .iter()
+            .find(|n| n.kind.as_str() == "math_inline")
+            .expect("math_inline node");
+        assert_eq!(math.props.get_str("math:format"), Some("mathml"));
+        assert_eq!(
+            math.props.get_str("math:source"),
+            Some("<math><mi>x</mi><mo>+</mo><mi>y</mi></math>")
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "html5ever")]
+    fn test_parse_mathml_display() {
+        let input = "<math display=\"block\"><mi>x</mi></math>";
+        let result = parse(input).unwrap();
+        let doc = result.value;
+        let children = root_children(&doc);
+        assert_eq!(children[0].kind.as_str(), "math_display");
+        assert_eq!(children[0].props.get_str("math:format"), Some("mathml"));
+    }
+
+    #[test]
+    #[cfg(feature = "html5ever")]
+    fn test_mathml_roundtrip() {
+        let input = "<p>Solve <math><mi>x</mi><mo>=</mo><mn>2</mn></math> for x.</p>";
+        let doc = parse(input).unwrap().value;
+        let output = rescribe_write_html::emit(&doc).unwrap().value;
+        let html = String::from_utf8(output).unwrap();
+        let doc2 = parse(&html).unwrap().value;
+        assert_eq!(
+            doc.content, doc2.content,
+            "mathml roundtrip mismatch:\n{html}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "html5ever")]
     fn test_data_uri_roundtrip() {
         // A small 1x1 red PNG as base64
         let original_data_uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";

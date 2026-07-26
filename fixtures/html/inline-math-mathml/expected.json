@@ -1,0 +1,8 @@
+{
+  "description": "inline <math> MathML element is raw-preserved as a math_inline node carrying the verbatim MathML source",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "math_inline", "props": { "math:format": "mathml", "math:source": "<math><mi>x</mi><mo>+</mo><mi>y</mi><mo>=</mo><mi>z</mi></math>" } }
+  ]
+}

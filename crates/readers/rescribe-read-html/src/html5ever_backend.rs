@@ -1,6 +1,7 @@
 //! HTML parser using html-fmt (wraps html5ever).
 
 use html_fmt::Node as HtmlNode;
+use html_fmt::ast::Span;
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Properties, Resource,
     ResourceId, ResourceMap, Severity, WarningKind,
@@ -204,6 +205,13 @@ fn convert_element(
     resources: &mut ResourceMap,
     options: &ParseOptions,
 ) -> Vec<Node> {
+    // MathML subtrees are captured verbatim (see the "math" arm below) —
+    // their children are foreign-namespace elements (`<mi>`, `<mo>`, …) that
+    // must not be recursively converted (and warned about) as HTML.
+    if tag == "math" {
+        return vec![convert_mathml(tag, attrs, children_nodes)];
+    }
+
     let children = convert_children(children_nodes, warnings, resources, options);
 
     let node = match tag {
@@ -263,9 +271,7 @@ fn convert_element(
             node
         }
 
-        "blockquote" => {
-            apply_global_attrs(Node::new(node::BLOCKQUOTE).children(children), attrs)
-        }
+        "blockquote" => apply_global_attrs(Node::new(node::BLOCKQUOTE).children(children), attrs),
 
         "ul" => apply_global_attrs(
             Node::new(node::LIST)
@@ -329,6 +335,34 @@ fn convert_element(
 
         "hr" => Node::new(node::HORIZONTAL_RULE),
 
+        // Footnote definition convention (see rescribe-write-html's
+        // convert_footnote_def): `<div id="fn-{label}" class="footnote">`
+        // wrapping a `<sup class="footnote-label">` marker, a
+        // `<span class="footnote-content">` holding the real content, and a
+        // `<a class="footnote-back">` backlink. The marker and backlink are
+        // regenerated from the label on write, so only the content span's
+        // children need to survive the round trip.
+        "div"
+            if has_class(attrs, "footnote")
+                && get_attr(attrs, "id")
+                    .as_deref()
+                    .is_some_and(|id| id.starts_with("fn-")) =>
+        {
+            let label = get_attr(attrs, "id").unwrap()["fn-".len()..].to_string();
+            let content = children.iter().find(|c| {
+                c.kind.as_str() == node::SPAN
+                    && c.props.get_str(prop::CLASSES).is_some_and(|classes| {
+                        classes.split_whitespace().any(|c| c == "footnote-content")
+                    })
+            });
+            match content {
+                Some(content_span) => Node::new(node::FOOTNOTE_DEF)
+                    .prop(prop::LABEL, label)
+                    .children(content_span.children.clone()),
+                None => apply_global_attrs(Node::new(node::DIV).children(children), attrs),
+            }
+        }
+
         // Generic block container — no html:tag prop (it IS a div).
         "div" => apply_global_attrs(Node::new(node::DIV).children(children), attrs),
 
@@ -362,6 +396,28 @@ fn convert_element(
             attrs,
         ),
         "sub" => Node::new(node::SUBSCRIPT).children(children),
+
+        // Footnote reference convention (see rescribe-write-html's
+        // convert_footnote_ref): `<sup class="footnote-ref"><a href="#fn-{label}">…</a></sup>`.
+        // Recognize it structurally and reconstruct footnote_ref; the label
+        // is derived from the href, not any id attribute, so hand-authored
+        // markup without an `id` still round-trips.
+        "sup" if has_class(attrs, "footnote-ref") => match children.as_slice() {
+            [link] if link.kind.as_str() == node::LINK => {
+                match link
+                    .props
+                    .get_str(prop::URL)
+                    .and_then(|u| u.strip_prefix("#fn-"))
+                {
+                    Some(label) => {
+                        Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, label.to_string())
+                    }
+                    None => Node::new(node::SUPERSCRIPT).children(children),
+                }
+            }
+            _ => Node::new(node::SUPERSCRIPT).children(children),
+        },
+
         "sup" => Node::new(node::SUPERSCRIPT).children(children),
 
         "code" => {
@@ -455,10 +511,43 @@ fn convert_element(
     vec![node]
 }
 
+/// Convert a `<math>` element to a math_inline/math_display node.
+///
+/// Full structural modeling into rescribe's `math:*` node kinds is a large
+/// undertaking (MathML has its own presentation/content element vocabulary);
+/// per CLAUDE.md's raw-preservation pattern, the element is captured verbatim
+/// (including its own attributes, e.g. `xmlns`) so the writer can re-emit it
+/// byte-for-byte. `display="block"` maps to math_display, anything else
+/// (including absent) to math_inline, matching MathML/CSS semantics.
+fn convert_mathml(tag: &str, attrs: &[(String, String)], children_nodes: &[HtmlNode]) -> Node {
+    let kind = if get_attr(attrs, "display").as_deref() == Some("block") {
+        "math_display"
+    } else {
+        "math_inline"
+    };
+    let math_el = HtmlNode::Element {
+        tag: tag.to_string(),
+        attrs: attrs.to_vec(),
+        children: children_nodes.to_vec(),
+        self_closing: false,
+        span: Span::NONE,
+    };
+    let source = String::from_utf8(html_fmt::emit_fragment(std::slice::from_ref(&math_el)))
+        .unwrap_or_default();
+    Node::new(kind)
+        .prop("math:format", "mathml")
+        .prop("math:source", source)
+}
+
 /// Get an attribute value by name.
 fn get_attr(attrs: &[(String, String)], name: &str) -> Option<String> {
     attrs
         .iter()
         .find(|(n, _)| n == name)
         .map(|(_, v)| v.to_string())
+}
+
+/// Check whether an element's `class` attribute contains a given class name.
+fn has_class(attrs: &[(String, String)], class: &str) -> bool {
+    get_attr(attrs, "class").is_some_and(|classes| classes.split_whitespace().any(|c| c == class))
 }

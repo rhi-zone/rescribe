@@ -1,0 +1,10 @@
+{
+  "description": "footnote-ref/footnote-back anchor convention is recognized as footnote_ref/footnote_def nodes",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "footnote_ref", "props": { "label": "1" } },
+    { "path": "/1",   "kind": "footnote_def", "props": { "label": "1" } },
+    { "path": "/1/0", "kind": "text", "props": { "content": "The footnote text." } }
+  ]
+}
