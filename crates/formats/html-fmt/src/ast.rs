@@ -46,20 +46,11 @@ pub enum Node {
         span: Span,
     },
     /// Text content.
-    Text {
-        content: String,
-        span: Span,
-    },
+    Text { content: String, span: Span },
     /// `<!-- comment -->`.
-    Comment {
-        content: String,
-        span: Span,
-    },
+    Comment { content: String, span: Span },
     /// Raw HTML content to be emitted verbatim without escaping.
-    Raw {
-        content: String,
-        span: Span,
-    },
+    Raw { content: String, span: Span },
 }
 
 impl Node {
@@ -130,8 +121,12 @@ impl Node {
 
     /// Get a specific attribute value by name.
     pub fn get_attr(&self, name: &str) -> Option<&str> {
-        self.attrs()
-            .and_then(|attrs| attrs.iter().find(|(n, _)| n == name).map(|(_, v)| v.as_str()))
+        self.attrs().and_then(|attrs| {
+            attrs
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| v.as_str())
+        })
     }
 }
 

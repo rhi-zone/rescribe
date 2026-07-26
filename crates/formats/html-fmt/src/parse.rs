@@ -4,8 +4,8 @@
 //! implements the full HTML5 parsing algorithm including error recovery,
 //! implied element insertion, and foster parenting.
 
-use html5ever::tendril::TendrilSink;
 use html5ever::parse_document;
+use html5ever::tendril::TendrilSink;
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 
 use crate::ast::*;
@@ -35,12 +35,7 @@ pub fn parse(input: &[u8]) -> (HtmlDoc, Vec<Diagnostic>) {
 
 /// Convert children of an html5ever handle to our AST nodes.
 fn convert_children(handle: &Handle) -> Vec<Node> {
-    handle
-        .children
-        .borrow()
-        .iter()
-        .map(convert_node)
-        .collect()
+    handle.children.borrow().iter().map(convert_node).collect()
 }
 
 /// Convert a single html5ever node to our AST.
