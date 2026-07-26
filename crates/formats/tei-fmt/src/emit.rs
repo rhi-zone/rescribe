@@ -29,6 +29,18 @@ pub fn emit(doc: &TeiDoc) -> Vec<u8> {
     writer.into_inner().into_inner()
 }
 
+/// Emit a bare fragment (a slice of nodes with no surrounding document) as
+/// XML bytes. Useful for serializing a subtree in isolation — e.g. to
+/// capture a TEI-specific sub-structure (`<msDesc>`, `<encodingDesc>`)
+/// verbatim for raw preservation by a downstream consumer.
+pub fn emit_fragment(nodes: &[Node]) -> Vec<u8> {
+    let mut writer = XmlWriter::new(Cursor::new(Vec::new()));
+    for node in nodes {
+        emit_node(&mut writer, node);
+    }
+    writer.into_inner().into_inner()
+}
+
 fn emit_node(writer: &mut XmlWriter<Cursor<Vec<u8>>>, node: &Node) {
     match node {
         Node::Element {
@@ -83,6 +95,10 @@ fn emit_node(writer: &mut XmlWriter<Cursor<Vec<u8>>>, node: &Node) {
         }
         Node::EntityRef { name, .. } => {
             let _ = writer.write_event(XmlEvent::GeneralRef(BytesRef::new(name.as_str())));
+        }
+        Node::Raw { content, .. } => {
+            use std::io::Write;
+            let _ = writer.get_mut().write_all(content.as_bytes());
         }
     }
 }

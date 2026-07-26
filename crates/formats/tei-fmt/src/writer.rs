@@ -86,6 +86,9 @@ impl<W: Write> Writer<W> {
             Event::EntityRef(name) => self
                 .inner
                 .write_event(XmlEvent::GeneralRef(BytesRef::new(name.as_ref()))),
+            Event::Raw(content) => {
+                return self.inner.get_mut().write_all(content.as_bytes());
+            }
         };
         xml_result.map_err(|e| std::io::Error::other(format!("XML write error: {e}")))
     }
