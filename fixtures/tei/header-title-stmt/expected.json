@@ -1,0 +1,7 @@
+{
+  "description": "titleStmt author and editor are captured into document metadata",
+  "metadata": { "title": "A Sample Document", "author": "Jane Doe", "editor": "John Smith" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

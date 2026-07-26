@@ -1,0 +1,8 @@
+{
+  "description": "unnumbered div with head becomes div containing heading",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/1", "kind": "paragraph" }
+  ]
+}

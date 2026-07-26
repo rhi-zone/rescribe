@@ -1,0 +1,6 @@
+{
+  "description": "foreign language phrase becomes a span with xml:lang preserved as the language property",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "foreign", "language": "fr" } }
+  ]
+}

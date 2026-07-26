@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <p><name type="product">Widget 3000</name> shipped today.</p>
+    </body>
+  </text>
+</TEI>

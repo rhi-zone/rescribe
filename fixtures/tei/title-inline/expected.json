@@ -1,0 +1,6 @@
+{
+  "description": "inline bibliographic title reference becomes a span tagged tei:tag=title preserving tei:level",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "title", "tei:level": "m" } }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "description": "teiHeader exercising every optional metadata field at once: multiple authors, editor, publisher, idno, language, abstract, keywords, revisionDesc with multiple changes, and msDesc",
+  "category": "pathological",
+  "metadata": {
+    "title": "The Fully Documented Sample",
+    "author": "Jane Doe; Richard Roe",
+    "editor": "John Smith",
+    "publisher": "Acme Press",
+    "idno": "978-0-000000-00-0",
+    "language": "en",
+    "abstract": "A document exercising every optional teiHeader field at once.",
+    "keywords": "history, manuscripts, digital humanities",
+    "revisions": "2020-01-01: Initial encoding.; 2021-06-15: Corrected transcription errors.",
+    "ms_desc": "MS Add. 12345",
+    "encoding_desc": "Encoded per house style, TEI P5 conformant."
+  },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

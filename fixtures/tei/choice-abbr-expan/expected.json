@@ -1,0 +1,8 @@
+{
+  "description": "choice wrapping an abbr/expan pair becomes a span tagged tei:tag=choice containing both alternatives",
+  "assertions": [
+    { "path": "/0/0",   "kind": "span", "props": { "tei:tag": "choice" } },
+    { "path": "/0/0/0", "kind": "span", "props": { "tei:tag": "abbr" } },
+    { "path": "/0/0/1", "kind": "span", "props": { "tei:tag": "expan" } }
+  ]
+}

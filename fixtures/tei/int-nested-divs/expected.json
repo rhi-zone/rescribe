@@ -1,0 +1,13 @@
+{
+  "description": "three levels of nested divisions (div1 > div2 > div) each with head",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/1",     "kind": "div" },
+    { "path": "/0/1/0",   "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/1/1",   "kind": "div" },
+    { "path": "/0/1/1/0", "kind": "heading", "props": { "level": 1 } },
+    { "path": "/0/1/1/1", "kind": "paragraph" }
+  ]
+}

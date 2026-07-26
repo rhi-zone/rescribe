@@ -1,0 +1,6 @@
+{
+  "description": "corresp and sameAs linking attributes are preserved as tei:corresp / tei:same-as",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "tei:corresp": "#other-edition", "tei:same-as": "#canonical-div" } }
+  ]
+}

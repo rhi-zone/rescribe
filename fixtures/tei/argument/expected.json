@@ -1,0 +1,9 @@
+{
+  "description": "argument prefatory block becomes a div tagged tei:type=argument",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div", "props": { "tei:type": "argument" } },
+    { "path": "/0/0/0", "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "paragraph" }
+  ]
+}

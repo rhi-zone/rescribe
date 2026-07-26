@@ -1,0 +1,6 @@
+{
+  "description": "formula type=inline becomes an inline math node instead of display math",
+  "assertions": [
+    { "path": "/0/1", "kind": "math_inline", "props": { "math:source": "x^2" } }
+  ]
+}

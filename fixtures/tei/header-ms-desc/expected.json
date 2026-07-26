@@ -1,0 +1,7 @@
+{
+  "description": "sourceDesc/msDesc manuscript description is flattened into ms_desc metadata (structure not fully modeled; a fidelity warning is emitted)",
+  "metadata": { "ms_desc": "MS Add. 12345" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

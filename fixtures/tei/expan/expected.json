@@ -1,0 +1,6 @@
+{
+  "description": "expan (expansion of an abbreviation) becomes a span tagged tei:tag=expan",
+  "assertions": [
+    { "path": "/0/0", "kind": "span", "props": { "tei:tag": "expan" } }
+  ]
+}

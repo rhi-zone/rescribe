@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <div>
+        <dateline>10 June 1850</dateline>
+        <p>Dear friend,</p>
+        <salute>Yours truly,</salute>
+        <signed>J. Doe</signed>
+      </div>
+    </body>
+  </text>
+</TEI>

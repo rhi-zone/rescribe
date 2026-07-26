@@ -1,0 +1,7 @@
+{
+  "description": "sourceDesc content is preserved (as a tagged bibl span found during header extraction)",
+  "metadata": { "title": "A Sample Document" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

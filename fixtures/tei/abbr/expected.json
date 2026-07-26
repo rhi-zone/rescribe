@@ -1,0 +1,6 @@
+{
+  "description": "abbr becomes a span tagged tei:tag=abbr",
+  "assertions": [
+    { "path": "/0/0", "kind": "span", "props": { "tei:tag": "abbr" } }
+  ]
+}

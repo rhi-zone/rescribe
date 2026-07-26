@@ -1,0 +1,7 @@
+{
+  "description": "encodingDesc content is flattened into encoding_desc metadata (structure not fully modeled; a fidelity warning is emitted)",
+  "metadata": { "encoding_desc": "Encoded according to house style." },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

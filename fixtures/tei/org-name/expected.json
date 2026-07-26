@@ -1,0 +1,6 @@
+{
+  "description": "orgName becomes a span tagged tei:tag=orgName",
+  "assertions": [
+    { "path": "/0/0", "kind": "span", "props": { "tei:tag": "orgName" } }
+  ]
+}

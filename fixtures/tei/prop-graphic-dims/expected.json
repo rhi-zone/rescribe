@@ -1,0 +1,6 @@
+{
+  "description": "graphic width and height attributes are preserved as tei:width / tei:height",
+  "assertions": [
+    { "path": "/0/0", "kind": "image", "props": { "url": "image.png", "tei:width": "200px", "tei:height": "100px" } }
+  ]
+}

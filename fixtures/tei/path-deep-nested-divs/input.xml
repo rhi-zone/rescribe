@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <div><head>Level 1</head>
+      <div><head>Level 2</head>
+      <div><head>Level 3</head>
+      <div><head>Level 4</head>
+      <div><head>Level 5</head>
+      <div><head>Level 6</head>
+      <div><head>Level 7</head>
+      <div><head>Level 8</head>
+      <p>Deepest content.</p>
+      </div>
+      </div>
+      </div>
+      </div>
+      </div>
+      </div>
+      </div>
+      </div>
+    </body>
+  </text>
+</TEI>

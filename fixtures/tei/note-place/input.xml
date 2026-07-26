@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <p>See the margin.<note place="margin" type="gloss">A marginal note.</note></p>
+      <p>See the end.<note place="end" type="endnote">An endnote.</note></p>
+    </body>
+  </text>
+</TEI>

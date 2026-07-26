@@ -1,0 +1,9 @@
+{
+  "description": "choice wrapping an orig/reg normalization pair round-trips as tagged spans",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0/0",   "kind": "span", "props": { "tei:tag": "choice" } },
+    { "path": "/0/0/0", "kind": "span", "props": { "tei:tag": "orig" } },
+    { "path": "/0/0/1", "kind": "span", "props": { "tei:tag": "reg" } }
+  ]
+}

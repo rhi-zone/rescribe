@@ -1,0 +1,6 @@
+{
+  "description": "type attribute on note is preserved as tei:type",
+  "assertions": [
+    { "path": "/0/1", "kind": "footnote_def", "props": { "tei:type": "footnote" } }
+  ]
+}

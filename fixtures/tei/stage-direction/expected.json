@@ -1,0 +1,6 @@
+{
+  "description": "stage direction becomes a paragraph tagged tei:type=stage",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "tei:type": "stage" } }
+  ]
+}

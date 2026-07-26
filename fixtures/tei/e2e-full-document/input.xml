@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>The Complete Sample</title>
+        <author>Jane Doe</author>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Acme Press</publisher>
+      </publicationStmt>
+      <sourceDesc>
+        <bibl>First edition, 1900.</bibl>
+      </sourceDesc>
+    </fileDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <div>
+        <head>Chapter One</head>
+        <p>An <hi rend="italic">introductory</hi> paragraph.</p>
+        <list>
+          <item>First point</item>
+          <item>Second point</item>
+        </list>
+      </div>
+    </body>
+  </text>
+</TEI>

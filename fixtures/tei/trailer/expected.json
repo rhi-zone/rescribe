@@ -1,0 +1,6 @@
+{
+  "description": "trailer becomes a paragraph tagged tei:type=trailer",
+  "assertions": [
+    { "path": "/0/1", "kind": "paragraph", "props": { "tei:type": "trailer" } }
+  ]
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <table>
+        <row>
+          <cell cols="2" rows="1">Spanning cell</cell>
+        </row>
+      </table>
+    </body>
+  </text>
+</TEI>

@@ -1,0 +1,7 @@
+{
+  "description": "profileDesc/langUsage/language ident attribute is captured as document language metadata",
+  "metadata": { "language": "en" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

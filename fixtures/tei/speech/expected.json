@@ -1,0 +1,8 @@
+{
+  "description": "sp with speaker and p becomes a div tagged tei:type=sp containing a speaker paragraph",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "tei:type": "sp" } },
+    { "path": "/0/0", "kind": "paragraph", "props": { "tei:type": "speaker" } },
+    { "path": "/0/1", "kind": "paragraph" }
+  ]
+}

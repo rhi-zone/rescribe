@@ -1,0 +1,8 @@
+{
+  "description": "castList with castItem becomes a list tagged tei:type=castList",
+  "assertions": [
+    { "path": "/0",   "kind": "list", "props": { "tei:type": "castList" } },
+    { "path": "/0/0", "kind": "list_item" },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}

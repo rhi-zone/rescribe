@@ -1,0 +1,11 @@
+{
+  "description": "a table with 31 rows and 4 columns stress-tests parsing without excessive slowdown",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",      "kind": "table" },
+    { "path": "/0/0",    "kind": "table_row" },
+    { "path": "/0/0/0",  "kind": "table_header" },
+    { "path": "/0/30",   "kind": "table_row" },
+    { "path": "/0/30/3", "kind": "table_cell" }
+  ]
+}

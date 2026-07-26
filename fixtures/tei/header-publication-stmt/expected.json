@@ -1,0 +1,7 @@
+{
+  "description": "publicationStmt publisher and idno are captured into document metadata",
+  "metadata": { "publisher": "Acme Press", "idno": "ISBN-123" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

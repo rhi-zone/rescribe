@@ -1,0 +1,6 @@
+{
+  "description": "seg (generic inline span) becomes a span tagged tei:tag=seg",
+  "assertions": [
+    { "path": "/0/0", "kind": "span", "props": { "tei:tag": "seg" } }
+  ]
+}

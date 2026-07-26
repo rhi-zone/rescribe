@@ -1,0 +1,6 @@
+{
+  "description": "xml:id on a div is preserved as the standard id property",
+  "assertions": [
+    { "path": "/0", "kind": "div", "props": { "id": "ch1" } }
+  ]
+}

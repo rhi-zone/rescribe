@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <sp>
+        <speaker>Hamlet</speaker>
+        <lg>
+          <l>To be, or not to be,</l>
+          <l>that is the question.</l>
+        </lg>
+      </sp>
+    </body>
+  </text>
+</TEI>

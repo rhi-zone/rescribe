@@ -1,0 +1,8 @@
+{
+  "description": "decimal and hex numeric character references are resolved directly into text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "children_count": 1 },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Copyright © — all rights reserved." } }
+  ]
+}

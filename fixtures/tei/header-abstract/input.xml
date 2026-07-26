@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>A Sample Document</title>
+      </titleStmt>
+    </fileDesc>
+    <profileDesc>
+      <abstract>
+        <p>A short summary of the document.</p>
+      </abstract>
+    </profileDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <p>Body text.</p>
+    </body>
+  </text>
+</TEI>

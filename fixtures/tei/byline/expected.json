@@ -1,0 +1,6 @@
+{
+  "description": "byline becomes a paragraph tagged tei:type=byline",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "tei:type": "byline" } }
+  ]
+}

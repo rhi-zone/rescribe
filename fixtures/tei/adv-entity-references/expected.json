@@ -1,0 +1,7 @@
+{
+  "description": "a named entity reference not resolvable without a DTD is preserved verbatim as raw_inline",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0/1", "kind": "raw_inline", "props": { "content": "&editorial;", "tei:entity": "editorial" } }
+  ]
+}

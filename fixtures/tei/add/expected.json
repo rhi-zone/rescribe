@@ -1,0 +1,6 @@
+{
+  "description": "add (editorial addition) becomes a span tagged tei:tag=add",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "add" } }
+  ]
+}

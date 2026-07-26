@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text><body>
+    <p>Paragraph 1 with a note.<note>Footnote content 1.</note></p>
+    <p>Paragraph 2 with a note.<note>Footnote content 2.</note></p>
+    <p>Paragraph 3 with a note.<note>Footnote content 3.</note></p>
+    <p>Paragraph 4 with a note.<note>Footnote content 4.</note></p>
+    <p>Paragraph 5 with a note.<note>Footnote content 5.</note></p>
+    <p>Paragraph 6 with a note.<note>Footnote content 6.</note></p>
+    <p>Paragraph 7 with a note.<note>Footnote content 7.</note></p>
+    <p>Paragraph 8 with a note.<note>Footnote content 8.</note></p>
+    <p>Paragraph 9 with a note.<note>Footnote content 9.</note></p>
+    <p>Paragraph 10 with a note.<note>Footnote content 10.</note></p>
+    <p>Paragraph 11 with a note.<note>Footnote content 11.</note></p>
+    <p>Paragraph 12 with a note.<note>Footnote content 12.</note></p>
+    <p>Paragraph 13 with a note.<note>Footnote content 13.</note></p>
+    <p>Paragraph 14 with a note.<note>Footnote content 14.</note></p>
+    <p>Paragraph 15 with a note.<note>Footnote content 15.</note></p>
+    <p>Paragraph 16 with a note.<note>Footnote content 16.</note></p>
+    <p>Paragraph 17 with a note.<note>Footnote content 17.</note></p>
+    <p>Paragraph 18 with a note.<note>Footnote content 18.</note></p>
+    <p>Paragraph 19 with a note.<note>Footnote content 19.</note></p>
+    <p>Paragraph 20 with a note.<note>Footnote content 20.</note></p>
+  </body></text>
+</TEI>

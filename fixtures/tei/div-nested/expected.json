@@ -1,0 +1,9 @@
+{
+  "description": "div nested inside div at 3 levels",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/1",     "kind": "div" },
+    { "path": "/0/1/1",   "kind": "div" },
+    { "path": "/0/1/1/1", "kind": "paragraph" }
+  ]
+}

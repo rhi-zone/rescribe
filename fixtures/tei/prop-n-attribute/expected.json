@@ -1,0 +1,6 @@
+{
+  "description": "n numbering attribute on l/div/p is preserved as tei:n",
+  "assertions": [
+    { "path": "/0/0", "kind": "paragraph", "props": { "tei:type": "line", "tei:n": "5" } }
+  ]
+}

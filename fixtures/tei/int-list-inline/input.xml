@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <list>
+        <item>An <hi rend="italic">important</hi> item.</item>
+      </list>
+    </body>
+  </text>
+</TEI>

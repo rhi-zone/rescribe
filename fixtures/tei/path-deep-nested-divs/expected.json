@@ -1,0 +1,9 @@
+{
+  "description": "8 levels of nested divs stress-test recursive descent without stack overflow",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    { "path": "/0/1/1/1/1/1/1/1", "kind": "div" },
+    { "path": "/0/1/1/1/1/1/1/1/1", "kind": "paragraph" }
+  ]
+}

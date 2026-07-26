@@ -1,0 +1,10 @@
+{
+  "description": "a document with 20 footnotes stress-tests footnote handling",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "footnote_def" },
+    { "path": "/19",    "kind": "paragraph" },
+    { "path": "/19/1",  "kind": "footnote_def" }
+  ]
+}

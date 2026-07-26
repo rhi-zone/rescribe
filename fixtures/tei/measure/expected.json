@@ -1,0 +1,6 @@
+{
+  "description": "measure becomes a span tagged tei:tag=measure preserving tei:unit and tei:quantity",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "measure", "tei:unit": "kg", "tei:quantity": "5" } }
+  ]
+}

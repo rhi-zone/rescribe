@@ -1,0 +1,8 @@
+{
+  "description": "w/pc linguistic annotation tokens become tagged spans",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0/0", "kind": "span", "props": { "tei:tag": "w" } },
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "pc" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "note place=margin/end and type attributes are preserved on the footnote_def",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0/1", "kind": "footnote_def", "props": { "tei:place": "margin", "tei:type": "gloss" } },
+    { "path": "/1/1", "kind": "footnote_def", "props": { "tei:place": "end", "tei:type": "endnote" } }
+  ]
+}

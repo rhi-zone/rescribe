@@ -1,0 +1,7 @@
+{
+  "description": "an element name outside the TEI vocabulary is raw-preserved as a tagged span rather than silently dropped",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/1", "kind": "span", "props": { "tei:tag": "thisIsNotATeiElement" } }
+  ]
+}

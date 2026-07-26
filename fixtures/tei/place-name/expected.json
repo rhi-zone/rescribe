@@ -1,0 +1,6 @@
+{
+  "description": "placeName becomes a span tagged tei:tag=placeName",
+  "assertions": [
+    { "path": "/0/0", "kind": "span", "props": { "tei:tag": "placeName" } }
+  ]
+}

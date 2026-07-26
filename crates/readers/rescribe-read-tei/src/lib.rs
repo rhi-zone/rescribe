@@ -92,7 +92,7 @@ fn convert_children(
                     Some(node) => out.push(node),
                     None => {
                         if name == "teiHeader" {
-                            extract_metadata(&converted_kids, metadata);
+                            extract_metadata(&converted_kids, metadata, warnings);
                         } else {
                             // Pass-through wrapper element (e.g. `text`,
                             // `body`, `front`, `back`, `fileDesc`,
@@ -142,16 +142,19 @@ fn get_attr<'a>(attrs: &'a [(String, String)], key: &str) -> Option<&'a str> {
         .map(|(_, v)| v.as_str())
 }
 
-/// Attach the two generic TEI attributes that apply to (almost) any
-/// element — `xml:id` and `n` — as raw-preserved properties, if present.
+/// Attach the generic TEI attributes that apply to (almost) any element —
+/// `xml:id`, `n`, `xml:lang`, `corresp`, and `sameAs` — as properties, if
+/// present.
 ///
-/// The pre-split reader captured both into a `FrameAttrs` struct but never
-/// actually read them back out when building IR nodes, so `xml:id` and `n`
-/// were parsed and then silently discarded on every element that carried
-/// them. This closes that gap: `xml:id` becomes the standard `id` property
-/// (it is rescribe's own identity-attribute prop, and TEI's `xml:id` is
-/// exactly that construct), `n` becomes `tei:n` (TEI-specific numbering
-/// with no standard cross-format equivalent).
+/// The pre-split reader captured `xml:id`/`n` into a `FrameAttrs` struct but
+/// never actually read them back out when building IR nodes, so they were
+/// parsed and then silently discarded on every element that carried them.
+/// This closes that gap: `xml:id` becomes the standard `id` property (it is
+/// rescribe's own identity-attribute prop, and TEI's `xml:id` is exactly
+/// that construct), `xml:lang` becomes the standard `language` property,
+/// and `n`/`corresp`/`sameAs` become `tei:n`/`tei:corresp`/`tei:same-as`
+/// (TEI-specific linking/numbering attributes with no standard
+/// cross-format equivalent).
 fn attach_generic_attrs(mut node: Node, attrs: &[(String, String)]) -> Node {
     if let Some(id) = get_attr(attrs, "xml:id") {
         node = node.prop(prop::ID, id.to_string());
@@ -159,7 +162,42 @@ fn attach_generic_attrs(mut node: Node, attrs: &[(String, String)]) -> Node {
     if let Some(n) = get_attr(attrs, "n") {
         node = node.prop("tei:n", n.to_string());
     }
+    if let Some(lang) = get_attr(attrs, "xml:lang") {
+        node = node.prop(prop::LANGUAGE, lang.to_string());
+    }
+    if let Some(corresp) = get_attr(attrs, "corresp") {
+        node = node.prop("tei:corresp", corresp.to_string());
+    }
+    if let Some(same_as) = get_attr(attrs, "sameAs") {
+        node = node.prop("tei:same-as", same_as.to_string());
+    }
     node
+}
+
+/// Map a `rend` value that denotes paragraph/heading alignment (as opposed
+/// to character-level formatting handled by `<hi>`) to the standard
+/// `style:align` property value. Returns `None` for anything else so the
+/// caller can fall back to raw-preserving the literal `rend` string.
+fn align_from_rend(rend: &str) -> Option<&'static str> {
+    match rend {
+        "center" | "centre" => Some("center"),
+        "right" => Some("right"),
+        "left" => Some("left"),
+        "justify" | "justified" => Some("justify"),
+        _ => None,
+    }
+}
+
+/// A generic inline "wrapper" element: TEI markup that has no dedicated IR
+/// node kind but must still round-trip losslessly. Represented as a `span`
+/// tagged with the original element name (`tei:tag`) per the raw-
+/// preservation pattern — this is exactly what `span` exists for.
+fn generic_span(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let mut n = Node::new(node::SPAN)
+        .prop("tei:tag", name.to_string())
+        .children(children);
+    n = attach_generic_attrs(n, attrs);
+    n
 }
 
 /// Convert one TEI element (with its already-converted children) into a
@@ -176,16 +214,55 @@ fn convert_element(
     let rend = get_attr(attrs, "rend");
     let target = get_attr(attrs, "target");
     let url = get_attr(attrs, "url");
+    let type_attr = get_attr(attrs, "type");
 
     let node = match name {
         // Document structure
         "TEI" | "text" | "body" | "front" | "back" => None, // Pass through
         // Handled by the caller (`convert_children`) via `extract_metadata`.
         "teiHeader" => None,
-        "fileDesc" | "titleStmt" | "publicationStmt" | "sourceDesc" => None, // Pass through into teiHeader extraction
+        "fileDesc" | "titleStmt" | "publicationStmt" | "sourceDesc" | "profileDesc"
+        | "revisionDesc" | "textClass" | "langUsage" => None, // Pass through into teiHeader extraction
+
+        // teiHeader metadata leaves: tagged so `extract_metadata` can find
+        // them regardless of which wrapper they were nested under.
+        "author" => Some(generic_span("author", attrs, children)),
+        "editor" => Some(generic_span("editor", attrs, children)),
+        "publisher" => Some(generic_span("publisher", attrs, children)),
+        "idno" => Some(generic_span("idno", attrs, children)),
+        "language" => {
+            let mut n = generic_span("language", attrs, children);
+            if let Some(ident) = get_attr(attrs, "ident") {
+                n = n.prop("tei:ident", ident.to_string());
+            }
+            Some(n)
+        }
+        "abstract" => Some(generic_span("abstract", attrs, children)),
+        "keywords" => Some(generic_span("keywords", attrs, children)),
+        "change" => {
+            let mut n = generic_span("change", attrs, children);
+            if let Some(when) = get_attr(attrs, "when") {
+                n = n.prop("tei:when", when.to_string());
+            }
+            Some(n)
+        }
+        // `encodingDesc`/`msDesc` are deeply nested TEI-specific
+        // sub-structures (classification declarations, manuscript
+        // description apparatus). Rather than silently dropping them, a
+        // text summary is captured under a tagged span and a fidelity
+        // warning documents that the full internal structure is not yet
+        // modeled — a genuine, tracked gap rather than a silent loss.
+        "encodingDesc" => Some(generic_span("encodingDesc", attrs, children)),
+        "msDesc" => Some(generic_span("msDesc", attrs, children)),
 
         // Divisions
-        "div" | "div1" | "div2" | "div3" | "div4" => Some(Node::new(node::DIV).children(children)),
+        "div" | "div1" | "div2" | "div3" | "div4" | "div5" | "div6" => {
+            let mut n = Node::new(node::DIV).children(children);
+            if let Some(align) = rend.and_then(align_from_rend) {
+                n = n.prop(prop::STYLE_ALIGN, align);
+            }
+            Some(n)
+        }
 
         // Headings
         "head" => {
@@ -194,6 +271,8 @@ fn convert_element(
                 Some("div2") => 2,
                 Some("div3") => 3,
                 Some("div4") => 4,
+                Some("div5") => 5,
+                Some("div6") => 6,
                 _ => 2,
             };
             Some(
@@ -204,25 +283,148 @@ fn convert_element(
         }
 
         // Paragraphs
-        "p" => Some(Node::new(node::PARAGRAPH).children(children)),
+        "p" => {
+            let mut n = Node::new(node::PARAGRAPH).children(children);
+            if let Some(align) = rend.and_then(align_from_rend) {
+                n = n.prop(prop::STYLE_ALIGN, align);
+            }
+            Some(n)
+        }
+
+        // Anonymous block
+        "ab" => Some(
+            Node::new(node::PARAGRAPH)
+                .prop("tei:tag", "ab")
+                .children(children),
+        ),
+
+        // Drama / speech
+        "sp" => Some(
+            Node::new(node::DIV)
+                .prop("tei:type", "sp")
+                .children(children),
+        ),
+        "speaker" => Some(
+            Node::new(node::PARAGRAPH)
+                .prop("tei:type", "speaker")
+                .children(children),
+        ),
+        "stage" => Some(
+            Node::new(node::PARAGRAPH)
+                .prop("tei:type", "stage")
+                .children(children),
+        ),
+        "castList" => Some(
+            Node::new(node::LIST)
+                .prop("tei:type", "castList")
+                .children(children),
+        ),
+        "castItem" => Some(
+            Node::new(node::LIST_ITEM)
+                .prop("tei:tag", "castItem")
+                .children(children),
+        ),
+
+        // Prefatory / documentary structure blocks
+        "epigraph" => Some(
+            Node::new(node::DIV)
+                .prop("tei:type", "epigraph")
+                .children(children),
+        ),
+        "argument" => Some(
+            Node::new(node::DIV)
+                .prop("tei:type", "argument")
+                .children(children),
+        ),
+        "byline" => Some(
+            Node::new(node::PARAGRAPH)
+                .prop("tei:type", "byline")
+                .children(children),
+        ),
+        "dateline" => Some(
+            Node::new(node::PARAGRAPH)
+                .prop("tei:type", "dateline")
+                .children(children),
+        ),
+        "salute" => Some(
+            Node::new(node::PARAGRAPH)
+                .prop("tei:type", "salute")
+                .children(children),
+        ),
+        "signed" => Some(
+            Node::new(node::PARAGRAPH)
+                .prop("tei:type", "signed")
+                .children(children),
+        ),
+        "trailer" => Some(
+            Node::new(node::PARAGRAPH)
+                .prop("tei:type", "trailer")
+                .children(children),
+        ),
+        "bibl" => Some(generic_span("bibl", attrs, children)),
+
+        // Editorial intervention: empty (or near-empty) constructs.
+        "gap" => {
+            let mut n = generic_span("gap", attrs, vec![]);
+            if let Some(reason) = get_attr(attrs, "reason") {
+                n = n.prop("tei:reason", reason.to_string());
+            }
+            if let Some(extent) = get_attr(attrs, "extent") {
+                n = n.prop("tei:extent", extent.to_string());
+            }
+            Some(n)
+        }
+        "space" => {
+            let mut n = generic_span("space", attrs, vec![]);
+            if let Some(extent) = get_attr(attrs, "extent") {
+                n = n.prop("tei:extent", extent.to_string());
+            }
+            Some(n)
+        }
 
         // Lists
         "list" => {
-            let ordered = rend == Some("numbered");
-            Some(
-                Node::new(node::LIST)
-                    .prop(prop::ORDERED, ordered)
-                    .children(children),
-            )
+            let ordered = rend == Some("numbered") || type_attr == Some("ordered");
+            let mut n = Node::new(node::LIST)
+                .prop(prop::ORDERED, ordered)
+                .children(children);
+            if let Some(t) = type_attr {
+                n = n.prop("tei:type", t.to_string());
+            }
+            Some(n)
         }
         "item" => Some(Node::new(node::LIST_ITEM).children(children)),
+        "label" if parent == Some("list") => Some(
+            Node::new(node::LIST_ITEM)
+                .prop("tei:tag", "label")
+                .children(children),
+        ),
 
-        // Glossary/definition lists
-        "gloss" => Some(Node::new(node::DEFINITION_LIST).children(children)),
+        // Glossary/definition lists (block form) vs. inline gloss span.
+        "gloss" => {
+            if matches!(
+                parent,
+                Some("body")
+                    | Some("div")
+                    | Some("div1")
+                    | Some("div2")
+                    | Some("div3")
+                    | Some("div4")
+                    | Some("div5")
+                    | Some("div6")
+                    | Some("front")
+                    | Some("back")
+                    | None
+            ) {
+                Some(Node::new(node::DEFINITION_LIST).children(children))
+            } else {
+                Some(generic_span("gloss", attrs, children))
+            }
+        }
         "term" => Some(Node::new(node::DEFINITION_TERM).children(children)),
         "def" | "desc" => Some(Node::new(node::DEFINITION_DESC).children(children)),
 
-        // Block quote
+        // Block quote / cited quotation
         "quote" | "cit" => Some(Node::new(node::BLOCKQUOTE).children(children)),
 
         // Poetry/verse
@@ -237,10 +439,15 @@ fn convert_element(
                 .children(children),
         ),
 
-        // Code
-        "code" | "eg" => {
+        // Code: `<eg>` is a block-level example listing; `<code>` is an
+        // inline (or short block) fragment of computer code.
+        "eg" => {
             let text = extract_text(&children);
             Some(Node::new(node::CODE_BLOCK).prop(prop::CONTENT, text))
+        }
+        "code" => {
+            let text = extract_text(&children);
+            Some(Node::new(node::CODE).prop(prop::CONTENT, text))
         }
 
         // Highlighting (inline formatting)
@@ -271,7 +478,7 @@ fn convert_element(
 
         // Semantic highlighting
         "emph" => Some(Node::new(node::EMPHASIS).children(children)),
-        "foreign" => Some(Node::new(node::EMPHASIS).children(children)),
+        "foreign" => Some(generic_span("foreign", attrs, children)),
         "title" => {
             // Could be in metadata or inline, depending on ancestry.
             if matches!(parent, Some("titleStmt") | Some("teiHeader")) {
@@ -290,8 +497,53 @@ fn convert_element(
                     )
                 }
             } else {
-                Some(Node::new(node::EMPHASIS).children(children))
+                // Inline bibliographic title reference — not emphasis.
+                let mut n = generic_span("title", attrs, children);
+                if let Some(lvl) = get_attr(attrs, "level") {
+                    n = n.prop("tei:level", lvl.to_string());
+                }
+                Some(n)
             }
+        }
+
+        // Named entities and editorial apparatus: generic inline spans that
+        // round-trip via `tei:tag`, with a handful of format-specific
+        // attributes worth preserving explicitly.
+        "persName" | "placeName" | "orgName" | "name" | "seg" | "w" | "pc" | "choice" | "orig"
+        | "reg" | "sic" | "corr" | "add" | "del" | "supplied" | "unclear" | "abbr" | "expan" => {
+            Some(generic_span(name, attrs, children))
+        }
+        "date" => {
+            let mut n = generic_span("date", attrs, children);
+            if let Some(when) = get_attr(attrs, "when") {
+                n = n.prop("tei:when", when.to_string());
+            }
+            Some(n)
+        }
+        "num" => {
+            let mut n = generic_span("num", attrs, children);
+            if let Some(value) = get_attr(attrs, "value") {
+                n = n.prop("tei:value", value.to_string());
+            }
+            Some(n)
+        }
+        "measure" => {
+            let mut n = generic_span("measure", attrs, children);
+            if let Some(unit) = get_attr(attrs, "unit") {
+                n = n.prop("tei:unit", unit.to_string());
+            }
+            if let Some(quantity) = get_attr(attrs, "quantity") {
+                n = n.prop("tei:quantity", quantity.to_string());
+            }
+            Some(n)
+        }
+        "anchor" => Some(generic_span("anchor", attrs, vec![])),
+        "milestone" => {
+            let mut n = generic_span("milestone", attrs, vec![]);
+            if let Some(unit) = get_attr(attrs, "unit") {
+                n = n.prop("tei:unit", unit.to_string());
+            }
+            Some(n)
         }
 
         // Links
@@ -310,52 +562,207 @@ fn convert_element(
                 .prop("html:tag", "figcaption")
                 .children(children),
         ),
-        "graphic" => url.map(|u| Node::new(node::IMAGE).prop(prop::URL, u.to_string())),
+        "graphic" => url.map(|u| {
+            let mut n = Node::new(node::IMAGE).prop(prop::URL, u.to_string());
+            if let Some(width) = get_attr(attrs, "width") {
+                n = n.prop("tei:width", width.to_string());
+            }
+            if let Some(height) = get_attr(attrs, "height") {
+                n = n.prop("tei:height", height.to_string());
+            }
+            n
+        }),
 
         // Tables
         "table" => Some(Node::new(node::TABLE).children(children)),
         "row" => Some(Node::new(node::TABLE_ROW).children(children)),
         "cell" => {
             let role = rend;
-            if role == Some("header") || role == Some("label") {
-                Some(Node::new(node::TABLE_HEADER).children(children))
+            let mut n = if role == Some("header") || role == Some("label") {
+                Node::new(node::TABLE_HEADER).children(children)
             } else {
-                Some(Node::new(node::TABLE_CELL).children(children))
+                Node::new(node::TABLE_CELL).children(children)
+            };
+            if let Some(cols) = get_attr(attrs, "cols") {
+                n = n.prop("tei:cols", cols.to_string());
             }
+            if let Some(rows) = get_attr(attrs, "rows") {
+                n = n.prop("tei:rows", rows.to_string());
+            }
+            Some(n)
         }
 
         // Notes/footnotes
-        "note" => Some(Node::new(node::FOOTNOTE_DEF).children(children)),
+        "note" => {
+            let mut n = Node::new(node::FOOTNOTE_DEF).children(children);
+            if let Some(place) = get_attr(attrs, "place") {
+                n = n.prop("tei:place", place.to_string());
+            }
+            if let Some(t) = type_attr {
+                n = n.prop("tei:type", t.to_string());
+            }
+            Some(n)
+        }
 
-        // Formula
+        // Formula: display by default; `type="inline"` marks an inline
+        // formula embedded in running text.
         "formula" => {
             let text = extract_text(&children);
-            Some(Node::new("math_display").prop("math:source", text))
+            if type_attr == Some("inline") {
+                Some(Node::new("math_inline").prop("math:source", text))
+            } else {
+                Some(Node::new("math_display").prop("math:source", text))
+            }
         }
 
         // Line/page breaks
         "lb" => Some(Node::new(node::LINE_BREAK)),
         "pb" => Some(Node::new(node::HORIZONTAL_RULE)),
 
-        // Default: pass through children
-        _ => None,
+        // Default: an element name this reader doesn't specifically
+        // recognize. Raw-preserve it as a generic tagged span rather than
+        // silently unwrapping it into its parent — losing the fact that
+        // `<foo>` ever existed (as opposed to its text just being loose in
+        // the parent) is exactly the silent-drop CLAUDE.md forbids. Known
+        // structural wrapper elements (`TEI`, `text`, `body`, `teiHeader`,
+        // etc.) are matched explicitly above and return `None` on purpose —
+        // this arm only catches names genuinely outside the vocabulary this
+        // reader models.
+        _ => Some(generic_span(name, attrs, children)),
     };
 
     node.map(|n| attach_generic_attrs(n, attrs))
 }
 
-/// Extract `<teiHeader>` metadata (currently: title, found by searching the
-/// already-converted children for a `HEADING` — matches the pre-split
-/// reader's approach).
-fn extract_metadata(nodes: &[Node], metadata: &mut Properties) {
+/// Extract `<teiHeader>` metadata: title (searched for as a `HEADING`, per
+/// the original reader's approach) plus author/editor/publisher/idno/
+/// language/abstract/keywords/revision-history/manuscript-description,
+/// each surfaced by `convert_element` as a `span` tagged with `tei:tag` so
+/// this function can find them regardless of which `fileDesc`/
+/// `publicationStmt`/`profileDesc`/etc. wrapper they were nested under.
+///
+/// Multiple occurrences of a repeatable field (e.g. more than one
+/// `<author>`) are joined with `"; "` rather than the later one silently
+/// overwriting the earlier — losing all-but-the-last author would itself be
+/// a silent drop.
+fn extract_metadata(
+    nodes: &[Node],
+    metadata: &mut Properties,
+    warnings: &mut Vec<FidelityWarning>,
+) {
     for node in nodes {
         if node.kind.as_str() == node::HEADING {
             let title = extract_text(&node.children);
             if !title.is_empty() {
                 metadata.set("title", title);
             }
+        } else if node.kind.as_str() == node::SPAN
+            && let Some(tag) = node.props.get_str("tei:tag")
+        {
+            let text = extract_text(&node.children);
+            match tag {
+                "author" => append_metadata(metadata, "author", &text),
+                "editor" => append_metadata(metadata, "editor", &text),
+                "publisher" if !text.is_empty() => metadata.set("publisher", text),
+                "idno" if !text.is_empty() => metadata.set("idno", text),
+                "language" => {
+                    let lang = node
+                        .props
+                        .get_str("tei:ident")
+                        .map(str::to_string)
+                        .unwrap_or(text);
+                    if !lang.is_empty() {
+                        metadata.set("language", lang);
+                    }
+                }
+                "abstract" if !text.is_empty() => metadata.set("abstract", text),
+                "keywords" => {
+                    let terms = collect_terms(&node.children);
+                    if !terms.is_empty() {
+                        metadata.set("keywords", terms.join(", "));
+                    } else if !text.is_empty() {
+                        metadata.set("keywords", text);
+                    }
+                }
+                "change" if !text.is_empty() => {
+                    let entry = match node.props.get_str("tei:when") {
+                        Some(when) => format!("{when}: {text}"),
+                        None => text,
+                    };
+                    append_metadata(metadata, "revisions", &entry);
+                }
+                "encodingDesc" if !text.is_empty() => {
+                    metadata.set("encoding_desc", text);
+                    warnings.push(FidelityWarning::new(
+                        Severity::Minor,
+                        WarningKind::FeatureLost("encoding-desc-structure".to_string()),
+                        "teiHeader <encodingDesc> internal structure (classDecl, tagsDecl, \
+                             etc.) is not modeled; only its flattened text was kept in metadata"
+                            .to_string(),
+                    ));
+                }
+                "msDesc" if !text.is_empty() => {
+                    metadata.set("ms_desc", text);
+                    warnings.push(FidelityWarning::new(
+                        Severity::Minor,
+                        WarningKind::FeatureLost("ms-desc-structure".to_string()),
+                        "teiHeader <msDesc> internal structure (msIdentifier, physDesc, \
+                             etc.) is not modeled; only its flattened text was kept in metadata"
+                            .to_string(),
+                    ));
+                }
+                // A teiHeader field this reader doesn't specifically
+                // recognize. teiHeader metadata is a flat property bag,
+                // not part of the document content tree, so there is
+                // nowhere to raw-preserve this content structurally —
+                // track the loss explicitly instead of dropping it
+                // silently.
+                other => {
+                    if !text.trim().is_empty() {
+                        warnings.push(FidelityWarning::new(
+                            Severity::Minor,
+                            WarningKind::FeatureLost(format!("tei-header-field-{other}")),
+                            format!(
+                                "teiHeader <{other}> content is not modeled in document \
+                                     metadata and was dropped: {text:?}"
+                            ),
+                        ));
+                    }
+                }
+            }
         }
-        extract_metadata(&node.children, metadata);
+        extract_metadata(&node.children, metadata, warnings);
+    }
+}
+
+/// Collect the text of every `definition_term` descendant (used for
+/// `<keywords><term>…</term>…</keywords>`).
+fn collect_terms(nodes: &[Node]) -> Vec<String> {
+    let mut out = Vec::new();
+    for node in nodes {
+        if node.kind.as_str() == node::DEFINITION_TERM {
+            let text = extract_text(&node.children);
+            if !text.is_empty() {
+                out.push(text);
+            }
+        }
+        out.extend(collect_terms(&node.children));
+    }
+    out
+}
+
+/// Set a metadata field, joining onto an existing value with `"; "` rather
+/// than overwriting it — used for repeatable teiHeader fields.
+fn append_metadata(metadata: &mut Properties, key: &str, value: &str) {
+    if value.is_empty() {
+        return;
+    }
+    match metadata.get_str(key) {
+        Some(existing) => {
+            let combined = format!("{existing}; {value}");
+            metadata.set(key, combined);
+        }
+        None => metadata.set(key, value.to_string()),
     }
 }
 

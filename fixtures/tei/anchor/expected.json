@@ -1,0 +1,6 @@
+{
+  "description": "anchor becomes an empty span tagged tei:tag=anchor preserving xml:id",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "anchor", "id": "a1" } }
+  ]
+}

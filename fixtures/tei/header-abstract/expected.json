@@ -1,0 +1,7 @@
+{
+  "description": "profileDesc/abstract content is captured into abstract metadata",
+  "metadata": { "abstract": "A short summary of the document." },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

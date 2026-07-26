@@ -1,0 +1,14 @@
+{
+  "description": "a realistic whole document: teiHeader metadata plus a div with heading, formatted paragraph, and list",
+  "category": "e2e",
+  "metadata": { "title": "The Complete Sample", "author": "Jane Doe", "publisher": "Acme Press" },
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "heading" },
+    { "path": "/0/1",   "kind": "paragraph" },
+    { "path": "/0/1/1", "kind": "emphasis" },
+    { "path": "/0/2",   "kind": "list" },
+    { "path": "/0/2/0", "kind": "list_item" },
+    { "path": "/0/2/1", "kind": "list_item" }
+  ]
+}

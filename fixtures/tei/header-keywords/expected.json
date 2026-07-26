@@ -1,0 +1,7 @@
+{
+  "description": "profileDesc/textClass/keywords terms are captured into keywords metadata",
+  "metadata": { "keywords": "history, manuscripts" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

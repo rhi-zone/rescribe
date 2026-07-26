@@ -1,0 +1,7 @@
+{
+  "description": "revisionDesc/change entries are captured into revisions metadata",
+  "metadata": { "revisions": "2020-01-01: Initial encoding." },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

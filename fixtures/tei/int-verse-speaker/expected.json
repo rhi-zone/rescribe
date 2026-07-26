@@ -1,0 +1,11 @@
+{
+  "description": "sp containing lg (verse spoken by a character)",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",     "kind": "div", "props": { "tei:type": "sp" } },
+    { "path": "/0/0",   "kind": "paragraph", "props": { "tei:type": "speaker" } },
+    { "path": "/0/1",   "kind": "div", "props": { "tei:type": "verse" } },
+    { "path": "/0/1/0", "kind": "paragraph", "props": { "tei:type": "line" } },
+    { "path": "/0/1/1", "kind": "paragraph", "props": { "tei:type": "line" } }
+  ]
+}

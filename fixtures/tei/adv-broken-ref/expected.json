@@ -1,0 +1,7 @@
+{
+  "description": "a ref pointing at a target with no matching xml:id still round-trips as a link (target resolution is a consumer concern, not a parse-time error)",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0/1", "kind": "link", "props": { "url": "#nonexistent" } }
+  ]
+}

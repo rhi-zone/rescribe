@@ -1,0 +1,10 @@
+{
+  "description": "choice (sic/corr) embedded inside running paragraph prose",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",     "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "span", "props": { "tei:tag": "choice" } },
+    { "path": "/0/1/0", "kind": "span", "props": { "tei:tag": "sic" } },
+    { "path": "/0/1/1", "kind": "span", "props": { "tei:tag": "corr" } }
+  ]
+}

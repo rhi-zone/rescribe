@@ -1,0 +1,6 @@
+{
+  "description": "num becomes a span tagged tei:tag=num preserving tei:value",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "num", "tei:value": "42" } }
+  ]
+}

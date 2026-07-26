@@ -1,0 +1,6 @@
+{
+  "description": "ab (anonymous block) becomes a paragraph tagged tei:tag=ab",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "tei:tag": "ab" } }
+  ]
+}

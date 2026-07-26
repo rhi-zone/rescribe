@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>The Fully Documented Sample</title>
+        <author>Jane Doe</author>
+        <author>Richard Roe</author>
+        <editor>John Smith</editor>
+      </titleStmt>
+      <publicationStmt>
+        <publisher>Acme Press</publisher>
+        <idno type="ISBN">978-0-000000-00-0</idno>
+      </publicationStmt>
+      <sourceDesc>
+        <msDesc>
+          <msIdentifier>MS Add. 12345</msIdentifier>
+        </msDesc>
+      </sourceDesc>
+    </fileDesc>
+    <encodingDesc>
+      <p>Encoded per house style, TEI P5 conformant.</p>
+    </encodingDesc>
+    <profileDesc>
+      <langUsage>
+        <language ident="en">English</language>
+      </langUsage>
+      <abstract>
+        <p>A document exercising every optional teiHeader field at once.</p>
+      </abstract>
+      <textClass>
+        <keywords>
+          <term>history</term>
+          <term>manuscripts</term>
+          <term>digital humanities</term>
+        </keywords>
+      </textClass>
+    </profileDesc>
+    <revisionDesc>
+      <change when="2020-01-01">Initial encoding.</change>
+      <change when="2021-06-15">Corrected transcription errors.</change>
+    </revisionDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <p>Body text.</p>
+    </body>
+  </text>
+</TEI>

@@ -1,0 +1,6 @@
+{
+  "description": "unclear (illegible-but-guessed text) becomes a span tagged tei:tag=unclear",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "unclear" } }
+  ]
+}

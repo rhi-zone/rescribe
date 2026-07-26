@@ -1,0 +1,6 @@
+{
+  "description": "term used inline in running prose becomes a definition_term node",
+  "assertions": [
+    { "path": "/0/1", "kind": "definition_term" }
+  ]
+}

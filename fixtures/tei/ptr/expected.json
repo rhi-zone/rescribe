@@ -1,0 +1,6 @@
+{
+  "description": "ptr (empty cross-reference pointer) becomes a link with the target url",
+  "assertions": [
+    { "path": "/0/1", "kind": "link", "props": { "url": "#fig1" } }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "description": "TEI document missing the tei-c.org namespace declaration still parses by element name",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

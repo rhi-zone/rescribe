@@ -1,0 +1,7 @@
+{
+  "description": "cit (quotation with attribution) becomes a blockquote",
+  "assertions": [
+    { "path": "/0",   "kind": "blockquote" },
+    { "path": "/0/0", "kind": "blockquote" }
+  ]
+}

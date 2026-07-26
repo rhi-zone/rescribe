@@ -1,0 +1,7 @@
+{
+  "description": "gloss used inline (not as a block definition list) becomes a span",
+  "assertions": [
+    { "path": "/0/1", "kind": "definition_term" },
+    { "path": "/0/3", "kind": "span", "props": { "tei:tag": "gloss" } }
+  ]
+}

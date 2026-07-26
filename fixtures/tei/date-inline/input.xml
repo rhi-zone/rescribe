@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <p>It happened on <date when="1850-06-10">10 June 1850</date>.</p>
+    </body>
+  </text>
+</TEI>

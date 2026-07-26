@@ -1,0 +1,6 @@
+{
+  "description": "del (editorial deletion) becomes a span tagged tei:tag=del",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "del" } }
+  ]
+}

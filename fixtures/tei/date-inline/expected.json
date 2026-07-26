@@ -1,0 +1,6 @@
+{
+  "description": "inline date with when attribute becomes a span tagged tei:tag=date preserving tei:when",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "date", "tei:when": "1850-06-10" } }
+  ]
+}

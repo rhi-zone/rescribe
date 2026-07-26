@@ -1,0 +1,7 @@
+{
+  "description": "a self-closing note with no content produces a footnote_def with no children",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0/1", "kind": "footnote_def", "children_count": 0 }
+  ]
+}

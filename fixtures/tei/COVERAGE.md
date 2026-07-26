@@ -23,23 +23,23 @@ TEI All tagset (tei_all). Primary module focus: tei, core, textstructure, linkin
 - [x] horizontal rule / page break — `horizontal-rule` (`<pb/>`)
 - [x] verse / line group — `verse` (`<lg>` with `<l>`)
 - [x] display math — `math-display` (`<formula>`)
-- [ ] div (unnumbered) — (missing; `<div>` with `<head>`, the preferred modern TEI division)
-- [ ] div3 / div4 / div5 / div6 — (missing; deeper numbered division levels)
-- [ ] nested div structure — (missing; `<div>` inside `<div>` at 3+ levels)
-- [ ] sp / said (speech) — (missing; `<sp>` with `<speaker>` and `<p>`)
-- [ ] stage direction — (missing; `<stage>`)
-- [ ] epigraph — (missing; `<epigraph>` with `<quote>` and `<bibl>`)
-- [ ] argument — (missing; `<argument>` prefatory block)
-- [ ] byline — (missing; `<byline>`)
-- [ ] dateline / salute / signed — (missing; letter/document structure elements)
-- [ ] trailer — (missing; `<trailer>`)
-- [ ] castList — (missing; `<castList>` with `<castItem>`)
-- [ ] cit (quotation with attribution) — (missing; `<cit>` with `<quote>` and `<bibl>`)
-- [ ] ab (anonymous block) — (missing; `<ab>`)
-- [ ] gap / space — (missing; `<gap>` editorial intervention, `<space>`)
-- [ ] list with `type` attribute variants — (missing; `type="bulleted"`, `type="ordered"`, `type="gloss"`, `type="simple"`)
-- [ ] nested list — (missing; `<list>` inside `<item>`)
-- [ ] item with label — (missing; `<label>` sibling to `<item>`)
+- [x] div (unnumbered) — `div-unnumbered` (`<div>` with `<head>`)
+- [x] div3 / div4 / div5 / div6 — `div-deep-levels`
+- [x] nested div structure — `div-nested`
+- [x] sp / said (speech) — `speech` (`<sp>` with `<speaker>` and `<p>`)
+- [x] stage direction — `stage-direction`
+- [x] epigraph — `epigraph`
+- [x] argument — `argument`
+- [x] byline — `byline`
+- [x] dateline / salute / signed — `letter-elements`
+- [x] trailer — `trailer`
+- [x] castList — `cast-list`
+- [x] cit (quotation with attribution) — `cit`
+- [x] ab (anonymous block) — `ab`
+- [x] gap / space — `gap-space`
+- [x] list with `type` attribute variants — `list-type-variants`
+- [x] nested list — `list-nested`
+- [x] item with label — `list-item-label`
 
 ## Inline constructs
 
@@ -53,47 +53,47 @@ TEI All tagset (tei_all). Primary module focus: tei, core, textstructure, linkin
 - [x] link — `link` (`<ref target="…">`)
 - [x] image (inline graphic) — `image` (`<graphic url="…">`)
 - [x] line break — `line-break` (`<lb/>`)
-- [ ] inline code — (missing; `<code>` or `<hi rend="code">`)
-- [ ] foreign language phrase — (missing; `<foreign xml:lang="…">`)
-- [ ] term — (missing; `<term>` inline)
-- [ ] gloss (inline) — (missing; `<gloss>` inline)
-- [ ] abbr — (missing; `<abbr>`)
-- [ ] expan (expansion of abbreviation) — (missing; `<expan>`)
-- [ ] choice (abbr/expan pair) — (missing; `<choice><abbr>…</abbr><expan>…</expan></choice>`)
-- [ ] orig / reg (normalization pair) — (missing; `<choice><orig>…</orig><reg>…</reg></choice>`)
-- [ ] sic / corr (correction pair) — (missing; `<choice><sic>…</sic><corr>…</corr></choice>`)
-- [ ] add (addition) — (missing; `<add>`)
-- [ ] del (deletion) — (missing; `<del>`)
-- [ ] supplied — (missing; `<supplied>`)
-- [ ] unclear — (missing; `<unclear>`)
-- [ ] persName — (missing; `<persName>`)
-- [ ] placeName — (missing; `<placeName>`)
-- [ ] orgName — (missing; `<orgName>`)
-- [ ] date (inline) — (missing; `<date when="…">`)
-- [ ] title (inline) — (missing; `<title>` as inline bibliographic reference)
-- [ ] name (generic) — (missing; `<name>`)
-- [ ] num — (missing; `<num>`)
-- [ ] measure — (missing; `<measure>`)
-- [ ] xref / ptr — (missing; `<ptr target="…">`)
-- [ ] anchor — (missing; `<anchor xml:id="…">`)
-- [ ] milestone — (missing; `<milestone unit="…">`)
-- [ ] seg — (missing; `<seg>` generic inline span)
-- [ ] w / pc (token / punctuation) — (missing; corpus / linguistic annotation)
-- [ ] inline math — (missing; `<formula type="inline">`)
-- [ ] note (marginal / endnote) — (missing; `<note place="margin">`, `<note place="end">`)
+- [x] inline code — `inline-code` (`<code>`)
+- [x] foreign language phrase — `foreign` (`<foreign xml:lang="…">`)
+- [x] term — `term-inline`
+- [x] gloss (inline) — `gloss-inline`
+- [x] abbr — `abbr`
+- [x] expan (expansion of abbreviation) — `expan`
+- [x] choice (abbr/expan pair) — `choice-abbr-expan`
+- [x] orig / reg (normalization pair) — `choice-orig-reg`
+- [x] sic / corr (correction pair) — `choice-sic-corr`
+- [x] add (addition) — `add`
+- [x] del (deletion) — `del`
+- [x] supplied — `supplied`
+- [x] unclear — `unclear`
+- [x] persName — `pers-name`
+- [x] placeName — `place-name`
+- [x] orgName — `org-name`
+- [x] date (inline) — `date-inline`
+- [x] title (inline) — `title-inline`
+- [x] name (generic) — `name-generic`
+- [x] num — `num`
+- [x] measure — `measure`
+- [x] xref / ptr — `ptr`
+- [x] anchor — `anchor`
+- [x] milestone — `milestone`
+- [x] seg — `seg`
+- [x] w / pc (token / punctuation) — `word-token`
+- [x] inline math — `math-inline` (`<formula type="inline">`)
+- [x] note (marginal / endnote) — `note-place`
 
 ## TEI Header (metadata)
 
-- [ ] teiHeader / fileDesc — (missing; `<teiHeader>` with `<fileDesc>`)
-- [ ] titleStmt — (missing; `<titleStmt>` with `<title>`, `<author>`, `<editor>`)
-- [ ] publicationStmt — (missing; `<publicationStmt>` with `<publisher>`, `<date>`, `<idno>`)
-- [ ] sourceDesc — (missing; `<sourceDesc>`)
-- [ ] profileDesc / langUsage — (missing; `<langUsage>` with `<language ident="…">`)
-- [ ] encodingDesc — (missing; `<encodingDesc>`)
-- [ ] revisionDesc / change — (missing; `<revisionDesc>` with `<change>`)
-- [ ] abstract (in profileDesc) — (missing; `<abstract>` in `<profileDesc>`)
-- [ ] keywords (in profileDesc) — (missing; `<textClass>` / `<keywords>`)
-- [ ] msDesc (manuscript description) — (missing; `<msDesc>` in `<sourceDesc>`)
+- [x] teiHeader / fileDesc — `header-file-desc`
+- [x] titleStmt — `header-title-stmt`
+- [x] publicationStmt — `header-publication-stmt`
+- [x] sourceDesc — `header-source-desc`
+- [x] profileDesc / langUsage — `header-lang-usage`
+- [x] encodingDesc — `header-encoding-desc`
+- [x] revisionDesc / change — `header-revision-desc`
+- [x] abstract (in profileDesc) — `header-abstract`
+- [x] keywords (in profileDesc) — `header-keywords`
+- [x] msDesc (manuscript description) — `header-ms-desc`
 
 ## Properties
 
@@ -102,44 +102,44 @@ TEI All tagset (tei_all). Primary module focus: tei, core, textstructure, linkin
 - [x] figure description — `figure` (`<figDesc>`)
 - [x] table row role ("label") — `table` (`<row role="label">`)
 - [x] table cell rend ("header") — `table-header`
-- [ ] xml:id on div — (missing)
-- [ ] xml:lang on element — (missing)
-- [ ] rend values beyond covered set — (missing; `rend="center"`, `rend="right"`, `rend="it"`, `rend="b"`)
-- [ ] type attribute on note — (missing; `<note type="footnote">` vs `type="endnote">`)
-- [ ] n attribute (numbering) — (missing; `n` on `<div>`, `<l>`, `<p>`)
-- [ ] corresp / sameAs (linking attributes) — (missing)
-- [ ] graphic dimensions (width/height) — (missing; `<graphic width="…" height="…">`)
-- [ ] table cols/rows — (missing; `cols` and `rows` on `<cell>`)
-- [ ] list item label — (missing; `<label>` before `<item>`)
+- [x] xml:id on div — `prop-xml-id-div`
+- [x] xml:lang on element — `prop-xml-lang`
+- [x] rend values beyond covered set — `prop-rend-align` (`rend="center"`, `rend="right"`)
+- [x] type attribute on note — `prop-note-type`
+- [x] n attribute (numbering) — `prop-n-attribute`
+- [x] corresp / sameAs (linking attributes) — `prop-corresp-sameas`
+- [x] graphic dimensions (width/height) — `prop-graphic-dims`
+- [x] table cols/rows — `prop-table-cols-rows`
+- [x] list item label — `list-item-label`
 
 ## Composition (integration)
 
-- [ ] nested divs (3 levels) — (missing)
-- [ ] inline formatting inside list items — (missing)
-- [ ] table with inline formatting in cells — (missing)
-- [ ] verse with speaker — (missing; `<sp>` containing `<lg>`)
-- [ ] footnote with formatted content — (missing; `<note>` containing `<hi>`)
-- [ ] cit with bibl attribution — (missing)
-- [ ] choice (sic/corr) inside paragraph — (missing)
-- [ ] full document with teiHeader + text — (missing)
-- [ ] front matter + body + back matter — (missing; `<front>`, `<body>`, `<back>`)
+- [x] nested divs (3 levels) — `int-nested-divs`
+- [x] inline formatting inside list items — `int-list-inline`
+- [x] table with inline formatting in cells — `int-table-inline`
+- [x] verse with speaker — `int-verse-speaker` (`<sp>` containing `<lg>`)
+- [x] footnote with formatted content — `int-footnote-formatted` (`<note>` containing `<hi>`)
+- [x] cit with bibl attribution — `int-cit-bibl`
+- [x] choice (sic/corr) inside paragraph — `int-choice-in-paragraph`
+- [x] full document with teiHeader + text — `e2e-full-document`
+- [x] front matter + body + back matter — `e2e-front-body-back` (`<front>`, `<body>`, `<back>`)
 
 ## Adversarial
 
 - [x] empty document — `adv-empty`
-- [ ] malformed XML (unclosed tag) — (missing)
-- [ ] missing TEI namespace — (missing)
-- [ ] unknown element — (missing; element not in TEI spec)
-- [ ] entity references — (missing)
-- [ ] numeric character references — (missing)
-- [ ] empty paragraph — (missing; `<p/>`)
-- [ ] note with no content — (missing; `<note/>`)
-- [ ] broken target reference — (missing; `<ref target="#nonexistent">`)
+- [x] malformed XML (unclosed tag) — `adv-malformed-xml`
+- [x] missing TEI namespace — `adv-no-namespace`
+- [x] unknown element — `adv-unknown-element`
+- [x] entity references — `adv-entity-references`
+- [x] numeric character references — `adv-numeric-char-ref`
+- [x] empty paragraph — `adv-empty-paragraph` (`<p/>`)
+- [x] note with no content — `adv-empty-note` (`<note/>`)
+- [x] broken target reference — `adv-broken-ref` (`<ref target="#nonexistent">`)
 
 ## Pathological
 
-- [ ] deeply nested divs (6+ levels) — (missing)
-- [ ] very large table — (missing)
-- [ ] long poem with many lines — (missing)
-- [ ] document with many footnotes — (missing)
-- [ ] teiHeader with all optional metadata — (missing)
+- [x] deeply nested divs (6+ levels) — `path-deep-nested-divs` (8 levels)
+- [x] very large table — `path-large-table` (31 rows × 4 cols)
+- [x] long poem with many lines — `path-long-poem` (50 lines)
+- [x] document with many footnotes — `path-many-footnotes` (20 footnotes)
+- [x] teiHeader with all optional metadata — `path-full-header`

@@ -1,0 +1,8 @@
+{
+  "description": "list type attribute variants (bulleted, simple) are preserved as tei:type",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false, "tei:type": "bulleted" } },
+    { "path": "/1", "kind": "list", "props": { "ordered": false, "tei:type": "simple" } }
+  ]
+}

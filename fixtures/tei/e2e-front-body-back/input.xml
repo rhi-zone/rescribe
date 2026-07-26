@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <front>
+      <div>
+        <head>Preface</head>
+        <p>Introductory remarks.</p>
+      </div>
+    </front>
+    <body>
+      <div>
+        <head>Chapter One</head>
+        <p>The story begins.</p>
+      </div>
+    </body>
+    <back>
+      <div>
+        <head>Appendix</head>
+        <p>Supplementary material.</p>
+      </div>
+    </back>
+  </text>
+</TEI>

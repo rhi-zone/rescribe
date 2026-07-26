@@ -1,0 +1,6 @@
+{
+  "description": "generic name element becomes a span tagged tei:tag=name",
+  "assertions": [
+    { "path": "/0/0", "kind": "span", "props": { "tei:tag": "name" } }
+  ]
+}

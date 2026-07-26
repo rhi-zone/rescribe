@@ -576,9 +576,69 @@ code).
   `fuzz_tei_fmt_roundtrip` (arbitrary `TeiDoc` → `emit()` → `parse()` →
   `strip_spans()` equality; 527K runs clean). No library bugs found. Initial
   validation only, not an exhaustive campaign — see `docs/format-audit.md`.
-- [ ] DTD-aware entity resolution and closing the remaining
-  `fixtures/tei/COVERAGE.md` gaps (31/117 items checked) are follow-up work — out of
-  scope for this pass per CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
+- [ ] DTD-aware entity resolution is follow-up work — out of scope for this pass
+  per CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
+
+### `fixtures/tei/COVERAGE.md` closed to 117/117 (2026-07-27)
+
+Fixture suite completeness (vertical checklist step 1) reached: every item in
+`fixtures/tei/COVERAGE.md` now has a passing fixture (85 new `fixtures/tei/*`
+directories added across block, inline, teiHeader-metadata, property,
+integration/e2e, adversarial, and pathological categories). This closing pass
+required real reader/writer changes, not just fixture-writing:
+
+- [x] `rescribe-read-tei`/`rescribe-write-tei`: ~35 new element mappings (`sp`,
+  `speaker`, `stage`, `epigraph`, `argument`, `byline`, `dateline`/`salute`/`signed`,
+  `trailer`, `castList`/`castItem`, `ab`, `gap`/`space`, `div5`/`div6`, list
+  `type` variants, `<label>` items) plus a generic `span`-tagged (`tei:tag=`)
+  raw-preservation path for editorial/named-entity apparatus (`choice`,
+  `abbr`/`expan`, `orig`/`reg`, `sic`/`corr`, `add`/`del`/`supplied`/`unclear`,
+  `persName`/`placeName`/`orgName`/`name`, `date`/`title`/`num`/`measure`,
+  `anchor`/`milestone`/`seg`/`w`/`pc`, `foreign`, `bibl`) — this is the same
+  `span` node kind already used for exactly this purpose.
+- [x] `xml:lang`, `corresp`, `sameAs` added to `attach_generic_attrs` (alongside
+  the existing `xml:id`/`n`); `style:align` now derived from alignment-only
+  `rend` values (`center`/`right`/`left`/`justify`) on `p`/`div` rather than
+  overloading the `<hi>`-only `tei:rend` fallback.
+  `<formula type="inline">` now maps to `math_inline` instead of always
+  `math_display`; bare `<code>` now maps to inline `code` (previously only
+  `<eg>` was reachable, and both aliased to `code_block`).
+- [x] teiHeader metadata extraction substantially deepened: `author`/`editor`
+  (repeatable, `"; "`-joined), `publisher`/`idno`, `profileDesc/langUsage/language`
+  (`ident` → `language`), `abstract`, `textClass/keywords`, `revisionDesc/change`
+  (repeatable, timestamped) all now populate `Document::metadata` and round-trip
+  through the writer (which previously only ever wrote/read `title`).
+  `encodingDesc`/`msDesc` are flattened to plain-text metadata with an explicit
+  `Minor` fidelity warning (structure genuinely not modeled — a tracked gap, not
+  a silent drop).
+- [x] **Bug found and fixed**: the reader's final `_ => None` fallback arm
+  silently unwrapped *any* unrecognized element into its parent — dropping the
+  fact that e.g. `<foo>` ever existed, not just layout. Changed to raw-preserve
+  as a generic tagged `span` (`adv-unknown-element` fixture regression-tests
+  this). Same fix category added a catch-all fidelity warning for teiHeader
+  fields with no known metadata key (previously silently scanned-and-discarded
+  with zero signal).
+- [x] `cargo clippy --all-targets --all-features -p tei-fmt -p rescribe-read-tei
+  -p rescribe-write-tei -- -D warnings` and full test/fixture suite clean
+  (all 111 `fixtures/tei/*` fixtures + all existing unit tests pass)
+- [ ] Known limitation: teiHeader is a flat `Properties` bag, not part of the
+  document content tree, so genuinely unrecognized header sub-structure
+  (e.g. `msDesc`'s internal `msIdentifier`/`physDesc`) can only be flattened to
+  text + warned about, never raw-preserved node-for-node the way body content
+  can be. A structural metadata representation (nested `PropValue::Map`, or a
+  dedicated header-subtree slot) would be needed to close this properly —
+  out of scope for this pass.
+- [ ] Known limitation: an unrecognized element at block level (outside
+  teiHeader) round-trips as content wrapped in an extra `<p>` (since the
+  generic `span` fallback is inline-shaped and the writer's block dispatch
+  wraps bare inline/span nodes in `<p>` to stay valid XML) — element name and
+  content survive, but a block-level unknown element is not byte-identical
+  after round-trip. A block-shaped raw-preservation node (mirroring
+  `raw_block`) would close this.
+- [ ] DTD-aware entity resolution remains out of scope for this pass (Tier B
+  target is 3-Harness, not 5-Production; fixture-suite-complete is step 1 of 5
+  in the vertical checklist — reader/writer completeness beyond the fixture
+  suite, the oracle harness, and a longer fuzz campaign are still open).
 
 ### DEBT: Streaming architecture — COMPLETED 2026-03-28
 

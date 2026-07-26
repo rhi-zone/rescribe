@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <lg>
+        <l n="5">Fifth line of the poem.</l>
+      </lg>
+    </body>
+  </text>
+</TEI>

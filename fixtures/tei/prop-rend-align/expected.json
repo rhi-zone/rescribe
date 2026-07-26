@@ -1,0 +1,7 @@
+{
+  "description": "rend values center/right on a paragraph become the standard style:align property",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "style:align": "center" } },
+    { "path": "/1", "kind": "paragraph", "props": { "style:align": "right" } }
+  ]
+}

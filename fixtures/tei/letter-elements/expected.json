@@ -1,0 +1,8 @@
+{
+  "description": "letter/document structure elements dateline, salute, signed each become a tagged paragraph",
+  "assertions": [
+    { "path": "/0/0", "kind": "paragraph", "props": { "tei:type": "dateline" } },
+    { "path": "/0/2", "kind": "paragraph", "props": { "tei:type": "salute" } },
+    { "path": "/0/3", "kind": "paragraph", "props": { "tei:type": "signed" } }
+  ]
+}

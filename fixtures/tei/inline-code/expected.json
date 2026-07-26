@@ -1,0 +1,7 @@
+{
+  "description": "inline code element becomes an inline code node",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/1", "kind": "code", "props": { "content": "make build" } }
+  ]
+}

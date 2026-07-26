@@ -1,0 +1,6 @@
+{
+  "description": "milestone becomes an empty span tagged tei:tag=milestone preserving tei:unit and tei:n",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "milestone", "tei:unit": "page", "tei:n": "42" } }
+  ]
+}

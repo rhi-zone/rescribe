@@ -1,0 +1,8 @@
+{
+  "description": "epigraph with quote and bibl becomes a div tagged tei:type=epigraph",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "props": { "tei:type": "epigraph" } },
+    { "path": "/0/0", "kind": "blockquote" },
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "bibl" } }
+  ]
+}

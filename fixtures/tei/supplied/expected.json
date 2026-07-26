@@ -1,0 +1,6 @@
+{
+  "description": "supplied (editorially supplied text) becomes a span tagged tei:tag=supplied",
+  "assertions": [
+    { "path": "/0/1", "kind": "span", "props": { "tei:tag": "supplied" } }
+  ]
+}

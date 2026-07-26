@@ -1,0 +1,6 @@
+{
+  "description": "xml:lang on an element is preserved as the standard language property",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph", "props": { "language": "de" } }
+  ]
+}

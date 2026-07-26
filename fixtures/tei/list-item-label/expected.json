@@ -1,0 +1,8 @@
+{
+  "description": "label sibling to item becomes a list_item tagged tei:tag=label",
+  "assertions": [
+    { "path": "/0",   "kind": "list" },
+    { "path": "/0/0", "kind": "list_item", "props": { "tei:tag": "label" } },
+    { "path": "/0/1", "kind": "list_item" }
+  ]
+}

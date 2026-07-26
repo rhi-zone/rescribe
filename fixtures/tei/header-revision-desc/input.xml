@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>A Sample Document</title>
+      </titleStmt>
+    </fileDesc>
+    <revisionDesc>
+      <change when="2020-01-01">Initial encoding.</change>
+    </revisionDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <p>Body text.</p>
+    </body>
+  </text>
+</TEI>

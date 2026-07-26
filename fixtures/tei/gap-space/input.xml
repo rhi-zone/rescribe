@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <p>Illegible text follows: <gap reason="illegible" extent="3 words"/> and continues.</p>
+      <p>A blank <space extent="2 lines"/> in the manuscript.</p>
+    </body>
+  </text>
+</TEI>

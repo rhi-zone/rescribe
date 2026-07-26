@@ -1,0 +1,7 @@
+{
+  "description": "teiHeader/fileDesc with titleStmt/publicationStmt/sourceDesc yields document title metadata",
+  "metadata": { "title": "A Sample Document" },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}
