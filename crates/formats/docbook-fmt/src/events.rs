@@ -1,0 +1,516 @@
+//! Streaming event types and iterator for DocBook/XML documents.
+//!
+//! Unlike `html-fmt` (which must build the full tree first because HTML5
+//! tree construction can rearrange nodes already seen), XML has no such
+//! requirement: it is well-nested by construction. `EventIter` therefore
+//! wraps `quick_xml::Reader` *directly* and pulls one token at a time from
+//! the input slice — it never materializes a `DocBookDoc`. This is a true
+//! independent implementation of the reader, not a walk over `parse()`'s
+//! output, and it is genuinely `O(largest token)` memory beyond the input
+//! slice itself.
+
+use std::borrow::Cow;
+
+use quick_xml::Reader;
+use quick_xml::events::Event as XmlEvent;
+
+/// A streaming event from a DocBook/XML document.
+#[derive(Debug, PartialEq)]
+pub enum Event<'a> {
+    Decl {
+        version: Cow<'a, str>,
+        encoding: Option<Cow<'a, str>>,
+        standalone: Option<Cow<'a, str>>,
+    },
+    Doctype(Cow<'a, str>),
+    ProcessingInstruction {
+        target: Cow<'a, str>,
+        data: Cow<'a, str>,
+    },
+    StartElement {
+        name: Cow<'a, str>,
+        attrs: Vec<(String, String)>,
+    },
+    EndElement {
+        name: Cow<'a, str>,
+    },
+    /// A self-closing element (`<foo/>`) — equivalent to `StartElement`
+    /// immediately followed by `EndElement`, delivered as one event so a
+    /// streaming writer can emit `<foo/>` rather than `<foo></foo>`.
+    EmptyElement {
+        name: Cow<'a, str>,
+        attrs: Vec<(String, String)>,
+    },
+    Text(Cow<'a, str>),
+    Cdata(Cow<'a, str>),
+    Comment(Cow<'a, str>),
+    /// An unresolvable named entity reference (`&custom;`); see
+    /// [`crate::ast::Node::EntityRef`]. Predefined XML entities and numeric
+    /// character references are resolved to a `Text` event instead.
+    EntityRef(Cow<'a, str>),
+}
+
+/// Owned event (all `Cow` fields are `Cow::Owned`).
+pub type OwnedEvent = Event<'static>;
+
+impl Event<'_> {
+    pub fn into_owned(self) -> OwnedEvent {
+        match self {
+            Event::Decl {
+                version,
+                encoding,
+                standalone,
+            } => Event::Decl {
+                version: Cow::Owned(version.into_owned()),
+                encoding: encoding.map(|e| Cow::Owned(e.into_owned())),
+                standalone: standalone.map(|s| Cow::Owned(s.into_owned())),
+            },
+            Event::Doctype(d) => Event::Doctype(Cow::Owned(d.into_owned())),
+            Event::ProcessingInstruction { target, data } => Event::ProcessingInstruction {
+                target: Cow::Owned(target.into_owned()),
+                data: Cow::Owned(data.into_owned()),
+            },
+            Event::StartElement { name, attrs } => Event::StartElement {
+                name: Cow::Owned(name.into_owned()),
+                attrs,
+            },
+            Event::EndElement { name } => Event::EndElement {
+                name: Cow::Owned(name.into_owned()),
+            },
+            Event::EmptyElement { name, attrs } => Event::EmptyElement {
+                name: Cow::Owned(name.into_owned()),
+                attrs,
+            },
+            Event::Text(t) => Event::Text(Cow::Owned(t.into_owned())),
+            Event::Cdata(t) => Event::Cdata(Cow::Owned(t.into_owned())),
+            Event::Comment(t) => Event::Comment(Cow::Owned(t.into_owned())),
+            Event::EntityRef(t) => Event::EntityRef(Cow::Owned(t.into_owned())),
+        }
+    }
+}
+
+/// A streaming iterator over DocBook/XML events, produced by [`crate::events()`].
+///
+/// Holds the `quick_xml::Reader` directly: `next()` advances the reader by
+/// exactly one token per call. Diagnostics for malformed input are available
+/// via [`EventIter::diagnostics`] after iteration completes (an `Err` token
+/// stops iteration but does not panic).
+pub struct EventIter<'a> {
+    reader: Reader<&'a [u8]>,
+    buf: Vec<u8>,
+    done: bool,
+    diagnostics: Vec<crate::ast::Diagnostic>,
+}
+
+impl<'a> EventIter<'a> {
+    pub fn new(input: &'a [u8]) -> Self {
+        let mut reader = Reader::from_reader(input);
+        reader.config_mut().trim_text(false);
+        EventIter {
+            reader,
+            buf: Vec::new(),
+            done: false,
+            diagnostics: Vec::new(),
+        }
+    }
+
+    /// Diagnostics accumulated so far (populated as iteration proceeds).
+    pub fn diagnostics(&self) -> &[crate::ast::Diagnostic] {
+        &self.diagnostics
+    }
+}
+
+impl<'a> Iterator for EventIter<'a> {
+    type Item = Event<'a>;
+
+    fn next(&mut self) -> Option<Event<'a>> {
+        if self.done {
+            return None;
+        }
+        loop {
+            self.buf.clear();
+            let pos = self.reader.buffer_position() as usize;
+            match self.reader.read_event_into(&mut self.buf) {
+                Ok(XmlEvent::Decl(decl)) => {
+                    let version = decl
+                        .version()
+                        .map(|v| String::from_utf8_lossy(&v).into_owned())
+                        .unwrap_or_else(|_| "1.0".to_string());
+                    let encoding = decl
+                        .encoding()
+                        .and_then(|e| e.ok())
+                        .map(|e| String::from_utf8_lossy(&e).into_owned());
+                    let standalone = decl
+                        .standalone()
+                        .and_then(|s| s.ok())
+                        .map(|s| String::from_utf8_lossy(&s).into_owned());
+                    return Some(Event::Decl {
+                        version: Cow::Owned(version),
+                        encoding: encoding.map(Cow::Owned),
+                        standalone: standalone.map(Cow::Owned),
+                    });
+                }
+                Ok(XmlEvent::DocType(dt)) => {
+                    return Some(Event::Doctype(Cow::Owned(
+                        String::from_utf8_lossy(dt.as_ref()).into_owned(),
+                    )));
+                }
+                Ok(XmlEvent::PI(pi)) => {
+                    let raw = String::from_utf8_lossy(pi.as_ref()).into_owned();
+                    let (target, data) = crate::ast::split_pi(&raw);
+                    return Some(Event::ProcessingInstruction {
+                        target: Cow::Owned(target),
+                        data: Cow::Owned(data),
+                    });
+                }
+                Ok(XmlEvent::Start(e)) => {
+                    let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                    let attrs = read_attrs_owned(&e);
+                    return Some(Event::StartElement {
+                        name: Cow::Owned(name),
+                        attrs,
+                    });
+                }
+                Ok(XmlEvent::Empty(e)) => {
+                    let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                    let attrs = read_attrs_owned(&e);
+                    return Some(Event::EmptyElement {
+                        name: Cow::Owned(name),
+                        attrs,
+                    });
+                }
+                Ok(XmlEvent::End(e)) => {
+                    let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                    return Some(Event::EndElement {
+                        name: Cow::Owned(name),
+                    });
+                }
+                Ok(XmlEvent::Text(t)) => {
+                    let content = t
+                        .decode()
+                        .map(|c| c.into_owned())
+                        .unwrap_or_else(|_| String::from_utf8_lossy(t.as_ref()).into_owned());
+                    if content.is_empty() {
+                        continue;
+                    }
+                    return Some(Event::Text(Cow::Owned(content)));
+                }
+                Ok(XmlEvent::GeneralRef(r)) => {
+                    if let Ok(Some(ch)) = r.resolve_char_ref() {
+                        return Some(Event::Text(Cow::Owned(ch.to_string())));
+                    }
+                    let name = r
+                        .decode()
+                        .map(|c| c.into_owned())
+                        .unwrap_or_else(|_| String::from_utf8_lossy(r.as_ref()).into_owned());
+                    if let Some(ch) = crate::ast::resolve_predefined_entity(&name) {
+                        return Some(Event::Text(Cow::Owned(ch.to_string())));
+                    }
+                    return Some(Event::EntityRef(Cow::Owned(name)));
+                }
+                Ok(XmlEvent::CData(c)) => {
+                    return Some(Event::Cdata(Cow::Owned(
+                        String::from_utf8_lossy(c.as_ref()).into_owned(),
+                    )));
+                }
+                Ok(XmlEvent::Comment(c)) => {
+                    return Some(Event::Comment(Cow::Owned(
+                        String::from_utf8_lossy(c.as_ref()).into_owned(),
+                    )));
+                }
+                Ok(XmlEvent::Eof) => {
+                    self.done = true;
+                    return None;
+                }
+                Err(e) => {
+                    self.diagnostics.push(crate::ast::Diagnostic {
+                        message: format!("XML parse error: {e}"),
+                        span: crate::ast::Span {
+                            start: pos,
+                            end: pos,
+                        },
+                    });
+                    self.done = true;
+                    return None;
+                }
+            }
+        }
+    }
+}
+
+/// Convert a raw `quick_xml` event into our owned [`Event`], for every
+/// variant except `Text` and `Eof` (callers that need chunk-boundary-aware
+/// text handling, like [`crate::batch::StreamingParser`], handle `Text`
+/// themselves; `Eof` carries no data). Returns `None` for those two.
+pub(crate) fn owned_event_from_xml(event: XmlEvent<'_>) -> Option<OwnedEvent> {
+    match event {
+        XmlEvent::Decl(decl) => {
+            let version = decl
+                .version()
+                .map(|v| String::from_utf8_lossy(&v).into_owned())
+                .unwrap_or_else(|_| "1.0".to_string());
+            let encoding = decl
+                .encoding()
+                .and_then(|e| e.ok())
+                .map(|e| String::from_utf8_lossy(&e).into_owned());
+            let standalone = decl
+                .standalone()
+                .and_then(|s| s.ok())
+                .map(|s| String::from_utf8_lossy(&s).into_owned());
+            Some(Event::Decl {
+                version: Cow::Owned(version),
+                encoding: encoding.map(Cow::Owned),
+                standalone: standalone.map(Cow::Owned),
+            })
+        }
+        XmlEvent::DocType(dt) => Some(Event::Doctype(Cow::Owned(
+            String::from_utf8_lossy(dt.as_ref()).into_owned(),
+        ))),
+        XmlEvent::PI(pi) => {
+            let raw = String::from_utf8_lossy(pi.as_ref()).into_owned();
+            let (target, data) = crate::ast::split_pi(&raw);
+            Some(Event::ProcessingInstruction {
+                target: Cow::Owned(target),
+                data: Cow::Owned(data),
+            })
+        }
+        XmlEvent::Start(e) => Some(Event::StartElement {
+            name: Cow::Owned(String::from_utf8_lossy(e.name().as_ref()).into_owned()),
+            attrs: read_attrs_owned(&e),
+        }),
+        XmlEvent::Empty(e) => Some(Event::EmptyElement {
+            name: Cow::Owned(String::from_utf8_lossy(e.name().as_ref()).into_owned()),
+            attrs: read_attrs_owned(&e),
+        }),
+        XmlEvent::End(e) => Some(Event::EndElement {
+            name: Cow::Owned(String::from_utf8_lossy(e.name().as_ref()).into_owned()),
+        }),
+        XmlEvent::CData(c) => Some(Event::Cdata(Cow::Owned(
+            String::from_utf8_lossy(c.as_ref()).into_owned(),
+        ))),
+        XmlEvent::Comment(c) => Some(Event::Comment(Cow::Owned(
+            String::from_utf8_lossy(c.as_ref()).into_owned(),
+        ))),
+        XmlEvent::GeneralRef(r) => {
+            if let Ok(Some(ch)) = r.resolve_char_ref() {
+                return Some(Event::Text(Cow::Owned(ch.to_string())));
+            }
+            let name = r
+                .decode()
+                .map(|c| c.into_owned())
+                .unwrap_or_else(|_| String::from_utf8_lossy(r.as_ref()).into_owned());
+            if let Some(ch) = crate::ast::resolve_predefined_entity(&name) {
+                return Some(Event::Text(Cow::Owned(ch.to_string())));
+            }
+            Some(Event::EntityRef(Cow::Owned(name)))
+        }
+        XmlEvent::Text(_) | XmlEvent::Eof => None,
+    }
+}
+
+fn read_attrs_owned(e: &quick_xml::events::BytesStart<'_>) -> Vec<(String, String)> {
+    let mut attrs = Vec::new();
+    for attr in e.attributes().flatten() {
+        let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
+        let value = attr
+            .unescape_value()
+            .map(|v| v.into_owned())
+            .unwrap_or_else(|_| String::from_utf8_lossy(&attr.value).into_owned());
+        attrs.push((key, value));
+    }
+    attrs
+}
+
+/// Build an owned event stream from an already-parsed [`crate::ast::DocBookDoc`].
+///
+/// Used by the builder writer and by round-trip tests; not used by
+/// [`crate::events()`] itself (which streams directly from bytes).
+pub fn events_from_doc(doc: &crate::ast::DocBookDoc) -> Vec<OwnedEvent> {
+    let mut events = Vec::new();
+    if let Some(decl) = &doc.xml_decl {
+        events.push(Event::Decl {
+            version: Cow::Owned(decl.version.clone()),
+            encoding: decl.encoding.clone().map(Cow::Owned),
+            standalone: decl.standalone.clone().map(Cow::Owned),
+        });
+    }
+    for node in &doc.nodes {
+        walk_node(node, &mut events);
+    }
+    events
+}
+
+fn walk_node(node: &crate::ast::Node, events: &mut Vec<OwnedEvent>) {
+    use crate::ast::Node;
+    match node {
+        Node::Element {
+            name,
+            attrs,
+            children,
+            ..
+        } => {
+            if children.is_empty() {
+                events.push(Event::EmptyElement {
+                    name: Cow::Owned(name.clone()),
+                    attrs: attrs.clone(),
+                });
+            } else {
+                events.push(Event::StartElement {
+                    name: Cow::Owned(name.clone()),
+                    attrs: attrs.clone(),
+                });
+                for child in children {
+                    walk_node(child, events);
+                }
+                events.push(Event::EndElement {
+                    name: Cow::Owned(name.clone()),
+                });
+            }
+        }
+        Node::Text { content, .. } => events.push(Event::Text(Cow::Owned(content.clone()))),
+        Node::Cdata { content, .. } => events.push(Event::Cdata(Cow::Owned(content.clone()))),
+        Node::Comment { content, .. } => events.push(Event::Comment(Cow::Owned(content.clone()))),
+        Node::ProcessingInstruction { target, data, .. } => {
+            events.push(Event::ProcessingInstruction {
+                target: Cow::Owned(target.clone()),
+                data: Cow::Owned(data.clone()),
+            })
+        }
+        Node::Doctype { content, .. } => events.push(Event::Doctype(Cow::Owned(content.clone()))),
+        Node::EntityRef { name, .. } => events.push(Event::EntityRef(Cow::Owned(name.clone()))),
+    }
+}
+
+/// Reconstruct a `DocBookDoc` from an event stream.
+///
+/// Used by the streaming writer's AST fallback and for round-trip testing.
+/// One in-progress element on the [`collect_doc`] build stack: name,
+/// attributes, and children accumulated so far.
+type BuildFrame = (String, Vec<(String, String)>, Vec<crate::ast::Node>);
+
+pub fn collect_doc(events: impl IntoIterator<Item = OwnedEvent>) -> crate::ast::DocBookDoc {
+    use crate::ast::{Node, Span, XmlDecl};
+
+    let mut xml_decl = None;
+    let mut roots: Vec<Node> = Vec::new();
+    let mut stack: Vec<BuildFrame> = Vec::new();
+
+    fn push(node: Node, stack: &mut [BuildFrame], roots: &mut Vec<Node>) {
+        if let Some((_, _, children)) = stack.last_mut() {
+            children.push(node);
+        } else {
+            roots.push(node);
+        }
+    }
+
+    for event in events {
+        match event {
+            Event::Decl {
+                version,
+                encoding,
+                standalone,
+            } => {
+                xml_decl = Some(XmlDecl {
+                    version: version.into_owned(),
+                    encoding: encoding.map(|e| e.into_owned()),
+                    standalone: standalone.map(|s| s.into_owned()),
+                });
+            }
+            Event::Doctype(content) => push(
+                Node::Doctype {
+                    content: content.into_owned(),
+                    span: Span::NONE,
+                },
+                &mut stack,
+                &mut roots,
+            ),
+            Event::ProcessingInstruction { target, data } => push(
+                Node::ProcessingInstruction {
+                    target: target.into_owned(),
+                    data: data.into_owned(),
+                    span: Span::NONE,
+                },
+                &mut stack,
+                &mut roots,
+            ),
+            Event::StartElement { name, attrs } => {
+                stack.push((name.into_owned(), attrs, Vec::new()));
+            }
+            Event::EmptyElement { name, attrs } => push(
+                Node::Element {
+                    name: name.into_owned(),
+                    attrs,
+                    children: Vec::new(),
+                    span: Span::NONE,
+                },
+                &mut stack,
+                &mut roots,
+            ),
+            Event::EndElement { .. } => {
+                if let Some((name, attrs, children)) = stack.pop() {
+                    push(
+                        Node::Element {
+                            name,
+                            attrs,
+                            children,
+                            span: Span::NONE,
+                        },
+                        &mut stack,
+                        &mut roots,
+                    );
+                }
+            }
+            Event::Text(t) => push(
+                Node::Text {
+                    content: t.into_owned(),
+                    span: Span::NONE,
+                },
+                &mut stack,
+                &mut roots,
+            ),
+            Event::Cdata(t) => push(
+                Node::Cdata {
+                    content: t.into_owned(),
+                    span: Span::NONE,
+                },
+                &mut stack,
+                &mut roots,
+            ),
+            Event::Comment(t) => push(
+                Node::Comment {
+                    content: t.into_owned(),
+                    span: Span::NONE,
+                },
+                &mut stack,
+                &mut roots,
+            ),
+            Event::EntityRef(name) => push(
+                Node::EntityRef {
+                    name: name.into_owned(),
+                    span: Span::NONE,
+                },
+                &mut stack,
+                &mut roots,
+            ),
+        }
+    }
+
+    // Close any unclosed elements.
+    while let Some((name, attrs, children)) = stack.pop() {
+        push(
+            Node::Element {
+                name,
+                attrs,
+                children,
+                span: Span::NONE,
+            },
+            &mut stack,
+            &mut roots,
+        );
+    }
+
+    crate::ast::DocBookDoc {
+        xml_decl,
+        nodes: roots,
+    }
+}

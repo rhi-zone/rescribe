@@ -789,6 +789,13 @@ name = "djot-fmt"
 version = "0.1.0"
 
 [[package]]
+name = "docbook-fmt"
+version = "0.1.0"
+dependencies = [
+ "quick-xml 0.39.0",
+]
+
+[[package]]
 name = "dokuwiki"
 version = "0.1.0"
 dependencies = [
@@ -3090,7 +3097,7 @@ dependencies = [
 name = "rescribe-read-docbook"
 version = "0.1.0"
 dependencies = [
- "quick-xml 0.39.0",
+ "docbook-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -3643,8 +3650,9 @@ dependencies = [
 name = "rescribe-write-docbook"
 version = "0.1.0"
 dependencies = [
- "quick-xml 0.39.0",
+ "docbook-fmt",
  "rescribe-core",
+ "rescribe-read-docbook",
  "rescribe-std",
 ]
 

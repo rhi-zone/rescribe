@@ -1,7 +1,12 @@
 //! DocBook reader for rescribe.
 //!
-//! Parses DocBook XML into rescribe's document IR.
-//! Supports DocBook 5 and DocBook 4 elements.
+//! Translates `docbook_fmt::DocBookDoc` (the standalone DocBook/XML AST from
+//! the `docbook-fmt` crate) into rescribe's document IR. Supports DocBook 5
+//! and DocBook 4 elements.
+//!
+//! All XML tokenizing/parsing lives in `docbook-fmt` — this crate is a thin
+//! AST↔IR translator only (per CLAUDE.md's "adapter layer must never
+//! contain parsing or writing logic" rule).
 //!
 //! # Example
 //!
@@ -18,411 +23,338 @@
 //! let doc = result.value;
 //! ```
 
-use quick_xml::Reader;
-use quick_xml::events::{BytesStart, Event};
-use rescribe_core::{ConversionResult, Document, FidelityWarning, Node, ParseError, Properties};
+use docbook_fmt::Node as DbNode;
+use rescribe_core::{
+    ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Severity,
+    WarningKind,
+};
 use rescribe_std::{node, prop};
 
 /// Parse DocBook XML into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
-    let mut reader = Reader::from_str(input);
-    reader.config_mut().trim_text(true);
+    let (doc, diagnostics) = docbook_fmt::parse(input.as_bytes());
 
-    let mut converter = Converter::new();
-    converter.parse(&mut reader)?;
+    let mut warnings: Vec<FidelityWarning> = diagnostics
+        .into_iter()
+        .map(|d| {
+            FidelityWarning::new(
+                Severity::Major,
+                WarningKind::FeatureLost("xml-parse-error".to_string()),
+                format!("DocBook XML parse error: {}", d.message),
+            )
+        })
+        .collect();
+
+    let mut metadata = Properties::new();
+    let mut children = Vec::new();
+    for top in &doc.nodes {
+        if let DbNode::Element {
+            name,
+            attrs,
+            children: kids,
+            ..
+        } = top
+        {
+            let converted = convert_children(kids, name, &mut metadata, &mut warnings);
+            match convert_element(name, attrs, converted.clone(), None) {
+                Some(node) => children.push(node),
+                None => {
+                    // Root element itself carries no rescribe-level
+                    // semantics (shouldn't normally happen for
+                    // article/book/etc, but pass its children through
+                    // rather than dropping them).
+                    children.extend(converted);
+                }
+            }
+        }
+        // Leading/trailing Comment/PI/Doctype/whitespace-Text at the very
+        // top level (outside the root element) carry no IR meaning and
+        // have no cross-format equivalent to model; DocBook documents
+        // otherwise consist of exactly one root element.
+    }
 
     let document = Document {
-        content: Node::new(node::DOCUMENT).children(converter.result),
+        content: Node::new(node::DOCUMENT).children(children),
         resources: Default::default(),
-        metadata: converter.metadata,
+        metadata,
         source: None,
     };
 
-    Ok(ConversionResult::with_warnings(
-        document,
-        converter.warnings,
-    ))
+    Ok(ConversionResult::with_warnings(document, warnings))
 }
 
-struct Converter {
-    result: Vec<Node>,
-    metadata: Properties,
-    warnings: Vec<FidelityWarning>,
-    stack: Vec<StackFrame>,
-    current_text: String,
+/// Convert a slice of DocBook child nodes into rescribe IR nodes,
+/// discarding nodes that only exist to be unwrapped (e.g. `<info>`, which
+/// is consumed for metadata) and passing through "structural" wrapper
+/// elements (like `<tgroup>`) as their own children.
+fn convert_children(
+    children: &[DbNode],
+    parent_name: &str,
+    metadata: &mut Properties,
+    warnings: &mut Vec<FidelityWarning>,
+) -> Vec<Node> {
+    let mut out = Vec::new();
+    for child in children {
+        match child {
+            DbNode::Element {
+                name,
+                attrs,
+                children: kids,
+                ..
+            } => {
+                let converted_kids = convert_children(kids, name, metadata, warnings);
+                match convert_element(name, attrs, converted_kids.clone(), Some(parent_name)) {
+                    Some(node) => out.push(node),
+                    None => {
+                        if name == "info" || name == "articleinfo" || name == "bookinfo" {
+                            extract_metadata(kids, metadata);
+                        } else {
+                            // Pass-through wrapper element (e.g. tgroup,
+                            // imageobject, mediaobject): splice its already
+                            // converted children directly into the parent.
+                            out.extend(converted_kids);
+                        }
+                    }
+                }
+            }
+            DbNode::Text { content, .. } => {
+                if !content.trim().is_empty() {
+                    out.push(Node::new(node::TEXT).prop(prop::CONTENT, content.clone()));
+                }
+            }
+            DbNode::Cdata { content, .. } => {
+                out.push(Node::new(node::TEXT).prop(prop::CONTENT, content.clone()));
+            }
+            DbNode::EntityRef { name, .. } => {
+                // Named entity DocBook/the DTD defines but we cannot resolve
+                // without the DTD — raw-preserve verbatim rather than drop.
+                out.push(
+                    Node::new(node::RAW_INLINE)
+                        .prop(prop::CONTENT, format!("&{name};"))
+                        .prop("docbook:entity", name.clone()),
+                );
+            }
+            DbNode::Comment { .. }
+            | DbNode::ProcessingInstruction { .. }
+            | DbNode::Doctype { .. } => {
+                // No cross-format meaning and no natural IR raw-block slot
+                // inside inline/block flow content; DocBook's own semantic
+                // model has no equivalent for a bare PI/comment here.
+                warnings.push(FidelityWarning::new(
+                    Severity::Minor,
+                    WarningKind::FeatureLost("comment-or-pi".to_string()),
+                    format!("dropped non-content DocBook node inside <{parent_name}>"),
+                ));
+            }
+        }
+    }
+    out
 }
 
-#[derive(Debug)]
-struct StackFrame {
-    element: String,
+fn get_attr<'a>(attrs: &'a [(String, String)], key: &str) -> Option<&'a str> {
+    attrs
+        .iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, v)| v.as_str())
+}
+
+/// Convert one DocBook element (with its already-converted children) into a
+/// rescribe node. Returns `None` for elements that either have no IR
+/// representation of their own (pass-through wrappers) or are consumed for
+/// side effects (metadata extraction) — see [`convert_children`] for how
+/// those two cases are told apart.
+fn convert_element(
+    name: &str,
+    attrs: &[(String, String)],
     children: Vec<Node>,
-    attrs: FrameAttrs,
-}
+    parent: Option<&str>,
+) -> Option<Node> {
+    let role = get_attr(attrs, "role");
+    let url = get_attr(attrs, "url").or_else(|| get_attr(attrs, "xlink:href"));
+    let language = get_attr(attrs, "language");
 
-#[derive(Debug, Default)]
-struct FrameAttrs {
-    role: Option<String>,
-    url: Option<String>,
-    language: Option<String>,
-    level: Option<u32>,
-}
-
-impl Converter {
-    fn new() -> Self {
-        Self {
-            result: Vec::new(),
-            metadata: Properties::new(),
-            warnings: Vec::new(),
-            stack: Vec::new(),
-            current_text: String::new(),
-        }
-    }
-
-    fn parse(&mut self, reader: &mut Reader<&[u8]>) -> Result<(), ParseError> {
-        let mut buf = Vec::new();
-
-        loop {
-            match reader.read_event_into(&mut buf) {
-                Ok(Event::Start(e)) => {
-                    self.flush_text();
-                    self.handle_start(&e)?;
-                }
-                Ok(Event::Empty(e)) => {
-                    self.flush_text();
-                    self.handle_empty(&e)?;
-                }
-                Ok(Event::End(e)) => {
-                    self.flush_text();
-                    self.handle_end(&e)?;
-                }
-                Ok(Event::Text(e)) => {
-                    self.current_text
-                        .push_str(&String::from_utf8_lossy(e.as_ref()));
-                }
-                Ok(Event::CData(e)) => {
-                    self.current_text
-                        .push_str(&String::from_utf8_lossy(e.as_ref()));
-                }
-                Ok(Event::Eof) => break,
-                Ok(_) => {} // Ignore other events
-                Err(e) => {
-                    return Err(ParseError::Invalid(format!("XML parse error: {}", e)));
-                }
-            }
-            buf.clear();
+    match name {
+        // Document level
+        "article" | "book" | "chapter" | "part" | "appendix" => {
+            Some(Node::new(node::DIV).children(children))
         }
 
-        Ok(())
-    }
-
-    fn flush_text(&mut self) {
-        if self.current_text.is_empty() {
-            return;
+        // Sections
+        "section" | "sect1" | "sect2" | "sect3" | "sect4" | "sect5" | "simplesect" => {
+            Some(Node::new(node::DIV).children(children))
         }
 
-        let text = std::mem::take(&mut self.current_text);
-        if text.trim().is_empty() {
-            return;
-        }
-
-        let text_node = Node::new(node::TEXT).prop(prop::CONTENT, text);
-        if let Some(frame) = self.stack.last_mut() {
-            frame.children.push(text_node);
-        }
-    }
-
-    fn handle_start(&mut self, e: &BytesStart<'_>) -> Result<(), ParseError> {
-        let name = String::from_utf8_lossy(e.local_name().as_ref()).to_string();
-        let mut attrs = FrameAttrs::default();
-
-        for attr in e.attributes().flatten() {
-            let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).to_string();
-            let value = String::from_utf8_lossy(&attr.value).to_string();
-            match key.as_str() {
-                "role" => attrs.role = Some(value),
-                "url" | "xlink:href" => attrs.url = Some(value),
-                "language" => attrs.language = Some(value),
-                _ => {}
-            }
-        }
-
-        // Extract level from section numbers (sect1, sect2, etc.)
-        if let Some(level) = name.strip_prefix("sect")
-            && let Ok(n) = level.parse::<u32>()
-        {
-            attrs.level = Some(n);
-        }
-
-        self.stack.push(StackFrame {
-            element: name,
-            children: Vec::new(),
-            attrs,
-        });
-
-        Ok(())
-    }
-
-    fn handle_empty(&mut self, e: &BytesStart<'_>) -> Result<(), ParseError> {
-        let name = String::from_utf8_lossy(e.local_name().as_ref()).to_string();
-
-        let node = match name.as_str() {
-            "imagedata" | "graphic" => {
-                let mut url = None;
-                for attr in e.attributes().flatten() {
-                    let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).to_string();
-                    if key == "fileref" {
-                        url = Some(String::from_utf8_lossy(&attr.value).to_string());
-                    }
-                }
-                url.map(|url| Node::new(node::IMAGE).prop(prop::URL, url))
-            }
-            "xref" | "link" => {
-                let mut linkend = None;
-                for attr in e.attributes().flatten() {
-                    let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).to_string();
-                    if key == "linkend" || key == "xlink:href" || key == "url" {
-                        linkend = Some(String::from_utf8_lossy(&attr.value).to_string());
-                    }
-                }
-                linkend.map(|url| {
-                    Node::new(node::LINK)
-                        .prop(prop::URL, format!("#{}", url.clone()))
-                        .child(Node::new(node::TEXT).prop(prop::CONTENT, url))
-                })
-            }
-            _ => None,
-        };
-
-        if let Some(n) = node {
-            if let Some(frame) = self.stack.last_mut() {
-                frame.children.push(n);
-            } else {
-                self.result.push(n);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn handle_end(&mut self, e: &quick_xml::events::BytesEnd<'_>) -> Result<(), ParseError> {
-        let name = String::from_utf8_lossy(e.local_name().as_ref()).to_string();
-
-        if let Some(frame) = self.stack.pop() {
-            if frame.element != name {
-                // Mismatched tags, just continue
-                self.stack.push(frame);
-                return Ok(());
-            }
-
-            let node = self.convert_element(&frame);
-
-            if let Some(parent) = self.stack.last_mut() {
-                if let Some(n) = node {
-                    parent.children.push(n);
-                } else {
-                    parent.children.extend(frame.children);
-                }
-            } else if let Some(n) = node {
-                self.result.push(n);
-            } else {
-                self.result.extend(frame.children);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn convert_element(&mut self, frame: &StackFrame) -> Option<Node> {
-        match frame.element.as_str() {
-            // Document level
-            "article" | "book" | "chapter" | "part" | "appendix" => {
-                Some(Node::new(node::DIV).children(frame.children.clone()))
-            }
-
-            // Sections
-            "section" | "sect1" | "sect2" | "sect3" | "sect4" | "sect5" | "simplesect" => {
-                Some(Node::new(node::DIV).children(frame.children.clone()))
-            }
-
-            // Titles - convert to heading
-            "title" => {
-                // Determine heading level from parent
-                let level = self
-                    .stack
-                    .last()
-                    .and_then(|p| match p.element.as_str() {
-                        "article" | "book" => Some(1),
-                        "chapter" | "part" => Some(1),
-                        "sect1" | "section" => p.attrs.level.or(Some(2)),
-                        "sect2" => Some(3),
-                        "sect3" => Some(4),
-                        "sect4" => Some(5),
-                        "sect5" => Some(6),
-                        _ => None,
-                    })
-                    .unwrap_or(2);
-
-                Some(
-                    Node::new(node::HEADING)
-                        .prop(prop::LEVEL, level as i64)
-                        .children(frame.children.clone()),
-                )
-            }
-
-            // Paragraphs
-            "para" | "simpara" => Some(Node::new(node::PARAGRAPH).children(frame.children.clone())),
-
-            // Block quote
-            "blockquote" => Some(Node::new(node::BLOCKQUOTE).children(frame.children.clone())),
-
-            // Lists
-            "itemizedlist" => Some(
-                Node::new(node::LIST)
-                    .prop(prop::ORDERED, false)
-                    .children(frame.children.clone()),
-            ),
-            "orderedlist" => Some(
-                Node::new(node::LIST)
-                    .prop(prop::ORDERED, true)
-                    .children(frame.children.clone()),
-            ),
-            "listitem" => Some(Node::new(node::LIST_ITEM).children(frame.children.clone())),
-
-            // Definition lists
-            "variablelist" => {
-                Some(Node::new(node::DEFINITION_LIST).children(frame.children.clone()))
-            }
-            "varlistentry" => {
-                Some(Node::new("docbook:varlistentry").children(frame.children.clone()))
-            }
-            "term" => Some(Node::new(node::DEFINITION_TERM).children(frame.children.clone())),
-
-            // Code
-            "programlisting" | "screen" | "literallayout" => {
-                let text = extract_text(&frame.children);
-                let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, text);
-                if let Some(lang) = &frame.attrs.language {
-                    node = node.prop(prop::LANGUAGE, lang.clone());
-                }
-                Some(node)
-            }
-            "code" | "literal" | "command" | "filename" | "option" | "computeroutput"
-            | "userinput" => {
-                let text = extract_text(&frame.children);
-                Some(Node::new(node::CODE).prop(prop::CONTENT, text))
-            }
-
-            // Inline formatting
-            "emphasis" => {
-                if frame.attrs.role.as_deref() == Some("strong")
-                    || frame.attrs.role.as_deref() == Some("bold")
-                {
-                    Some(Node::new(node::STRONG).children(frame.children.clone()))
-                } else {
-                    Some(Node::new(node::EMPHASIS).children(frame.children.clone()))
-                }
-            }
-            "subscript" => Some(Node::new(node::SUBSCRIPT).children(frame.children.clone())),
-            "superscript" => Some(Node::new(node::SUPERSCRIPT).children(frame.children.clone())),
-
-            // Links
-            "link" | "ulink" | "xref" => {
-                let mut node = Node::new(node::LINK).children(frame.children.clone());
-                if let Some(url) = &frame.attrs.url {
-                    node = node.prop(prop::URL, url.clone());
-                }
-                Some(node)
-            }
-
-            // Figures and media
-            "figure" | "informalfigure" => {
-                Some(Node::new(node::FIGURE).children(frame.children.clone()))
-            }
-            "mediaobject" | "inlinemediaobject" => {
-                // Just pass through children (imageobject, etc.)
-                None
-            }
-            "imageobject" | "textobject" => None, // Pass through
-            "imagedata" => {
-                // Should be handled in empty, but just in case
-                None
-            }
-            "caption" => Some(
-                Node::new("figcaption")
-                    .prop("html:tag", "figcaption")
-                    .children(frame.children.clone()),
-            ),
-
-            // Tables
-            "table" | "informaltable" => {
-                Some(Node::new(node::TABLE).children(frame.children.clone()))
-            }
-            "tgroup" | "thead" | "tbody" | "tfoot" => None, // Pass through
-            "row" | "tr" => Some(Node::new(node::TABLE_ROW).children(frame.children.clone())),
-            "entry" | "td" => Some(Node::new(node::TABLE_CELL).children(frame.children.clone())),
-            "th" => Some(Node::new(node::TABLE_HEADER).children(frame.children.clone())),
-
-            // Footnotes
-            "footnote" => {
-                // Create a footnote reference and definition
-                Some(Node::new(node::FOOTNOTE_DEF).children(frame.children.clone()))
-            }
-
-            // Admonitions
-            "note" | "tip" | "warning" | "caution" | "important" => Some(
-                Node::new(node::BLOCKQUOTE)
-                    .prop("docbook:type", frame.element.clone())
-                    .children(frame.children.clone()),
-            ),
-
-            // Abstract and other metadata
-            "abstract" => Some(
-                Node::new(node::DIV)
-                    .prop("html:class", "abstract")
-                    .children(frame.children.clone()),
-            ),
-            "info" | "articleinfo" | "bookinfo" => {
-                // Extract metadata from info block
-                self.extract_metadata(&frame.children);
-                None
-            }
-            "author" | "authorgroup" | "date" | "copyright" | "legalnotice" | "pubdate"
-            | "releaseinfo" | "revhistory" | "revision" => {
-                // Metadata elements - handled in extract_metadata
-                None
-            }
-            "personname" | "firstname" | "surname" | "othername" => {
-                // Author name parts - just extract text
-                None
-            }
-
-            // Line break
-            "sbr" => Some(Node::new(node::LINE_BREAK)),
-
-            // Horizontal rule
-            "bridgehead" => Some(
+        // Titles - convert to heading
+        "title" => {
+            let level = match parent {
+                Some("article") | Some("book") | Some("chapter") | Some("part") => 1,
+                Some("sect1") | Some("section") => 2,
+                Some("sect2") => 3,
+                Some("sect3") => 4,
+                Some("sect4") => 5,
+                Some("sect5") => 6,
+                _ => 2,
+            };
+            Some(
                 Node::new(node::HEADING)
-                    .prop(prop::LEVEL, 4i64)
-                    .children(frame.children.clone()),
-            ),
-
-            // Default: pass through children
-            _ => None,
+                    .prop(prop::LEVEL, level as i64)
+                    .children(children),
+            )
         }
-    }
 
-    fn extract_metadata(&mut self, nodes: &[Node]) {
-        // Simple extraction - just look for title text
-        for node in nodes {
-            if node.kind.as_str() == node::HEADING {
-                let title = extract_text(&node.children);
-                if !title.is_empty() {
-                    self.metadata.set("title", title);
-                }
+        // Paragraphs
+        "para" | "simpara" => Some(Node::new(node::PARAGRAPH).children(children)),
+
+        // Block quote
+        "blockquote" => Some(Node::new(node::BLOCKQUOTE).children(children)),
+
+        // Lists
+        "itemizedlist" => Some(
+            Node::new(node::LIST)
+                .prop(prop::ORDERED, false)
+                .children(children),
+        ),
+        "orderedlist" => Some(
+            Node::new(node::LIST)
+                .prop(prop::ORDERED, true)
+                .children(children),
+        ),
+        "listitem" => Some(Node::new(node::LIST_ITEM).children(children)),
+
+        // Definition lists
+        "variablelist" => Some(Node::new(node::DEFINITION_LIST).children(children)),
+        "varlistentry" => Some(Node::new("docbook:varlistentry").children(children)),
+        "term" => Some(Node::new(node::DEFINITION_TERM).children(children)),
+
+        // Code
+        "programlisting" | "screen" | "literallayout" => {
+            let text = extract_text(&children);
+            let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, text);
+            if let Some(lang) = language {
+                node = node.prop(prop::LANGUAGE, lang.to_string());
             }
-            self.extract_metadata(&node.children);
+            Some(node)
+        }
+        "code" | "literal" | "command" | "filename" | "option" | "computeroutput" | "userinput" => {
+            let text = extract_text(&children);
+            Some(Node::new(node::CODE).prop(prop::CONTENT, text))
+        }
+
+        // Inline formatting
+        "emphasis" => {
+            if role == Some("strong") || role == Some("bold") {
+                Some(Node::new(node::STRONG).children(children))
+            } else {
+                Some(Node::new(node::EMPHASIS).children(children))
+            }
+        }
+        "subscript" => Some(Node::new(node::SUBSCRIPT).children(children)),
+        "superscript" => Some(Node::new(node::SUPERSCRIPT).children(children)),
+
+        // Links
+        "link" | "ulink" | "xref" => {
+            let mut node = Node::new(node::LINK).children(children);
+            if let Some(url) = url {
+                node = node.prop(prop::URL, url.to_string());
+            } else if let Some(linkend) = get_attr(attrs, "linkend") {
+                node = node
+                    .prop(prop::URL, format!("#{linkend}"))
+                    .child(Node::new(node::TEXT).prop(prop::CONTENT, linkend.to_string()));
+            }
+            Some(node)
+        }
+
+        // Figures and media
+        "figure" | "informalfigure" => Some(Node::new(node::FIGURE).children(children)),
+        "mediaobject" | "inlinemediaobject" | "imageobject" | "textobject" => None, // Pass through
+        "imagedata" | "graphic" => get_attr(attrs, "fileref")
+            .map(|url| Node::new(node::IMAGE).prop(prop::URL, url.to_string())),
+        "caption" => Some(
+            Node::new("figcaption")
+                .prop("html:tag", "figcaption")
+                .children(children),
+        ),
+
+        // Tables
+        "table" | "informaltable" => Some(Node::new(node::TABLE).children(children)),
+        "tgroup" | "thead" | "tbody" | "tfoot" => None, // Pass through
+        "row" | "tr" => Some(Node::new(node::TABLE_ROW).children(children)),
+        "entry" | "td" => Some(Node::new(node::TABLE_CELL).children(children)),
+        "th" => Some(Node::new(node::TABLE_HEADER).children(children)),
+
+        // Footnotes
+        "footnote" => Some(Node::new(node::FOOTNOTE_DEF).children(children)),
+
+        // Admonitions
+        "note" | "tip" | "warning" | "caution" | "important" => Some(
+            Node::new(node::BLOCKQUOTE)
+                .prop("docbook:type", name)
+                .children(children),
+        ),
+
+        // Abstract and other metadata
+        "abstract" => Some(
+            Node::new(node::DIV)
+                .prop("html:class", "abstract")
+                .children(children),
+        ),
+        // Handled by the caller (`convert_children`) via `extract_metadata`.
+        "info" | "articleinfo" | "bookinfo" => None,
+        "author" | "authorgroup" | "date" | "copyright" | "legalnotice" | "pubdate"
+        | "releaseinfo" | "revhistory" | "revision" => None, // Handled in extract_metadata
+        "personname" | "firstname" | "surname" | "othername" => None, // Just text extraction
+
+        // Line break
+        "sbr" => Some(Node::new(node::LINE_BREAK)),
+
+        // Horizontal rule equivalent
+        "bridgehead" => Some(
+            Node::new(node::HEADING)
+                .prop(prop::LEVEL, 4i64)
+                .children(children),
+        ),
+
+        // Anchors: cross-format equivalent to an empty link target
+        "anchor" => {
+            let mut node = Node::new(node::LINK);
+            if let Some(id) = get_attr(attrs, "id").or_else(|| get_attr(attrs, "xml:id")) {
+                node = node.prop("id", id.to_string());
+            }
+            Some(node)
+        }
+
+        // Default: pass through children (structural/unknown wrapper)
+        _ => None,
+    }
+}
+
+/// Extract `<info>`/`<articleinfo>`/`<bookinfo>` metadata (currently: title).
+fn extract_metadata(nodes: &[DbNode], metadata: &mut Properties) {
+    for node in nodes {
+        if let DbNode::Element { name, children, .. } = node
+            && name == "title"
+        {
+            let title = extract_docbook_text(children);
+            if !title.is_empty() {
+                metadata.set("title", title);
+            }
+        }
+        if let DbNode::Element { children, .. } = node {
+            extract_metadata(children, metadata);
         }
     }
+}
+
+fn extract_docbook_text(nodes: &[DbNode]) -> String {
+    let mut text = String::new();
+    for node in nodes {
+        match node {
+            DbNode::Text { content, .. } | DbNode::Cdata { content, .. } => text.push_str(content),
+            DbNode::Element { children, .. } => text.push_str(&extract_docbook_text(children)),
+            _ => {}
+        }
+    }
+    text
 }
 
 fn extract_text(nodes: &[Node]) -> String {
@@ -507,5 +439,19 @@ mod tests {
         let result = parse(docbook).unwrap();
         let doc = result.value;
         assert!(!doc.content.children.is_empty());
+    }
+
+    #[test]
+    fn test_unresolvable_entity_preserved() {
+        let docbook = r#"<article><para>a &custom; b</para></article>"#;
+        let result = parse(docbook).unwrap();
+        let doc = result.value;
+        let article = &doc.content.children[0];
+        let para = &article.children[0];
+        assert!(
+            para.children
+                .iter()
+                .any(|n| n.kind.as_str() == node::RAW_INLINE)
+        );
     }
 }

@@ -1,6 +1,10 @@
 //! DocBook writer for rescribe.
 //!
-//! Serializes rescribe's document IR to DocBook 5 XML.
+//! Translates rescribe's document IR into `docbook_fmt::DocBookDoc` (the
+//! standalone DocBook/XML AST from the `docbook-fmt` crate) and serializes
+//! it via `docbook_fmt::emit`. All XML writing lives in `docbook-fmt` —
+//! this crate is a thin IR↔AST translator only (per CLAUDE.md's "adapter
+//! layer must never contain parsing or writing logic" rule).
 //!
 //! # Example
 //!
@@ -19,78 +23,72 @@
 //! let xml = String::from_utf8(result.value).unwrap();
 //! ```
 
-use quick_xml::Writer;
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use docbook_fmt::{DocBookDoc, Node as DbNode, XmlDecl};
 use rescribe_core::{ConversionResult, Document, EmitError, Node};
 use rescribe_std::{node, prop};
-use std::io::Cursor;
 
 /// Emit a document to DocBook XML.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let warnings = Vec::new();
-    let mut writer = Writer::new(Cursor::new(Vec::new()));
 
-    // XML declaration
-    writer
-        .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-    // Start article element
-    let mut article = BytesStart::new("article");
-    article.push_attribute(("xmlns", "http://docbook.org/ns/docbook"));
-    article.push_attribute(("version", "5.0"));
-    writer
-        .write_event(Event::Start(article))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-    // Write title from metadata if present
+    let mut root_children = Vec::new();
     if let Some(title) = doc.metadata.get_str("title") {
-        write_element(&mut writer, "title", title)?;
+        root_children.push(db_element("title", vec![], vec![db_text(title)]));
     }
-
-    // Write content
     for child in &doc.content.children {
-        write_node(&mut writer, child)?;
+        root_children.extend(write_node(child));
     }
 
-    // End article
-    writer
-        .write_event(Event::End(BytesEnd::new("article")))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+    let root = DbNode::Element {
+        name: "article".to_string(),
+        attrs: vec![
+            (
+                "xmlns".to_string(),
+                "http://docbook.org/ns/docbook".to_string(),
+            ),
+            ("version".to_string(), "5.0".to_string()),
+        ],
+        children: root_children,
+        span: docbook_fmt::Span::NONE,
+    };
 
-    let result = writer.into_inner().into_inner();
-    Ok(ConversionResult::with_warnings(result, warnings))
+    let doc_ast = DocBookDoc {
+        xml_decl: Some(XmlDecl {
+            version: "1.0".to_string(),
+            encoding: Some("UTF-8".to_string()),
+            standalone: None,
+        }),
+        nodes: vec![root],
+    };
+
+    let bytes = docbook_fmt::emit(&doc_ast);
+    Ok(ConversionResult::with_warnings(bytes, warnings))
 }
 
-fn write_element(
-    writer: &mut Writer<Cursor<Vec<u8>>>,
-    tag: &str,
-    text: &str,
-) -> Result<(), EmitError> {
-    writer
-        .write_event(Event::Start(BytesStart::new(tag)))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-    writer
-        .write_event(Event::Text(BytesText::new(text)))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-    writer
-        .write_event(Event::End(BytesEnd::new(tag)))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-    Ok(())
+fn db_element(name: &str, attrs: Vec<(String, String)>, children: Vec<DbNode>) -> DbNode {
+    DbNode::Element {
+        name: name.to_string(),
+        attrs,
+        children,
+        span: docbook_fmt::Span::NONE,
+    }
 }
 
-fn write_node(writer: &mut Writer<Cursor<Vec<u8>>>, node: &Node) -> Result<(), EmitError> {
+fn db_text(content: impl Into<String>) -> DbNode {
+    DbNode::Text {
+        content: content.into(),
+        span: docbook_fmt::Span::NONE,
+    }
+}
+
+/// Convert one rescribe IR (block-level) node into zero or more DocBook AST
+/// nodes.
+fn write_node(node: &Node) -> Vec<DbNode> {
     match node.kind.as_str() {
-        node::DOCUMENT | node::DIV => {
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-        }
+        node::DOCUMENT | node::DIV => node.children.iter().flat_map(write_node).collect(),
 
         node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u32;
-
-            // Write as section with title
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
             let section_tag = match level {
                 1 => "section",
                 2 => "sect1",
@@ -99,50 +97,34 @@ fn write_node(writer: &mut Writer<Cursor<Vec<u8>>>, node: &Node) -> Result<(), E
                 5 => "sect4",
                 _ => "sect5",
             };
-
-            writer
-                .write_event(Event::Start(BytesStart::new(section_tag)))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            writer
-                .write_event(Event::Start(BytesStart::new("title")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-
-            writer
-                .write_event(Event::End(BytesEnd::new("title")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            writer
-                .write_event(Event::End(BytesEnd::new(section_tag)))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            vec![db_element(
+                section_tag,
+                vec![],
+                vec![db_element(
+                    "title",
+                    vec![],
+                    node.children.iter().flat_map(write_inline).collect(),
+                )],
+            )]
         }
 
-        node::PARAGRAPH => {
-            writer
-                .write_event(Event::Start(BytesStart::new("para")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("para")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::PARAGRAPH => vec![db_element(
+            "para",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
         node::BLOCKQUOTE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("blockquote")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("blockquote")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            let tag = node
+                .props
+                .get_str("docbook:type")
+                .filter(|t| matches!(*t, "note" | "tip" | "warning" | "caution" | "important"))
+                .unwrap_or("blockquote");
+            vec![db_element(
+                tag,
+                vec![],
+                node.children.iter().flat_map(write_node).collect(),
+            )]
         }
 
         node::LIST => {
@@ -152,379 +134,214 @@ fn write_node(writer: &mut Writer<Cursor<Vec<u8>>>, node: &Node) -> Result<(), E
             } else {
                 "itemizedlist"
             };
-
-            writer
-                .write_event(Event::Start(BytesStart::new(tag)))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new(tag)))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            vec![db_element(
+                tag,
+                vec![],
+                node.children.iter().flat_map(write_node).collect(),
+            )]
         }
 
-        node::LIST_ITEM => {
-            writer
-                .write_event(Event::Start(BytesStart::new("listitem")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("listitem")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::LIST_ITEM => vec![db_element(
+            "listitem",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
         node::DEFINITION_LIST => {
-            writer
-                .write_event(Event::Start(BytesStart::new("variablelist")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            // Process children in pairs (term, desc)
+            let mut entries = Vec::new();
             let mut i = 0;
             while i < node.children.len() {
-                writer
-                    .write_event(Event::Start(BytesStart::new("varlistentry")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-
-                if i < node.children.len() {
-                    write_node(writer, &node.children[i])?;
-                }
+                let mut entry_children = write_node(&node.children[i]);
                 if i + 1 < node.children.len() {
-                    write_node(writer, &node.children[i + 1])?;
+                    entry_children.extend(write_node(&node.children[i + 1]));
                 }
-
-                writer
-                    .write_event(Event::End(BytesEnd::new("varlistentry")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-
+                entries.push(db_element("varlistentry", vec![], entry_children));
                 i += 2;
             }
-
-            writer
-                .write_event(Event::End(BytesEnd::new("variablelist")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            vec![db_element("variablelist", vec![], entries)]
         }
 
-        node::DEFINITION_TERM => {
-            writer
-                .write_event(Event::Start(BytesStart::new("term")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("term")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::DEFINITION_TERM => vec![db_element(
+            "term",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::DEFINITION_DESC => {
-            writer
-                .write_event(Event::Start(BytesStart::new("listitem")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("listitem")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::DEFINITION_DESC => vec![db_element(
+            "listitem",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
         node::CODE_BLOCK => {
-            let mut start = BytesStart::new("programlisting");
+            let mut attrs = Vec::new();
             if let Some(lang) = node.props.get_str(prop::LANGUAGE) {
-                start.push_attribute(("language", lang));
+                attrs.push(("language".to_string(), lang.to_string()));
             }
-            writer
-                .write_event(Event::Start(start))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                writer
-                    .write_event(Event::Text(BytesText::new(content)))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-            }
-
-            writer
-                .write_event(Event::End(BytesEnd::new("programlisting")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("");
+            vec![db_element("programlisting", attrs, vec![db_text(content)])]
         }
 
-        node::TABLE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("informaltable")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            writer
-                .write_event(Event::Start(BytesStart::new("tgroup")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            writer
-                .write_event(Event::Start(BytesStart::new("tbody")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        node::TABLE => vec![db_element(
+            "informaltable",
+            vec![],
+            vec![db_element(
+                "tgroup",
+                vec![],
+                vec![db_element(
+                    "tbody",
+                    vec![],
+                    node.children.iter().flat_map(write_node).collect(),
+                )],
+            )],
+        )],
 
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
+        node::TABLE_ROW => vec![db_element(
+            "row",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
-            writer
-                .write_event(Event::End(BytesEnd::new("tbody")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            writer
-                .write_event(Event::End(BytesEnd::new("tgroup")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            writer
-                .write_event(Event::End(BytesEnd::new("informaltable")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::TABLE_CELL | node::TABLE_HEADER => vec![db_element(
+            "entry",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::TABLE_ROW => {
-            writer
-                .write_event(Event::Start(BytesStart::new("row")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("row")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::FIGURE => vec![db_element(
+            "figure",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
-        node::TABLE_CELL | node::TABLE_HEADER => {
-            writer
-                .write_event(Event::Start(BytesStart::new("entry")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("entry")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::IMAGE => vec![db_element(
+            "mediaobject",
+            vec![],
+            vec![db_element(
+                "imageobject",
+                vec![],
+                vec![db_element(
+                    "imagedata",
+                    node.props
+                        .get_str(prop::URL)
+                        .map(|url| vec![("fileref".to_string(), url.to_string())])
+                        .unwrap_or_default(),
+                    vec![],
+                )],
+            )],
+        )],
 
-        node::FIGURE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("figure")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("figure")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::HORIZONTAL_RULE => Vec::new(), // DocBook doesn't have HR
 
-        node::IMAGE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("mediaobject")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            writer
-                .write_event(Event::Start(BytesStart::new("imageobject")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        node::FOOTNOTE_DEF => vec![db_element(
+            "footnote",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
-            let mut imagedata = BytesStart::new("imagedata");
-            if let Some(url) = node.props.get_str(prop::URL) {
-                imagedata.push_attribute(("fileref", url));
-            }
-            writer
-                .write_event(Event::Empty(imagedata))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            writer
-                .write_event(Event::End(BytesEnd::new("imageobject")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            writer
-                .write_event(Event::End(BytesEnd::new("mediaobject")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
-
-        node::HORIZONTAL_RULE => {
-            // DocBook doesn't have HR, skip
-        }
-
-        node::FOOTNOTE_DEF => {
-            writer
-                .write_event(Event::Start(BytesStart::new("footnote")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("footnote")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
-
-        // Inline nodes that appear at block level
+        // Inline nodes that appear at block level: wrap in a <para>.
         node::TEXT | node::EMPHASIS | node::STRONG | node::CODE | node::LINK => {
-            // Wrap in para
-            writer
-                .write_event(Event::Start(BytesStart::new("para")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            write_inline(writer, node)?;
-            writer
-                .write_event(Event::End(BytesEnd::new("para")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            vec![db_element("para", vec![], write_inline(node))]
         }
 
         _ => {
             // Unknown block - recurse into children
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
+            node.children.iter().flat_map(write_node).collect()
         }
     }
-
-    Ok(())
 }
 
-fn write_inline(writer: &mut Writer<Cursor<Vec<u8>>>, node: &Node) -> Result<(), EmitError> {
+/// Convert one rescribe IR (inline-level) node into zero or more DocBook AST
+/// nodes.
+fn write_inline(node: &Node) -> Vec<DbNode> {
     match node.kind.as_str() {
-        node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                writer
-                    .write_event(Event::Text(BytesText::new(content)))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-            }
-        }
+        node::TEXT => match node.props.get_str(prop::CONTENT) {
+            Some(content) => vec![db_text(content)],
+            None => Vec::new(),
+        },
 
-        node::EMPHASIS => {
-            writer
-                .write_event(Event::Start(BytesStart::new("emphasis")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("emphasis")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::EMPHASIS => vec![db_element(
+            "emphasis",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::STRONG => {
-            let mut emphasis = BytesStart::new("emphasis");
-            emphasis.push_attribute(("role", "strong"));
-            writer
-                .write_event(Event::Start(emphasis))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("emphasis")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::STRONG => vec![db_element(
+            "emphasis",
+            vec![("role".to_string(), "strong".to_string())],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
         node::CODE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("code")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                writer
-                    .write_event(Event::Text(BytesText::new(content)))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-            }
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("code")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            let mut children: Vec<DbNode> = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(db_text)
+                .into_iter()
+                .collect();
+            children.extend(node.children.iter().flat_map(write_inline));
+            vec![db_element("code", vec![], children)]
         }
 
         node::LINK => {
-            let mut link = BytesStart::new("link");
+            let mut attrs = Vec::new();
             if let Some(url) = node.props.get_str(prop::URL) {
-                link.push_attribute(("xlink:href", url));
+                attrs.push(("xlink:href".to_string(), url.to_string()));
             }
-            writer
-                .write_event(Event::Start(link))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("link")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            vec![db_element(
+                "link",
+                attrs,
+                node.children.iter().flat_map(write_inline).collect(),
+            )]
         }
 
-        node::SUBSCRIPT => {
-            writer
-                .write_event(Event::Start(BytesStart::new("subscript")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("subscript")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::SUBSCRIPT => vec![db_element(
+            "subscript",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::SUPERSCRIPT => {
-            writer
-                .write_event(Event::Start(BytesStart::new("superscript")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("superscript")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::SUPERSCRIPT => vec![db_element(
+            "superscript",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::LINE_BREAK => {
-            writer
-                .write_event(Event::Empty(BytesStart::new("sbr")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::LINE_BREAK => vec![db_element("sbr", vec![], vec![])],
 
-        node::SOFT_BREAK => {
-            writer
-                .write_event(Event::Text(BytesText::new(" ")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::SOFT_BREAK => vec![db_text(" ")],
 
-        node::IMAGE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("inlinemediaobject")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        node::IMAGE => vec![db_element(
+            "inlinemediaobject",
+            vec![],
+            vec![db_element(
+                "imageobject",
+                vec![],
+                vec![db_element(
+                    "imagedata",
+                    node.props
+                        .get_str(prop::URL)
+                        .map(|url| vec![("fileref".to_string(), url.to_string())])
+                        .unwrap_or_default(),
+                    vec![],
+                )],
+            )],
+        )],
 
-            writer
-                .write_event(Event::Start(BytesStart::new("imageobject")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            let mut img = BytesStart::new("imagedata");
-            if let Some(url) = node.props.get_str(prop::URL) {
-                img.push_attribute(("fileref", url));
-            }
-            writer
-                .write_event(Event::Empty(img))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            writer
-                .write_event(Event::End(BytesEnd::new("imageobject")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            writer
-                .write_event(Event::End(BytesEnd::new("inlinemediaobject")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        // A raw entity reference preserved by the reader: re-emit verbatim.
+        node::RAW_INLINE => match node.props.get_str("docbook:entity") {
+            Some(name) => vec![DbNode::EntityRef {
+                name: name.to_string(),
+                span: docbook_fmt::Span::NONE,
+            }],
+            None => node.children.iter().flat_map(write_inline).collect(),
+        },
 
         _ => {
             // Unknown inline - recurse
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
+            node.children.iter().flat_map(write_inline).collect()
         }
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -544,7 +361,9 @@ mod tests {
         let result = emit(&doc).unwrap();
         let xml = String::from_utf8(result.value).unwrap();
         assert!(xml.contains("<article"));
-        assert!(xml.contains("</article>"));
+        // An empty root element is emitted self-closing (`<article .../>`) —
+        // valid XML equivalent to `<article ...></article>`.
+        assert!(xml.contains("/>"));
     }
 
     #[test]
@@ -579,5 +398,15 @@ mod tests {
         let result = emit(&doc).unwrap();
         let xml = String::from_utf8(result.value).unwrap();
         assert!(xml.contains("<title>Test Document</title>"));
+    }
+
+    #[test]
+    fn test_roundtrip_through_reader() {
+        let docbook = r#"<?xml version="1.0"?>
+<article><title>T</title><para>Hello <emphasis>world</emphasis></para></article>"#;
+        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(xml.contains("<para>Hello <emphasis>world</emphasis></para>"));
     }
 }

@@ -431,8 +431,50 @@ The violation is format-parsing deps (quick-xml, zip, etc.) called from producti
   binary and `#[cfg(test)]`. Production parsing path is clean. Acceptable.
 - **`rescribe-read-fb2`**: CLEAN — uses `fb2-fmt` (fixed 2026-04-10).
 - **`rescribe-write-fb2`**: CLEAN — uses `fb2-fmt` (fixed 2026-04-10).
+- **`rescribe-read-docbook`**: CLEAN — uses `docbook-fmt` (fixed 2026-07-26).
+- **`rescribe-write-docbook`**: CLEAN — uses `docbook-fmt` (fixed 2026-07-26).
 
 Fix each when doing that format's vertical. Do NOT fix all at once (horizontal sweep).
+
+### `docbook-fmt` crate created (2026-07-26)
+
+Standalone DocBook/generic-XML AST + parser + emitter (`crates/formats/docbook-fmt`),
+wrapping `quick-xml` — no rescribe dependency. `rescribe-read-docbook` and
+`rescribe-write-docbook` rewired to thin AST↔IR translators over `docbook_fmt::Node`
+(no `quick-xml` left in either adapter's production code).
+
+- [x] AST: `DocBookDoc { xml_decl, nodes: Vec<Node> }`; `Node::{Element, Text, Cdata,
+  Comment, ProcessingInstruction, Doctype, EntityRef}`, `Span`, `Diagnostic`, `strip_spans()`
+- [x] `parse(&[u8]) -> (DocBookDoc, Vec<Diagnostic>)` — direct recursive-descent build
+  over `quick_xml::Reader`, never panics (malformed input recovered best-effort + diagnostics)
+- [x] `events(&[u8]) -> EventIter` — **true SAX streaming**, not derived from `parse()`.
+  Unlike `html-fmt` (which must build the full tree because HTML5 tree construction can
+  rearrange nodes), XML is well-nested by construction, so `EventIter` wraps
+  `quick_xml::Reader` directly and is genuinely O(largest token) memory.
+- [x] `StreamingParser<H: Handler>` (`batch.rs`) — genuinely incremental: dispatches every
+  event to the handler as soon as it's provably complete and drops the consumed prefix
+  from its buffer, so memory is bounded by the largest in-progress token, not the whole
+  document. The one non-obvious case: quick-xml can't distinguish "text run ended because
+  `<` was found" from "text run ended because the buffer ran out" — a `Text` event is only
+  dispatched once it's terminated by an actual `<` boundary or `finish()` confirms EOF.
+  Verified with chunk-boundary-splitting tests (text split mid-word, tag split mid-name).
+- [x] Entity handling: quick-xml 0.39 tokenizes `&name;`/`&#N;` as its own `GeneralRef`
+  event rather than folding it into `Text`. The 5 predefined XML entities and numeric
+  character refs are resolved and merged into the surrounding text; any other named
+  (DTD-defined) entity is preserved verbatim as `Node::EntityRef` / IR `raw_inline` with
+  `docbook:entity` — never silently dropped, per CLAUDE.md's raw-preservation rule.
+- [x] `emit(&DocBookDoc) -> Vec<u8>` builder writer + `Writer<W: Write>` streaming writer,
+  both via `quick_xml::Writer` for correct escaping
+- [x] Full construct parity with the pre-split adapter logic preserved (all node kinds the
+  old hand-rolled reader/writer handled still map the same way); `xlink:href` link
+  attribute matching now actually works (previously dead code — the old reader stripped
+  namespace prefixes before matching the literal string `"xlink:href"`, so it could never
+  match; `docbook-fmt` keeps the raw prefixed attribute name)
+- [x] `cargo clippy --all-targets --all-features -p docbook-fmt -p rescribe-read-docbook
+  -p rescribe-write-docbook -- -D warnings` and full test suite (incl. fixture suite) clean
+- [ ] Fuzz targets, DTD-aware entity resolution, and closing the remaining
+  `fixtures/docbook/COVERAGE.md` gaps are follow-up work — out of scope for this pass per
+  CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
 
 ### DEBT: Streaming architecture — COMPLETED 2026-03-28
 
