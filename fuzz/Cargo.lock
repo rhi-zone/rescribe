@@ -354,6 +354,13 @@ name = "djot-fmt"
 version = "0.1.0"
 
 [[package]]
+name = "docbook-fmt"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+]
+
+[[package]]
 name = "dokuwiki"
 version = "0.1.0"
 
@@ -571,6 +578,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "html-fmt"
+version = "0.1.0"
+dependencies = [
+ "html5ever",
+ "markup5ever_rcdom",
+]
+
+[[package]]
 name = "html5ever"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -637,6 +652,13 @@ name = "itoa"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
+
+[[package]]
+name = "jats-fmt"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+]
 
 [[package]]
 name = "jira-fmt"
@@ -1318,6 +1340,8 @@ dependencies = [
  "commonmark-fmt",
  "csv-fmt",
  "djot-fmt",
+ "docbook-fmt",
+ "jats-fmt",
  "libfuzzer-sys",
  "mediawiki-fmt",
  "odf-fmt",
@@ -1414,6 +1438,7 @@ dependencies = [
  "rescribe-write-zimwiki",
  "ris",
  "rtf-fmt",
+ "tei-fmt",
  "texinfo",
  "textile-fmt",
  "tsv-fmt",
@@ -1505,7 +1530,7 @@ dependencies = [
 name = "rescribe-read-docbook"
 version = "0.1.0"
 dependencies = [
- "quick-xml",
+ "docbook-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1589,8 +1614,7 @@ dependencies = [
 name = "rescribe-read-html"
 version = "0.1.0"
 dependencies = [
- "html5ever",
- "markup5ever_rcdom",
+ "html-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1611,7 +1635,7 @@ dependencies = [
 name = "rescribe-read-jats"
 version = "0.1.0"
 dependencies = [
- "quick-xml",
+ "jats-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -1798,9 +1822,9 @@ dependencies = [
 name = "rescribe-read-tei"
 version = "0.1.0"
 dependencies = [
- "quick-xml",
  "rescribe-core",
  "rescribe-std",
+ "tei-fmt",
 ]
 
 [[package]]
@@ -2009,6 +2033,7 @@ dependencies = [
 name = "rescribe-write-html"
 version = "0.1.0"
 dependencies = [
+ "html-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -2472,6 +2497,13 @@ dependencies = [
 [[package]]
 name = "t2t"
 version = "0.1.0"
+
+[[package]]
+name = "tei-fmt"
+version = "0.1.0"
+dependencies = [
+ "quick-xml",
+]
 
 [[package]]
 name = "tempfile"

@@ -316,6 +316,15 @@ path = "../crates/writers/rescribe-write-slidy"
 [dependencies.odf-fmt]
 path = "../crates/formats/odf-fmt"
 
+[dependencies.docbook-fmt]
+path = "../crates/formats/docbook-fmt"
+
+[dependencies.jats-fmt]
+path = "../crates/formats/jats-fmt"
+
+[dependencies.tei-fmt]
+path = "../crates/formats/tei-fmt"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -1035,6 +1044,48 @@ bench = false
 [[bin]]
 name = "fuzz_odf_fmt_roundtrip"
 path = "fuzz_targets/odf_fmt_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_docbook_fmt_reader"
+path = "fuzz_targets/docbook_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_docbook_fmt_roundtrip"
+path = "fuzz_targets/docbook_fmt_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_jats_fmt_reader"
+path = "fuzz_targets/jats_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_jats_fmt_roundtrip"
+path = "fuzz_targets/jats_fmt_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_tei_fmt_reader"
+path = "fuzz_targets/tei_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_tei_fmt_roundtrip"
+path = "fuzz_targets/tei_fmt_roundtrip.rs"
 test = false
 doc = false
 bench = false

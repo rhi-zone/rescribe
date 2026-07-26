@@ -476,7 +476,14 @@ wrapping `quick-xml` — no rescribe dependency. `rescribe-read-docbook` and
   match; `docbook-fmt` keeps the raw prefixed attribute name)
 - [x] `cargo clippy --all-targets --all-features -p docbook-fmt -p rescribe-read-docbook
   -p rescribe-write-docbook -- -D warnings` and full test suite (incl. fixture suite) clean
-- [ ] Fuzz targets, DTD-aware entity resolution, and closing the remaining
+- [x] Fuzz targets added (2026-07-26): `fuzz_docbook_fmt_reader` (no-panic gate on
+  `parse()`/`events()`, 1.69M runs clean in initial 60s validation) and
+  `fuzz_docbook_fmt_roundtrip` (arbitrary `DocBookDoc` → `emit()` → `parse()` →
+  `strip_spans()` equality, per CLAUDE.md's arbitrary-AST-first direction; 573K runs
+  clean). Only a fuzz-harness bug found (duplicate attribute names on one element —
+  invalid XML, fixed by suffixing generated names with their index), no library bugs.
+  Initial validation only, not an exhaustive campaign — see `docs/format-audit.md`.
+- [ ] DTD-aware entity resolution and closing the remaining
   `fixtures/docbook/COVERAGE.md` gaps are follow-up work — out of scope for this pass per
   CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
 
@@ -513,7 +520,12 @@ and `rescribe-write-jats` rewired to thin AST↔IR translators over `jats_fmt::N
   it for the self-closing case
 - [x] `cargo clippy --all-targets --all-features -p jats-fmt -p rescribe-read-jats
   -p rescribe-write-jats -- -D warnings` and full test suite (incl. fixture suite) clean
-- [ ] Fuzz targets, DTD-aware entity resolution, and closing the remaining
+- [x] Fuzz targets added (2026-07-26): `fuzz_jats_fmt_reader` (no-panic gate on
+  `parse()`/`events()`, 1.61M runs clean in initial 60s validation) and
+  `fuzz_jats_fmt_roundtrip` (arbitrary `JatsDoc` → `emit()` → `parse()` →
+  `strip_spans()` equality; 553K runs clean). No library bugs found. Initial
+  validation only, not an exhaustive campaign — see `docs/format-audit.md`.
+- [ ] DTD-aware entity resolution and closing the remaining
   `fixtures/jats/COVERAGE.md` gaps are follow-up work — out of scope for this pass per
   CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
 
@@ -559,7 +571,12 @@ code).
   `Minor` fidelity warning instead of vanishing silently.
 - [x] `cargo clippy --all-targets --all-features -p tei-fmt -p rescribe-read-tei
   -p rescribe-write-tei -- -D warnings` and full test suite (incl. fixture suite) clean
-- [ ] Fuzz targets, DTD-aware entity resolution, and closing the remaining
+- [x] Fuzz targets added (2026-07-26): `fuzz_tei_fmt_reader` (no-panic gate on
+  `parse()`/`events()`, 1.59M runs clean in initial 60s validation) and
+  `fuzz_tei_fmt_roundtrip` (arbitrary `TeiDoc` → `emit()` → `parse()` →
+  `strip_spans()` equality; 527K runs clean). No library bugs found. Initial
+  validation only, not an exhaustive campaign — see `docs/format-audit.md`.
+- [ ] DTD-aware entity resolution and closing the remaining
   `fixtures/tei/COVERAGE.md` gaps (31/117 items checked) are follow-up work — out of
   scope for this pass per CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
 
