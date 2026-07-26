@@ -1,673 +1,388 @@
 //! JATS XML writer for rescribe.
 //!
-//! Serializes rescribe's document IR to JATS (Journal Article Tag Suite) XML.
+//! Translates rescribe's document IR into `jats_fmt::JatsDoc` (the
+//! standalone JATS/XML AST from the `jats-fmt` crate) and serializes it via
+//! `jats_fmt::emit`. All XML writing lives in `jats-fmt` — this crate is a
+//! thin IR↔AST translator only (per CLAUDE.md's "adapter layer must never
+//! contain parsing or writing logic" rule).
+//!
+//! # Example
+//!
+//! ```
+//! use rescribe_write_jats::emit;
+//! use rescribe_core::{Document, Node, Properties};
+//!
+//! let doc = Document {
+//!     content: Node::new("document"),
+//!     resources: Default::default(),
+//!     metadata: Properties::new(),
+//!     source: None,
+//! };
+//!
+//! let result = emit(&doc).unwrap();
+//! let xml = String::from_utf8(result.value).unwrap();
+//! ```
 
-use quick_xml::Writer;
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use jats_fmt::{JatsDoc, Node as JNode, XmlDecl};
 use rescribe_core::{ConversionResult, Document, EmitError, Node};
 use rescribe_std::{node, prop};
-use std::io::Cursor;
 
 /// Emit a document to JATS XML.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let warnings = Vec::new();
-    let mut writer = Writer::new(Cursor::new(Vec::new()));
 
-    // XML declaration
-    writer
-        .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+    let mut root_children = Vec::new();
 
-    // Start article element
-    let mut article = BytesStart::new("article");
-    article.push_attribute(("xmlns:xlink", "http://www.w3.org/1999/xlink"));
-    article.push_attribute(("article-type", "research-article"));
-    writer
-        .write_event(Event::Start(article))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-    // Write front matter if we have metadata
-    let has_title = doc.metadata.get_str("title").is_some();
-    if has_title {
-        writer
-            .write_event(Event::Start(BytesStart::new("front")))
-            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        writer
-            .write_event(Event::Start(BytesStart::new("article-meta")))
-            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-        if let Some(title) = doc.metadata.get_str("title") {
-            writer
-                .write_event(Event::Start(BytesStart::new("title-group")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            write_element(&mut writer, "article-title", title)?;
-            writer
-                .write_event(Event::End(BytesEnd::new("title-group")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
-
-        writer
-            .write_event(Event::End(BytesEnd::new("article-meta")))
-            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        writer
-            .write_event(Event::End(BytesEnd::new("front")))
-            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+    if let Some(title) = doc.metadata.get_str("title") {
+        root_children.push(jats_element(
+            "front",
+            vec![],
+            vec![jats_element(
+                "article-meta",
+                vec![],
+                vec![jats_element(
+                    "title-group",
+                    vec![],
+                    vec![jats_element(
+                        "article-title",
+                        vec![],
+                        vec![jats_text(title)],
+                    )],
+                )],
+            )],
+        ));
     }
 
-    // Write body
-    writer
-        .write_event(Event::Start(BytesStart::new("body")))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
+    let mut body_children = Vec::new();
     for child in &doc.content.children {
-        write_node(&mut writer, child)?;
+        body_children.extend(write_node(child));
     }
+    root_children.push(jats_element("body", vec![], body_children));
 
-    writer
-        .write_event(Event::End(BytesEnd::new("body")))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+    let root = JNode::Element {
+        name: "article".to_string(),
+        attrs: vec![
+            (
+                "xmlns:xlink".to_string(),
+                "http://www.w3.org/1999/xlink".to_string(),
+            ),
+            ("article-type".to_string(), "research-article".to_string()),
+        ],
+        children: root_children,
+        span: jats_fmt::Span::NONE,
+    };
 
-    // End article
-    writer
-        .write_event(Event::End(BytesEnd::new("article")))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+    let doc_ast = JatsDoc {
+        xml_decl: Some(XmlDecl {
+            version: "1.0".to_string(),
+            encoding: Some("UTF-8".to_string()),
+            standalone: None,
+        }),
+        nodes: vec![root],
+    };
 
-    let result = writer.into_inner().into_inner();
-    Ok(ConversionResult::with_warnings(result, warnings))
+    let bytes = jats_fmt::emit(&doc_ast);
+    Ok(ConversionResult::with_warnings(bytes, warnings))
 }
 
-fn write_element(
-    writer: &mut Writer<Cursor<Vec<u8>>>,
-    tag: &str,
-    text: &str,
-) -> Result<(), EmitError> {
-    writer
-        .write_event(Event::Start(BytesStart::new(tag)))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-    writer
-        .write_event(Event::Text(BytesText::new(text)))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-    writer
-        .write_event(Event::End(BytesEnd::new(tag)))
-        .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-    Ok(())
+fn jats_element(name: &str, attrs: Vec<(String, String)>, children: Vec<JNode>) -> JNode {
+    JNode::Element {
+        name: name.to_string(),
+        attrs,
+        children,
+        span: jats_fmt::Span::NONE,
+    }
 }
 
-fn write_node(writer: &mut Writer<Cursor<Vec<u8>>>, node: &Node) -> Result<(), EmitError> {
+fn jats_text(content: impl Into<String>) -> JNode {
+    JNode::Text {
+        content: content.into(),
+        span: jats_fmt::Span::NONE,
+    }
+}
+
+/// Convert one rescribe IR (block-level) node into zero or more JATS AST
+/// nodes.
+fn write_node(node: &Node) -> Vec<JNode> {
     match node.kind.as_str() {
-        node::DOCUMENT | node::DIV => {
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-        }
+        node::DOCUMENT | node::DIV => node.children.iter().flat_map(write_node).collect(),
 
-        node::HEADING => {
-            let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
+        node::HEADING => vec![jats_element(
+            "sec",
+            vec![],
+            vec![jats_element(
+                "title",
+                vec![],
+                node.children.iter().flat_map(write_inline).collect(),
+            )],
+        )],
 
-            // Level 1 headings become sections, others become sec with title
-            if level == 1 {
-                writer
-                    .write_event(Event::Start(BytesStart::new("sec")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                writer
-                    .write_event(Event::Start(BytesStart::new("title")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                for child in &node.children {
-                    write_inline(writer, child)?;
-                }
-                writer
-                    .write_event(Event::End(BytesEnd::new("title")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                writer
-                    .write_event(Event::End(BytesEnd::new("sec")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-            } else {
-                writer
-                    .write_event(Event::Start(BytesStart::new("sec")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                writer
-                    .write_event(Event::Start(BytesStart::new("title")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                for child in &node.children {
-                    write_inline(writer, child)?;
-                }
-                writer
-                    .write_event(Event::End(BytesEnd::new("title")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                writer
-                    .write_event(Event::End(BytesEnd::new("sec")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-            }
-        }
+        node::PARAGRAPH => vec![jats_element(
+            "p",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::PARAGRAPH => {
-            writer
-                .write_event(Event::Start(BytesStart::new("p")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("p")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
-
-        node::BLOCKQUOTE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("disp-quote")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("disp-quote")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::BLOCKQUOTE => vec![jats_element(
+            "disp-quote",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let mut list = BytesStart::new("list");
-            if ordered {
-                list.push_attribute(("list-type", "order"));
-            } else {
-                list.push_attribute(("list-type", "bullet"));
-            }
-
-            writer
-                .write_event(Event::Start(list))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("list")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            let list_type = if ordered { "order" } else { "bullet" };
+            vec![jats_element(
+                "list",
+                vec![("list-type".to_string(), list_type.to_string())],
+                node.children.iter().flat_map(write_node).collect(),
+            )]
         }
 
-        node::LIST_ITEM => {
-            writer
-                .write_event(Event::Start(BytesStart::new("list-item")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("list-item")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::LIST_ITEM => vec![jats_element(
+            "list-item",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
         node::DEFINITION_LIST => {
-            writer
-                .write_event(Event::Start(BytesStart::new("def-list")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            // Process children in pairs (term, desc)
+            let mut entries = Vec::new();
             let mut i = 0;
             while i < node.children.len() {
-                writer
-                    .write_event(Event::Start(BytesStart::new("def-item")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-
-                if i < node.children.len() {
-                    write_node(writer, &node.children[i])?;
-                }
+                let mut entry_children = write_node(&node.children[i]);
                 if i + 1 < node.children.len() {
-                    write_node(writer, &node.children[i + 1])?;
+                    entry_children.extend(write_node(&node.children[i + 1]));
                 }
-
-                writer
-                    .write_event(Event::End(BytesEnd::new("def-item")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-
+                entries.push(jats_element("def-item", vec![], entry_children));
                 i += 2;
             }
-
-            writer
-                .write_event(Event::End(BytesEnd::new("def-list")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            vec![jats_element("def-list", vec![], entries)]
         }
 
-        node::DEFINITION_TERM => {
-            writer
-                .write_event(Event::Start(BytesStart::new("term")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("term")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::DEFINITION_TERM => vec![jats_element(
+            "term",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::DEFINITION_DESC => {
-            writer
-                .write_event(Event::Start(BytesStart::new("def")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("def")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::DEFINITION_DESC => vec![jats_element(
+            "def",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
         node::CODE_BLOCK => {
-            let mut code = BytesStart::new("code");
+            let mut attrs = Vec::new();
             if let Some(lang) = node.props.get_str(prop::LANGUAGE) {
-                code.push_attribute(("language", lang));
+                attrs.push(("content-type".to_string(), lang.to_string()));
             }
-            writer
-                .write_event(Event::Start(code))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                writer
-                    .write_event(Event::Text(BytesText::new(content)))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-            }
-
-            writer
-                .write_event(Event::End(BytesEnd::new("code")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("");
+            vec![jats_element("code", attrs, vec![jats_text(content)])]
         }
 
         node::TABLE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("table-wrap")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            writer
-                .write_event(Event::Start(BytesStart::new("table")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-
-            // Check if we have thead/tbody structure
             let has_structure = node.children.iter().any(|c| {
                 c.kind.as_str() == node::TABLE_HEAD || c.kind.as_str() == node::TABLE_BODY
             });
-
-            if has_structure {
-                for child in &node.children {
-                    write_node(writer, child)?;
-                }
+            let table_children: Vec<JNode> = if has_structure {
+                node.children.iter().flat_map(write_node).collect()
             } else {
-                // Wrap in tbody
-                writer
-                    .write_event(Event::Start(BytesStart::new("tbody")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                for child in &node.children {
-                    write_node(writer, child)?;
-                }
-                writer
-                    .write_event(Event::End(BytesEnd::new("tbody")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-            }
-
-            writer
-                .write_event(Event::End(BytesEnd::new("table")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            writer
-                .write_event(Event::End(BytesEnd::new("table-wrap")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+                vec![jats_element(
+                    "tbody",
+                    vec![],
+                    node.children.iter().flat_map(write_node).collect(),
+                )]
+            };
+            vec![jats_element(
+                "table-wrap",
+                vec![],
+                vec![jats_element("table", vec![], table_children)],
+            )]
         }
 
-        node::TABLE_HEAD => {
-            writer
-                .write_event(Event::Start(BytesStart::new("thead")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("thead")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::TABLE_HEAD => vec![jats_element(
+            "thead",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
-        node::TABLE_BODY => {
-            writer
-                .write_event(Event::Start(BytesStart::new("tbody")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("tbody")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::TABLE_BODY => vec![jats_element(
+            "tbody",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
-        node::TABLE_ROW => {
-            writer
-                .write_event(Event::Start(BytesStart::new("tr")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("tr")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::TABLE_ROW => vec![jats_element(
+            "tr",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
-        node::TABLE_CELL => {
-            writer
-                .write_event(Event::Start(BytesStart::new("td")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("td")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::TABLE_CELL => vec![jats_element(
+            "td",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::TABLE_HEADER => {
-            writer
-                .write_event(Event::Start(BytesStart::new("th")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("th")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::TABLE_HEADER => vec![jats_element(
+            "th",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::FIGURE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("fig")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("fig")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::FIGURE => vec![jats_element(
+            "fig",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
-        node::IMAGE => {
-            let mut graphic = BytesStart::new("graphic");
-            if let Some(url) = node.props.get_str(prop::URL) {
-                graphic.push_attribute(("xlink:href", url));
-            }
-            writer
-                .write_event(Event::Empty(graphic))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::IMAGE => vec![jats_element(
+            "graphic",
+            node.props
+                .get_str(prop::URL)
+                .map(|url| vec![("xlink:href".to_string(), url.to_string())])
+                .unwrap_or_default(),
+            vec![],
+        )],
 
-        node::HORIZONTAL_RULE => {
-            // JATS doesn't have HR, skip
-        }
+        node::HORIZONTAL_RULE => Vec::new(), // JATS doesn't have HR
 
-        node::FOOTNOTE_DEF => {
-            writer
-                .write_event(Event::Start(BytesStart::new("fn")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("fn")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::FOOTNOTE_DEF => vec![jats_element(
+            "fn",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
 
         "math_display" => {
-            writer
-                .write_event(Event::Start(BytesStart::new("disp-formula")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            let mut formula_children = Vec::new();
             if let Some(source) = node.props.get_str("math:source") {
-                writer
-                    .write_event(Event::Start(BytesStart::new("tex-math")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                writer
-                    .write_event(Event::Text(BytesText::new(source)))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                writer
-                    .write_event(Event::End(BytesEnd::new("tex-math")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
+                formula_children.push(jats_element("tex-math", vec![], vec![jats_text(source)]));
             }
-            writer
-                .write_event(Event::End(BytesEnd::new("disp-formula")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            vec![jats_element("disp-formula", vec![], formula_children)]
         }
 
-        // Inline nodes that appear at block level
+        // Inline nodes that appear at block level: wrap in a <p>.
         node::TEXT | node::EMPHASIS | node::STRONG | node::CODE | node::LINK => {
-            writer
-                .write_event(Event::Start(BytesStart::new("p")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            write_inline(writer, node)?;
-            writer
-                .write_event(Event::End(BytesEnd::new("p")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            vec![jats_element("p", vec![], write_inline(node))]
         }
 
         _ => {
-            for child in &node.children {
-                write_node(writer, child)?;
-            }
+            // Unknown block - recurse into children
+            node.children.iter().flat_map(write_node).collect()
         }
     }
-
-    Ok(())
 }
 
-fn write_inline(writer: &mut Writer<Cursor<Vec<u8>>>, node: &Node) -> Result<(), EmitError> {
+/// Convert one rescribe IR (inline-level) node into zero or more JATS AST
+/// nodes.
+fn write_inline(node: &Node) -> Vec<JNode> {
     match node.kind.as_str() {
-        node::TEXT => {
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                writer
-                    .write_event(Event::Text(BytesText::new(content)))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-            }
-        }
+        node::TEXT => match node.props.get_str(prop::CONTENT) {
+            Some(content) => vec![jats_text(content)],
+            None => Vec::new(),
+        },
 
-        node::EMPHASIS => {
-            writer
-                .write_event(Event::Start(BytesStart::new("italic")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("italic")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::EMPHASIS => vec![jats_element(
+            "italic",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::STRONG => {
-            writer
-                .write_event(Event::Start(BytesStart::new("bold")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("bold")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::STRONG => vec![jats_element(
+            "bold",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::UNDERLINE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("underline")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("underline")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::UNDERLINE => vec![jats_element(
+            "underline",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::STRIKEOUT => {
-            writer
-                .write_event(Event::Start(BytesStart::new("strike")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("strike")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::STRIKEOUT => vec![jats_element(
+            "strike",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
         node::CODE => {
-            writer
-                .write_event(Event::Start(BytesStart::new("monospace")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            if let Some(content) = node.props.get_str(prop::CONTENT) {
-                writer
-                    .write_event(Event::Text(BytesText::new(content)))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-            }
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("monospace")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            let mut children: Vec<JNode> = node
+                .props
+                .get_str(prop::CONTENT)
+                .map(jats_text)
+                .into_iter()
+                .collect();
+            children.extend(node.children.iter().flat_map(write_inline));
+            vec![jats_element("monospace", vec![], children)]
         }
 
         node::LINK => {
-            let mut link = BytesStart::new("ext-link");
+            let mut attrs = Vec::new();
             if let Some(url) = node.props.get_str(prop::URL) {
-                link.push_attribute(("xlink:href", url));
-                link.push_attribute(("ext-link-type", "uri"));
+                attrs.push(("xlink:href".to_string(), url.to_string()));
+                attrs.push(("ext-link-type".to_string(), "uri".to_string()));
             }
-            writer
-                .write_event(Event::Start(link))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("ext-link")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            vec![jats_element(
+                "ext-link",
+                attrs,
+                node.children.iter().flat_map(write_inline).collect(),
+            )]
         }
 
-        node::SUBSCRIPT => {
-            writer
-                .write_event(Event::Start(BytesStart::new("sub")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("sub")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::SUBSCRIPT => vec![jats_element(
+            "sub",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::SUPERSCRIPT => {
-            writer
-                .write_event(Event::Start(BytesStart::new("sup")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("sup")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::SUPERSCRIPT => vec![jats_element(
+            "sup",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::SMALL_CAPS => {
-            writer
-                .write_event(Event::Start(BytesStart::new("sc")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
-            writer
-                .write_event(Event::End(BytesEnd::new("sc")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::SMALL_CAPS => vec![jats_element(
+            "sc",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
 
-        node::LINE_BREAK => {
-            writer
-                .write_event(Event::Empty(BytesStart::new("break")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::LINE_BREAK => vec![jats_element("break", vec![], vec![])],
 
-        node::SOFT_BREAK => {
-            writer
-                .write_event(Event::Text(BytesText::new(" ")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::SOFT_BREAK => vec![jats_text(" ")],
 
-        node::IMAGE => {
-            let mut graphic = BytesStart::new("inline-graphic");
-            if let Some(url) = node.props.get_str(prop::URL) {
-                graphic.push_attribute(("xlink:href", url));
-            }
-            writer
-                .write_event(Event::Empty(graphic))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
-        }
+        node::IMAGE => vec![jats_element(
+            "inline-graphic",
+            node.props
+                .get_str(prop::URL)
+                .map(|url| vec![("xlink:href".to_string(), url.to_string())])
+                .unwrap_or_default(),
+            vec![],
+        )],
 
         "math_inline" => {
-            writer
-                .write_event(Event::Start(BytesStart::new("inline-formula")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            let mut formula_children = Vec::new();
             if let Some(source) = node.props.get_str("math:source") {
-                writer
-                    .write_event(Event::Start(BytesStart::new("tex-math")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                writer
-                    .write_event(Event::Text(BytesText::new(source)))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
-                writer
-                    .write_event(Event::End(BytesEnd::new("tex-math")))
-                    .map_err(|e| {
-                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
-                    })?;
+                formula_children.push(jats_element("tex-math", vec![], vec![jats_text(source)]));
             }
-            writer
-                .write_event(Event::End(BytesEnd::new("inline-formula")))
-                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            vec![jats_element("inline-formula", vec![], formula_children)]
         }
+
+        // A raw entity reference preserved by the reader: re-emit verbatim.
+        node::RAW_INLINE => match node.props.get_str("jats:entity") {
+            Some(name) => vec![JNode::EntityRef {
+                name: name.to_string(),
+                span: jats_fmt::Span::NONE,
+            }],
+            None => node.children.iter().flat_map(write_inline).collect(),
+        },
 
         _ => {
-            for child in &node.children {
-                write_inline(writer, child)?;
-            }
+            // Unknown inline - recurse
+            node.children.iter().flat_map(write_inline).collect()
         }
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -748,5 +463,15 @@ mod tests {
         let xml = String::from_utf8(result.value).unwrap();
         assert!(xml.contains("<italic>italic</italic>"));
         assert!(xml.contains("<bold>bold</bold>"));
+    }
+
+    #[test]
+    fn test_roundtrip_through_reader() {
+        let jats = r#"<?xml version="1.0"?>
+<article><body><p>Hello <italic>world</italic></p></body></article>"#;
+        let parsed = rescribe_read_jats::parse(jats).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(xml.contains("<p>Hello <italic>world</italic></p>"));
     }
 }

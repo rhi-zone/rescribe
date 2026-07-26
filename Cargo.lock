@@ -1687,6 +1687,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 
 [[package]]
+name = "jats-fmt"
+version = "0.1.0"
+dependencies = [
+ "quick-xml 0.39.0",
+]
+
+[[package]]
 name = "jira-fmt"
 version = "0.1.0"
 dependencies = [
@@ -3207,7 +3214,7 @@ dependencies = [
 name = "rescribe-read-jats"
 version = "0.1.0"
 dependencies = [
- "quick-xml 0.39.0",
+ "jats-fmt",
  "rescribe-core",
  "rescribe-std",
 ]
@@ -3769,8 +3776,9 @@ dependencies = [
 name = "rescribe-write-jats"
 version = "0.1.0"
 dependencies = [
- "quick-xml 0.39.0",
+ "jats-fmt",
  "rescribe-core",
+ "rescribe-read-jats",
  "rescribe-std",
 ]
 

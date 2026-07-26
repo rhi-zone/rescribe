@@ -9,4 +9,4 @@ description = "JATS XML reader for rescribe"
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
-quick-xml.workspace = true
+jats-fmt.workspace = true

@@ -433,6 +433,8 @@ The violation is format-parsing deps (quick-xml, zip, etc.) called from producti
 - **`rescribe-write-fb2`**: CLEAN — uses `fb2-fmt` (fixed 2026-04-10).
 - **`rescribe-read-docbook`**: CLEAN — uses `docbook-fmt` (fixed 2026-07-26).
 - **`rescribe-write-docbook`**: CLEAN — uses `docbook-fmt` (fixed 2026-07-26).
+- **`rescribe-read-jats`**: CLEAN — uses `jats-fmt` (fixed 2026-07-26).
+- **`rescribe-write-jats`**: CLEAN — uses `jats-fmt` (fixed 2026-07-26).
 
 Fix each when doing that format's vertical. Do NOT fix all at once (horizontal sweep).
 
@@ -474,6 +476,43 @@ wrapping `quick-xml` — no rescribe dependency. `rescribe-read-docbook` and
   -p rescribe-write-docbook -- -D warnings` and full test suite (incl. fixture suite) clean
 - [ ] Fuzz targets, DTD-aware entity resolution, and closing the remaining
   `fixtures/docbook/COVERAGE.md` gaps are follow-up work — out of scope for this pass per
+  CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
+
+### `jats-fmt` crate created (2026-07-26)
+
+Standalone JATS/generic-XML AST + parser + emitter (`crates/formats/jats-fmt`),
+wrapping `quick-xml` — no rescribe dependency. Mirrors `docbook-fmt`'s architecture
+exactly since JATS, like DocBook, is well-nested XML with no format-specific AST needs
+(element semantics live entirely in the rescribe adapter, not the crate). `rescribe-read-jats`
+and `rescribe-write-jats` rewired to thin AST↔IR translators over `jats_fmt::Node`
+(no `quick-xml` left in either adapter's production code).
+
+- [x] AST: `JatsDoc { xml_decl, nodes: Vec<Node> }`; `Node::{Element, Text, Cdata,
+  Comment, ProcessingInstruction, Doctype, EntityRef}`, `Span`, `Diagnostic`, `strip_spans()`
+- [x] `parse(&[u8]) -> (JatsDoc, Vec<Diagnostic>)` — direct recursive-descent build
+  over `quick_xml::Reader`, never panics (malformed input recovered best-effort + diagnostics)
+- [x] `events(&[u8]) -> EventIter` — true SAX streaming, not derived from `parse()`
+  (XML is well-nested, so no tree needs to be built first, unlike `html-fmt`'s HTML5 case)
+- [x] `StreamingParser<H: Handler>` (`batch.rs`) — genuinely incremental: dispatches every
+  event to the handler as soon as it's provably complete and drops the consumed prefix
+  from its buffer, memory bounded by the largest in-progress token. Verified with
+  chunk-boundary-splitting tests (text split mid-word, tag split mid-name).
+- [x] Entity handling: the 5 predefined XML entities and numeric character refs are
+  resolved and merged into surrounding text; any other named (DTD-defined) entity is
+  preserved verbatim as `Node::EntityRef` / IR `raw_inline` with `jats:entity` — never
+  silently dropped. The pre-split reader had **no** entity handling at all, so this is
+  a net fidelity improvement, not just parity.
+- [x] `emit(&JatsDoc) -> Vec<u8>` builder writer + `Writer<W: Write>` streaming writer,
+  both via `quick_xml::Writer` for correct escaping
+- [x] Full construct parity with the pre-split adapter logic preserved (all node kinds the
+  old hand-rolled reader/writer handled still map the same way); one incidental fidelity
+  fix — `<xref ref-type="…">` now preserves `jats:ref-type` for both the self-closing
+  and full-element (`<xref ...>text</xref>`) shapes, where the old reader only attached
+  it for the self-closing case
+- [x] `cargo clippy --all-targets --all-features -p jats-fmt -p rescribe-read-jats
+  -p rescribe-write-jats -- -D warnings` and full test suite (incl. fixture suite) clean
+- [ ] Fuzz targets, DTD-aware entity resolution, and closing the remaining
+  `fixtures/jats/COVERAGE.md` gaps are follow-up work — out of scope for this pass per
   CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
 
 ### DEBT: Streaming architecture — COMPLETED 2026-03-28
