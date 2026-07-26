@@ -1,0 +1,20 @@
+[package]
+name = "tei-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "TEI (Text Encoding Initiative) XML parser, AST, and emitter — no rescribe dependency"
+
+[features]
+default = ["reader-ast", "reader-streaming", "reader-batch", "writer-streaming", "writer-builder"]
+reader-ast = []
+reader-streaming = []
+reader-batch = []
+writer-streaming = []
+writer-builder = ["reader-ast", "writer-streaming"]
+
+[dependencies]
+quick-xml = { workspace = true }
+
+[dev-dependencies]

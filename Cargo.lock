@@ -3427,9 +3427,9 @@ dependencies = [
 name = "rescribe-read-tei"
 version = "0.1.0"
 dependencies = [
- "quick-xml 0.39.0",
  "rescribe-core",
  "rescribe-std",
+ "tei-fmt",
 ]
 
 [[package]]
@@ -4014,9 +4014,10 @@ dependencies = [
 name = "rescribe-write-tei"
 version = "0.1.0"
 dependencies = [
- "quick-xml 0.39.0",
  "rescribe-core",
+ "rescribe-read-tei",
  "rescribe-std",
+ "tei-fmt",
 ]
 
 [[package]]
@@ -4564,6 +4565,13 @@ name = "t2t"
 version = "0.1.0"
 dependencies = [
  "criterion",
+]
+
+[[package]]
+name = "tei-fmt"
+version = "0.1.0"
+dependencies = [
+ "quick-xml 0.39.0",
 ]
 
 [[package]]

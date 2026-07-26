@@ -435,6 +435,8 @@ The violation is format-parsing deps (quick-xml, zip, etc.) called from producti
 - **`rescribe-write-docbook`**: CLEAN — uses `docbook-fmt` (fixed 2026-07-26).
 - **`rescribe-read-jats`**: CLEAN — uses `jats-fmt` (fixed 2026-07-26).
 - **`rescribe-write-jats`**: CLEAN — uses `jats-fmt` (fixed 2026-07-26).
+- **`rescribe-read-tei`**: CLEAN — uses `tei-fmt` (fixed 2026-07-26).
+- **`rescribe-write-tei`**: CLEAN — uses `tei-fmt` (fixed 2026-07-26).
 
 Fix each when doing that format's vertical. Do NOT fix all at once (horizontal sweep).
 
@@ -514,6 +516,52 @@ and `rescribe-write-jats` rewired to thin AST↔IR translators over `jats_fmt::N
 - [ ] Fuzz targets, DTD-aware entity resolution, and closing the remaining
   `fixtures/jats/COVERAGE.md` gaps are follow-up work — out of scope for this pass per
   CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
+
+### `tei-fmt` crate created (2026-07-26)
+
+Standalone TEI/generic-XML AST + parser + emitter (`crates/formats/tei-fmt`),
+wrapping `quick-xml` — no rescribe dependency. Mirrors `docbook-fmt`/`jats-fmt`'s
+architecture exactly since TEI, like DocBook and JATS, is well-nested XML with no
+format-specific AST needs (element semantics live entirely in the rescribe adapter, not
+the crate). `rescribe-read-tei` and `rescribe-write-tei` rewired to thin AST↔IR
+translators over `tei_fmt::Node` (no `quick-xml` left in either adapter's production
+code).
+
+- [x] AST: `TeiDoc { xml_decl, nodes: Vec<Node> }`; `Node::{Element, Text, Cdata,
+  Comment, ProcessingInstruction, Doctype, EntityRef}`, `Span`, `Diagnostic`, `strip_spans()`
+- [x] `parse(&[u8]) -> (TeiDoc, Vec<Diagnostic>)` — direct recursive-descent build
+  over `quick_xml::Reader`, never panics (malformed input recovered best-effort + diagnostics)
+- [x] `events(&[u8]) -> EventIter` — true SAX streaming, not derived from `parse()`
+  (XML is well-nested, so no tree needs to be built first, unlike `html-fmt`'s HTML5 case)
+- [x] `StreamingParser<H: Handler>` (`batch.rs`) — genuinely incremental: dispatches every
+  event to the handler as soon as it's provably complete and drops the consumed prefix
+  from its buffer, memory bounded by the largest in-progress token. Verified with
+  chunk-boundary-splitting tests (text split mid-word, tag split mid-name).
+- [x] Attribute keys are kept exactly as written (including namespace prefix, e.g.
+  `xml:id`, `xml:lang`) rather than local-name-stripped — TEI leans heavily on
+  `xml:id`/`xml:lang`, and adapter-layer matching against the literal prefixed name only
+  works if the prefix survives parsing.
+- [x] Entity handling: the 5 predefined XML entities and numeric character refs are
+  resolved and merged into surrounding text; any other named (DTD-defined) entity is
+  preserved verbatim as `Node::EntityRef` / IR `raw_inline` with `tei:entity` — never
+  silently dropped. The pre-split reader had **no** entity handling at all, so this is
+  a net fidelity improvement, not just parity.
+- [x] `emit(&TeiDoc) -> Vec<u8>` builder writer + `Writer<W: Write>` streaming writer,
+  both via `quick_xml::Writer` for correct escaping
+- [x] Full construct parity with the pre-split adapter logic preserved (all node kinds the
+  old hand-rolled reader/writer handled still map the same way), plus one real fidelity
+  bug fixed: the old reader captured `xml:id` and `n` attributes into a `FrameAttrs`
+  struct on every element but never read either field back out when building IR nodes —
+  both attributes were parsed and then silently discarded on every element that carried
+  them (dead-code capture bug, same family as docbook's `xlink:href` issue). `xml:id`
+  now round-trips as the standard `id` property; `n` round-trips as `tei:n`. Comments/PIs
+  inside content flow (previously bare-dropped with no signal at all) now emit a
+  `Minor` fidelity warning instead of vanishing silently.
+- [x] `cargo clippy --all-targets --all-features -p tei-fmt -p rescribe-read-tei
+  -p rescribe-write-tei -- -D warnings` and full test suite (incl. fixture suite) clean
+- [ ] Fuzz targets, DTD-aware entity resolution, and closing the remaining
+  `fixtures/tei/COVERAGE.md` gaps (31/117 items checked) are follow-up work — out of
+  scope for this pass per CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
 
 ### DEBT: Streaming architecture — COMPLETED 2026-03-28
 
