@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <bibliography>
+    <biblioentry>
+      <title><emphasis>Foo</emphasis> Bar</title>
+      <author><personname>A. Writer</personname></author>
+    </biblioentry>
+  </bibliography>
+</article>

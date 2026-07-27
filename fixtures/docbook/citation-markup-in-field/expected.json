@@ -1,0 +1,13 @@
+{
+  "description": "emphasis nested inside a biblioentry's title is preserved as a real emphasis node inside the bibliography_field, not flattened to plain text — proving bibliography_field's children are ordinary markup-capable inline nodes, not a flat string property",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0/0/0",     "kind": "bibliography_entry" },
+    { "path": "/0/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "title" }, "children_count": 2 },
+    { "path": "/0/0/0/0/0", "kind": "emphasis" },
+    { "path": "/0/0/0/0/0/0", "kind": "text", "props": { "content": "Foo" } },
+    { "path": "/0/0/0/0/1", "kind": "text", "props": { "content": " Bar" } },
+    { "path": "/0/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/0/1/0", "kind": "text", "props": { "content": "A. Writer" } }
+  ]
+}

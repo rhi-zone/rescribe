@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <bibliography>
+    <biblioentry>
+      <biblioset relation="journal">
+        <title>Journal of Examples</title>
+        <volumenum>5</volumenum>
+      </biblioset>
+      <biblioset relation="article">
+        <title>An Example Article</title>
+        <author><personname>Jane Doe</personname></author>
+      </biblioset>
+    </biblioentry>
+  </bibliography>
+</article>

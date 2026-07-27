@@ -1,0 +1,16 @@
+{
+  "description": "biblioset nesting (an article-within-a-journal and article-within-a-book style grouping) becomes nested bibliography_entry children, each with its own relation attribute raw-preserved as docbook:biblioset-relation",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0/0/0",     "kind": "bibliography_entry", "props": { "docbook:tag": "biblioentry" }, "children_count": 2 },
+    { "path": "/0/0/0/0",   "kind": "bibliography_entry", "props": { "docbook:tag": "biblioset", "docbook:biblioset-relation": "journal" } },
+    { "path": "/0/0/0/0/0", "kind": "bibliography_field", "props": { "field:role": "title" } },
+    { "path": "/0/0/0/0/0/0", "kind": "text", "props": { "content": "Journal of Examples" } },
+    { "path": "/0/0/0/0/1", "kind": "bibliography_field", "props": { "field:role": "volume" } },
+    { "path": "/0/0/0/1",   "kind": "bibliography_entry", "props": { "docbook:tag": "biblioset", "docbook:biblioset-relation": "article" } },
+    { "path": "/0/0/0/1/0", "kind": "bibliography_field", "props": { "field:role": "title" } },
+    { "path": "/0/0/0/1/0/0", "kind": "text", "props": { "content": "An Example Article" } },
+    { "path": "/0/0/0/1/1", "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/0/1/1/0", "kind": "text", "props": { "content": "Jane Doe" } }
+  ]
+}

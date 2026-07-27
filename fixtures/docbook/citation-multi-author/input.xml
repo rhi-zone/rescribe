@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <bibliography>
+    <biblioentry>
+      <authorgroup>
+        <author><personname><firstname>Jane</firstname><surname>Doe</surname></personname></author>
+        <author><personname><firstname>John</firstname><surname>Smith</surname></personname></author>
+      </authorgroup>
+      <title>A Multi-Author Work</title>
+      <volumenum>5</volumenum>
+      <issuenum>2</issuenum>
+    </biblioentry>
+  </bibliography>
+</article>

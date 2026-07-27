@@ -23,8 +23,10 @@
 //! let xml = String::from_utf8(result.value).unwrap();
 //! ```
 
+use std::collections::HashMap;
+
 use docbook_fmt::{DocBookDoc, Node as DbNode, XmlDecl};
-use rescribe_core::{ConversionResult, Document, EmitError, Node};
+use rescribe_core::{ConversionResult, Document, EmitError, Node, PropValue};
 use rescribe_std::{node, prop};
 
 /// Emit a document to DocBook XML.
@@ -435,6 +437,22 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             node.children.iter().flat_map(write_node).collect(),
         )],
 
+        node::BIBLIOGRAPHY => vec![db_element(
+            "bibliography",
+            generic_attrs(node),
+            node.children.iter().flat_map(write_node).collect(),
+        )],
+
+        node::BIBLIOGRAPHY_ENTRY => vec![write_bibliography_entry(node)],
+
+        // A `bibliography_field` shouldn't normally appear outside a
+        // `BIBLIOGRAPHY_ENTRY`'s own children (handled directly by
+        // `write_bibliography_entry`, not through this dispatch), but
+        // delegate to the same field writer defensively rather than falling
+        // to the generic "recurse into children" catch-all below, which
+        // would drop the field's role/tag entirely.
+        node::BIBLIOGRAPHY_FIELD => vec![write_bibliography_field(node)],
+
         // Inline nodes that appear at block level: wrap in a <para>.
         node::TEXT | node::EMPHASIS | node::STRONG | node::CODE | node::LINK => {
             vec![db_element("para", vec![], write_inline(node))]
@@ -458,6 +476,195 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             // Unknown block - recurse into children
             node.children.iter().flat_map(write_node).collect()
         }
+    }
+}
+
+/// Write a `bibliography_entry` node back to `<biblioentry>`/`<bibliomixed>`/
+/// `<biblioset>`/`<bibliomset>` (see rescribe-read-docbook's
+/// `build_bibliography_entry` — `docbook:tag` remembers which one the
+/// original element was; defaults to `<biblioentry>` for an entry built by a
+/// non-DocBook producer). `prop::DATE` (a structured year/month/day map, see
+/// its own doc comment) becomes a leading `<date>` child; a `page_first` +
+/// `page_last` pair of sibling fields recombines into one `<pagenums>`
+/// (see rescribe-read-docbook's `convert_pagenums` for the reader-side
+/// split); a nested `BIBLIOGRAPHY_ENTRY` child (from `<biblioset>` nesting)
+/// recurses through this same function.
+fn write_bibliography_entry(node: &Node) -> DbNode {
+    let tag = node.props.get_str("docbook:tag").unwrap_or("biblioentry");
+    let mut attrs = generic_attrs(node);
+    if let Some(relation) = node.props.get_str("docbook:biblioset-relation") {
+        attrs.push(("relation".to_string(), relation.to_string()));
+    }
+    let mut kids = Vec::with_capacity(node.children.len() + 1);
+    if let Some(PropValue::Map(date)) = node.props.get(prop::DATE) {
+        let text = format_bibliographic_date(date);
+        if !text.is_empty() {
+            kids.push(db_element("date", vec![], vec![db_text(text)]));
+        }
+    }
+    let mut iter = node.children.iter().peekable();
+    while let Some(child) = iter.next() {
+        if child.kind.as_str() == node::BIBLIOGRAPHY_ENTRY {
+            kids.push(write_bibliography_entry(child));
+            continue;
+        }
+        // `<bibliomixed>`'s mixed content model interleaves free text
+        // directly between fields (see rescribe-read-docbook's
+        // `convert_children` — a `bibliomixed` entry's non-element
+        // children, e.g. plain running text between citation parts, are
+        // ordinary inline nodes, not `bibliography_field`s). Re-emit them
+        // as plain inline content rather than routing through
+        // `write_bibliography_field`, which would wrap them in a spurious
+        // `<bibliomisc>`.
+        if child.kind.as_str() != node::BIBLIOGRAPHY_FIELD {
+            kids.extend(write_inline(child));
+            continue;
+        }
+        if child.props.get_str(prop::FIELD_ROLE) == Some("page_first")
+            && iter
+                .peek()
+                .and_then(|next| next.props.get_str(prop::FIELD_ROLE))
+                == Some("page_last")
+        {
+            let last = iter.next().unwrap();
+            let first_text = flatten_field_text(child);
+            let last_text = flatten_field_text(last);
+            kids.push(db_element(
+                "pagenums",
+                vec![],
+                vec![db_text(format!("{first_text}-{last_text}"))],
+            ));
+            continue;
+        }
+        kids.push(write_bibliography_field(child));
+    }
+    db_element(tag, attrs, kids)
+}
+
+/// Write one `bibliography_field` node back to its originating DocBook
+/// element. `docbook:tag` (set by every arm of rescribe-read-docbook's
+/// `convert_biblio_field`) takes priority when present, since it names the
+/// exact source element (e.g. `<publishername>` vs. a bare `<publisher>`,
+/// or the original tag behind a raw-preserved `misc` field); `prop::
+/// FIELD_ROLE` is the fallback for a field built by a non-DocBook producer
+/// (a cross-format conversion into DocBook).
+fn write_bibliography_field(node: &Node) -> DbNode {
+    let inline_children: Vec<DbNode> = node.children.iter().flat_map(write_inline).collect();
+    if let Some(tag) = node.props.get_str("docbook:tag") {
+        return match tag {
+            "author" => db_element(
+                "author",
+                vec![],
+                vec![db_element("personname", vec![], inline_children)],
+            ),
+            "editor" => db_element(
+                "editor",
+                vec![],
+                vec![db_element("personname", vec![], inline_children)],
+            ),
+            "publishername" => db_element(
+                "publisher",
+                vec![],
+                vec![db_element("publishername", vec![], inline_children)],
+            ),
+            "city" => db_element(
+                "address",
+                vec![],
+                vec![db_element("city", vec![], inline_children)],
+            ),
+            "biblioid" => {
+                let mut attrs = Vec::new();
+                if let Some(scheme) = node.props.get_str(prop::FIELD_SCHEME) {
+                    attrs.push(("class".to_string(), scheme.to_string()));
+                }
+                db_element("biblioid", attrs, inline_children)
+            }
+            // `title`, `edition`, `volumenum`, `issuenum`, `publisher`
+            // (bare-text case), `address` (bare-text case), `bibliomisc`,
+            // `pagenums` (ambiguous-split misc fallback), `date`/`pubdate`
+            // (unparseable-date misc fallback), and any other raw-preserved
+            // tag (`subtitle`, `titleabbrev`, `isbn`, ...): re-emit the
+            // original element name directly with the field's content.
+            other => db_element(other, vec![], inline_children),
+        };
+    }
+    // No `docbook:tag` — this field was built by a non-DocBook reader (a
+    // cross-format conversion into DocBook). Fall back to the standard
+    // `FIELD_ROLE` vocabulary.
+    match node.props.get_str(prop::FIELD_ROLE).unwrap_or("misc") {
+        "author" => db_element(
+            "author",
+            vec![],
+            vec![db_element("personname", vec![], inline_children)],
+        ),
+        "editor" => db_element(
+            "editor",
+            vec![],
+            vec![db_element("personname", vec![], inline_children)],
+        ),
+        // `container_title` has no distinct DocBook element of its own —
+        // DocBook instead expresses a citation's container via `<biblioset>`
+        // nesting (see `write_bibliography_entry`) — so a flat
+        // `container_title` field (which can only arrive from a non-DocBook
+        // producer that didn't use nesting) falls back to `<title>` rather
+        // than being dropped; a disclosed simplification, not a design fork.
+        "title" | "container_title" => db_element("title", vec![], inline_children),
+        "publisher" => db_element(
+            "publisher",
+            vec![],
+            vec![db_element("publishername", vec![], inline_children)],
+        ),
+        "publisher_location" => db_element("address", vec![], inline_children),
+        "edition" => db_element("edition", vec![], inline_children),
+        "volume" => db_element("volumenum", vec![], inline_children),
+        "issue" => db_element("issuenum", vec![], inline_children),
+        "page_first" | "page_last" => db_element("pagenums", vec![], inline_children),
+        "identifier" => {
+            let mut attrs = Vec::new();
+            if let Some(scheme) = node.props.get_str(prop::FIELD_SCHEME) {
+                attrs.push(("class".to_string(), scheme.to_string()));
+            }
+            db_element("biblioid", attrs, inline_children)
+        }
+        _ => db_element("bibliomisc", vec![], inline_children),
+    }
+}
+
+/// Concatenate a field's descendant `TEXT` node content (depth-first) — used
+/// only for re-combining a `page_first`/`page_last` pair back into one
+/// `<pagenums>first-last</pagenums>` string, where page numbers are never
+/// expected to carry nested markup.
+fn flatten_field_text(node: &Node) -> String {
+    let mut out = String::new();
+    flatten_field_text_into(node, &mut out);
+    out
+}
+
+fn flatten_field_text_into(node: &Node, out: &mut String) {
+    if node.kind.as_str() == node::TEXT
+        && let Some(content) = node.props.get_str(prop::CONTENT)
+    {
+        out.push_str(content);
+    }
+    for child in &node.children {
+        flatten_field_text_into(child, out);
+    }
+}
+
+/// Format `prop::DATE`'s `year`/`month`/`day` map (see the property's own
+/// doc comment) back into an ISO 8601 string — the inverse of
+/// rescribe-read-docbook's `parse_bibliographic_date`. Zero-padded to two
+/// digits for month/day per ISO 8601 (`2020-03-05`, not `2020-3-5`).
+fn format_bibliographic_date(map: &HashMap<String, PropValue>) -> String {
+    let as_int = |key: &str| match map.get(key) {
+        Some(PropValue::Int(i)) => Some(*i),
+        _ => None,
+    };
+    match (as_int("year"), as_int("month"), as_int("day")) {
+        (Some(y), Some(m), Some(d)) => format!("{y:04}-{m:02}-{d:02}"),
+        (Some(y), Some(m), None) => format!("{y:04}-{m:02}"),
+        (Some(y), None, None) => format!("{y:04}"),
+        _ => String::new(),
     }
 }
 

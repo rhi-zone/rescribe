@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <bibliography>
+    <biblioentry>
+      <author><personname><firstname>Jane</firstname><surname>Doe</surname></personname></author>
+      <title>A Simple Title</title>
+      <publisher><publishername>Acme Press</publishername></publisher>
+      <pagenums>12-34</pagenums>
+      <biblioid class="doi">10.1234/xyz</biblioid>
+    </biblioentry>
+  </bibliography>
+</article>

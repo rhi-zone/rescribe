@@ -23,9 +23,11 @@
 //! let doc = result.value;
 //! ```
 
+use std::collections::HashMap;
+
 use docbook_fmt::Node as DbNode;
 use rescribe_core::{
-    ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Severity,
+    ConversionResult, Document, FidelityWarning, Node, ParseError, PropValue, Properties, Severity,
     WarningKind,
 };
 use rescribe_std::{node, prop};
@@ -55,7 +57,8 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
             ..
         } = top
         {
-            let converted = convert_children(kids, name, false, &mut metadata, &mut warnings);
+            let converted =
+                convert_children(kids, name, false, false, &mut metadata, &mut warnings);
             match convert_element(name, attrs, converted.clone(), None) {
                 Some(node) => children.push(node),
                 None => {
@@ -93,10 +96,18 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
 /// recursion below) — i.e. whether the *children* of `parent_name` are
 /// front-matter content that will end up consumed by [`extract_metadata`]
 /// rather than surviving as document content nodes.
+///
+/// `in_biblio` is true when `parent_name` is a bibliographic citation
+/// container (`<biblioentry>`/`<bibliomixed>`/`<biblioset>`/`<bibliomset>`,
+/// or a descendant of one — threaded down the same way `in_header` is) —
+/// i.e. whether the *children* of `parent_name` are citation sub-fields that
+/// should be dispatched through [`convert_biblio_field`] (producing
+/// `bibliography_field` nodes) rather than the generic [`convert_element`].
 fn convert_children(
     children: &[DbNode],
     parent_name: &str,
     in_header: bool,
+    in_biblio: bool,
     metadata: &mut Properties,
     warnings: &mut Vec<FidelityWarning>,
 ) -> Vec<Node> {
@@ -111,8 +122,44 @@ fn convert_children(
             } => {
                 let child_in_header =
                     in_header || matches!(name.as_str(), "info" | "articleinfo" | "bookinfo");
-                let converted_kids =
-                    convert_children(kids, name, child_in_header, metadata, warnings);
+                // Whether *`name`'s own children* should also be dispatched
+                // through `convert_biblio_field` (as opposed to normal
+                // inline conversion): if we're not in biblio scope yet,
+                // entering it requires `name` itself to be a citation
+                // container (`is_biblio_container`); if we're already
+                // inside one, scope only continues through a structural
+                // pass-through wrapper (`is_biblio_field_wrapper`) —
+                // everything else is a *leaf* field (`title`, `author`,
+                // `bibliomisc`, ...), and a leaf field's own children are
+                // ordinary markup-capable inline content, not further
+                // sub-fields. Without this distinction, `<emphasis>` inside
+                // e.g. a `<title>` would itself be mis-dispatched as a
+                // raw-preserved "misc" field instead of a proper `emphasis`
+                // node, silently flattening the markup it exists to
+                // preserve.
+                let child_in_biblio = if in_biblio {
+                    is_biblio_field_wrapper(name)
+                } else {
+                    is_biblio_container(name)
+                };
+                let converted_kids = convert_children(
+                    kids,
+                    name,
+                    child_in_header,
+                    child_in_biblio,
+                    metadata,
+                    warnings,
+                );
+                if in_biblio {
+                    // Inside a citation container, every child is a
+                    // bibliographic sub-field (or a nested citation, for
+                    // `<biblioset>`) — dispatch through the dedicated
+                    // converter instead of the generic element table, and
+                    // splice its result(s) straight in (no header-raw-
+                    // capture logic applies here; see `convert_biblio_field`).
+                    out.extend(convert_biblio_field(name, attrs, converted_kids));
+                    continue;
+                }
                 let mut converted =
                     convert_element(name, attrs, converted_kids.clone(), Some(parent_name));
                 // Any `<info>` descendant this reader has no explicit
@@ -246,8 +293,11 @@ fn heading_level_for_parent(parent: Option<&str>) -> Option<i64> {
         // is level 1 — the same level as article/book/chapter/part/appendix
         // — not a caption; `extract_metadata` specifically looks for a
         // `HEADING` child to find it (see `is_modeled_header_field`).
+        // `<bibliography>` is a top-level division exactly like `<chapter>`
+        // (DocBook 5.2 reference lists it alongside chapter/glossary/index),
+        // so its own `<title>` is a heading, not a caption.
         Some("article") | Some("book") | Some("chapter") | Some("part") | Some("appendix")
-        | Some("info") | Some("articleinfo") | Some("bookinfo") => Some(1),
+        | Some("bibliography") | Some("info") | Some("articleinfo") | Some("bookinfo") => Some(1),
         Some("sect1") | Some("section") | Some("simplesect") => Some(2),
         Some("sect2") => Some(3),
         Some("sect3") => Some(4),
@@ -735,6 +785,26 @@ fn convert_element(
         // re-emits children in their original position.
         "attribution" => Some(Node::new("docbook:attribution").children(children)),
 
+        // Bibliography / citation list. `<bibliography>` is a plain block
+        // container (its own `<title>` is handled by the `"title"` arm
+        // above, via `heading_level_for_parent`); its `<biblioentry>`/
+        // `<bibliomixed>` children were converted through
+        // `convert_biblio_field`'s dispatch (see `convert_children`'s
+        // `in_biblio` threading) before reaching here, so `children` is
+        // already a mix of `bibliography_entry` nodes and any ordinary
+        // block content (`<para>`, a nested `<bibliodiv>`, ...).
+        "bibliography" => Some(Node::new(node::BIBLIOGRAPHY).children(children)),
+        // `<biblioentry>`/`<bibliomixed>` at the top level, i.e. not nested
+        // inside another citation container (the normal case — a
+        // `<biblioset>` nested *inside* a `<biblioentry>` is instead built
+        // by `convert_biblio_field`'s own "biblioset"/"bibliomset" arm,
+        // which calls the same `build_bibliography_entry` helper). Also
+        // covers the defensive/malformed case of a bare `<biblioset>` with
+        // no enclosing `<biblioentry>`.
+        "biblioentry" | "bibliomixed" | "biblioset" | "bibliomset" => {
+            Some(build_bibliography_entry(name, attrs, children))
+        }
+
         // Abstract and other metadata
         "abstract" => Some(
             Node::new(node::DIV)
@@ -807,6 +877,320 @@ fn convert_element(
     // `attach_generic_attrs`'s doc comment) rather than each arm attaching
     // its own subset of generic attributes.
     result.map(|n| attach_generic_attrs(n, attrs))
+}
+
+/// Whether `name` is a DocBook bibliographic citation container — its
+/// children are citation sub-fields (author, title, publisher, ...), not
+/// ordinary document content, so `convert_children` dispatches them through
+/// [`convert_biblio_field`] instead of [`convert_element`]. `<biblioset>`/
+/// `<bibliomset>` group sub-citations (e.g. an article within a book) and
+/// are themselves containers for the same reason.
+fn is_biblio_container(name: &str) -> bool {
+    matches!(
+        name,
+        "biblioentry" | "bibliomixed" | "biblioset" | "bibliomset"
+    )
+}
+
+/// Whether `name`, encountered *while already inside* biblio scope, is a
+/// structural pass-through wrapper whose own children remain citation
+/// sub-fields (as opposed to a leaf field like `<title>`/`<author>`, whose
+/// children are ordinary inline content — see `convert_children`'s
+/// `child_in_biblio` computation for why this distinction matters).
+/// `<publisher>` wraps `<publishername>`/`<address>`; `<address>` may itself
+/// wrap `<city>`; `<authorgroup>` wraps individual `<author>`/`<editor>`
+/// elements; `<biblioset>`/`<bibliomset>` wrap a nested citation's own
+/// fields.
+fn is_biblio_field_wrapper(name: &str) -> bool {
+    matches!(
+        name,
+        "authorgroup" | "publisher" | "address" | "biblioset" | "bibliomset"
+    )
+}
+
+/// Convert one child of a bibliographic citation container (see
+/// [`is_biblio_container`]) into zero or more IR nodes. Returns a `Vec`
+/// rather than `Option<Node>` because a single DocBook element sometimes
+/// expands to more than one IR node (a split `<pagenums>` becomes
+/// `page_first` + `page_last` fields) and sometimes to zero (a pass-through
+/// wrapper like `<authorgroup>` contributes only its already-converted
+/// children).
+///
+/// `children` are `name`'s own children, already recursively converted
+/// (inheriting the same biblio-field dispatch — see `convert_children`'s
+/// `in_biblio` threading — so e.g. a `<personname>` inside `<author>` has
+/// already been unwrapped to plain inline content by `convert_element`'s
+/// existing `personname`/`firstname`/`surname`/`othername` pass-through
+/// arm, which is untouched by this function).
+fn convert_biblio_field(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Vec<Node> {
+    match name {
+        // A `<biblioset>`/`<bibliomset>` nested inside another citation
+        // container groups sub-citations (DocBook 5.2 reference: e.g. an
+        // article `<biblioset>` inside the containing book's
+        // `<biblioentry>`) — modeled as a nested `bibliography_entry`,
+        // exactly like a top-level one (see `convert_element`'s own
+        // "biblioset"/"bibliomset" arm, which calls the same helper).
+        "biblioset" | "bibliomset" => vec![build_bibliography_entry(name, attrs, children)],
+
+        // Pass-through wrappers: their own children (individual
+        // `<author>`/`<editor>` elements) were already converted into
+        // `bibliography_field` nodes by the recursive dispatch above —
+        // splice them straight into the entry as siblings rather than
+        // nesting them one level deeper.
+        "authorgroup" => children,
+
+        "author" => vec![bib_field("author", "author", children, None)],
+        "editor" => vec![bib_field("editor", "editor", children, None)],
+        "title" => vec![bib_field("title", "title", children, None)],
+
+        // `<publisher>` normally wraps `<publishername>` (and optionally
+        // `<address>`) — both of which, via this same dispatch, already
+        // produced their own `publisher`/`publisher_location` fields by the
+        // time we get here, so `<publisher>` itself is just a pass-through.
+        // A `<publisher>` with bare text content directly (no
+        // `<publishername>` child) is the fallback case: treat its own
+        // content as the publisher-name field.
+        "publisher" => {
+            if children
+                .iter()
+                .any(|c| c.kind.as_str() == node::BIBLIOGRAPHY_FIELD)
+            {
+                children
+            } else {
+                vec![bib_field("publisher", "publisher", children, None)]
+            }
+        }
+        "publishername" => vec![bib_field("publisher", "publishername", children, None)],
+
+        // Same pass-through-or-fallback pattern as `<publisher>`/
+        // `<publishername>` above, for `<address>`/`<city>`.
+        "address" => {
+            if children
+                .iter()
+                .any(|c| c.kind.as_str() == node::BIBLIOGRAPHY_FIELD)
+            {
+                children
+            } else {
+                vec![bib_field("publisher_location", "address", children, None)]
+            }
+        }
+        "city" => vec![bib_field("publisher_location", "city", children, None)],
+
+        "edition" => vec![bib_field("edition", "edition", children, None)],
+        "volumenum" => vec![bib_field("volume", "volumenum", children, None)],
+        "issuenum" => vec![bib_field("issue", "issuenum", children, None)],
+
+        // `class` (DocBook 5.2 reference: doi/isbn/issn/uri/... plus an
+        // open `other` value) names the identifier scheme.
+        "biblioid" => vec![bib_field(
+            "identifier",
+            "biblioid",
+            children,
+            get_attr(attrs, "class"),
+        )],
+
+        "bibliomisc" => vec![bib_field("misc", "bibliomisc", children, None)],
+
+        "pagenums" => convert_pagenums(children),
+
+        // A bibliographic date has no `bibliography_field` role of its own
+        // — it's captured as the structured `prop::DATE` property on the
+        // *entry*, not a child node (see `prop::DATE`'s doc comment for the
+        // rationale). Emit an internal marker node for
+        // `build_bibliography_entry` to consume and remove; if the date
+        // text isn't unambiguously parseable, that function demotes it back
+        // to an ordinary `misc` field instead of losing it.
+        "date" | "pubdate" => vec![
+            Node::new("docbook:_date")
+                .prop("docbook:tag", name.to_string())
+                .children(children),
+        ],
+
+        // Every other bibliographic element this reader has no dedicated
+        // mapping for (`subtitle`, `titleabbrev`, `collab`, `isbn`, `issn`,
+        // `abbrev`, `corpauthor`, `printhistory`, and any future addition to
+        // DocBook's `bibliocomponent.mix`/`bibliomixed.mix` content models):
+        // raw-preserve as a `misc` field tagged with the original element
+        // name (its own children stay ordinary markup-capable inline
+        // nodes), rather than silently dropping it.
+        _ => vec![bib_field("misc", name, children, None)],
+    }
+}
+
+/// Build one `bibliography_field` node: `role` is the standard
+/// `prop::FIELD_ROLE` value; `tag` is the original DocBook element name
+/// (round-tripped via `docbook:tag` so `rescribe-write-docbook` can restore
+/// the exact source element, e.g. `<publishername>` vs. a bare
+/// `<publisher>`, or `<biblioid>` vs. a generic misc field); `scheme`, if
+/// given, becomes `prop::FIELD_SCHEME` (used only by `<biblioid>`'s `class`
+/// attribute).
+fn bib_field(role: &str, tag: &str, children: Vec<Node>, scheme: Option<&str>) -> Node {
+    let mut node = Node::new(node::BIBLIOGRAPHY_FIELD)
+        .prop(prop::FIELD_ROLE, role.to_string())
+        .prop("docbook:tag", tag.to_string())
+        .children(children);
+    if let Some(scheme) = scheme {
+        node = node.prop(prop::FIELD_SCHEME, scheme.to_string());
+    }
+    node
+}
+
+/// The result of attempting to split a `<pagenums>` string into a page
+/// range.
+enum PageSplit {
+    /// A single page number (no separator) — unambiguous, no split needed.
+    Single,
+    /// A clean `first`-`last` numeric range.
+    Range(String, String),
+    /// Anything else (a discontiguous list like `"12, 34"`, non-numeric
+    /// page labels like `"xii-xiv"` or `"42ff"`, multiple separators, ...)
+    /// — splitting would be a guess, so the string is kept whole instead.
+    Ambiguous,
+}
+
+/// Split a `<pagenums>` string on the typical range separator (hyphen, en
+/// dash, or em dash) if — and only if — both sides are purely numeric.
+/// Anything less clear-cut is reported as [`PageSplit::Ambiguous`] rather
+/// than guessed at, per CLAUDE.md's no-guessing rule.
+fn split_page_range(text: &str) -> PageSplit {
+    let t = text.trim();
+    if t.is_empty() {
+        return PageSplit::Ambiguous;
+    }
+    if t.chars().all(|c| c.is_ascii_digit()) {
+        return PageSplit::Single;
+    }
+    for sep in ['-', '\u{2013}', '\u{2014}'] {
+        if let Some((first, last)) = t.split_once(sep) {
+            let first = first.trim();
+            let last = last.trim();
+            if !first.is_empty()
+                && !last.is_empty()
+                && first.chars().all(|c| c.is_ascii_digit())
+                && last.chars().all(|c| c.is_ascii_digit())
+            {
+                return PageSplit::Range(first.to_string(), last.to_string());
+            }
+        }
+    }
+    PageSplit::Ambiguous
+}
+
+/// Convert a `<pagenums>` element's already-converted children into
+/// `bibliography_field` node(s): a clean split becomes `page_first` (+
+/// `page_last`, for an actual range); an ambiguous/unsplittable string keeps
+/// its original inline content whole as a `misc` field, additionally
+/// raw-preserving the flattened original string under `docbook:pagenums` —
+/// a belt-and-suspenders convenience for a consumer that only understands
+/// the `page_first`/`page_last` vocabulary and would otherwise have to
+/// re-flatten `children` itself to recover the exact source text.
+fn convert_pagenums(children: Vec<Node>) -> Vec<Node> {
+    let text = extract_text(&children);
+    match split_page_range(&text) {
+        // The original children are reused verbatim: no split occurred, so
+        // nothing was at risk of being torn apart.
+        PageSplit::Single => vec![bib_field("page_first", "pagenums", children, None)],
+        PageSplit::Range(first, last) => vec![
+            bib_field(
+                "page_first",
+                "pagenums",
+                vec![Node::new(node::TEXT).prop(prop::CONTENT, first)],
+                None,
+            ),
+            bib_field(
+                "page_last",
+                "pagenums",
+                vec![Node::new(node::TEXT).prop(prop::CONTENT, last)],
+                None,
+            ),
+        ],
+        PageSplit::Ambiguous => vec![
+            Node::new(node::BIBLIOGRAPHY_FIELD)
+                .prop(prop::FIELD_ROLE, "misc")
+                .prop("docbook:tag", "pagenums")
+                .prop("docbook:pagenums", text)
+                .children(children),
+        ],
+    }
+}
+
+/// Build a `bibliography_entry` node (used both for a top-level
+/// `<biblioentry>`/`<bibliomixed>` — see `convert_element` — and for a
+/// nested `<biblioset>`/`<bibliomset>` — see `convert_biblio_field`).
+/// `children` are the already-converted `bibliography_field`/nested-entry
+/// siblings (see `convert_biblio_field`); this function additionally pulls
+/// out the internal `docbook:_date` marker (see `convert_biblio_field`'s
+/// "date"/"pubdate" arm) and turns it into the structured `prop::DATE`
+/// property, or — if the date text isn't unambiguously parseable — demotes
+/// it to an ordinary `misc` field instead of losing it.
+fn build_bibliography_entry(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let mut entry = Node::new(node::BIBLIOGRAPHY_ENTRY).prop("docbook:tag", name.to_string());
+    if matches!(name, "biblioset" | "bibliomset")
+        && let Some(relation) = get_attr(attrs, "relation")
+    {
+        entry = entry.prop("docbook:biblioset-relation", relation.to_string());
+    }
+    let mut kids = Vec::with_capacity(children.len());
+    for child in children {
+        if child.kind.as_str() == "docbook:_date" {
+            let text = extract_text(&child.children);
+            match parse_bibliographic_date(&text) {
+                Some(date) => entry = entry.prop(prop::DATE, PropValue::Map(date)),
+                None => {
+                    let tag = child
+                        .props
+                        .get_str("docbook:tag")
+                        .unwrap_or("date")
+                        .to_string();
+                    kids.push(
+                        Node::new(node::BIBLIOGRAPHY_FIELD)
+                            .prop(prop::FIELD_ROLE, "misc")
+                            .prop("docbook:tag", tag)
+                            .children(child.children),
+                    );
+                }
+            }
+        } else {
+            kids.push(child);
+        }
+    }
+    attach_generic_attrs(entry.children(kids), attrs)
+}
+
+/// Parse a bibliographic `<date>`/`<pubdate>` string into `prop::DATE`'s
+/// `year`/`month`/`day` map, accepting only the unambiguous ISO 8601 forms
+/// (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`). DocBook's `<date>` content is
+/// otherwise free text (e.g. `"Spring 2021"`, `"March 2020"`) with no
+/// single well-defined parse — rather than guess, this returns `None` for
+/// anything else, and the caller ([`build_bibliography_entry`]) keeps the
+/// text as an ordinary field instead.
+fn parse_bibliographic_date(text: &str) -> Option<HashMap<String, PropValue>> {
+    let parts: Vec<&str> = text.trim().split('-').collect();
+    let is_year = |s: &str| s.len() == 4 && s.chars().all(|c| c.is_ascii_digit());
+    let is_two_digit_in = |s: &str, range: std::ops::RangeInclusive<u32>| {
+        s.len() == 2 && s.parse::<u32>().is_ok_and(|n| range.contains(&n))
+    };
+    match parts.as_slice() {
+        [y] if is_year(y) => {
+            let mut map = HashMap::new();
+            map.insert("year".to_string(), PropValue::Int(y.parse().ok()?));
+            Some(map)
+        }
+        [y, m] if is_year(y) && is_two_digit_in(m, 1..=12) => {
+            let mut map = HashMap::new();
+            map.insert("year".to_string(), PropValue::Int(y.parse().ok()?));
+            map.insert("month".to_string(), PropValue::Int(m.parse().ok()?));
+            Some(map)
+        }
+        [y, m, d] if is_year(y) && is_two_digit_in(m, 1..=12) && is_two_digit_in(d, 1..=31) => {
+            let mut map = HashMap::new();
+            map.insert("year".to_string(), PropValue::Int(y.parse().ok()?));
+            map.insert("month".to_string(), PropValue::Int(m.parse().ok()?));
+            map.insert("day".to_string(), PropValue::Int(d.parse().ok()?));
+            Some(map)
+        }
+        _ => None,
+    }
 }
 
 /// `<info>`/`<articleinfo>`/`<bookinfo>` fields `convert_element` gives an

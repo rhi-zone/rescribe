@@ -156,6 +156,56 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   via `pubdate_raw`/`publisher_raw` metadata, same general fallback as
   `header-author`)
 
+## Bibliography / citation
+
+Cross-format IR shape (`bibliography`/`bibliography_entry`/`bibliography_field`
+node kinds, `field:role`/`field:scheme`/`date` properties — see
+`rescribe-std`'s `node`/`prop` doc comments and `docs/adr/0005-citation-bibliography-ir-shape.md`)
+schema-verified against DocBook 5.2, JATS 1.3, TEI P5, and OOXML's `b:`
+namespace. This section covers the DocBook side only.
+
+- [x] bibliography container — `citation-simple-author` (`<bibliography>`
+  mapped to the standard `bibliography` node; its own `<title>` is a heading,
+  same as `<chapter>`, per the `heading_level_for_parent` fix)
+- [x] biblioentry, single structured author — `citation-simple-author`
+  (`<biblioentry>` mapped to `bibliography_entry`; `<author>`/`<title>`/
+  `<publisher>`/`<publishername>`/`<pagenums>`/`<biblioid class="...">` each
+  mapped to a `bibliography_field` with the matching `field:role`; `class`
+  round-trips as `field:scheme`)
+- [x] biblioentry, multiple authors — `citation-multi-author` (`<authorgroup>`
+  of two `<author>`s becomes two sibling `field:role=author` nodes in
+  document order, not merged or overwritten; also covers `<volumenum>`/
+  `<issuenum>`)
+- [x] markup nested inside a field — `citation-markup-in-field` (`<emphasis>`
+  inside a `<title>` survives as a real `emphasis` node inside the
+  `bibliography_field`, concretely proving the field-node design — not a
+  flat string property — actually preserves nested markup; round-trip
+  verified through `rescribe-read-docbook` → `rescribe-write-docbook` →
+  reparse)
+- [x] bibliomixed (mixed free-text content) — `citation-bibliomixed`
+  (`<bibliomixed>` mapped to `bibliography_entry` tagged
+  `docbook:tag=bibliomixed`; plain text interspersed between `<author>`/
+  `<title>` stays as ordinary sibling text nodes rather than being wrapped
+  in a spurious field — writer fix: free text inside an entry is re-emitted
+  via `write_inline`, not routed through the field writer)
+- [x] biblioset nesting — `citation-biblioset` (`<biblioset>` grouping a
+  sub-citation, e.g. a journal/article split — modeled as a nested
+  `bibliography_entry`; `relation` attribute raw-preserved as
+  `docbook:biblioset-relation`)
+- [x] page range splitting — `citation-simple-author` (`<pagenums>12-34</pagenums>`
+  splits into `page_first`/`page_last` fields; the writer's round trip
+  recombines them back into one `<pagenums>`). The ambiguous/non-numeric
+  case (e.g. `"12, 34, 56"`) is not covered by a dedicated fixture, only by
+  manual round-trip verification during development — it's kept whole as a
+  `misc` field with the original string additionally raw-preserved under
+  `docbook:pagenums` rather than guessed at
+- [x] bibliographic date — exercised only via `rescribe-read-docbook`'s
+  manual round-trip verification, not a dedicated fixture (no fixture format
+  currently asserts `PropValue::Map` properties — see `fixtures/spec.md`
+  v1.2's property-matching table); an ISO 8601 `<date>`/`<pubdate>` becomes
+  the structured `prop::DATE` map, a free-text one (e.g. `"Spring 2020"`) is
+  kept as an ordinary `misc` field instead of being guessed at
+
 ## Composition (integration)
 
 - [x] nested list — `int-nested-list` (`<itemizedlist>` inside `<listitem>`)

@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <bibliography>
+    <bibliomixed>Some text before. <author><personname>J. Doe</personname></author>, <title>A Title</title>. 2020.</bibliomixed>
+  </bibliography>
+</article>
