@@ -24,7 +24,7 @@
 //! ```
 
 use jats_fmt::{JatsDoc, Node as JNode, XmlDecl};
-use rescribe_core::{ConversionResult, Document, EmitError, Node};
+use rescribe_core::{ConversionResult, Document, EmitError, Node, PropValue};
 use rescribe_std::{node, prop};
 
 /// Emit a document to JATS XML.
@@ -49,18 +49,26 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         .collect();
     meta_raw_fields.sort_unstable_by_key(|(tag, _)| *tag);
     let title = doc.metadata.get_str("title");
-    if title.is_some() || !meta_raw_fields.is_empty() {
+    let subtitle = doc.metadata.get_str("subtitle");
+    if title.is_some() || subtitle.is_some() || !meta_raw_fields.is_empty() {
         let mut article_meta_children = Vec::new();
-        if let Some(title) = title {
-            article_meta_children.push(jats_element(
-                "title-group",
-                vec![],
-                vec![jats_element(
+        if title.is_some() || subtitle.is_some() {
+            let mut title_group_children = Vec::new();
+            if let Some(title) = title {
+                title_group_children.push(jats_element(
                     "article-title",
                     vec![],
                     vec![jats_text(title)],
-                )],
-            ));
+                ));
+            }
+            if let Some(subtitle) = subtitle {
+                title_group_children.push(jats_element(
+                    "subtitle",
+                    vec![],
+                    vec![jats_text(subtitle)],
+                ));
+            }
+            article_meta_children.push(jats_element("title-group", vec![], title_group_children));
         }
         // Splice back every raw-captured `<article-meta>`/`<journal-meta>`
         // subtree byte-for-byte (see `rescribe-read-jats`'s
@@ -130,15 +138,79 @@ fn jats_text(content: impl Into<String>) -> JNode {
     }
 }
 
-/// Build the generic `id` attribute for a node, if the IR node carries the
-/// corresponding raw-preserved property (see `rescribe-read-jats`'s
-/// `attach_generic_attrs` for the reader side of this round trip).
+/// Build the generic `id`/`xml:lang` attributes for a node, if the IR node
+/// carries the corresponding raw-preserved property (see
+/// `rescribe-read-jats`'s `attach_generic_attrs`, applied to *every*
+/// converted element on read — this is its writer-side counterpart, called
+/// from every `jats_element(...)` build site below, not just the generic
+/// span/div fallback).
 fn generic_attrs(node: &Node) -> Vec<(String, String)> {
     let mut attrs = Vec::new();
     if let Some(id) = node.props.get_str(prop::ID) {
         attrs.push(("id".to_string(), id.to_string()));
     }
+    if let Some(lang) = node.props.get_str(prop::LANGUAGE) {
+        attrs.push(("xml:lang".to_string(), lang.to_string()));
+    }
     attrs
+}
+
+/// Every extra attribute a `generic_span`/`generic_div` (unrecognized
+/// element) captured on read via `jats:attr:{name}` properties — the
+/// writer-side counterpart of `rescribe-read-jats`'s `attach_all_attrs`.
+/// Only meaningful on `SPAN`/`DIV` nodes carrying a `jats:tag` prop; other
+/// node kinds simply have no such properties and this returns empty.
+fn generic_extra_attrs(node: &Node) -> Vec<(String, String)> {
+    node.props
+        .iter()
+        .filter_map(|(key, value)| {
+            let name = key.strip_prefix("jats:attr:")?;
+            match value {
+                PropValue::String(s) => Some((name.to_string(), s.clone())),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// Build `colspan`/`rowspan` attributes for a `<th>`/`<td>` from the
+/// standard cross-format `colspan`/`rowspan` properties (see
+/// `rescribe-read-jats`'s `with_cell_span` for the reader side).
+fn cell_span_attrs(node: &Node) -> Vec<(String, String)> {
+    let mut attrs = generic_attrs(node);
+    if let Some(n) = node.props.get_int(prop::COLSPAN)
+        && n > 1
+    {
+        attrs.push(("colspan".to_string(), n.to_string()));
+    }
+    if let Some(n) = node.props.get_int(prop::ROWSPAN)
+        && n > 1
+    {
+        attrs.push(("rowspan".to_string(), n.to_string()));
+    }
+    attrs
+}
+
+/// Build a bare `<table>...</table>` element (no wrapping `<table-wrap>`)
+/// from a `TABLE` node. Shared by the `TABLE` write arm (which wraps the
+/// result in a synthesized `<table-wrap>`) and the `table-wrap`-tagged
+/// `FIGURE` arm (which supplies its own, already-present `<table-wrap>` and
+/// must not wrap twice).
+fn table_element(node: &Node) -> JNode {
+    let has_structure = node
+        .children
+        .iter()
+        .any(|c| c.kind.as_str() == node::TABLE_HEAD || c.kind.as_str() == node::TABLE_BODY);
+    let table_children: Vec<JNode> = if has_structure {
+        node.children.iter().flat_map(write_node).collect()
+    } else {
+        vec![jats_element(
+            "tbody",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )]
+    };
+    jats_element("table", generic_attrs(node), table_children)
 }
 
 /// Convert one rescribe IR (block-level) node into zero or more JATS AST
@@ -154,11 +226,15 @@ fn write_node(node: &Node) -> Vec<JNode> {
         // reader unwraps regardless of the writer re-wrapping them) just
         // flattens into its children, same as `DOCUMENT`.
         node::DIV => match node.props.get_str("jats:tag") {
-            Some(tag) => vec![jats_element(
-                tag,
-                generic_attrs(node),
-                node.children.iter().flat_map(write_node).collect(),
-            )],
+            Some(tag) => {
+                let mut attrs = generic_attrs(node);
+                attrs.extend(generic_extra_attrs(node));
+                vec![jats_element(
+                    tag,
+                    attrs,
+                    node.children.iter().flat_map(write_node).collect(),
+                )]
+            }
             None => node.children.iter().flat_map(write_node).collect(),
         },
 
@@ -167,36 +243,48 @@ fn write_node(node: &Node) -> Vec<JNode> {
             vec![],
             vec![jats_element(
                 "title",
-                vec![],
+                generic_attrs(node),
                 node.children.iter().flat_map(write_inline).collect(),
             )],
         )],
 
         node::PARAGRAPH => vec![jats_element(
             "p",
-            vec![],
+            generic_attrs(node),
             node.children.iter().flat_map(write_inline).collect(),
         )],
 
         node::BLOCKQUOTE => vec![jats_element(
             "disp-quote",
-            vec![],
+            generic_attrs(node),
             node.children.iter().flat_map(write_node).collect(),
         )],
 
         node::LIST => {
-            let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let list_type = if ordered { "order" } else { "bullet" };
+            // `jats:list-type` (see `rescribe-read-jats`) round-trips the
+            // exact original `list-type` value (`alpha-lower`, `roman-upper`,
+            // ...); only fall back to the lossy ordered/unordered ->
+            // `order`/`bullet` derivation when the source never had one
+            // (e.g. a list built programmatically, not read from JATS).
+            let list_type = match node.props.get_str("jats:list-type") {
+                Some(lt) => lt.to_string(),
+                None => {
+                    let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
+                    (if ordered { "order" } else { "bullet" }).to_string()
+                }
+            };
+            let mut attrs = vec![("list-type".to_string(), list_type)];
+            attrs.extend(generic_attrs(node));
             vec![jats_element(
                 "list",
-                vec![("list-type".to_string(), list_type.to_string())],
+                attrs,
                 node.children.iter().flat_map(write_node).collect(),
             )]
         }
 
         node::LIST_ITEM => vec![jats_element(
             "list-item",
-            vec![],
+            generic_attrs(node),
             node.children.iter().flat_map(write_node).collect(),
         )],
 
@@ -211,7 +299,7 @@ fn write_node(node: &Node) -> Vec<JNode> {
                 entries.push(jats_element("def-item", vec![], entry_children));
                 i += 2;
             }
-            vec![jats_element("def-list", vec![], entries)]
+            vec![jats_element("def-list", generic_attrs(node), entries)]
         }
 
         node::DEFINITION_TERM => vec![jats_element(
@@ -227,33 +315,32 @@ fn write_node(node: &Node) -> Vec<JNode> {
         )],
 
         node::CODE_BLOCK => {
+            // `jats:tag` (see `rescribe-read-jats`) round-trips whether the
+            // source was `<code>` or `<preformat>` — default to `<code>` for
+            // IR trees not built from a JATS `<code>`/`<preformat>` read.
+            let tag = node.props.get_str("jats:tag").unwrap_or("code");
             let mut attrs = Vec::new();
             if let Some(lang) = node.props.get_str(prop::LANGUAGE) {
                 attrs.push(("content-type".to_string(), lang.to_string()));
             }
+            attrs.extend(generic_attrs(node));
             let content = node.props.get_str(prop::CONTENT).unwrap_or("");
-            vec![jats_element("code", attrs, vec![jats_text(content)])]
+            vec![jats_element(tag, attrs, vec![jats_text(content)])]
         }
 
-        node::TABLE => {
-            let has_structure = node.children.iter().any(|c| {
-                c.kind.as_str() == node::TABLE_HEAD || c.kind.as_str() == node::TABLE_BODY
-            });
-            let table_children: Vec<JNode> = if has_structure {
-                node.children.iter().flat_map(write_node).collect()
-            } else {
-                vec![jats_element(
-                    "tbody",
-                    vec![],
-                    node.children.iter().flat_map(write_node).collect(),
-                )]
-            };
-            vec![jats_element(
-                "table-wrap",
-                vec![],
-                vec![jats_element("table", vec![], table_children)],
-            )]
-        }
+        // A bare `TABLE` (not already nested inside a `FIGURE` tagged
+        // `table-wrap` — see that arm above) is standalone IR content with
+        // no wrapping `<table-wrap>` of its own; JATS requires `<table>` to
+        // sit inside a `<table-wrap>`, so one is synthesized here. A `TABLE`
+        // that *is* a `table-wrap`-tagged `FIGURE`'s child is written via
+        // `table_element` directly instead (by that arm), bypassing this one
+        // entirely, so the synthesized wrapper here is never redundant with
+        // an already-present source `<table-wrap>`.
+        node::TABLE => vec![jats_element(
+            "table-wrap",
+            vec![],
+            vec![table_element(node)],
+        )],
 
         node::TABLE_HEAD => vec![jats_element(
             "thead",
@@ -275,19 +362,40 @@ fn write_node(node: &Node) -> Vec<JNode> {
 
         node::TABLE_CELL => vec![jats_element(
             "td",
-            vec![],
+            cell_span_attrs(node),
             node.children.iter().flat_map(write_inline).collect(),
         )],
 
         node::TABLE_HEADER => vec![jats_element(
             "th",
-            vec![],
+            cell_span_attrs(node),
             node.children.iter().flat_map(write_inline).collect(),
         )],
 
+        // `jats:tag = "table-wrap"` (see `rescribe-read-jats`'s `"table-wrap"`
+        // arm) distinguishes a `<table-wrap>`-sourced `FIGURE` from a plain
+        // `<fig>` one. A direct `TABLE` child is written via `table_element`
+        // (a bare `<table>...</table>`, no wrapper) rather than
+        // `write_node` (whose own `TABLE` arm would synthesize a *second*,
+        // redundant `<table-wrap>` nested inside this one).
+        node::FIGURE if node.props.get_str("jats:tag") == Some("table-wrap") => {
+            let children = node
+                .children
+                .iter()
+                .flat_map(|c| {
+                    if c.kind.as_str() == node::TABLE {
+                        vec![table_element(c)]
+                    } else {
+                        write_node(c)
+                    }
+                })
+                .collect();
+            vec![jats_element("table-wrap", generic_attrs(node), children)]
+        }
+
         node::FIGURE => vec![jats_element(
             "fig",
-            vec![],
+            generic_attrs(node),
             node.children.iter().flat_map(write_node).collect(),
         )],
 
@@ -304,7 +412,7 @@ fn write_node(node: &Node) -> Vec<JNode> {
 
         node::FOOTNOTE_DEF => vec![jats_element(
             "fn",
-            vec![],
+            generic_attrs(node),
             node.children.iter().flat_map(write_node).collect(),
         )],
 
@@ -313,8 +421,35 @@ fn write_node(node: &Node) -> Vec<JNode> {
             if let Some(source) = node.props.get_str("math:source") {
                 formula_children.push(jats_element("tex-math", vec![], vec![jats_text(source)]));
             }
-            vec![jats_element("disp-formula", vec![], formula_children)]
+            vec![jats_element(
+                "disp-formula",
+                generic_attrs(node),
+                formula_children,
+            )]
         }
+
+        // `figcaption` (a custom node kind — see `rescribe-read-jats`'s
+        // `"caption"` arm) round-trips back to `<caption>`. Previously had
+        // no arm here at all, so it fell to the catch-all below and its
+        // `<caption>` wrapper was silently dropped, leaving a bare `<p>` on
+        // round-trip — the same class of bug found in `docbook-fmt`'s
+        // `<caption>`/`figcaption` handling in an earlier session.
+        "figcaption" => vec![jats_element(
+            "caption",
+            generic_attrs(node),
+            node.children.iter().flat_map(write_node).collect(),
+        )],
+
+        // A `span` tagged `jats:tag` (a `generic_span`, e.g. `<label>`
+        // landing directly among a `<fig>`/`<table-wrap>`'s block-level
+        // children) must re-emit as itself via `write_inline`'s `SPAN` arm,
+        // not fall to the "unknown block - recurse into children" catch-all
+        // below — that catch-all would descend straight to the span's
+        // `TEXT` child, which the next arm's block-position `TEXT` case then
+        // wraps in a spurious `<p>`, silently losing the original tag
+        // entirely (e.g. `<label>Figure 1</label>` round-tripping as a bare
+        // `<p>Figure 1</p>`).
+        node::SPAN if node.props.get_str("jats:tag").is_some() => write_inline(node),
 
         // Inline nodes that appear at block level: wrap in a <p>.
         node::TEXT | node::EMPHASIS | node::STRONG | node::CODE | node::LINK => {
@@ -362,6 +497,11 @@ fn write_inline(node: &Node) -> Vec<JNode> {
         )],
 
         node::CODE => {
+            // `jats:tag` (see `rescribe-read-jats`) distinguishes an inline
+            // `<code>` from `<monospace>` — default to `<monospace>` (the
+            // pre-existing behavior) for IR trees not built from a JATS
+            // read.
+            let tag = node.props.get_str("jats:tag").unwrap_or("monospace");
             let mut children: Vec<JNode> = node
                 .props
                 .get_str(prop::CONTENT)
@@ -369,17 +509,39 @@ fn write_inline(node: &Node) -> Vec<JNode> {
                 .into_iter()
                 .collect();
             children.extend(node.children.iter().flat_map(write_inline));
-            vec![jats_element("monospace", vec![], children)]
+            vec![jats_element(tag, generic_attrs(node), children)]
         }
 
         node::LINK => {
             let mut attrs = Vec::new();
             if let Some(url) = node.props.get_str(prop::URL) {
                 attrs.push(("xlink:href".to_string(), url.to_string()));
-                attrs.push(("ext-link-type".to_string(), "uri".to_string()));
+                // `jats:ext-link-type` (see `rescribe-read-jats`) round-trips
+                // the original `ext-link-type` value; `"uri"` is JATS's own
+                // default and remains the fallback for IR trees not built
+                // from a JATS read.
+                let link_type = node
+                    .props
+                    .get_str("jats:ext-link-type")
+                    .unwrap_or("uri")
+                    .to_string();
+                attrs.push(("ext-link-type".to_string(), link_type));
             }
+            attrs.extend(generic_attrs(node));
             vec![jats_element(
                 "ext-link",
+                attrs,
+                node.children.iter().flat_map(write_inline).collect(),
+            )]
+        }
+
+        node::FOOTNOTE_REF => {
+            let mut attrs = vec![("ref-type".to_string(), "fn".to_string())];
+            if let Some(label) = node.props.get_str(prop::LABEL) {
+                attrs.push(("rid".to_string(), label.to_string()));
+            }
+            vec![jats_element(
+                "xref",
                 attrs,
                 node.children.iter().flat_map(write_inline).collect(),
             )]
@@ -438,11 +600,15 @@ fn write_inline(node: &Node) -> Vec<JNode> {
         // `rescribe-read-jats::generic_span`) — re-emit its original tag
         // name.
         node::SPAN => match node.props.get_str("jats:tag") {
-            Some(tag) => vec![jats_element(
-                tag,
-                generic_attrs(node),
-                node.children.iter().flat_map(write_inline).collect(),
-            )],
+            Some(tag) => {
+                let mut attrs = generic_attrs(node);
+                attrs.extend(generic_extra_attrs(node));
+                vec![jats_element(
+                    tag,
+                    attrs,
+                    node.children.iter().flat_map(write_inline).collect(),
+                )]
+            }
             None => node.children.iter().flat_map(write_inline).collect(),
         },
 

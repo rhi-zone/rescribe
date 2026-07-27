@@ -1,0 +1,11 @@
+{
+  "description": "the id attribute on <fig> round-trips onto the standard id property; <label> has no dedicated IR mapping and is raw-preserved as a tagged span child (JATS's own inline label-line convention, same as e.g. DocBook's bridgehead)",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "figure", "props": { "id": "f1" } },
+    { "path": "/0/0/0",   "kind": "span", "props": { "jats:tag": "label" } },
+    { "path": "/0/0/1",   "kind": "figcaption" },
+    { "path": "/0/0/1/0", "kind": "paragraph" },
+    { "path": "/0/0/2",   "kind": "image", "props": { "url": "image.png" } }
+  ]
+}

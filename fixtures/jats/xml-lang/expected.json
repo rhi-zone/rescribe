@@ -1,0 +1,7 @@
+{
+  "description": "xml:lang round-trips onto the standard cross-format language property, applied uniformly to every converted element via attach_generic_attrs",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph", "props": { "language": "fr" } }
+  ]
+}

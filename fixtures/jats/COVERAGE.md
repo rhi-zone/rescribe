@@ -101,17 +101,19 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] list type (ordered vs unordered) — `list-ordered`, `list-unordered`
 - [x] figure caption — `figure`
 - [x] table header cells — `table-sections`
-- [ ] section id (`id` attribute) — (missing)
-- [ ] xml:lang — (missing; language attribute)
-- [ ] figure id / label — (missing; `id` and `<label>` on `<fig>`)
-- [ ] table caption — (missing; `<caption>` on `<table-wrap>`)
-- [ ] table id / label — (missing)
+- [x] section id (`id` attribute) — `section-id`
+- [x] xml:lang — `xml-lang`
+- [x] figure id / label — `figure-id-label`
+- [x] table caption — `table-caption`
+- [x] table id / label — `table-id` (id on `<table-wrap>` covered by
+  `table-caption`, id on the inner `<table>` by `table-id`)
 - [ ] list continuation / start value — (missing; `continued-from` attribute)
-- [ ] colgroup / colspec in table — (missing; column width/alignment attributes)
-- [ ] table cell spanning — (missing; `colspan`, `rowspan`)
+- [x] colgroup / colspec in table — `table-colgroup`
+- [x] table cell spanning — `table-cell-spanning`
 - [ ] underline style — (missing; `underline-style` attribute on `<underline>`)
-- [ ] ext-link type — (missing; `ext-link-type` attribute variants beyond "uri")
-- [ ] MathML math — (missing; `<math>` MathML content as alternative to `<tex-math>`)
+- [x] ext-link type — `ext-link-type`
+- [ ] MathML math — (missing; `<math>` MathML content as alternative to `<tex-math>` —
+  genuine design fork, see TODO.md)
 
 ## Composition (integration)
 

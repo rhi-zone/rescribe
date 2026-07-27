@@ -214,10 +214,38 @@ fn get_attr<'a>(attrs: &'a [(String, String)], key: &str) -> Option<&'a str> {
 }
 
 /// Attach the small set of JATS attributes worth round-tripping generically
-/// (id) regardless of which element carries them.
+/// (`id`, `xml:lang`) regardless of which element carries them. Applied to
+/// *every* element [`convert_element`] produces (see the `.map()` wrapping
+/// its `match` at the end of that function) — not just the generic-fallback
+/// span/div nodes — so e.g. `id` on a `<sec>` or `xml:lang` on a `<p>`
+/// round-trips the same way it would on an unrecognized element. Mirrors
+/// `rescribe-read-docbook`'s `attach_generic_attrs` for the same two
+/// standard-XML-ish attributes (JATS defines no format-specific analogue of
+/// DocBook's `role`).
 fn attach_generic_attrs(mut node: Node, attrs: &[(String, String)]) -> Node {
     if let Some(id) = get_attr(attrs, "id") {
         node = node.prop(prop::ID, id.to_string());
+    }
+    if let Some(lang) = get_attr(attrs, "xml:lang") {
+        node = node.prop(prop::LANGUAGE, lang.to_string());
+    }
+    node
+}
+
+/// Preserve every attribute *other than* `id`/`xml:lang` (already handled by
+/// [`attach_generic_attrs`]) as a `jats:attr:{name}` property. Only used by
+/// [`generic_span`]/[`generic_div`] — the elements this reader has no
+/// dedicated semantic mapping for — since those are exactly the elements
+/// whose attributes (`content-type` on `<named-content>`, `mimetype` on
+/// `<supplementary-material>`, `target-type` on `<target>`, ...) this reader
+/// cannot know the meaning of ahead of time and so must raw-preserve
+/// wholesale rather than silently drop.
+fn attach_all_attrs(mut node: Node, attrs: &[(String, String)]) -> Node {
+    for (key, value) in attrs {
+        if key == "id" || key == "xml:lang" {
+            continue;
+        }
+        node = node.prop(format!("jats:attr:{key}"), value.clone());
     }
     node
 }
@@ -230,7 +258,7 @@ fn generic_span(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> 
     let n = Node::new(node::SPAN)
         .prop("jats:tag", name.to_string())
         .children(children);
-    attach_generic_attrs(n, attrs)
+    attach_all_attrs(n, attrs)
 }
 
 /// A generic block-level "wrapper" element: the block-level counterpart to
@@ -244,7 +272,7 @@ fn generic_div(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> N
     let n = Node::new(node::DIV)
         .prop("jats:tag", name.to_string())
         .children(children);
-    attach_generic_attrs(n, attrs)
+    attach_all_attrs(n, attrs)
 }
 
 /// Known JATS block-level elements — used only by the catch-all fallback in
@@ -337,6 +365,8 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             | "speaker"
             | "supplementary-material"
             | "block-alternatives"
+            | "colgroup"
+            | "col"
             // Front-matter containers
             | "contrib-group"
             | "aff"
@@ -399,9 +429,15 @@ fn convert_element(
                     .children(children),
             )
         }
+        // Tagged `jats:subtitle` so `extract_metadata` can tell a `<subtitle>`
+        // apart from a `<title>`/`<article-title>` sibling in the same
+        // `<title-group>` — both convert to `HEADING`, but they must land in
+        // distinct metadata keys (`subtitle` vs `title`) rather than one
+        // silently overwriting/merging into the other.
         "subtitle" => Some(
             Node::new(node::HEADING)
                 .prop(prop::LEVEL, 2i64)
+                .prop("jats:subtitle", true)
                 .children(children),
         ),
 
@@ -415,14 +451,27 @@ fn convert_element(
                 .children(children),
         ),
 
-        // Lists
+        // Lists. `list-type` has more values than the binary
+        // ordered/unordered `prop::ORDERED` can represent (`alpha-lower`,
+        // `alpha-upper`, `roman-lower`, `roman-upper`, `simple`, `bullet`,
+        // `order`, ...) — the exact original value is additionally
+        // raw-preserved as `jats:list-type` so the writer can round-trip the
+        // specific numeration style instead of collapsing every ordered
+        // variant down to a generic `order`.
         "list" => {
-            let ordered = list_type == Some("order");
-            Some(
-                Node::new(node::LIST)
-                    .prop(prop::ORDERED, ordered)
-                    .children(children),
-            )
+            let ordered = list_type == Some("order")
+                || matches!(
+                    list_type,
+                    Some("alpha-lower")
+                        | Some("alpha-upper")
+                        | Some("roman-lower")
+                        | Some("roman-upper")
+                );
+            let mut node = Node::new(node::LIST).prop(prop::ORDERED, ordered);
+            if let Some(lt) = list_type {
+                node = node.prop("jats:list-type", lt.to_string());
+            }
+            Some(node.children(children))
         }
         "list-item" => Some(Node::new(node::LIST_ITEM).children(children)),
 
@@ -432,22 +481,60 @@ fn convert_element(
         "term" => Some(Node::new(node::DEFINITION_TERM).children(children)),
         "def" => Some(Node::new(node::DEFINITION_DESC).children(children)),
 
-        // Code
+        // Code. `<code>` (unlike `<preformat>`) is documented as usable
+        // either as a standalone block sibling of `<sec>`/`<body>` content
+        // or mixed directly into running text — this reader uses the
+        // pragmatic signal of "direct child of `<p>`" to tell the two
+        // usages apart (the same typical-usage judgment call `is_block_element`'s
+        // doc comment already documents making elsewhere; JATS's own tag
+        // library page for `<code>` did not yield a fetchable "May be
+        // contained in" list to verify this against directly). Both `<code>`
+        // and `<preformat>` map to `CODE_BLOCK` in block position but record
+        // which original tag was used via `jats:tag` so the writer can
+        // re-emit the exact element rather than collapsing both to `<code>`.
+        "code" if parent == Some("p") => {
+            let text = extract_text(&children);
+            Some(
+                Node::new(node::CODE)
+                    .prop(prop::CONTENT, text)
+                    .prop("jats:tag", "code"),
+            )
+        }
         "code" | "preformat" => {
             let text = extract_text(&children);
-            let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, text);
+            let mut node = Node::new(node::CODE_BLOCK)
+                .prop(prop::CONTENT, text)
+                .prop("jats:tag", name.to_string());
             if let Some(lang) = content_type {
                 node = node.prop(prop::LANGUAGE, lang.to_string());
             }
             Some(node)
         }
+        // `<monospace>` is JATS's dedicated inline-styling element (distinct
+        // from `<code>` used inline) — both map to the same `CODE` node kind
+        // since rescribe has no separate "styled as monospace" vs "is source
+        // code" inline distinction, but `jats:tag` records which one it was
+        // so the writer defaults back to `<monospace>` (this arm) unless the
+        // `<code>`-inline arm above set `jats:tag` to `"code"`.
         "monospace" => {
             let text = extract_text(&children);
-            Some(Node::new(node::CODE).prop(prop::CONTENT, text))
+            Some(
+                Node::new(node::CODE)
+                    .prop(prop::CONTENT, text)
+                    .prop("jats:tag", "monospace"),
+            )
         }
 
-        // Block quote
-        "disp-quote" | "boxed-text" => Some(Node::new(node::BLOCKQUOTE).children(children)),
+        // Block quote. `<boxed-text>` (a callout/sidebar per its own Tag
+        // Library page — "highlighting tips, warnings, explanatory notes...
+        // visual prominence and topical relevance", explicitly contrasted
+        // there with `<disp-quote>`'s "attribution and source") is *not* a
+        // quotation and was previously (incorrectly) folded into the same
+        // `BLOCKQUOTE` mapping as `<disp-quote>`; it now falls through to the
+        // generic block catch-all below (`is_block_element` already lists
+        // it), which raw-preserves it as a tagged `div` instead of
+        // misrepresenting it as a quote.
+        "disp-quote" => Some(Node::new(node::BLOCKQUOTE).children(children)),
 
         // Inline formatting
         "italic" => Some(Node::new(node::EMPHASIS).children(children)),
@@ -463,6 +550,30 @@ fn convert_element(
             let mut node = Node::new(node::LINK).children(children);
             if let Some(url) = href {
                 node = node.prop(prop::URL, url.to_string());
+            }
+            // `ext-link-type` defaults to `"uri"` on write when absent (the
+            // writer's previous hardcoded behavior, kept as the fallback)
+            // but the original value is now round-tripped exactly when
+            // present, rather than every `<ext-link>` collapsing to
+            // `ext-link-type="uri"` regardless of its source value.
+            if let Some(t) = get_attr(attrs, "ext-link-type") {
+                node = node.prop("jats:ext-link-type", t.to_string());
+            }
+            Some(node)
+        }
+        // `<xref ref-type="fn">` is a footnote reference (a cross-reference
+        // to an `<fn>` by `rid`) — modeled with the standard cross-format
+        // `footnote_ref` node kind (the same convention every other
+        // rescribe reader with footnote references uses, e.g.
+        // `rescribe-read-docbook`'s `footnoteref` -> `FOOTNOTE_REF`) rather
+        // than the generic `LINK` every other `<xref ref-type="...">`
+        // variant (`fig`, `table`, `bibr`, `sec`, ...) falls to below, which
+        // already round-trips those adequately via `jats:ref-type` +
+        // `url`/`#{rid}`.
+        "xref" if ref_type == Some("fn") => {
+            let mut node = Node::new(node::FOOTNOTE_REF).children(children);
+            if let Some(r) = rid {
+                node = node.prop(prop::LABEL, r.to_string());
             }
             Some(node)
         }
@@ -502,13 +613,30 @@ fn convert_element(
         }
 
         // Tables
-        "table-wrap" => Some(Node::new(node::FIGURE).children(children)),
+        // Tagged `jats:tag = "table-wrap"` (distinct from `<fig>`, which gets
+        // no tag) so the writer can tell the two `FIGURE`-mapped source
+        // elements apart and re-emit the right one — see
+        // `rescribe-write-jats`'s `FIGURE` arm, which also needs this
+        // distinction to avoid double-wrapping a `TABLE` child in a second,
+        // redundant `<table-wrap>` (its own `TABLE` write arm already emits
+        // one for a standalone table).
+        "table-wrap" => Some(
+            Node::new(node::FIGURE)
+                .prop("jats:tag", "table-wrap")
+                .children(children),
+        ),
         "table" => Some(Node::new(node::TABLE).children(children)),
         "thead" => Some(Node::new(node::TABLE_HEAD).children(children)),
         "tbody" => Some(Node::new(node::TABLE_BODY).children(children)),
         "tr" => Some(Node::new(node::TABLE_ROW).children(children)),
-        "th" => Some(Node::new(node::TABLE_HEADER).children(children)),
-        "td" => Some(Node::new(node::TABLE_CELL).children(children)),
+        "th" => Some(with_cell_span(
+            Node::new(node::TABLE_HEADER).children(children),
+            attrs,
+        )),
+        "td" => Some(with_cell_span(
+            Node::new(node::TABLE_CELL).children(children),
+            attrs,
+        )),
 
         // Math
         "disp-formula" => {
@@ -570,6 +698,24 @@ fn convert_element(
             }
         }
     }
+    // Applied to every branch above (not just the generic fallback) so `id`
+    // and `xml:lang` round-trip uniformly regardless of which element
+    // carries them — see `attach_generic_attrs`.
+    .map(|n| attach_generic_attrs(n, attrs))
+}
+
+/// Read `colspan`/`rowspan` off a `<th>`/`<td>` element (JATS's table model
+/// uses the same HTML-style attribute names/semantics directly, unlike
+/// DocBook's CALS `morerows`/`namest`/`nameend`) onto the standard
+/// cross-format `colspan`/`rowspan` properties.
+fn with_cell_span(mut node: Node, attrs: &[(String, String)]) -> Node {
+    if let Some(n) = get_attr(attrs, "colspan").and_then(|s| s.parse::<i64>().ok()) {
+        node = node.prop(prop::COLSPAN, n);
+    }
+    if let Some(n) = get_attr(attrs, "rowspan").and_then(|s| s.parse::<i64>().ok()) {
+        node = node.prop(prop::ROWSPAN, n);
+    }
+    node
 }
 
 /// `<article-meta>`/`<journal-meta>` fields `convert_element` gives an
@@ -584,7 +730,7 @@ fn convert_element(
 /// `convert_element`'s generic catch-all (`generic_span`/`generic_div`) and
 /// gets raw-preserved instead — see `convert_children`.
 fn is_modeled_header_field(name: &str) -> bool {
-    matches!(name, "title" | "article-title")
+    matches!(name, "title" | "article-title" | "subtitle")
 }
 
 /// Extract `<article-meta>`/`<journal-meta>` metadata: title (searched for
@@ -616,9 +762,18 @@ fn extract_metadata(
 ) {
     for node in nodes {
         if node.kind.as_str() == node::HEADING {
-            let title = extract_text(&node.children);
-            if !title.is_empty() {
-                metadata.set("title", title);
+            let text = extract_text(&node.children);
+            if !text.is_empty() {
+                // A `<subtitle>` converts to `HEADING` the same as
+                // `<title>`/`<article-title>` (see `convert_element`) but is
+                // tagged `jats:subtitle` so it lands in its own metadata key
+                // instead of overwriting/merging into `title`.
+                let key = if node.props.get_bool("jats:subtitle") == Some(true) {
+                    "subtitle"
+                } else {
+                    "title"
+                };
+                metadata.set(key, text);
             }
         } else if matches!(node.kind.as_str(), node::SPAN | node::DIV)
             && let Some(tag) = node.props.get_str("jats:tag")

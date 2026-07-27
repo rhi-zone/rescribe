@@ -1,0 +1,13 @@
+{
+  "description": "<table-wrap> (mapped to figure, same as <fig>) with id/label/caption: id round-trips onto the standard id property; caption maps to the same figcaption node <fig>'s caption uses",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "figure", "props": { "id": "t1" } },
+    { "path": "/0/0/0",     "kind": "span", "props": { "jats:tag": "label" } },
+    { "path": "/0/0/1",     "kind": "figcaption" },
+    { "path": "/0/0/1/0",   "kind": "paragraph" },
+    { "path": "/0/0/2",     "kind": "table" },
+    { "path": "/0/0/2/0",   "kind": "table_body" },
+    { "path": "/0/0/2/0/0", "kind": "table_row" }
+  ]
+}

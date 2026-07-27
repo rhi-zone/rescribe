@@ -1,0 +1,12 @@
+{
+  "description": "<colgroup>/<col> (column width attributes) have no dedicated IR mapping and are raw-preserved generically as tagged divs with their attributes captured via jats:attr:*, rather than being silently dropped or misclassified as inline",
+  "assertions": [
+    { "path": "/0",           "kind": "div" },
+    { "path": "/0/0",         "kind": "figure" },
+    { "path": "/0/0/0",       "kind": "table" },
+    { "path": "/0/0/0/0",     "kind": "div", "props": { "jats:tag": "colgroup" } },
+    { "path": "/0/0/0/0/0",   "kind": "div", "props": { "jats:tag": "col", "jats:attr:width": "1*" } },
+    { "path": "/0/0/0/0/1",   "kind": "div", "props": { "jats:tag": "col", "jats:attr:width": "2*" } },
+    { "path": "/0/0/0/1",     "kind": "table_body" }
+  ]
+}

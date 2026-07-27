@@ -1,0 +1,8 @@
+{
+  "description": "the id attribute on the inner <table> element (distinct from an id on the outer <table-wrap>) round-trips onto the standard id property",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "figure" },
+    { "path": "/0/0/0",   "kind": "table", "props": { "id": "tbl1" } }
+  ]
+}

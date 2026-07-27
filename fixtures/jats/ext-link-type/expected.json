@@ -1,0 +1,8 @@
+{
+  "description": "ext-link-type values other than the default \"uri\" (e.g. \"doi\") are raw-preserved via jats:ext-link-type so the writer round-trips the original value instead of collapsing every <ext-link> to ext-link-type=\"uri\"",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "link", "props": { "url": "10.1000/example", "jats:ext-link-type": "doi" } }
+  ]
+}

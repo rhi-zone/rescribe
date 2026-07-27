@@ -1,0 +1,12 @@
+{
+  "description": "JATS <td>/<th> colspan/rowspan attributes (HTML-style, unlike DocBook's CALS morerows) round-trip onto the standard cross-format colspan/rowspan properties",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "figure" },
+    { "path": "/0/0/0",     "kind": "table" },
+    { "path": "/0/0/0/0",   "kind": "table_body" },
+    { "path": "/0/0/0/0/0", "kind": "table_row" },
+    { "path": "/0/0/0/0/0/0", "kind": "table_cell", "props": { "colspan": 2, "rowspan": 3 } },
+    { "path": "/0/0/0/0/0/1", "kind": "table_cell" }
+  ]
+}

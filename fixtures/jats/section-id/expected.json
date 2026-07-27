@@ -1,0 +1,9 @@
+{
+  "description": "the id attribute on <sec> round-trips onto the standard id property, applied uniformly via attach_generic_attrs to every converted element (not just the generic unrecognized-element fallback)",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div", "props": { "id": "s1" } },
+    { "path": "/0/0/0", "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0/1", "kind": "paragraph" }
+  ]
+}

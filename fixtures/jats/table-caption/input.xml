@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink">
+  <body>
+    <table-wrap id="t1">
+      <label>Table 1</label>
+      <caption><p>Results.</p></caption>
+      <table>
+        <tbody>
+          <tr><td>Cell</td></tr>
+        </tbody>
+      </table>
+    </table-wrap>
+  </body>
+</article>

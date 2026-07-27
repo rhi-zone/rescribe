@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink">
+  <body>
+    <p><ext-link ext-link-type="doi" xlink:href="10.1000/example">a DOI link</ext-link></p>
+  </body>
+</article>
