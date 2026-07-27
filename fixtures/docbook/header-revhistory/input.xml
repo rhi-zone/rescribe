@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <info>
+    <title>Sample</title>
+    <revhistory>
+      <revision>
+        <revnumber>1.1</revnumber>
+        <date>2026-01-01</date>
+        <authorinitials>ab</authorinitials>
+        <revremark>Initial revision</revremark>
+      </revision>
+    </revhistory>
+  </info>
+  <para>Body text.</para>
+</article>

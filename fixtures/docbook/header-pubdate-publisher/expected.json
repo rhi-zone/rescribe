@@ -1,0 +1,14 @@
+{
+  "description": "<info>/<pubdate> and <info>/<publisher> have no dedicated semantic mapping — raw-preserved verbatim (pubdate_raw, publisher_raw) alongside flattened summaries, exercising the general <info> front-matter fallback",
+  "metadata": {
+    "title": "Sample",
+    "pubdate": "2026-01-01",
+    "pubdate_raw": "<pubdate>2026-01-01</pubdate>",
+    "publisher": "Acme Publishing",
+    "publisher_raw": "<publisher>\n      <publishername>Acme Publishing</publishername>\n    </publisher>"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

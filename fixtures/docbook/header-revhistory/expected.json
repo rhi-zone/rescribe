@@ -1,0 +1,12 @@
+{
+  "description": "<info>/<revhistory> has no dedicated semantic mapping — it is raw-preserved verbatim (revhistory_raw) alongside a flattened summary, exercising the general <info> front-matter fallback (the same mechanism header-author exercises for <author>)",
+  "metadata": {
+    "title": "Sample",
+    "revhistory": "1.12026-01-01abInitial revision",
+    "revhistory_raw": "<revhistory>\n      <revision>\n        <revnumber>1.1</revnumber>\n        <date>2026-01-01</date>\n        <authorinitials>ab</authorinitials>\n        <revremark>Initial revision</revremark>\n      </revision>\n    </revhistory>"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

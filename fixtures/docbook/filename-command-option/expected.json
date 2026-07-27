@@ -1,0 +1,10 @@
+{
+  "description": "<command>/<option>/<filename> are system-oriented inline elements with no cross-format meaning beyond \"this is literal/verbatim text\" - mapped to the standard code node like <literal>",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "code", "props": { "content": "make" } },
+    { "path": "/0/0/3", "kind": "code", "props": { "content": "--jobs" } },
+    { "path": "/0/0/5", "kind": "code", "props": { "content": "Makefile" } }
+  ]
+}

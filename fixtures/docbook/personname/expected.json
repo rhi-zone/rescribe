@@ -1,0 +1,9 @@
+{
+  "description": "<personname>/<firstname>/<surname> outside <info> have no dedicated node of their own - they pass their text through in place, matching plain running text",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "text", "props": { "content": "Ada" } },
+    { "path": "/0/0/2", "kind": "text", "props": { "content": "Lovelace" } }
+  ]
+}

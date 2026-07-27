@@ -51,19 +51,22 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 - [x] image (inline) — `image` (`<inlinemediaobject>` / `<imagedata>`)
 - [x] line break — `line-break` (`<sbr>`)
 - [x] footnote — `footnote-def` (`<footnote>`)
-- [ ] xref (cross-reference) — (missing; `<xref linkend="…">`)
-- [ ] anchor — (missing; `<anchor xml:id="…">`)
+- [x] xref (cross-reference) — `xref` (`<xref linkend="…">`, mapped to the
+  standard `link` node with a synthesized `#linkend` url)
+- [x] anchor — `anchor` (`<anchor xml:id="…">`, mapped to an id-only `link` node)
 - [ ] abbrev / acronym — (missing; `<abbrev>`, `<acronym>`)
 - [ ] trademark — (missing; `<trademark>`)
 - [ ] keycap / keycombo — (missing; `<keycap>`, `<keycombo>`)
 - [ ] guilabel / guimenu / guibutton — (missing; GUI inline elements)
-- [ ] filename / command / option — (missing; `<filename>`, `<command>`, `<option>`)
+- [x] filename / command / option — `filename-command-option` (mapped to the
+  standard `code` node, same as `<literal>`)
 - [ ] varname / function / parameter — (missing; `<varname>`, `<function>`, `<parameter>`)
 - [ ] classname / methodname / interfacename — (missing; OOP semantic inlines)
 - [ ] replaceable — (missing; `<replaceable>`)
 - [ ] systemitem / envar / prompt — (missing; system inline elements)
 - [ ] citetitle — (missing; `<citetitle>`)
-- [ ] personname — (missing; `<personname>`)
+- [x] personname — `personname` (outside `<info>`, `<personname>`/`<firstname>`/
+  `<surname>` have no dedicated node — their text passes through in place)
 - [x] quote — `adv-unknown-inline-element` (unrecognized inline element,
   raw-preserved as a tagged `span` in place rather than silently dropped)
 - [ ] phrase — (missing; `<phrase>`)
@@ -99,15 +102,16 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   context the per-entry conversion doesn't have)
 - [x] xml:lang — `prop-xml-lang` (standard `language` property, applied
   uniformly to every element via `attach_generic_attrs`, not just `<para>`)
-- [ ] revision / revhistory — (missing standalone fixture; the general
-  `<info>` raw-preservation fallback that would cover it is exercised by
-  `header-author`)
+- [x] revision / revhistory — `header-revhistory` (raw-preserved verbatim via
+  `revhistory_raw` metadata, alongside a flattened summary — the general
+  `<info>` front-matter fallback, same mechanism as `header-author`)
 - [x] author / orgname in info — `header-author` (`<author>` has no
   dedicated semantic mapping; raw-preserved verbatim as `author_raw`
   metadata, alongside a flattened `author` summary — exercises the general
   `<info>` front-matter fallback, not a hardcoded special case)
-- [ ] pubdate / publisher — (missing standalone fixture; covered by the same
-  general fallback as `header-author`)
+- [x] pubdate / publisher — `header-pubdate-publisher` (raw-preserved verbatim
+  via `pubdate_raw`/`publisher_raw` metadata, same general fallback as
+  `header-author`)
 
 ## Composition (integration)
 

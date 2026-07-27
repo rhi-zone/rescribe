@@ -1,0 +1,10 @@
+{
+  "description": "<xref linkend=...> is a cross-reference to another element's id, mapped to the standard link node with a synthesized #linkend url and placeholder text",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "div", "props": { "id": "intro" } },
+    { "path": "/0/0/1", "kind": "paragraph" },
+    { "path": "/0/0/1/1", "kind": "link", "props": { "url": "#intro" } },
+    { "path": "/0/0/1/1/0", "kind": "text", "props": { "content": "intro" } }
+  ]
+}
