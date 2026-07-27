@@ -10,13 +10,19 @@
 //! quick-xml 0.39 tokenizes entity references (`&name;`, `&#65;`) as their
 //! own `GeneralRef` events rather than folding them into `Text`. The five
 //! predefined XML entities and numeric character references are resolved
-//! here and merged into the surrounding text run; any other named entity
-//! (DTD-defined, unresolvable without the DTD) is preserved verbatim as
-//! [`Node::EntityRef`] per the raw-preservation rule — never silently
-//! dropped.
+//! here and merged into the surrounding text run. Any other named entity is
+//! next tried against an [`xml_entities::EntityResolver`] built from the
+//! document's own DOCTYPE internal subset (if any) layered over the
+//! standard WHATWG/ISO table — if that resolves, the replacement text is
+//! merged into the surrounding text run the same way the predefined
+//! entities are. Only a name neither layer can resolve (truly DTD-specific,
+//! or referencing an external subset this crate does not fetch) is
+//! preserved verbatim as [`Node::EntityRef`] per the raw-preservation rule —
+//! never silently dropped.
 
 use quick_xml::Reader;
 use quick_xml::events::Event as XmlEvent;
+use xml_entities::{DtdEntities, EntityResolver, Resolution};
 
 use crate::ast::*;
 
@@ -35,6 +41,12 @@ pub fn parse(input: &[u8]) -> (JatsDoc, Vec<Diagnostic>) {
     let mut current_text = String::new();
     let mut text_start = 0usize;
     let mut buf = Vec::new();
+    // Entities declared in this document's own DOCTYPE internal subset (if
+    // any), layered over the standard table by `EntityResolver`. Replaced
+    // once the `DocType` event is seen below; a well-formed XML document's
+    // DOCTYPE always precedes the entity references it enables, so a single
+    // forward pass is sufficient.
+    let mut entity_resolver = EntityResolver::new(DtdEntities::empty());
 
     macro_rules! flush_text {
         ($end:expr) => {
@@ -81,6 +93,17 @@ pub fn parse(input: &[u8]) -> (JatsDoc, Vec<Diagnostic>) {
             Ok(XmlEvent::DocType(dt)) => {
                 flush_text!(pos);
                 let content = String::from_utf8_lossy(dt.as_ref()).into_owned();
+                let (declared, entity_diagnostics) = DtdEntities::parse_doctype(&content);
+                for d in entity_diagnostics {
+                    diagnostics.push(Diagnostic {
+                        message: format!("DOCTYPE internal subset: {d}"),
+                        span: Span {
+                            start: pos,
+                            end: pos,
+                        },
+                    });
+                }
+                entity_resolver = EntityResolver::new(declared);
                 let node = Node::Doctype {
                     content,
                     span: Span {
@@ -188,15 +211,22 @@ pub fn parse(input: &[u8]) -> (JatsDoc, Vec<Diagnostic>) {
                     if let Some(ch) = resolve_predefined_entity(&name) {
                         current_text.push(ch);
                     } else {
-                        flush_text!(pos);
-                        let node = Node::EntityRef {
-                            name,
-                            span: Span {
-                                start: pos,
-                                end: reader.buffer_position() as usize,
-                            },
-                        };
-                        push_node(node, &mut stack, &mut roots);
+                        match entity_resolver.resolve(&name) {
+                            Resolution::Resolved { text, .. } => {
+                                current_text.push_str(&text);
+                            }
+                            Resolution::ExternalUnresolved { .. } | Resolution::Unknown => {
+                                flush_text!(pos);
+                                let node = Node::EntityRef {
+                                    name,
+                                    span: Span {
+                                        start: pos,
+                                        end: reader.buffer_position() as usize,
+                                    },
+                                };
+                                push_node(node, &mut stack, &mut roots);
+                            }
+                        }
                     }
                 }
             }
@@ -372,6 +402,53 @@ mod tests {
         let (doc, _) = parse(b"<p>&#65;</p>");
         let root = doc.root().unwrap();
         assert_eq!(root.text_content(), "A");
+    }
+
+    #[test]
+    fn resolves_entity_declared_in_internal_subset() {
+        let (doc, diags) = parse(
+            br#"<!DOCTYPE article [ <!ENTITY company "Acme, Inc."> ]>
+<article><p>Made by &company;.</p></article>"#,
+        );
+        assert!(diags.is_empty(), "diagnostics: {diags:?}");
+        let root = doc.root().unwrap();
+        assert_eq!(root.text_content(), "Made by Acme, Inc..");
+    }
+
+    #[test]
+    fn resolves_entity_via_standard_table_without_any_doctype() {
+        // No DOCTYPE at all: falls back straight to the standard table for
+        // an entity that isn't one of the 5 XML predefined ones.
+        let (doc, diags) = parse("<p>caf\u{e9} or caf&eacute;</p>".as_bytes());
+        assert!(diags.is_empty(), "diagnostics: {diags:?}");
+        let root = doc.root().unwrap();
+        assert_eq!(root.text_content(), "caf\u{e9} or caf\u{e9}");
+    }
+
+    #[test]
+    fn still_preserves_entity_unresolvable_by_either_layer() {
+        // A name that is neither declared by this document's own DOCTYPE
+        // nor part of the standard table must still round-trip losslessly
+        // as `Node::EntityRef`, not be dropped or invented.
+        let (doc, diags) = parse(
+            br#"<!DOCTYPE article [ <!ENTITY company "Acme, Inc."> ]>
+<article><p>a &undeclared; b</p></article>"#,
+        );
+        assert!(diags.is_empty(), "diagnostics: {diags:?}");
+        let root = doc.root().unwrap();
+        let p = root
+            .children()
+            .unwrap()
+            .iter()
+            .find_map(|n| match n {
+                Node::Element { name, children, .. } if name == "p" => Some(children),
+                _ => None,
+            })
+            .unwrap();
+        assert!(
+            p.iter()
+                .any(|n| matches!(n, Node::EntityRef { name, .. } if name == "undeclared"))
+        );
     }
 
     #[test]

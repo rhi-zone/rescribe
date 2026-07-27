@@ -146,6 +146,12 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] broken xref (rid pointing to nonexistent id) — `adv-broken-xref`
 - [x] entity references — `adv-entity-references`
 - [x] numeric character references — `adv-numeric-char-ref`
+- [x] entity declared in the document's own DOCTYPE internal subset,
+  resolved via the `xml-entities` crate — `dtd-entity-resolution`
+- [x] named entity resolved via the standard WHATWG/ISO table with no
+  DOCTYPE present — `rare-named-entity-standard-table`
+- [x] named entity unresolvable by either layer, still raw-preserved as
+  `raw_inline` — `adv-unresolvable-entity`
 - [x] empty paragraph — `adv-empty-paragraph`
 
 ## Pathological

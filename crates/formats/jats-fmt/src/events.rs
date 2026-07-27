@@ -13,6 +13,7 @@ use std::borrow::Cow;
 
 use quick_xml::Reader;
 use quick_xml::events::Event as XmlEvent;
+use xml_entities::{DtdEntities, EntityResolver, Resolution};
 
 /// A streaming event from a JATS/XML document.
 #[derive(Debug, PartialEq)]
@@ -104,6 +105,10 @@ pub struct EventIter<'a> {
     buf: Vec<u8>,
     done: bool,
     diagnostics: Vec<crate::ast::Diagnostic>,
+    /// Entities declared in this document's own DOCTYPE internal subset (if
+    /// any); replaced once a `Doctype` event is produced. See `parse.rs`'s
+    /// module docs for why a single forward pass is sufficient.
+    entity_resolver: EntityResolver,
 }
 
 impl<'a> EventIter<'a> {
@@ -115,6 +120,7 @@ impl<'a> EventIter<'a> {
             buf: Vec::new(),
             done: false,
             diagnostics: Vec::new(),
+            entity_resolver: EntityResolver::new(DtdEntities::empty()),
         }
     }
 
@@ -155,9 +161,19 @@ impl<'a> Iterator for EventIter<'a> {
                     });
                 }
                 Ok(XmlEvent::DocType(dt)) => {
-                    return Some(Event::Doctype(Cow::Owned(
-                        String::from_utf8_lossy(dt.as_ref()).into_owned(),
-                    )));
+                    let content = String::from_utf8_lossy(dt.as_ref()).into_owned();
+                    let (declared, entity_diagnostics) = DtdEntities::parse_doctype(&content);
+                    for d in entity_diagnostics {
+                        self.diagnostics.push(crate::ast::Diagnostic {
+                            message: format!("DOCTYPE internal subset: {d}"),
+                            span: crate::ast::Span {
+                                start: pos,
+                                end: pos,
+                            },
+                        });
+                    }
+                    self.entity_resolver = EntityResolver::new(declared);
+                    return Some(Event::Doctype(Cow::Owned(content)));
                 }
                 Ok(XmlEvent::PI(pi)) => {
                     let raw = String::from_utf8_lossy(pi.as_ref()).into_owned();
@@ -210,7 +226,14 @@ impl<'a> Iterator for EventIter<'a> {
                     if let Some(ch) = crate::ast::resolve_predefined_entity(&name) {
                         return Some(Event::Text(Cow::Owned(ch.to_string())));
                     }
-                    return Some(Event::EntityRef(Cow::Owned(name)));
+                    match self.entity_resolver.resolve(&name) {
+                        Resolution::Resolved { text, .. } => {
+                            return Some(Event::Text(Cow::Owned(text.into_owned())));
+                        }
+                        Resolution::ExternalUnresolved { .. } | Resolution::Unknown => {
+                            return Some(Event::EntityRef(Cow::Owned(name)));
+                        }
+                    }
                 }
                 Ok(XmlEvent::CData(c)) => {
                     return Some(Event::Cdata(Cow::Owned(
@@ -246,7 +269,16 @@ impl<'a> Iterator for EventIter<'a> {
 /// variant except `Text` and `Eof` (callers that need chunk-boundary-aware
 /// text handling, like [`crate::batch::StreamingParser`], handle `Text`
 /// themselves; `Eof` carries no data). Returns `None` for those two.
-pub(crate) fn owned_event_from_xml(event: XmlEvent<'_>) -> Option<OwnedEvent> {
+///
+/// `entity_resolver` resolves non-predefined named entities against the
+/// document's DOCTYPE-declared entities plus the standard table; this
+/// function is stateless, so it's the caller's job to notice a returned
+/// `Event::Doctype` and rebuild the resolver it passes on subsequent calls
+/// (see [`crate::batch::StreamingParser::drain`]).
+pub(crate) fn owned_event_from_xml(
+    event: XmlEvent<'_>,
+    entity_resolver: &EntityResolver,
+) -> Option<OwnedEvent> {
     match event {
         XmlEvent::Decl(decl) => {
             let version = decl
@@ -306,7 +338,14 @@ pub(crate) fn owned_event_from_xml(event: XmlEvent<'_>) -> Option<OwnedEvent> {
             if let Some(ch) = crate::ast::resolve_predefined_entity(&name) {
                 return Some(Event::Text(Cow::Owned(ch.to_string())));
             }
-            Some(Event::EntityRef(Cow::Owned(name)))
+            match entity_resolver.resolve(&name) {
+                Resolution::Resolved { text, .. } => {
+                    Some(Event::Text(Cow::Owned(text.into_owned())))
+                }
+                Resolution::ExternalUnresolved { .. } | Resolution::Unknown => {
+                    Some(Event::EntityRef(Cow::Owned(name)))
+                }
+            }
         }
         XmlEvent::Text(_) | XmlEvent::Eof => None,
     }

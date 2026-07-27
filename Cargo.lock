@@ -1698,6 +1698,7 @@ name = "jats-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.0",
+ "xml-entities",
 ]
 
 [[package]]
@@ -4579,6 +4580,7 @@ name = "tei-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.0",
+ "xml-entities",
 ]
 
 [[package]]
