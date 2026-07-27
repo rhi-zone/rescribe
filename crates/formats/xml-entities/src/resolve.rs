@@ -102,8 +102,8 @@ impl EntityResolver {
     /// practice, but document declarations are more specific and should
     /// win). If the document's declaration is an *internal* entity whose
     /// literal value itself contains further `&name;` references, those are
-    /// resolved recursively (with cycle/depth protection — see
-    /// [`MAX_RESOLUTION_DEPTH`]).
+    /// resolved recursively (with a bounded cycle/depth guard against
+    /// self-referential or mutually recursive declarations).
     pub fn resolve<'a>(&'a self, name: &str) -> Resolution<'a> {
         let mut seen = HashSet::new();
         self.resolve_inner(name, &mut seen, 0)
