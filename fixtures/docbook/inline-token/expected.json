@@ -1,0 +1,8 @@
+{
+  "description": "<token> (DocBook 5.2 reference: a lexical token in a language grammar; #PCDATA plus common attributes) has no cross-format equivalent - raw-preserved as a tagged span",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "docbook:tag": "token" } }
+  ]
+}

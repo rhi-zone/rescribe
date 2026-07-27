@@ -1,0 +1,9 @@
+{
+  "description": "<tag> (DocBook 5.2 reference: names an XML/SGML tag; #PCDATA plus common attributes and a class enumeration) has no cross-format equivalent - raw-preserved as a tagged span",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "docbook:tag": "tag" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "title" } }
+  ]
+}

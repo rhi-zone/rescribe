@@ -1,0 +1,9 @@
+{
+  "description": "<markup> (DocBook 5.2 reference: a fragment of markup shown verbatim; #PCDATA plus common attributes) has no cross-format equivalent - raw-preserved as a tagged span",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "docbook:tag": "markup" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "<title>" } }
+  ]
+}

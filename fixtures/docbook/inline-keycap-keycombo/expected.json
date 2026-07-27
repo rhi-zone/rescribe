@@ -1,0 +1,11 @@
+{
+  "description": "<keycap> and <keycombo> (DocBook 5.2 reference: keyboard-input phrase elements, #PCDATA/nested-keycap content plus common attributes) have no cross-format equivalent - raw-preserved as tagged spans",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "docbook:tag": "keycap" } },
+    { "path": "/0/0/3", "kind": "span", "props": { "docbook:tag": "keycombo" } },
+    { "path": "/0/0/3/0", "kind": "span", "props": { "docbook:tag": "keycap" } },
+    { "path": "/0/0/3/1", "kind": "span", "props": { "docbook:tag": "keycap" } }
+  ]
+}

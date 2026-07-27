@@ -54,29 +54,40 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 - [x] xref (cross-reference) — `xref` (`<xref linkend="…">`, mapped to the
   standard `link` node with a synthesized `#linkend` url)
 - [x] anchor — `anchor` (`<anchor xml:id="…">`, mapped to an id-only `link` node)
-- [ ] abbrev / acronym — (missing; `<abbrev>`, `<acronym>`)
-- [ ] trademark — (missing; `<trademark>`)
-- [ ] keycap / keycombo — (missing; `<keycap>`, `<keycombo>`)
-- [ ] guilabel / guimenu / guibutton — (missing; GUI inline elements)
+- [x] abbrev / acronym — `inline-abbrev-acronym` (DocBook 5.2 reference:
+  plain phrase elements, #PCDATA plus common attributes; no cross-format
+  equivalent — raw-preserved as tagged spans)
+- [x] trademark — `inline-trademark`
+- [x] keycap / keycombo — `inline-keycap-keycombo`
+- [x] guilabel / guimenu / guibutton — `inline-gui-elements`
 - [x] filename / command / option — `filename-command-option` (mapped to the
   standard `code` node, same as `<literal>`)
-- [ ] varname / function / parameter — (missing; `<varname>`, `<function>`, `<parameter>`)
-- [ ] classname / methodname / interfacename — (missing; OOP semantic inlines)
-- [ ] replaceable — (missing; `<replaceable>`)
-- [ ] systemitem / envar / prompt — (missing; system inline elements)
-- [ ] citetitle — (missing; `<citetitle>`)
+- [x] varname / function / parameter — `inline-varname-function-parameter`
+- [x] classname / methodname / interfacename — `inline-oop-elements`
+- [x] replaceable — `inline-replaceable`
+- [x] systemitem / envar / prompt — `inline-systemitem-envar-prompt`
+- [x] citetitle — `inline-citetitle`
 - [x] personname — `personname` (outside `<info>`, `<personname>`/`<firstname>`/
   `<surname>` have no dedicated node — their text passes through in place)
 - [x] quote — `adv-unknown-inline-element` (unrecognized inline element,
   raw-preserved as a tagged `span` in place rather than silently dropped)
-- [ ] phrase — (missing; `<phrase>`)
-- [ ] token — (missing; `<token>`)
-- [ ] markup — (missing; `<markup>`)
-- [ ] tag — (missing; `<tag>`)
-- [ ] uri — (missing; `<uri>`)
-- [ ] inlineequation (inline math) — (missing; `<inlineequation>` / MathML)
-- [ ] footnoteref — (missing; `<footnoteref linkend="…">`)
-- [ ] co (callout reference) — (missing; `<co>`)
+- [x] phrase — `inline-phrase`
+- [x] token — `inline-token`
+- [x] markup — `inline-markup`
+- [x] tag — `inline-tag`
+- [x] uri — `inline-uri`
+- [ ] inlineequation (inline math) — (missing; `<inlineequation>` / MathML —
+  left open: modeling this needs a real design decision — whether to reuse
+  rescribe-math's `math_inline` node with the MathML captured as
+  `math:source`/raw content, or something else — not a lookup-verifiable
+  answer, see TODO.md)
+- [x] footnoteref — `footnoteref` (`<footnoteref linkend="…">`, mapped to the
+  standard `footnote_ref` node with `linkend` as the standard `label` property)
+- [ ] co (callout reference) — (missing; `<co>` — left open together with the
+  `programlistingco (callout listing)` block construct below: `co` only has
+  meaning paired with a `<calloutlist>` that references it back, so mapping
+  one without designing the other would be premature; a real design decision,
+  not a lookup, see TODO.md)
 
 ## Properties
 

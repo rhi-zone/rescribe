@@ -1,0 +1,12 @@
+{
+  "description": "<phrase> (DocBook 5.2 reference: a generic wrapper for a run of text, meaningful only via its role attribute) has no fixed cross-format meaning - raw-preserved as a tagged span with its role",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    {
+      "path": "/0/0/1",
+      "kind": "span",
+      "props": { "docbook:tag": "phrase", "docbook:role": "warning" }
+    }
+  ]
+}

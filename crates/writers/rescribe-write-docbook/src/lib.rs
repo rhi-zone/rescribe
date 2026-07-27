@@ -433,6 +433,15 @@ fn write_inline(node: &Node) -> Vec<DbNode> {
 
         node::LINE_BREAK => vec![db_element("sbr", vec![], vec![])],
 
+        node::FOOTNOTE_REF => match node.props.get_str(prop::LABEL) {
+            Some(label) => vec![db_element(
+                "footnoteref",
+                vec![("linkend".to_string(), label.to_string())],
+                vec![],
+            )],
+            None => Vec::new(),
+        },
+
         node::SOFT_BREAK => vec![db_text(" ")],
 
         node::IMAGE => vec![db_element(

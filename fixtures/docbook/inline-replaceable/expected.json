@@ -1,0 +1,9 @@
+{
+  "description": "<replaceable> (DocBook 5.2 reference: marks text the user should substitute; #PCDATA plus common attributes and an optional class enumeration) has no cross-format equivalent - raw-preserved as a tagged span",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "docbook:tag": "replaceable" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "filename" } }
+  ]
+}

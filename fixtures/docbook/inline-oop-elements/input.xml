@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <para>The <classname>Widget</classname> class implements <interfacename>Drawable</interfacename> via <methodname>draw</methodname>.</para>
+</article>

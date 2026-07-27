@@ -1,0 +1,9 @@
+{
+  "description": "<uri> (DocBook 5.2 reference: a URI shown as text, distinct from <link>'s xlink:href-based linking; #PCDATA plus common attributes) has no cross-format equivalent - raw-preserved as a tagged span",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "docbook:tag": "uri" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "https://example.com" } }
+  ]
+}

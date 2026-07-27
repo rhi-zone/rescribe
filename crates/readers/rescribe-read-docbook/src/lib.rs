@@ -614,6 +614,14 @@ fn convert_element(
 
         // Footnotes
         "footnote" => Some(Node::new(node::FOOTNOTE_DEF).children(children)),
+        // `<footnoteref linkend="…"/>` repeats a `<footnote>` defined
+        // elsewhere by reference (DocBook 5.2 reference) — the standard
+        // cross-format `footnote_ref` node kind exists for exactly this,
+        // with the referenced label under the standard `label` property
+        // (the same convention every other rescribe reader with footnote
+        // references uses).
+        "footnoteref" => get_attr(attrs, "linkend")
+            .map(|linkend| Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, linkend.to_string())),
 
         // Admonitions
         "note" | "tip" | "warning" | "caution" | "important" => Some(

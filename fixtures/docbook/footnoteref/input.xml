@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <para>First mention.<footnote xml:id="fn1"><para>The note.</para></footnote></para>
+  <para>Second mention.<footnoteref linkend="fn1"/></para>
+</article>

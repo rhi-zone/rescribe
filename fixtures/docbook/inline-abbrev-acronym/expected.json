@@ -1,0 +1,11 @@
+{
+  "description": "<abbrev> and <acronym> are phrase-level inline elements with no cross-format equivalent (DocBook 5.2 reference: #PCDATA plus common attributes only) - raw-preserved as tagged spans",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "docbook:tag": "abbrev" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "approx." } },
+    { "path": "/0/0/3", "kind": "span", "props": { "docbook:tag": "acronym" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "NASA" } }
+  ]
+}

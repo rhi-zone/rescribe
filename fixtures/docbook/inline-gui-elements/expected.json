@@ -1,0 +1,10 @@
+{
+  "description": "<guimenu>/<guibutton>/<guilabel> (DocBook 5.2 reference: GUI-element phrase elements, #PCDATA plus common attributes only) have no cross-format equivalent - raw-preserved as tagged spans",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "docbook:tag": "guimenu" } },
+    { "path": "/0/0/3", "kind": "span", "props": { "docbook:tag": "guibutton" } },
+    { "path": "/0/0/5", "kind": "span", "props": { "docbook:tag": "guilabel" } }
+  ]
+}
