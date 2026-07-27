@@ -327,6 +327,17 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             | "answer"
             | "task"
             | "revhistory"
+            | "revision"
+            // Front-matter wrappers: never inline in running text, always a
+            // displayed-block/title-page structural container (confirmed
+            // against the DocBook 5.1 reference: authorgroup wraps
+            // author/editor/othercredit and "does not appear inline within
+            // paragraph content"; legalnotice holds para/lists/tables and
+            // "operates at the block level"; revision documents a single
+            // revhistory entry — revnumber/date/authorinitials/revremark —
+            // structurally block like a table row).
+            | "authorgroup"
+            | "legalnotice"
     )
 }
 
