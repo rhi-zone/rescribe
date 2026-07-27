@@ -164,11 +164,17 @@ This file describes milestones, format tiers, and cross-cutting work.
   writer bugs (section reassembly, figure caption drop); jats's 7 open
   design-fork boxes (MathML, citation/ref-list IR shape, alternatives) plus its
   3 disclosed writer gaps (titleless-sec reassembly, generic_div bare-PCDATA
-  wrapping, journal-meta origin tracking); the docbook/jats fuzz campaigns still
-  only having had a ~60s validation run rather than tei's multi-hour campaign
-  (see below); and DTD-aware entity resolution across all three (see below).
-  None of these block calling any of the three verticals 3-Harness; they gate
-  5-Production only.
+  wrapping, journal-meta origin tracking); and DTD-aware entity resolution
+  across all three (see below). The docbook/jats fuzz campaigns (previously
+  only a ~60s validation run) were brought to parity with tei's multi-hour
+  campaign in a later session (2026-07-27): `fuzz_docbook_fmt_reader`
+  8,918,090 runs clean, `fuzz_docbook_fmt_roundtrip` 6,012,874 runs clean,
+  `fuzz_jats_fmt_reader` 8,162,993 runs clean, `fuzz_jats_fmt_roundtrip`
+  5,696,913 runs clean — no crashes, no panics, no artifacts, no bugs found.
+  All four fuzz targets across all three verticals (tei/docbook/jats) are now
+  at the same extended-campaign scale. None of the remaining residue items
+  block calling any of the three verticals 3-Harness; they gate 5-Production
+  only.
 - **Oracle harness not yet run for `docbook-fmt`/`jats-fmt`; applicability confirmed.**
   `pandoc --list-input-formats` (checked 2026-07-27) includes both `docbook` and `jats`, so per
   TODO.md's Tier B oracle-harness guidance ("skip for formats Pandoc can't read") the harness step
@@ -176,15 +182,19 @@ This file describes milestones, format tiers, and cross-cutting work.
   "harness" (applicable, not yet done). `tei` is **not** in pandoc's input-formats list (only
   output); `docs/format-audit.md` now marks TEI's oracle-harness step N/A (2026-07-27), the same
   way `asciidoc`'s was.
-- **`docbook-fmt`/`jats-fmt` fuzz targets have only had an initial ~60s validation run each**
+- **`docbook-fmt`/`jats-fmt` fuzz targets initially only had a ~60s validation run each**
   (docbook: 1.69M reader / 573K roundtrip runs; jats: 1.61M / 553K; both clean, one fuzz-harness
   generator bug fixed, no library bugs) — not the multi-hour/multi-million-run campaign
   `commonmark-fmt` got before its 5-Production sign-off. `tei-fmt`'s fuzz targets got that longer
-  campaign in a later session (2026-07-27): `fuzz_tei_fmt_reader` 7,518,438 runs clean,
+  campaign in an earlier session (2026-07-27): `fuzz_tei_fmt_reader` 7,518,438 runs clean,
   `fuzz_tei_fmt_roundtrip` 6,611,996 runs clean (15 min/target via `cargo fuzz run <target> --
-  -max_total_time=900`), no crashes/panics/artifacts. Whether the same longer campaign is
-  warranted for docbook/jats before or independent of closing their fixture-suite gaps above is
-  still an open call.
+  -max_total_time=900`), no crashes/panics/artifacts. **Closed (2026-07-27, later same day)**:
+  docbook and jats got the same extended campaign — `fuzz_docbook_fmt_reader` 8,918,090 runs
+  clean, `fuzz_docbook_fmt_roundtrip` 6,012,874 runs clean, `fuzz_jats_fmt_reader` 8,162,993
+  runs clean, `fuzz_jats_fmt_roundtrip` 5,696,913 runs clean. No crashes, no panics, no
+  artifacts, no roundtrip mismatches, no bugs found — all three XML verticals' fuzz targets
+  are now at the same extended-campaign scale. The fixture-suite gaps above remain open but
+  are independent of this closed item.
 - **DTD-aware entity resolution** remains unimplemented across all three XML verticals
   (docbook/jats/tei) — named entities outside the 5 XML predefined ones and numeric char refs
   raw-preserve losslessly, but are never resolved to their DTD-defined replacement text. Explicitly
@@ -665,6 +675,12 @@ wrapping `quick-xml` — no rescribe dependency. `rescribe-read-docbook` and
   clean). Only a fuzz-harness bug found (duplicate attribute names on one element —
   invalid XML, fixed by suffixing generated names with their index), no library bugs.
   Initial validation only, not an exhaustive campaign — see `docs/format-audit.md`.
+  **Superseded (2026-07-27)**: extended campaign run, `-max_total_time=900` (15 min)
+  per target via `cargo fuzz run <target> -- -max_total_time=900` in the
+  `nix develop .#fuzz` shell — `fuzz_docbook_fmt_reader` 8,918,090 runs clean,
+  `fuzz_docbook_fmt_roundtrip` 6,012,874 runs clean. No crashes, no panics, no
+  artifacts written, no roundtrip mismatches. No bugs found this pass — now at
+  parity with `tei-fmt`'s campaign scale.
 - [x] **Bug found and fixed (2026-07-27)**: two silent-drop bugs closed,
   mirroring the tei fix (same audit, applied to this vertical). (1) The
   reader's final `_ => None` catch-all arm silently unwrapped *any*
@@ -751,6 +767,12 @@ and `rescribe-write-jats` rewired to thin AST↔IR translators over `jats_fmt::N
   `fuzz_jats_fmt_roundtrip` (arbitrary `JatsDoc` → `emit()` → `parse()` →
   `strip_spans()` equality; 553K runs clean). No library bugs found. Initial
   validation only, not an exhaustive campaign — see `docs/format-audit.md`.
+  **Superseded (2026-07-27)**: extended campaign run, `-max_total_time=900` (15 min)
+  per target via `cargo fuzz run <target> -- -max_total_time=900` in the
+  `nix develop .#fuzz` shell — `fuzz_jats_fmt_reader` 8,162,993 runs clean,
+  `fuzz_jats_fmt_roundtrip` 5,696,913 runs clean. No crashes, no panics, no
+  artifacts written, no roundtrip mismatches. No bugs found this pass — now at
+  parity with `tei-fmt`'s campaign scale.
 - [x] **Bug found and fixed (2026-07-27)**: two silent-drop bugs closed,
   mirroring the docbook/tei fix (same audit, applied to this vertical; docbook's
   final generalized form used directly as the template, not the two-hardcoded-
