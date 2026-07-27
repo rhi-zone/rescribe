@@ -96,10 +96,13 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 | html | 5† | 5† | html5ever / hand | – | – |
 | docbook | 4 | 2 | quick-xml (docbook-fmt) | production | harness |
 | jats | 4 | 2 | quick-xml (jats-fmt) | production | harness |
-| tei | 4 | 2 | quick-xml (tei-fmt) | production | harness |
+| tei | 4 | 2 | quick-xml (tei-fmt) | production | – |
 | opml | 4 | 2 | hand | production | harness |
 | ipynb | 4† | 2† | serde_json | production | harness |
 | latex | 4 | 2 | hand | production | harness |
+
+‡ Pandoc cannot read TEI (`--from tei` unsupported, output-only per
+`pandoc --list-input-formats`); oracle-harness stage is N/A, same as AsciiDoc.
 
 ### Bibliographic
 

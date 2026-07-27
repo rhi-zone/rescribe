@@ -704,7 +704,7 @@ code).
 - [ ] DTD-aware entity resolution is follow-up work — out of scope for this pass
   per CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
 
-### `fixtures/tei/COVERAGE.md` closed to 117/117 (2026-07-27)
+### `fixtures/tei/COVERAGE.md` closed to 118/118 (2026-07-27)
 
 Fixture suite completeness (vertical checklist step 1) reached: every item in
 `fixtures/tei/COVERAGE.md` now has a passing fixture (85 new `fixtures/tei/*`
