@@ -15,12 +15,73 @@ This file describes milestones, format tiers, and cross-cutting work.
 
 *Open threads from a previous session. Treat as starting context, not instructions — verify relevance before acting.*
 
-- **`docbook-fmt`/`jats-fmt` fixture suites are far from complete** — `fixtures/docbook/COVERAGE.md`
-  is 30/94 checked, `fixtures/jats/COVERAGE.md` is 32/106 checked (checked 2026-07-27). This is
-  vertical-checklist step 1 of 5, not yet reached for either crate — unlike `tei-fmt`, whose
-  suite was separately closed to 118/118 this session. Closing these is real reader/writer work
-  (new element mappings, teiHeader-style front-matter fields), not just fixture-writing, per the
-  pattern `tei-fmt`'s closing pass followed.
+- **`docbook-fmt` fixture suite closed to 88/94** (checked 2026-07-27, this session) —
+  up from 30/94. Real reader/writer work, not just fixture-writing: added CALS table
+  attributes (frame/colsep/rowsep/colspec/spanning), formal-table titles, list
+  numeration/spacing, xml:lang/xlink attrs applied uniformly via
+  `attach_generic_attrs`, `procedure`/`step`/`substeps` -> ordered list mapping,
+  `screen`/`literallayout`/`synopsis`/`address` -> tagged `code_block`,
+  `epigraph`/`attribution`, `bridgehead`, `footnoteref` -> `footnote_ref`,
+  `mediaobject`/`textobject` -> image `alt` folding, and ~20 phrase-level semantic
+  inlines (abbrev/acronym/trademark/keycap/guilabel/etc) verified individually
+  against the DocBook 5.2 reference (tdg.docbook.org) and closed via the existing
+  `generic_span` raw-preservation mechanism. Full commit list on `master`, newest
+  first: `feat(docbook): fold mediaobject alt text into image; close composition
+  fixtures`, `feat(docbook): map example/screen/synopsis/procedure/epigraph/
+  bridgehead/address`, `fix(docbook): stop corrupting <title> round-trip in
+  non-sectioning containers`, `test(docbook): close the Adversarial and
+  Pathological COVERAGE dimensions`, `feat(docbook): map footnoteref; fixture the
+  phrase-level semantic inlines`, `test(docbook): fixtures for xref/anchor/
+  personname/filename/revhistory/pubdate`, `feat(docbook): model CALS table
+  attributes, formal tables, cell spanning`, `feat(docbook): add xml:lang, link
+  xlink attrs, list numeration/spacing`.
+
+  **Real bugs found and fixed along the way** (discovered while verifying
+  parse -> emit -> parse round-trips for new fixtures, not just one-way reader
+  assertions — docbook has no dedicated writer fixture suite, so these were
+  latent): (1) any `<title>` whose parent wasn't a genuine sectioning container
+  always became a `HEADING`, which the writer always wraps in a fresh `<sectN>`
+  on emit — so e.g. `<example><title>T</title>...` round-tripped as a spurious
+  nested `<sect1>` inside the example, corrupting every non-sectioning titled
+  container (example, figure, admonitions, qandaset, refentry, ...). Fixed via
+  `heading_level_for_parent` + a new `CAPTION` node kind/write arm. (2) a
+  `generic_span` landing directly in a raw-preserved block container's children
+  (e.g. `<arg>` inside `<cmdsynopsis>`) silently lost its tag on write. (3)
+  `<abstract>` (the one dedicated DIV mapping without `docbook:tag`) was dropped
+  entirely by the writer's DIV arm. (4) `FOOTNOTE_DEF` embedded inline (e.g. in a
+  table cell) had no `write_inline` arm and silently lost its `<footnote>`
+  wrapper. All four fixed this session.
+
+  **Left open, genuine design forks (not lookup-resolvable), 6 of 94 boxes**:
+  `qandaset`/`qandaentry` (no Q&A-list IR shape attempted — still raw-preserves
+  generically via `generic_div`, just unverified with a fixture); `equation`/
+  `inlineequation` (MathML modeling choice — reuse `rescribe-math`'s
+  `math_inline`/`math_display` with the MathML captured as raw content, or
+  something else — genuinely undecided); `programlistingco`/`co`/"callout listing
+  + callout list" (three boxes, all paired: `co` only has meaning alongside a
+  `<calloutlist>` that references it back, so designing one without the other
+  would be premature).
+
+  **Found but NOT fixed this session** (real, disclosed, out of scope for the
+  fixture-closing pass): a `DIV` containing a `HEADING` plus following block
+  siblings (any section with more than just a title) does not reassemble into
+  one shared `<sectN>` on write — `write_node`'s `HEADING` arm always wraps only
+  the title itself in a fresh `<sectN>`, leaving the section's actual body
+  content as siblings *outside* that new element on round-trip. Exposed by the
+  `nested-section` fixture (whose *reader* output is correct — fixtures only
+  test the reader per `fixtures/spec.md`, so the fixture was still added). Fixing
+  this needs the writer's section-boundary detection redesigned (recognizing "a
+  DIV whose first child is a HEADING" as one section unit to serialize together)
+  — a real architecture decision, not a quick patch. Also found: `<figure>`'s
+  `<caption>` child (mapped to a custom `figcaption` node kind, pre-existing,
+  unrelated to this session's changes) has no writer arm and silently drops the
+  `<caption>` wrapper on round-trip, leaving a bare `<para>` — pre-existing,
+  not fixed, not gating any box closed this session.
+
+- **`jats-fmt` fixture suite** — `fixtures/jats/COVERAGE.md` is still 32/106 checked
+  (checked 2026-07-27, prior session). Not touched this session per CLAUDE.md's
+  "finish one vertical before starting the next" — `docbook-fmt` was this
+  session's vertical. Pick this up next using the same pattern.
 - **`jats-fmt` `is_block_element` classifier has not had a schema-verification pass.**
   `docbook-fmt`'s block/inline element list was checked against the live DocBook 5.1 reference
   (docbook.org) and three misclassifications were corrected (2026-07-27). `tei-fmt`'s equivalent
