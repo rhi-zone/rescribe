@@ -118,6 +118,74 @@ TEI All tagset (tei_all). Primary module focus: tei, core, textstructure, linkin
 - [x] table cols/rows — `prop-table-cols-rows`
 - [x] list item label — `list-item-label`
 
+## Bibliography / citation
+
+Cross-format IR shape (`bibliography`/`bibliography_entry`/`bibliography_field`
+node kinds, `field:role`/`field:scheme`/`date` properties — see `rescribe-std`'s
+`node`/`prop` doc comments) schema-verified against DocBook 5.2, JATS 1.3, TEI
+P5, and OOXML's `b:` namespace. This section covers the TEI side only,
+following the same pattern used for DocBook (`8aedfb80fa`) and JATS
+(`060c0858d5`). `tei-fmt` itself needed no changes (its AST is generic XML,
+like docbook-fmt's/jats-fmt's) — all the work is in
+`rescribe-read-tei`/`rescribe-write-tei`.
+
+- [x] bibliography container — `citation-simple-author` (`<listBibl>` mapped
+  to the standard `bibliography` node; its own `<head>` is an ordinary
+  heading, since `listBibl`'s content model already has room for a bare
+  `<head>`, unlike JATS's `<ref-list>`)
+- [x] biblStruct, single structured author — `citation-simple-author`
+  (`<biblStruct>` mapped to `bibliography_entry`; `<analytic>`'s fields
+  flatten into the entry's direct `bibliography_field` children; `<monogr>`
+  becomes a nested `bibliography_entry`; `<author>`/`<title>`/`<publisher>`/
+  `<biblScope unit="volume">` each mapped to a `bibliography_field` with the
+  matching `field:role`)
+- [x] biblStruct, multiple authors/editor — `citation-multi-author`
+  (`<analytic>`'s two `<author>`s and one `<editor>` become three sibling
+  `field:role`-tagged nodes in document order, not merged or overwritten;
+  also covers `<biblScope unit="issue">`)
+- [x] markup nested inside a field — `citation-markup-in-field` (`<hi>` inside
+  a `<title>`, and inside an `<orgName>` nested inside `<author>`, survives as
+  a real `emphasis`/`strong` node inside the `bibliography_field`, concretely
+  proving the field-node design — not a flat string property — actually
+  preserves nested markup; round-trip verified through `rescribe-read-tei` ->
+  `rescribe-write-tei` -> reparse, see
+  `rescribe-write-tei`'s `test_roundtrip_biblstruct_markup_survives`)
+- [x] bibl (loose, mixed-content citation) — `citation-bibl-mixed` (a `<bibl>`
+  directly inside `<listBibl>` is mapped to `bibliography_entry` tagged
+  `tei:tag=bibl`; plain text interspersed between a structured `<title>`
+  field stays as ordinary sibling text nodes rather than being wrapped in a
+  spurious field. A bare `<bibl>` used elsewhere as lightweight inline
+  attribution — e.g. inside `<cit>` — is deliberately left as the
+  pre-existing plain `span` mapping instead; see the `int-cit-bibl` fixture,
+  which continues to pass unchanged)
+- [x] analytic/monogr/series nesting — `citation-analytic-monogr-series`
+  (all three levels present: analytic's own author/title flatten into the
+  entry directly; monogr — the containing book — and series — the series
+  the book belongs to — each become their own nested `bibliography_entry`.
+  This is an explicit human-approved fork resolution from the original
+  design session, not a fresh design choice made here)
+- [x] page range splitting — `citation-simple-author` (`<biblScope
+  unit="page" from="12" to="34"/>` splits into `page_first`/`page_last`
+  fields; the writer's round trip recombines an adjacent pair back into one
+  `<biblScope unit="page" from="…" to="…">`). A page range given as
+  unbounded free text (no `@from`/`@to`) is not covered by a dedicated
+  fixture — it is kept whole as a `misc` field with `@unit` preserved raw,
+  per `rescribe-read-tei::convert_bibl_scope`'s doc comment, rather than
+  guessed at
+- [x] bibliographic date, point and one-sided bound — `citation-date` (R1/R2:
+  `@when` alone, and `@notBefore` alone, each resolve into the structured
+  `prop::DATE` map plus `tei:date-attr` recording which attribute was used —
+  the mechanism CLAUDE.md's no-guessing rule required be judged adequate or
+  flagged as a fork; see below)
+- [x] bibliographic date, range pair (documented fork, not silently dropped)
+  — `citation-date` (R3: `@notBefore`+`@notAfter` present *together* express
+  a two-point range that does not fit `prop::DATE`'s single-point Map at all
+  — this was flagged in the original task brief as a possible structural
+  mismatch and is resolved as a documented fork rather than invented here;
+  see `TODO.md`. The date is still never silently dropped: it demotes to a
+  `misc` `bibliography_field` with both raw `@notBefore`/`@notAfter` values
+  preserved)
+
 ## Composition (integration)
 
 - [x] nested divs (3 levels) — `int-nested-divs`

@@ -1,0 +1,21 @@
+{
+  "description": "biblStruct's analytic with two authors and one editor becomes three sibling bibliography_field nodes (field:role=author x2, field:role=editor x1) in document order, not merged or overwritten; monogr also covers volume/issue biblScope",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0/0",       "kind": "bibliography_entry", "props": { "tei:tag": "biblStruct" }, "children_count": 5 },
+    { "path": "/0/0/0",     "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "Jane Doe" } },
+    { "path": "/0/0/1",     "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/1/0/0", "kind": "text", "props": { "content": "John Smith" } },
+    { "path": "/0/0/2",     "kind": "bibliography_field", "props": { "field:role": "editor" } },
+    { "path": "/0/0/2/0/0", "kind": "text", "props": { "content": "Ed Editor" } },
+    { "path": "/0/0/3",     "kind": "bibliography_field", "props": { "field:role": "title" } },
+    { "path": "/0/0/3/0",   "kind": "text", "props": { "content": "A Multi-Author Work" } },
+    { "path": "/0/0/4",     "kind": "bibliography_entry", "props": { "tei:tag": "monogr" }, "children_count": 3 },
+    { "path": "/0/0/4/0",   "kind": "bibliography_field", "props": { "field:role": "title" } },
+    { "path": "/0/0/4/1",   "kind": "bibliography_field", "props": { "field:role": "volume", "tei:attr:unit": "volume" } },
+    { "path": "/0/0/4/1/0", "kind": "text", "props": { "content": "5" } },
+    { "path": "/0/0/4/2",   "kind": "bibliography_field", "props": { "field:role": "issue", "tei:attr:unit": "issue" } },
+    { "path": "/0/0/4/2/0", "kind": "text", "props": { "content": "2" } }
+  ]
+}

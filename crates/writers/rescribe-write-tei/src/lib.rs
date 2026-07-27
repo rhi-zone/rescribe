@@ -23,9 +23,11 @@
 //! let xml = String::from_utf8(result.value).unwrap();
 //! ```
 
+use std::collections::HashMap;
+
 use tei_fmt::{Node as TNode, Span as TSpan, TeiDoc, XmlDecl};
 
-use rescribe_core::{ConversionResult, Document, EmitError, Node};
+use rescribe_core::{ConversionResult, Document, EmitError, Node, PropValue};
 use rescribe_std::{node, prop};
 
 /// Emit a document to TEI XML.
@@ -368,6 +370,27 @@ fn write_node(node: &Node) -> Vec<TNode> {
             )]
         }
 
+        // `<listBibl>`'s content model is `(head?, (bibl|biblStruct|
+        // biblFull|listBibl)+)`, which already has room for a bare `<head>`
+        // — unlike JATS's `<ref-list>`, no special title-unwrapping is
+        // needed here; the ordinary `node::HEADING` arm below already
+        // produces exactly that.
+        node::BIBLIOGRAPHY => vec![tei_element(
+            "listBibl",
+            attrs,
+            node.children.iter().flat_map(write_node).collect(),
+        )],
+
+        node::BIBLIOGRAPHY_ENTRY => vec![write_bibliography_entry(node)],
+
+        // A `bibliography_field` shouldn't normally appear outside a
+        // `BIBLIOGRAPHY_ENTRY`'s own children (handled directly by
+        // `write_bibliography_entry`/`write_entry_children`, not through
+        // this dispatch), but delegate to the same field writer defensively
+        // rather than falling to the generic "recurse into children"
+        // catch-all below, which would drop the field's role/tag entirely.
+        node::BIBLIOGRAPHY_FIELD => vec![write_bibliography_field(node, None)],
+
         node::HEADING => vec![tei_element(
             "head",
             attrs,
@@ -671,6 +694,295 @@ fn hi_element(rend: &str, mut attrs: Vec<(String, String)>, node: &Node) -> Vec<
     )]
 }
 
+/// The five TEI `att.datable` dating-value attribute names — see
+/// `rescribe-read-tei`'s constant of the same name.
+const DATE_ATTRS: [&str; 5] = ["when", "notBefore", "notAfter", "from", "to"];
+
+/// Write a `bibliography_entry` node back to `<biblStruct>`/`<bibl>`/
+/// `<monogr>`/`<series>` (see `rescribe-read-tei`'s `build_bibliography_entry`
+/// /`convert_biblio_field`'s `"monogr" | "series"` arm). `tei:tag` (set by
+/// every entry-producing arm of the reader) picks which element to
+/// re-emit, defaulting to `<biblStruct>` for an entry built by a non-TEI
+/// producer.
+///
+/// - `"bibl"`: the loose, mixed-content form — fields and free text/nested
+///   entries are written flat, in original document order, with no
+///   `<analytic>`/`<imprint>` wrapping.
+/// - `"monogr"`/`"series"`: direct children of the entry, in original
+///   order; for `"monogr"` specifically, `publisher`/`publisher_location`
+///   fields (plus the entry's own resolved date, if any) are pulled into a
+///   required `<imprint>` wrapper — TEI's own `monogr` content model groups
+///   publication facts there — rather than left as direct `monogr` children.
+/// - anything else (`"biblStruct"`, or an entry from a non-TEI producer):
+///   direct field children are the analytic level's own fields, wrapped in
+///   `<analytic>` only when the entry also has nested `monogr`/`series`
+///   children (see `rescribe-read-tei::is_biblio_field_wrapper`'s doc
+///   comment for why this pairing determines the wrap) — a "flat" entry
+///   with no nested structure at all emits its fields directly instead of
+///   inventing an `<analytic>` wrapper with no monogr/series counterpart.
+///
+/// `prop::DATE` becomes a leading `<date>` child (see `write_citation_date`)
+/// — for `"monogr"` this lands inside the `<imprint>` wrapper alongside
+/// `publisher`/`pubPlace`; for every other tag it's the first child of
+/// whichever direct-field group it belongs to. Mirrors the "dates move to a
+/// canonical position rather than an exact original slot" precedent already
+/// established by `rescribe-write-jats::write_bibliography_entry`.
+fn write_bibliography_entry(node: &Node) -> TNode {
+    let attrs = generic_attrs(node);
+    let tag = node.props.get_str("tei:tag").unwrap_or("biblStruct");
+    let date_kid = match node.props.get(prop::DATE) {
+        Some(PropValue::Map(map)) => Some(write_citation_date(
+            map,
+            node.props.get_str("tei:date-attr").unwrap_or("when"),
+            node.props.get_str("tei:date-text"),
+        )),
+        _ => None,
+    };
+
+    match tag {
+        "bibl" => {
+            let mut kids: Vec<TNode> = date_kid.into_iter().collect();
+            write_entry_children(&node.children, None, None, None, &mut kids);
+            tei_element("bibl", attrs, kids)
+        }
+        "series" => {
+            let mut kids: Vec<TNode> = date_kid.into_iter().collect();
+            write_entry_children(&node.children, Some("s"), None, None, &mut kids);
+            tei_element("series", attrs, kids)
+        }
+        "monogr" => {
+            let mut imprint_kids: Vec<TNode> = date_kid.into_iter().collect();
+            let mut kids = Vec::new();
+            write_entry_children(
+                &node.children,
+                Some("m"),
+                Some(&mut imprint_kids),
+                None,
+                &mut kids,
+            );
+            if !imprint_kids.is_empty() {
+                kids.push(tei_element("imprint", vec![], imprint_kids));
+            }
+            tei_element("monogr", attrs, kids)
+        }
+        _ => {
+            let mut direct: Vec<TNode> = date_kid.into_iter().collect();
+            let mut nested = Vec::new();
+            write_entry_children(
+                &node.children,
+                Some("a"),
+                None,
+                Some(&mut nested),
+                &mut direct,
+            );
+            let mut kids = Vec::new();
+            if !direct.is_empty() {
+                if !nested.is_empty() {
+                    kids.push(tei_element("analytic", vec![], direct));
+                } else {
+                    kids.extend(direct);
+                }
+            }
+            kids.extend(nested);
+            tei_element(tag, attrs, kids)
+        }
+    }
+}
+
+/// Write an entry/monogr/series/bibl's own direct children — fields, nested
+/// entries, and free inline content (the loose `<bibl>` mixed-content case)
+/// — in original document order into `out`.
+///
+/// `imprint_out`, when given, receives `publisher`/`publisher_location`
+/// fields instead of `out` (the `<monogr>` case — see
+/// `write_bibliography_entry`). `nested_out`, when given, receives nested
+/// `bibliography_entry` children (`<monogr>`/`<series>`) instead of `out`,
+/// so the caller can decide separately whether to wrap the remaining direct
+/// fields in `<analytic>` (the `"biblStruct"`-shaped default case).
+///
+/// A `biblScope` `page_first` field immediately followed by its `page_last`
+/// sibling (see `rescribe-read-tei::convert_bibl_scope`) is merged back into
+/// one `<biblScope unit="page" from="…" to="…">` rather than emitting two
+/// separate elements.
+fn write_entry_children(
+    children: &[Node],
+    default_title_level: Option<&str>,
+    mut imprint_out: Option<&mut Vec<TNode>>,
+    mut nested_out: Option<&mut Vec<TNode>>,
+    out: &mut Vec<TNode>,
+) {
+    let mut iter = children.iter().peekable();
+    while let Some(child) = iter.next() {
+        if child.kind.as_str() == node::BIBLIOGRAPHY_ENTRY {
+            let written = write_bibliography_entry(child);
+            match nested_out.as_deref_mut() {
+                Some(nested) => nested.push(written),
+                None => out.push(written),
+            }
+            continue;
+        }
+        if child.kind.as_str() != node::BIBLIOGRAPHY_FIELD {
+            out.extend(write_inline(child));
+            continue;
+        }
+        let role = child.props.get_str(prop::FIELD_ROLE);
+        if let Some(imprint) = imprint_out.as_deref_mut()
+            && matches!(role, Some("publisher") | Some("publisher_location"))
+        {
+            imprint.push(write_bibliography_field(child, default_title_level));
+            continue;
+        }
+        if child.props.get_str("tei:tag") == Some("biblScope")
+            && role == Some("page_first")
+            && let Some(next) = iter.peek()
+            && next.kind.as_str() == node::BIBLIOGRAPHY_FIELD
+            && next.props.get_str("tei:tag") == Some("biblScope")
+            && next.props.get_str(prop::FIELD_ROLE) == Some("page_last")
+        {
+            let from = field_plain_text(child);
+            let to = field_plain_text(iter.next().unwrap());
+            out.push(tei_element(
+                "biblScope",
+                vec![
+                    ("unit".to_string(), "page".to_string()),
+                    ("from".to_string(), from),
+                    ("to".to_string(), to),
+                ],
+                vec![],
+            ));
+            continue;
+        }
+        out.push(write_bibliography_field(child, default_title_level));
+    }
+}
+
+/// Concatenate a `bibliography_field`'s plain-text `TEXT` children (used
+/// only for the synthetic `page_first`/`page_last` fields
+/// `rescribe-read-tei::convert_bibl_scope` builds, which carry exactly one
+/// such child).
+fn field_plain_text(node: &Node) -> String {
+    node.children
+        .iter()
+        .filter_map(|c| {
+            if c.kind.as_str() == node::TEXT {
+                c.props.get_str(prop::CONTENT)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Write one `bibliography_field` node back to its originating TEI element.
+/// `tei:tag` (set by every arm of `rescribe-read-tei`'s
+/// `convert_biblio_field`) takes priority when present, since it names the
+/// exact source element; `prop::FIELD_ROLE` is the fallback for a field
+/// built by a non-TEI producer (a cross-format conversion into TEI).
+///
+/// `default_title_level` supplies `<title>`'s `@level` when the field
+/// itself carries no raw-preserved `tei:attr:level` — see
+/// `write_bibliography_entry`'s per-tag calls for how the structural
+/// position (analytic/monogr/series) determines this default.
+fn write_bibliography_field(node: &Node, default_title_level: Option<&str>) -> TNode {
+    let inline_children: Vec<TNode> = node.children.iter().flat_map(write_inline).collect();
+    let role = node.props.get_str(prop::FIELD_ROLE).unwrap_or("misc");
+    let tag = node
+        .props
+        .get_str("tei:tag")
+        .unwrap_or_else(|| default_tag_for_role(role));
+    let mut attrs = Vec::new();
+    match tag {
+        "title" => {
+            let level = node.props.get_str("tei:attr:level").or(default_title_level);
+            if let Some(level) = level {
+                attrs.push(("level".to_string(), level.to_string()));
+            }
+        }
+        "idno" => {
+            if let Some(scheme) = node.props.get_str(prop::FIELD_SCHEME) {
+                attrs.push(("type".to_string(), scheme.to_string()));
+            }
+        }
+        "biblScope" => {
+            if let Some(unit) = node.props.get_str("tei:attr:unit") {
+                attrs.push(("unit".to_string(), unit.to_string()));
+            } else if let Some(unit) = match role {
+                "volume" => Some("volume"),
+                "issue" => Some("issue"),
+                _ => None,
+            } {
+                attrs.push(("unit".to_string(), unit.to_string()));
+            }
+        }
+        // A demoted secondary/unresolved date (see
+        // `rescribe-read-tei::build_bibliography_entry`) — restore whichever
+        // raw dating attributes it carried.
+        "date" => {
+            for name in DATE_ATTRS {
+                if let Some(v) = node.props.get_str(&format!("tei:attr:{name}")) {
+                    attrs.push((name.to_string(), v.to_string()));
+                }
+                let iso_name = format!("{name}-iso");
+                if let Some(v) = node.props.get_str(&format!("tei:attr:{iso_name}")) {
+                    attrs.push((iso_name, v.to_string()));
+                }
+            }
+        }
+        _ => {}
+    }
+    tei_element(tag, attrs, inline_children)
+}
+
+/// `prop::FIELD_ROLE`'s standard vocabulary, mapped to the TEI element a
+/// field with no `tei:tag` (i.e. built by a non-TEI producer) should
+/// re-emit as.
+fn default_tag_for_role(role: &str) -> &'static str {
+    match role {
+        "author" | "editor" => "author",
+        "title" => "title",
+        "container_title" => "title",
+        "publisher" => "publisher",
+        "publisher_location" => "pubPlace",
+        "edition" => "edition",
+        "volume" | "issue" | "page_first" | "page_last" => "biblScope",
+        "identifier" => "idno",
+        _ => "note",
+    }
+}
+
+/// Format `prop::DATE`'s `year`/`month`/`day` map (see the property's own
+/// doc comment) into a `<date>` element using whichever `att.datable`
+/// attribute `tei:date-attr` (set by `rescribe-read-tei::resolve_tei_date`)
+/// says was originally used — the inverse of that resolution. `text`, if
+/// the source `<date>` had its own display text (`tei:date-text`), becomes
+/// the element's content; otherwise the formatted ISO string doubles as the
+/// display text, since `<date>` requires *some* content to be schema-valid
+/// prose.
+fn write_citation_date(
+    map: &HashMap<String, PropValue>,
+    attr_name: &str,
+    text: Option<&str>,
+) -> TNode {
+    let as_int = |key: &str| match map.get(key) {
+        Some(PropValue::Int(i)) => Some(*i),
+        _ => None,
+    };
+    let year = as_int("year");
+    let month = as_int("month");
+    let day = as_int("day");
+    let iso = match (year, month, day) {
+        (Some(y), Some(m), Some(d)) => format!("{y:04}-{m:02}-{d:02}"),
+        (Some(y), Some(m), None) => format!("{y:04}-{m:02}"),
+        _ => format!("{:04}", year.unwrap_or(0)),
+    };
+    let display = text.map(str::to_string).unwrap_or_else(|| iso.clone());
+    tei_element(
+        "date",
+        vec![(attr_name.to_string(), iso)],
+        vec![tei_text(display)],
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -790,5 +1102,29 @@ mod tests {
         assert!(xml.contains("xml:id=\"d1\""));
         assert!(xml.contains("n=\"2\""));
         assert!(xml.contains("&custom;"));
+    }
+
+    #[test]
+    fn test_roundtrip_biblstruct_markup_survives() {
+        // Regression test for the TEI citation/bibliography vertical: a
+        // `<hi>` nested inside an `<analytic>` `<title>` must survive
+        // parse -> emit -> reparse -> emit byte-for-byte, and the second
+        // generation's output must be stable (proving `bibliography_field`
+        // children are ordinary markup-capable inline nodes, not a flat
+        // string property).
+        let tei = r#"<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0"><text><body><listBibl><biblStruct><analytic><title level="a">Foo <hi rend="italic">Bar</hi></title></analytic><monogr><title level="m">Some Journal</title></monogr></biblStruct></listBibl></body></text></TEI>"#;
+        let parsed = rescribe_read_tei::parse(tei).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml1 = String::from_utf8(emitted.value).unwrap();
+        assert!(xml1.contains("<hi rend=\"italic\">Bar</hi>"));
+
+        let reparsed = rescribe_read_tei::parse(&xml1).unwrap();
+        let emitted2 = emit(&reparsed.value).unwrap();
+        let xml2 = String::from_utf8(emitted2.value).unwrap();
+        assert_eq!(
+            xml1, xml2,
+            "output must be stable across a second round trip"
+        );
     }
 }

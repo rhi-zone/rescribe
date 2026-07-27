@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <listBibl>
+        <biblStruct>
+          <analytic>
+            <author><persName>Jane Doe</persName></author>
+            <title level="a">Chapter Title</title>
+          </analytic>
+          <monogr>
+            <title level="m">Book Title</title>
+            <imprint>
+              <publisher>Example Press</publisher>
+              <date when="2015">2015</date>
+            </imprint>
+          </monogr>
+          <series>
+            <title level="s">Great Works Series</title>
+            <biblScope unit="volume">3</biblScope>
+          </series>
+        </biblStruct>
+      </listBibl>
+    </body>
+  </text>
+</TEI>

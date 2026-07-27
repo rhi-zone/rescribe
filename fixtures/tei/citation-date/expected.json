@@ -1,0 +1,15 @@
+{
+  "description": "three att.datable forms: (R1) a point in time via @when, resolved into prop::DATE with tei:date-attr=\"when\"; (R2) a one-sided bound via @notBefore alone, resolved the same way with tei:date-attr=\"notBefore\" so a reader can tell it's a bound rather than a point; (R3) @notBefore+@notAfter present TOGETHER express a two-point RANGE that does not fit prop::DATE's single year/month/day Map at all - this is the documented design fork (see TODO.md): it is NOT resolved into prop::DATE, and is instead demoted to a misc bibliography_field with both raw dating attributes preserved, so nothing is silently dropped",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0/0",       "kind": "bibliography_entry", "children_count": 1 },
+    { "path": "/0/0/0",     "kind": "bibliography_entry", "props": { "tei:tag": "monogr", "date": { "year": 2020, "month": 5, "day": 1 }, "tei:date-attr": "when", "tei:date-text": "1 May 2020" }, "children_count": 1 },
+    { "path": "/0/1",       "kind": "bibliography_entry", "children_count": 1 },
+    { "path": "/0/1/0",     "kind": "bibliography_entry", "props": { "tei:tag": "monogr", "date": { "year": 1990 }, "tei:date-attr": "notBefore", "tei:date-text": "circa 1990" }, "children_count": 1 },
+    { "path": "/0/2",       "kind": "bibliography_entry", "children_count": 1 },
+    { "path": "/0/2/0",     "kind": "bibliography_entry", "props": { "tei:tag": "monogr", "date": null }, "children_count": 2 },
+    { "path": "/0/2/0/0",   "kind": "bibliography_field", "props": { "field:role": "title" } },
+    { "path": "/0/2/0/1",   "kind": "bibliography_field", "props": { "field:role": "misc", "tei:tag": "date", "tei:attr:notBefore": "1990", "tei:attr:notAfter": "1999" } },
+    { "path": "/0/2/0/1/0", "kind": "text", "props": { "content": "1990s" } }
+  ]
+}

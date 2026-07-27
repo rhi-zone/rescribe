@@ -1,0 +1,11 @@
+{
+  "description": "bibl's loose, mixed-content model: plain text interspersed with a structured title field becomes an entry tagged tei:tag=bibl, with ordinary text nodes and a bibliography_field as direct siblings in document order - the field-node approach is itself the preservation mechanism, no separate raw-prose side channel needed. Only a direct child of listBibl is elevated to a bibliography_entry (see the pre-existing int-cit-bibl fixture for a bare <bibl> used as inline attribution, which is left as a plain span)",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "tei:tag": "bibl" }, "children_count": 3 },
+    { "path": "/0/0/0",   "kind": "text", "props": { "content": "Shakespeare, W. " } },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "title", "tei:attr:level": "m" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "As You Like It" } },
+    { "path": "/0/0/2",   "kind": "text", "props": { "content": ". London, 1600." } }
+  ]
+}

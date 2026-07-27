@@ -8,10 +8,12 @@
 //! AST↔IR translator only (per CLAUDE.md's "adapter layer must never
 //! contain parsing or writing logic" rule).
 
+use std::collections::HashMap;
+
 use tei_fmt::Node as TNode;
 
 use rescribe_core::{
-    ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Severity,
+    ConversionResult, Document, FidelityWarning, Node, ParseError, PropValue, Properties, Severity,
     WarningKind,
 };
 use rescribe_std::{node, prop};
@@ -41,7 +43,8 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
             ..
         } = top
         {
-            let converted = convert_children(kids, name, false, &mut metadata, &mut warnings);
+            let converted =
+                convert_children(kids, name, false, false, &mut metadata, &mut warnings);
             match convert_element(name, attrs, converted.clone(), None) {
                 Some(node) => children.push(node),
                 None => {
@@ -78,10 +81,22 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
 /// whether the *children* of `parent_name` are teiHeader content that will
 /// end up consumed by [`extract_metadata`] rather than surviving as document
 /// content nodes.
+///
+/// `in_biblio` is true when `parent_name` is a bibliographic reference
+/// container (`<biblStruct>`/`<bibl>` — see [`is_biblio_container`] — or a
+/// descendant of one that is itself a structural pass-through wrapper, see
+/// [`is_biblio_field_wrapper`]) — i.e. whether the *children* of
+/// `parent_name` are citation sub-fields that should be dispatched through
+/// [`convert_biblio_field`] (producing `bibliography_field` nodes, or a
+/// nested `bibliography_entry` for `<monogr>`/`<series>`) rather than the
+/// generic [`convert_element`]. Mirrors the `in_header` threading above and
+/// the identical pattern used for `rescribe-read-jats`'s `in_biblio`
+/// (`060c0858d5`).
 fn convert_children(
     children: &[TNode],
     parent_name: &str,
     in_header: bool,
+    in_biblio: bool,
     metadata: &mut Properties,
     warnings: &mut Vec<FidelityWarning>,
 ) -> Vec<Node> {
@@ -95,8 +110,49 @@ fn convert_children(
                 ..
             } => {
                 let child_in_header = in_header || name == "teiHeader";
-                let converted_kids =
-                    convert_children(kids, name, child_in_header, metadata, warnings);
+                // Whether `name`'s own children should also be dispatched
+                // through `convert_biblio_field`: if we're not in biblio
+                // scope yet, entering it requires `name` itself to be a
+                // reference container (`is_biblio_container` — `<bibl>`
+                // only counts when directly inside `<listBibl>`, since a
+                // bare `<bibl>` elsewhere in running prose — e.g. attributing
+                // a `<cit>`'s quote — is a lightweight inline citation, not a
+                // full bibliography entry; see the `int-cit-bibl` fixture);
+                // if we're already inside one, scope only continues through
+                // a structural pass-through wrapper (`is_biblio_field_wrapper`
+                // — `<analytic>`/`<imprint>` splice their fields straight
+                // into the entry, `<monogr>`/`<series>` become their own
+                // nested entry) — everything else is a *leaf* field
+                // (`<author>`, `<title>`, `<date>`, ...), whose own children
+                // are ordinary markup-capable inline content, not further
+                // sub-fields. Without this distinction, `<hi>` inside e.g.
+                // a `<title>` would itself be mis-dispatched as a
+                // raw-preserved "misc" field instead of a proper `emphasis`
+                // node, silently flattening the markup it exists to
+                // preserve.
+                let child_in_biblio = if in_biblio {
+                    is_biblio_field_wrapper(name)
+                } else {
+                    is_biblio_container(name, parent_name)
+                };
+                let converted_kids = convert_children(
+                    kids,
+                    name,
+                    child_in_header,
+                    child_in_biblio,
+                    metadata,
+                    warnings,
+                );
+                if in_biblio {
+                    // Inside a reference container, every child is a
+                    // bibliographic sub-field — dispatch through the
+                    // dedicated converter instead of the generic element
+                    // table, and splice its result(s) straight in (no
+                    // header-raw-capture logic applies here; see
+                    // `convert_biblio_field`).
+                    out.extend(convert_biblio_field(name, attrs, converted_kids));
+                    continue;
+                }
                 let mut converted =
                     convert_element(name, attrs, converted_kids.clone(), Some(parent_name));
                 // Any teiHeader descendant this reader has no explicit
@@ -340,6 +396,10 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             | "listBibl"
             | "biblStruct"
             | "biblFull"
+            | "analytic"
+            | "monogr"
+            | "series"
+            | "imprint"
             // Manuscript description / title page apparatus
             | "msContents"
             | "msItem"
@@ -566,7 +626,37 @@ fn convert_element(
                 .prop("tei:type", "trailer")
                 .children(children),
         ),
-        "bibl" => Some(generic_span("bibl", attrs, children)),
+        // Bibliography. `<listBibl>` is a bibliography container; its own
+        // `<head>` (e.g. "References") is handled by the `"head"` arm above
+        // like any other block's title, so by the time we get here
+        // `children` is already a mix of the resulting `HEADING` (if any)
+        // and `bibliography_entry` nodes (each `<bibl>`/`<biblStruct>` child
+        // was converted through `build_bibliography_entry` before reaching
+        // here, via `convert_children`'s `in_biblio` threading — see
+        // `is_biblio_container`).
+        "listBibl" => Some(Node::new(node::BIBLIOGRAPHY).children(children)),
+        // A `<biblStruct>` reached here always has `convert_children` having
+        // already run over its own children with `in_biblio = true` (per
+        // `is_biblio_container`, which admits `<biblStruct>` unconditionally
+        // — unlike `<bibl>`, it has no other common use), so `children` is
+        // already the fully-built field/nested-entry/date-marker list
+        // `build_bibliography_entry` assembles.
+        "biblStruct" => Some(build_bibliography_entry("biblStruct", attrs, children)),
+        // `<bibl>` is TEI's loose, mixed-content citation form — but it is
+        // also legitimately used as a lightweight inline citation/
+        // attribution *outside* a bibliography list (e.g. `<cit><quote>…
+        // </quote><bibl>…</bibl></cit>` — see the `int-cit-bibl` fixture).
+        // Only elevate it to a full `bibliography_entry` when it is a direct
+        // child of `<listBibl>` (see `is_biblio_container`, which this arm
+        // must agree with exactly); anywhere else, keep the pre-existing
+        // raw-preserving `span` mapping.
+        "bibl" => {
+            if parent == Some("listBibl") {
+                Some(build_bibliography_entry("bibl", attrs, children))
+            } else {
+                Some(generic_span("bibl", attrs, children))
+            }
+        }
 
         // Editorial intervention: empty (or near-empty) constructs.
         "gap" => {
@@ -848,6 +938,359 @@ fn convert_element(
     };
 
     node.map(|n| attach_generic_attrs(n, attrs))
+}
+
+/// Whether `name` is a TEI bibliographic reference container — its children
+/// are citation sub-fields, not ordinary document content, so
+/// `convert_children` dispatches them through [`convert_biblio_field`]
+/// instead of [`convert_element`]. `<biblStruct>` always counts (it has no
+/// other use in TEI); `<bibl>` only counts when it is a direct child of
+/// `<listBibl>` — see the `"bibl"` arm of [`convert_element`], which this
+/// must agree with exactly, for why a bare `<bibl>` elsewhere is left as a
+/// lightweight inline citation instead.
+fn is_biblio_container(name: &str, parent_name: &str) -> bool {
+    name == "biblStruct" || (name == "bibl" && parent_name == "listBibl")
+}
+
+/// Whether `name`, encountered *while already inside* biblio scope, is a
+/// structural pass-through wrapper whose own children remain citation
+/// sub-fields (as opposed to a leaf field like `<author>`/`<title>`, whose
+/// children are ordinary inline content — see `convert_children`'s
+/// `child_in_biblio` computation for why this distinction matters).
+///
+/// `<analytic>` groups the fields describing the citation's own entity (an
+/// article's title/authors); `<imprint>` groups the publication facts
+/// (`<publisher>`/`<pubPlace>`/`<date>`) inside a `<monogr>`. Both are
+/// presentational groupings of *this* entry's own fields, so their children
+/// splice straight into the entry (see `convert_biblio_field`'s
+/// `"analytic" | "imprint"` arm) rather than becoming a nested entity.
+///
+/// `<monogr>`/`<series>` are different: they describe the *containing*
+/// publication (the journal/book an article appeared in, or the series a
+/// book belongs to) as its own citable unit — modeled as a nested
+/// `bibliography_entry` (see `convert_biblio_field`'s `"monogr" | "series"`
+/// arm), mirroring DocBook's `<biblioset>` nesting. This is an explicit
+/// human-approved fork resolution from the original design session for the
+/// TEI vertical, not a fresh design choice made here: the analytic level's
+/// fields flatten into the entry's direct children, while monogr/series
+/// become nested `bibliography_entry` children.
+fn is_biblio_field_wrapper(name: &str) -> bool {
+    matches!(name, "analytic" | "monogr" | "series" | "imprint")
+}
+
+/// Convert one child of a bibliographic reference container (see
+/// [`is_biblio_container`]/[`is_biblio_field_wrapper`]) into zero or more IR
+/// nodes.
+///
+/// `children` are `name`'s own children, already recursively converted
+/// (inheriting the same biblio-field dispatch — see `convert_children`'s
+/// `in_biblio` threading).
+fn convert_biblio_field(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Vec<Node> {
+    match name {
+        // Transparent structural wrappers: splice their own
+        // (already-converted) children straight into the entry as siblings
+        // rather than nesting one level deeper — see `is_biblio_field_wrapper`.
+        "analytic" | "imprint" => children,
+
+        // The containing publication (journal/book/series), modeled as its
+        // own nested `bibliography_entry` — see `is_biblio_field_wrapper`.
+        "monogr" | "series" => vec![build_bibliography_entry(name, attrs, children)],
+
+        "author" => vec![bib_field("author", "author", children, None)],
+        "editor" => vec![bib_field("editor", "editor", children, None)],
+
+        // `<title>`'s `@level` (`a`/`m`/`s`/`u`) names which bibliographic
+        // level it describes, but the analytic/monogr/series structural
+        // nesting already tells `rescribe-write-tei` which level a title
+        // belongs to positionally — `@level` is preserved verbatim as
+        // `tei:attr:level` purely so an unusual original value (or a
+        // `<title>` with no clear structural home) round-trips exactly,
+        // without the writer needing to guess it back from context alone.
+        "title" => {
+            let mut node = bib_field("title", "title", children, None);
+            if let Some(level) = get_attr(attrs, "level") {
+                node = node.prop("tei:attr:level", level.to_string());
+            }
+            vec![node]
+        }
+
+        "publisher" => vec![bib_field("publisher", "publisher", children, None)],
+        "pubPlace" => vec![bib_field("publisher_location", "pubPlace", children, None)],
+        "edition" => vec![bib_field("edition", "edition", children, None)],
+
+        // `@unit` names what `<biblScope>` measures: `volume`/`vol` and
+        // `issue`/`number` map directly onto the standard roles; a
+        // `page`/`pp` scope with explicit `@from`/`@to` bounds splits
+        // unambiguously into `page_first`/`page_last` (each a plain-text
+        // field, since a page number carries no markup); anything else
+        // (an unbounded page range as free text, or any other unit value)
+        // is kept as a `misc` field with the original `@unit` preserved
+        // raw, rather than guessing at a split.
+        "biblScope" => convert_bibl_scope(attrs, children),
+
+        // `@type` (`doi`/`isbn`/`issn`/`url`/... plus an open vocabulary)
+        // names the identifier scheme.
+        "idno" => vec![bib_field(
+            "identifier",
+            "idno",
+            children,
+            get_attr(attrs, "type"),
+        )],
+
+        // `att.datable`'s dating attributes (`@when`/`@notBefore`/
+        // `@notAfter`/`@from`/`@to`, or their `-iso`-suffixed siblings) —
+        // see `date_marker`/`resolve_tei_date` for how these become the
+        // structured `prop::DATE` (or are demoted to a raw-preserved `misc`
+        // field when they can't be).
+        "date" => vec![date_marker(attrs, children)],
+
+        // Every other citation-scope element this reader has no dedicated
+        // mapping for (`respStmt`, `extent`, `note`, `textLang`,
+        // `availability`, `distributor`, `authority`, `ptr`/`ref` used as a
+        // citation link, ...): raw-preserve as a `misc` field tagged with
+        // the original element name (its own children stay ordinary
+        // markup-capable inline nodes), rather than silently dropping it.
+        _ => vec![bib_field("misc", name, children, None)],
+    }
+}
+
+/// Convert a `<biblScope>` element into one or more `bibliography_field`
+/// nodes — see `convert_biblio_field`'s `"biblScope"` arm for the role
+/// mapping this implements.
+fn convert_bibl_scope(attrs: &[(String, String)], children: Vec<Node>) -> Vec<Node> {
+    let unit = get_attr(attrs, "unit");
+    if matches!(unit, Some("page") | Some("pp"))
+        && let (Some(from), Some(to)) = (get_attr(attrs, "from"), get_attr(attrs, "to"))
+    {
+        let page_field = |role: &str, text: &str| {
+            Node::new(node::BIBLIOGRAPHY_FIELD)
+                .prop(prop::FIELD_ROLE, role.to_string())
+                .prop("tei:tag", "biblScope")
+                .prop("tei:attr:unit", unit.unwrap().to_string())
+                .child(Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()))
+        };
+        return vec![page_field("page_first", from), page_field("page_last", to)];
+    }
+    let role = match unit {
+        Some("volume") | Some("vol") => "volume",
+        Some("issue") | Some("number") => "issue",
+        _ => "misc",
+    };
+    let mut node = bib_field(role, "biblScope", children, None);
+    if let Some(u) = unit {
+        node = node.prop("tei:attr:unit", u.to_string());
+    }
+    vec![node]
+}
+
+/// Build one `bibliography_field` node: `role` is the standard
+/// `prop::FIELD_ROLE` value; `tag` is the original TEI element name
+/// (round-tripped via `tei:tag` so `rescribe-write-tei` can restore the
+/// exact source element); `scheme`, if given, becomes `prop::FIELD_SCHEME`
+/// (used only by `<idno>`'s `@type`).
+fn bib_field(role: &str, tag: &str, children: Vec<Node>, scheme: Option<&str>) -> Node {
+    let mut node = Node::new(node::BIBLIOGRAPHY_FIELD)
+        .prop(prop::FIELD_ROLE, role.to_string())
+        .prop("tei:tag", tag.to_string())
+        .children(children);
+    if let Some(scheme) = scheme {
+        node = node.prop(prop::FIELD_SCHEME, scheme.to_string());
+    }
+    node
+}
+
+/// The five TEI `att.datable` dating-value attribute names this reader
+/// understands. `when` marks a single point in time; `notBefore`/
+/// `notAfter`/`from`/`to` each mark a one-sided *bound*, not a point. See
+/// [`resolve_tei_date`] for how each is resolved, and its doc comment for
+/// the documented fork around `notBefore`+`notAfter`/`from`+`to` pairs.
+const DATE_ATTRS: [&str; 5] = ["when", "notBefore", "notAfter", "from", "to"];
+
+/// Look up a TEI dating attribute's effective value: the `-iso`-suffixed
+/// sibling (e.g. `when-iso`) is preferred when present, per the TEI
+/// Guidelines' `att.datable.iso` class — it supplies an ISO-normalized value
+/// alongside a base attribute that may use a non-ISO dating scheme.
+fn tei_date_value<'a>(attrs: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    get_attr(attrs, &format!("{name}-iso")).or_else(|| get_attr(attrs, name))
+}
+
+/// Resolve a `<date>` element's structured date from its `att.datable`
+/// attributes. Returns `(map, attr_name)` when exactly one dating attribute
+/// resolves unambiguously — `attr_name` is the base attribute name used
+/// (`when`/`notBefore`/`notAfter`/`from`/`to`, without the `-iso` suffix
+/// even if the `-iso` sibling supplied the actual value), recorded by the
+/// caller as `tei:date-attr` so a reader can tell a point-in-time (`when`)
+/// apart from a one-sided bound (the other four) without that distinction
+/// being lost by flattening both into the same bare Map.
+///
+/// **Documented design fork**: returns `None` — rather than invent a range
+/// representation — when *both* `notBefore`+`notAfter` or *both* `from`+`to`
+/// are present together. Those pairs jointly express a genuine two-point
+/// RANGE (a lower bound and an upper bound), which does not fit
+/// `prop::DATE`'s single year/month/day Map at all — there is no single
+/// "the" point to store, unlike a lone `notBefore` or `notAfter` (which is
+/// adequately captured as one bound, tagged via `tei:date-attr`). This is
+/// exactly the fork the original task brief flagged as a possible
+/// structural mismatch; per CLAUDE.md's no-guessing rule this is not
+/// resolved here — see TODO.md. The caller falls back to raw-preserving the
+/// original attributes on a `misc` field instead of populating `prop::DATE`
+/// for this case, so nothing is silently dropped; only the *modeling* of a
+/// two-point range remains an open question for a human to decide.
+fn resolve_tei_date(
+    attrs: &[(String, String)],
+) -> Option<(HashMap<String, PropValue>, &'static str)> {
+    let has =
+        |n: &str| get_attr(attrs, n).is_some() || get_attr(attrs, &format!("{n}-iso")).is_some();
+    let range_pair = (has("notBefore") && has("notAfter")) || (has("from") && has("to"));
+    if range_pair {
+        return None;
+    }
+    for name in DATE_ATTRS {
+        if let Some(v) = tei_date_value(attrs, name)
+            && let Some(map) = parse_tei_date_string(v)
+        {
+            return Some((map, name));
+        }
+    }
+    None
+}
+
+/// Parse a dating attribute's unambiguous forms (`YYYY`, `YYYY-MM`,
+/// `YYYY-MM-DD`, optionally followed by a `T`-separated time component,
+/// which is ignored — `prop::DATE` has no time-of-day slot) into
+/// `prop::DATE`'s map. Returns `None` for anything else (TEI does not
+/// constrain these attributes to a single format — e.g. a non-Gregorian
+/// calendar date with no `-iso` sibling) rather than guess.
+fn parse_tei_date_string(text: &str) -> Option<HashMap<String, PropValue>> {
+    let date_part = text.split('T').next().unwrap_or(text).trim();
+    let parts: Vec<&str> = date_part.split('-').collect();
+    match parts.as_slice() {
+        [y] => Some(date_map(parse_year_text(y)?, None, None)),
+        [y, m] => Some(date_map(
+            parse_year_text(y)?,
+            Some(parse_two_digit(m, 1..=12)?),
+            None,
+        )),
+        [y, m, d] => Some(date_map(
+            parse_year_text(y)?,
+            Some(parse_two_digit(m, 1..=12)?),
+            Some(parse_two_digit(d, 1..=31)?),
+        )),
+        _ => None,
+    }
+}
+
+fn date_map(year: i64, month: Option<i64>, day: Option<i64>) -> HashMap<String, PropValue> {
+    let mut map = HashMap::new();
+    map.insert("year".to_string(), PropValue::Int(year));
+    if let Some(month) = month {
+        map.insert("month".to_string(), PropValue::Int(month));
+    }
+    if let Some(day) = day {
+        map.insert("day".to_string(), PropValue::Int(day));
+    }
+    map
+}
+
+fn parse_year_text(text: &str) -> Option<i64> {
+    let t = text.trim();
+    if t.len() == 4 && t.chars().all(|c| c.is_ascii_digit()) {
+        t.parse().ok()
+    } else {
+        None
+    }
+}
+
+fn parse_two_digit(text: &str, range: std::ops::RangeInclusive<i64>) -> Option<i64> {
+    if text.len() == 2 && text.chars().all(|c| c.is_ascii_digit()) {
+        text.parse::<i64>().ok().filter(|n| range.contains(n))
+    } else {
+        None
+    }
+}
+
+/// Build an internal `tei:_date` marker node for a `<date>` element (see
+/// `convert_biblio_field`'s `"date"` arm) — consumed and removed by
+/// `build_bibliography_entry`, never a real IR node kind that could leak
+/// into the final tree. Carries the resolved `prop::DATE` Map + `tei:date-
+/// attr` when `resolve_tei_date` succeeds, and *always* raw-preserves every
+/// dating attribute present (`tei:attr:{name}`) — needed both for the
+/// misc-field fallback (unresolved/range case) and so a second date on the
+/// same entry level (see `build_bibliography_entry`) isn't lost even when a
+/// first one was already promoted to `prop::DATE`. `children` (the date's
+/// own already-converted markup-capable content, e.g. `<date>1 May
+/// <num value="2020">2020</num></date>`) is kept on the marker so its
+/// display text can be recovered as `tei:date-text` even when the date
+/// resolves via an attribute.
+fn date_marker(attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let mut marker = Node::new("tei:_date").children(children);
+    if let Some((map, attr_name)) = resolve_tei_date(attrs) {
+        marker = marker.prop(prop::DATE, PropValue::Map(map));
+        marker = marker.prop("tei:date-attr", attr_name.to_string());
+    }
+    for name in DATE_ATTRS {
+        if let Some(v) = get_attr(attrs, name) {
+            marker = marker.prop(format!("tei:attr:{name}"), v.to_string());
+        }
+        let iso_name = format!("{name}-iso");
+        if let Some(v) = get_attr(attrs, &iso_name) {
+            marker = marker.prop(format!("tei:attr:{iso_name}"), v.to_string());
+        }
+    }
+    marker
+}
+
+/// Build a `bibliography_entry` node for a `<biblStruct>`/`<bibl>`/
+/// `<monogr>`/`<series>` element. `tag` is the original element name
+/// (round-tripped via `tei:tag` so `rescribe-write-tei` knows which wrapper
+/// to re-emit, and whether `<analytic>`/`<imprint>` wrapping applies).
+/// `children` are the already-converted `bibliography_field`/nested-entry/
+/// date-marker siblings (see `convert_biblio_field`); this function pulls
+/// the internal `tei:_date` marker(s) back out. The *first* marker with a
+/// resolved date is promoted onto the entry as `prop::DATE` (+ `tei:date-
+/// attr`, + `tei:date-text` if the source `<date>` had its own display
+/// text); every other marker on this same level (an unresolved/range date,
+/// or a second date alongside the primary one — TEI permits e.g. both a
+/// publication date and a copyright date) is demoted to an ordinary `misc`
+/// field instead of being lost, preserving whichever raw `tei:attr:*`
+/// attributes it carried.
+fn build_bibliography_entry(tag: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let mut date_markers = Vec::new();
+    let mut kids = Vec::with_capacity(children.len());
+    for child in children {
+        if child.kind.as_str() == "tei:_date" {
+            date_markers.push(child);
+        } else {
+            kids.push(child);
+        }
+    }
+    let mut entry = Node::new(node::BIBLIOGRAPHY_ENTRY).prop("tei:tag", tag.to_string());
+    let mut promoted = false;
+    for marker in date_markers {
+        if !promoted && let Some(PropValue::Map(map)) = marker.props.get(prop::DATE) {
+            entry = entry.prop(prop::DATE, PropValue::Map(map.clone()));
+            if let Some(attr_name) = marker.props.get_str("tei:date-attr") {
+                entry = entry.prop("tei:date-attr", attr_name.to_string());
+            }
+            let text = extract_text(&marker.children);
+            if !text.is_empty() {
+                entry = entry.prop("tei:date-text", text);
+            }
+            promoted = true;
+            continue;
+        }
+        let mut field = Node::new(node::BIBLIOGRAPHY_FIELD)
+            .prop(prop::FIELD_ROLE, "misc")
+            .prop("tei:tag", "date")
+            .children(marker.children);
+        for (key, value) in marker.props.iter() {
+            if key.starts_with("tei:attr:") {
+                field = field.prop(key.clone(), value.clone());
+            }
+        }
+        kids.push(field);
+    }
+    attach_generic_attrs(entry.children(kids), attrs)
 }
 
 /// Extract `<teiHeader>` metadata: title (searched for as a `HEADING`, per

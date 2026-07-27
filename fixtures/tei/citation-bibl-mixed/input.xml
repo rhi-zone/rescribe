@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <listBibl>
+        <bibl>Shakespeare, W. <title level="m">As You Like It</title>. London, 1600.</bibl>
+      </listBibl>
+    </body>
+  </text>
+</TEI>

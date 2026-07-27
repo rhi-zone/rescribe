@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <listBibl>
+        <biblStruct>
+          <analytic>
+            <title level="a">Foo <hi rend="italic">Bar</hi></title>
+            <author><orgName>The <hi rend="bold">Example</hi> Consortium</orgName></author>
+          </analytic>
+          <monogr>
+            <title level="m">Some Journal</title>
+          </monogr>
+        </biblStruct>
+      </listBibl>
+    </body>
+  </text>
+</TEI>

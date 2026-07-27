@@ -1,0 +1,24 @@
+{
+  "description": "listBibl/biblStruct with analytic (author, title) and monogr (title, imprint publisher/date, volume/page biblScope) becomes bibliography/bibliography_entry with bibliography_field children plus a nested bibliography_entry for the monogr level",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0",         "kind": "bibliography" },
+    { "path": "/0/0",       "kind": "bibliography_entry", "props": { "tei:tag": "biblStruct" }, "children_count": 3 },
+    { "path": "/0/0/0",     "kind": "bibliography_field", "props": { "field:role": "author", "tei:tag": "author" }, "children_count": 1 },
+    { "path": "/0/0/0/0",   "kind": "span", "props": { "tei:tag": "persName" } },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "Jane Doe" } },
+    { "path": "/0/0/1",     "kind": "bibliography_field", "props": { "field:role": "title", "tei:tag": "title", "tei:attr:level": "a" } },
+    { "path": "/0/0/1/0",   "kind": "text", "props": { "content": "A Simple Title" } },
+    { "path": "/0/0/2",     "kind": "bibliography_entry", "props": { "tei:tag": "monogr", "date": { "year": 2020 }, "tei:date-attr": "when", "tei:date-text": "2020" }, "children_count": 5 },
+    { "path": "/0/0/2/0",   "kind": "bibliography_field", "props": { "field:role": "title", "tei:attr:level": "m" } },
+    { "path": "/0/0/2/0/0", "kind": "text", "props": { "content": "Journal of Examples" } },
+    { "path": "/0/0/2/1",   "kind": "bibliography_field", "props": { "field:role": "publisher" } },
+    { "path": "/0/0/2/1/0", "kind": "text", "props": { "content": "Example Press" } },
+    { "path": "/0/0/2/2",   "kind": "bibliography_field", "props": { "field:role": "volume", "tei:attr:unit": "volume" } },
+    { "path": "/0/0/2/2/0", "kind": "text", "props": { "content": "5" } },
+    { "path": "/0/0/2/3",   "kind": "bibliography_field", "props": { "field:role": "page_first", "tei:tag": "biblScope" } },
+    { "path": "/0/0/2/3/0", "kind": "text", "props": { "content": "12" } },
+    { "path": "/0/0/2/4",   "kind": "bibliography_field", "props": { "field:role": "page_last", "tei:tag": "biblScope" } },
+    { "path": "/0/0/2/4/0", "kind": "text", "props": { "content": "34" } }
+  ]
+}

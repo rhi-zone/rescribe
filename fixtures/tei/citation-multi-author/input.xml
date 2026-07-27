@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <listBibl>
+        <biblStruct>
+          <analytic>
+            <author><persName>Jane Doe</persName></author>
+            <author><persName>John Smith</persName></author>
+            <editor><persName>Ed Editor</persName></editor>
+            <title level="a">A Multi-Author Work</title>
+          </analytic>
+          <monogr>
+            <title level="m">Journal X</title>
+            <biblScope unit="volume">5</biblScope>
+            <biblScope unit="issue">2</biblScope>
+          </monogr>
+        </biblStruct>
+      </listBibl>
+    </body>
+  </text>
+</TEI>

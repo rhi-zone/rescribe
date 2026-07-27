@@ -1339,3 +1339,48 @@ Also extended `crates/rescribe-fixtures`' `check_prop_in` (and `fixtures/spec.md
 JSON objects against `PropValue::Map` — needed to assert `prop::DATE` in the new `citation-
 date` fixture, and a general gap: DocBook's own earlier citation fixtures never exercised
 `prop::DATE` at all, for lack of this.
+
+## TEI citation/bibliography IR vertical closed (2026-07-28)
+
+Following DocBook's (`8aedfb80fa`) and JATS's (`060c0858d5`) citation verticals, TEI is
+done using the same `bibliography`/`bibliography_entry`/`bibliography_field` node kinds
+added in `4e15c996`. `tei-fmt` itself needed no changes (its AST is generic XML, like
+docbook-fmt's/jats-fmt's) — all the work is in `rescribe-read-tei`/`rescribe-write-tei`.
+`<listBibl>` -> `bibliography`; `<biblStruct>`/a `<bibl>` directly inside `<listBibl>` ->
+`bibliography_entry`; a bare `<bibl>` used elsewhere (e.g. inline `<cit>` attribution) is
+deliberately left as the pre-existing plain-`span` mapping, per the already-passing
+`int-cit-bibl` fixture.
+
+**Analytic/monogr/series fork resolution (implemented as instructed, not re-derived):**
+`<biblStruct>`'s `<analytic>` level flattens directly into the entry's own
+`bibliography_field` children; `<monogr>`/`<series>` each become their own nested
+`bibliography_entry`, mirroring DocBook's `<biblioset>` nesting. `<imprint>` is a third
+transparent wrapper (splices into whichever entry it's inside), needed because TEI's own
+`monogr` content model groups `<publisher>`/`<pubPlace>`/`<date>` there.
+
+**Date-attribute-semantics fork — resolved, not deferred:** implemented `tei:date-attr`
+raw-preservation for the single-attribute case. TEI's `att.datable` class (`@when`/
+`@notBefore`/`@notAfter`/`@from`/`@to`, or their `-iso`-suffixed siblings) is judged
+adequately captured by parsing into the structured `prop::DATE` map plus a `tei:date-attr`
+property recording which attribute was used — a reader can tell a point (`when`) apart
+from a one-sided bound (`notBefore`/`notAfter`/`from`/`to`) without the distinction being
+lost. **However, when `@notBefore`+`@notAfter` (or `@from`+`@to`) are present *together*,
+this reader does NOT populate `prop::DATE` at all** — that pair jointly expresses a
+genuine two-point RANGE (a lower bound and an upper bound), which does not fit
+`prop::DATE`'s single year/month/day Map even with `tei:date-attr` attached: there is no
+single "the" point to store. This is exactly the structural mismatch the original task
+brief anticipated as a possible fork. Per CLAUDE.md's no-guessing rule, no new range
+representation was invented for it — the range case falls back to raw-preserving
+`@notBefore`+`@notAfter` (or `@from`+`@to`) verbatim on a `misc` `bibliography_field`
+instead, so nothing is silently dropped; only the *modeling* of a two-point range as a
+first-class `prop::DATE`-like property remains open. **Decision needed:** should
+`rescribe-std` eventually gain a distinct range-shaped date property (e.g. `prop::
+DATE_RANGE` as a `{from: Map, to: Map}` Map-of-Maps, or two Maps under `date:from`/
+`date:to`), or is raw-preservation-only sufficient for this case indefinitely? See
+`fixtures/tei/citation-date` (the R3 assertion) and `fixtures/tei/COVERAGE.md`'s
+Bibliography/citation section for the concrete fixture demonstrating this.
+
+Fixtures: `fixtures/tei/citation-{simple-author,multi-author,markup-in-field,bibl-mixed,
+analytic-monogr-series,date}`. `fixtures/tei/COVERAGE.md`'s new Bibliography/citation
+section is fully checked except for the range-date modeling question above, which is
+tracked here rather than silently marked done.
