@@ -138,21 +138,25 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 ## Adversarial
 
 - [x] empty document — `adv-empty`
-- [ ] malformed XML (unclosed tag) — (missing)
+- [x] malformed XML (unclosed tag) — `adv-malformed-xml` (recovers best-effort,
+  reports diagnostics, never panics)
 - [x] unknown DocBook element — `adv-unknown-block-element` (block-shaped,
   raw-preserved as a tagged `div`), `adv-unknown-inline-element`
   (inline-shaped, raw-preserved as a tagged `span` in place) — neither is
   silently dropped
-- [ ] missing required namespace declaration — (missing)
-- [ ] entity references (&amp;, &lt;, &gt;, &apos;, &quot;) — (missing)
-- [ ] numeric character references (&#160;, &#x2019;) — (missing)
-- [ ] deeply nested sections (6+ levels) — (missing)
-- [ ] empty para — (missing; `<para/>`)
-- [ ] para with only whitespace — (missing)
+- [x] missing required namespace declaration — `adv-no-namespace` (elements
+  matched by local name, not namespace-qualified)
+- [x] entity references (&amp;, &lt;, &gt;, &apos;, &quot;) — `adv-entity-references`
+- [x] numeric character references (&#160;, &#x2019;) — `adv-numeric-char-ref`
+- [x] deeply nested sections (6+ levels) — `adv-deeply-nested-sections`
+- [x] empty para — `adv-empty-para` (`<para/>`)
+- [x] para with only whitespace — `adv-whitespace-para`
 
 ## Pathological
 
-- [ ] very large table (many rows/columns) — (missing)
-- [ ] deeply nested lists (4+ levels) — (missing)
-- [ ] section nesting at maximum DocBook depth — (missing)
-- [ ] long document with many sections — (missing)
+- [x] very large table (many rows/columns) — `path-large-table` (50 rows x 6 columns)
+- [x] deeply nested lists (4+ levels) — `path-deeply-nested-lists` (6 levels)
+- [x] section nesting at maximum DocBook depth — `path-max-section-depth`
+  (15 levels — `<section>` is recursive with no schema-enforced depth limit)
+- [x] long document with many sections — `path-long-document` (100 sibling
+  top-level sections)

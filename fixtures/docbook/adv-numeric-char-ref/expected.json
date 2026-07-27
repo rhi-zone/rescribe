@@ -1,0 +1,8 @@
+{
+  "description": "decimal and hexadecimal numeric character references resolve to their characters and merge into surrounding text",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "space:  quote:’" } }
+  ]
+}

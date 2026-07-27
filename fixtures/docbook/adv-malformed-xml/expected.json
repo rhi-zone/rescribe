@@ -1,0 +1,5 @@
+{
+  "description": "an unclosed <para> tag does not panic the parser; it recovers best-effort (nesting the rest of the content under the still-open element) and reports diagnostics",
+  "category": "adversarial",
+  "assertions": []
+}

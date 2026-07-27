@@ -1,0 +1,10 @@
+{
+  "description": "6+ levels of nested <section> do not panic and each level round-trips as a nested div/heading",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",                     "kind": "div" },
+    { "path": "/0/0",                   "kind": "div" },
+    { "path": "/0/0/1/1/1/1/1",         "kind": "div" },
+    { "path": "/0/0/1/1/1/1/1/1",       "kind": "paragraph" }
+  ]
+}

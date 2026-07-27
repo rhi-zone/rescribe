@@ -1,0 +1,10 @@
+{
+  "description": "a table with 50 rows and 6 columns (300 cells) parses without excessive slowdown or stack issues",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",    "kind": "div" },
+    { "path": "/0/0",  "kind": "table", "children_count": 50 },
+    { "path": "/0/0/0", "kind": "table_row", "children_count": 6 },
+    { "path": "/0/0/49", "kind": "table_row", "children_count": 6 }
+  ]
+}

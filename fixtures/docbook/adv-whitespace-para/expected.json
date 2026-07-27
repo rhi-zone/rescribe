@@ -1,0 +1,8 @@
+{
+  "description": "a <para> containing only whitespace does not panic; the whitespace-only text is dropped rather than kept as a meaningless text node",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph", "children_count": 0 }
+  ]
+}

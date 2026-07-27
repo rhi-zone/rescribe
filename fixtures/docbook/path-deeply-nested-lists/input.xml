@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <itemizedlist><listitem><para>Level 1</para>
+  <itemizedlist><listitem><para>Level 2</para>
+  <itemizedlist><listitem><para>Level 3</para>
+  <itemizedlist><listitem><para>Level 4</para>
+  <itemizedlist><listitem><para>Level 5</para>
+  <itemizedlist><listitem><para>Level 6</para>
+  <para>Bottom.</para>
+  </listitem></itemizedlist>
+  </listitem></itemizedlist>
+  </listitem></itemizedlist>
+  </listitem></itemizedlist>
+  </listitem></itemizedlist>
+  </listitem></itemizedlist>
+</article>

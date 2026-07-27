@@ -1,0 +1,9 @@
+{
+  "description": "a document with 100 sibling top-level sections parses without excessive slowdown",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",   "kind": "div", "children_count": 100 },
+    { "path": "/0/0", "kind": "div" },
+    { "path": "/0/99", "kind": "div" }
+  ]
+}

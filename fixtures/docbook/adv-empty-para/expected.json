@@ -1,0 +1,8 @@
+{
+  "description": "a self-closing empty <para/> does not panic and produces a paragraph node with no children",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph", "children_count": 0 }
+  ]
+}

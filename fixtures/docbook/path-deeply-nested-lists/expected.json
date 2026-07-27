@@ -1,0 +1,10 @@
+{
+  "description": "6 levels of nested <itemizedlist> (well beyond the 4-level floor) parse without excessive slowdown or stack issues",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "list", "children_count": 1 },
+    { "path": "/0/0/0", "kind": "list_item", "children_count": 2 },
+    { "path": "/0/0/0/0", "kind": "paragraph" }
+  ]
+}

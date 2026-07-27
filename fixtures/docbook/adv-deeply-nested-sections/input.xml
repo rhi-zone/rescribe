@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <section><title>L1</title>
+    <section><title>L2</title>
+      <section><title>L3</title>
+        <section><title>L4</title>
+          <section><title>L5</title>
+            <section><title>L6</title>
+              <para>Bottom.</para>
+            </section>
+          </section>
+        </section>
+      </section>
+    </section>
+  </section>
+</article>
