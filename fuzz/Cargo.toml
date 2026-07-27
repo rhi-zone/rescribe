@@ -322,6 +322,9 @@ path = "../crates/formats/docbook-fmt"
 [dependencies.jats-fmt]
 path = "../crates/formats/jats-fmt"
 
+[dependencies.xml-entities]
+path = "../crates/formats/xml-entities"
+
 [dependencies.tei-fmt]
 path = "../crates/formats/tei-fmt"
 
@@ -1086,6 +1089,13 @@ bench = false
 [[bin]]
 name = "fuzz_tei_fmt_roundtrip"
 path = "fuzz_targets/tei_fmt_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_xml_entities_reader"
+path = "fuzz_targets/xml_entities_reader.rs"
 test = false
 doc = false
 bench = false

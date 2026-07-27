@@ -121,6 +121,7 @@ tei-fmt = { path = "crates/formats/tei-fmt" }
 ris = { path = "crates/formats/ris" }
 native = { path = "crates/formats/native" }
 tsv-fmt = { path = "crates/formats/tsv-fmt" }
+xml-entities = { path = "crates/formats/xml-entities" }
 rescribe-read-rtf = { path = "crates/readers/rescribe-read-rtf" }
 rescribe-write-rtf = { path = "crates/writers/rescribe-write-rtf" }
 rescribe-read-vimwiki = { path = "crates/readers/rescribe-read-vimwiki" }
@@ -215,6 +216,7 @@ html5ever = "0.36"
 markup5ever_rcdom = "0.36"
 pdf-extract = "0.10"
 quick-xml = { version = "0.39", features = ["serialize"] }
+entities = "1"
 toml = "0.8"
 zip = "7"
 base64 = "0.22"

@@ -1,0 +1,15 @@
+[package]
+name = "xml-entities"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "DTD-aware XML named entity declaration parsing and resolution — no rescribe dependency"
+readme.workspace = true
+keywords = ["xml", "dtd", "entities", "sgml", "docbook"]
+categories = ["parser-implementations", "encoding"]
+
+[dependencies]
+entities.workspace = true
+
+[dev-dependencies]
