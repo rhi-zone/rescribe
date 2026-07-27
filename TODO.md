@@ -569,6 +569,50 @@ and `rescribe-write-jats` rewired to thin AST↔IR translators over `jats_fmt::N
   `fuzz_jats_fmt_roundtrip` (arbitrary `JatsDoc` → `emit()` → `parse()` →
   `strip_spans()` equality; 553K runs clean). No library bugs found. Initial
   validation only, not an exhaustive campaign — see `docs/format-audit.md`.
+- [x] **Bug found and fixed (2026-07-27)**: two silent-drop bugs closed,
+  mirroring the docbook/tei fix (same audit, applied to this vertical; docbook's
+  final generalized form used directly as the template, not the two-hardcoded-
+  names intermediate step tei went through first). (1) The reader's final
+  `_ => None` catch-all arm silently unwrapped *any* unrecognized element into
+  its parent, discarding the fact that the tag ever existed with no warning.
+  `rescribe-read-jats` gained `is_block_element(tag: &str) -> bool` (a JATS
+  block-level vocabulary allow-list, mirroring `rescribe-read-docbook`) plus
+  `generic_div`/`generic_span` helpers; the catch-all now raw-preserves an
+  unrecognized element as a `jats:tag`-tagged `div` (block-shaped) or `span`
+  (inline-shaped) instead of dropping the tag. New fixtures
+  `adv-unknown-block-element` (`<statement>`) and `adv-unknown-inline-element`
+  (`<styled-content>` nested in running text) regression-test both branches.
+  (2) `<article-meta>`/`<journal-meta>` front-matter beyond `title`/
+  `article-title` (contrib-group, pub-date, volume, issue, fpage, lpage,
+  permissions, history, or any other unmodeled field) was silently dropped —
+  `extract_metadata` only ever extracted `title`. `jats-fmt` gained a
+  `Node::Raw { content, span }` AST variant plus
+  `emit_fragment(nodes: &[Node]) -> Vec<u8>` (mirroring `docbook-fmt`/
+  `tei-fmt`). `convert_children` now threads an `in_header: bool` through its
+  recursion (true once inside `<article-meta>`/`<journal-meta>` or any
+  descendant) and, for any child not in the new `is_modeled_header_field`
+  allow-list (just `title`/`article-title` — the only fields with dedicated
+  semantic extraction before this fix), captures the whole subtree's original
+  XML via `jats_fmt::emit_fragment` and stores it as `{tag}_raw` metadata
+  (e.g. `contrib-group_raw`) alongside a flattened `{tag}` text convenience
+  copy. `<title-group>` gained an explicit pass-through arm (it wraps
+  `<article-title>`/journal `<title>` under both `<article-meta>` and
+  `<journal-meta>`) so the already-modeled title reaches `extract_metadata`
+  as a direct sibling instead of being buried inside a `jats:raw` blob
+  `extract_metadata` never recurses into. `extract_metadata` matches both
+  `span` and `div` node kinds and skips recursing into an already-raw-captured
+  subtree's children. A repeatable field (e.g. more than one
+  `<contrib-group>`) joins its flattened text with `"; "` and concatenates its
+  raw XML rather than a later occurrence silently overwriting an earlier one.
+  The fidelity warning path only fires if raw capture genuinely fails
+  (non-UTF8 content — not expected for XML that parsed at all).
+  `rescribe-write-jats` now emits an `<article-meta>` wrapper (title-group
+  plus any spliced-back `*_raw` fields, sorted by tag for deterministic
+  output) instead of writing a bare `<title-group>` only. New fixture
+  `header-contrib-group` (`<contrib-group>` with nested `<contrib>`/`<name>`)
+  regression-tests the general fallback. `cargo clippy --all-targets
+  --all-features -p jats-fmt -p rescribe-read-jats -p rescribe-write-jats --
+  -D warnings` and full test/fixture suite clean.
 - [ ] DTD-aware entity resolution and closing the remaining
   `fixtures/jats/COVERAGE.md` gaps are follow-up work — out of scope for this pass per
   CLAUDE.md (Tier B target is 3-Harness, not 5-Production)

@@ -63,7 +63,7 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
             ..
         } = top
         {
-            let converted = convert_children(kids, name, &mut metadata, &mut warnings);
+            let converted = convert_children(kids, name, false, &mut metadata, &mut warnings);
             match convert_element(name, attrs, converted.clone(), None) {
                 Some(node) => children.push(node),
                 None => {
@@ -95,9 +95,16 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
 /// `<journal-meta>`, which are consumed for metadata) and passing through
 /// "structural" wrapper elements (like `<title-group>`) as their own
 /// children.
+///
+/// `in_header` is true when `parent_name` is `<article-meta>`/
+/// `<journal-meta>` itself or a descendant of it (threaded down through the
+/// recursion below) — i.e. whether the *children* of `parent_name` are
+/// front-matter content that will end up consumed by [`extract_metadata`]
+/// rather than surviving as document content nodes.
 fn convert_children(
     children: &[JNode],
     parent_name: &str,
+    in_header: bool,
     metadata: &mut Properties,
     warnings: &mut Vec<FidelityWarning>,
 ) -> Vec<Node> {
@@ -110,17 +117,49 @@ fn convert_children(
                 children: kids,
                 ..
             } => {
-                let converted_kids = convert_children(kids, name, metadata, warnings);
-                match convert_element(name, attrs, converted_kids.clone(), Some(parent_name)) {
+                let child_in_header =
+                    in_header || matches!(name.as_str(), "article-meta" | "journal-meta");
+                let converted_kids =
+                    convert_children(kids, name, child_in_header, metadata, warnings);
+                let mut converted =
+                    convert_element(name, attrs, converted_kids.clone(), Some(parent_name));
+                // Any `<article-meta>`/`<journal-meta>` descendant this
+                // reader has no explicit semantic mapping for (i.e.
+                // `convert_element` produced it via its generic catch-all
+                // rather than a dedicated arm — see
+                // `is_modeled_header_field`) is about to be discarded as a
+                // tree node and flattened into metadata by
+                // `extract_metadata`. Rather than lose its internal
+                // structure (`<contrib-group>`'s author entries,
+                // `<pub-date>`'s day/month/year parts, or any other
+                // unmodeled front-matter element), capture the whole
+                // subtree's original XML verbatim (mirroring how
+                // `rescribe-read-docbook`/`rescribe-read-tei` raw-preserve
+                // unmodeled header children via `{fmt}_fmt::emit_fragment`)
+                // so the writer can splice it back byte-for-byte instead of
+                // reconstructing a lossy approximation from flattened text.
+                if in_header
+                    && !is_modeled_header_field(name)
+                    && let Some(node) = converted.take()
+                {
+                    let raw =
+                        String::from_utf8(jats_fmt::emit_fragment(std::slice::from_ref(child)))
+                            .ok();
+                    converted = Some(match raw {
+                        Some(raw) => node.prop("jats:raw", raw),
+                        None => node,
+                    });
+                }
+                match converted {
                     Some(node) => out.push(node),
                     None => {
                         if name == "article-meta" || name == "journal-meta" {
-                            extract_metadata(&converted_kids, metadata);
+                            extract_metadata(&converted_kids, metadata, warnings);
                         } else {
                             // Pass-through wrapper element (e.g.
-                            // title-group, fn-group's own nested wrappers):
-                            // splice its already converted children
-                            // directly into the parent.
+                            // title-group, def-item, fn-group's own nested
+                            // wrappers): splice its already converted
+                            // children directly into the parent.
                             out.extend(converted_kids);
                         }
                     }
@@ -153,6 +192,15 @@ fn convert_children(
                     format!("dropped non-content JATS node inside <{parent_name}>"),
                 ));
             }
+            JNode::Raw { content, .. } => {
+                // `JNode::Raw` is never produced by `jats_fmt::parse` itself
+                // (see its doc comment) — it only exists for downstream
+                // consumers to construct directly. This arm exists purely
+                // so the match stays exhaustive; raw-preserve the content
+                // verbatim rather than drop it if a `JatsDoc` containing one
+                // is ever fed through this reader.
+                out.push(Node::new(node::RAW_BLOCK).prop(prop::CONTENT, content.clone()));
+            }
         }
     }
     out
@@ -163,6 +211,109 @@ fn get_attr<'a>(attrs: &'a [(String, String)], key: &str) -> Option<&'a str> {
         .iter()
         .find(|(k, _)| k == key)
         .map(|(_, v)| v.as_str())
+}
+
+/// Attach the small set of JATS attributes worth round-tripping generically
+/// (id) regardless of which element carries them.
+fn attach_generic_attrs(mut node: Node, attrs: &[(String, String)]) -> Node {
+    if let Some(id) = get_attr(attrs, "id") {
+        node = node.prop(prop::ID, id.to_string());
+    }
+    node
+}
+
+/// A generic inline "wrapper" element: JATS markup that has no dedicated IR
+/// node kind but must still round-trip losslessly. Represented as a `span`
+/// tagged with the original element name (`jats:tag`) per the
+/// raw-preservation pattern — this is exactly what `span` exists for.
+fn generic_span(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let n = Node::new(node::SPAN)
+        .prop("jats:tag", name.to_string())
+        .children(children);
+    attach_generic_attrs(n, attrs)
+}
+
+/// A generic block-level "wrapper" element: the block-level counterpart to
+/// [`generic_span`]. JATS markup with no dedicated IR node kind, but whose
+/// content model is block-shaped (per [`is_block_element`]) rather than
+/// running inline text — represented as a `div` tagged with the original
+/// element name (`jats:tag`) so the writer can re-emit the exact tag rather
+/// than `<p>`-wrapping a bare span, which would misrepresent an
+/// unrecognized block element as an inline one.
+fn generic_div(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let n = Node::new(node::DIV)
+        .prop("jats:tag", name.to_string())
+        .children(children);
+    attach_generic_attrs(n, attrs)
+}
+
+/// Known JATS block-level elements — used only by the catch-all fallback in
+/// [`convert_element`] to decide whether an element name this reader doesn't
+/// specifically recognize should become a [`generic_div`] (block position)
+/// or a [`generic_span`] (inline position); every element `convert_element`
+/// already gives dedicated handling to never reaches the catch-all, so this
+/// list exists purely to classify the *unrecognized* remainder. It
+/// deliberately includes both this reader's own recognized block vocabulary
+/// (as a cross-reference) and additional JATS elements that are
+/// unambiguously block-shaped but have no dedicated IR mapping yet.
+pub(crate) fn is_block_element(tag: &str) -> bool {
+    matches!(
+        tag,
+        // Document structure
+        "article"
+            | "front"
+            | "body"
+            | "back"
+            | "article-meta"
+            | "journal-meta"
+            | "sec"
+            // Block content
+            | "p"
+            | "list"
+            | "list-item"
+            | "def-list"
+            | "def-item"
+            | "def"
+            | "statement"
+            | "disp-quote"
+            | "boxed-text"
+            | "verse-group"
+            | "verse-line"
+            | "table-wrap"
+            | "table-wrap-group"
+            | "table"
+            | "thead"
+            | "tbody"
+            | "tfoot"
+            | "tr"
+            | "fig"
+            | "fig-group"
+            | "caption"
+            | "disp-formula"
+            | "disp-formula-group"
+            | "fn-group"
+            | "fn"
+            | "ref-list"
+            | "ref"
+            | "abstract"
+            | "kwd-group"
+            | "ack"
+            | "app-group"
+            | "app"
+            | "notes"
+            | "sig-block"
+            | "sig"
+            // Front-matter containers
+            | "contrib-group"
+            | "aff"
+            | "pub-date"
+            | "permissions"
+            | "history"
+            | "custom-meta-group"
+            | "custom-meta"
+            | "related-article"
+            | "product"
+    )
 }
 
 /// Convert one JATS element (with its already-converted children) into a
@@ -188,6 +339,15 @@ fn convert_element(
         "front" | "body" | "back" => None, // Pass through
         // Handled by the caller (`convert_children`) via `extract_metadata`.
         "article-meta" | "journal-meta" => None,
+        // Structural wrapper (used both under `<article-meta>` for the
+        // article title and under `<journal-meta>` for the journal title):
+        // no IR node of its own, but its `<article-title>`/`<title>` child
+        // is separately mapped to `HEADING` below and must reach
+        // `extract_metadata` as a direct sibling rather than being
+        // raw-captured wholesale (which would bury the already-modeled
+        // title inside a `jats:raw` blob `extract_metadata` never
+        // recurses into — see `is_modeled_header_field`).
+        "title-group" => None, // Pass through
 
         // Sections
         "sec" => Some(Node::new(node::DIV).children(children)),
@@ -348,30 +508,149 @@ fn convert_element(
         ),
         "mixed-citation" | "element-citation" => Some(Node::new(node::SPAN).children(children)),
 
-        // Metadata elements (usually skip, but may contain useful info)
-        "contrib-group" | "contrib" | "name" | "surname" | "given-names" | "aff" | "pub-date"
-        | "volume" | "issue" | "fpage" | "lpage" | "kwd-group" | "kwd" => None,
+        // `contrib-group`/`contrib`/`name`/`surname`/`given-names`/`aff`/
+        // `pub-date`/`volume`/`issue`/`fpage`/`lpage`/`kwd-group`/`kwd`
+        // (and any other `<article-meta>`/`<journal-meta>` child with no
+        // dedicated semantic mapping) deliberately fall through to the
+        // generic catch-all at the bottom of this match — which produces
+        // the `generic_span`/`generic_div` node `convert_children`'s
+        // `in_header` handling then raw-preserves (see
+        // `is_modeled_header_field`) — rather than being special-cased here
+        // and dropped.
 
         // Line break
         "break" => Some(Node::new(node::LINE_BREAK)),
 
-        // Default: pass through children
-        _ => None,
+        // Any other element name: this reader has no dedicated semantic
+        // mapping for it. Rather than silently dropping the tag and
+        // splicing its children straight into the parent (which is what
+        // returning `None` here does, via `convert_children`'s pass-through
+        // branch), raw-preserve it generically as a tagged div/span keyed
+        // by `jats:tag` — block-shaped or inline-shaped depending on
+        // `is_block_element` — so `rescribe-write-jats` can re-emit the
+        // original tag rather than losing it.
+        _ => {
+            if is_block_element(name) {
+                Some(generic_div(name, attrs, children))
+            } else {
+                Some(generic_span(name, attrs, children))
+            }
+        }
     }
 }
 
-/// Extract `<article-meta>`/`<journal-meta>` metadata (currently: title,
-/// found by searching the already-converted children for a `HEADING` —
-/// matches the pre-split reader's approach).
-fn extract_metadata(nodes: &[Node], metadata: &mut Properties) {
+/// `<article-meta>`/`<journal-meta>` fields `convert_element` gives an
+/// explicit, dedicated semantic mapping to — these are fully modeled in
+/// `Document::metadata` (via `extract_metadata`'s `HEADING` case) and so
+/// must *not* be raw-captured by `convert_children`'s front-matter handling:
+/// their content already round-trips through the semantic property it was
+/// extracted into, and wrapping them in `jats:raw` on top would just
+/// duplicate that content.
+///
+/// Every other `<article-meta>`/`<journal-meta>` child element name falls to
+/// `convert_element`'s generic catch-all (`generic_span`/`generic_div`) and
+/// gets raw-preserved instead — see `convert_children`.
+fn is_modeled_header_field(name: &str) -> bool {
+    matches!(name, "title" | "article-title")
+}
+
+/// Extract `<article-meta>`/`<journal-meta>` metadata: title (searched for
+/// as a `HEADING`, matching how `<title>`/`<article-title>` convert anywhere
+/// else) plus every other front-matter field (contrib-group, pub-date,
+/// volume, issue, fpage, lpage, permissions, history, or any other
+/// unrecognized `<article-meta>`/`<journal-meta>` child), each surfaced by
+/// `convert_element` as a `span`/`div` tagged with `jats:tag` so this
+/// function can find them regardless of nesting.
+///
+/// Every field beyond `title`/`article-title` was raw-captured by
+/// `convert_children` — see `is_modeled_header_field` — and shows up here as
+/// a `span`/`div` carrying a `jats:raw` prop. That subtree's original XML is
+/// stored verbatim as `{tag}_raw` metadata (plus a `{tag}` flattened-text
+/// convenience copy) so `rescribe-write-jats` can splice it back
+/// byte-for-byte; nothing was lost, so descendants aren't recursed into
+/// separately. Only if raw capture itself failed (non-UTF8 content — the
+/// XML source was already UTF8, so this is not expected in practice) does
+/// this fall back to a flatten-to-text-plus-fidelity-warning path.
+///
+/// Multiple occurrences of a repeatable field (e.g. more than one
+/// `<contrib-group>`) are joined with `"; "` rather than the later one
+/// silently overwriting the earlier — losing all-but-the-last would itself
+/// be a silent drop.
+fn extract_metadata(
+    nodes: &[Node],
+    metadata: &mut Properties,
+    warnings: &mut Vec<FidelityWarning>,
+) {
     for node in nodes {
         if node.kind.as_str() == node::HEADING {
             let title = extract_text(&node.children);
             if !title.is_empty() {
                 metadata.set("title", title);
             }
+        } else if matches!(node.kind.as_str(), node::SPAN | node::DIV)
+            && let Some(tag) = node.props.get_str("jats:tag")
+        {
+            let text = extract_text(&node.children);
+            match tag {
+                // A `<title>`/`<article-title>` nested somewhere other than
+                // directly under `<title-group>` — `convert_element` still
+                // maps it to `HEADING`, handled above, so there is nothing
+                // to do for a `span`/`div`-shaped "title" here; this arm
+                // only exists so the generic fallback below doesn't clobber
+                // the real title metadata.
+                "title" | "article-title" => {}
+                other if !text.is_empty() || node.props.get_str("jats:raw").is_some() => {
+                    if !text.is_empty() {
+                        append_metadata(metadata, other, &text);
+                    }
+                    match node.props.get_str("jats:raw") {
+                        // A repeatable field (e.g. more than one
+                        // `<contrib-group>`) concatenates its raw XML rather
+                        // than the later occurrence silently overwriting the
+                        // earlier — valid, since concatenated sibling XML
+                        // elements are themselves valid XML content.
+                        Some(raw) => {
+                            let key = format!("{other}_raw");
+                            match metadata.get_str(&key) {
+                                Some(existing) => {
+                                    let combined = format!("{existing}{raw}");
+                                    metadata.set(key, combined);
+                                }
+                                None => metadata.set(key, raw.to_string()),
+                            }
+                            continue;
+                        }
+                        None => warnings.push(FidelityWarning::new(
+                            Severity::Minor,
+                            WarningKind::FeatureLost(format!("jats-header-field-{other}")),
+                            format!(
+                                "<article-meta>/<journal-meta> <{other}> internal structure is \
+                                     not modeled and its raw XML could not be captured; only its \
+                                     flattened text was kept in metadata: {text:?}"
+                            ),
+                        )),
+                    }
+                }
+                _ => {}
+            }
         }
-        extract_metadata(&node.children, metadata);
+        extract_metadata(&node.children, metadata, warnings);
+    }
+}
+
+/// Set a metadata field, joining onto any existing value with `"; "` rather
+/// than a later occurrence of a repeatable field (e.g. more than one
+/// `<contrib-group>`) silently overwriting an earlier one.
+fn append_metadata(metadata: &mut Properties, key: &str, value: &str) {
+    if value.is_empty() {
+        return;
+    }
+    match metadata.get_str(key) {
+        Some(existing) => {
+            let combined = format!("{existing}; {value}");
+            metadata.set(key, combined);
+        }
+        None => metadata.set(key, value.to_string()),
     }
 }
 

@@ -1,0 +1,12 @@
+{
+  "description": "<article-meta>/<contrib-group> has no dedicated semantic mapping — it is raw-preserved verbatim (contrib-group_raw) alongside a flattened contrib-group name summary, exercising the general <article-meta> front-matter fallback with no fidelity warning since the original XML round-trips",
+  "metadata": {
+    "title": "Sample",
+    "contrib-group": "LovelaceAda",
+    "contrib-group_raw": "<contrib-group>\n        <contrib contrib-type=\"author\">\n          <name>\n            <surname>Lovelace</surname>\n            <given-names>Ada</given-names>\n          </name>\n        </contrib>\n      </contrib-group>"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

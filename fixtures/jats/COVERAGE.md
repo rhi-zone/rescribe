@@ -26,7 +26,8 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [ ] code block (`<code>`) — (missing; JATS `<code>` element distinct from `<preformat>`)
 - [ ] verse-group — (missing; `<verse-group>` / `<verse-line>`)
 - [ ] speech — (missing; `<speech>` with `<speaker>` and `<p>`)
-- [ ] statement (theorem, proof, etc.) — (missing; `<statement>`)
+- [x] statement (theorem, proof, etc.) — `adv-unknown-block-element` (unrecognized
+  block-level element, raw-preserved as a tagged `div` rather than silently dropped)
 - [ ] boxed-text — (missing; `<boxed-text>`)
 - [ ] supplementary-material — (missing; `<supplementary-material>`)
 - [ ] caption as standalone block — (missing; `<caption>` outside `<fig>`)
@@ -53,7 +54,8 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [ ] sans-serif — (missing; `<sans-serif>`)
 - [ ] code (inline) — (missing; `<code>` as inline)
 - [ ] named-content — (missing; `<named-content content-type="…">`)
-- [ ] styled-content — (missing; `<styled-content style="…">`)
+- [x] styled-content — `adv-unknown-inline-element` (unrecognized inline element,
+  raw-preserved as a tagged `span` in place rather than silently dropped)
 - [ ] xref (cross-reference) — (missing; `<xref ref-type="…" rid="…">`)
 - [ ] internal link — (missing; `<xref ref-type="fig">`, `<xref ref-type="table">`, etc.)
 - [ ] citation (inline xref to ref-list) — (missing; `<xref ref-type="bibr">`)
@@ -65,9 +67,13 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 
 ## Metadata (front matter)
 
-- [ ] article-meta / article title — (missing; `<article-meta>` / `<title-group>` / `<article-title>`)
+- [x] article-meta / article title — `header-contrib-group` (`<article-meta>` /
+  `<title-group>` / `<article-title>` extracted into `title` metadata)
 - [ ] subtitle — (missing; `<subtitle>` in `<title-group>`)
-- [ ] author / contrib — (missing; `<contrib contrib-type="author">` / `<name>`)
+- [x] author / contrib — `header-contrib-group` (`<contrib-group>` has no dedicated
+  semantic mapping; raw-preserved verbatim as `contrib-group_raw` metadata, alongside
+  a flattened `contrib-group` name summary — exercises the general `<article-meta>`
+  front-matter fallback, not a hardcoded special case)
 - [ ] affiliation — (missing; `<aff>`)
 - [ ] abstract — (missing; `<abstract>` in `<article-meta>`)
 - [ ] keywords — (missing; `<kwd-group>` / `<kwd>`)
@@ -122,7 +128,9 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 
 - [x] empty document — `adv-empty`
 - [ ] malformed XML (unclosed tag) — (missing)
-- [ ] unknown element (extension) — (missing; element not in JATS spec)
+- [x] unknown element (extension) — `adv-unknown-block-element` (block-shaped,
+  raw-preserved as a tagged `div`), `adv-unknown-inline-element` (inline-shaped,
+  raw-preserved as a tagged `span` in place) — neither is silently dropped
 - [ ] missing xlink namespace — (missing)
 - [ ] broken xref (rid pointing to nonexistent id) — (missing)
 - [ ] entity references — (missing)

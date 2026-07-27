@@ -32,24 +32,53 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let warnings = Vec::new();
 
     let mut root_children = Vec::new();
-
-    if let Some(title) = doc.metadata.get_str("title") {
+    // Any metadata key ending in `_raw` is a whole-subtree verbatim capture
+    // of an unmodeled `<article-meta>`/`<journal-meta>` front-matter
+    // element (see `rescribe-read-jats`'s `convert_children`/
+    // `extract_metadata` — `{tag}_raw`, e.g. `contrib-group_raw` or
+    // `pub-date_raw`). Collected once here so both the "do we even need an
+    // `<article-meta>`" check and the splice-back loop below share one
+    // scan.
+    let mut meta_raw_fields: Vec<(&str, &str)> = doc
+        .metadata
+        .iter()
+        .filter_map(|(key, _)| {
+            let tag = key.strip_suffix("_raw")?;
+            Some((tag, doc.metadata.get_str(key)?))
+        })
+        .collect();
+    meta_raw_fields.sort_unstable_by_key(|(tag, _)| *tag);
+    let title = doc.metadata.get_str("title");
+    if title.is_some() || !meta_raw_fields.is_empty() {
+        let mut article_meta_children = Vec::new();
+        if let Some(title) = title {
+            article_meta_children.push(jats_element(
+                "title-group",
+                vec![],
+                vec![jats_element(
+                    "article-title",
+                    vec![],
+                    vec![jats_text(title)],
+                )],
+            ));
+        }
+        // Splice back every raw-captured `<article-meta>`/`<journal-meta>`
+        // subtree byte-for-byte (see `rescribe-read-jats`'s
+        // `convert_children`/`extract_metadata` — any `{tag}_raw` metadata
+        // field, e.g. `contrib-group_raw` or `pub-date_raw`). This is
+        // lossless where reconstructing the element from its flattened
+        // text would not be; sorted by tag for deterministic output since
+        // `Properties` iterates in unspecified order.
+        for (_, raw) in &meta_raw_fields {
+            article_meta_children.push(JNode::Raw {
+                content: (*raw).to_string(),
+                span: jats_fmt::Span::NONE,
+            });
+        }
         root_children.push(jats_element(
             "front",
             vec![],
-            vec![jats_element(
-                "article-meta",
-                vec![],
-                vec![jats_element(
-                    "title-group",
-                    vec![],
-                    vec![jats_element(
-                        "article-title",
-                        vec![],
-                        vec![jats_text(title)],
-                    )],
-                )],
-            )],
+            vec![jats_element("article-meta", vec![], article_meta_children)],
         ));
     }
 
@@ -101,11 +130,37 @@ fn jats_text(content: impl Into<String>) -> JNode {
     }
 }
 
+/// Build the generic `id` attribute for a node, if the IR node carries the
+/// corresponding raw-preserved property (see `rescribe-read-jats`'s
+/// `attach_generic_attrs` for the reader side of this round trip).
+fn generic_attrs(node: &Node) -> Vec<(String, String)> {
+    let mut attrs = Vec::new();
+    if let Some(id) = node.props.get_str(prop::ID) {
+        attrs.push(("id".to_string(), id.to_string()));
+    }
+    attrs
+}
+
 /// Convert one rescribe IR (block-level) node into zero or more JATS AST
 /// nodes.
 fn write_node(node: &Node) -> Vec<JNode> {
     match node.kind.as_str() {
-        node::DOCUMENT | node::DIV => node.children.iter().flat_map(write_node).collect(),
+        node::DOCUMENT => node.children.iter().flat_map(write_node).collect(),
+
+        // A `div` tagged `jats:tag` is a `generic_div` (an unrecognized
+        // block-level element raw-preserved by the reader's catch-all, see
+        // `rescribe-read-jats::generic_div`) — re-emit its original tag
+        // name. Any other `div` (article/sec/abstract/etc, which the
+        // reader unwraps regardless of the writer re-wrapping them) just
+        // flattens into its children, same as `DOCUMENT`.
+        node::DIV => match node.props.get_str("jats:tag") {
+            Some(tag) => vec![jats_element(
+                tag,
+                generic_attrs(node),
+                node.children.iter().flat_map(write_node).collect(),
+            )],
+            None => node.children.iter().flat_map(write_node).collect(),
+        },
 
         node::HEADING => vec![jats_element(
             "sec",
@@ -375,6 +430,19 @@ fn write_inline(node: &Node) -> Vec<JNode> {
                 name: name.to_string(),
                 span: jats_fmt::Span::NONE,
             }],
+            None => node.children.iter().flat_map(write_inline).collect(),
+        },
+
+        // A `span` tagged `jats:tag` is a `generic_span` (an unrecognized
+        // inline-level element raw-preserved by the reader's catch-all, see
+        // `rescribe-read-jats::generic_span`) — re-emit its original tag
+        // name.
+        node::SPAN => match node.props.get_str("jats:tag") {
+            Some(tag) => vec![jats_element(
+                tag,
+                generic_attrs(node),
+                node.children.iter().flat_map(write_inline).collect(),
+            )],
             None => node.children.iter().flat_map(write_inline).collect(),
         },
 

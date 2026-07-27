@@ -1,0 +1,11 @@
+{
+  "description": "an unrecognized element name that JATS's content model treats as block-level (<statement>, not otherwise given dedicated IR handling) is raw-preserved as a tagged div, not silently dropped with its children spliced into the parent",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "div", "props": { "jats:tag": "statement" } },
+    { "path": "/0/1/0", "kind": "paragraph" },
+    { "path": "/0/2",   "kind": "paragraph" }
+  ]
+}
