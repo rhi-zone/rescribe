@@ -21,25 +21,32 @@ This file describes milestones, format tiers, and cross-cutting work.
   suite was separately closed to 118/118 this session. Closing these is real reader/writer work
   (new element mappings, teiHeader-style front-matter fields), not just fixture-writing, per the
   pattern `tei-fmt`'s closing pass followed.
-- **`jats-fmt`/`tei-fmt` `is_block_element` classifiers have not had a schema-verification pass.**
+- **`jats-fmt` `is_block_element` classifier has not had a schema-verification pass.**
   `docbook-fmt`'s block/inline element list was checked against the live DocBook 5.1 reference
-  (docbook.org) this session and three misclassifications were corrected. `jats-fmt` and
-  `tei-fmt`'s equivalent classifiers were written by the same typical-usage judgment call
-  docbook's started from, but have not been checked against JATS/TEI's own schema references —
-  unverified until someone does that pass.
+  (docbook.org) and three misclassifications were corrected (2026-07-27). `tei-fmt`'s equivalent
+  classifier was checked against the TEI P5 Guidelines reference the same way in a later session
+  (2026-07-27): zero misclassifications found, but three missing block-level elements
+  (`objectDesc`/`supportDesc`/`titlePart`) were added — see the `is_block_element` doc comment in
+  `crates/readers/rescribe-read-tei/src/lib.rs` and `TODO.md`'s tei-fmt section for the full
+  citation trail. `jats-fmt`'s classifier was written by the same typical-usage judgment call and
+  still has not been checked against JATS's own schema references — unverified until someone does
+  that pass.
 - **Oracle harness not yet run for `docbook-fmt`/`jats-fmt`; applicability confirmed.**
   `pandoc --list-input-formats` (checked 2026-07-27) includes both `docbook` and `jats`, so per
   TODO.md's Tier B oracle-harness guidance ("skip for formats Pandoc can't read") the harness step
   applies to both and is still open — `docs/format-audit.md` shows both at oracle-harness status
   "harness" (applicable, not yet done). `tei` is **not** in pandoc's input-formats list (only
-  output), so TEI's oracle-harness step should be marked N/A rather than pending, the way
-  `asciidoc`'s was.
-- **`docbook-fmt`/`jats-fmt`/`tei-fmt` fuzz targets have only had an initial ~60s validation run
-  each** (docbook: 1.69M reader / 573K roundtrip runs; jats: 1.61M / 553K; tei: 1.59M / 527K;
-  all clean, one fuzz-harness generator bug fixed, no library bugs) — not the multi-hour/multi-
-  million-run campaign `commonmark-fmt` got before its 5-Production sign-off. Whether a longer
-  campaign is warranted before or independent of closing the fixture-suite gaps above is an open
-  call.
+  output); `docs/format-audit.md` now marks TEI's oracle-harness step N/A (2026-07-27), the same
+  way `asciidoc`'s was.
+- **`docbook-fmt`/`jats-fmt` fuzz targets have only had an initial ~60s validation run each**
+  (docbook: 1.69M reader / 573K roundtrip runs; jats: 1.61M / 553K; both clean, one fuzz-harness
+  generator bug fixed, no library bugs) — not the multi-hour/multi-million-run campaign
+  `commonmark-fmt` got before its 5-Production sign-off. `tei-fmt`'s fuzz targets got that longer
+  campaign in a later session (2026-07-27): `fuzz_tei_fmt_reader` 7,518,438 runs clean,
+  `fuzz_tei_fmt_roundtrip` 6,611,996 runs clean (15 min/target via `cargo fuzz run <target> --
+  -max_total_time=900`), no crashes/panics/artifacts. Whether the same longer campaign is
+  warranted for docbook/jats before or independent of closing their fixture-suite gaps above is
+  still an open call.
 - **DTD-aware entity resolution** remains unimplemented across all three XML verticals
   (docbook/jats/tei) — named entities outside the 5 XML predefined ones and numeric char refs
   raw-preserve losslessly, but are never resolved to their DTD-defined replacement text. Explicitly
@@ -701,6 +708,13 @@ code).
   `fuzz_tei_fmt_roundtrip` (arbitrary `TeiDoc` → `emit()` → `parse()` →
   `strip_spans()` equality; 527K runs clean). No library bugs found. Initial
   validation only, not an exhaustive campaign — see `docs/format-audit.md`.
+  **Superseded (2026-07-27)**: extended campaign run, `-max_total_time=900`
+  (15 min) per target via `cargo fuzz run <target> -- -max_total_time=900`
+  in the `nix develop .#fuzz` shell — `fuzz_tei_fmt_reader` 7,518,438 runs
+  clean, `fuzz_tei_fmt_roundtrip` 6,611,996 runs clean. No crashes, no
+  panics, no artifacts written, no roundtrip mismatches. No bugs found this
+  pass (the one fuzz-harness generator bug from the initial 2026-07-26 run
+  — duplicate attribute names — was already fixed before this campaign).
 - [ ] DTD-aware entity resolution is follow-up work — out of scope for this pass
   per CLAUDE.md (Tier B target is 3-Harness, not 5-Production)
 
