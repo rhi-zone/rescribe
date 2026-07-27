@@ -1,0 +1,14 @@
+{
+  "description": "pathological: a 200-row by 10-column table parses without panicking or excessive slowdown",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",                  "kind": "div" },
+    { "path": "/0/0",                "kind": "figure" },
+    { "path": "/0/0/0",              "kind": "table" },
+    { "path": "/0/0/0/0",            "kind": "table_body" },
+    { "path": "/0/0/0/0/0",          "kind": "table_row" },
+    { "path": "/0/0/0/0/0/0",        "kind": "table_cell" },
+    { "path": "/0/0/0/0/199",        "kind": "table_row" },
+    { "path": "/0/0/0/0/199/9",      "kind": "table_cell" }
+  ]
+}

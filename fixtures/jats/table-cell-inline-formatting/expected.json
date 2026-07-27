@@ -1,0 +1,14 @@
+{
+  "description": "integration: inline formatting (<bold>) directly inside a <td> (no <p> wrapper, JATS table cells hold mixed content directly) converts correctly",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "figure" },
+    { "path": "/0/0/0",     "kind": "table" },
+    { "path": "/0/0/0/0",   "kind": "table_body" },
+    { "path": "/0/0/0/0/0", "kind": "table_row" },
+    { "path": "/0/0/0/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/0/0/0/0/1", "kind": "strong" },
+    { "path": "/0/0/0/0/0/0/1/0", "kind": "text", "props": { "content": "bold" } }
+  ]
+}

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink">
+  <body>
+    <list list-type="bullet">
+      <list-item><p>An <italic>emphasized</italic> item.</p></list-item>
+    </list>
+  </body>
+</article>

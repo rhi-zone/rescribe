@@ -1,0 +1,17 @@
+{
+  "description": "integration: a <td> containing an <xref ref-type=\"fn\"> that references an <fn> defined in the table's own <table-wrap-foot> (rather than the article-wide back matter) converts correctly on both ends",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",             "kind": "div" },
+    { "path": "/0/0",           "kind": "figure" },
+    { "path": "/0/0/0",         "kind": "table" },
+    { "path": "/0/0/0/0",       "kind": "table_body" },
+    { "path": "/0/0/0/0/0",     "kind": "table_row" },
+    { "path": "/0/0/0/0/0/0",   "kind": "table_cell" },
+    { "path": "/0/0/0/0/0/0/0", "kind": "text", "props": { "content": "Value" } },
+    { "path": "/0/0/0/0/0/0/1", "kind": "footnote_ref", "props": { "label": "tfn1" } },
+    { "path": "/0/0/1",         "kind": "div", "props": { "jats:tag": "table-wrap-foot" } },
+    { "path": "/0/0/1/0",       "kind": "footnote_def", "props": { "id": "tfn1" } },
+    { "path": "/0/0/1/0/0",     "kind": "paragraph" }
+  ]
+}

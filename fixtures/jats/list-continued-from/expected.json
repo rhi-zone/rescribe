@@ -1,0 +1,9 @@
+{
+  "description": "continued-from (an idref to the list this one continues the numbering of, interrupted by other content in between) is raw-preserved via jats:continued-from rather than being resolved to an actual numeric start value or silently dropped — resolving it to a number needs a second document pass this single-pass conversion doesn't do",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "list", "props": { "id": "list1" } },
+    { "path": "/0/1",   "kind": "paragraph" },
+    { "path": "/0/2",   "kind": "list", "props": { "jats:continued-from": "list1" } }
+  ]
+}

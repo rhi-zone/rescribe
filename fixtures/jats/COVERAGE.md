@@ -113,7 +113,9 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] table caption — `table-caption`
 - [x] table id / label — `table-id` (id on `<table-wrap>` covered by
   `table-caption`, id on the inner `<table>` by `table-id`)
-- [ ] list continuation / start value — (missing; `continued-from` attribute)
+- [x] list continuation / start value — `list-continued-from` (idref raw-preserved
+  via `jats:continued-from`; not resolved to an actual numeric start value, which
+  would need a second document pass this single-pass conversion doesn't do)
 - [x] colgroup / colspec in table — `table-colgroup`
 - [x] table cell spanning — `table-cell-spanning`
 - [x] underline style — `underline-style`
@@ -123,14 +125,15 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 
 ## Composition (integration)
 
-- [ ] nested sections (2 levels) — (missing)
-- [ ] inline formatting inside list items — (missing)
-- [ ] table with inline formatting in cells — (missing)
-- [ ] figure with supplementary content — (missing)
-- [ ] footnote in table cell — (missing)
-- [ ] citation + reference list roundtrip — (missing)
-- [ ] display formula with label — (missing; `<label>` on `<disp-formula>`)
-- [ ] full article with front/body/back — (missing)
+- [x] nested sections (2 levels) — `nested-section` (Block constructs dimension)
+- [x] inline formatting inside list items — `list-item-inline-formatting`
+- [x] table with inline formatting in cells — `table-cell-inline-formatting`
+- [x] figure with supplementary content — `figure-with-supplementary-material`
+- [x] footnote in table cell — `footnote-in-table-cell`
+- [ ] citation + reference list roundtrip — (missing; tied to the citation/
+  reference-list IR-shape design fork, see TODO.md)
+- [x] display formula with label — `disp-formula-with-label`
+- [x] full article with front/body/back — `e2e-full-article`
 
 ## Adversarial
 
@@ -147,7 +150,8 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 
 ## Pathological
 
-- [ ] very large table — (missing)
-- [ ] deeply nested sections — (missing; 6+ levels)
-- [ ] many references in ref-list — (missing)
-- [ ] large number of footnotes — (missing)
+- [x] very large table — `path-large-table` (200 rows x 10 columns)
+- [x] deeply nested sections — `path-deeply-nested-sections` (10 levels)
+- [ ] many references in ref-list — (missing; tied to the citation/
+  reference-list IR-shape design fork, see TODO.md)
+- [x] large number of footnotes — `path-many-footnotes` (100 footnotes)

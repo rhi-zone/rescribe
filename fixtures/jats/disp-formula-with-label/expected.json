@@ -1,0 +1,8 @@
+{
+  "description": "<disp-formula>'s <label> is captured separately onto the standard label property rather than being folded into math:source (a real bug fixed this session: the label text was previously concatenated directly into the math source string, corrupting it for any consumer treating math:source as literal TeX)",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "math_display", "props": { "label": "(1)", "math:source": "E = mc^2", "id": "eq1" } }
+  ]
+}

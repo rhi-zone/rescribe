@@ -1,0 +1,12 @@
+{
+  "description": "pathological: 10 levels of <sec> nesting parse without panicking or stack overflow, and the innermost title's heading level correctly reflects the full nesting depth (1 + sec_depth)",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0",                       "kind": "div" },
+    { "path": "/0/0",                     "kind": "div" },
+    { "path": "/0/0/0",                   "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0/1/1/1/1/1/1/1/1/1",     "kind": "div" },
+    { "path": "/0/0/1/1/1/1/1/1/1/1/1/0",   "kind": "heading", "props": { "level": 11 } },
+    { "path": "/0/0/1/1/1/1/1/1/1/1/1/1",   "kind": "paragraph" }
+  ]
+}

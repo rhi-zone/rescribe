@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="research-article">
+  <front>
+    <journal-meta>
+      <journal-title>Journal of Examples</journal-title>
+    </journal-meta>
+    <article-meta>
+      <title-group>
+        <article-title>A Complete Article</article-title>
+      </title-group>
+      <abstract>
+        <p>This article demonstrates a full front/body/back structure.</p>
+      </abstract>
+    </article-meta>
+  </front>
+  <body>
+    <sec>
+      <title>Introduction</title>
+      <p>Some <italic>introductory</italic> text.</p>
+    </sec>
+    <sec>
+      <title>Methods</title>
+      <p>Methods text.</p>
+    </sec>
+  </body>
+  <back>
+    <ack>
+      <p>Thanks.</p>
+    </ack>
+  </back>
+</article>

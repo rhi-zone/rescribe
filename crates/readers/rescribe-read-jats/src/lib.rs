@@ -360,6 +360,12 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             | "verse-line"
             | "table-wrap"
             | "table-wrap-group"
+            // Same navigation-index-only fetch limitation as `glossary`
+            // above — classified block by analogy to its sibling
+            // `table-wrap` child elements (`caption`, `table-wrap-group`),
+            // which the "May be contained in <table-wrap>" family
+            // unambiguously is.
+            | "table-wrap-foot"
             | "table"
             | "thead"
             | "tbody"
@@ -516,6 +522,15 @@ fn convert_element(
             let mut node = Node::new(node::LIST).prop(prop::ORDERED, ordered);
             if let Some(lt) = list_type {
                 node = node.prop("jats:list-type", lt.to_string());
+            }
+            // `continued-from` (an idref to the `<list>` this one continues
+            // the numbering of) is raw-preserved rather than resolved to an
+            // actual numeric start value — resolving it needs a second pass
+            // over the whole document to find and count the referenced
+            // list's items, which this single-pass per-element conversion
+            // doesn't do. Capturing the idref itself is still lossless.
+            if let Some(cf) = get_attr(attrs, "continued-from") {
+                node = node.prop("jats:continued-from", cf.to_string());
             }
             Some(node.children(children))
         }
@@ -690,14 +705,30 @@ fn convert_element(
             attrs,
         )),
 
-        // Math
+        // Math. A `<label>` (e.g. `(1)`) is split out via `split_label`
+        // *before* computing `math:source` — without this, since `<label>`
+        // has no dedicated mapping and becomes a generic_span spliced
+        // directly into `children`, its text was silently folding into
+        // `math:source` itself (`"(1)E = mc^2"` instead of `"E = mc^2"`
+        // with a separate label), corrupting the math content for any
+        // consumer that treats `math:source` as literal TeX. Found via
+        // parse -> emit -> parse verification while building the
+        // disp-formula-with-label fixture.
         "disp-formula" => {
-            let text = extract_text(&children);
-            Some(Node::new("math_display").prop("math:source", text))
+            let (label, rest) = split_label(children);
+            let mut node = Node::new("math_display").prop("math:source", extract_text(&rest));
+            if let Some(label) = label {
+                node = node.prop(prop::LABEL, label);
+            }
+            Some(node)
         }
         "inline-formula" => {
-            let text = extract_text(&children);
-            Some(Node::new("math_inline").prop("math:source", text))
+            let (label, rest) = split_label(children);
+            let mut node = Node::new("math_inline").prop("math:source", extract_text(&rest));
+            if let Some(label) = label {
+                node = node.prop(prop::LABEL, label);
+            }
+            Some(node)
         }
         "tex-math" | "mml:math" => {
             // Already captured by the parent formula element.
@@ -892,6 +923,27 @@ fn append_metadata(metadata: &mut Properties, key: &str, value: &str) {
         }
         None => metadata.set(key, value.to_string()),
     }
+}
+
+/// Split a leading `<label>` (a `generic_span` tagged `jats:tag = "label"`,
+/// e.g. `<disp-formula>`'s `(1)`) out of a converted-children list, returning
+/// its flattened text separately from the remaining children. Used by the
+/// `disp-formula`/`inline-formula` math arms so a label doesn't fold into
+/// `math:source` — see their doc comments.
+fn split_label(children: Vec<Node>) -> (Option<String>, Vec<Node>) {
+    let mut label = None;
+    let mut rest = Vec::with_capacity(children.len());
+    for child in children {
+        if label.is_none()
+            && child.kind.as_str() == node::SPAN
+            && child.props.get_str("jats:tag") == Some("label")
+        {
+            label = Some(extract_text(&child.children));
+        } else {
+            rest.push(child);
+        }
+    }
+    (label, rest)
 }
 
 fn extract_text(nodes: &[Node]) -> String {

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink">
+  <body>
+    <fig id="f1">
+      <caption><p>Main figure.</p></caption>
+      <graphic xlink:href="fig1.png"/>
+      <supplementary-material xlink:href="fig1-data.csv">
+        <caption><p>Underlying data.</p></caption>
+      </supplementary-material>
+    </fig>
+  </body>
+</article>

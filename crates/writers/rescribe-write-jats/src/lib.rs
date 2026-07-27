@@ -274,6 +274,9 @@ fn write_node(node: &Node) -> Vec<JNode> {
                 }
             };
             let mut attrs = vec![("list-type".to_string(), list_type)];
+            if let Some(cf) = node.props.get_str("jats:continued-from") {
+                attrs.push(("continued-from".to_string(), cf.to_string()));
+            }
             attrs.extend(generic_attrs(node));
             vec![jats_element(
                 "list",
@@ -426,6 +429,12 @@ fn write_node(node: &Node) -> Vec<JNode> {
 
         "math_display" => {
             let mut formula_children = Vec::new();
+            // A label (see `rescribe-read-jats`'s `split_label`) must be
+            // emitted as its own `<label>` element *before* `<tex-math>`,
+            // never folded into the math source text.
+            if let Some(label) = node.props.get_str(prop::LABEL) {
+                formula_children.push(jats_element("label", vec![], vec![jats_text(label)]));
+            }
             if let Some(source) = node.props.get_str("math:source") {
                 formula_children.push(jats_element("tex-math", vec![], vec![jats_text(source)]));
             }
@@ -591,6 +600,9 @@ fn write_inline(node: &Node) -> Vec<JNode> {
 
         "math_inline" => {
             let mut formula_children = Vec::new();
+            if let Some(label) = node.props.get_str(prop::LABEL) {
+                formula_children.push(jats_element("label", vec![], vec![jats_text(label)]));
+            }
             if let Some(source) = node.props.get_str("math:source") {
                 formula_children.push(jats_element("tex-math", vec![], vec![jats_text(source)]));
             }
