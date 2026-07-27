@@ -494,7 +494,10 @@ fn write_inline(node: &Node) -> Vec<JNode> {
 
         node::UNDERLINE => vec![jats_element(
             "underline",
-            vec![],
+            node.props
+                .get_str("jats:underline-style")
+                .map(|s| vec![("underline-style".to_string(), s.to_string())])
+                .unwrap_or_default(),
             node.children.iter().flat_map(write_inline).collect(),
         )],
 

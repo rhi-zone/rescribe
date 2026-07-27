@@ -1,0 +1,12 @@
+{
+  "description": "<inline-supplementary-material> (the inline counterpart to <supplementary-material>, no dedicated IR node kind) is raw-preserved as a tagged span, with id and xlink:href captured, rather than silently dropped",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    {
+      "path": "/0/0/1",
+      "kind": "span",
+      "props": { "jats:tag": "inline-supplementary-material", "id": "s1", "jats:attr:xlink:href": "data.csv" }
+    }
+  ]
+}

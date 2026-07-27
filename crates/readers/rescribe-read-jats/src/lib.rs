@@ -380,6 +380,13 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             | "app-group"
             | "app"
             | "notes"
+            // `glossary` was not fetchable from the Tag Library in this
+            // session (only its navigation-index entry loaded, not its
+            // content-model page) — classified block by analogy to its
+            // fellow back-matter sectioning siblings `ack`/`app-group`/
+            // `notes` (same "whole back-matter section" shape), not a
+            // direct schema citation like the rest of this list.
+            | "glossary"
             | "sig-block"
             | "sig"
             | "speech"
@@ -578,7 +585,13 @@ fn convert_element(
         // Inline formatting
         "italic" => Some(Node::new(node::EMPHASIS).children(children)),
         "bold" => Some(Node::new(node::STRONG).children(children)),
-        "underline" => Some(Node::new(node::UNDERLINE).children(children)),
+        "underline" => {
+            let mut node = Node::new(node::UNDERLINE).children(children);
+            if let Some(style) = get_attr(attrs, "underline-style") {
+                node = node.prop("jats:underline-style", style.to_string());
+            }
+            Some(node)
+        }
         "strike" => Some(Node::new(node::STRIKEOUT).children(children)),
         "sub" => Some(Node::new(node::SUBSCRIPT).children(children)),
         "sup" => Some(Node::new(node::SUPERSCRIPT).children(children)),

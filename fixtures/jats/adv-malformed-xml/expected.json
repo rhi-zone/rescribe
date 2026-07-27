@@ -1,0 +1,9 @@
+{
+  "description": "unclosed tags (truncated input) do not panic; the parser best-effort-recovers by closing open elements at EOF and the reader surfaces the resulting diagnostics as fidelity warnings rather than erroring outright",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Unterminated content" } }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "an xlink:href attribute still resolves even when the root element never declared xmlns:xlink (the reader matches attribute names literally rather than doing real namespace resolution, so a missing/wrong namespace declaration does not silently lose the link)",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/0",   "kind": "link", "props": { "url": "https://example.org" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "underline-style (\"double\", \"dotted\", etc. beyond a plain single underline) round-trips via jats:underline-style rather than being silently dropped",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "underline", "props": { "jats:underline-style": "double" } }
+  ]
+}

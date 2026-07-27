@@ -1,0 +1,10 @@
+{
+  "description": "<fn-group> in <back> (a footnote group outside any table, distinct from a table's own <fn-group>) converts through the same dedicated fn-group -> div / fn -> footnote_def mapping used everywhere else, with the <fn>'s id now round-tripping via attach_generic_attrs",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "div" },
+    { "path": "/0/1/0", "kind": "footnote_def", "props": { "id": "fn1" } },
+    { "path": "/0/1/0/0", "kind": "paragraph" }
+  ]
+}

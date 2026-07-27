@@ -1,0 +1,9 @@
+{
+  "description": "an <xref rid=\"...\"> pointing to an id that doesn't exist anywhere in the document does not panic or error — the reader does no cross-reference resolution/validation, it just carries the rid through as url=\"#rid\" verbatim, same as any other xref",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "link", "props": { "url": "#does-not-exist", "jats:ref-type": "fig" } }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "numeric character references (decimal &#176; and hex &#x00B0;) are resolved at parse time and merged into the surrounding text run rather than split into separate nodes or dropped",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Temperature: 20°C (°C in hex)." } }
+  ]
+}

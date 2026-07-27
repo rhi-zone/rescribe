@@ -63,7 +63,7 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] citation (inline xref to ref-list) — `xref-citation`
 - [x] footnote reference (xref to fn) — `xref-footnote`
 - [x] abbrev — `abbrev`
-- [ ] inline-supplementary-material — (missing)
+- [x] inline-supplementary-material — `inline-supplementary-material`
 - [x] milestone-start / milestone-end — `milestone`
 - [x] target (anchor) — `target-anchor`
 
@@ -89,14 +89,18 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 
 ## Back matter
 
-- [ ] reference list — (missing; `<ref-list>` / `<ref>` / `<mixed-citation>` / `<element-citation>`)
-- [ ] element-citation (structured ref) — (missing)
-- [ ] mixed-citation (text ref) — (missing)
-- [ ] appendix — (missing; `<app>` / `<app-group>`)
-- [ ] glossary — (missing; `<glossary>` / `<def-list>`)
-- [ ] acknowledgments — (missing; `<ack>`)
-- [ ] fn-group (footnote group in back) — (missing; `<fn-group>`)
-- [ ] notes (back notes) — (missing; `<notes>`)
+- [ ] reference list — (missing; `<ref-list>` / `<ref>` / `<mixed-citation>` /
+  `<element-citation>` — genuine design fork, see TODO.md: whether a dedicated
+  citation/bibliography IR shape should exist, or whether the current thin
+  ref-list -> div / ref -> paragraph / \*-citation -> span mapping is the
+  intended final answer, is genuinely undecided)
+- [ ] element-citation (structured ref) — (missing; same fork)
+- [ ] mixed-citation (text ref) — (missing; same fork)
+- [x] appendix — `appendix`
+- [x] glossary — `glossary`
+- [x] acknowledgments — `acknowledgments`
+- [x] fn-group (footnote group in back) — `fn-group-back`
+- [x] notes (back notes) — `back-notes`
 
 ## Properties
 
@@ -112,7 +116,7 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [ ] list continuation / start value — (missing; `continued-from` attribute)
 - [x] colgroup / colspec in table — `table-colgroup`
 - [x] table cell spanning — `table-cell-spanning`
-- [ ] underline style — (missing; `underline-style` attribute on `<underline>`)
+- [x] underline style — `underline-style`
 - [x] ext-link type — `ext-link-type`
 - [ ] MathML math — (missing; `<math>` MathML content as alternative to `<tex-math>` —
   genuine design fork, see TODO.md)
@@ -131,15 +135,15 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 ## Adversarial
 
 - [x] empty document — `adv-empty`
-- [ ] malformed XML (unclosed tag) — (missing)
+- [x] malformed XML (unclosed tag) — `adv-malformed-xml`
 - [x] unknown element (extension) — `adv-unknown-block-element` (block-shaped,
   raw-preserved as a tagged `div`), `adv-unknown-inline-element` (inline-shaped,
   raw-preserved as a tagged `span` in place) — neither is silently dropped
-- [ ] missing xlink namespace — (missing)
-- [ ] broken xref (rid pointing to nonexistent id) — (missing)
-- [ ] entity references — (missing)
-- [ ] numeric character references — (missing)
-- [ ] empty paragraph — (missing; `<p/>`)
+- [x] missing xlink namespace — `adv-missing-xlink-ns`
+- [x] broken xref (rid pointing to nonexistent id) — `adv-broken-xref`
+- [x] entity references — `adv-entity-references`
+- [x] numeric character references — `adv-numeric-char-ref`
+- [x] empty paragraph — `adv-empty-paragraph`
 
 ## Pathological
 

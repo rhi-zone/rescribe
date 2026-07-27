@@ -1,0 +1,10 @@
+{
+  "description": "a self-closing empty <p/> converts to a paragraph node with no children rather than being dropped or causing a panic; a following non-empty paragraph is unaffected",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph", "children_count": 0 },
+    { "path": "/0/1",   "kind": "paragraph" },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Not empty." } }
+  ]
+}

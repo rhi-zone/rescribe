@@ -1,0 +1,12 @@
+{
+  "description": "<glossary> (back-matter glossary, no dedicated IR node kind, classified block by analogy to its ack/app-group/notes back-matter sectioning siblings) is raw-preserved as a tagged div; its <def-list> child still converts through the standard definition_list mapping",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "paragraph" },
+    { "path": "/0/1",       "kind": "div", "props": { "jats:tag": "glossary" } },
+    { "path": "/0/1/0",     "kind": "definition_list" },
+    { "path": "/0/1/0/0",   "kind": "definition_term" },
+    { "path": "/0/1/0/1",   "kind": "definition_desc" },
+    { "path": "/0/1/0/1/0", "kind": "paragraph" }
+  ]
+}

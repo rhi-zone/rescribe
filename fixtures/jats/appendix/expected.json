@@ -1,0 +1,11 @@
+{
+  "description": "<app-group>/<app> (back-matter appendices, no dedicated IR node kind) are raw-preserved as tagged divs rather than silently dropped; <back> passes through the same way <front>/<body> do",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/1",     "kind": "div", "props": { "jats:tag": "app-group" } },
+    { "path": "/0/1/0",   "kind": "div", "props": { "jats:tag": "app", "id": "app1" } },
+    { "path": "/0/1/0/0", "kind": "heading" },
+    { "path": "/0/1/0/1", "kind": "paragraph" }
+  ]
+}

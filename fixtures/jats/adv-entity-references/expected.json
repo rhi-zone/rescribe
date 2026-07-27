@@ -1,0 +1,11 @@
+{
+  "description": "a named entity reference the parser cannot resolve without a DTD (not one of the 5 XML-predefined entities) is raw-preserved verbatim as a tagged raw_inline node rather than silently dropped or causing a parse failure",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "A custom " } },
+    { "path": "/0/0/1", "kind": "raw_inline", "props": { "content": "&myentity;", "jats:entity": "myentity" } },
+    { "path": "/0/0/2", "kind": "text", "props": { "content": " entity." } }
+  ]
+}

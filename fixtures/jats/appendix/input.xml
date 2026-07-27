@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink">
+  <body>
+    <p>Body.</p>
+  </body>
+  <back>
+    <app-group>
+      <app id="app1">
+        <title>Appendix A</title>
+        <p>Extra material.</p>
+      </app>
+    </app-group>
+  </back>
+</article>

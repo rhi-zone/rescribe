@@ -1,0 +1,10 @@
+{
+  "description": "<ack> (back-matter acknowledgments, no dedicated IR node kind) is raw-preserved as a tagged div rather than silently dropped",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "div", "props": { "jats:tag": "ack" } },
+    { "path": "/0/1/0", "kind": "heading" },
+    { "path": "/0/1/1", "kind": "paragraph" }
+  ]
+}
