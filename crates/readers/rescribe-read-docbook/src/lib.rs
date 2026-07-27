@@ -229,6 +229,34 @@ fn attach_generic_attrs(mut node: Node, attrs: &[(String, String)]) -> Node {
     node
 }
 
+/// The document-outline heading level a `<title>` should use, if its parent
+/// is a genuine DocBook sectioning container (DocBook 5.2 reference:
+/// article/book/chapter/part/appendix are the top-level divisions;
+/// section/sect1 nest one level deeper than that; sect2-sect5 each nest one
+/// level deeper still; simplesect is a non-nesting subsection, kept at the
+/// same level `section`/`sect1` used before this function existed to avoid
+/// changing existing round-trip behavior). `None` for every other parent
+/// (including `table`, `example`, `figure`, admonitions, `qandaset`,
+/// `refentry`, or no parent at all) — those containers' `<title>` is a
+/// caption, not an outline heading; see the `"title"` arm in
+/// `convert_element`.
+fn heading_level_for_parent(parent: Option<&str>) -> Option<i64> {
+    match parent {
+        // A document's own title, inside <info>/<articleinfo>/<bookinfo>,
+        // is level 1 — the same level as article/book/chapter/part/appendix
+        // — not a caption; `extract_metadata` specifically looks for a
+        // `HEADING` child to find it (see `is_modeled_header_field`).
+        Some("article") | Some("book") | Some("chapter") | Some("part") | Some("appendix")
+        | Some("info") | Some("articleinfo") | Some("bookinfo") => Some(1),
+        Some("sect1") | Some("section") | Some("simplesect") => Some(2),
+        Some("sect2") => Some(3),
+        Some("sect3") => Some(4),
+        Some("sect4") => Some(5),
+        Some("sect5") => Some(6),
+        _ => None,
+    }
+}
+
 /// `spacing="compact"` on `<itemizedlist>`/`<orderedlist>` (DocBook 5.2
 /// reference) maps to the standard `tight` property — the same semantic
 /// concept CommonMark/GFM readers use for "no paragraph wrapping between
@@ -388,32 +416,30 @@ fn convert_element(
             Some(Node::new(node::DIV).children(children))
         }
 
-        // A formal <table>'s <title> (DocBook 5.2: table requires a title,
-        // unlike informaltable) is the table's caption, not a heading in
-        // the document outline — mapped to the standard `caption` node kind
-        // so the "table"/"informaltable" arm below can pull it out of the
-        // row children and fold it into the table's `title` property,
-        // rather than it appearing as a stray HEADING mixed in with the
-        // table's rows.
-        "title" if parent == Some("table") => Some(Node::new(node::CAPTION).children(children)),
-
-        // Titles - convert to heading
-        "title" => {
-            let level = match parent {
-                Some("article") | Some("book") | Some("chapter") | Some("part") => 1,
-                Some("sect1") | Some("section") => 2,
-                Some("sect2") => 3,
-                Some("sect3") => 4,
-                Some("sect4") => 5,
-                Some("sect5") => 6,
-                _ => 2,
-            };
-            Some(
+        // A <title> is a section heading only inside a genuine sectioning
+        // container (see `heading_level_for_parent`) — everywhere else
+        // (formal <table>, <example>, <figure>, admonitions, <qandaset>,
+        // `<refentry>`, ...) it's the container's *caption*, not a heading
+        // in the document outline. Mapping every `<title>` to `HEADING`
+        // regardless of parent (the pre-fix behavior) round-trips
+        // incorrectly for non-sectioning parents: `rescribe-write-docbook`
+        // always re-emits a `HEADING` node as a wrapping `<sectN><title>`,
+        // so e.g. `<example><title>T</title><para>P</para></example>`
+        // would come back as `<example><sect1><title>T</title></sect1>
+        // <para>P</para></example>` — a spurious nested section and the
+        // title's position corrupted. The `"table"/"informaltable"` arm
+        // pulls its `CAPTION` child out into the `title` property; every
+        // other container just keeps it as an ordinary child, which
+        // `rescribe-write-docbook`'s new `CAPTION` write arm re-emits as
+        // `<title>` in its original position.
+        "title" => match heading_level_for_parent(parent) {
+            Some(level) => Some(
                 Node::new(node::HEADING)
-                    .prop(prop::LEVEL, level as i64)
+                    .prop(prop::LEVEL, level)
                     .children(children),
-            )
-        }
+            ),
+            None => Some(Node::new(node::CAPTION).children(children)),
+        },
 
         // Paragraphs
         "para" | "simpara" => Some(Node::new(node::PARAGRAPH).children(children)),
@@ -532,10 +558,11 @@ fn convert_element(
         // disclosed simplification, not a silent drop of the common case.
         "table" | "informaltable" => {
             // A <colspec> (see its own arm below) or the table's <title>
-            // (see the `"title" if parent == Some("table")` arm above,
-            // mapped to CAPTION) must not appear as a table row — pull the
-            // title out into the `title` property and keep colspecs as
-            // structured leading children rather than TABLE_ROW siblings.
+            // (see the `"title"` arm's `heading_level_for_parent` dispatch
+            // above, which maps a table's title to CAPTION) must not appear
+            // as a table row — pull the title out into the `title` property
+            // and keep colspecs as structured leading children rather than
+            // TABLE_ROW siblings.
             let mut title = None;
             let mut rest = Vec::with_capacity(children.len());
             for child in children {

@@ -150,6 +150,22 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             None => node.children.iter().flat_map(write_node).collect(),
         },
 
+        // A container's caption (see rescribe-read-docbook's
+        // `heading_level_for_parent` — any `<title>` whose parent isn't a
+        // genuine sectioning container maps here instead of to `HEADING`)
+        // — re-emit as `<title>` in place, not wrapped in a spurious
+        // `<sectN>` the way a `HEADING` would be. The `TABLE` arm above
+        // handles its own title specially (via the `title` property, since
+        // a formal table's title needs to come before `<tgroup>`); every
+        // other container (example, figure, admonitions, qandaset,
+        // refentry, ...) just keeps its `CAPTION` child in natural
+        // position, which lands here.
+        node::CAPTION => vec![db_element(
+            "title",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
+
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
             let section_tag = match level {
