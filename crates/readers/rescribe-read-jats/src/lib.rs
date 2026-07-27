@@ -256,6 +256,36 @@ fn generic_div(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> N
 /// deliberately includes both this reader's own recognized block vocabulary
 /// (as a cross-reference) and additional JATS elements that are
 /// unambiguously block-shaped but have no dedicated IR mapping yet.
+///
+/// Schema-verified against the JATS 1.3 (NISO Z39.96-2019) Tag Library
+/// (<https://jats.nlm.nih.gov/archiving/tag-library/1.3/>), per-element pages
+/// under `element/{name}.html`, using each element's expanded content model
+/// and "May be contained in" list as ground truth (same pass previously done
+/// for docbook-fmt in `abd6dd447d` and tei-fmt in `3e3d84bcef`):
+/// - `related-article` was **removed**: its own Usage/Remarks documents two
+///   uses — front-matter metadata *and* "textual content throughout the
+///   article (as part of the Journal Article Link Class Elements)" — i.e. it
+///   is a phrase-level link element like `xref`/`ext-link`, not block-shaped.
+/// - `speech`, `speaker`, `supplementary-material`, `block-alternatives` were
+///   **added**: `speech` (`(speaker, p+)`) and `supplementary-material`
+///   (floating object, same class as `fig`) have unambiguous block content
+///   models; `speaker` is a leading label line with mixed (PCDATA + phrase)
+///   content, classified block for the same reason as `verse-line`/`sig`
+///   (occupies its own line in the rendered flow, not running text);
+///   `block-alternatives` is JATS's explicitly block-only counterpart to
+///   `alternatives`.
+/// - `alternatives` (plain, non-`block-` form) was deliberately **not**
+///   added: its own Tag Library page states it "is neither inherently block
+///   nor inherently inline in nature, because the block or inline quality is
+///   determined by context and usage" and that it is "typical[ly]... loose
+///   inside a paragraph" — JATS itself declines to classify it, so it is
+///   left to the inline default rather than guessed at.
+/// - Every other entry (including the metadata-container group —
+///   `contrib-group`, `aff`, `pub-date`, `permissions`, `history`,
+///   `custom-meta-group`, `custom-meta`, `product`) was checked against its
+///   "May be contained in" list and confirmed to never appear inside `<p>`
+///   or other running-text contexts, i.e. genuinely block-positioned despite
+///   some having PCDATA-mixed content models.
 pub(crate) fn is_block_element(tag: &str) -> bool {
     matches!(
         tag,
@@ -303,6 +333,10 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             | "notes"
             | "sig-block"
             | "sig"
+            | "speech"
+            | "speaker"
+            | "supplementary-material"
+            | "block-alternatives"
             // Front-matter containers
             | "contrib-group"
             | "aff"
@@ -311,7 +345,6 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             | "history"
             | "custom-meta-group"
             | "custom-meta"
-            | "related-article"
             | "product"
     )
 }
