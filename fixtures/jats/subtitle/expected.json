@@ -1,0 +1,11 @@
+{
+  "description": "<subtitle> in <title-group> converts to HEADING the same as <article-title> but is tagged jats:subtitle so it lands in its own \"subtitle\" metadata key instead of overwriting/merging into \"title\"",
+  "metadata": {
+    "title": "Main Title",
+    "subtitle": "A Clarifying Subtitle"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

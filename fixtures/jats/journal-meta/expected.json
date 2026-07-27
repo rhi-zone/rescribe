@@ -1,0 +1,12 @@
+{
+  "description": "<journal-meta> (journal-title, issn — no dedicated semantic mapping) exercises the same general front-matter fallback as <article-meta>: each unmodeled child is raw-preserved verbatim alongside a flattened text summary, landing in the same top-level Document metadata as article-meta fields",
+  "metadata": {
+    "title": "Sample",
+    "journal-title": "Journal of Examples",
+    "issn": "1234-5678"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

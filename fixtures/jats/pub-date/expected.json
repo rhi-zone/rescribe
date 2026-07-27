@@ -1,0 +1,11 @@
+{
+  "description": "<pub-date> (day/month/year — no dedicated semantic mapping) is raw-preserved verbatim (pub-date_raw) alongside a flattened text summary; the day/month/year internal structure survives losslessly in the raw XML even though the flattened text copy loses it",
+  "metadata": {
+    "title": "Sample",
+    "pub-date": "27072026"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

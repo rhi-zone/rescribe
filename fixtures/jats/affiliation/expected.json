@@ -1,0 +1,11 @@
+{
+  "description": "<aff> (author affiliation, no dedicated semantic mapping) is raw-preserved verbatim (aff_raw) alongside a flattened text summary, exercising the general <article-meta> front-matter fallback",
+  "metadata": {
+    "title": "Sample",
+    "aff": "Department of Computing, Example University"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

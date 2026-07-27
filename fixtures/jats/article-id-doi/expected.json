@@ -1,0 +1,11 @@
+{
+  "description": "<article-id pub-id-type=\"doi\"> (no dedicated semantic mapping) is raw-preserved verbatim (article-id_raw, keeping the pub-id-type attribute) alongside a flattened text summary, exercising the general <article-meta> front-matter fallback",
+  "metadata": {
+    "title": "Sample",
+    "article-id": "10.1000/example.123"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

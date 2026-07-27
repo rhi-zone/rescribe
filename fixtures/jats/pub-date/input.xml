@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink">
+  <front>
+    <article-meta>
+      <title-group>
+        <article-title>Sample</article-title>
+      </title-group>
+      <pub-date pub-type="epub">
+        <day>27</day>
+        <month>07</month>
+        <year>2026</year>
+      </pub-date>
+    </article-meta>
+  </front>
+  <body>
+    <p>Body.</p>
+  </body>
+</article>

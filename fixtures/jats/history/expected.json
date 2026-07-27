@@ -1,0 +1,11 @@
+{
+  "description": "<history>/<date date-type=\"...\"> (received/accepted dates, no dedicated semantic mapping) is raw-preserved verbatim (history_raw, keeping the date-type attributes) alongside a flattened text summary, exercising the general <article-meta> front-matter fallback",
+  "metadata": {
+    "title": "Sample",
+    "history": "112026172026"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

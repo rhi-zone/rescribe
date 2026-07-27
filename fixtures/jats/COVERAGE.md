@@ -71,21 +71,21 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 
 - [x] article-meta / article title — `header-contrib-group` (`<article-meta>` /
   `<title-group>` / `<article-title>` extracted into `title` metadata)
-- [ ] subtitle — (missing; `<subtitle>` in `<title-group>`)
+- [x] subtitle — `subtitle`
 - [x] author / contrib — `header-contrib-group` (`<contrib-group>` has no dedicated
   semantic mapping; raw-preserved verbatim as `contrib-group_raw` metadata, alongside
   a flattened `contrib-group` name summary — exercises the general `<article-meta>`
   front-matter fallback, not a hardcoded special case)
-- [ ] affiliation — (missing; `<aff>`)
-- [ ] abstract — (missing; `<abstract>` in `<article-meta>`)
-- [ ] keywords — (missing; `<kwd-group>` / `<kwd>`)
-- [ ] journal-meta — (missing; `<journal-meta>` with `<journal-title>`, `<issn>`)
-- [ ] pub-date — (missing; `<pub-date>` with `<year>`, `<month>`, `<day>`)
-- [ ] volume / issue / fpage / lpage — (missing; article pagination metadata)
-- [ ] doi / article-id — (missing; `<article-id pub-id-type="doi">`)
-- [ ] permissions / license — (missing; `<permissions>` / `<license>`)
-- [ ] funding-group — (missing; `<funding-group>` / `<funding-source>`)
-- [ ] history (received/accepted dates) — (missing; `<history>` / `<date date-type="received">`)
+- [x] affiliation — `affiliation`
+- [x] abstract — `abstract`
+- [x] keywords — `keywords`
+- [x] journal-meta — `journal-meta`
+- [x] pub-date — `pub-date`
+- [x] volume / issue / fpage / lpage — `pagination`
+- [x] doi / article-id — `article-id-doi`
+- [x] permissions / license — `permissions-license`
+- [x] funding-group — `funding-group`
+- [x] history (received/accepted dates) — `history`
 
 ## Back matter
 

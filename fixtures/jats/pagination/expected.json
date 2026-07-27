@@ -1,0 +1,14 @@
+{
+  "description": "<volume>/<issue>/<fpage>/<lpage> (article pagination metadata, no dedicated semantic mapping) each raw-preserve verbatim alongside a flattened text summary, exercising the general <article-meta> front-matter fallback for four sibling fields at once",
+  "metadata": {
+    "title": "Sample",
+    "volume": "12",
+    "issue": "3",
+    "fpage": "100",
+    "lpage": "110"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

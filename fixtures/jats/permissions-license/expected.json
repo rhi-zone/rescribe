@@ -1,0 +1,11 @@
+{
+  "description": "<permissions>/<license> (copyright and license statements, no dedicated semantic mapping) is raw-preserved verbatim (permissions_raw, keeping the license-type and xlink:href attributes) alongside a flattened text summary, exercising the general <article-meta> front-matter fallback",
+  "metadata": {
+    "title": "Sample",
+    "permissions": "Copyright 2026 The AuthorsThis is an open access article."
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

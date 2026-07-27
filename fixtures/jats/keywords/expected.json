@@ -1,0 +1,11 @@
+{
+  "description": "<kwd-group>/<kwd> (no dedicated semantic mapping) is raw-preserved verbatim (kwd-group_raw) alongside a flattened text summary, exercising the general <article-meta> front-matter fallback",
+  "metadata": {
+    "title": "Sample",
+    "kwd-group": "rescribeJATS"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}
