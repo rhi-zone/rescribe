@@ -1417,3 +1417,23 @@ fields are `ST_String255` — flat, no nested markup possible in this namespace,
 field's children will just be a single `text` node, unlike DocBook/JATS/TEI); (3) raw-
 preserve `b:Tag`/`b:SourceType` as `docx:tag`/`docx:source-type` (round-trip-critical:
 Word keys in-text citations off `b:Tag`); (4) `b:Year`/`b:Month`/`b:Day` -> `prop::DATE`.
+
+### Discovered gap: pre-existing bibliography readers don't use this IR shape
+
+While adding the citation IR shape above, noticed that `rescribe-read-bibtex`,
+`rescribe-read-csl-json`, `rescribe-read-ris`, and `rescribe-read-endnotexml` (all
+pre-existing, not touched this session) use a completely different, ad-hoc representation:
+a `definition_list` node with each entry's fields flattened into `Properties` as plain
+strings (e.g. `rescribe-read-csl-json/src/lib.rs`'s `convert_item`). This predates the
+`bibliography`/`bibliography_entry`/`bibliography_field` node kinds added in `4e15c996` and
+was not migrated onto them — those four formats are pure-metadata bibliography formats
+(BibTeX/CSL-JSON/RIS/EndNote XML) rather than markup-in-document formats like DocBook/JATS/
+TEI, so the flat-string approach may or may not be an actual fidelity problem for them (CSL
+fields like `title`/`container-title` are effectively always plain text in practice, unlike
+DocBook's/JATS's/TEI's markup-permitting equivalents) — this needs a human call, not a
+guess: (a) leave the four metadata-format readers as-is (flat properties) since their
+source formats genuinely have no nested markup capability, accepting that rescribe now has
+two different bibliography-entry shapes in the IR depending on which format produced them,
+or (b) migrate all four onto `bibliography`/`bibliography_entry`/`bibliography_field` for
+consistency across the whole bibliography surface, even though the field-children-as-
+inline-nodes indirection buys nothing for these formats. Flagging rather than deciding.
