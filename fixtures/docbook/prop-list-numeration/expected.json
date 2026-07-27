@@ -1,0 +1,11 @@
+{
+  "description": "numeration and startingnumber on <orderedlist> map to the standard list_style and start properties",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    {
+      "path": "/0/0",
+      "kind": "list",
+      "props": { "ordered": true, "list_style": "upper-roman", "start": 3 }
+    }
+  ]
+}

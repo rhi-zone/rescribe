@@ -1,0 +1,16 @@
+{
+  "description": "xlink:type and xlink:role on <link> are raw-preserved verbatim alongside the standard url property",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    {
+      "path": "/0/0/0",
+      "kind": "link",
+      "props": {
+        "url": "https://example.com",
+        "docbook:xlink-type": "simple",
+        "docbook:xlink-role": "external"
+      }
+    }
+  ]
+}

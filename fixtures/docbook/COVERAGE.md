@@ -77,14 +77,19 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 ## Properties
 
 - [x] code language — `code-block` (`language` attribute on `<programlisting>`)
-- [ ] link role / type — (missing; `xlink:type`, `xlink:role` on `<link>`)
-- [ ] section xml:id — (missing; `xml:id` attribute on `<section>`)
-- [ ] list numeration — (missing; `numeration` attribute on `<orderedlist>` — arabic, loweralpha, etc.)
-- [ ] list spacing — (missing; `spacing` attribute — compact vs normal)
+- [x] link role / type — `prop-link-role-type` (`xlink:type`, `xlink:role` on
+  `<link>`, raw-preserved as `docbook:xlink-type`/`docbook:xlink-role`)
+- [x] section xml:id — `prop-section-xml-id`
+- [x] list numeration — `prop-list-numeration` (`numeration` attribute on
+  `<orderedlist>` maps to the standard `list_style` property; `startingnumber`
+  maps to `start`)
+- [x] list spacing — `prop-list-spacing` (`spacing="compact"` maps to the
+  standard `tight` property)
 - [ ] table frame / colsep / rowsep — (missing; CALS table model attributes)
 - [ ] table colspec widths — (missing; `<colspec colwidth="…">`)
 - [ ] table spanning cells — (missing; `morerows`, `namest`/`nameend`)
-- [ ] xml:lang — (missing; language attribute on any element)
+- [x] xml:lang — `prop-xml-lang` (standard `language` property, applied
+  uniformly to every element via `attach_generic_attrs`, not just `<para>`)
 - [ ] revision / revhistory — (missing standalone fixture; the general
   `<info>` raw-preservation fallback that would cover it is exercised by
   `header-author`)

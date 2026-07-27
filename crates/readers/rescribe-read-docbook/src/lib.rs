@@ -206,13 +206,36 @@ fn get_attr<'a>(attrs: &'a [(String, String)], key: &str) -> Option<&'a str> {
 }
 
 /// Attach the small set of DocBook attributes worth round-tripping
-/// generically (id, role) regardless of which element carries them.
+/// generically (id, role, xml:lang) regardless of which element carries
+/// them. Applied to *every* element `convert_element` produces (see the
+/// `.map()` wrapping its `match` at the end of that function) — not just
+/// the generic-fallback span/div nodes — so e.g. `xml:id` on a `<section>`
+/// or `xml:lang` on a `<para>` round-trips the same way it would on an
+/// unrecognized element.
 fn attach_generic_attrs(mut node: Node, attrs: &[(String, String)]) -> Node {
     if let Some(id) = get_attr(attrs, "id").or_else(|| get_attr(attrs, "xml:id")) {
         node = node.prop(prop::ID, id.to_string());
     }
     if let Some(role) = get_attr(attrs, "role") {
         node = node.prop("docbook:role", role.to_string());
+    }
+    // `xml:lang` is the standard XML language attribute (DocBook doesn't
+    // define its own) — maps to rescribe's cross-format `language`
+    // property, the same convention `rescribe-read-tei` uses for the same
+    // attribute.
+    if let Some(lang) = get_attr(attrs, "xml:lang") {
+        node = node.prop(prop::LANGUAGE, lang.to_string());
+    }
+    node
+}
+
+/// `spacing="compact"` on `<itemizedlist>`/`<orderedlist>` (DocBook 5.2
+/// reference) maps to the standard `tight` property — the same semantic
+/// concept CommonMark/GFM readers use for "no paragraph wrapping between
+/// items." `spacing="normal"` is the default and needs no property.
+fn attach_list_spacing(mut node: Node, attrs: &[(String, String)]) -> Node {
+    if let Some(spacing) = get_attr(attrs, "spacing") {
+        node = node.prop(prop::TIGHT, spacing == "compact");
     }
     node
 }
@@ -221,11 +244,10 @@ fn attach_generic_attrs(mut node: Node, attrs: &[(String, String)]) -> Node {
 /// IR node kind but must still round-trip losslessly. Represented as a
 /// `span` tagged with the original element name (`docbook:tag`) per the
 /// raw-preservation pattern — this is exactly what `span` exists for.
-fn generic_span(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
-    let n = Node::new(node::SPAN)
+fn generic_span(name: &str, _attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    Node::new(node::SPAN)
         .prop("docbook:tag", name.to_string())
-        .children(children);
-    attach_generic_attrs(n, attrs)
+        .children(children)
 }
 
 /// A generic block-level "wrapper" element: the block-level counterpart to
@@ -235,11 +257,10 @@ fn generic_span(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> 
 /// original element name (`docbook:tag`) so the writer can re-emit the exact
 /// tag rather than `<para>`-wrapping a bare span, which would misrepresent
 /// an unrecognized block element as an inline one.
-fn generic_div(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
-    let n = Node::new(node::DIV)
+fn generic_div(name: &str, _attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    Node::new(node::DIV)
         .prop("docbook:tag", name.to_string())
-        .children(children);
-    attach_generic_attrs(n, attrs)
+        .children(children)
 }
 
 /// Known DocBook block-level elements — used only by the catch-all fallback
@@ -356,7 +377,7 @@ fn convert_element(
     let url = get_attr(attrs, "url").or_else(|| get_attr(attrs, "xlink:href"));
     let language = get_attr(attrs, "language");
 
-    match name {
+    let result = match name {
         // Document level
         "article" | "book" | "chapter" | "part" | "appendix" => {
             Some(Node::new(node::DIV).children(children))
@@ -392,16 +413,40 @@ fn convert_element(
         "blockquote" => Some(Node::new(node::BLOCKQUOTE).children(children)),
 
         // Lists
-        "itemizedlist" => Some(
+        "itemizedlist" => Some(attach_list_spacing(
             Node::new(node::LIST)
                 .prop(prop::ORDERED, false)
                 .children(children),
-        ),
-        "orderedlist" => Some(
-            Node::new(node::LIST)
+            attrs,
+        )),
+        "orderedlist" => {
+            let mut node = Node::new(node::LIST)
                 .prop(prop::ORDERED, true)
-                .children(children),
-        ),
+                .children(children);
+            // `numeration` selects the marker style (DocBook 5.2 reference:
+            // arabic/upperalpha/loweralpha/upperroman/lowerroman) — mapped
+            // to the standard `list_style` property using the same
+            // CSS `list-style-type` vocabulary rescribe already uses
+            // elsewhere (decimal/upper-alpha/lower-alpha/upper-roman/
+            // lower-roman) rather than DocBook's own attribute spelling.
+            if let Some(numeration) = get_attr(attrs, "numeration") {
+                let style = match numeration {
+                    "arabic" => "decimal",
+                    "upperalpha" => "upper-alpha",
+                    "loweralpha" => "lower-alpha",
+                    "upperroman" => "upper-roman",
+                    "lowerroman" => "lower-roman",
+                    other => other,
+                };
+                node = node.prop(prop::LIST_STYLE, style.to_string());
+            }
+            if let Some(start) = get_attr(attrs, "startingnumber")
+                && let Ok(n) = start.parse::<i64>()
+            {
+                node = node.prop(prop::START, n);
+            }
+            Some(attach_list_spacing(node, attrs))
+        }
         "listitem" => Some(Node::new(node::LIST_ITEM).children(children)),
 
         // Definition lists
@@ -443,6 +488,16 @@ fn convert_element(
                 node = node
                     .prop(prop::URL, format!("#{linkend}"))
                     .child(Node::new(node::TEXT).prop(prop::CONTENT, linkend.to_string()));
+            }
+            // `xlink:type`/`xlink:role` are XLink attributes DocBook's
+            // `<link>` inherits (per the DocBook 5.2 reference); they have
+            // no cross-format equivalent, so raw-preserve verbatim under a
+            // `docbook:` namespace rather than dropping them.
+            if let Some(xtype) = get_attr(attrs, "xlink:type") {
+                node = node.prop("docbook:xlink-type", xtype.to_string());
+            }
+            if let Some(xrole) = get_attr(attrs, "xlink:role") {
+                node = node.prop("docbook:xlink-role", xrole.to_string());
             }
             Some(node)
         }
@@ -526,7 +581,11 @@ fn convert_element(
                 Some(generic_span(name, attrs, children))
             }
         }
-    }
+    };
+    // Applied uniformly to whatever node the match above produced (see
+    // `attach_generic_attrs`'s doc comment) rather than each arm attaching
+    // its own subset of generic attributes.
+    result.map(|n| attach_generic_attrs(n, attrs))
 }
 
 /// `<info>`/`<articleinfo>`/`<bookinfo>` fields `convert_element` gives an

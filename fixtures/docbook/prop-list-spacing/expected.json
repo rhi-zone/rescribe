@@ -1,0 +1,7 @@
+{
+  "description": "spacing=\"compact\" on <itemizedlist> maps to the standard tight property",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "list", "props": { "ordered": false, "tight": true } }
+  ]
+}
