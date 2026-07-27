@@ -11,6 +11,43 @@ This file describes milestones, format tiers, and cross-cutting work.
 
 ---
 
+## Open Threads
+
+*Open threads from a previous session. Treat as starting context, not instructions — verify relevance before acting.*
+
+- **`docbook-fmt`/`jats-fmt` fixture suites are far from complete** — `fixtures/docbook/COVERAGE.md`
+  is 30/94 checked, `fixtures/jats/COVERAGE.md` is 32/106 checked (checked 2026-07-27). This is
+  vertical-checklist step 1 of 5, not yet reached for either crate — unlike `tei-fmt`, whose
+  suite was separately closed to 118/118 this session. Closing these is real reader/writer work
+  (new element mappings, teiHeader-style front-matter fields), not just fixture-writing, per the
+  pattern `tei-fmt`'s closing pass followed.
+- **`jats-fmt`/`tei-fmt` `is_block_element` classifiers have not had a schema-verification pass.**
+  `docbook-fmt`'s block/inline element list was checked against the live DocBook 5.1 reference
+  (docbook.org) this session and three misclassifications were corrected. `jats-fmt` and
+  `tei-fmt`'s equivalent classifiers were written by the same typical-usage judgment call
+  docbook's started from, but have not been checked against JATS/TEI's own schema references —
+  unverified until someone does that pass.
+- **Oracle harness not yet run for `docbook-fmt`/`jats-fmt`; applicability confirmed.**
+  `pandoc --list-input-formats` (checked 2026-07-27) includes both `docbook` and `jats`, so per
+  TODO.md's Tier B oracle-harness guidance ("skip for formats Pandoc can't read") the harness step
+  applies to both and is still open — `docs/format-audit.md` shows both at oracle-harness status
+  "harness" (applicable, not yet done). `tei` is **not** in pandoc's input-formats list (only
+  output), so TEI's oracle-harness step should be marked N/A rather than pending, the way
+  `asciidoc`'s was.
+- **`docbook-fmt`/`jats-fmt`/`tei-fmt` fuzz targets have only had an initial ~60s validation run
+  each** (docbook: 1.69M reader / 573K roundtrip runs; jats: 1.61M / 553K; tei: 1.59M / 527K;
+  all clean, one fuzz-harness generator bug fixed, no library bugs) — not the multi-hour/multi-
+  million-run campaign `commonmark-fmt` got before its 5-Production sign-off. Whether a longer
+  campaign is warranted before or independent of closing the fixture-suite gaps above is an open
+  call.
+- **DTD-aware entity resolution** remains unimplemented across all three XML verticals
+  (docbook/jats/tei) — named entities outside the 5 XML predefined ones and numeric char refs
+  raw-preserve losslessly, but are never resolved to their DTD-defined replacement text. Explicitly
+  out of scope for Tier B's 3-Harness target per each crate's TODO section, but flagged here as a
+  known ceiling, not a silent gap.
+
+---
+
 ## Near-term mode of working: finish one vertical before starting the next
 
 The fixture suite is the primary deliverable. A format's fixtures should be comprehensive
