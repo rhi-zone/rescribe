@@ -272,6 +272,21 @@ fn generic_div(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> N
 /// additional TEI P5 elements that are unambiguously block-shaped but have
 /// no dedicated IR mapping yet (front-matter and manuscript-description
 /// apparatus in particular).
+///
+/// Verified 2026-07-27 against the TEI P5 Guidelines reference
+/// (tei-c.org/release/doc/tei-p5-doc/en/html/ref-*.html and the
+/// `model.*` content-model-class pages), mirroring the docbook-fmt pass
+/// (see `abd6dd447d`). Every element already listed checked out against
+/// its TEI model class (`model.pLike`, `model.inter`, `model.titlepagePart`,
+/// `model.physDescPart`, `macro.specialPara`, etc. — all block-level);
+/// `l` in particular was double-checked since it's also a legal `<p>`
+/// child, but that just puts it in the same `model.inter`/`model.paraPart`
+/// family as `list`/`table`/`quote`, not phrase-level. Three block-level
+/// elements were missing and are added here: `objectDesc`/`supportDesc`
+/// (`model.physDescPart`, siblings of the already-listed `additions`/
+/// `accMat`) and `titlePart` (`model.titlepagePart`, sibling of the
+/// already-listed `docTitle`/`docAuthor`/etc.). No fixtures exercised the
+/// old (missing) shape for these three, so none needed updating.
 pub(crate) fn is_block_element(tag: &str) -> bool {
     matches!(
         tag,
@@ -330,6 +345,8 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             | "msItem"
             | "msIdentifier"
             | "physDesc"
+            | "objectDesc"
+            | "supportDesc"
             | "handDesc"
             | "handNote"
             | "typeDesc"
@@ -353,6 +370,7 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             | "history"
             | "titlePage"
             | "docTitle"
+            | "titlePart"
             | "docAuthor"
             | "docDate"
             | "docEdition"
