@@ -1,0 +1,10 @@
+{
+  "description": "<epigraph> is structurally a blockquote (reuses the same node kind and docbook:type tagging as note/tip/warning); its <attribution> child names the quotation's source and is kept in place, not extracted into a property",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "blockquote", "props": { "docbook:type": "epigraph" } },
+    { "path": "/0/0/0", "kind": "docbook:attribution" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Richard Dawkins" } },
+    { "path": "/0/0/1", "kind": "paragraph" }
+  ]
+}

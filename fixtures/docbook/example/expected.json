@@ -1,0 +1,10 @@
+{
+  "description": "<example> (a formal block with <title>, distinct from <programlisting>) has no dedicated node kind - raw-preserved as a tagged div, with its title kept as an ordinary caption child (not a spurious nested section)",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div", "props": { "docbook:tag": "example" } },
+    { "path": "/0/0/0", "kind": "caption" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "A Trivial Example" } },
+    { "path": "/0/0/1", "kind": "paragraph" }
+  ]
+}

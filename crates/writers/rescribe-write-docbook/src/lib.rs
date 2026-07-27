@@ -147,6 +147,17 @@ fn write_node(node: &Node) -> Vec<DbNode> {
                 generic_attrs(node),
                 node.children.iter().flat_map(write_node).collect(),
             )],
+            // `html:class == "abstract"` (see rescribe-read-docbook's
+            // "abstract" arm, the one dedicated DIV mapping that doesn't
+            // use `docbook:tag`) still needs to round-trip back to
+            // `<abstract>` — falling through to the untagged case below
+            // would silently flatten it into its children, losing the
+            // fact it was ever an `<abstract>` at all.
+            None if node.props.get_str("html:class") == Some("abstract") => vec![db_element(
+                "abstract",
+                vec![],
+                node.children.iter().flat_map(write_node).collect(),
+            )],
             None => node.children.iter().flat_map(write_node).collect(),
         },
 
@@ -165,6 +176,21 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             vec![],
             node.children.iter().flat_map(write_inline).collect(),
         )],
+
+        // `docbook:tag == "bridgehead"` (see rescribe-read-docbook's
+        // "bridgehead" arm): a bridgehead is explicitly *not* tied to the
+        // section hierarchy, so it must not get the `<sectN><title>`
+        // wrapper below — re-emit as a bare `<bridgehead renderas="sectN">`
+        // instead, with its level round-tripped through `renderas`.
+        node::HEADING if node.props.get_str("docbook:tag") == Some("bridgehead") => {
+            let level = node.props.get_int(prop::LEVEL).unwrap_or(4);
+            let renderas = format!("sect{}", (level - 1).clamp(1, 5));
+            vec![db_element(
+                "bridgehead",
+                vec![("renderas".to_string(), renderas)],
+                node.children.iter().flat_map(write_inline).collect(),
+            )]
+        }
 
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
@@ -197,7 +223,12 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             let tag = node
                 .props
                 .get_str("docbook:type")
-                .filter(|t| matches!(*t, "note" | "tip" | "warning" | "caution" | "important"))
+                .filter(|t| {
+                    matches!(
+                        *t,
+                        "note" | "tip" | "warning" | "caution" | "important" | "epigraph"
+                    )
+                })
                 .unwrap_or("blockquote");
             vec![db_element(
                 tag,
@@ -206,12 +237,28 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             )]
         }
 
+        // <attribution> (see rescribe-read-docbook's "attribution" arm) —
+        // phrase-level content, so re-emitted via write_inline like
+        // CAPTION, not write_node.
+        "docbook:attribution" => vec![db_element(
+            "attribution",
+            vec![],
+            node.children.iter().flat_map(write_inline).collect(),
+        )],
+
         node::LIST => {
-            let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let tag = if ordered {
-                "orderedlist"
-            } else {
-                "itemizedlist"
+            // `docbook:tag` = "procedure"/"substeps" (see
+            // rescribe-read-docbook's "procedure"|"substeps" arm) re-emits
+            // the original element instead of `<orderedlist>`.
+            let tag = match node.props.get_str("docbook:tag") {
+                Some(tag @ ("procedure" | "substeps")) => tag,
+                _ => {
+                    if node.props.get_bool(prop::ORDERED).unwrap_or(false) {
+                        "orderedlist"
+                    } else {
+                        "itemizedlist"
+                    }
+                }
             };
             vec![db_element(
                 tag,
@@ -221,7 +268,7 @@ fn write_node(node: &Node) -> Vec<DbNode> {
         }
 
         node::LIST_ITEM => vec![db_element(
-            "listitem",
+            node.props.get_str("docbook:tag").unwrap_or("listitem"),
             vec![],
             node.children.iter().flat_map(write_node).collect(),
         )],
@@ -258,7 +305,16 @@ fn write_node(node: &Node) -> Vec<DbNode> {
                 attrs.push(("language".to_string(), lang.to_string()));
             }
             let content = node.props.get_str(prop::CONTENT).unwrap_or("");
-            vec![db_element("programlisting", attrs, vec![db_text(content)])]
+            // `docbook:tag` remembers which verbatim element this came from
+            // (see rescribe-read-docbook's "programlisting"|"screen"|
+            // "literallayout"|"synopsis"|"address" arm) — defaults to
+            // `programlisting` for CODE_BLOCK nodes built directly by
+            // non-DocBook producers.
+            let tag = node
+                .props
+                .get_str("docbook:tag")
+                .unwrap_or("programlisting");
+            vec![db_element(tag, attrs, vec![db_text(content)])]
         }
 
         node::TABLE => {
@@ -383,6 +439,20 @@ fn write_node(node: &Node) -> Vec<DbNode> {
         node::TEXT | node::EMPHASIS | node::STRONG | node::CODE | node::LINK => {
             vec![db_element("para", vec![], write_inline(node))]
         }
+
+        // A `generic_span` (see rescribe-read-docbook's `generic_span` — an
+        // unrecognized inline element, e.g. `<arg>` inside
+        // `<cmdsynopsis>`, raw-preserved with its tag under `docbook:tag`)
+        // that ends up as a direct child of a raw-preserved block
+        // container (e.g. `<cmdsynopsis>`'s mixed inline content model, not
+        // `<para>`-based like most block containers) is re-emitted as
+        // itself, not wrapped in a synthetic `<para>` the original never
+        // had — unlike TEXT/EMPHASIS/etc above, which need a `<para>`
+        // wrapper to be valid content at all, a bare element is already
+        // valid without one. Without this arm it would fall to the
+        // catch-all `_` below, which only recurses into children and would
+        // silently drop the tag itself.
+        node::SPAN => write_inline(node),
 
         _ => {
             // Unknown block - recurse into children

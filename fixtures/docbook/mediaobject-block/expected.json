@@ -1,0 +1,7 @@
+{
+  "description": "<mediaobject> as a direct block child (not inside <figure>) passes through to its imagedata, producing a standard image node",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "image", "props": { "url": "diagram.png" } }
+  ]
+}

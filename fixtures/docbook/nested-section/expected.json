@@ -1,0 +1,14 @@
+{
+  "description": "a <section> nested inside another <section> (2 levels deep) produces a nested div/heading structure",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div" },
+    { "path": "/0/0/0",   "kind": "heading" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Outer" } },
+    { "path": "/0/0/1",   "kind": "paragraph" },
+    { "path": "/0/0/2",   "kind": "div" },
+    { "path": "/0/0/2/0", "kind": "heading" },
+    { "path": "/0/0/2/0/0", "kind": "text", "props": { "content": "Inner" } },
+    { "path": "/0/0/2/1", "kind": "paragraph" }
+  ]
+}

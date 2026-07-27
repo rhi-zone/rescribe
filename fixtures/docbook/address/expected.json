@@ -1,0 +1,7 @@
+{
+  "description": "<address> is a verbatim block (DocBook 5.2 reference: whitespace and line breaks are significant, like <screen>) - mapped to the standard code_block node",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "code_block", "props": { "docbook:tag": "address" } }
+  ]
+}

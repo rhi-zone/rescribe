@@ -484,15 +484,48 @@ fn convert_element(
         }
         "listitem" => Some(Node::new(node::LIST_ITEM).children(children)),
 
+        // A <procedure> (DocBook 5.2 reference: "encapsulates a task
+        // composed of <step>s, and possibly <substeps>") is structurally a
+        // numbered list of instructions — the same cross-format shape as
+        // an ordered list, so it's modeled as one (tagged `docbook:tag` so
+        // the writer re-emits `<procedure>`/`<step>`/`<substeps>` rather
+        // than `<orderedlist>`/`<listitem>`, which would lose the
+        // "this is a procedure, not just a list" distinction).
+        "procedure" => Some(
+            Node::new(node::LIST)
+                .prop(prop::ORDERED, true)
+                .prop("docbook:tag", "procedure")
+                .children(children),
+        ),
+        "substeps" => Some(
+            Node::new(node::LIST)
+                .prop(prop::ORDERED, true)
+                .prop("docbook:tag", "substeps")
+                .children(children),
+        ),
+        "step" => Some(
+            Node::new(node::LIST_ITEM)
+                .prop("docbook:tag", "step")
+                .children(children),
+        ),
+
         // Definition lists
         "variablelist" => Some(Node::new(node::DEFINITION_LIST).children(children)),
         "varlistentry" => Some(Node::new("docbook:varlistentry").children(children)),
         "term" => Some(Node::new(node::DEFINITION_TERM).children(children)),
 
-        // Code
-        "programlisting" | "screen" | "literallayout" => {
+        // Code / verbatim blocks. `<synopsis>` and `<address>` (DocBook 5.2
+        // reference: both "displayed 'verbatim'; whitespace and line breaks
+        // ... are significant", the same as `<screen>`/`<literallayout>`)
+        // share the same verbatim-block semantics as `<programlisting>`,
+        // just without a programming-language association. The original
+        // tag name is kept (`docbook:tag`) so the writer re-emits the exact
+        // element instead of always defaulting to `<programlisting>`.
+        "programlisting" | "screen" | "literallayout" | "synopsis" | "address" => {
             let text = extract_text(&children);
-            let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, text);
+            let mut node = Node::new(node::CODE_BLOCK)
+                .prop(prop::CONTENT, text)
+                .prop("docbook:tag", name.to_string());
             if let Some(lang) = language {
                 node = node.prop(prop::LANGUAGE, lang.to_string());
             }
@@ -657,6 +690,23 @@ fn convert_element(
                 .children(children),
         ),
 
+        // <epigraph> (DocBook 5.2 reference: a "Publishing element", block
+        // content typically followed by an <attribution> naming its
+        // source) is structurally the same shape as a blockquote — reuses
+        // the same node kind and `docbook:type` tagging convention as the
+        // admonitions above.
+        "epigraph" => Some(
+            Node::new(node::BLOCKQUOTE)
+                .prop("docbook:type", "epigraph")
+                .children(children),
+        ),
+        // <attribution> (names the source of a quotation inside
+        // <blockquote>/<epigraph>) has no dedicated IR node kind; kept as
+        // an ordinary structured child (not extracted into a property,
+        // unlike a table's <title>) since BLOCKQUOTE's writer already
+        // re-emits children in their original position.
+        "attribution" => Some(Node::new("docbook:attribution").children(children)),
+
         // Abstract and other metadata
         "abstract" => Some(
             Node::new(node::DIV)
@@ -678,11 +728,27 @@ fn convert_element(
         "sbr" => Some(Node::new(node::LINE_BREAK)),
 
         // Horizontal rule equivalent
-        "bridgehead" => Some(
-            Node::new(node::HEADING)
-                .prop(prop::LEVEL, 4i64)
-                .children(children),
-        ),
+        // <bridgehead> (DocBook 5.2 reference: "a heading not tied to the
+        // normal sectional hierarchy" — its `renderas` attribute, values
+        // sect1-sect5, only controls visual level, not actual nesting)
+        // reuses the standard `heading` node kind for its cross-format
+        // level meaning, but is tagged `docbook:tag` so the writer
+        // re-emits a bare `<bridgehead>` rather than the `<sectN><title>`
+        // wrapper a real nested-section HEADING gets — bridgehead is
+        // explicitly *not* a section.
+        "bridgehead" => {
+            let level = get_attr(attrs, "renderas")
+                .and_then(|r| r.strip_prefix("sect"))
+                .and_then(|n| n.parse::<i64>().ok())
+                .map(|n| n + 1) // sect1 nests one level under the top (1) => heading level 2
+                .unwrap_or(4);
+            Some(
+                Node::new(node::HEADING)
+                    .prop(prop::LEVEL, level)
+                    .prop("docbook:tag", "bridgehead")
+                    .children(children),
+            )
+        }
 
         // Anchors: cross-format equivalent to an empty link target
         "anchor" => {

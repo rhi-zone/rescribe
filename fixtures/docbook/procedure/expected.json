@@ -1,0 +1,11 @@
+{
+  "description": "<procedure>/<step>/<substeps> are structurally a numbered list of instructions - mapped to the standard ordered list/list_item nodes (tagged so the writer restores the original procedure/step/substeps tags rather than orderedlist/listitem)",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "list", "props": { "ordered": true, "docbook:tag": "procedure" } },
+    { "path": "/0/0/0", "kind": "list_item", "props": { "docbook:tag": "step" } },
+    { "path": "/0/0/1", "kind": "list_item", "props": { "docbook:tag": "step" } },
+    { "path": "/0/0/1/1", "kind": "list", "props": { "ordered": true, "docbook:tag": "substeps" } },
+    { "path": "/0/0/1/1/0", "kind": "list_item", "props": { "docbook:tag": "step" } }
+  ]
+}

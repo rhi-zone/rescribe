@@ -1,0 +1,10 @@
+{
+  "description": "<synopsis> is verbatim like <screen> - mapped to code_block. <cmdsynopsis> has structured command/arg/group children (not plain text) rather than simple verbatim content, so it stays a raw-preserved tagged div (with <arg> raw-preserved as a tagged span) instead of losing that structure to text-flattening",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "code_block", "props": { "docbook:tag": "synopsis" } },
+    { "path": "/0/1", "kind": "div", "props": { "docbook:tag": "cmdsynopsis" } },
+    { "path": "/0/1/0", "kind": "span", "props": { "docbook:tag": "arg" } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "PATTERN" } }
+  ]
+}

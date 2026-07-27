@@ -1,0 +1,8 @@
+{
+  "description": "<screen> and <literallayout> are verbatim blocks like <programlisting> - mapped to the standard code_block node, tagged with the original element name so the writer re-emits the exact tag rather than defaulting to <programlisting>",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "code_block", "props": { "content": "$ ls -la", "docbook:tag": "screen" } },
+    { "path": "/0/1", "kind": "code_block", "props": { "docbook:tag": "literallayout" } }
+  ]
+}

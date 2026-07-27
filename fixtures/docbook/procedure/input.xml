@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <procedure>
+    <step><para>Do the first thing.</para></step>
+    <step><para>Do the second thing.</para>
+      <substeps>
+        <step><para>A sub-step.</para></step>
+      </substeps>
+    </step>
+  </procedure>
+</article>

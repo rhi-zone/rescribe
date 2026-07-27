@@ -1,0 +1,9 @@
+{
+  "description": "<bridgehead> is a heading not tied to a <section> boundary - mapped to a level-4 heading",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" },
+    { "path": "/0/1", "kind": "heading", "props": { "level": 4 } },
+    { "path": "/0/2", "kind": "paragraph" }
+  ]
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <para>Before.</para>
+  <bridgehead>A Floating Heading</bridgehead>
+  <para>After.</para>
+</article>

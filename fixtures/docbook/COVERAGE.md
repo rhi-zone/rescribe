@@ -24,21 +24,53 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 - [x] important admonition — `important` (`<important>`)
 - [x] formal table — `formal-table` (`<table>` with `<title>`, distinct from
   `<informaltable>`; title captured as the table's `title` property)
-- [ ] example — (missing; `<example>` block with `<title>`)
-- [ ] screen / literallayout — (missing; `<screen>`, `<literallayout>`)
-- [ ] synopsis / cmdsynopsis — (missing; `<synopsis>`, `<cmdsynopsis>`)
-- [ ] procedure — (missing; `<procedure>` with `<step>`)
-- [ ] nested section — (missing; `<section>` inside `<section>`, 2+ levels deep)
+- [x] example — `example` (`<example>` block with `<title>`; raw-preserved as a
+  tagged `div` with its title as an ordinary `caption` child — see the
+  `heading_level_for_parent`/`CAPTION` title-round-trip fix)
+- [x] screen / literallayout — `screen-literallayout` (mapped to `code_block`
+  like `<programlisting>`, tagged `docbook:tag` so the writer restores the
+  exact original element)
+- [x] synopsis / cmdsynopsis — `synopsis-cmdsynopsis` (`<synopsis>` is
+  verbatim like `<screen>`, mapped to `code_block`; `<cmdsynopsis>` has
+  structured `command`/`arg`/`group` children rather than plain text, so it
+  stays raw-preserved as a tagged `div`)
+- [x] procedure — `procedure` (`<procedure>`/`<step>`/`<substeps>` are
+  structurally a numbered list of instructions — mapped to the standard
+  ordered `list`/`list_item` nodes, tagged so the writer restores the
+  original element names)
+- [x] nested section — `nested-section` (`<section>` inside `<section>`, 2+
+  levels deep; reader output is correct — a writer bug independent of this
+  fixture, where a `DIV` containing a `HEADING` plus following siblings
+  doesn't reassemble them into one shared `<sectN>` on emit, is disclosed in
+  TODO.md, not fixed this session — it needs the writer's section-boundary
+  detection redesigned, a real design decision, not a lookup)
 - [x] sidebar — `adv-unknown-block-element` (unrecognized block-level element,
   raw-preserved as a tagged `div` rather than silently dropped)
-- [ ] abstract — (missing; `<abstract>`)
-- [ ] epigraph — (missing; `<epigraph>`)
-- [ ] bridgehead — (missing; floating `<bridgehead>` not tied to a section)
-- [ ] qandaset — (missing; `<qandaset>` / `<qandaentry>`)
-- [ ] equation (display math) — (missing; `<equation>` / `<mathphrase>` or MathML)
-- [ ] mediaobject (block image) — (missing; `<mediaobject>` as a direct block child, not inside `<figure>`)
-- [ ] programlistingco (callout listing) — (missing; `<programlistingco>` + `<calloutlist>`)
-- [ ] address block — (missing; `<address>`)
+- [x] abstract — `abstract` (mapped to a `div` tagged `html:class=abstract`;
+  writer previously silently dropped this tag on round-trip — fixed this
+  session)
+- [x] epigraph — `epigraph-attribution` (structurally a blockquote, reuses
+  the `blockquote`/`docbook:type` convention already used for admonitions)
+- [x] bridgehead — `bridgehead` (a free-floating `heading`, tagged
+  `docbook:tag=bridgehead` so the writer re-emits a bare `<bridgehead
+  renderas="sectN">` instead of wrapping it in a spurious `<sectN>` section
+  the way a real nested-section heading would be)
+- [ ] qandaset — (missing; `<qandaset>` / `<qandaentry>` — left open: no
+  dedicated mapping attempted this session, still raw-preserved generically
+  via `generic_div`/`generic_span` per the catch-all, but not verified with a
+  fixture; a real Q&A-list IR mapping is a design choice, see TODO.md)
+- [ ] equation (display math) — (missing; `<equation>` / `<mathphrase>` or
+  MathML — left open together with `inlineequation`, same MathML-modeling
+  design fork, see TODO.md)
+- [x] mediaobject (block image) — `mediaobject-block` (`<mediaobject>` as a
+  direct block child, not inside `<figure>`, passes through to a standard
+  `image` node; the writer already had a dedicated block-position IMAGE ->
+  `<mediaobject>` arm, so this just adds the missing fixture)
+- [ ] programlistingco (callout listing) — (missing; `<programlistingco>` +
+  `<calloutlist>` — left open together with the `co` inline construct above:
+  designing one without the other would be premature, see TODO.md)
+- [x] address block — `address` (verbatim like `<screen>`, mapped to
+  `code_block`)
 
 ## Inline constructs
 

@@ -1,0 +1,8 @@
+{
+  "description": "<abstract> maps to a div tagged html:class=abstract",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "div", "props": { "html:class": "abstract" } },
+    { "path": "/0/0/0", "kind": "paragraph" }
+  ]
+}
