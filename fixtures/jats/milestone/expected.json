@@ -1,0 +1,9 @@
+{
+  "description": "<milestone-start>/<milestone-end> (empty inline markers with no dedicated IR node kind) are raw-preserved as tagged spans rather than silently dropped, keeping their id and other attributes",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "jats:tag": "milestone-start", "id": "m1", "jats:attr:specific-use": "page-break" } },
+    { "path": "/0/0/3", "kind": "span", "props": { "jats:tag": "milestone-end", "id": "m2" } }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "description": "block-level <code> (distinct from <preformat>) both map to code_block but record which original tag was used via jats:tag so the writer round-trips the exact element rather than collapsing both to one tag",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div" },
+    { "path": "/0/0/0", "kind": "code_block", "props": { "jats:tag": "code", "language": "python" } },
+    { "path": "/0/0/1", "kind": "code_block", "props": { "jats:tag": "preformat" } }
+  ]
+}

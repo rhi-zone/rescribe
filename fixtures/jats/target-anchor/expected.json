@@ -1,0 +1,8 @@
+{
+  "description": "<target> (an internal-link anchor, no dedicated IR node kind) is raw-preserved as a tagged span; its id round-trips onto the standard id property and target-type via jats:attr:target-type",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "jats:tag": "target", "id": "loc1", "jats:attr:target-type": "fig" } }
+  ]
+}

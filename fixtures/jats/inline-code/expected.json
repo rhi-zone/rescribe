@@ -1,0 +1,10 @@
+{
+  "description": "a <code> element as a direct child of <p> (mixed into running text) maps to the standard inline code node rather than a block code_block, tagged jats:tag=\"code\" to distinguish it from <monospace> on write",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "Run " } },
+    { "path": "/0/0/1", "kind": "code", "props": { "content": "make test", "jats:tag": "code" } },
+    { "path": "/0/0/2", "kind": "text", "props": { "content": " to check." } }
+  ]
+}

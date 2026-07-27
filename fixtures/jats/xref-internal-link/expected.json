@@ -1,0 +1,9 @@
+{
+  "description": "<xref ref-type=\"fig\" rid=\"...\"> (an internal cross-reference to a figure) maps to the standard link node with url=\"#rid\" and the ref-type preserved via jats:ref-type",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/1",   "kind": "link", "props": { "url": "#fig1", "jats:ref-type": "fig" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Figure 1" } }
+  ]
+}

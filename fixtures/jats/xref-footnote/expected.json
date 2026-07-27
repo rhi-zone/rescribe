@@ -1,0 +1,9 @@
+{
+  "description": "<xref ref-type=\"fn\" rid=\"...\"> (a cross-reference to an <fn>) maps to the standard footnote_ref node kind, the same convention every other rescribe reader with footnote references uses, rather than the generic link every other xref ref-type variant gets",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/1",   "kind": "footnote_ref", "props": { "label": "fn1" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "1" } }
+  ]
+}

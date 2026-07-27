@@ -1,0 +1,9 @@
+{
+  "description": "<xref ref-type=\"bibr\" rid=\"...\"> (an inline citation referencing a <ref-list> entry) maps to the standard link node with url=\"#rid\" and the ref-type preserved via jats:ref-type; no dedicated citation node kind is used since a citation/reference-list IR shape is a genuinely open design question",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/1",   "kind": "link", "props": { "url": "#ref1", "jats:ref-type": "bibr" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "[1]" } }
+  ]
+}

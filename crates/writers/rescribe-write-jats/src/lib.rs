@@ -320,10 +320,18 @@ fn write_node(node: &Node) -> Vec<JNode> {
             // IR trees not built from a JATS `<code>`/`<preformat>` read.
             let tag = node.props.get_str("jats:tag").unwrap_or("code");
             let mut attrs = Vec::new();
+            // NOTE: `prop::LANGUAGE` is deliberately *not* routed through
+            // `generic_attrs` (-> `xml:lang`) here — on `CODE_BLOCK` it
+            // means the code's programming language (`content-type`), the
+            // same property reused for a different cross-format meaning
+            // than the natural-language `xml:lang` `generic_attrs` assumes
+            // everywhere else. Only `id` is pulled in generically.
             if let Some(lang) = node.props.get_str(prop::LANGUAGE) {
                 attrs.push(("content-type".to_string(), lang.to_string()));
             }
-            attrs.extend(generic_attrs(node));
+            if let Some(id) = node.props.get_str(prop::ID) {
+                attrs.push(("id".to_string(), id.to_string()));
+            }
             let content = node.props.get_str(prop::CONTENT).unwrap_or("");
             vec![jats_element(tag, attrs, vec![jats_text(content)])]
         }

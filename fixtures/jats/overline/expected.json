@@ -1,0 +1,9 @@
+{
+  "description": "<overline> (an inline styling element with no dedicated IR node kind) is raw-preserved as a tagged span rather than silently dropped",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "jats:tag": "overline" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "x" } }
+  ]
+}

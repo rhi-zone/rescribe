@@ -1,0 +1,9 @@
+{
+  "description": "<abbrev> (abbreviation/acronym, no dedicated IR node kind) is raw-preserved as a tagged span; its xml:alt expansion attribute is captured via jats:attr:xml:alt rather than silently dropped",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/1",   "kind": "span", "props": { "jats:tag": "abbrev", "jats:attr:xml:alt": "World Health Organization" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "WHO" } }
+  ]
+}

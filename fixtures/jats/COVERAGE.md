@@ -23,7 +23,7 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [ ] nested section — (missing; `<sec>` inside `<sec>`, 2+ levels deep)
 - [ ] abstract — (missing; `<abstract>`)
 - [ ] structured abstract — (missing; `<abstract abstract-type="structured">` with `<sec>`)
-- [ ] code block (`<code>`) — (missing; JATS `<code>` element distinct from `<preformat>`)
+- [x] code block (`<code>`) — `code-block-vs-preformat`
 - [ ] verse-group — (missing; `<verse-group>` / `<verse-line>`)
 - [ ] speech — (missing; `<speech>` with `<speaker>` and `<p>`)
 - [x] statement (theorem, proof, etc.) — `adv-unknown-block-element` (unrecognized
@@ -48,22 +48,22 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] image (inline graphic) — `image` (`<graphic>`)
 - [x] line break — `line-break` (`<break>`)
 - [x] inline math — `math-inline` (`<inline-formula>` / `<tex-math>`)
-- [ ] monospace — (missing; `<monospace>`)
-- [ ] overline — (missing; `<overline>`)
-- [ ] roman — (missing; `<roman>`)
-- [ ] sans-serif — (missing; `<sans-serif>`)
-- [ ] code (inline) — (missing; `<code>` as inline)
-- [ ] named-content — (missing; `<named-content content-type="…">`)
+- [x] monospace — `monospace`
+- [x] overline — `overline`
+- [x] roman — `roman`
+- [x] sans-serif — `sans-serif`
+- [x] code (inline) — `inline-code`
+- [x] named-content — `named-content`
 - [x] styled-content — `adv-unknown-inline-element` (unrecognized inline element,
   raw-preserved as a tagged `span` in place rather than silently dropped)
-- [ ] xref (cross-reference) — (missing; `<xref ref-type="…" rid="…">`)
-- [ ] internal link — (missing; `<xref ref-type="fig">`, `<xref ref-type="table">`, etc.)
-- [ ] citation (inline xref to ref-list) — (missing; `<xref ref-type="bibr">`)
-- [ ] footnote reference (xref to fn) — (missing; `<xref ref-type="fn">`)
-- [ ] abbrev — (missing; `<abbrev>`)
+- [x] xref (cross-reference) — `xref-internal-link`
+- [x] internal link — `xref-internal-link` (`<xref ref-type="fig">`; same mapping covers `table`, `sec`, etc.)
+- [x] citation (inline xref to ref-list) — `xref-citation`
+- [x] footnote reference (xref to fn) — `xref-footnote`
+- [x] abbrev — `abbrev`
 - [ ] inline-supplementary-material — (missing)
-- [ ] milestone-start / milestone-end — (missing)
-- [ ] target (anchor) — (missing; `<target id="…">`)
+- [x] milestone-start / milestone-end — `milestone`
+- [x] target (anchor) — `target-anchor`
 
 ## Metadata (front matter)
 

@@ -1,0 +1,9 @@
+{
+  "description": "<named-content content-type=\"...\"> has no dedicated IR node kind; raw-preserved as a tagged span with its content-type attribute captured via jats:attr:content-type rather than silently dropping the attribute (the whole point of named-content)",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "paragraph" },
+    { "path": "/0/0/0",   "kind": "span", "props": { "jats:tag": "named-content", "jats:attr:content-type": "genus-species" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Homo sapiens" } }
+  ]
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink">
+  <body>
+    <p>Start <milestone-start id="m1" specific-use="page-break"/>middle<milestone-end id="m2"/> end.</p>
+  </body>
+</article>
