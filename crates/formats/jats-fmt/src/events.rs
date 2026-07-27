@@ -48,6 +48,9 @@ pub enum Event<'a> {
     /// [`crate::ast::Node::EntityRef`]. Predefined XML entities and numeric
     /// character references are resolved to a `Text` event instead.
     EntityRef(Cow<'a, str>),
+    /// Raw XML content emitted verbatim; see [`crate::ast::Node::Raw`].
+    /// Never produced by [`EventIter`] itself.
+    Raw(Cow<'a, str>),
 }
 
 /// Owned event (all `Cow` fields are `Cow::Owned`).
@@ -85,6 +88,7 @@ impl Event<'_> {
             Event::Cdata(t) => Event::Cdata(Cow::Owned(t.into_owned())),
             Event::Comment(t) => Event::Comment(Cow::Owned(t.into_owned())),
             Event::EntityRef(t) => Event::EntityRef(Cow::Owned(t.into_owned())),
+            Event::Raw(t) => Event::Raw(Cow::Owned(t.into_owned())),
         }
     }
 }
@@ -378,6 +382,7 @@ fn walk_node(node: &crate::ast::Node, events: &mut Vec<OwnedEvent>) {
         }
         Node::Doctype { content, .. } => events.push(Event::Doctype(Cow::Owned(content.clone()))),
         Node::EntityRef { name, .. } => events.push(Event::EntityRef(Cow::Owned(name.clone()))),
+        Node::Raw { content, .. } => events.push(Event::Raw(Cow::Owned(content.clone()))),
     }
 }
 
@@ -487,6 +492,14 @@ pub fn collect_doc(events: impl IntoIterator<Item = OwnedEvent>) -> crate::ast::
             Event::EntityRef(name) => push(
                 Node::EntityRef {
                     name: name.into_owned(),
+                    span: Span::NONE,
+                },
+                &mut stack,
+                &mut roots,
+            ),
+            Event::Raw(content) => push(
+                Node::Raw {
+                    content: content.into_owned(),
                     span: Span::NONE,
                 },
                 &mut stack,

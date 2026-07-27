@@ -85,6 +85,12 @@ pub enum Node {
     /// nodes instead — this variant only appears for entities the parser
     /// cannot resolve, preserved verbatim so the writer can re-emit them.
     EntityRef { name: String, span: Span },
+    /// Raw XML content emitted verbatim, with no escaping and no further
+    /// interpretation. Never produced by [`crate::parse::parse`] itself —
+    /// this variant exists for downstream consumers (e.g. an adapter that
+    /// captured a subtree via [`crate::emit::emit_fragment`] and wants to
+    /// splice it back in unchanged) to construct directly.
+    Raw { content: String, span: Span },
 }
 
 /// Resolve one of the five XML-predefined entity names to its character.
@@ -138,6 +144,10 @@ impl Node {
             },
             Node::EntityRef { name, .. } => Node::EntityRef {
                 name: name.clone(),
+                span: Span::NONE,
+            },
+            Node::Raw { content, .. } => Node::Raw {
+                content: content.clone(),
                 span: Span::NONE,
             },
         }

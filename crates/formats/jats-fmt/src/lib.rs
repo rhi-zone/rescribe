@@ -53,7 +53,7 @@ pub mod writer;
 
 pub use ast::{Diagnostic, JatsDoc, Node, Span, XmlDecl};
 pub use batch::{BatchParser, Handler, StreamingParser};
-pub use emit::emit;
+pub use emit::{emit, emit_fragment};
 pub use events::{Event, EventIter, OwnedEvent};
 pub use parse::parse;
 pub use writer::Writer;
