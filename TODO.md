@@ -1310,3 +1310,32 @@ Conventional commit: `docs: add corrections-as-documentation-lag + context-poiso
 From an ecosystem-wide investigation of ad-hoc dispatch architecture (2026-05-29). The recurring anti-pattern: N parallel dispatch tables keyed on a closed name/enum set where one registry/trait/visitor belongs — strongest tell is DRIFT (parallel tables disagreeing). Each finding names the general mechanism it should have been.
 
 - **R1 — 3 parallel format-match arms bypass the `Parser`/`Emitter` traits.** `rescribe-cli/src/main.rs`: `parse_text` (line ~805), `parse_binary` (line ~874), `emit` (line ~900) each manually enumerate every format and call format-specific free functions; plus a 60-entry `const FORMATS` (lines ~80–676). The library's `Parser`/`Emitter` traits expose `fn formats(&self)` — the exact dispatch mechanism — but the CLI ignores it. Adding a format = 4-place edit, compiler can't enforce consistency. SHOULD BE: registry dispatch via `Parser::formats()`/`Emitter`. This is the cleanest bypassed-abstraction finding in the conversion cluster.
+
+## JATS citation/bibliography IR vertical closed (2026-07-28)
+
+Following DocBook's citation vertical (`8aedfb80fa`), the JATS citation/reference-list
+design fork noted above (and in `fixtures/jats/COVERAGE.md`) is resolved: `<ref-list>` ->
+`bibliography`, `<ref>` -> `bibliography_entry`, `<element-citation>`/`<mixed-citation>`
+fields -> `bibliography_field` children, using the same node kinds added in `4e15c996`.
+`jats-fmt` itself needed no changes (its AST is generic XML, like docbook-fmt's) — all the
+work is in `rescribe-read-jats`/`rescribe-write-jats`.
+
+One correction to the original task framing worth recording: the date-handling
+instructions referenced `<pub-date>`'s `year`/`month`/`day` children, but the JATS 1.3 Tag
+Library (fetched live, not from memory) confirms `<element-citation>`'s content model has
+no `<pub-date>` child at all — the actual date-bearing elements are bare
+`<year>`/`<month>`/`<day>` and/or a `<date>` wrapper, both optionally carrying an
+`iso-8601-date` attribute (per the Tag Library's own tagged examples, e.g. `<year
+iso-8601-date="2001-11">2001</year>`). Implemented against the schema-verified elements
+instead; the attribute-preferred-over-reconstruction design intent was unaffected.
+
+Fixtures: `fixtures/jats/citation-{simple-author,multi-author,markup-in-field,
+mixed-citation,date}`, `fixtures/jats/path-many-references`. COVERAGE.md's back-matter/
+integration/pathological reference-list boxes are now all checked; the two remaining
+open boxes (MathML `<math>` as an alternative to `<tex-math>`, and `<alternatives>`'s
+block-vs-inline non-classification) are unrelated pre-existing design forks, untouched.
+
+Also extended `crates/rescribe-fixtures`' `check_prop_in` (and `fixtures/spec.md`) to match
+JSON objects against `PropValue::Map` — needed to assert `prop::DATE` in the new `citation-
+date` fixture, and a general gap: DocBook's own earlier citation fixtures never exercised
+`prop::DATE` at all, for lack of this.
