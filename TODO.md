@@ -610,7 +610,9 @@ required real reader/writer changes, not just fixture-writing:
   through the writer (which previously only ever wrote/read `title`).
   `encodingDesc`/`msDesc` are flattened to plain-text metadata with an explicit
   `Minor` fidelity warning (structure genuinely not modeled — a tracked gap, not
-  a silent drop).
+  a silent drop). **Superseded**: see the `2026-07-27` entries below —
+  `encodingDesc`/`msDesc`, and every other unmodeled teiHeader field, are now
+  raw-preserved byte-for-byte instead of flattened-with-warning.
 - [x] **Bug found and fixed**: the reader's final `_ => None` fallback arm
   silently unwrapped *any* unrecognized element into its parent — dropping the
   fact that e.g. `<foo>` ever existed, not just layout. Changed to raw-preserve
@@ -636,12 +638,47 @@ required real reader/writer changes, not just fixture-writing:
   capture genuinely fails (should not happen for any XML that parsed
   successfully). `fixtures/tei/header-ms-desc` and `header-encoding-desc`
   updated to assert the new `*_raw` metadata keys and the no-warning case.
-  Residual gap: this closes `msDesc`/`encodingDesc` specifically (the two
-  named in this note); other teiHeader leaves this reader doesn't recognize
-  by name still hit the generic "unmodeled teiHeader field" warning path
-  (`extract_metadata`'s `other =>` arm) rather than raw-preservation — a
-  narrower version of the same gap remains for those, tracked separately
-  if it comes up.
+  **Superseded below (2026-07-27)**: this pass hand-picked only `msDesc`/
+  `encodingDesc` for raw-preservation; the generalization that closes the
+  gap for *every* unmodeled teiHeader field is the next entry.
+- [x] **Fixed (2026-07-27)**: generalized the `msDesc`/`encodingDesc`
+  raw-preservation above from a two-element special case to *any* teiHeader
+  child element `convert_element` has no dedicated semantic mapping for.
+  `convert_children` now threads an `in_header: bool` through its recursion
+  (true once inside `<teiHeader>` or any of its descendants) and, for any
+  such child not in the new `is_modeled_header_field` allow-list
+  (`author`/`editor`/`publisher`/`idno`/`language`/`abstract`/`keywords`/
+  `change`/`title` — the fields that already have dedicated semantic
+  extraction), captures the whole subtree's original XML via
+  `tei_fmt::emit_fragment`, same mechanism as before. The hardcoded
+  `msDesc`/`encodingDesc` arms in `convert_element` were removed — they were
+  already producing the exact same `generic_span`/`generic_div` node the
+  generic catch-all does, so removal is a no-op for those two and the
+  general path now covers them plus everything else (`particDesc`,
+  `projectDesc`, or any other TEI header element). Metadata key naming
+  generalized from the old ad hoc snake_case (`ms_desc_raw`,
+  `encoding_desc_raw`) to `{tag}_raw` using the element's actual XML tag
+  name (`msDesc_raw`, `encodingDesc_raw`, `particDesc_raw`, ...), plus a
+  `{tag}` flattened-text convenience copy — `extract_metadata` now matches
+  both `span` and `div` node kinds (previously `div`-shaped unrecognized
+  header children were silently invisible to it) and skips recursing into
+  an already-raw-captured subtree's children (nothing further to extract;
+  previously this could double-process msDesc's internal
+  msIdentifier/physDesc/etc. as spurious separate warnings). The old
+  per-field fidelity warning only fires now if raw capture genuinely fails
+  (non-UTF8 content — not expected for XML that parsed at all).
+  `rescribe-write-tei` generalized correspondingly: instead of two hardcoded
+  `ms_desc_raw`/`encoding_desc_raw` checks, it scans `Document::metadata`
+  for any `*_raw`-suffixed key and splices each back via `tei_fmt::Node::Raw`
+  as a `teiHeader` child, sorted by tag for deterministic output.
+  `fixtures/tei/header-ms-desc`, `header-encoding-desc`, and
+  `path-full-header` updated to the new key names; new fixture
+  `header-partic-desc` (`<profileDesc><particDesc>`, an element with no
+  explicit semantic mapping and not one of the previously-hardcoded two)
+  regression-tests the general path directly. Residual gap: none known —
+  every teiHeader child without a dedicated semantic mapping now
+  raw-preserves rather than warn-and-drop; the warning path is reachable
+  only in the (currently unexercised) genuine-raw-capture-failure case.
 - [x] **Fixed (2026-07-27)**: an unrecognized element at block level no
   longer round-trips wrapped in an extra `<p>`. `rescribe-read-tei` gained
   `is_block_element(tag: &str) -> bool` (mirroring

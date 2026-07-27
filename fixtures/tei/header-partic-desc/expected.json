@@ -1,0 +1,10 @@
+{
+  "description": "profileDesc/particDesc has no dedicated semantic mapping — it is raw-preserved verbatim (particDesc_raw) alongside a flattened particDesc summary, exercising the general teiHeader fallback (not a msDesc/encodingDesc special case) with no fidelity warning since the original XML round-trips",
+  "metadata": {
+    "particDesc": "Narrator",
+    "particDesc_raw": "<particDesc>\n        <listPerson>\n          <person xml:id=\"p1\">Narrator</person>\n        </listPerson>\n      </particDesc>"
+  },
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" }
+  ]
+}

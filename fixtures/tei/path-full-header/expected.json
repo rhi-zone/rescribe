@@ -11,8 +11,8 @@
     "abstract": "A document exercising every optional teiHeader field at once.",
     "keywords": "history, manuscripts, digital humanities",
     "revisions": "2020-01-01: Initial encoding.; 2021-06-15: Corrected transcription errors.",
-    "ms_desc": "MS Add. 12345",
-    "encoding_desc": "Encoded per house style, TEI P5 conformant."
+    "msDesc": "MS Add. 12345",
+    "encodingDesc": "Encoded per house style, TEI P5 conformant."
   },
   "assertions": [
     { "path": "/0", "kind": "paragraph" }

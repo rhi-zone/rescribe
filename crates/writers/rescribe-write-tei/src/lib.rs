@@ -36,6 +36,20 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
 
     // Write teiHeader if we have any header-shaped metadata.
     let title = doc.metadata.get_str("title");
+    // Any metadata key ending in `_raw` is a whole-subtree verbatim capture
+    // of an unmodeled teiHeader element (see `rescribe-read-tei`'s
+    // `convert_children`/`extract_metadata` — `{tag}_raw`, e.g. `msDesc_raw`
+    // or `particDesc_raw`). Collected once here so both the "do we even
+    // need a header" check and the splice-back loop below share one scan.
+    let mut header_raw_fields: Vec<(&str, &str)> = doc
+        .metadata
+        .iter()
+        .filter_map(|(key, _)| {
+            let tag = key.strip_suffix("_raw")?;
+            Some((tag, doc.metadata.get_str(key)?))
+        })
+        .collect();
+    header_raw_fields.sort_unstable_by_key(|(tag, _)| *tag);
     let has_header_metadata = title.is_some()
         || doc.metadata.get_str("author").is_some()
         || doc.metadata.get_str("editor").is_some()
@@ -45,10 +59,7 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         || doc.metadata.get_str("abstract").is_some()
         || doc.metadata.get_str("keywords").is_some()
         || doc.metadata.get_str("revisions").is_some()
-        || doc.metadata.get_str("encoding_desc").is_some()
-        || doc.metadata.get_str("ms_desc").is_some()
-        || doc.metadata.get_str("encoding_desc_raw").is_some()
-        || doc.metadata.get_str("ms_desc_raw").is_some();
+        || !header_raw_fields.is_empty();
     if has_header_metadata {
         let mut title_stmt_children = Vec::new();
         title_stmt_children.push(tei_element(
@@ -85,7 +96,7 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
             pub_stmt_children.push(tei_element("idno", vec![], vec![tei_text(idno)]));
         }
 
-        let mut file_desc_children = vec![
+        let file_desc_children = vec![
             tei_element("titleStmt", vec![], title_stmt_children),
             tei_element("publicationStmt", vec![], pub_stmt_children),
             tei_element(
@@ -129,36 +140,25 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
                 vec![tei_element("keywords", vec![], terms)],
             ));
         }
-        // Prefer the byte-verbatim raw XML captured by the reader (see
-        // `rescribe-read-tei`'s `tei:raw` handling) over reconstructing
-        // `<msDesc>` from its flattened text — splicing the original
-        // subtree back in is lossless where the reconstruction is not.
-        if let Some(ms_desc_raw) = doc.metadata.get_str("ms_desc_raw") {
-            file_desc_children.push(TNode::Raw {
-                content: ms_desc_raw.to_string(),
-                span: TSpan::NONE,
-            });
-        } else if let Some(ms_desc) = doc.metadata.get_str("ms_desc") {
-            file_desc_children.push(tei_element("msDesc", vec![], vec![tei_text(ms_desc)]));
-        }
-
         // `profileDesc`, `encodingDesc`, and `revisionDesc` are siblings of
         // `fileDesc` under `teiHeader` per the TEI schema (not nested
         // inside it) — the reader unwraps all of these wrappers into a
         // flat scan regardless, but matching real TEI element structure
         // keeps emitted documents schema-valid.
         let mut header_children = vec![tei_element("fileDesc", vec![], file_desc_children)];
-        if let Some(encoding_desc_raw) = doc.metadata.get_str("encoding_desc_raw") {
+        // Splice back every raw-captured teiHeader subtree byte-for-byte
+        // (see `rescribe-read-tei`'s `convert_children`/`extract_metadata`
+        // — any `{tag}_raw` metadata field, e.g. `msDesc_raw` or
+        // `particDesc_raw`, not just the two historically hardcoded
+        // `<msDesc>`/`<encodingDesc>` names). This is lossless where
+        // reconstructing the element from its flattened text would not be;
+        // sorted by tag for deterministic output since `Properties` iterates
+        // in unspecified order.
+        for (_, raw) in &header_raw_fields {
             header_children.push(TNode::Raw {
-                content: encoding_desc_raw.to_string(),
+                content: (*raw).to_string(),
                 span: TSpan::NONE,
             });
-        } else if let Some(encoding_desc) = doc.metadata.get_str("encoding_desc") {
-            header_children.push(tei_element(
-                "encodingDesc",
-                vec![],
-                vec![tei_text(encoding_desc)],
-            ));
         }
         if !profile_desc_children.is_empty() {
             header_children.push(tei_element("profileDesc", vec![], profile_desc_children));

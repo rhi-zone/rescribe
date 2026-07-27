@@ -41,7 +41,7 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
             ..
         } = top
         {
-            let converted = convert_children(kids, name, &mut metadata, &mut warnings);
+            let converted = convert_children(kids, name, false, &mut metadata, &mut warnings);
             match convert_element(name, attrs, converted.clone(), None) {
                 Some(node) => children.push(node),
                 None => {
@@ -72,9 +72,16 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
 /// nodes that only exist to be unwrapped (e.g. `<teiHeader>`/`<fileDesc>`,
 /// which are consumed for metadata) and passing through "structural"
 /// wrapper elements (like `<text>`/`<body>`) as their own children.
+///
+/// `in_header` is true when `parent_name` is `<teiHeader>` itself or a
+/// descendant of it (threaded down through the recursion below) — i.e.
+/// whether the *children* of `parent_name` are teiHeader content that will
+/// end up consumed by [`extract_metadata`] rather than surviving as document
+/// content nodes.
 fn convert_children(
     children: &[TNode],
     parent_name: &str,
+    in_header: bool,
     metadata: &mut Properties,
     warnings: &mut Vec<FidelityWarning>,
 ) -> Vec<Node> {
@@ -87,19 +94,27 @@ fn convert_children(
                 children: kids,
                 ..
             } => {
-                let converted_kids = convert_children(kids, name, metadata, warnings);
+                let child_in_header = in_header || name == "teiHeader";
+                let converted_kids =
+                    convert_children(kids, name, child_in_header, metadata, warnings);
                 let mut converted =
                     convert_element(name, attrs, converted_kids.clone(), Some(parent_name));
-                // `<msDesc>`/`<encodingDesc>` are deeply nested TEI-specific
-                // teiHeader sub-structures with no dedicated IR modeling.
-                // Alongside the flattened-text summary `extract_metadata`
-                // keeps for backward compatibility, capture the whole
-                // subtree's original XML verbatim (mirroring how
-                // `rescribe-read-html` raw-preserves `<math>` via
-                // `html_fmt::emit_fragment`) so the writer can splice it
-                // back byte-for-byte instead of reconstructing a lossy
-                // approximation from flattened text.
-                if matches!(name.as_str(), "msDesc" | "encodingDesc")
+                // Any teiHeader descendant this reader has no explicit
+                // semantic mapping for (i.e. `convert_element` produced it
+                // via its generic catch-all rather than a dedicated
+                // author/editor/publisher/... arm — see
+                // `is_modeled_header_field`) is about to be discarded as a
+                // tree node and flattened into metadata by
+                // `extract_metadata`. Rather than lose its internal
+                // structure (`<msDesc>`'s msIdentifier/physDesc/etc.,
+                // `<particDesc>`, `<projectDesc>`, or any other unmodeled
+                // TEI header element), capture the whole subtree's original
+                // XML verbatim (mirroring how `rescribe-read-html`
+                // raw-preserves `<math>` via `html_fmt::emit_fragment`) so
+                // the writer can splice it back byte-for-byte instead of
+                // reconstructing a lossy approximation from flattened text.
+                if in_header
+                    && !is_modeled_header_field(name)
                     && let Some(node) = converted.take()
                 {
                     let raw =
@@ -347,6 +362,31 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
     )
 }
 
+/// TEI header fields `convert_element` gives an explicit, dedicated
+/// semantic mapping to — these are fully modeled in `Document::metadata`
+/// (via `extract_metadata`'s per-tag match arms) and so must *not* be
+/// raw-captured by `convert_children`'s teiHeader handling: their content
+/// already round-trips through the semantic property it was extracted into,
+/// and wrapping them in `tei:raw` on top would just duplicate that content.
+///
+/// Every other teiHeader child element name falls to `convert_element`'s
+/// generic catch-all (`generic_span`/`generic_div`) and gets raw-preserved
+/// instead — see `convert_children`.
+fn is_modeled_header_field(name: &str) -> bool {
+    matches!(
+        name,
+        "author"
+            | "editor"
+            | "publisher"
+            | "idno"
+            | "language"
+            | "abstract"
+            | "keywords"
+            | "change"
+            | "title"
+    )
+}
+
 /// Convert one TEI element (with its already-converted children) into a
 /// rescribe node. Returns `None` for elements that either have no IR
 /// representation of their own (pass-through wrappers) or are consumed for
@@ -393,14 +433,14 @@ fn convert_element(
             }
             Some(n)
         }
-        // `encodingDesc`/`msDesc` are deeply nested TEI-specific
-        // sub-structures (classification declarations, manuscript
-        // description apparatus). Rather than silently dropping them, a
-        // text summary is captured under a tagged span and a fidelity
-        // warning documents that the full internal structure is not yet
-        // modeled — a genuine, tracked gap rather than a silent loss.
-        "encodingDesc" => Some(generic_span("encodingDesc", attrs, children)),
-        "msDesc" => Some(generic_span("msDesc", attrs, children)),
+        // `encodingDesc`/`msDesc` (deeply nested TEI-specific
+        // sub-structures: classification declarations, manuscript
+        // description apparatus) have no dedicated semantic modeling here.
+        // They deliberately fall through to the generic catch-all at the
+        // bottom of this match — same as any other unrecognized teiHeader
+        // element — which produces the identical `generic_span`/
+        // `generic_div` node `convert_children` then raw-preserves (see
+        // `is_modeled_header_field`).
 
         // Divisions
         "div" | "div1" | "div2" | "div3" | "div4" | "div5" | "div6" => {
@@ -794,10 +834,22 @@ fn convert_element(
 
 /// Extract `<teiHeader>` metadata: title (searched for as a `HEADING`, per
 /// the original reader's approach) plus author/editor/publisher/idno/
-/// language/abstract/keywords/revision-history/manuscript-description,
-/// each surfaced by `convert_element` as a `span` tagged with `tei:tag` so
-/// this function can find them regardless of which `fileDesc`/
-/// `publicationStmt`/`profileDesc`/etc. wrapper they were nested under.
+/// language/abstract/keywords/revision-history, each surfaced by
+/// `convert_element` as a `span` tagged with `tei:tag` so this function can
+/// find them regardless of which `fileDesc`/`publicationStmt`/`profileDesc`/
+/// etc. wrapper they were nested under.
+///
+/// Every other teiHeader child (e.g. `<msDesc>`, `<encodingDesc>`,
+/// `<particDesc>`, `<projectDesc>`, or any other TEI header element this
+/// reader has no dedicated mapping for) was raw-captured by
+/// `convert_children` — see `is_modeled_header_field` — and shows up here as
+/// a `span`/`div` carrying a `tei:raw` prop. That subtree's original XML is
+/// stored verbatim as `{tag}_raw` metadata (plus a `{tag}` flattened-text
+/// convenience copy) so `rescribe-write-tei` can splice it back
+/// byte-for-byte; nothing was lost, so descendants aren't recursed into
+/// separately. Only if raw capture itself failed (non-UTF8 content — the
+/// XML source was already UTF8, so this is not expected in practice) does
+/// this fall back to the old flatten-to-text-plus-fidelity-warning path.
 ///
 /// Multiple occurrences of a repeatable field (e.g. more than one
 /// `<author>`) are joined with `"; "` rather than the later one silently
@@ -814,7 +866,7 @@ fn extract_metadata(
             if !title.is_empty() {
                 metadata.set("title", title);
             }
-        } else if node.kind.as_str() == node::SPAN
+        } else if matches!(node.kind.as_str(), node::SPAN | node::DIV)
             && let Some(tag) = node.props.get_str("tei:tag")
         {
             let text = extract_text(&node.children);
@@ -849,61 +901,43 @@ fn extract_metadata(
                     };
                     append_metadata(metadata, "revisions", &entry);
                 }
-                "encodingDesc" if !text.is_empty() || node.props.get_str("tei:raw").is_some() => {
-                    let raw = node.props.get_str("tei:raw").map(str::to_string);
+                // A bibliographic/cited-work `<title>` nested somewhere
+                // other than `titleStmt`/`teiHeader` directly (e.g. inside
+                // a `sourceDesc` `<bibl>`) — `convert_element` tags it
+                // `tei:tag = "title"` but it is not the document title, and
+                // `is_modeled_header_field` excludes it from raw-capture
+                // (see that function's doc comment) precisely because it's
+                // already-modeled ground for the real title. Drop it here
+                // rather than let the generic fallback below overwrite the
+                // document's actual `title` metadata key with it.
+                "title" => {}
+                // Any other teiHeader field: `convert_children` already
+                // attempted to raw-capture its whole subtree (unless it was
+                // one of the explicit arms above). If that succeeded, splice
+                // it back losslessly via metadata; the whole subtree is
+                // preserved, so there's nothing more to gain from recursing
+                // into its (already-flattened) children.
+                other if !text.is_empty() || node.props.get_str("tei:raw").is_some() => {
                     if !text.is_empty() {
-                        metadata.set("encoding_desc", text);
+                        metadata.set(other.to_string(), text.clone());
                     }
-                    match raw {
-                        // Raw XML captured: the writer can splice it back
-                        // byte-for-byte, so the flattened text above is
-                        // just a convenience — nothing was actually lost.
-                        Some(raw) => metadata.set("encoding_desc_raw", raw),
+                    match node.props.get_str("tei:raw") {
+                        Some(raw) => {
+                            metadata.set(format!("{other}_raw"), raw.to_string());
+                            continue;
+                        }
                         None => warnings.push(FidelityWarning::new(
-                            Severity::Minor,
-                            WarningKind::FeatureLost("encoding-desc-structure".to_string()),
-                            "teiHeader <encodingDesc> internal structure (classDecl, \
-                                 tagsDecl, etc.) is not modeled and its raw XML could not be \
-                                 captured; only its flattened text was kept in metadata"
-                                .to_string(),
-                        )),
-                    }
-                }
-                "msDesc" if !text.is_empty() || node.props.get_str("tei:raw").is_some() => {
-                    let raw = node.props.get_str("tei:raw").map(str::to_string);
-                    if !text.is_empty() {
-                        metadata.set("ms_desc", text);
-                    }
-                    match raw {
-                        Some(raw) => metadata.set("ms_desc_raw", raw),
-                        None => warnings.push(FidelityWarning::new(
-                            Severity::Minor,
-                            WarningKind::FeatureLost("ms-desc-structure".to_string()),
-                            "teiHeader <msDesc> internal structure (msIdentifier, physDesc, \
-                                 etc.) is not modeled and its raw XML could not be captured; \
-                                 only its flattened text was kept in metadata"
-                                .to_string(),
-                        )),
-                    }
-                }
-                // A teiHeader field this reader doesn't specifically
-                // recognize. teiHeader metadata is a flat property bag,
-                // not part of the document content tree, so there is
-                // nowhere to raw-preserve this content structurally —
-                // track the loss explicitly instead of dropping it
-                // silently.
-                other => {
-                    if !text.trim().is_empty() {
-                        warnings.push(FidelityWarning::new(
                             Severity::Minor,
                             WarningKind::FeatureLost(format!("tei-header-field-{other}")),
                             format!(
-                                "teiHeader <{other}> content is not modeled in document \
-                                     metadata and was dropped: {text:?}"
+                                "teiHeader <{other}> internal structure is not modeled and its \
+                                     raw XML could not be captured; only its flattened text was \
+                                     kept in metadata: {text:?}"
                             ),
-                        ));
+                        )),
                     }
                 }
+                _ => {}
             }
         }
         extract_metadata(&node.children, metadata, warnings);

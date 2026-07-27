@@ -1,8 +1,8 @@
 {
-  "description": "sourceDesc/msDesc manuscript description is raw-preserved verbatim (ms_desc_raw) alongside a flattened ms_desc summary for convenience — no fidelity warning since the original XML round-trips",
+  "description": "sourceDesc/msDesc manuscript description is raw-preserved verbatim (msDesc_raw) alongside a flattened msDesc summary for convenience — no fidelity warning since the original XML round-trips",
   "metadata": {
-    "ms_desc": "MS Add. 12345",
-    "ms_desc_raw": "<msDesc>\n          <msIdentifier>MS Add. 12345</msIdentifier>\n        </msDesc>"
+    "msDesc": "MS Add. 12345",
+    "msDesc_raw": "<msDesc>\n          <msIdentifier>MS Add. 12345</msIdentifier>\n        </msDesc>"
   },
   "assertions": [
     { "path": "/0", "kind": "paragraph" }

@@ -90,12 +90,16 @@ TEI All tagset (tei_all). Primary module focus: tei, core, textstructure, linkin
 - [x] sourceDesc — `header-source-desc`
 - [x] profileDesc / langUsage — `header-lang-usage`
 - [x] encodingDesc — `header-encoding-desc` (raw-preserved verbatim via
-  `encoding_desc_raw` metadata, alongside a flattened `encoding_desc` summary)
+  `encodingDesc_raw` metadata, alongside a flattened `encodingDesc` summary)
 - [x] revisionDesc / change — `header-revision-desc`
 - [x] abstract (in profileDesc) — `header-abstract`
 - [x] keywords (in profileDesc) — `header-keywords`
 - [x] msDesc (manuscript description) — `header-ms-desc` (raw-preserved
-  verbatim via `ms_desc_raw` metadata, alongside a flattened `ms_desc` summary)
+  verbatim via `msDesc_raw` metadata, alongside a flattened `msDesc` summary)
+- [x] any other teiHeader element with no dedicated semantic mapping —
+  `header-partic-desc` (`<profileDesc><particDesc>`) exercises the general
+  raw-preservation fallback (`{tag}_raw` metadata), not just the two
+  historically hardcoded `msDesc`/`encodingDesc` names
 
 ## Properties
 
