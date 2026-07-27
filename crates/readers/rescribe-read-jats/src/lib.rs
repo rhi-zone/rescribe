@@ -63,8 +63,8 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
             ..
         } = top
         {
-            let converted = convert_children(kids, name, false, &mut metadata, &mut warnings);
-            match convert_element(name, attrs, converted.clone(), None) {
+            let converted = convert_children(kids, name, false, 0, &mut metadata, &mut warnings);
+            match convert_element(name, attrs, converted.clone(), None, 0) {
                 Some(node) => children.push(node),
                 None => {
                     // The root element itself carries no rescribe-level
@@ -105,6 +105,7 @@ fn convert_children(
     children: &[JNode],
     parent_name: &str,
     in_header: bool,
+    sec_depth: usize,
     metadata: &mut Properties,
     warnings: &mut Vec<FidelityWarning>,
 ) -> Vec<Node> {
@@ -119,10 +120,30 @@ fn convert_children(
             } => {
                 let child_in_header =
                     in_header || matches!(name.as_str(), "article-meta" | "journal-meta");
-                let converted_kids =
-                    convert_children(kids, name, child_in_header, metadata, warnings);
-                let mut converted =
-                    convert_element(name, attrs, converted_kids.clone(), Some(parent_name));
+                // `<sec>` is the only JATS block-level element that nests
+                // arbitrarily deep inside itself (unlike DocBook's distinct
+                // sect1..sect5 tag names, JATS uses the same `<sec>` tag at
+                // every level) — a real nesting-depth counter, not just the
+                // immediate parent tag name, is needed to give a `<title>`
+                // inside a doubly-nested `<sec>` a deeper heading level than
+                // one inside its outer `<sec>`. See the `"title"` arm in
+                // `convert_element`.
+                let child_sec_depth = sec_depth + usize::from(name == "sec");
+                let converted_kids = convert_children(
+                    kids,
+                    name,
+                    child_in_header,
+                    child_sec_depth,
+                    metadata,
+                    warnings,
+                );
+                let mut converted = convert_element(
+                    name,
+                    attrs,
+                    converted_kids.clone(),
+                    Some(parent_name),
+                    sec_depth,
+                );
                 // Any `<article-meta>`/`<journal-meta>` descendant this
                 // reader has no explicit semantic mapping for (i.e.
                 // `convert_element` produced it via its generic catch-all
@@ -389,6 +410,7 @@ fn convert_element(
     attrs: &[(String, String)],
     children: Vec<Node>,
     parent: Option<&str>,
+    sec_depth: usize,
 ) -> Option<Node> {
     let href = get_attr(attrs, "href").or_else(|| get_attr(attrs, "xlink:href"));
     let rid = get_attr(attrs, "rid");
@@ -415,11 +437,17 @@ fn convert_element(
         // Sections
         "sec" => Some(Node::new(node::DIV).children(children)),
 
-        // Titles
+        // Titles. A `<title>` whose parent is `<sec>` gets a level derived
+        // from `sec_depth` (how many `<sec>` ancestors enclose it) rather
+        // than a hardcoded `2` — JATS nests `<sec>` inside itself
+        // arbitrarily deep using the same tag name at every level (unlike
+        // DocBook's distinct `sect1`..`sect5`), so telling a doubly-nested
+        // section's title apart from its parent's needs an actual depth
+        // count, not just the immediate parent tag.
         "title" | "article-title" => {
             let level = match parent {
                 Some("article") | Some("front") | Some("article-meta") => 1,
-                Some("sec") => 2,
+                Some("sec") => 1 + sec_depth.max(1),
                 Some("fig") | Some("table-wrap") => 3,
                 _ => 2,
             };
@@ -444,12 +472,23 @@ fn convert_element(
         // Paragraphs
         "p" => Some(Node::new(node::PARAGRAPH).children(children)),
 
-        // Abstract
-        "abstract" => Some(
-            Node::new(node::DIV)
+        // Abstract. Also tagged `jats:tag = "abstract"` (on top of the usual
+        // `html:class` styling hint) and given every other attribute via
+        // `attach_all_attrs` (`abstract-type="structured"`, etc.) — without
+        // `jats:tag`, `extract_metadata`'s `<article-meta>` front-matter
+        // handling below (which keys off `jats:tag` to recognize an
+        // unmodeled header field worth capturing) would silently skip this
+        // node entirely: it's a dedicated, non-generic mapping, so it was
+        // never being pushed into `Document::metadata` at all, dropping the
+        // entire abstract (found via `parse -> emit -> parse` verification
+        // while building this fixture, not by inspection alone).
+        "abstract" => {
+            let n = Node::new(node::DIV)
                 .prop("html:class", "abstract")
-                .children(children),
-        ),
+                .prop("jats:tag", "abstract")
+                .children(children);
+            Some(attach_all_attrs(n, attrs))
+        }
 
         // Lists. `list-type` has more values than the binary
         // ordered/unordered `prop::ORDERED` can represent (`alpha-lower`,

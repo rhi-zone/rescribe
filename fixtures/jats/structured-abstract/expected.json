@@ -1,0 +1,11 @@
+{
+  "description": "<abstract abstract-type=\"structured\"> with nested <sec> subsections is captured into Document metadata the same way a plain <abstract> is (flattened text plus verbatim raw XML) — the nested section structure is preserved losslessly in the raw XML even though the flattened text convenience copy loses it, matching every other unmodeled-but-tagged front-matter field's convention",
+  "metadata": {
+    "title": "Sample",
+    "abstract": "BackgroundWhy we did this.ResultsWhat we found."
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

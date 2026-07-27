@@ -1,0 +1,10 @@
+{
+  "description": "<caption> outside <fig>/<table-wrap> (here, inside <boxed-text>, which JATS permits) converts to the same figcaption node kind regardless of parent, since <caption> maps unconditionally in convert_element rather than being fig/table-wrap-specific",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div", "props": { "jats:tag": "boxed-text" } },
+    { "path": "/0/0/0",   "kind": "figcaption" },
+    { "path": "/0/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/1",   "kind": "paragraph" }
+  ]
+}

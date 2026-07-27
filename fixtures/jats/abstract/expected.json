@@ -1,0 +1,11 @@
+{
+  "description": "<abstract> inside <article-meta> is captured into Document metadata (flattened text under \"abstract\" plus the verbatim subtree under \"abstract_raw\" for lossless round-trip), the same convention every other unmodeled-but-tagged front-matter field uses",
+  "metadata": {
+    "title": "Sample",
+    "abstract": "This is the abstract text."
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

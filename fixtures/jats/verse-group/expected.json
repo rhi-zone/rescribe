@@ -1,0 +1,9 @@
+{
+  "description": "<verse-group>/<verse-line> (no dedicated IR node kind) are raw-preserved as tagged divs, block-shaped per is_block_element, rather than silently dropped or misclassified inline",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div", "props": { "jats:tag": "verse-group" } },
+    { "path": "/0/0/0",   "kind": "div", "props": { "jats:tag": "verse-line" } },
+    { "path": "/0/0/1",   "kind": "div", "props": { "jats:tag": "verse-line" } }
+  ]
+}

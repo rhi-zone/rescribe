@@ -1,0 +1,12 @@
+{
+  "description": "a <sec> nested inside another <sec> (JATS uses the same tag at every nesting depth, unlike DocBook's sect1..sect5) gets a heading level derived from actual nesting depth, not just the immediate parent tag, so the outer and inner titles land at different levels",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "div" },
+    { "path": "/0/0/0",     "kind": "heading", "props": { "level": 2 } },
+    { "path": "/0/0/1",     "kind": "paragraph" },
+    { "path": "/0/0/2",     "kind": "div" },
+    { "path": "/0/0/2/0",   "kind": "heading", "props": { "level": 3 } },
+    { "path": "/0/0/2/1",   "kind": "paragraph" }
+  ]
+}

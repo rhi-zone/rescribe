@@ -1,0 +1,9 @@
+{
+  "description": "<table-wrap-group> (grouping multiple <table-wrap>s, no dedicated IR node kind) is raw-preserved as a tagged div rather than silently dropped; its <table-wrap> children still convert to figure via their own dedicated mapping",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "div", "props": { "jats:tag": "table-wrap-group" } },
+    { "path": "/0/0/0",     "kind": "figure" },
+    { "path": "/0/0/1",     "kind": "figure" }
+  ]
+}

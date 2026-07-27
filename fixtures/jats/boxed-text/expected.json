@@ -1,0 +1,8 @@
+{
+  "description": "<boxed-text> (a callout/sidebar per its own JATS 1.3 Tag Library page — \"highlighting tips, warnings, explanatory notes... visual prominence and topical relevance\", explicitly contrasted there with <disp-quote>'s \"attribution and source\") is raw-preserved as a tagged div, not misrepresented as a blockquote (a bug this session fixed — boxed-text and disp-quote previously shared one BLOCKQUOTE mapping)",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div", "props": { "jats:tag": "boxed-text" } },
+    { "path": "/0/0/0",   "kind": "paragraph" }
+  ]
+}

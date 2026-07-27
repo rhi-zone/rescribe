@@ -20,20 +20,22 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] figure — `figure` (`<fig>` with `<caption>` and `<graphic>`)
 - [x] display math — `math-display` (`<disp-formula>` / `<tex-math>`)
 - [x] footnote — `footnote-def` (`<fn>`)
-- [ ] nested section — (missing; `<sec>` inside `<sec>`, 2+ levels deep)
-- [ ] abstract — (missing; `<abstract>`)
-- [ ] structured abstract — (missing; `<abstract abstract-type="structured">` with `<sec>`)
+- [x] nested section — `nested-section`
+- [x] abstract — `abstract`
+- [x] structured abstract — `structured-abstract`
 - [x] code block (`<code>`) — `code-block-vs-preformat`
-- [ ] verse-group — (missing; `<verse-group>` / `<verse-line>`)
-- [ ] speech — (missing; `<speech>` with `<speaker>` and `<p>`)
+- [x] verse-group — `verse-group`
+- [x] speech — `speech`
 - [x] statement (theorem, proof, etc.) — `adv-unknown-block-element` (unrecognized
   block-level element, raw-preserved as a tagged `div` rather than silently dropped)
-- [ ] boxed-text — (missing; `<boxed-text>`)
-- [ ] supplementary-material — (missing; `<supplementary-material>`)
-- [ ] caption as standalone block — (missing; `<caption>` outside `<fig>`)
-- [ ] list with `list-type="alpha-lower"` / `"alpha-upper"` / `"roman-lower"` — (missing; list type variants)
-- [ ] table-wrap-group — (missing; `<table-wrap-group>`)
-- [ ] alternatives — (missing; `<alternatives>` container for math/graphic variants)
+- [x] boxed-text — `boxed-text`
+- [x] supplementary-material — `supplementary-material`
+- [x] caption as standalone block — `caption-standalone`
+- [x] list with `list-type="alpha-lower"` / `"alpha-upper"` / `"roman-lower"` — `list-type-alpha`
+- [x] table-wrap-group — `table-wrap-group`
+- [ ] alternatives — (missing; `<alternatives>` container for math/graphic variants —
+  genuine design fork, see TODO.md: JATS's own Tag Library page says it "is neither
+  inherently block nor inherently inline")
 
 ## Inline constructs
 

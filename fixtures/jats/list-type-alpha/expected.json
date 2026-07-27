@@ -1,0 +1,9 @@
+{
+  "description": "list-type=\"alpha-lower\" (a numeration style beyond the binary order/bullet) is classified ordered and the exact original value is additionally raw-preserved via jats:list-type so the writer round-trips \"alpha-lower\" instead of collapsing it to \"order\"",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "list", "props": { "ordered": true, "jats:list-type": "alpha-lower" } },
+    { "path": "/0/0/0", "kind": "list_item" },
+    { "path": "/0/0/1", "kind": "list_item" }
+  ]
+}

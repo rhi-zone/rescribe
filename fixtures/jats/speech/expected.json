@@ -1,0 +1,9 @@
+{
+  "description": "<speech> with <speaker> and <p> (no dedicated IR node kind) is raw-preserved as tagged divs, block-shaped per is_block_element (schema-verified in an earlier session), rather than silently dropped",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "div", "props": { "jats:tag": "speech" } },
+    { "path": "/0/0/0",   "kind": "div", "props": { "jats:tag": "speaker" } },
+    { "path": "/0/0/1",   "kind": "paragraph" }
+  ]
+}
