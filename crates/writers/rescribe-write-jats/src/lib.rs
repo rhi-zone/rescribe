@@ -23,6 +23,8 @@
 //! let xml = String::from_utf8(result.value).unwrap();
 //! ```
 
+use std::collections::HashMap;
+
 use jats_fmt::{JatsDoc, Node as JNode, XmlDecl};
 use rescribe_core::{ConversionResult, Document, EmitError, Node, PropValue};
 use rescribe_std::{node, prop};
@@ -237,6 +239,40 @@ fn write_node(node: &Node) -> Vec<JNode> {
             }
             None => node.children.iter().flat_map(write_node).collect(),
         },
+
+        // A `bibliography` (`<ref-list>`) whose own title (see
+        // `rescribe-read-jats`'s `"title"` arm — a `<ref-list>`'s own
+        // `<title>` converts to an ordinary `HEADING` like any other
+        // block's title, since `<ref-list>` isn't in `heading_level_for_parent`'s
+        // dedicated top-level-division list) must re-emit that title as a
+        // bare `<title>`, *not* the generic `HEADING` arm's `<sec><title>`
+        // wrapping below — `<ref-list>`'s content model is `(title?,
+        // (ref | ref-list)+)`, which has no room for a nested `<sec>`.
+        node::BIBLIOGRAPHY => {
+            let mut kids = Vec::with_capacity(node.children.len());
+            for child in &node.children {
+                if child.kind.as_str() == node::HEADING {
+                    kids.push(jats_element(
+                        "title",
+                        vec![],
+                        child.children.iter().flat_map(write_inline).collect(),
+                    ));
+                } else {
+                    kids.extend(write_node(child));
+                }
+            }
+            vec![jats_element("ref-list", generic_attrs(node), kids)]
+        }
+
+        node::BIBLIOGRAPHY_ENTRY => vec![write_bibliography_entry(node)],
+
+        // A `bibliography_field` shouldn't normally appear outside a
+        // `BIBLIOGRAPHY_ENTRY`'s own children (handled directly by
+        // `write_bibliography_entry`, not through this dispatch), but
+        // delegate to the same field writer defensively rather than falling
+        // to the generic "recurse into children" catch-all below, which
+        // would drop the field's role/tag entirely.
+        node::BIBLIOGRAPHY_FIELD => vec![write_bibliography_field(node)],
 
         node::HEADING => vec![jats_element(
             "sec",
@@ -478,6 +514,178 @@ fn write_node(node: &Node) -> Vec<JNode> {
             node.children.iter().flat_map(write_node).collect()
         }
     }
+}
+
+/// Write a `bibliography_entry` node back to `<ref>` (see
+/// rescribe-read-jats's `build_bibliography_entry`). A `label` field (see
+/// rescribe-read-jats's `convert_biblio_field`'s `"label"` arm) becomes a
+/// direct `<ref>` child *before* the citation wrapper — `<ref>`'s own
+/// content model is `(label?, (element-citation | mixed-citation | ...)+)`,
+/// so a `<label>` must not end up nested *inside* the citation element.
+/// `jats:tag` (set by rescribe-read-jats's `"element-citation"`/
+/// `"mixed-citation"` marker handling) picks which of the two wrapper
+/// elements to re-emit, defaulting to `<element-citation>` for an entry
+/// built by a non-JATS producer. `prop::DATE` becomes leading `<year>`/
+/// `<month>`/`<day>` children (see `write_citation_date`); consecutive
+/// `author`/`editor` fields sharing the same `jats:person-group-type` (see
+/// rescribe-read-jats's `convert_person_group`) are regrouped back into one
+/// `<person-group person-group-type="...">` wrapper — a field with no such
+/// prop (the bare `<name>`/`<collab>`/`<string-name>` case) is instead
+/// re-emitted unwrapped, exactly as read.
+fn write_bibliography_entry(node: &Node) -> JNode {
+    let attrs = generic_attrs(node);
+    let citation_tag = node.props.get_str("jats:tag").unwrap_or("element-citation");
+    let mut citation_attrs = Vec::new();
+    if let Some(pt) = node.props.get_str("jats:attr:publication-type") {
+        citation_attrs.push(("publication-type".to_string(), pt.to_string()));
+    }
+    if let Some(pf) = node.props.get_str("jats:attr:publication-format") {
+        citation_attrs.push(("publication-format".to_string(), pf.to_string()));
+    }
+
+    let mut ref_kids = Vec::new();
+    let mut citation_kids = Vec::with_capacity(node.children.len() + 3);
+    if let Some(PropValue::Map(date)) = node.props.get(prop::DATE) {
+        citation_kids.extend(write_citation_date(date));
+    }
+
+    let mut iter = node.children.iter().peekable();
+    while let Some(child) = iter.next() {
+        if child.kind.as_str() == node::BIBLIOGRAPHY_ENTRY {
+            // Not produced by rescribe-read-jats itself (JATS `<ref>` has no
+            // nested-reference construct), but a cross-format conversion
+            // into JATS could build one — recurse rather than drop it.
+            ref_kids.push(write_bibliography_entry(child));
+            continue;
+        }
+        if child.kind.as_str() != node::BIBLIOGRAPHY_FIELD {
+            citation_kids.extend(write_inline(child));
+            continue;
+        }
+        if child.props.get_str("jats:tag") == Some("label") {
+            ref_kids.push(write_bibliography_field(child));
+            continue;
+        }
+        if let Some(pg_type) = child.props.get_str("jats:person-group-type") {
+            let mut group_kids = vec![write_bibliography_field(child)];
+            while let Some(next) = iter.peek() {
+                if next.kind.as_str() == node::BIBLIOGRAPHY_FIELD
+                    && next.props.get_str("jats:person-group-type") == Some(pg_type)
+                {
+                    group_kids.push(write_bibliography_field(iter.next().unwrap()));
+                } else {
+                    break;
+                }
+            }
+            citation_kids.push(jats_element(
+                "person-group",
+                vec![("person-group-type".to_string(), pg_type.to_string())],
+                group_kids,
+            ));
+            continue;
+        }
+        citation_kids.push(write_bibliography_field(child));
+    }
+    ref_kids.push(jats_element(citation_tag, citation_attrs, citation_kids));
+    jats_element("ref", attrs, ref_kids)
+}
+
+/// Write one `bibliography_field` node back to its originating JATS
+/// element. `jats:tag` (set by every arm of rescribe-read-jats's
+/// `convert_biblio_field`/`convert_person_group`) takes priority when
+/// present, since it names the exact source element (a person-group
+/// member's own tag — `name`/`collab`/`string-name`/`etal`/`aff`/`role` —
+/// or the original tag behind a raw-preserved `misc` field); `prop::
+/// FIELD_ROLE` is the fallback for a field built by a non-JATS producer (a
+/// cross-format conversion into JATS).
+fn write_bibliography_field(node: &Node) -> JNode {
+    let inline_children: Vec<JNode> = node.children.iter().flat_map(write_inline).collect();
+    let role = node.props.get_str(prop::FIELD_ROLE).unwrap_or("misc");
+    let tag = node
+        .props
+        .get_str("jats:tag")
+        .unwrap_or_else(|| default_tag_for_role(role));
+    let mut attrs = Vec::new();
+    if tag == "pub-id"
+        && let Some(scheme) = node.props.get_str(prop::FIELD_SCHEME)
+    {
+        attrs.push(("pub-id-type".to_string(), scheme.to_string()));
+    }
+    if tag == "date-in-citation" {
+        if let Some(iso) = node.props.get_str("jats:attr:iso-8601-date") {
+            attrs.push(("iso-8601-date".to_string(), iso.to_string()));
+        }
+        if let Some(ct) = node.props.get_str("jats:attr:content-type") {
+            attrs.push(("content-type".to_string(), ct.to_string()));
+        }
+    }
+    jats_element(tag, attrs, inline_children)
+}
+
+/// `prop::FIELD_ROLE`'s standard vocabulary, mapped to the JATS element a
+/// field with no `jats:tag` (i.e. built by a non-JATS producer) should
+/// re-emit as.
+fn default_tag_for_role(role: &str) -> &'static str {
+    match role {
+        "author" | "editor" => "name",
+        "title" => "article-title",
+        "container_title" => "source",
+        "publisher" => "publisher-name",
+        "publisher_location" => "publisher-loc",
+        "edition" => "edition",
+        "volume" => "volume",
+        "issue" => "issue",
+        "page_first" => "fpage",
+        "page_last" => "lpage",
+        "identifier" => "pub-id",
+        _ => "comment",
+    }
+}
+
+/// Format `prop::DATE`'s `year`/`month`/`day` map (see the property's own
+/// doc comment) into `<year iso-8601-date="...">`/`<month>`/`<day>`
+/// elements — the inverse of rescribe-read-jats's `resolve_citation_date`.
+/// The `iso-8601-date` attribute is always attached to `<year>` (the JATS
+/// Tag Library's own convention — see its tagged `element-citation`
+/// examples) so a reader that prefers the unambiguous attribute form
+/// recovers exactly the same date without needing the separate `<month>`/
+/// `<day>` elements at all.
+fn write_citation_date(map: &HashMap<String, PropValue>) -> Vec<JNode> {
+    let as_int = |key: &str| match map.get(key) {
+        Some(PropValue::Int(i)) => Some(i),
+        _ => None,
+    };
+    let year = as_int("year");
+    let month = as_int("month");
+    let day = as_int("day");
+    let mut out = Vec::new();
+    if let Some(y) = year {
+        let iso = match (month, day) {
+            (Some(m), Some(d)) => format!("{y:04}-{m:02}-{d:02}"),
+            (Some(m), None) => format!("{y:04}-{m:02}"),
+            _ => format!("{y:04}"),
+        };
+        out.push(jats_element(
+            "year",
+            vec![("iso-8601-date".to_string(), iso)],
+            vec![jats_text(y.to_string())],
+        ));
+    }
+    if let Some(m) = month {
+        out.push(jats_element(
+            "month",
+            vec![],
+            vec![jats_text(format!("{m:02}"))],
+        ));
+    }
+    if let Some(d) = day {
+        out.push(jats_element(
+            "day",
+            vec![],
+            vec![jats_text(format!("{d:02}"))],
+        ));
+    }
+    out
 }
 
 /// Convert one rescribe IR (inline-level) node into zero or more JATS AST

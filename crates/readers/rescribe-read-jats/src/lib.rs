@@ -31,9 +31,11 @@
 //! let doc = result.value;
 //! ```
 
+use std::collections::HashMap;
+
 use jats_fmt::Node as JNode;
 use rescribe_core::{
-    ConversionResult, Document, FidelityWarning, Node, ParseError, Properties, Severity,
+    ConversionResult, Document, FidelityWarning, Node, ParseError, PropValue, Properties, Severity,
     WarningKind,
 };
 use rescribe_std::{node, prop};
@@ -63,7 +65,8 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
             ..
         } = top
         {
-            let converted = convert_children(kids, name, false, 0, &mut metadata, &mut warnings);
+            let converted =
+                convert_children(kids, name, false, false, 0, &mut metadata, &mut warnings);
             match convert_element(name, attrs, converted.clone(), None, 0) {
                 Some(node) => children.push(node),
                 None => {
@@ -101,10 +104,23 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
 /// recursion below) — i.e. whether the *children* of `parent_name` are
 /// front-matter content that will end up consumed by [`extract_metadata`]
 /// rather than surviving as document content nodes.
+///
+/// `in_biblio` is true when `parent_name` is a bibliographic reference
+/// container (`<ref>`, or a descendant of one that is itself a structural
+/// pass-through such as `<element-citation>`/`<mixed-citation>`/`<date>` —
+/// threaded down the same way `in_header` is) — i.e. whether the *children*
+/// of `parent_name` are citation sub-fields that should be dispatched
+/// through [`convert_biblio_field`] (producing `bibliography_field` nodes)
+/// rather than the generic [`convert_element`]. `<person-group>` is handled
+/// as a special case directly in the loop below (see its own comment)
+/// rather than through this threading, since the author/editor role its
+/// children get depends on `<person-group>`'s own `person-group-type`
+/// attribute, not on the child element's own name.
 fn convert_children(
     children: &[JNode],
     parent_name: &str,
     in_header: bool,
+    in_biblio: bool,
     sec_depth: usize,
     metadata: &mut Properties,
     warnings: &mut Vec<FidelityWarning>,
@@ -118,8 +134,45 @@ fn convert_children(
                 children: kids,
                 ..
             } => {
+                // `<person-group>` groups a set of `<name>`/`<collab>`/
+                // `<string-name>` (etc.) contributors whose IR role
+                // (author/editor) is determined by `<person-group>`'s own
+                // `person-group-type` attribute, not by any per-child
+                // element name — so it can't be handled through the
+                // generic `convert_biblio_field` dispatch below (which only
+                // sees one child element name/attrs/children at a time).
+                // Build its field nodes directly from its own raw children
+                // instead of recursing through the normal pipeline.
+                if in_biblio && name == "person-group" {
+                    out.extend(convert_person_group(
+                        attrs, kids, sec_depth, metadata, warnings,
+                    ));
+                    continue;
+                }
                 let child_in_header =
                     in_header || matches!(name.as_str(), "article-meta" | "journal-meta");
+                // Whether *`name`'s own children* should also be dispatched
+                // through `convert_biblio_field` (as opposed to normal
+                // conversion): if we're not in biblio scope yet, entering it
+                // requires `name` itself to be a reference container
+                // (`is_biblio_container`, i.e. `<ref>`); if we're already
+                // inside one, scope only continues through a structural
+                // pass-through wrapper (`is_biblio_field_wrapper` — the
+                // citation-content elements `<element-citation>`/
+                // `<mixed-citation>`, and `<date>`, which itself wraps
+                // `<year>`/`<month>`/`<day>`) — everything else is a *leaf*
+                // field (`article-title`, `source`, `fpage`, ...), and a
+                // leaf field's own children are ordinary markup-capable
+                // inline content, not further sub-fields. Without this
+                // distinction, `<italic>` inside e.g. an `<article-title>`
+                // would itself be mis-dispatched as a raw-preserved "misc"
+                // field instead of a proper `emphasis` node, silently
+                // flattening the markup it exists to preserve.
+                let child_in_biblio = if in_biblio {
+                    is_biblio_field_wrapper(name)
+                } else {
+                    is_biblio_container(name)
+                };
                 // `<sec>` is the only JATS block-level element that nests
                 // arbitrarily deep inside itself (unlike DocBook's distinct
                 // sect1..sect5 tag names, JATS uses the same `<sec>` tag at
@@ -133,10 +186,21 @@ fn convert_children(
                     kids,
                     name,
                     child_in_header,
+                    child_in_biblio,
                     child_sec_depth,
                     metadata,
                     warnings,
                 );
+                if in_biblio {
+                    // Inside a reference container, every child is a
+                    // bibliographic sub-field — dispatch through the
+                    // dedicated converter instead of the generic element
+                    // table, and splice its result(s) straight in (no
+                    // header-raw-capture logic applies here; see
+                    // `convert_biblio_field`).
+                    out.extend(convert_biblio_field(name, attrs, converted_kids));
+                    continue;
+                }
                 let mut converted = convert_element(
                     name,
                     attrs,
@@ -739,17 +803,27 @@ fn convert_element(
         "fn" => Some(Node::new(node::FOOTNOTE_DEF).children(children)),
         "fn-group" => Some(Node::new(node::DIV).children(children)),
 
-        // References
-        "ref-list" => Some(
-            Node::new(node::DIV)
-                .prop("html:class", "references")
-                .children(children),
-        ),
-        "ref" => Some(
-            Node::new(node::PARAGRAPH)
-                .prop("jats:ref", true)
-                .children(children),
-        ),
+        // References. `<ref-list>` is a bibliography container; its own
+        // `<title>` (e.g. "References") is handled by the `"title"` arm
+        // above like any other block's title, so by the time we get here
+        // `children` is already a mix of the resulting `HEADING` (if any)
+        // and `bibliography_entry` nodes (each `<ref>` child was converted
+        // through `build_bibliography_entry` before reaching here, via
+        // `convert_children`'s `in_biblio` threading — see
+        // `is_biblio_container`).
+        "ref-list" => Some(Node::new(node::BIBLIOGRAPHY).children(children)),
+        // A `<ref>` reached here always has `convert_children` having
+        // already run over its own children with `in_biblio = true` (per
+        // `is_biblio_container`), so `children` is already the fully-built
+        // field/date-marker list `build_bibliography_entry` assembles.
+        "ref" => Some(build_bibliography_entry(attrs, children)),
+        // Defensive fallback: an `<element-citation>`/`<mixed-citation>`
+        // encountered *outside* any enclosing `<ref>` (malformed input, or a
+        // `JatsDoc` constructed directly rather than parsed) never entered
+        // biblio scope (see `is_biblio_container`), so its children were
+        // converted as ordinary content rather than citation fields — keep
+        // the pre-existing generic `span` mapping for that case rather than
+        // silently dropping it.
         "mixed-citation" | "element-citation" => Some(Node::new(node::SPAN).children(children)),
 
         // `contrib-group`/`contrib`/`name`/`surname`/`given-names`/`aff`/
@@ -785,6 +859,491 @@ fn convert_element(
     // and `xml:lang` round-trip uniformly regardless of which element
     // carries them — see `attach_generic_attrs`.
     .map(|n| attach_generic_attrs(n, attrs))
+}
+
+/// Whether `name` is a JATS bibliographic reference container — its children
+/// are citation sub-fields (label, `<element-citation>`/`<mixed-citation>`),
+/// not ordinary document content, so `convert_children` dispatches them
+/// through [`convert_biblio_field`] instead of [`convert_element`]. Only
+/// `<ref>` itself; `<ref-list>` is *not* included here — a `<ref-list>`'s
+/// direct children are `<ref>` elements and its own `<title>`, both of which
+/// are ordinary content from `<ref-list>`'s point of view (the `<ref>`
+/// element is what enters biblio scope, per [`is_biblio_container`]'s use in
+/// `convert_children`).
+fn is_biblio_container(name: &str) -> bool {
+    name == "ref"
+}
+
+/// Whether `name`, encountered *while already inside* biblio scope, is a
+/// structural pass-through wrapper whose own children remain citation
+/// sub-fields (as opposed to a leaf field like `<article-title>`/
+/// `<source>`, whose children are ordinary inline content — see
+/// `convert_children`'s `child_in_biblio` computation for why this
+/// distinction matters). `<element-citation>`/`<mixed-citation>` wrap the
+/// citation's own fields; `<date>` wraps `<year>`/`<month>`/`<day>`.
+/// `<person-group>` is deliberately *not* included — it is intercepted
+/// directly in `convert_children`'s loop (see [`convert_person_group`])
+/// rather than threaded through this generic mechanism, since the role its
+/// children get depends on `<person-group>`'s own attribute.
+fn is_biblio_field_wrapper(name: &str) -> bool {
+    matches!(name, "element-citation" | "mixed-citation" | "date")
+}
+
+/// Convert one child of a bibliographic reference container (see
+/// [`is_biblio_container`]/[`is_biblio_field_wrapper`]) into zero or more IR
+/// nodes.
+///
+/// `children` are `name`'s own children, already recursively converted
+/// (inheriting the same biblio-field dispatch — see `convert_children`'s
+/// `in_biblio` threading).
+fn convert_biblio_field(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Vec<Node> {
+    match name {
+        // Pass-through wrapper: its own children were already converted
+        // into `bibliography_field`/marker nodes by the recursive dispatch
+        // above — splice them straight into the entry as siblings rather
+        // than nesting them one level deeper. Which of `<element-citation>`/
+        // `<mixed-citation>` it was (plus its `publication-type`/
+        // `publication-format` attributes, if present) would otherwise be
+        // lost entirely once its children are spliced flat, so a leading
+        // `jats:_citation_tag` marker records it for
+        // `build_bibliography_entry` to consume and remove.
+        "element-citation" | "mixed-citation" => {
+            let mut marker = Node::new("jats:_citation_tag").prop("jats:tag", name.to_string());
+            if let Some(pt) = get_attr(attrs, "publication-type") {
+                marker = marker.prop("jats:attr:publication-type", pt.to_string());
+            }
+            if let Some(pf) = get_attr(attrs, "publication-format") {
+                marker = marker.prop("jats:attr:publication-format", pf.to_string());
+            }
+            let mut out = vec![marker];
+            out.extend(children);
+            out
+        }
+
+        "article-title" => vec![bib_field("title", "article-title", children, None)],
+        "source" => vec![bib_field("container_title", "source", children, None)],
+        "publisher-name" => vec![bib_field("publisher", "publisher-name", children, None)],
+        "publisher-loc" => vec![bib_field(
+            "publisher_location",
+            "publisher-loc",
+            children,
+            None,
+        )],
+        "edition" => vec![bib_field("edition", "edition", children, None)],
+        "volume" => vec![bib_field("volume", "volume", children, None)],
+        "issue" => vec![bib_field("issue", "issue", children, None)],
+        "fpage" => vec![bib_field("page_first", "fpage", children, None)],
+        "lpage" => vec![bib_field("page_last", "lpage", children, None)],
+
+        // `pub-id-type` (doi/isbn/pmid/pmcid/... plus an open vocabulary)
+        // names the identifier scheme.
+        "pub-id" => vec![bib_field(
+            "identifier",
+            "pub-id",
+            children,
+            get_attr(attrs, "pub-id-type"),
+        )],
+
+        // A bare person name/collaborative-author name directly inside
+        // `<element-citation>`/`<mixed-citation>` — JATS 1.3's own content
+        // model permits `<name>`/`<collab>`/`<string-name>` here without a
+        // wrapping `<person-group>` (legacy tagging style; the Tag Library's
+        // own recommended practice is the `<person-group>`-wrapped form
+        // handled by `convert_person_group`). No `jats:person-group-type` is
+        // set, so `rescribe-write-jats` re-emits it bare (unwrapped) rather
+        // than reconstructing a `<person-group>` that was never there.
+        // Defaults to the `author` role since that is this bare form's
+        // overwhelmingly common usage (a corporate/collaborative author);
+        // a disclosed simplification, not a silent drop — the original tag
+        // survives via `jats:tag`.
+        "name" | "collab" | "string-name" => vec![bib_field("author", name, children, None)],
+
+        // `<year>`/`<month>`/`<day>`, whether bare (direct children of
+        // `<element-citation>`) or nested inside a `<date>` wrapper (see
+        // `is_biblio_field_wrapper`), become an internal marker node for
+        // `build_bibliography_entry`/`resolve_citation_date` to consume and
+        // remove; each may itself carry its own `iso-8601-date` attribute
+        // (JATS Tag Library example: `<year iso-8601-date="2001-11">2001
+        // </year>`), preserved on the marker so the unambiguous attribute
+        // form can be preferred over reconstructing from possibly free-text
+        // sub-parts (e.g. `<month>Nov</month>`).
+        "year" | "month" | "day" => vec![date_part_marker(name, attrs, children)],
+
+        // `<date>` itself may carry its own `iso-8601-date` attribute
+        // (preferred when present) in addition to, or instead of, wrapping
+        // `<year>`/`<month>`/`<day>` sub-elements (already converted into
+        // `jats:_date_part` markers above, present in `children`).
+        "date" => vec![date_wrapper_marker(attrs, children)],
+
+        // `<date-in-citation>` names its own semantics via `content-type`
+        // (e.g. `"copyright-year"`) distinct from the citation's primary
+        // publication date — rather than guess which of possibly *two*
+        // dates on one citation (a primary `<date>`/bare year *and* a
+        // `<date-in-citation>`) is "the" `prop::DATE`, this is always kept
+        // as its own `misc` field (with `iso-8601-date`/`content-type`
+        // preserved as raw attrs) instead of merged into `prop::DATE`.
+        "date-in-citation" => {
+            let mut node = Node::new(node::BIBLIOGRAPHY_FIELD)
+                .prop(prop::FIELD_ROLE, "misc")
+                .prop("jats:tag", "date-in-citation")
+                .children(children);
+            if let Some(iso) = get_attr(attrs, "iso-8601-date") {
+                node = node.prop("jats:attr:iso-8601-date", iso.to_string());
+            }
+            if let Some(ct) = get_attr(attrs, "content-type") {
+                node = node.prop("jats:attr:content-type", ct.to_string());
+            }
+            vec![node]
+        }
+
+        "label" => vec![bib_field("misc", "label", children, None)],
+
+        // Every other reference-citation element this reader has no
+        // dedicated mapping for (`comment`, `season`, `series`, `etal`,
+        // `annotation`, `trans-title`, `part-title`, and any other member of
+        // JATS's `%citation-elements;` parameter entity): raw-preserve as a
+        // `misc` field tagged with the original element name (its own
+        // children stay ordinary markup-capable inline nodes), rather than
+        // silently dropping it.
+        _ => vec![bib_field("misc", name, children, None)],
+    }
+}
+
+/// Build one `bibliography_field` node: `role` is the standard
+/// `prop::FIELD_ROLE` value; `tag` is the original JATS element name
+/// (round-tripped via `jats:tag` so `rescribe-write-jats` can restore the
+/// exact source element); `scheme`, if given, becomes `prop::FIELD_SCHEME`
+/// (used only by `<pub-id>`'s `pub-id-type` attribute).
+fn bib_field(role: &str, tag: &str, children: Vec<Node>, scheme: Option<&str>) -> Node {
+    let mut node = Node::new(node::BIBLIOGRAPHY_FIELD)
+        .prop(prop::FIELD_ROLE, role.to_string())
+        .prop("jats:tag", tag.to_string())
+        .children(children);
+    if let Some(scheme) = scheme {
+        node = node.prop(prop::FIELD_SCHEME, scheme.to_string());
+    }
+    node
+}
+
+/// Build an internal `jats:_date_part` marker node for a bare `<year>`/
+/// `<month>`/`<day>` element (see `convert_biblio_field`'s "year"/"month"/
+/// "day" arm) — consumed and removed by `build_bibliography_entry` via
+/// `resolve_citation_date`, never a real IR node kind that could leak into
+/// the final tree.
+fn date_part_marker(part: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let mut node = Node::new("jats:_date_part")
+        .prop("jats:part", part.to_string())
+        .children(children);
+    if let Some(iso) = get_attr(attrs, "iso-8601-date") {
+        node = node.prop("jats:iso", iso.to_string());
+    }
+    node
+}
+
+/// Build an internal `jats:_date` marker node for a `<date>` wrapper (see
+/// `convert_biblio_field`'s "date" arm) — consumed and removed by
+/// `build_bibliography_entry` via `resolve_citation_date`. `children` may
+/// contain `jats:_date_part` markers (from a wrapped `<year>`/`<month>`/
+/// `<day>`), any other unmodeled sub-element (raw-preserved by
+/// `convert_biblio_field`'s catch-all), or nothing at all if `<date>` itself
+/// carries `iso-8601-date` with no children.
+fn date_wrapper_marker(attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let mut node = Node::new("jats:_date").children(children);
+    if let Some(iso) = get_attr(attrs, "iso-8601-date") {
+        node = node.prop("jats:iso", iso.to_string());
+    }
+    node
+}
+
+/// Build a `bibliography_entry` node for a `<ref>` element. `children` are
+/// the already-converted `bibliography_field`/date-marker/citation-tag-marker
+/// siblings (see `convert_biblio_field`); this function pulls the internal
+/// `jats:_citation_tag`/`jats:_date`/`jats:_date_part` markers back out —
+/// the citation-tag marker becomes `jats:tag` (+ raw-preserved
+/// `publication-type`/`publication-format`) on the entry itself, and the
+/// date marker(s) become the structured `prop::DATE` property via
+/// `resolve_citation_date`, or — if no unambiguous date could be resolved —
+/// are demoted back to ordinary `misc` field(s) instead of being lost.
+fn build_bibliography_entry(attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let mut citation_tag: Option<Node> = None;
+    let mut date_wrapper: Option<Node> = None;
+    let mut year_marker: Option<Node> = None;
+    let mut month_marker: Option<Node> = None;
+    let mut day_marker: Option<Node> = None;
+    let mut kids = Vec::with_capacity(children.len());
+    for child in children {
+        match (child.kind.as_str(), child.props.get_str("jats:part")) {
+            ("jats:_citation_tag", _) => citation_tag = Some(child),
+            ("jats:_date", _) => date_wrapper = Some(child),
+            ("jats:_date_part", Some("year")) => year_marker = Some(child),
+            ("jats:_date_part", Some("month")) => month_marker = Some(child),
+            ("jats:_date_part", Some("day")) => day_marker = Some(child),
+            _ => kids.push(child),
+        }
+    }
+    let date_map = match &date_wrapper {
+        Some(wrapper) => resolve_citation_date(
+            wrapper.props.get_str("jats:iso"),
+            date_wrapper_parts(wrapper, "year"),
+            date_wrapper_parts(wrapper, "month"),
+            date_wrapper_parts(wrapper, "day"),
+        ),
+        None => resolve_citation_date(
+            None,
+            year_marker.as_ref(),
+            month_marker.as_ref(),
+            day_marker.as_ref(),
+        ),
+    };
+    let mut entry = Node::new(node::BIBLIOGRAPHY_ENTRY);
+    if let Some(marker) = &citation_tag {
+        if let Some(tag) = marker.props.get_str("jats:tag") {
+            entry = entry.prop("jats:tag", tag.to_string());
+        }
+        if let Some(pt) = marker.props.get_str("jats:attr:publication-type") {
+            entry = entry.prop("jats:attr:publication-type", pt.to_string());
+        }
+        if let Some(pf) = marker.props.get_str("jats:attr:publication-format") {
+            entry = entry.prop("jats:attr:publication-format", pf.to_string());
+        }
+    }
+    match date_map {
+        Some(map) => entry = entry.prop(prop::DATE, PropValue::Map(map)),
+        None => {
+            // Couldn't resolve an unambiguous date — demote whatever
+            // marker(s) exist back into an ordinary `misc` field (or
+            // fields, for the bare year/month/day case, keeping them
+            // separate since they weren't wrapped together in the source)
+            // instead of losing them.
+            if let Some(wrapper) = date_wrapper {
+                kids.push(
+                    Node::new(node::BIBLIOGRAPHY_FIELD)
+                        .prop(prop::FIELD_ROLE, "misc")
+                        .prop("jats:tag", "date")
+                        .children(wrapper.children.into_iter().flat_map(|part| part.children)),
+                );
+            }
+            for marker in [year_marker, month_marker, day_marker]
+                .into_iter()
+                .flatten()
+            {
+                let tag = marker
+                    .props
+                    .get_str("jats:part")
+                    .unwrap_or("date")
+                    .to_string();
+                kids.push(
+                    Node::new(node::BIBLIOGRAPHY_FIELD)
+                        .prop(prop::FIELD_ROLE, "misc")
+                        .prop("jats:tag", tag)
+                        .children(marker.children),
+                );
+            }
+        }
+    }
+    attach_generic_attrs(entry.children(kids), attrs)
+}
+
+/// Find a `jats:_date_part` marker of the given `part` (`"year"`/`"month"`/
+/// `"day"`) among a `jats:_date` wrapper's own children.
+fn date_wrapper_parts<'a>(wrapper: &'a Node, part: &str) -> Option<&'a Node> {
+    wrapper.children.iter().find(|c| {
+        c.kind.as_str() == "jats:_date_part" && c.props.get_str("jats:part") == Some(part)
+    })
+}
+
+/// Resolve a citation date, preferring an unambiguous `iso-8601-date`
+/// attribute over reconstructing from `<year>`/`<month>`/`<day>` sub-parts —
+/// per the JATS Tag Library's own tagged examples, the attribute may appear
+/// either on the `<date>` wrapper itself (`explicit_iso`) or directly on
+/// `<year>` (`year`'s own `jats:iso`), and either may encode a full
+/// `YYYY[-MM[-DD]]` string on its own (e.g. `<year iso-8601-date="2001-11">
+/// 2001</year>` alongside a separate, redundant `<month>Nov</month>`).
+/// Falls back to parsing `year`/`month`/`day`'s own text content (numeric,
+/// or an English month name/abbreviation for `month`) only when no
+/// attribute is present; returns `None` — rather than guess — when even
+/// that isn't unambiguous (e.g. a `<season>`-only citation with no year).
+fn resolve_citation_date(
+    explicit_iso: Option<&str>,
+    year: Option<&Node>,
+    month: Option<&Node>,
+    day: Option<&Node>,
+) -> Option<HashMap<String, PropValue>> {
+    if let Some(iso) = explicit_iso
+        && let Some(map) = parse_iso_date_string(iso)
+    {
+        return Some(map);
+    }
+    if let Some(y) = year
+        && let Some(iso) = y.props.get_str("jats:iso")
+        && let Some(map) = parse_iso_date_string(iso)
+    {
+        return Some(map);
+    }
+    let y = year.and_then(|n| parse_year_text(&extract_text(&n.children)));
+    let m = month.and_then(|n| parse_month_text(&extract_text(&n.children)));
+    let d = day.and_then(|n| parse_day_text(&extract_text(&n.children)));
+    match (y, m, d) {
+        (Some(y), Some(m), Some(d)) => Some(date_map(y, Some(m), Some(d))),
+        (Some(y), Some(m), None) => Some(date_map(y, Some(m), None)),
+        (Some(y), None, None) => Some(date_map(y, None, None)),
+        // Month/day present without a year, or nothing parseable at all —
+        // ambiguous or insufficient; don't guess.
+        _ => None,
+    }
+}
+
+fn date_map(year: i64, month: Option<i64>, day: Option<i64>) -> HashMap<String, PropValue> {
+    let mut map = HashMap::new();
+    map.insert("year".to_string(), PropValue::Int(year));
+    if let Some(month) = month {
+        map.insert("month".to_string(), PropValue::Int(month));
+    }
+    if let Some(day) = day {
+        map.insert("day".to_string(), PropValue::Int(day));
+    }
+    map
+}
+
+/// Parse an `iso-8601-date` attribute value's unambiguous forms (`YYYY`,
+/// `YYYY-MM`, `YYYY-MM-DD`) into `prop::DATE`'s map. Returns `None` for
+/// anything else (JATS does not constrain this attribute's value to a
+/// single format) rather than guess.
+fn parse_iso_date_string(text: &str) -> Option<HashMap<String, PropValue>> {
+    let parts: Vec<&str> = text.trim().split('-').collect();
+    match parts.as_slice() {
+        [y] => Some(date_map(parse_year_text(y)?, None, None)),
+        [y, m] => Some(date_map(
+            parse_year_text(y)?,
+            Some(parse_two_digit(m, 1..=12)?),
+            None,
+        )),
+        [y, m, d] => Some(date_map(
+            parse_year_text(y)?,
+            Some(parse_two_digit(m, 1..=12)?),
+            Some(parse_two_digit(d, 1..=31)?),
+        )),
+        _ => None,
+    }
+}
+
+fn parse_year_text(text: &str) -> Option<i64> {
+    let t = text.trim();
+    if t.len() == 4 && t.chars().all(|c| c.is_ascii_digit()) {
+        t.parse().ok()
+    } else {
+        None
+    }
+}
+
+fn parse_two_digit(text: &str, range: std::ops::RangeInclusive<i64>) -> Option<i64> {
+    if text.len() == 2 && text.chars().all(|c| c.is_ascii_digit()) {
+        text.parse::<i64>().ok().filter(|n| range.contains(n))
+    } else {
+        None
+    }
+}
+
+fn parse_day_text(text: &str) -> Option<i64> {
+    let t = text.trim();
+    let n: i64 = t.parse().ok()?;
+    (1..=31).contains(&n).then_some(n)
+}
+
+/// Parse a `<month>` element's free-text content: either a plain number
+/// (`"11"`) or one of the standard English month names/abbreviations
+/// (`"Nov"`, `"November"`, case-insensitive) — a fixed, unambiguous lookup
+/// table, not a locale guess. Anything else (a non-English month name, a
+/// season, free text) returns `None` rather than being guessed at.
+fn parse_month_text(text: &str) -> Option<i64> {
+    let t = text.trim();
+    if let Ok(n) = t.parse::<i64>() {
+        return (1..=12).contains(&n).then_some(n);
+    }
+    const MONTHS: [(&str, &str, i64); 12] = [
+        ("jan", "january", 1),
+        ("feb", "february", 2),
+        ("mar", "march", 3),
+        ("apr", "april", 4),
+        ("may", "may", 5),
+        ("jun", "june", 6),
+        ("jul", "july", 7),
+        ("aug", "august", 8),
+        ("sep", "september", 9),
+        ("oct", "october", 10),
+        ("nov", "november", 11),
+        ("dec", "december", 12),
+    ];
+    let lower = t.to_ascii_lowercase();
+    MONTHS
+        .iter()
+        .find(|(abbr, full, _)| lower == *abbr || lower == *full)
+        .map(|(_, _, n)| *n)
+}
+
+/// Convert a `<person-group>` element's own raw (unconverted) children into
+/// `bibliography_field` nodes: one field per `<name>`/`<collab>`/
+/// `<string-name>`/`<etal>`/`<aff>`/`<role>` (etc.) child, all sharing the
+/// role derived from `<person-group>`'s own `person-group-type` attribute
+/// (`"editor"` maps to the `editor` role; every other value — `"author"`,
+/// `"translator"`, `"allauthors"`, `"guest-editor"`, absent, ...— maps to
+/// `author`, since `prop::FIELD_ROLE`'s vocabulary has no finer-grained
+/// bucket; the *exact* original attribute value is preserved on every
+/// resulting field via `jats:person-group-type` regardless, so this is a
+/// disclosed simplification of the role classification, not a loss of the
+/// underlying data). Each child's own subtree is converted through the
+/// ordinary (non-biblio) pipeline — *not* `convert_biblio_field` — so its
+/// internal markup (`<surname>`/`<given-names>` etc.) is preserved exactly
+/// as any other unrecognized element would be, via `convert_element`'s
+/// generic `generic_span`/`generic_div` catch-all.
+fn convert_person_group(
+    attrs: &[(String, String)],
+    kids: &[JNode],
+    sec_depth: usize,
+    metadata: &mut Properties,
+    warnings: &mut Vec<FidelityWarning>,
+) -> Vec<Node> {
+    let raw_type = get_attr(attrs, "person-group-type").unwrap_or("author");
+    let role = if raw_type == "editor" {
+        "editor"
+    } else {
+        "author"
+    };
+    let mut out = Vec::new();
+    for kid in kids {
+        if let JNode::Element {
+            name,
+            attrs: cattrs,
+            children: ckids,
+            ..
+        } = kid
+        {
+            // Use `name`'s own already-converted children directly as the
+            // field's content — *not* `convert_element(name, ...)`'s result
+            // (which, for `<name>`/`<collab>`/`<string-name>` etc., has no
+            // dedicated arm and would fall to the generic catch-all,
+            // producing a second `span` tagged `jats:tag = name` nested
+            // *inside* this field — which already carries that exact same
+            // tag on itself). `<surname>`/`<given-names>` (etc.) inside
+            // `<name>` are still preserved exactly, via that same generic
+            // catch-all, one level down — only the redundant outer
+            // wrapper is skipped.
+            let field = Node::new(node::BIBLIOGRAPHY_FIELD)
+                .prop(prop::FIELD_ROLE, role)
+                .prop("jats:tag", name.clone())
+                .prop("jats:person-group-type", raw_type.to_string())
+                .children(convert_children(
+                    ckids, name, false, false, sec_depth, metadata, warnings,
+                ));
+            out.push(attach_generic_attrs(field, cattrs));
+        }
+        // Whitespace-only text between `<name>` elements carries no
+        // meaning here (same treatment as `convert_children`'s own
+        // whitespace-text handling); non-`Element` node kinds otherwise
+        // don't occur directly inside `<person-group>` per its content
+        // model.
+    }
+    out
 }
 
 /// Read `colspan`/`rowspan` off a `<th>`/`<td>` element (JATS's table model
