@@ -1,0 +1,10 @@
+{
+  "description": "an entity that is neither one of the 5 XML-predefined names, nor declared by this document's DOCTYPE, nor part of the standard table, is still raw-preserved as a raw_inline node (never silently dropped) rather than resolved or invented",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "a " } },
+    { "path": "/0/1", "kind": "raw_inline", "props": { "content": "&undeclared;", "tei:entity": "undeclared" } },
+    { "path": "/0/2", "kind": "text", "props": { "content": " b" } }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "an entity declared in the document's own DOCTYPE internal subset resolves to its declared replacement text and merges into surrounding text, rather than being raw-preserved",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "Made by Acme, Inc.." } }
+  ]
+}

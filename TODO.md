@@ -195,11 +195,50 @@ This file describes milestones, format tiers, and cross-cutting work.
   artifacts, no roundtrip mismatches, no bugs found — all three XML verticals' fuzz targets
   are now at the same extended-campaign scale. The fixture-suite gaps above remain open but
   are independent of this closed item.
-- **DTD-aware entity resolution** remains unimplemented across all three XML verticals
-  (docbook/jats/tei) — named entities outside the 5 XML predefined ones and numeric char refs
-  raw-preserve losslessly, but are never resolved to their DTD-defined replacement text. Explicitly
-  out of scope for Tier B's 3-Harness target per each crate's TODO section, but flagged here as a
-  known ceiling, not a silent gap.
+- **DTD-aware entity resolution — implemented (2026-07-28)** via a new standalone crate,
+  `crates/formats/xml-entities` (no rescribe dependency, workspace member `xml-entities`).
+  Scope: (1) a narrow DTD internal-subset `<!ENTITY ...>` declaration parser
+  (`DtdEntities::parse_doctype`/`parse_subset`) — general *and* parameter entities,
+  `SYSTEM`/`PUBLIC` external entities recorded (name + identifiers) but never fetched (no
+  network/filesystem access anywhere in the crate), numeric char refs expanded at
+  declaration time per the XML spec, internally-declared parameter entities expanded
+  in-place (the "combine several `<!ENTITY %`-declared fragments" idiom), external
+  parameter-entity references diagnosed rather than silently skipped. Deliberately **not**
+  a DTD validator — `<!ELEMENT>`/`<!ATTLIST>`/`<!NOTATION>` are recognized only well enough
+  to skip correctly. (2) `EntityResolver`, layering those document-declared entities over
+  the WHATWG HTML5 standard table (via the `entities` crate, ~7M downloads/wk) as a
+  fallback — HTML5's table absorbed nearly all of the ISO 8879/9573 sets (`ISOlat1`,
+  `ISOnum`, `ISOpub`, `ISOtech`, `mmlalias`) DocBook/JATS/TEI lean on, which in practice is
+  what resolves most entities from those DTDs anyway since the real-world idiom pulls them
+  in via an *externally*-fetched parameter entity (e.g. DocBook's
+  `%isolat1; PUBLIC "ISO 8879-1986//ENTITIES Added Latin 1//EN" "isolat1.ent"`) that this
+  crate does not fetch. Resolution is recursive (an entity's value referencing another
+  entity) with cycle/depth guards. Unknown/external names resolve to a non-error variant
+  (`Resolution::Unknown`/`ExternalUnresolved`) so callers raw-preserve rather than drop
+  them. 30 unit tests + 1 doctest, clippy clean, no-panic fuzz target
+  `fuzz_xml_entities_reader` registered (compiles clean; not run as an extended campaign —
+  `cargo-fuzz` isn't installed in this repo's dev shell).
+
+  **Wired into all three format crates' `parse()`, `EventIter` (SAX), and
+  `StreamingParser` (batch)** — all three independent reader API surfaces per
+  CLAUDE.md's "each API mode is independently implemented" rule, not just the AST path.
+  Named entities beyond the 5 XML-predefined ones now try `EntityResolver` (built from
+  that document's own DOCTYPE, if any) before falling back to the pre-existing
+  `Node::EntityRef` raw-preservation. Malformed DOCTYPE internal subsets surface as
+  diagnostics (prefixed `"DOCTYPE internal subset: ..."`) instead of being silently
+  discarded. 3 new fixtures per vertical (`dtd-entity-resolution`,
+  `rare-named-entity-standard-table`, `adv-unresolvable-entity`) plus 3 new unit tests
+  per format crate; COVERAGE.md updated for all three (docbook/jats/tei).
+
+  **Known gap, disclosed rather than silently left**: the rescribe adapter layer
+  (`rescribe-read-{docbook,jats,tei}`) is unaffected by this change other than seeing
+  fewer `raw_inline`/`*:entity` nodes and more resolved `text` nodes — no adapter code
+  changed, since resolution now happens entirely inside the `-fmt` crates before the
+  adapter ever sees a `Node::EntityRef`. External (`SYSTEM`/`PUBLIC`) DTD entities and
+  entities declared only in an external subset pulled in via a parameter-entity reference
+  remain genuinely unresolvable without fetching that external file — this is a
+  deliberate, disclosed scope boundary (no network/filesystem access from this crate),
+  not a bug; such entities still raw-preserve losslessly exactly as before.
 
 ---
 

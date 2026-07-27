@@ -1,0 +1,8 @@
+{
+  "description": "a named entity that is not one of the 5 XML-predefined ones, and is not declared by any DOCTYPE in this document, still resolves via the standard WHATWG/ISO named-character-reference table (xml-entities crate) and merges into surrounding text",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",   "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "café or naïve, with no DOCTYPE at all" } }
+  ]
+}

@@ -47,6 +47,7 @@
 
 use quick_xml::Reader;
 use quick_xml::events::Event as XmlEvent;
+use xml_entities::{DtdEntities, EntityResolver};
 
 use crate::ast::{Diagnostic, Span, TeiDoc};
 use crate::events::OwnedEvent;
@@ -101,6 +102,11 @@ pub struct StreamingParser<H: Handler> {
     handler: H,
     pending: Vec<u8>,
     diagnostics: Vec<Diagnostic>,
+    /// Entities declared in this document's own DOCTYPE internal subset (if
+    /// any), rebuilt whenever a `Doctype` event is drained. See
+    /// `parse.rs`'s module docs for why a single forward pass is
+    /// sufficient.
+    entity_resolver: EntityResolver,
 }
 
 impl<H: Handler> StreamingParser<H> {
@@ -110,6 +116,7 @@ impl<H: Handler> StreamingParser<H> {
             handler,
             pending: Vec::new(),
             diagnostics: Vec::new(),
+            entity_resolver: EntityResolver::new(DtdEntities::empty()),
         }
     }
 
@@ -180,8 +187,20 @@ impl<H: Handler> StreamingParser<H> {
                 }
                 Ok(event) => {
                     let consumed = reader.buffer_position() as usize;
-                    let owned = crate::events::owned_event_from_xml(event);
+                    let owned = crate::events::owned_event_from_xml(event, &self.entity_resolver);
                     self.pending.drain(0..consumed);
+                    if let Some(owned) = &owned
+                        && let OwnedEvent::Doctype(content) = owned
+                    {
+                        let (declared, entity_diagnostics) = DtdEntities::parse_doctype(content);
+                        for d in entity_diagnostics {
+                            self.diagnostics.push(Diagnostic {
+                                message: format!("DOCTYPE internal subset: {d}"),
+                                span: Span::NONE,
+                            });
+                        }
+                        self.entity_resolver = EntityResolver::new(declared);
+                    }
                     if let Some(owned) = owned {
                         self.handler.handle(owned);
                     }

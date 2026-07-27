@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE TEI [ <!ENTITY company "Acme, Inc."> ]>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <text>
+    <body>
+      <p>a &undeclared; b</p>
+    </body>
+  </text>
+</TEI>

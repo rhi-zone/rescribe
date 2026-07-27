@@ -142,6 +142,12 @@ TEI All tagset (tei_all). Primary module focus: tei, core, textstructure, linkin
   inline within running text, stays a tagged span in place)
 - [x] entity references — `adv-entity-references`
 - [x] numeric character references — `adv-numeric-char-ref`
+- [x] entity declared in the document's own DOCTYPE internal subset,
+  resolved via the `xml-entities` crate — `dtd-entity-resolution`
+- [x] named entity resolved via the standard WHATWG/ISO table with no
+  DOCTYPE present — `rare-named-entity-standard-table`
+- [x] named entity unresolvable by either layer, still raw-preserved as
+  `raw_inline` — `adv-unresolvable-entity`
 - [x] empty paragraph — `adv-empty-paragraph` (`<p/>`)
 - [x] note with no content — `adv-empty-note` (`<note/>`)
 - [x] broken target reference — `adv-broken-ref` (`<ref target="#nonexistent">`)
