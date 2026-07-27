@@ -89,13 +89,13 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 
 ## Back matter
 
-- [ ] reference list — (missing; `<ref-list>` / `<ref>` / `<mixed-citation>` /
-  `<element-citation>` — genuine design fork, see TODO.md: whether a dedicated
-  citation/bibliography IR shape should exist, or whether the current thin
-  ref-list -> div / ref -> paragraph / \*-citation -> span mapping is the
-  intended final answer, is genuinely undecided)
-- [ ] element-citation (structured ref) — (missing; same fork)
-- [ ] mixed-citation (text ref) — (missing; same fork)
+- [x] reference list — `<ref-list>` -> `bibliography`, `<ref>` ->
+  `bibliography_entry`, using the dedicated citation/bibliography IR shape
+  added in `4e15c996` (schema-verified against DocBook 5.2/JATS/TEI/OOXML) —
+  `citation-simple-author`
+- [x] element-citation (structured ref) — `citation-simple-author`,
+  `citation-multi-author`, `citation-date`
+- [x] mixed-citation (text ref) — `citation-mixed-citation`
 - [x] appendix — `appendix`
 - [x] glossary — `glossary`
 - [x] acknowledgments — `acknowledgments`
@@ -130,8 +130,10 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] table with inline formatting in cells — `table-cell-inline-formatting`
 - [x] figure with supplementary content — `figure-with-supplementary-material`
 - [x] footnote in table cell — `footnote-in-table-cell`
-- [ ] citation + reference list roundtrip — (missing; tied to the citation/
-  reference-list IR-shape design fork, see TODO.md)
+- [x] citation + reference list roundtrip — `citation-markup-in-field`
+  (`<italic>`/`<bold>` nested inside an `article-title`/`collab` field,
+  proving `bibliography_field`'s children are ordinary markup-capable inline
+  nodes, not a flat string)
 - [x] display formula with label — `disp-formula-with-label`
 - [x] full article with front/body/back — `e2e-full-article`
 
@@ -158,6 +160,5 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 
 - [x] very large table — `path-large-table` (200 rows x 10 columns)
 - [x] deeply nested sections — `path-deeply-nested-sections` (10 levels)
-- [ ] many references in ref-list — (missing; tied to the citation/
-  reference-list IR-shape design fork, see TODO.md)
+- [x] many references in ref-list — `path-many-references` (60 references)
 - [x] large number of footnotes — `path-many-footnotes` (100 footnotes)

@@ -1,0 +1,11 @@
+{
+  "description": "three date forms: (R1) bare year/month, where year's own iso-8601-date attribute (\"2001-11\") is preferred over reconstructing from the separate month name \"Nov\"; (R2) a <date> wrapper whose own iso-8601-date attribute (\"1988\") is used directly; (R3) an unparseable <date> (only a <season>, no year) which cannot be resolved unambiguously and is demoted to a misc field instead of being dropped or guessed at",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0/0/0",     "kind": "bibliography_entry", "props": { "date": { "year": 2001, "month": 11 } } },
+    { "path": "/0/0/1",     "kind": "bibliography_entry", "props": { "date": { "year": 1988 } } },
+    { "path": "/0/0/2",     "kind": "bibliography_entry", "props": { "date": null }, "children_count": 2 },
+    { "path": "/0/0/2/1",   "kind": "bibliography_field", "props": { "field:role": "misc", "jats:tag": "date" } },
+    { "path": "/0/0/2/1/0", "kind": "text", "props": { "content": "Spring" } }
+  ]
+}

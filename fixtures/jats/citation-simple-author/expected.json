@@ -1,0 +1,23 @@
+{
+  "description": "ref-list/ref with a single structured author (via person-group), title, source, page range, and DOI identifier becomes a bibliography/bibliography_entry with bibliography_field children",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0/0",       "kind": "bibliography" },
+    { "path": "/0/0/0",     "kind": "bibliography_entry", "props": { "jats:tag": "element-citation", "jats:attr:publication-type": "journal" }, "children_count": 6 },
+    { "path": "/0/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "author", "jats:tag": "name", "jats:person-group-type": "author" }, "children_count": 2 },
+    { "path": "/0/0/0/0/0", "kind": "span", "props": { "jats:tag": "surname" } },
+    { "path": "/0/0/0/0/0/0", "kind": "text", "props": { "content": "Doe" } },
+    { "path": "/0/0/0/0/1", "kind": "span", "props": { "jats:tag": "given-names" } },
+    { "path": "/0/0/0/0/1/0", "kind": "text", "props": { "content": "Jane" } },
+    { "path": "/0/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "title" } },
+    { "path": "/0/0/0/1/0", "kind": "text", "props": { "content": "A Simple Title" } },
+    { "path": "/0/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "container_title" } },
+    { "path": "/0/0/0/2/0", "kind": "text", "props": { "content": "Journal of Examples" } },
+    { "path": "/0/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "page_first" } },
+    { "path": "/0/0/0/3/0", "kind": "text", "props": { "content": "12" } },
+    { "path": "/0/0/0/4",   "kind": "bibliography_field", "props": { "field:role": "page_last" } },
+    { "path": "/0/0/0/4/0", "kind": "text", "props": { "content": "34" } },
+    { "path": "/0/0/0/5",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "doi" } },
+    { "path": "/0/0/0/5/0", "kind": "text", "props": { "content": "10.1234/xyz" } }
+  ]
+}

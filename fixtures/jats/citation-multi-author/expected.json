@@ -1,0 +1,21 @@
+{
+  "description": "element-citation with a two-author person-group and a separate one-editor person-group becomes sibling bibliography_field nodes (field:role=author x2, field:role=editor x1) in document order, not merged or overwritten",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0/0/0",       "kind": "bibliography_entry", "children_count": 6 },
+    { "path": "/0/0/0/0",     "kind": "bibliography_field", "props": { "field:role": "author", "jats:person-group-type": "author" } },
+    { "path": "/0/0/0/0/0/0", "kind": "text", "props": { "content": "Doe" } },
+    { "path": "/0/0/0/0/1/0", "kind": "text", "props": { "content": "Jane" } },
+    { "path": "/0/0/0/1",     "kind": "bibliography_field", "props": { "field:role": "author", "jats:person-group-type": "author" } },
+    { "path": "/0/0/0/1/0/0", "kind": "text", "props": { "content": "Smith" } },
+    { "path": "/0/0/0/1/1/0", "kind": "text", "props": { "content": "John" } },
+    { "path": "/0/0/0/2",     "kind": "bibliography_field", "props": { "field:role": "editor", "jats:person-group-type": "editor" } },
+    { "path": "/0/0/0/2/0/0", "kind": "text", "props": { "content": "Editor" } },
+    { "path": "/0/0/0/2/1/0", "kind": "text", "props": { "content": "Ed" } },
+    { "path": "/0/0/0/3",     "kind": "bibliography_field", "props": { "field:role": "container_title" } },
+    { "path": "/0/0/0/4",     "kind": "bibliography_field", "props": { "field:role": "volume" } },
+    { "path": "/0/0/0/4/0",   "kind": "text", "props": { "content": "5" } },
+    { "path": "/0/0/0/5",     "kind": "bibliography_field", "props": { "field:role": "issue" } },
+    { "path": "/0/0/0/5/0",   "kind": "text", "props": { "content": "2" } }
+  ]
+}

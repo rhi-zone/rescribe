@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<article>
+  <back>
+    <ref-list>
+      <ref id="R1">
+        <element-citation publication-type="journal">
+          <person-group person-group-type="author">
+            <name><surname>Doe</surname><given-names>Jane</given-names></name>
+          </person-group>
+          <article-title>A Simple Title</article-title>
+          <source>Journal of Examples</source>
+          <fpage>12</fpage>
+          <lpage>34</lpage>
+          <pub-id pub-id-type="doi">10.1234/xyz</pub-id>
+        </element-citation>
+      </ref>
+    </ref-list>
+  </back>
+</article>

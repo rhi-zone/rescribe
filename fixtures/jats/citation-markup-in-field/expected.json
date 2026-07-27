@@ -1,0 +1,16 @@
+{
+  "description": "italic nested inside an article-title, and bold nested inside a person-group's collab, are preserved as real emphasis/strong nodes inside the bibliography_field — proving bibliography_field's children are ordinary markup-capable inline nodes, not a flat string property",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0/0/0",       "kind": "bibliography_entry" },
+    { "path": "/0/0/0/0",     "kind": "bibliography_field", "props": { "field:role": "title" }, "children_count": 2 },
+    { "path": "/0/0/0/0/0",   "kind": "text", "props": { "content": "Foo " } },
+    { "path": "/0/0/0/0/1",   "kind": "emphasis" },
+    { "path": "/0/0/0/0/1/0", "kind": "text", "props": { "content": "Bar" } },
+    { "path": "/0/0/0/1",     "kind": "bibliography_field", "props": { "field:role": "author", "jats:tag": "collab" }, "children_count": 3 },
+    { "path": "/0/0/0/1/0",   "kind": "text", "props": { "content": "The " } },
+    { "path": "/0/0/0/1/1",   "kind": "strong" },
+    { "path": "/0/0/0/1/1/0", "kind": "text", "props": { "content": "Example" } },
+    { "path": "/0/0/0/1/2",   "kind": "text", "props": { "content": " Consortium" } }
+  ]
+}

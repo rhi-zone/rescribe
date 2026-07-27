@@ -165,6 +165,28 @@ fn check_assertion(node: &Node, assertion: &Assertion, failures: &mut Vec<Failur
     }
 }
 
+/// Compare one property value's JSON expectation against the actual
+/// `PropValue`. A JSON object matches a `PropValue::Map` when every key in
+/// the expectation is present in the map with a matching value (recursively,
+/// via this same function) — extra keys in the actual map beyond what's
+/// asserted are ignored, matching this crate's general "assert what you
+/// care about" philosophy for `props`/`children_count`.
+fn prop_value_matches(expected: &serde_json::Value, actual: &PropValue) -> bool {
+    match (expected, actual) {
+        (serde_json::Value::String(s), PropValue::String(a)) => s == a,
+        (serde_json::Value::Number(n), PropValue::Int(a)) => n.as_i64().is_some_and(|i| i == *a),
+        (serde_json::Value::Number(n), PropValue::Float(a)) => {
+            n.as_f64().is_some_and(|f| (f - a).abs() < 1e-9)
+        }
+        (serde_json::Value::Bool(b), PropValue::Bool(a)) => b == a,
+        (serde_json::Value::Object(obj), PropValue::Map(map)) => obj.iter().all(|(k, v)| {
+            map.get(k)
+                .is_some_and(|actual_v| prop_value_matches(v, actual_v))
+        }),
+        _ => false,
+    }
+}
+
 fn check_prop_in(
     path: &str,
     props: &Properties,
@@ -191,15 +213,7 @@ fn check_prop_in(
             return;
         }
     };
-    let matches = match (expected_json, actual) {
-        (serde_json::Value::String(s), PropValue::String(a)) => s == a,
-        (serde_json::Value::Number(n), PropValue::Int(a)) => n.as_i64().is_some_and(|i| i == *a),
-        (serde_json::Value::Number(n), PropValue::Float(a)) => {
-            n.as_f64().is_some_and(|f| (f - a).abs() < 1e-9)
-        }
-        (serde_json::Value::Bool(b), PropValue::Bool(a)) => b == a,
-        _ => false,
-    };
+    let matches = prop_value_matches(expected_json, actual);
     if !matches {
         failures.push(Failure {
             path: path.to_string(),

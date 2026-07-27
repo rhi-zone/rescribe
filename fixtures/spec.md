@@ -104,6 +104,7 @@ Each key in `props` (or `metadata`) is a property name. The value specifies what
 | float (e.g. `1.5`) | `PropValue::Float` |
 | `true` / `false` | `PropValue::Bool` |
 | `null` | prop must be **absent** |
+| object (e.g. `{"year": 2020}`) | `PropValue::Map` — every key in the expected object must be present in the map with a matching value (checked recursively via this same table); extra keys in the actual map are ignored |
 
 ## Metadata assertions
 

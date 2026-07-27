@@ -1,0 +1,12 @@
+{
+  "description": "a ref-list with 60 structured references parses without degradation; spot-checks the first, a middle, and the last entry",
+  "category": "pathological",
+  "assertions": [
+    { "path": "/0/0", "kind": "bibliography", "children_count": 60 },
+    { "path": "/0/0/0", "kind": "bibliography_entry", "props": { "id": "R1", "date": { "year": 2001 } } },
+    { "path": "/0/0/0/1/0", "kind": "text", "props": { "content": "Title 1" } },
+    { "path": "/0/0/29", "kind": "bibliography_entry", "props": { "id": "R30", "date": { "year": 2030 } } },
+    { "path": "/0/0/59", "kind": "bibliography_entry", "props": { "id": "R60", "date": { "year": 2060 } } },
+    { "path": "/0/0/59/1/0", "kind": "text", "props": { "content": "Title 60" } }
+  ]
+}
