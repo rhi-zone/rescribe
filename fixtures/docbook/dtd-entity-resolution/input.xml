@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE article [ <!ENTITY company "Acme, Inc."> ]>
+<article xmlns="http://docbook.org/ns/docbook">
+  <para>Made by &company;.</para>
+</article>

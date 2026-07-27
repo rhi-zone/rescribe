@@ -239,6 +239,12 @@ namespace. This section covers the DocBook side only.
   matched by local name, not namespace-qualified)
 - [x] entity references (&amp;, &lt;, &gt;, &apos;, &quot;) — `adv-entity-references`
 - [x] numeric character references (&#160;, &#x2019;) — `adv-numeric-char-ref`
+- [x] entity declared in the document's own DOCTYPE internal subset,
+  resolved via the `xml-entities` crate — `dtd-entity-resolution`
+- [x] named entity resolved via the standard WHATWG/ISO table with no
+  DOCTYPE present — `rare-named-entity-standard-table`
+- [x] named entity unresolvable by either layer, still raw-preserved as
+  `raw_inline` — `adv-unresolvable-entity`
 - [x] deeply nested sections (6+ levels) — `adv-deeply-nested-sections`
 - [x] empty para — `adv-empty-para` (`<para/>`)
 - [x] para with only whitespace — `adv-whitespace-para`
