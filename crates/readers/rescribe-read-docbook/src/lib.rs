@@ -388,6 +388,15 @@ fn convert_element(
             Some(Node::new(node::DIV).children(children))
         }
 
+        // A formal <table>'s <title> (DocBook 5.2: table requires a title,
+        // unlike informaltable) is the table's caption, not a heading in
+        // the document outline — mapped to the standard `caption` node kind
+        // so the "table"/"informaltable" arm below can pull it out of the
+        // row children and fold it into the table's `title` property,
+        // rather than it appearing as a stray HEADING mixed in with the
+        // table's rows.
+        "title" if parent == Some("table") => Some(Node::new(node::CAPTION).children(children)),
+
         // Titles - convert to heading
         "title" => {
             let level = match parent {
@@ -513,11 +522,94 @@ fn convert_element(
                 .children(children),
         ),
 
-        // Tables
-        "table" | "informaltable" => Some(Node::new(node::TABLE).children(children)),
+        // Tables. CALS table-model attributes (DocBook 5.2 reference:
+        // frame — all/bottom/none/sides/top/topbot — plus colsep/rowsep,
+        // confirmed present directly on <table>/<informaltable>) have no
+        // cross-format equivalent, so raw-preserve them under `docbook:`.
+        // The same attributes can additionally appear on <tgroup> as a
+        // finer-grained override; that layer is not separately captured
+        // here (`tgroup` stays a pass-through wrapper) — a narrow,
+        // disclosed simplification, not a silent drop of the common case.
+        "table" | "informaltable" => {
+            // A <colspec> (see its own arm below) or the table's <title>
+            // (see the `"title" if parent == Some("table")` arm above,
+            // mapped to CAPTION) must not appear as a table row — pull the
+            // title out into the `title` property and keep colspecs as
+            // structured leading children rather than TABLE_ROW siblings.
+            let mut title = None;
+            let mut rest = Vec::with_capacity(children.len());
+            for child in children {
+                if title.is_none() && child.kind.as_str() == node::CAPTION {
+                    title = Some(extract_text(&child.children));
+                } else {
+                    rest.push(child);
+                }
+            }
+            let mut node = Node::new(node::TABLE).children(rest);
+            if let Some(title) = title {
+                node = node.prop(prop::TITLE, title);
+            }
+            if let Some(frame) = get_attr(attrs, "frame") {
+                node = node.prop("docbook:frame", frame.to_string());
+            }
+            if let Some(colsep) = get_attr(attrs, "colsep") {
+                node = node.prop("docbook:colsep", colsep.to_string());
+            }
+            if let Some(rowsep) = get_attr(attrs, "rowsep") {
+                node = node.prop("docbook:rowsep", rowsep.to_string());
+            }
+            Some(node)
+        }
         "tgroup" | "thead" | "tbody" | "tfoot" => None, // Pass through
+        // <colspec> (DocBook 5.2 reference: colname, colnum, colwidth,
+        // colsep, rowsep, align on the entry-alignment vocabulary) has no
+        // IR node kind of its own; modeled as a structured child (not a
+        // generic_span, so the "table"/"informaltable" arm can keep it out
+        // of the row list) carrying its attributes as raw `docbook:`
+        // properties since column-width units (`"3*"`, `"1.5in"`) have no
+        // cross-format representation.
+        "colspec" => {
+            let mut node = Node::new("docbook:colspec");
+            if let Some(colname) = get_attr(attrs, "colname") {
+                node = node.prop("docbook:colname", colname.to_string());
+            }
+            if let Some(colnum) = get_attr(attrs, "colnum") {
+                node = node.prop("docbook:colnum", colnum.to_string());
+            }
+            if let Some(colwidth) = get_attr(attrs, "colwidth") {
+                node = node.prop("docbook:colwidth", colwidth.to_string());
+            }
+            if let Some(align) = get_attr(attrs, "align") {
+                node = node.prop(prop::ALIGN, align.to_string());
+            }
+            Some(node)
+        }
         "row" | "tr" => Some(Node::new(node::TABLE_ROW).children(children)),
-        "entry" | "td" => Some(Node::new(node::TABLE_CELL).children(children)),
+        "entry" | "td" => {
+            let mut node = Node::new(node::TABLE_CELL).children(children);
+            // `morerows` counts *additional* rows an entry spans (DocBook
+            // 5.2 reference), whereas the standard cross-format `rowspan`
+            // property (mirroring HTML's `rowspan` attribute) counts the
+            // *total* rows spanned — hence +1.
+            if let Some(morerows) = get_attr(attrs, "morerows")
+                && let Ok(n) = morerows.parse::<i64>()
+            {
+                node = node.prop(prop::ROWSPAN, n + 1);
+            }
+            // `namest`/`nameend` span an entry across columns *by name*,
+            // resolved against the sibling <colspec> list's `colname`s.
+            // Resolving that to a plain column count (the standard
+            // `colspan` property) would need column-name lookup context
+            // this per-entry conversion doesn't have — raw-preserved
+            // verbatim rather than guessed at.
+            if let Some(namest) = get_attr(attrs, "namest") {
+                node = node.prop("docbook:namest", namest.to_string());
+            }
+            if let Some(nameend) = get_attr(attrs, "nameend") {
+                node = node.prop("docbook:nameend", nameend.to_string());
+            }
+            Some(node)
+        }
         "th" => Some(Node::new(node::TABLE_HEADER).children(children)),
 
         // Footnotes

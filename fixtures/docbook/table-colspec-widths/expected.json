@@ -1,0 +1,18 @@
+{
+  "description": "<colspec colwidth=...> entries are captured as structured leading children of the table, distinct from its rows",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "table" },
+    {
+      "path": "/0/0/0",
+      "kind": "docbook:colspec",
+      "props": { "docbook:colname": "c1", "docbook:colwidth": "2*", "align": "left" }
+    },
+    {
+      "path": "/0/0/1",
+      "kind": "docbook:colspec",
+      "props": { "docbook:colname": "c2", "docbook:colwidth": "1*", "align": "right" }
+    },
+    { "path": "/0/0/2", "kind": "table_row" }
+  ]
+}

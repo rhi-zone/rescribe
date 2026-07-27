@@ -1,0 +1,9 @@
+{
+  "description": "a formal <table> (with <title>, distinct from <informaltable>) has its title captured as the table's title property, not left as a stray heading among the rows",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "table", "props": { "title": "Population by City" } },
+    { "path": "/0/0/0", "kind": "table_row" },
+    { "path": "/0/0/0/0", "kind": "table_cell" }
+  ]
+}

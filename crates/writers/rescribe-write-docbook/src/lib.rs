@@ -245,19 +245,63 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             vec![db_element("programlisting", attrs, vec![db_text(content)])]
         }
 
-        node::TABLE => vec![db_element(
-            "informaltable",
-            vec![],
-            vec![db_element(
-                "tgroup",
-                vec![],
-                vec![db_element(
-                    "tbody",
-                    vec![],
-                    node.children.iter().flat_map(write_node).collect(),
-                )],
-            )],
-        )],
+        node::TABLE => {
+            // Split children back into <colspec> siblings (see
+            // rescribe-read-docbook's dedicated "colspec" arm — a
+            // structured "docbook:colspec"-kind child, not a table row)
+            // and actual row children.
+            let mut colspecs = Vec::new();
+            let mut rows = Vec::new();
+            for child in &node.children {
+                if child.kind.as_str() == "docbook:colspec" {
+                    let mut attrs = Vec::new();
+                    if let Some(colname) = child.props.get_str("docbook:colname") {
+                        attrs.push(("colname".to_string(), colname.to_string()));
+                    }
+                    if let Some(colnum) = child.props.get_str("docbook:colnum") {
+                        attrs.push(("colnum".to_string(), colnum.to_string()));
+                    }
+                    if let Some(colwidth) = child.props.get_str("docbook:colwidth") {
+                        attrs.push(("colwidth".to_string(), colwidth.to_string()));
+                    }
+                    if let Some(align) = child.props.get_str(prop::ALIGN) {
+                        attrs.push(("align".to_string(), align.to_string()));
+                    }
+                    colspecs.push(db_element("colspec", attrs, vec![]));
+                } else {
+                    rows.extend(write_node(child));
+                }
+            }
+            let mut tgroup_children = colspecs;
+            tgroup_children.push(db_element("tbody", vec![], rows));
+
+            // A `title` property means this was a formal <table> (DocBook
+            // 5.2: table requires a title, informaltable must not have
+            // one) — see rescribe-read-docbook's `"title" if parent ==
+            // Some("table")` arm.
+            let tag = if node.props.get_str(prop::TITLE).is_some() {
+                "table"
+            } else {
+                "informaltable"
+            };
+            let mut table_children = Vec::new();
+            if let Some(title) = node.props.get_str(prop::TITLE) {
+                table_children.push(db_element("title", vec![], vec![db_text(title)]));
+            }
+            table_children.push(db_element("tgroup", vec![], tgroup_children));
+
+            let mut attrs = generic_attrs(node);
+            if let Some(frame) = node.props.get_str("docbook:frame") {
+                attrs.push(("frame".to_string(), frame.to_string()));
+            }
+            if let Some(colsep) = node.props.get_str("docbook:colsep") {
+                attrs.push(("colsep".to_string(), colsep.to_string()));
+            }
+            if let Some(rowsep) = node.props.get_str("docbook:rowsep") {
+                attrs.push(("rowsep".to_string(), rowsep.to_string()));
+            }
+            vec![db_element(tag, attrs, table_children)]
+        }
 
         node::TABLE_ROW => vec![db_element(
             "row",
@@ -265,11 +309,28 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             node.children.iter().flat_map(write_node).collect(),
         )],
 
-        node::TABLE_CELL | node::TABLE_HEADER => vec![db_element(
-            "entry",
-            vec![],
-            node.children.iter().flat_map(write_inline).collect(),
-        )],
+        node::TABLE_CELL | node::TABLE_HEADER => {
+            let mut attrs = Vec::new();
+            // `rowspan` (total rows spanned) round-trips back to `morerows`
+            // (additional rows spanned) — see rescribe-read-docbook's
+            // "entry"|"td" arm for the inverse `+1` conversion.
+            if let Some(rowspan) = node.props.get_int(prop::ROWSPAN)
+                && rowspan > 1
+            {
+                attrs.push(("morerows".to_string(), (rowspan - 1).to_string()));
+            }
+            if let Some(namest) = node.props.get_str("docbook:namest") {
+                attrs.push(("namest".to_string(), namest.to_string()));
+            }
+            if let Some(nameend) = node.props.get_str("docbook:nameend") {
+                attrs.push(("nameend".to_string(), nameend.to_string()));
+            }
+            vec![db_element(
+                "entry",
+                attrs,
+                node.children.iter().flat_map(write_inline).collect(),
+            )]
+        }
 
         node::FIGURE => vec![db_element(
             "figure",

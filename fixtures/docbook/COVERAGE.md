@@ -22,7 +22,8 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 - [x] warning admonition — `warning` (`<warning>`)
 - [x] caution admonition — `caution` (`<caution>`)
 - [x] important admonition — `important` (`<important>`)
-- [ ] formal table — (missing; `<table>` with `<title>`, distinct from `<informaltable>`)
+- [x] formal table — `formal-table` (`<table>` with `<title>`, distinct from
+  `<informaltable>`; title captured as the table's `title` property)
 - [ ] example — (missing; `<example>` block with `<title>`)
 - [ ] screen / literallayout — (missing; `<screen>`, `<literallayout>`)
 - [ ] synopsis / cmdsynopsis — (missing; `<synopsis>`, `<cmdsynopsis>`)
@@ -85,9 +86,17 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   maps to `start`)
 - [x] list spacing — `prop-list-spacing` (`spacing="compact"` maps to the
   standard `tight` property)
-- [ ] table frame / colsep / rowsep — (missing; CALS table model attributes)
-- [ ] table colspec widths — (missing; `<colspec colwidth="…">`)
-- [ ] table spanning cells — (missing; `morerows`, `namest`/`nameend`)
+- [x] table frame / colsep / rowsep — `table-frame-colsep-rowsep` (raw-preserved
+  as `docbook:frame`/`docbook:colsep`/`docbook:rowsep`; the same attributes on
+  `<tgroup>` as a finer-grained override are not separately captured — `tgroup`
+  stays a pass-through wrapper — a disclosed narrow gap, not this fixture's claim)
+- [x] table colspec widths — `table-colspec-widths` (`<colspec>` modeled as a
+  structured `docbook:colspec` child carrying `docbook:colname`/`docbook:colwidth`/
+  `align`, kept out of the row list)
+- [x] table spanning cells — `table-spanning-cells` (`morerows` maps to the
+  standard `rowspan` property; `namest`/`nameend` raw-preserved verbatim since
+  resolving a column-name span to a column count needs sibling-colspec lookup
+  context the per-entry conversion doesn't have)
 - [x] xml:lang — `prop-xml-lang` (standard `language` property, applied
   uniformly to every element via `attach_generic_attrs`, not just `<para>`)
 - [ ] revision / revhistory — (missing standalone fixture; the general

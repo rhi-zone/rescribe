@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <table>
+    <title>Population by City</title>
+    <tgroup cols="2">
+      <tbody>
+        <row>
+          <entry>Sydney</entry>
+          <entry>5.3M</entry>
+        </row>
+      </tbody>
+    </tgroup>
+  </table>
+</article>

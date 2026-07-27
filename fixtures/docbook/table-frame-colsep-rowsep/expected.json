@@ -1,0 +1,11 @@
+{
+  "description": "CALS table-model frame/colsep/rowsep attributes on <informaltable> are raw-preserved verbatim",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    {
+      "path": "/0/0",
+      "kind": "table",
+      "props": { "docbook:frame": "all", "docbook:colsep": "1", "docbook:rowsep": "0" }
+    }
+  ]
+}

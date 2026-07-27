@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <informaltable frame="all" colsep="1" rowsep="0">
+    <tgroup cols="1">
+      <tbody>
+        <row>
+          <entry>Cell</entry>
+        </row>
+      </tbody>
+    </tgroup>
+  </informaltable>
+</article>

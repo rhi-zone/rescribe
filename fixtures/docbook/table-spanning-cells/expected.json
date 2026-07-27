@@ -1,0 +1,14 @@
+{
+  "description": "morerows maps to the standard rowspan property (total rows = morerows + 1); namest/nameend (column span by name) are raw-preserved since resolving them to a column count needs sibling-colspec lookup context this per-entry conversion doesn't have",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "table" },
+    { "path": "/0/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0/0", "kind": "table_cell", "props": { "rowspan": 2 } },
+    {
+      "path": "/0/0/0/1",
+      "kind": "table_cell",
+      "props": { "docbook:namest": "c1", "docbook:nameend": "c2" }
+    }
+  ]
+}
