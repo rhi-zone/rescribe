@@ -78,20 +78,97 @@ This file describes milestones, format tiers, and cross-cutting work.
   `<caption>` wrapper on round-trip, leaving a bare `<para>` — pre-existing,
   not fixed, not gating any box closed this session.
 
-- **`jats-fmt` fixture suite** — `fixtures/jats/COVERAGE.md` is still 32/106 checked
-  (checked 2026-07-27, prior session). Not touched this session per CLAUDE.md's
-  "finish one vertical before starting the next" — `docbook-fmt` was this
-  session's vertical. Pick this up next using the same pattern.
-- **`jats-fmt` `is_block_element` classifier has not had a schema-verification pass.**
-  `docbook-fmt`'s block/inline element list was checked against the live DocBook 5.1 reference
-  (docbook.org) and three misclassifications were corrected (2026-07-27). `tei-fmt`'s equivalent
-  classifier was checked against the TEI P5 Guidelines reference the same way in a later session
-  (2026-07-27): zero misclassifications found, but three missing block-level elements
-  (`objectDesc`/`supportDesc`/`titlePart`) were added — see the `is_block_element` doc comment in
-  `crates/readers/rescribe-read-tei/src/lib.rs` and `TODO.md`'s tei-fmt section for the full
-  citation trail. `jats-fmt`'s classifier was written by the same typical-usage judgment call and
-  still has not been checked against JATS's own schema references — unverified until someone does
-  that pass.
+- **`jats-fmt` fixture suite closed to 99/106** (checked 2026-07-27, this session) —
+  up from 32/106. Built on top of the classifier-verification pass below (same
+  session): `crates/formats/jats-fmt/` itself needed no changes (JATS's AST is
+  generic XML), all work landed in the AST↔IR adapter layer
+  (`crates/readers/rescribe-read-jats/src/lib.rs`,
+  `crates/writers/rescribe-write-jats/src/lib.rs`) plus 73 new fixture pairs under
+  `fixtures/jats/*/`. Added: table properties (id/lang, `ext-link-type`, spanning),
+  the inline `code`/`monospace` distinction, `xref` variants, generic-fallback
+  attribute preservation, nested-section depth tracking, `abstract` metadata
+  capture, front-matter metadata fields, adversarial-dimension fixtures,
+  back-matter structural elements, `underline-style`, and the composition/
+  pathological dimensions. Commits, newest first: `1eb2ffc14d` (stop folding
+  disp-formula label into math:source; close composition/pathological dims),
+  `c133f49562` (adversarial + back-matter + underline-style), `3f4db4a90d`
+  (front-matter metadata), `4b3b2c1604` (nested-section depth + abstract-drop
+  fix), `65245a6a12` (inline code/monospace/xref variants), `7dfacccd47` (table
+  properties + table-wrap double-wrap fix).
+
+  **Real bugs found and fixed along the way** (via parse→emit→parse round-trip
+  checks, same discovery pattern as docbook's session): (1) the `TABLE` write arm
+  always synthesized its own `<table-wrap>`, double-wrapping tables that
+  originated from a `<table-wrap>` — fixed via `jats:tag="table-wrap"` tagging
+  plus a shared `table_element()` helper. (2) block-position `SPAN` (e.g.
+  `<label>` inside `<fig>`) and the `figcaption` node kind had no `write_node`
+  arm and silently dropped their tags — fixed with dedicated arms. (3)
+  `<abstract>` was dropped entirely: its `DIV` mapping never set `jats:tag`, so
+  it missed the front-matter capture path — fixed. (4) nested `<sec>` heading
+  level was hardcoded to `2` regardless of depth (JATS reuses `<sec>` at every
+  nesting level) — fixed by threading a real depth counter. (5) `math:source`
+  for `<disp-formula>`/`<inline-formula>` absorbed the `<label>` text into the
+  math content — fixed with a `split_label()` helper.
+
+  **Left open, genuine design forks (not lookup-resolvable), 7 of 106 boxes**:
+  MathML `<math>` as an alternative to `<tex-math>` inside
+  `disp-formula`/`inline-formula` — the same math-modeling fork docbook's
+  `equation`/`inlineequation` hit, genuinely undecided; citation/reference-list
+  IR shape (`ref-list`/`ref`/`mixed-citation`/`element-citation`, 5 of the 7
+  boxes including two dependents — no dedicated bibliography IR shape attempted,
+  still raw-preserves generically, unverified with a fixture); `<alternatives>`
+  (JATS's own Tag Library page states it "is neither inherently block nor
+  inherently inline in nature... determined by context and usage" — JATS itself
+  declines to commit, so no IR classification was guessed).
+
+  **Found but NOT fixed this session** (real, disclosed, out of scope): a
+  titleless `<sec>` loses its wrapper on write — mirror of docbook's disclosed
+  section-writer gap (a DIV without a leading HEADING doesn't reassemble into
+  one shared element on emit). `generic_div` wraps bare-PCDATA children in a
+  synthetic `<p>` even for elements whose content model forbids it (e.g.
+  `<verse-line>`) — pre-existing, not gating any box closed this session.
+  `<journal-meta>` fields get spliced into a reconstructed `<article-meta>` on
+  write, losing origin-wrapper distinction — pre-existing, the flat metadata
+  namespace has no origin tracking.
+
+- **`jats-fmt` `is_block_element` classifier schema-verified against JATS 1.3**
+  (checked 2026-07-27, this session, commit `20c27d032e`) — following the same
+  pattern as `docbook-fmt` (docbook.org, three misclassifications corrected) and
+  `tei-fmt` (TEI P5 Guidelines, zero misclassifications, three missing elements
+  added). Checked every element in
+  `crates/readers/rescribe-read-jats/src/lib.rs`'s `is_block_element` against the
+  JATS 1.3 (NISO Z39.96-2019) Tag Library at jats.nlm.nih.gov, fetching each
+  element's actual page (expanded content model + "May be contained in" list)
+  rather than relying on memory. **Found and fixed**: `related-article` was
+  misclassified as block — its Tag Library page documents it as a phrase-level
+  link element (like `xref`/`ext-link`) that can appear inside `<p>`, `<italic>`,
+  `<sub>`, etc. — removed from the block list. **Added, previously missing**:
+  `speech`, `speaker`, `supplementary-material`, `block-alternatives`, all
+  confirmed block-shaped via their JATS content models. Plain `<alternatives>`
+  was deliberately left unclassified (defaults to inline) since JATS's own docs
+  decline to classify it either way (see the fixture-suite bullet above).
+  **Verified correct, no change**: nine metadata-container entries
+  (`contrib-group`/`aff`/`pub-date`/`permissions`/`history`/
+  `custom-meta-group`/`custom-meta`/`product`/`sig`/`sig-block`) plus
+  `statement`/`verse-group`/`table-wrap-group`/`tfoot`/`disp-formula-group`/
+  `kwd-group`/`ack`/`app-group`/`app`/`notes` — full citation trail in the doc
+  comment above `is_block_element`.
+- **The docbook/jats/tei extraction-and-closing arc is essentially wound down**
+  as of 2026-07-27. All three verticals have had their fixture suites deepened
+  (tei 118/118, docbook 88/94, jats 99/106) and their `is_block_element`
+  classifiers schema-verified against each format's authoritative reference,
+  with real round-trip bugs found and fixed along the way in every case. The
+  actual residue for a future session, accurately inventoried (not urgent):
+  docbook's 6 open design-fork boxes (qandaset/qandaentry, equation/
+  inlineequation MathML, programlistingco/co/calloutlist) plus its 2 disclosed
+  writer bugs (section reassembly, figure caption drop); jats's 7 open
+  design-fork boxes (MathML, citation/ref-list IR shape, alternatives) plus its
+  3 disclosed writer gaps (titleless-sec reassembly, generic_div bare-PCDATA
+  wrapping, journal-meta origin tracking); the docbook/jats fuzz campaigns still
+  only having had a ~60s validation run rather than tei's multi-hour campaign
+  (see below); and DTD-aware entity resolution across all three (see below).
+  None of these block calling any of the three verticals 3-Harness; they gate
+  5-Production only.
 - **Oracle harness not yet run for `docbook-fmt`/`jats-fmt`; applicability confirmed.**
   `pandoc --list-input-formats` (checked 2026-07-27) includes both `docbook` and `jats`, so per
   TODO.md's Tier B oracle-harness guidance ("skip for formats Pandoc can't read") the harness step
