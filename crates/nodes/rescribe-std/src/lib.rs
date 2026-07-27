@@ -55,6 +55,18 @@ pub mod node {
     pub const TABLE_BODY: &str = "table_body";
     /// Table foot section.
     pub const TABLE_FOOT: &str = "table_foot";
+    /// A bibliography / reference list container. Children are `bibliography_entry` nodes.
+    pub const BIBLIOGRAPHY: &str = "bibliography";
+    /// One citation/reference entry within a `bibliography`. Children are
+    /// `bibliography_field` nodes, and (for structural nesting cases such as
+    /// DocBook's `biblioset` or TEI's `analytic`/`monogr`/`series` levels)
+    /// nested `bibliography_entry` nodes.
+    pub const BIBLIOGRAPHY_ENTRY: &str = "bibliography_entry";
+    /// A single tagged field within a `bibliography_entry` (author, title,
+    /// publisher, etc. — see `prop::FIELD_ROLE`). Children are ordinary
+    /// inline nodes, so markup nested inside a field (e.g. an italicized
+    /// journal title) is preserved rather than flattened to a string.
+    pub const BIBLIOGRAPHY_FIELD: &str = "bibliography_field";
 
     // Inline-level nodes
     /// Plain text content (use `content` property).
@@ -144,6 +156,24 @@ pub mod prop {
     pub const COLSPAN: &str = "colspan";
     /// Row span for table cells.
     pub const ROWSPAN: &str = "rowspan";
+    /// Role of a `bibliography_field` node: one of `author`, `editor`,
+    /// `title`, `container_title`, `publisher`, `publisher_location`,
+    /// `edition`, `volume`, `issue`, `page_first`, `page_last`,
+    /// `identifier`, `misc`. Repeated fields (e.g. multiple authors) are
+    /// represented as multiple sibling `bibliography_field` nodes sharing
+    /// the same `FIELD_ROLE`, in document order.
+    pub const FIELD_ROLE: &str = "field:role";
+    /// Identifier scheme for a `bibliography_field` with `FIELD_ROLE ==
+    /// "identifier"` (e.g. `doi`, `isbn`, `issn`, `url`).
+    pub const FIELD_SCHEME: &str = "field:scheme";
+    /// Structured date on a `bibliography_entry`, as a `PropValue::Map`
+    /// with keys `year`, and optionally `month` / `day` (partial dates omit
+    /// the missing keys). Kept as a property rather than a child node
+    /// because date sub-parts are atomic, non-markup-bearing data in every
+    /// schema surveyed (DocBook/JATS/TEI/OOXML) — a structured Map lets
+    /// writers reformat per regional convention without re-parsing an
+    /// ambiguous flat string.
+    pub const DATE: &str = "date";
 
     // Style properties (presentational)
     /// Font family.
