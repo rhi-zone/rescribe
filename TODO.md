@@ -1384,3 +1384,36 @@ Fixtures: `fixtures/tei/citation-{simple-author,multi-author,markup-in-field,bib
 analytic-monogr-series,date}`. `fixtures/tei/COVERAGE.md`'s new Bibliography/citation
 section is fully checked except for the range-date modeling question above, which is
 tracked here rather than silently marked done.
+
+## DOCX (OOXML `b:` bibliography namespace) citation vertical deferred (2026-07-28)
+
+Following DocBook (`8aedfb80fa`), JATS (`060c0858d5`), and TEI (`b61994215c`), the fourth
+planned citation vertical — `b:Sources`/`b:Source` -> `bibliography`/`bibliography_entry`
+in `ooxml-wml`/`rescribe-read-docx`/`rescribe-write-docx` — was **not** implemented this
+session, per the original brief's explicit stretch-goal clause (defer if the crate isn't
+architecturally ready).
+
+Why: DocBook/JATS/TEI all share generic-XML-AST format crates where `<bibliography>`/
+`<ref-list>`/`<listBibl>` and their entry elements were already parseable-but-unhandled —
+all three verticals only needed adapter-layer work. OOXML's bibliography namespace
+(`http://schemas.openxmlformats.org/officeDocument/2006/bibliography`, ECMA-376 Part 4) is
+architecturally different: `ooxml-wml`'s `generated.rs`/`generated_parsers.rs`/
+`generated_serializers.rs` are codegenned (`build.rs`) from RELAX NG compact schemas —
+currently only `wml.rnc` plus `shared-commonSimpleTypes.rnc` are wired into that pipeline.
+The bibliography namespace has no schema file in the codegen input set at all (confirmed:
+`grep` over `build.rs` and the crate for `b:Sources`/`CTSources`/`bibliography.rnc` finds
+nothing beyond an unrelated `w:bibliography` compatibility-settings `CTEmpty` flag). Adding
+real support means sourcing/vendoring the bibliography RNC/XSD schema and extending the
+codegen input set — a schema-generation-pipeline change, not an adapter-layer fill-in —
+before any `rescribe-read-docx`/`rescribe-write-docx` work could even begin. That's a
+materially larger and differently-shaped task than the other three verticals, so per
+CLAUDE.md's "work one vertical to completion, no horizontal sweeps" and the brief's own
+deferral clause, it's left as a clearly-scoped follow-up rather than attempted partially.
+
+**Follow-up vertical, when picked up:** (1) vendor the OOXML bibliography RNC/XSD schema
+and wire it into `ooxml-wml/build.rs`'s codegen alongside `wml.rnc`; (2) map `b:Sources` ->
+`bibliography`, `b:Source` -> `bibliography_entry` with `bibliography_field` children (all
+fields are `ST_String255` — flat, no nested markup possible in this namespace, so each
+field's children will just be a single `text` node, unlike DocBook/JATS/TEI); (3) raw-
+preserve `b:Tag`/`b:SourceType` as `docx:tag`/`docx:source-type` (round-trip-critical:
+Word keys in-text citations off `b:Tag`); (4) `b:Year`/`b:Month`/`b:Day` -> `prop::DATE`.
