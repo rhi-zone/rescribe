@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <informaltable>
+    <tgroup cols="1">
+      <tbody>
+        <row>
+          <entry>This is <emphasis>emphasized</emphasis> and <emphasis role="strong">strong</emphasis>.</entry>
+        </row>
+      </tbody>
+    </tgroup>
+  </informaltable>
+</article>

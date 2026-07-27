@@ -158,14 +158,23 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 
 ## Composition (integration)
 
-- [ ] nested list — (missing; `<itemizedlist>` inside `<listitem>`)
-- [ ] table with inline formatting in cells — (missing)
-- [ ] section with admonition and code block — (missing)
-- [ ] blockquote with attribution — (missing; `<attribution>` inside `<blockquote>`)
-- [ ] figure with alt text — (missing; `<textobject>` as alt in `<mediaobject>`)
-- [ ] footnote in table cell — (missing)
-- [ ] callout listing + callout list — (missing)
-- [ ] article-level metadata (info block) — (missing; `<info>` with `<title>`, `<author>`, etc.)
+- [x] nested list — `int-nested-list` (`<itemizedlist>` inside `<listitem>`)
+- [x] table with inline formatting in cells — `int-table-inline`
+- [x] section with admonition and code block — `int-section-admonition-code`
+- [x] blockquote with attribution — `int-blockquote-attribution` (`<attribution>`
+  inside a plain `<blockquote>`, not just `<epigraph>`)
+- [x] figure with alt text — `int-figure-alt-text` (`<textobject><phrase>` inside
+  `<mediaobject>` folded into the standard `alt` property on the image node,
+  rather than left as an unrelated sibling — a real gap closed this session,
+  see rescribe-read-docbook's new "mediaobject"/"inlinemediaobject" arm)
+- [x] footnote in table cell — `int-footnote-table-cell` (also fixed a writer
+  bug found while verifying round-trip: `FOOTNOTE_DEF` embedded inline, e.g.
+  in a table cell, had no `write_inline` arm and silently lost its
+  `<footnote>` wrapper, splicing the note's text straight into the cell)
+- [ ] callout listing + callout list — (missing; left open together with `co`/
+  `programlistingco` above — same design fork, see TODO.md)
+- [x] article-level metadata (info block) — `e2e-article-metadata` (`<info>`
+  with `<title>`, `<author>`, `<pubdate>`)
 
 ## Adversarial
 

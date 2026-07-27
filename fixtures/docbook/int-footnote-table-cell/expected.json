@@ -1,0 +1,12 @@
+{
+  "description": "a <footnote> inside a table cell is preserved like any other inline content",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "table" },
+    { "path": "/0/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/0/0/1", "kind": "footnote_def" },
+    { "path": "/0/0/0/0/1/0", "kind": "paragraph" }
+  ]
+}

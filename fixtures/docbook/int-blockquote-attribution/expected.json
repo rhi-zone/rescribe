@@ -1,0 +1,11 @@
+{
+  "description": "<attribution> inside a plain <blockquote> (not just <epigraph>) names the quotation's source and is kept in place",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "blockquote" },
+    { "path": "/0/0/0", "kind": "docbook:attribution" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Ada Lovelace" } },
+    { "path": "/0/0/1", "kind": "paragraph" }
+  ]
+}

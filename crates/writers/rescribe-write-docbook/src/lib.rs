@@ -470,6 +470,18 @@ fn write_inline(node: &Node) -> Vec<DbNode> {
             None => Vec::new(),
         },
 
+        // A footnote embedded at the point of reference (e.g. inside a
+        // table cell, which writes its content via write_inline, not
+        // write_node) needs its own arm here — without it, the catch-all
+        // below would recurse straight into the footnote's block content
+        // (its <para>), silently losing the <footnote> wrapper and
+        // splicing the note's text directly into the surrounding flow.
+        node::FOOTNOTE_DEF => vec![db_element(
+            "footnote",
+            vec![],
+            node.children.iter().flat_map(write_node).collect(),
+        )],
+
         node::EMPHASIS => vec![db_element(
             "emphasis",
             vec![],

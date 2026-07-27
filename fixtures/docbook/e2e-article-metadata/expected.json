@@ -1,0 +1,13 @@
+{
+  "description": "a realistic <info> block (title, author, pubdate) all lands in document metadata, and the body content is unaffected",
+  "category": "e2e",
+  "metadata": {
+    "title": "The Full Article",
+    "author": "AdaLovelace",
+    "pubdate": "2026-01-01"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

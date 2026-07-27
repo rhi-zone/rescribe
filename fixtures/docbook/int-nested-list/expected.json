@@ -1,0 +1,12 @@
+{
+  "description": "an <itemizedlist> nested inside a <listitem> produces a nested list/list_item structure",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0/0",     "kind": "list_item" },
+    { "path": "/0/0/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/1",   "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0/0/1/0", "kind": "list_item" }
+  ]
+}

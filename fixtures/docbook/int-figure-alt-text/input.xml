@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <figure>
+    <title>A Diagram</title>
+    <mediaobject>
+      <imageobject>
+        <imagedata fileref="diagram.png"/>
+      </imageobject>
+      <textobject>
+        <phrase>A diagram showing the workflow.</phrase>
+      </textobject>
+    </mediaobject>
+  </figure>
+</article>

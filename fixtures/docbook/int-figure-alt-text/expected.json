@@ -1,0 +1,14 @@
+{
+  "description": "<textobject><phrase> inside <mediaobject> is the image's alt text (DocBook 5.2 reference) - folded into the standard alt property on the image node rather than left as an unrelated sibling",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "figure" },
+    { "path": "/0/0/0", "kind": "caption" },
+    {
+      "path": "/0/0/1",
+      "kind": "image",
+      "props": { "url": "diagram.png", "alt": "A diagram showing the workflow." }
+    }
+  ]
+}

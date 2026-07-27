@@ -1,0 +1,14 @@
+{
+  "description": "inline formatting (emphasis, strong) inside a table cell is preserved",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",       "kind": "div" },
+    { "path": "/0/0",     "kind": "table" },
+    { "path": "/0/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/0/0/1", "kind": "emphasis" },
+    { "path": "/0/0/0/0/1/0", "kind": "text", "props": { "content": "emphasized" } },
+    { "path": "/0/0/0/0/3", "kind": "strong" },
+    { "path": "/0/0/0/0/3/0", "kind": "text", "props": { "content": "strong" } }
+  ]
+}

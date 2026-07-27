@@ -572,7 +572,35 @@ fn convert_element(
 
         // Figures and media
         "figure" | "informalfigure" => Some(Node::new(node::FIGURE).children(children)),
-        "mediaobject" | "inlinemediaobject" | "imageobject" | "textobject" => None, // Pass through
+        // <imageobject>/<textobject> are pure pass-through wrappers (their
+        // own children, `<imagedata>` and alt-text content respectively,
+        // are what carry meaning). <mediaobject>/<inlinemediaobject>
+        // themselves fold their already-converted `<imageobject>` (an
+        // IMAGE node, via the `imagedata` arm) and `<textobject>` (DocBook
+        // 5.2 reference: holds a `<phrase>` or `<para>` naming the image's
+        // alt text) children into one IMAGE node with the standard `alt`
+        // property, rather than passing both through as separate flat
+        // siblings — which would leave the alt text as a stray, unrelated
+        // node next to the image instead of properly associated with it.
+        "mediaobject" | "inlinemediaobject" => {
+            let mut image = None;
+            let mut alt = String::new();
+            for child in children {
+                if image.is_none() && child.kind.as_str() == node::IMAGE {
+                    image = Some(child);
+                } else {
+                    alt.push_str(&extract_text(std::slice::from_ref(&child)));
+                }
+            }
+            image.map(|img| {
+                if alt.is_empty() {
+                    img
+                } else {
+                    img.prop(prop::ALT, alt)
+                }
+            })
+        }
+        "imageobject" | "textobject" => None, // Pass through
         "imagedata" | "graphic" => get_attr(attrs, "fileref")
             .map(|url| Node::new(node::IMAGE).prop(prop::URL, url.to_string())),
         "caption" => Some(
