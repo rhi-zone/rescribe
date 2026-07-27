@@ -1,0 +1,12 @@
+{
+  "description": "<info>/<author> has no dedicated semantic mapping — it is raw-preserved verbatim (author_raw) alongside a flattened author-name summary, exercising the general <info> front-matter fallback with no fidelity warning since the original XML round-trips",
+  "metadata": {
+    "title": "Sample",
+    "author": "AdaLovelace",
+    "author_raw": "<author>\n      <personname>\n        <firstname>Ada</firstname>\n        <surname>Lovelace</surname>\n      </personname>\n    </author>"
+  },
+  "assertions": [
+    { "path": "/0",   "kind": "div" },
+    { "path": "/0/0", "kind": "paragraph" }
+  ]
+}

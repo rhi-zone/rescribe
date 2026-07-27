@@ -1,0 +1,10 @@
+{
+  "description": "an unrecognized element name nested inline within running text (not DocBook block-level vocabulary) is raw-preserved as a tagged span in place, alongside its surrounding text",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/0/1", "kind": "span", "props": { "docbook:tag": "quote" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "surprise" } }
+  ]
+}

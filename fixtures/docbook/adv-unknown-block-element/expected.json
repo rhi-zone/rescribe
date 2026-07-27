@@ -1,0 +1,11 @@
+{
+  "description": "an unrecognized element name that DocBook's content model treats as block-level (<sidebar>, not otherwise given dedicated IR handling) is raw-preserved as a tagged div, not silently dropped with its children spliced into the parent",
+  "category": "adversarial",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    { "path": "/0/1",   "kind": "div", "props": { "docbook:tag": "sidebar" } },
+    { "path": "/0/1/0", "kind": "paragraph" },
+    { "path": "/0/2",   "kind": "paragraph" }
+  ]
+}

@@ -483,6 +483,50 @@ wrapping `quick-xml` — no rescribe dependency. `rescribe-read-docbook` and
   clean). Only a fuzz-harness bug found (duplicate attribute names on one element —
   invalid XML, fixed by suffixing generated names with their index), no library bugs.
   Initial validation only, not an exhaustive campaign — see `docs/format-audit.md`.
+- [x] **Bug found and fixed (2026-07-27)**: two silent-drop bugs closed,
+  mirroring the tei fix (same audit, applied to this vertical). (1) The
+  reader's final `_ => None` catch-all arm silently unwrapped *any*
+  unrecognized element into its parent, discarding the fact that the tag
+  ever existed with no warning. `rescribe-read-docbook` gained
+  `is_block_element(tag: &str) -> bool` (a DocBook block-level vocabulary
+  allow-list, mirroring `rescribe-read-tei`/`rescribe-read-html`) plus
+  `generic_div`/`generic_span` helpers; the catch-all now raw-preserves an
+  unrecognized element as a `docbook:tag`-tagged `div` (block-shaped) or
+  `span` (inline-shaped) instead of dropping the tag. New fixtures
+  `adv-unknown-block-element` (`<sidebar>`) and `adv-unknown-inline-element`
+  (`<quote>` nested in running text) regression-test both branches.
+  (2) `<info>`/`<articleinfo>`/`<bookinfo>` front-matter beyond `title`
+  (author, authorgroup, date, copyright, legalnotice, pubdate, releaseinfo,
+  revhistory, revision, or any other unmodeled field) was silently dropped —
+  `extract_metadata` only ever extracted `title`. `docbook-fmt` gained a
+  `Node::Raw { content, span }` AST variant plus
+  `emit_fragment(nodes: &[Node]) -> Vec<u8>` (mirroring `tei-fmt`/`html-fmt`).
+  `convert_children` now threads an `in_header: bool` through its recursion
+  (true once inside `<info>`/`<articleinfo>`/`<bookinfo>` or any descendant)
+  and, for any child not in the new `is_modeled_header_field` allow-list
+  (just `title` — the only field with dedicated semantic extraction before
+  this fix, per the current-code check this pass started from), captures
+  the whole subtree's original XML via `docbook_fmt::emit_fragment` and
+  stores it as `{tag}_raw` metadata (e.g. `author_raw`) alongside a
+  flattened `{tag}` text convenience copy — generalized directly to the
+  `{tag}_raw` naming from the start (not the two-hardcoded-names
+  intermediate step tei's own fix went through first, since docbook had no
+  prior per-field modeling to preserve compatibility with).
+  `extract_metadata` matches both `span` and `div` node kinds and skips
+  recursing into an already-raw-captured subtree's children. A repeatable
+  field (e.g. more than one `<author>`) joins its flattened text with `"; "`
+  and concatenates its raw XML (valid, since concatenated sibling XML
+  elements are themselves valid XML content) rather than a later occurrence
+  silently overwriting an earlier one. The fidelity warning path only fires
+  if raw capture genuinely fails (non-UTF8 content — not expected for XML
+  that parsed at all). `rescribe-write-docbook` now emits an `<info>`
+  wrapper (title plus any spliced-back `*_raw` fields, sorted by tag for
+  deterministic output) instead of writing a bare `<title>` only. New
+  fixture `header-author` (`<info><author>` with nested `<personname>`)
+  regression-tests the general fallback. `cargo clippy --all-targets
+  --all-features -p docbook-fmt -p rescribe-read-docbook
+  -p rescribe-write-docbook -- -D warnings` and full test/fixture suite
+  clean.
 - [ ] DTD-aware entity resolution and closing the remaining
   `fixtures/docbook/COVERAGE.md` gaps are follow-up work — out of scope for this pass per
   CLAUDE.md (Tier B target is 3-Harness, not 5-Production)

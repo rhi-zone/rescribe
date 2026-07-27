@@ -28,7 +28,8 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 - [ ] synopsis / cmdsynopsis — (missing; `<synopsis>`, `<cmdsynopsis>`)
 - [ ] procedure — (missing; `<procedure>` with `<step>`)
 - [ ] nested section — (missing; `<section>` inside `<section>`, 2+ levels deep)
-- [ ] sidebar — (missing; `<sidebar>`)
+- [x] sidebar — `adv-unknown-block-element` (unrecognized block-level element,
+  raw-preserved as a tagged `div` rather than silently dropped)
 - [ ] abstract — (missing; `<abstract>`)
 - [ ] epigraph — (missing; `<epigraph>`)
 - [ ] bridgehead — (missing; floating `<bridgehead>` not tied to a section)
@@ -62,7 +63,8 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 - [ ] systemitem / envar / prompt — (missing; system inline elements)
 - [ ] citetitle — (missing; `<citetitle>`)
 - [ ] personname — (missing; `<personname>`)
-- [ ] quote — (missing; `<quote>`)
+- [x] quote — `adv-unknown-inline-element` (unrecognized inline element,
+  raw-preserved as a tagged `span` in place rather than silently dropped)
 - [ ] phrase — (missing; `<phrase>`)
 - [ ] token — (missing; `<token>`)
 - [ ] markup — (missing; `<markup>`)
@@ -83,9 +85,15 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 - [ ] table colspec widths — (missing; `<colspec colwidth="…">`)
 - [ ] table spanning cells — (missing; `morerows`, `namest`/`nameend`)
 - [ ] xml:lang — (missing; language attribute on any element)
-- [ ] revision / revhistory — (missing; `<revhistory>` / `<revision>` in `<info>`)
-- [ ] author / orgname in info — (missing; `<author>`, `<orgname>` in `<info>`)
-- [ ] pubdate / publisher — (missing; metadata in `<info>`)
+- [ ] revision / revhistory — (missing standalone fixture; the general
+  `<info>` raw-preservation fallback that would cover it is exercised by
+  `header-author`)
+- [x] author / orgname in info — `header-author` (`<author>` has no
+  dedicated semantic mapping; raw-preserved verbatim as `author_raw`
+  metadata, alongside a flattened `author` summary — exercises the general
+  `<info>` front-matter fallback, not a hardcoded special case)
+- [ ] pubdate / publisher — (missing standalone fixture; covered by the same
+  general fallback as `header-author`)
 
 ## Composition (integration)
 
@@ -102,7 +110,10 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 
 - [x] empty document — `adv-empty`
 - [ ] malformed XML (unclosed tag) — (missing)
-- [ ] unknown DocBook element — (missing; element not in spec that reader must skip gracefully)
+- [x] unknown DocBook element — `adv-unknown-block-element` (block-shaped,
+  raw-preserved as a tagged `div`), `adv-unknown-inline-element`
+  (inline-shaped, raw-preserved as a tagged `span` in place) — neither is
+  silently dropped
 - [ ] missing required namespace declaration — (missing)
 - [ ] entity references (&amp;, &lt;, &gt;, &apos;, &quot;) — (missing)
 - [ ] numeric character references (&#160;, &#x2019;) — (missing)

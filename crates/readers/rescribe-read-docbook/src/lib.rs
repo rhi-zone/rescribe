@@ -55,7 +55,7 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
             ..
         } = top
         {
-            let converted = convert_children(kids, name, &mut metadata, &mut warnings);
+            let converted = convert_children(kids, name, false, &mut metadata, &mut warnings);
             match convert_element(name, attrs, converted.clone(), None) {
                 Some(node) => children.push(node),
                 None => {
@@ -87,9 +87,16 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
 /// discarding nodes that only exist to be unwrapped (e.g. `<info>`, which
 /// is consumed for metadata) and passing through "structural" wrapper
 /// elements (like `<tgroup>`) as their own children.
+///
+/// `in_header` is true when `parent_name` is `<info>`/`<articleinfo>`/
+/// `<bookinfo>` itself or a descendant of it (threaded down through the
+/// recursion below) — i.e. whether the *children* of `parent_name` are
+/// front-matter content that will end up consumed by [`extract_metadata`]
+/// rather than surviving as document content nodes.
 fn convert_children(
     children: &[DbNode],
     parent_name: &str,
+    in_header: bool,
     metadata: &mut Properties,
     warnings: &mut Vec<FidelityWarning>,
 ) -> Vec<Node> {
@@ -102,12 +109,42 @@ fn convert_children(
                 children: kids,
                 ..
             } => {
-                let converted_kids = convert_children(kids, name, metadata, warnings);
-                match convert_element(name, attrs, converted_kids.clone(), Some(parent_name)) {
+                let child_in_header =
+                    in_header || matches!(name.as_str(), "info" | "articleinfo" | "bookinfo");
+                let converted_kids =
+                    convert_children(kids, name, child_in_header, metadata, warnings);
+                let mut converted =
+                    convert_element(name, attrs, converted_kids.clone(), Some(parent_name));
+                // Any `<info>` descendant this reader has no explicit
+                // semantic mapping for (i.e. `convert_element` produced it
+                // via its generic catch-all rather than the dedicated
+                // `title` arm — see `is_modeled_header_field`) is about to
+                // be discarded as a tree node and flattened into metadata by
+                // `extract_metadata`. Rather than lose its internal
+                // structure (`<author>`'s personname parts, `<revhistory>`'s
+                // revision entries, or any other unmodeled front-matter
+                // element), capture the whole subtree's original XML
+                // verbatim (mirroring how `rescribe-read-tei` raw-preserves
+                // unmodeled teiHeader children via `tei_fmt::emit_fragment`)
+                // so the writer can splice it back byte-for-byte instead of
+                // reconstructing a lossy approximation from flattened text.
+                if in_header
+                    && !is_modeled_header_field(name)
+                    && let Some(node) = converted.take()
+                {
+                    let raw =
+                        String::from_utf8(docbook_fmt::emit_fragment(std::slice::from_ref(child)))
+                            .ok();
+                    converted = Some(match raw {
+                        Some(raw) => node.prop("docbook:raw", raw),
+                        None => node,
+                    });
+                }
+                match converted {
                     Some(node) => out.push(node),
                     None => {
-                        if name == "info" || name == "articleinfo" || name == "bookinfo" {
-                            extract_metadata(kids, metadata);
+                        if matches!(name.as_str(), "info" | "articleinfo" | "bookinfo") {
+                            extract_metadata(&converted_kids, metadata, warnings);
                         } else {
                             // Pass-through wrapper element (e.g. tgroup,
                             // imageobject, mediaobject): splice its already
@@ -146,6 +183,16 @@ fn convert_children(
                     format!("dropped non-content DocBook node inside <{parent_name}>"),
                 ));
             }
+            DbNode::Raw { content, .. } => {
+                // `DbNode::Raw` is never produced by `docbook_fmt::parse`
+                // itself (see its doc comment) — it only exists for
+                // downstream consumers to construct directly. This arm
+                // exists purely so the match stays exhaustive; raw-preserve
+                // the content verbatim rather than drop it if a
+                // `DocBookDoc` containing one is ever fed through this
+                // reader.
+                out.push(Node::new(node::RAW_BLOCK).prop(prop::CONTENT, content.clone()));
+            }
         }
     }
     out
@@ -156,6 +203,131 @@ fn get_attr<'a>(attrs: &'a [(String, String)], key: &str) -> Option<&'a str> {
         .iter()
         .find(|(k, _)| k == key)
         .map(|(_, v)| v.as_str())
+}
+
+/// Attach the small set of DocBook attributes worth round-tripping
+/// generically (id, role) regardless of which element carries them.
+fn attach_generic_attrs(mut node: Node, attrs: &[(String, String)]) -> Node {
+    if let Some(id) = get_attr(attrs, "id").or_else(|| get_attr(attrs, "xml:id")) {
+        node = node.prop(prop::ID, id.to_string());
+    }
+    if let Some(role) = get_attr(attrs, "role") {
+        node = node.prop("docbook:role", role.to_string());
+    }
+    node
+}
+
+/// A generic inline "wrapper" element: DocBook markup that has no dedicated
+/// IR node kind but must still round-trip losslessly. Represented as a
+/// `span` tagged with the original element name (`docbook:tag`) per the
+/// raw-preservation pattern — this is exactly what `span` exists for.
+fn generic_span(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let n = Node::new(node::SPAN)
+        .prop("docbook:tag", name.to_string())
+        .children(children);
+    attach_generic_attrs(n, attrs)
+}
+
+/// A generic block-level "wrapper" element: the block-level counterpart to
+/// [`generic_span`]. DocBook markup with no dedicated IR node kind, but
+/// whose content model is block-shaped (per [`is_block_element`]) rather
+/// than running inline text — represented as a `div` tagged with the
+/// original element name (`docbook:tag`) so the writer can re-emit the exact
+/// tag rather than `<para>`-wrapping a bare span, which would misrepresent
+/// an unrecognized block element as an inline one.
+fn generic_div(name: &str, attrs: &[(String, String)], children: Vec<Node>) -> Node {
+    let n = Node::new(node::DIV)
+        .prop("docbook:tag", name.to_string())
+        .children(children);
+    attach_generic_attrs(n, attrs)
+}
+
+/// Known DocBook block-level elements — used only by the catch-all fallback
+/// in [`convert_element`] to decide whether an element name this reader
+/// doesn't specifically recognize should become a [`generic_div`] (block
+/// position) or a [`generic_span`] (inline position); every element
+/// `convert_element` already gives dedicated handling to never reaches the
+/// catch-all, so this list exists purely to classify the *unrecognized*
+/// remainder. It deliberately includes both this reader's own recognized
+/// block vocabulary (as a cross-reference) and additional DocBook elements
+/// that are unambiguously block-shaped but have no dedicated IR mapping yet.
+pub(crate) fn is_block_element(tag: &str) -> bool {
+    matches!(
+        tag,
+        // Document / sectioning
+        "article"
+            | "book"
+            | "chapter"
+            | "part"
+            | "appendix"
+            | "preface"
+            | "colophon"
+            | "dedication"
+            | "glossary"
+            | "bibliography"
+            | "index"
+            | "section"
+            | "sect1"
+            | "sect2"
+            | "sect3"
+            | "sect4"
+            | "sect5"
+            | "simplesect"
+            | "refentry"
+            | "reference"
+            | "refsect1"
+            | "refsect2"
+            | "refsect3"
+            // Block content
+            | "para"
+            | "simpara"
+            | "formalpara"
+            | "blockquote"
+            | "epigraph"
+            | "itemizedlist"
+            | "orderedlist"
+            | "listitem"
+            | "variablelist"
+            | "varlistentry"
+            | "segmentedlist"
+            | "procedure"
+            | "step"
+            | "substeps"
+            | "programlisting"
+            | "screen"
+            | "literallayout"
+            | "synopsis"
+            | "cmdsynopsis"
+            | "funcsynopsis"
+            | "table"
+            | "informaltable"
+            | "tgroup"
+            | "thead"
+            | "tbody"
+            | "tfoot"
+            | "row"
+            | "tr"
+            | "figure"
+            | "informalfigure"
+            | "example"
+            | "informalexample"
+            | "equation"
+            | "informalequation"
+            | "mediaobject"
+            | "note"
+            | "tip"
+            | "warning"
+            | "caution"
+            | "important"
+            | "sidebar"
+            | "abstract"
+            | "qandaset"
+            | "qandaentry"
+            | "question"
+            | "answer"
+            | "task"
+            | "revhistory"
+    )
 }
 
 /// Convert one DocBook element (with its already-converted children) into a
@@ -300,8 +472,13 @@ fn convert_element(
         ),
         // Handled by the caller (`convert_children`) via `extract_metadata`.
         "info" | "articleinfo" | "bookinfo" => None,
-        "author" | "authorgroup" | "date" | "copyright" | "legalnotice" | "pubdate"
-        | "releaseinfo" | "revhistory" | "revision" => None, // Handled in extract_metadata
+        // `author`/`authorgroup`/`date`/`copyright`/`legalnotice`/`pubdate`/
+        // `releaseinfo`/`revhistory`/`revision` (and any other `<info>`
+        // child with no dedicated semantic mapping) deliberately fall
+        // through to the generic catch-all at the bottom of this match —
+        // which produces the `generic_span`/`generic_div` node
+        // `convert_children`'s `in_header` handling then raw-preserves (see
+        // `is_modeled_header_field`) — rather than being special-cased here.
         "personname" | "firstname" | "surname" | "othername" => None, // Just text extraction
 
         // Line break
@@ -323,38 +500,137 @@ fn convert_element(
             Some(node)
         }
 
-        // Default: pass through children (structural/unknown wrapper)
-        _ => None,
+        // Any other element name: this reader has no dedicated semantic
+        // mapping for it. Rather than silently dropping the tag and
+        // splicing its children straight into the parent (which is what
+        // returning `None` here does, via `convert_children`'s pass-through
+        // branch), raw-preserve it generically as a tagged div/span keyed
+        // by `docbook:tag` — block-shaped or inline-shaped depending on
+        // `is_block_element` — so `rescribe-write-docbook` can re-emit the
+        // original tag rather than losing it.
+        _ => {
+            if is_block_element(name) {
+                Some(generic_div(name, attrs, children))
+            } else {
+                Some(generic_span(name, attrs, children))
+            }
+        }
     }
 }
 
-/// Extract `<info>`/`<articleinfo>`/`<bookinfo>` metadata (currently: title).
-fn extract_metadata(nodes: &[DbNode], metadata: &mut Properties) {
+/// `<info>`/`<articleinfo>`/`<bookinfo>` fields `convert_element` gives an
+/// explicit, dedicated semantic mapping to — these are fully modeled in
+/// `Document::metadata` (via `extract_metadata`'s `HEADING` case) and so
+/// must *not* be raw-captured by `convert_children`'s front-matter handling:
+/// their content already round-trips through the semantic property it was
+/// extracted into, and wrapping them in `docbook:raw` on top would just
+/// duplicate that content.
+///
+/// Every other `<info>` child element name falls to `convert_element`'s
+/// generic catch-all (`generic_span`/`generic_div`) and gets raw-preserved
+/// instead — see `convert_children`.
+fn is_modeled_header_field(name: &str) -> bool {
+    matches!(name, "title")
+}
+
+/// Extract `<info>`/`<articleinfo>`/`<bookinfo>` metadata: title (searched
+/// for as a `HEADING`, matching how `<title>` converts anywhere else) plus
+/// every other front-matter field (author, authorgroup, date, copyright,
+/// legalnotice, pubdate, releaseinfo, revhistory, or any other unrecognized
+/// `<info>` child), each surfaced by `convert_element` as a `span`/`div`
+/// tagged with `docbook:tag` so this function can find them regardless of
+/// nesting.
+///
+/// Every field beyond `title` was raw-captured by `convert_children` — see
+/// `is_modeled_header_field` — and shows up here as a `span`/`div` carrying
+/// a `docbook:raw` prop. That subtree's original XML is stored verbatim as
+/// `{tag}_raw` metadata (plus a `{tag}` flattened-text convenience copy) so
+/// `rescribe-write-docbook` can splice it back byte-for-byte; nothing was
+/// lost, so descendants aren't recursed into separately. Only if raw
+/// capture itself failed (non-UTF8 content — the XML source was already
+/// UTF8, so this is not expected in practice) does this fall back to a
+/// flatten-to-text-plus-fidelity-warning path.
+///
+/// Multiple occurrences of a repeatable field (e.g. more than one
+/// `<author>`) are joined with `"; "` rather than the later one silently
+/// overwriting the earlier — losing all-but-the-last author would itself be
+/// a silent drop.
+fn extract_metadata(
+    nodes: &[Node],
+    metadata: &mut Properties,
+    warnings: &mut Vec<FidelityWarning>,
+) {
     for node in nodes {
-        if let DbNode::Element { name, children, .. } = node
-            && name == "title"
-        {
-            let title = extract_docbook_text(children);
+        if node.kind.as_str() == node::HEADING {
+            let title = extract_text(&node.children);
             if !title.is_empty() {
                 metadata.set("title", title);
             }
+        } else if matches!(node.kind.as_str(), node::SPAN | node::DIV)
+            && let Some(tag) = node.props.get_str("docbook:tag")
+        {
+            let text = extract_text(&node.children);
+            match tag {
+                // A `<title>` nested somewhere other than directly in
+                // `<info>` (e.g. a bibliographic title reference) —
+                // `convert_element` still maps it to `HEADING`, handled
+                // above, so there is nothing to do for a `span`/`div`-shaped
+                // "title" here; this arm only exists so the generic
+                // fallback below doesn't clobber the real title metadata.
+                "title" => {}
+                other if !text.is_empty() || node.props.get_str("docbook:raw").is_some() => {
+                    if !text.is_empty() {
+                        append_metadata(metadata, other, &text);
+                    }
+                    match node.props.get_str("docbook:raw") {
+                        // A repeatable field (e.g. more than one `<author>`)
+                        // concatenates its raw XML rather than the later
+                        // occurrence silently overwriting the earlier —
+                        // valid, since concatenated sibling XML elements are
+                        // themselves valid XML content.
+                        Some(raw) => {
+                            let key = format!("{other}_raw");
+                            match metadata.get_str(&key) {
+                                Some(existing) => {
+                                    let combined = format!("{existing}{raw}");
+                                    metadata.set(key, combined);
+                                }
+                                None => metadata.set(key, raw.to_string()),
+                            }
+                            continue;
+                        }
+                        None => warnings.push(FidelityWarning::new(
+                            Severity::Minor,
+                            WarningKind::FeatureLost(format!("docbook-info-field-{other}")),
+                            format!(
+                                "<info> <{other}> internal structure is not modeled and its \
+                                     raw XML could not be captured; only its flattened text was \
+                                     kept in metadata: {text:?}"
+                            ),
+                        )),
+                    }
+                }
+                _ => {}
+            }
         }
-        if let DbNode::Element { children, .. } = node {
-            extract_metadata(children, metadata);
-        }
+        extract_metadata(&node.children, metadata, warnings);
     }
 }
 
-fn extract_docbook_text(nodes: &[DbNode]) -> String {
-    let mut text = String::new();
-    for node in nodes {
-        match node {
-            DbNode::Text { content, .. } | DbNode::Cdata { content, .. } => text.push_str(content),
-            DbNode::Element { children, .. } => text.push_str(&extract_docbook_text(children)),
-            _ => {}
-        }
+/// Set a metadata field, joining onto any existing value with `"; "` rather
+/// than a later occurrence of a repeatable field (e.g. more than one
+/// `<author>`) silently overwriting an earlier one.
+fn append_metadata(metadata: &mut Properties, key: &str, value: &str) {
+    if value.is_empty() {
+        return;
     }
-    text
+    match metadata.get_str(key) {
+        Some(existing) => {
+            let combined = format!("{existing}; {value}");
+            metadata.set(key, combined);
+        }
+        None => metadata.set(key, value.to_string()),
+    }
 }
 
 fn extract_text(nodes: &[Node]) -> String {

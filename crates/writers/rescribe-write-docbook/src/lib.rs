@@ -32,8 +32,41 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let warnings = Vec::new();
 
     let mut root_children = Vec::new();
-    if let Some(title) = doc.metadata.get_str("title") {
-        root_children.push(db_element("title", vec![], vec![db_text(title)]));
+    // Any metadata key ending in `_raw` is a whole-subtree verbatim capture
+    // of an unmodeled `<info>` front-matter element (see
+    // `rescribe-read-docbook`'s `convert_children`/`extract_metadata` —
+    // `{tag}_raw`, e.g. `author_raw` or `revhistory_raw`). Collected once
+    // here so both the "do we even need an `<info>`" check and the
+    // splice-back loop below share one scan.
+    let mut info_raw_fields: Vec<(&str, &str)> = doc
+        .metadata
+        .iter()
+        .filter_map(|(key, _)| {
+            let tag = key.strip_suffix("_raw")?;
+            Some((tag, doc.metadata.get_str(key)?))
+        })
+        .collect();
+    info_raw_fields.sort_unstable_by_key(|(tag, _)| *tag);
+    let title = doc.metadata.get_str("title");
+    if title.is_some() || !info_raw_fields.is_empty() {
+        let mut info_children = Vec::new();
+        if let Some(title) = title {
+            info_children.push(db_element("title", vec![], vec![db_text(title)]));
+        }
+        // Splice back every raw-captured `<info>` subtree byte-for-byte
+        // (see `rescribe-read-docbook`'s `convert_children`/
+        // `extract_metadata` — any `{tag}_raw` metadata field, e.g.
+        // `author_raw` or `revhistory_raw`). This is lossless where
+        // reconstructing the element from its flattened text would not be;
+        // sorted by tag for deterministic output since `Properties`
+        // iterates in unspecified order.
+        for (_, raw) in &info_raw_fields {
+            info_children.push(DbNode::Raw {
+                content: (*raw).to_string(),
+                span: docbook_fmt::Span::NONE,
+            });
+        }
+        root_children.push(db_element("info", vec![], info_children));
     }
     for child in &doc.content.children {
         root_children.extend(write_node(child));
@@ -81,11 +114,41 @@ fn db_text(content: impl Into<String>) -> DbNode {
     }
 }
 
+/// Build the generic `id`/`role` attributes for a node, if the IR node
+/// carries the corresponding raw-preserved properties (see
+/// `rescribe-read-docbook`'s `attach_generic_attrs` for the reader side of
+/// this round trip).
+fn generic_attrs(node: &Node) -> Vec<(String, String)> {
+    let mut attrs = Vec::new();
+    if let Some(id) = node.props.get_str(prop::ID) {
+        attrs.push(("id".to_string(), id.to_string()));
+    }
+    if let Some(role) = node.props.get_str("docbook:role") {
+        attrs.push(("role".to_string(), role.to_string()));
+    }
+    attrs
+}
+
 /// Convert one rescribe IR (block-level) node into zero or more DocBook AST
 /// nodes.
 fn write_node(node: &Node) -> Vec<DbNode> {
     match node.kind.as_str() {
-        node::DOCUMENT | node::DIV => node.children.iter().flat_map(write_node).collect(),
+        node::DOCUMENT => node.children.iter().flat_map(write_node).collect(),
+
+        // A `div` tagged `docbook:tag` is a `generic_div` (an unrecognized
+        // block-level element raw-preserved by the reader's catch-all, see
+        // `rescribe-read-docbook::generic_div`) — re-emit its original tag
+        // name. Any other `div` (article/book/chapter/section/etc, which
+        // the reader unwraps regardless of the writer re-wrapping them)
+        // just flattens into its children, same as `DOCUMENT`.
+        node::DIV => match node.props.get_str("docbook:tag") {
+            Some(tag) => vec![db_element(
+                tag,
+                generic_attrs(node),
+                node.children.iter().flat_map(write_node).collect(),
+            )],
+            None => node.children.iter().flat_map(write_node).collect(),
+        },
 
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1);
@@ -334,6 +397,19 @@ fn write_inline(node: &Node) -> Vec<DbNode> {
                 name: name.to_string(),
                 span: docbook_fmt::Span::NONE,
             }],
+            None => node.children.iter().flat_map(write_inline).collect(),
+        },
+
+        // A `span` tagged `docbook:tag` is a `generic_span` (an
+        // unrecognized inline-level element raw-preserved by the reader's
+        // catch-all, see `rescribe-read-docbook::generic_span`) — re-emit
+        // its original tag name.
+        node::SPAN => match node.props.get_str("docbook:tag") {
+            Some(tag) => vec![db_element(
+                tag,
+                generic_attrs(node),
+                node.children.iter().flat_map(write_inline).collect(),
+            )],
             None => node.children.iter().flat_map(write_inline).collect(),
         },
 
