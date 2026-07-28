@@ -2,14 +2,16 @@
 
 ## Status
 
-Accepted (2026-07-28); amended twice the same day. The first amendment corrected a factual
-error in decision 3 and replaced the single-slice rule with a two-field model (normative vs.
-pragmatic slices). The second amendment resolves open questions 2 and 4: it adds content
-models to the registry schema (`registry_version` 2 → 3) and replaces
+Accepted (2026-07-28); amended three times the same day. The first amendment corrected a
+factual error in decision 3 and replaced the single-slice rule with a two-field model
+(normative vs. pragmatic slices). The second amendment resolves open questions 2 and 4: it
+adds content models to the registry schema (`registry_version` 2 → 3) and replaces
 `SourceKind::HandCurated` with `SourceKind::ScriptedExtraction`. Both are implemented in the
 JATS pilot (`jats-fmt`'s `registry` / `registry-derive` features) in the same commit range the
-second amendment lands in. Rollout to DocBook, TEI, and the OOXML migration is planned but not
-done — see `TODO.md`.
+second amendment lands in. The third amendment resolves open question 5 — the OOXML
+slice/Cargo-feature collapse rule — with OR-of-all, implemented in `ooxml-codegen`. Rollout to
+DocBook, TEI, and the OOXML migration (onto the registry design itself, as opposed to this
+narrower codegen fix) is planned but not done — see `TODO.md`.
 
 ## Amendment 1 (2026-07-28): decision 3 misstated OOXML's prior art, and the rule it produced was wrong
 
@@ -295,6 +297,108 @@ reproducible-vs-not, and a schema was only ever one way to be reproducible.
 any other schema-less format) should use — that is rollout work for the format in question,
 tracked in `TODO.md`, not a design decision this ADR needs to make in the abstract.
 
+## Amendment 3 (2026-07-28): OOXML's slice/Cargo-feature collapse rule is OR-of-all
+
+Open question 5 (from Amendment 1) asked how a construct's multiple `pragmatic_slices`
+memberships collapse into the single `#[cfg]` predicate a Cargo feature requires, once
+ooxml's tags are recognized as `pragmatic_slices` rather than a violation to fix. Four
+options were on the table: intersection, first-tag (the pre-existing silent behavior),
+OR-of-all, or a hard requirement that multi-tagged constructs name their gate explicitly.
+This amendment is scoped narrower than Amendments 1 and 2: it does not touch the registry
+*design* (this ADR's two-field model, content models, or `ScriptedExtraction`) — ooxml has
+not yet migrated onto the registry at all (that migration is still `TODO.md` rollout item 3).
+It answers only the collapse-rule question Amendment 1 explicitly deferred, applied directly
+to `ooxml-codegen`'s existing `FeatureMappings`/`primary_feature` mechanism as it stands today.
+
+**The decision: OR-of-all.** A construct tagged with several slices — e.g. `Worksheet.drawingHF:
+[drawings, layout]` — is gated `#[cfg(any(feature = "sml-drawings", feature = "sml-layout"))]`,
+so the construct compiles in when *any one* of its tagged slices is enabled. Rust's `any(...)`
+predicate accepts arbitrarily many terms and nests without restriction, so this scales to
+constructs tagged with three or more slices (verified: `wml` has no 3+-tag cases today, but
+`ooxml-codegen`'s implementation does not special-case the two-tag case — the same code path
+handles any tag count).
+
+**Rationale.** Most permissive, fewest surprises: enabling a slice is expected to get a
+consumer everything tagged with it, and OR-of-all is the only one of the four options that
+honors that expectation for *every* tag on a multi-tagged construct, not just whichever the
+data lists first. It also requires no change to `spec/ooxml-features.yaml` itself — the
+existing tag lists, unmodified, already express exactly the membership OR-of-all needs.
+
+**Rejected alternatives:**
+
+- **First-tag (the status quo being fixed).** This is not a design choice, it is the bug: a
+  construct's non-first tags become permanently inert with no diagnostic anywhere. A consumer
+  enabling `sml-layout` alone would never get `drawingHF`, even though the data says it should,
+  and nothing would tell them why. Rejected as the thing this amendment exists to stop doing.
+- **Intersection** (gate on *all* tags being enabled simultaneously, i.e. `#[cfg(all(...))]`).
+  Rejected: this is the least permissive option and the most surprising in the failure
+  direction opposite to first-tag — enabling `sml-drawings` alone would silently exclude
+  `drawingHF` too, because `sml-layout` isn't *also* on. A consumer who reads
+  "`drawingHF` is tagged drawings" and enables exactly that feature would still not get the
+  construct, for a reason nothing surfaces. Strictly worse than first-tag for discoverability,
+  while being no more precise about scope than OR-of-all in the cases that actually matter.
+- **Hard requirement to name an explicit gate per multi-tagged construct** (reject the
+  multi-tag data as under-specified and force `spec/ooxml-features.yaml` to carry a single
+  disambiguating tag per construct, in addition to its descriptive slice list). Rejected:
+  this is the most principled option in the abstract — it never has to average across
+  conflicting consumer expectations — but it demands the human curator make ~76 individual
+  calls (the count of non-core multi-tagged constructs found in the current data) about which
+  single slice should "win" the gate for each one, values judgments no more informed than
+  "OR-of-all" already makes uniformly, and it would have blocked this fix from landing at all
+  until that curation pass was done. The cost OR-of-all accepts instead — a consumer enabling
+  one slice may pull in constructs they'd consider out of scope of *that* slice alone, because
+  the construct is also tagged with something else — was judged worth it against a curation
+  project neither requested nor already underway.
+
+**Cost accepted.** Enabling a single slice can pull in constructs a consumer might not expect
+under that slice's name alone (`sml-layout` alone now also compiles in `Worksheet.drawingHF`,
+which is arguably as much a drawings construct as a layout one). This is the accepted
+trade-off, not an oversight: it was weighed against silent omission (first-tag) and judged
+better, per the rationale above.
+
+**Implementation shape**, since this is a Rust-code fix rather than a schema change:
+`FeatureMappings::primary_feature` (returned `Option<&str>`, the first non-core tag) is
+replaced by `FeatureMappings::feature_gates` (returns `Option<Vec<&str>>`, every non-core
+tag). A new `cfg_predicate(module, gates) -> String` helper, shared by `codegen.rs`,
+`parser_gen.rs`, and `serializer_gen.rs` (the only three modules that previously called
+`primary_feature`), builds `feature = "mod-tag"` for a single gate or `any(feature = "mod-tag1",
+feature = "mod-tag2", ...)` for several — this is the only place the OR-of-all rule is encoded,
+so all three codegen passes (struct fields, parser variables/match-arms/struct-literal-builds,
+serializer attribute/child/emptiness checks) stay in lockstep by construction rather than by
+convention. A struct field's own generated `#[cfg]` and the parser/serializer code that
+declares, matches, and builds that same field must agree, or a partial-feature build fails to
+compile (a struct-literal initializer omitting a field the struct itself requires, or a
+`match` arm for an element the struct can't hold) — verified in practice: building `ooxml-sml`
+with `--features sml-layout` alone (excluding `sml-drawings`) now correctly compiles `drawingHF`
+in, where it previously would have compiled it in when `sml-drawings` was the enabled feature
+regardless of `sml-layout`'s state, and vice versa, an inversion of the tags' stated meaning.
+
+**Guard against silent recurrence.** The root failure that motivated this whole amendment was
+silence — a tag disappearing with no signal — not the specific choice of collapse rule. Unit
+tests in `ooxml-codegen` (`codegen.rs`'s `tests` module) pin `feature_gates` and `cfg_predicate`
+against multi-tag inputs, asserting every tag survives into the emitted predicate; an
+integration test (`ooxml-codegen/tests/multi_tag_feature_gates.rs`) runs the real
+`spec/ooxml-features.yaml` + `spec/sml.rnc` through the full `generate()`/`generate_parsers()`
+pipeline and asserts the real `Worksheet.drawingHF` construct's generated code contains the
+`any(...)` predicate verbatim — so a future edit that reverts to keeping only `tags.first()`
+fails these tests rather than silently shipping.
+
+**Hand-written (non-generated) consumer code must stay in sync.** `ooxml-{sml,wml,pml,dml}`'s
+hand-written adapter files (`writer.rs`, `workbook.rs`, `ext.rs`, and similar) construct and
+read the generated structs directly, and some carry their own copy of a field's `#[cfg]` gate
+(e.g. to conditionally set a struct-literal field). These copies must match the generated
+struct's actual gate exactly, or a partial-feature build fails with a missing/unknown-field
+error — this is not a new problem this amendment introduces, but multi-tagged fields' gates
+widening from a single feature to an OR of several makes any pre-existing hand-written
+single-feature copy of that gate wrong where it previously happened to agree. There is no
+compile-time link between a hand-written `#[cfg]` and the codegen's `cfg_predicate` output for
+the same field; keeping them in sync today is a matter of grep-and-fix at edit time, checked by
+building each crate under a narrow feature set that isolates one tag of a multi-tagged pair
+from the others. A structural fix (e.g. a codegen-emitted constant or macro hand-written code
+could reference instead of retyping the predicate) is not built here — flagged as a possible
+follow-up in `TODO.md` rather than solved speculatively, since no second instance of the
+problem existed to generalize from.
+
 ## Context
 
 Every format vertical's completion claim rests on a ratio: "101/117 constructs covered."
@@ -557,15 +661,10 @@ Genuine forks, recorded rather than decided unilaterally:
    children and attributes, flattened, no ordering/choice/grouping structure) are now in the
    registry. See Amendment 2, Decision A.
 
-5. **OOXML's slice/Cargo-feature collapse rule.** *(New, from Amendment 1.)*
-   Once ooxml's tags become `pragmatic_slices`, a construct can still legitimately belong to
-   several of them (`drawingHF: [drawings, layout]`), but a Cargo feature gate is a single
-   `#[cfg]` predicate per field. Today `primary_feature` silently keeps only the first tag and
-   drops the rest with no diagnostic. The two-field model settles *which list* the tags live
-   in but not *how a multi-membership list becomes one gate* — intersection, first-tag
-   (today's silent behavior), OR-of-all, or a hard requirement that multi-tagged constructs
-   name their gate explicitly. This needs a human call before or during the ooxml migration
-   (`TODO.md` rollout item 3); it is not decided here.
+5. ~~**OOXML's slice/Cargo-feature collapse rule.**~~ **Resolved by Amendment 3**: OR-of-all —
+   a construct tagged with several pragmatic slices is gated on the disjunction of every tag,
+   not just the first. See Amendment 3 for the decision, rejected alternatives, and
+   implementation shape.
 
 6. **A full, validation-capable content-model representation.** *(New, from Amendment 2.)*
    Amendment 2's flattened `children`/`attributes`/`mixed` shape answers "what can this

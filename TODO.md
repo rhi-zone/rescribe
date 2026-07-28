@@ -229,16 +229,34 @@ and not being retracted — only the construct-list-completeness component of it
        needed. The *real* namespace/part decomposition (21 namespace schemas, ~59 parts)
        remains available as a separate, future `normative_slices` source if someone does
        that derivation work — it is not required for this migration to land.
-     - **Still needs a decision, unresolved by the amendment:** ooxml's tags conflate a
-       slice with a Cargo feature gate. `primary_feature` silently uses only the first tag,
-       so `drawingHF: [drawings, layout]` gates on `sml-drawings` and `layout` is inert with
-       no diagnostic. The amendment settles *which list* the tags belong in
-       (`pragmatic_slices`, since a Cargo feature is unambiguously our own build concern)
-       but not how a construct's multiple pragmatic-slice memberships collapse into the one
-       `#[cfg]` predicate a Cargo feature requires — intersection, first-tag (today's
-       silent behavior), OR-of-all, or requiring multi-tagged constructs to name their gate
-       explicitly. ADR 0013 open question 5 (as amended) restates this; it needs a human
-       call before or during this migration.
+     - **Resolved (2026-07-28, ADR 0013 Amendment 3): the slice/Cargo-feature collapse rule
+       is OR-of-all.** `primary_feature` (which silently kept only the first tag, so
+       `drawingHF: [drawings, layout]` gated on `sml-drawings` alone and `layout` was inert
+       with no diagnostic) is replaced by `FeatureMappings::feature_gates` (returns every
+       non-core tag) plus a shared `cfg_predicate` helper used identically by
+       `codegen.rs`/`parser_gen.rs`/`serializer_gen.rs`: a construct now gates on
+       `#[cfg(any(feature = "sml-drawings", feature = "sml-layout"))]` — enabling *either*
+       slice includes it. 76 non-core constructs across `sml`/`wml`/`pml`/`dml` were
+       multi-tagged (the blast radius of the original bug); all four crates' committed
+       `generated.rs`/`generated_parsers.rs`/`generated_serializers.rs` were regenerated
+       against the checked-out ECMA-376 schemas (present in this working tree) and now carry
+       the OR'd predicates. Guarded against recurrence by unit tests in `ooxml-codegen`
+       (`codegen.rs`'s `tests` module) and an integration test
+       (`ooxml-codegen/tests/multi_tag_feature_gates.rs`) that runs the real spec files
+       through the full pipeline and asserts the real `Worksheet.drawingHF` construct's
+       generated code contains the `any(...)` predicate verbatim. Verified under partial
+       feature sets (e.g. `cargo build -p ooxml-sml --no-default-features --features
+       sml-layout,...` now correctly compiles in `drawingHF` without `sml-drawings`
+       enabled). **Follow-up, not yet done**: hand-written (non-generated) adapter files in
+       each crate (`writer.rs`, `workbook.rs`, `ext.rs`, etc.) that construct or read these
+       same struct fields carry their own copied `#[cfg]` gates, which must be updated to
+       match the widened OR predicate wherever they reference a multi-tagged field, or
+       partial-feature builds fail with missing/unknown-field errors — there is no
+       compile-time link between a hand-written `#[cfg]` and the codegen's `cfg_predicate`
+       output for the same field, so this is a grep-and-fix sweep per crate, not a design
+       question. See ADR 0013 Amendment 3's closing note for the exact mechanism gap; a
+       structural fix (codegen-emitted constant/macro hand-written code could reference) is
+       a possible future improvement, not built here.
      - **Licensing constrains the construct list and any future normative-slice citation,
        not the pragmatic tags.** No copyright or license statement was found in the
        ECMA-376 schema files or in Parts 1/2 (ADR 0013 open question 3). Treat as
