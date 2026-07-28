@@ -36,6 +36,39 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [ ] alternatives — (missing; `<alternatives>` container for math/graphic variants —
   genuine design fork, see TODO.md: JATS's own Tag Library page says it "is neither
   inherently block nor inherently inline")
+- [ ] horizontal rule — (missing-and-unhandled; `<hr>` — rescribe-std already
+  defines `horizontal_rule` (`crates/nodes/rescribe-std/src/lib.rs:39`) but the
+  JATS reader has no arm for it and it is absent from `is_block_element`, so
+  it falls through as an inline span rather than a block. Full-schema audit
+  vs. jats.nlm.nih.gov's 1.3 archiving alpha-index, see TODO.md)
+- [ ] sub-article / response — (missing-and-unhandled; `<sub-article>`/
+  `<response>` — whole nested front/body/back substructures; absent from
+  `is_block_element`, so they default to an inline `generic_span` wrapping a
+  block subtree — the most structurally risky gap found in the audit, needs
+  investigation before adding a fixture. Full-schema audit, see TODO.md)
+- [ ] ruby annotation — (missing-and-unhandled; `<ruby>`/`<rb>`/`<rt>`/`<rp>` —
+  no rescribe-std node kind exists for ruby text; raw preservation via the
+  generic catch-all is the only path today. Full-schema audit, see TODO.md)
+- [ ] question-and-answer set — (missing-and-unhandled; `<question-wrap-group>`
+  / `<question-wrap>` / `<question>` / `<question-preamble>` / `<answer>` /
+  `<answer-set>` / `<explanation>`. Full-schema audit, see TODO.md)
+- [ ] chemical structure — (missing-and-unhandled; `<chem-struct>` /
+  `<chem-struct-wrap>`. Full-schema audit, see TODO.md)
+- [ ] array (untagged tabular data) — (missing-and-unhandled; `<array>`.
+  Full-schema audit, see TODO.md)
+- [ ] index term — (missing-and-unhandled; `<index-term>` /
+  `<index-term-range-end>`. Full-schema audit, see TODO.md)
+- [ ] media / accessibility description — (missing-and-unhandled; `<media>` /
+  `<inline-media>` / `<long-desc>` / `<alt-text>` / `<textual-form>`.
+  Full-schema audit, see TODO.md)
+- [ ] appendix — (missing-but-handled; `<app-group>`/`<app>`, already
+  `is_block_element`-classified and fixture-tested at `fixtures/jats/appendix`
+  — bookkeeping gap only, not enumerated by element name. Full-schema audit,
+  see TODO.md)
+- [ ] signature block — (missing-but-handled; `<sig-block>`/`<sig>`,
+  `is_block_element`-classified, no fixture. Full-schema audit, see TODO.md)
+- [ ] custom-meta-group / product / kwd-group — (missing-but-handled;
+  `is_block_element`-classified, no fixture. Full-schema audit, see TODO.md)
 
 ## Inline constructs
 
@@ -66,6 +99,11 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] inline-supplementary-material — `inline-supplementary-material`
 - [x] milestone-start / milestone-end — `milestone`
 - [x] target (anchor) — `target-anchor`
+- [ ] open-access license statements — (missing-and-unhandled;
+  `<ali:free_to_read>` / `<ali:license_ref>`. Full-schema audit, see TODO.md)
+- [ ] private character / glyph — (missing-and-unhandled; `<private-char>` /
+  `<glyph-ref>` / `<glyph-data>` / `<fixed-case>`. Full-schema audit, see
+  TODO.md)
 
 ## Metadata (front matter)
 
@@ -86,6 +124,46 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] permissions / license — `permissions-license`
 - [x] funding-group — `funding-group`
 - [x] history (received/accepted dates) — `history`
+- [ ] contrib name subfields — (missing-but-handled; one level inside
+  `<name>`/`<contrib>` via the generic raw-preserve fallback: `<given-names>`/
+  `<surname>`/`<prefix>`/`<suffix>`/`<degrees>`/`<role>`/`<email>`/`<phone>`/
+  `<fax>`/`<bio>`/`<author-notes>`/`<author-comment>`/`<corresp>`/
+  `<on-behalf-of>`/`<etal>`/`<anonymous>`/`<aff-alternatives>`/`<contrib-id>` —
+  no dedicated fixture. Full-schema audit, see TODO.md)
+- [ ] journal identification — (missing-but-handled; `<journal-id>`/
+  `<journal-title-group>`/`<journal-title>`/`<journal-subtitle>`/
+  `<abbrev-journal-title>`/`<issn>`/`<issn-l>`/`<isbn>`/`<publisher>` —
+  raw-preserved via the `<journal-meta>` fallback, no fixture. Full-schema
+  audit, see TODO.md)
+- [ ] funding/awards detail — (missing-but-handled; `<funding-source>`/
+  `<funding-statement>`/`<award-group>`/`<award-id>`/`<award-name>`/
+  `<award-desc>`/`<principal-award-recipient>`/`<principal-investigator>` —
+  raw-preserved via the `<article-meta>` fallback beyond the already-covered
+  `funding-group`, no fixture. Full-schema audit, see TODO.md)
+- [ ] conference metadata — (missing-but-handled; `<conference>`/
+  `<conf-name>`/`<conf-acronym>`/`<conf-loc>`/`<conf-date>`/`<conf-num>`/
+  `<conf-sponsor>`/`<conf-theme>`. Full-schema audit, see TODO.md)
+- [ ] keyword structure — (missing-but-handled; `<compound-kwd>`/
+  `<compound-kwd-part>`/`<nested-kwd>`/`<unstructured-kwd-group>` — `<kwd>`/
+  `<kwd-group>` already covered by `keywords`. Full-schema audit, see
+  TODO.md)
+- [ ] article/journal counts — (missing-but-handled; `<word-count>`/
+  `<fig-count>`/`<table-count>`/`<equation-count>`/`<ref-count>`/
+  `<page-count>`, wrapped in `<counts>`. Full-schema audit, see TODO.md)
+- [ ] article categorization / related links — (missing-but-handled;
+  `<article-categories>`/`<subj-group>`/`<subject>`/`<compound-subject>`/
+  `<related-article>`/`<related-object>`/`<self-uri>`/`<product>`/
+  `<supplement>`. Full-schema audit, see TODO.md)
+- [ ] copyright detail — (missing-but-handled; `<copyright-statement>`/
+  `<copyright-year>`/`<copyright-holder>`/`<license-p>` — under the
+  already-covered `permissions-license`. Full-schema audit, see TODO.md)
+- [ ] custom metadata fields — (missing-but-handled; `<meta-name>`/
+  `<meta-value>` inside the already-covered `<custom-meta>`/
+  `<custom-meta-group>`. Full-schema audit, see TODO.md)
+- [ ] volume/issue detail — (missing-but-handled; `<volume-id>`/
+  `<volume-series>`/`<volume-issue-group>`/`<issue-id>`/`<issue-part>`/
+  `<issue-sponsor>`/`<issue-subtitle>`/`<issue-title>`/`<issue-title-group>`.
+  Full-schema audit, see TODO.md)
 
 ## Back matter
 
@@ -126,6 +204,10 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
   `math:format="mathml"`, following the precedent already established for HTML's
   `<math>` handling; previously mis-classified as a genuine design fork — see TODO.md's
   "MathML resolved" entry)
+- [ ] table sub-elements — (missing-but-handled; `<col>`/`<colgroup>` covered
+  by `table-colgroup`; `<tr>`/`<td>`/`<th>`/`<thead>`/`<tbody>`/`<tfoot>`
+  covered by `table-sections`; `<table-wrap-foot>` is `is_block_element`-
+  classified but has no fixture. Full-schema audit, see TODO.md)
 
 ## Composition (integration)
 

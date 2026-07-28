@@ -258,6 +258,78 @@ This file describes milestones, format tiers, and cross-cutting work.
   deliberate, disclosed scope boundary (no network/filesystem access from this crate),
   not a bug; such entities still raw-preserve losslessly exactly as before.
 
+- **DocBook and JATS `COVERAGE.md` audited against the full format schema element
+  lists (2026-07-28)** — prompted by the observation that both checklists' denominators
+  had grown ad hoc during this session (docbook 94→105, jats 106→109) purely from gaps
+  noticed incidentally, with no evidence either was complete against the actual spec.
+  Two parallel research agents fetched the authoritative element indexes and diffed
+  them against every element name mentioned anywhere in the corresponding COVERAGE.md
+  (checked or not), then triaged each miss against the reader/writer source.
+
+  **DocBook**: authoritative list fetched from `https://tdg.docbook.org/tdg/5.2/ref-elements.html`
+  (~390 elements; the separate Assembly profile — `assembly`/`resource`/`structure` — was
+  excluded as a distinct DocBook 5.1+ profile, not core narrative markup). 265 raw element
+  names were absent from COVERAGE.md's text; collapsed by construct family (not enumerated
+  1:1, since many are narrow phrase-level elements already covered losslessly by the
+  generic-span/div catch-all) into **16 new unchecked lines** (12 block-construct family
+  lines + 4 inline-construct family lines). Two are genuine code gaps, not just checklist
+  gaps: (1) `<book>`/`<chapter>`/`<part>`/`<appendix>` and the `sectN`/`simplesect` family
+  map to a bare `DIV` with no `docbook:tag`, so on round-trip they collapse into
+  heading-level-inferred nesting with the specific element identity lost — broader than
+  the already-disclosed nested-section writer bug, same root cause; (2) `<glossentry>`,
+  `<indexentry>`/`<indexdiv>`, `<refnamediv>`/`<refsynopsisdiv>`/`<refmeta>`, and
+  `<entrytbl>` are block-shaped in the real content model but absent from
+  `is_block_element`, so they're misclassified as inline spans by the catch-all — a real
+  fidelity risk, not just an unenumerated element. No stale/invented entries found in
+  DocBook's COVERAGE.md. **Corrected honest ratio: 101/117** (was reported as 101/105).
+
+  **JATS**: authoritative list fetched from
+  `https://jats.nlm.nih.gov/archiving/tag-library/1.3/alpha-index/alpha-index.html`
+  (~306 elements). 216 element names absent from COVERAGE.md's text, collapsed into
+  **25 new unchecked lines**. Unlike DocBook, `rescribe-read-jats`'s `convert_element` has
+  a truly universal catch-all (verified no destructive `=> None` arm exists outside pure
+  pass-through wrappers), so most misses are bookkeeping gaps, not data loss — but ~12
+  elements are genuinely unhandled beyond even the catch-all's shape-classification:
+  `<hr>` (rescribe-std already defines `horizontal_rule` but no reader arm exists and it's
+  absent from `is_block_element`, so it misclassifies as inline), `<sub-article>`/
+  `<response>` (whole nested front/body/back substructures defaulting to an inline span
+  wrapping a block subtree — the riskiest single gap found), the ruby annotation family
+  (`ruby`/`rb`/`rt`/`rp`, no rescribe-std node kind exists for it at all), the Q&A family,
+  `chem-struct`, `array`, `index-term`, the `media`/`alt-text` accessibility family, and
+  the `ali:` open-access-license namespace. No stale/invented entries found in JATS's
+  COVERAGE.md. **Corrected honest ratio: 108/133** (was reported as 108/109).
+
+  **JATS tag-set target — confirmed never an explicit decision.** JATS defines three tag
+  sets (Archiving/"green" — broadest; Publishing/"blue"; Authoring/"orange" — narrowest),
+  and "100% coverage" means a different denominator depending which is the target.
+  COVERAGE.md's header cites the Archiving tag library URL, and every prior session's
+  schema-verification pass (the `is_block_element` audit, MathML resolution) also fetched
+  pages under `/archiving/tag-library/1.3/...` — but nowhere in TODO.md or the crate
+  source is there a sentence that actually chose Archiving over Publishing/Authoring. It's
+  an inherited default from whoever first pasted that URL into COVERAGE.md's header, not a
+  reasoned choice. This audit used Archiving as the working target since that's what's
+  consistently cited, but the choice itself remains undocumented as a decision.
+
+  **What the checkmarks actually mean, re: `fixtures/spec.md`'s six test dimensions
+  (Happy path / Integration / End-to-end / Rare / Adversarial / Pathological)**: per-format,
+  the spec's bar is "all six dimensions have meaningful coverage for all constructs," but
+  in practice a `[x]` in the Block/Inline/Metadata/Properties sections of either
+  COVERAGE.md means only that **one happy-path fixture demonstrates recognition** — the
+  Adversarial and Pathological dimensions are covered *globally* (a handful of fixtures at
+  the bottom of the file, e.g. `adv-empty`, `path-large-table`) rather than per-construct,
+  and Integration/e2e is likewise a handful of composition fixtures touching a few
+  constructs each, not full cross-product coverage. So a checked box asserts "this
+  construct round-trips in isolation," not "this construct has been tested against all six
+  dimensions" — a materially weaker claim than the ratio implies at face value. This gap
+  between what the ratio suggests and what it actually verifies is itself worth tracking,
+  independent of the denominator-completeness issue this entry addresses.
+
+  **Scope note**: per the audit's brief, this was audit-only — the deliverable is the
+  corrected enumeration (36 new unchecked boxes total across both files), not
+  implementations. The two genuine-code-gap findings above (DocBook's book/chapter/part/
+  appendix tag loss and block-misclassification; JATS's `<hr>`/`<sub-article>` gaps) are
+  the highest-priority items if this audit becomes follow-up implementation work.
+
 ---
 
 ## Near-term mode of working: finish one vertical before starting the next

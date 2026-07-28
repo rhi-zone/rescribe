@@ -59,6 +59,61 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   dedicated mapping attempted this session, still raw-preserved generically
   via `generic_div`/`generic_span` per the catch-all, but not verified with a
   fixture; a real Q&A-list IR mapping is a design choice, see TODO.md)
+- [ ] document division elements (book/chapter/part/appendix) — (missing;
+  `<book>`, `<chapter>`, `<part>`, `<appendix>` — genuine code gap, not just a
+  checklist gap: the reader maps these to a bare `DIV` with no `docbook:tag`,
+  unlike every other recognized element; the writer's `DIV` arm only re-emits
+  a tag when `docbook:tag` is present, so on round-trip these collapse into
+  plain nested sections inferred purely from heading level — the specific
+  element identity is lost, not just re-nested; same root cause as the
+  disclosed nested-section writer bug above but broader in scope; see
+  `rescribe-read-docbook::convert_element`'s `"article" | "book" | "chapter"
+  | "part" | "appendix"` arm. Full-schema audit, see TODO.md)
+- [ ] front-matter/back-matter division elements — (missing;
+  `<preface>`, `<colophon>`, `<dedication>`, `<glossary>`, `<index>` —
+  missing-but-handled: raw-preserved via the generic-div catch-all
+  (`docbook:tag` round-trips correctly), just not enumerated or
+  fixture-tested. Full-schema audit, see TODO.md)
+- [ ] reference/refentry structure — (missing; `<reference>`, `<refentry>`,
+  `<refsect1>`/`<refsect2>`/`<refsect3>` — container handled via the
+  generic-div catch-all (bookkeeping gap); their child elements
+  `<refnamediv>`, `<refname>`, `<refpurpose>`, `<refsynopsisdiv>`,
+  `<refmeta>`, `<refmiscinfo>`, `<refentrytitle>`, `<refclass>`,
+  `<refdescriptor>` are genuinely unhandled — absent from `is_block_element`
+  entirely, so a `<refnamediv>`/`<refsynopsisdiv>`/`<refmeta>` (block-shaped
+  in the real content model) is misclassified as an inline span by the
+  catch-all, a real fidelity risk beyond simple non-enumeration. Full-schema
+  audit, see TODO.md)
+- [ ] glossary entry structure — (missing; `<glossentry>`, `<glossterm>`,
+  `<glossdef>`, `<glossdiv>`, `<glosslist>`, `<glosssee>`, `<glossseealso>` —
+  genuinely unhandled: none appear in `rescribe-read-docbook` at all, and
+  absent from `is_block_element` so `<glossentry>` (block-shaped: a
+  term+definition pair) is misclassified as an inline span by the catch-all.
+  Full-schema audit, see TODO.md)
+- [ ] index structure — (missing; `<indexterm>`, `<indexentry>`, `<indexdiv>`,
+  `<primary>`/`<secondary>`/`<tertiary>`, `<see>`/`<seealso>` — genuinely
+  unhandled: none appear in `rescribe-read-docbook`; `<indexentry>`/
+  `<indexdiv>` are block-shaped and misclassified as inline by the catch-all
+  the same way as glossentry above. Full-schema audit, see TODO.md)
+- [ ] Q&A sub-structure — (missing; `<qandadiv>`, `<question>`, `<answer>` —
+  handled via the generic-div catch-all like `qandaset` above; same open
+  design question, not a separate gap. Full-schema audit, see TODO.md)
+- [ ] entry table (nested table in a cell) — (missing; `<entrytbl>`,
+  `<colgroup>`, `<col>`, `<spanspec>` — genuinely unhandled: none appear in
+  the reader; absent from `is_block_element`, so `<entrytbl>` — a table
+  nested inside a table cell — is misclassified as inline text rather than
+  raw-preserved as a block. Full-schema audit, see TODO.md)
+- [ ] programming-language synopsis family — (missing; `<classsynopsis>`,
+  `<fieldsynopsis>`, `<methodsynopsis>`, `<constructorsynopsis>`,
+  `<destructorsynopsis>`, `<enumsynopsis>`/`<enumitem>`/`<enumvalue>`,
+  `<typedefsynopsis>`, `<funcdef>`/`<funcparams>`/`<paramdef>`/`<void>`/
+  `<varargs>`/`<initializer>`/`<modifier>` — `<funcsynopsis>` itself is
+  recognized in `is_block_element` and raw-preserved as a tagged div via the
+  catch-all, but its structured children are not in `is_block_element` and
+  fall through as inline spans nested inside — text content survives but the
+  fine-grained structure (which span is `<funcdef>` vs `<funcparams>`) is
+  flattened to untagged spans; narrow API-reference-doc constructs, lower
+  priority. Full-schema audit, see TODO.md)
 - [x] equation (display math) — `equation-mathml`, `equation-mathphrase`
   (`<equation>` / `<informalequation>` map to `math_display`, per the DocBook 5.2
   content model's three mutually-exclusive alternatives — `<mml:math>` MathML
@@ -117,6 +172,27 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   maps to `math_inline`; same content-model handling as `equation` above, using
   `<inlinemediaobject>` in place of `<mediaobject>` for the image alternative —
   see TODO.md's "MathML resolved" entry)
+- [ ] indexterm / primary / secondary / tertiary / see / seealso — (missing;
+  genuinely unhandled — see the index-structure entry under Block constructs;
+  not modeled, falls through the generic-span catch-all. Full-schema audit,
+  see TODO.md)
+- [ ] person/org detail phrases — (missing; `<honorific>`, `<lineage>`,
+  `<jobtitle>`, `<email>` — no dedicated mapping; `personname`'s explicit
+  child-element allowlist (`firstname`/`surname`/`othername`) doesn't include
+  them, so they fall to the outer generic-span catch-all rather than being
+  text-extracted like their siblings. Full-schema audit, see TODO.md)
+- [ ] technical/UI phrase elements — (missing; `<menuchoice>`, `<shortcut>`,
+  `<mousebutton>`, `<keycode>`, `<keysym>`, `<remark>`, `<firstterm>`,
+  `<foreignphrase>`, `<wordasword>`, `<database>`, `<hardware>`,
+  `<application>`, `<productname>`, `<productnumber>` — all raw-preserved
+  correctly via the generic-span catch-all (`adv-unknown-inline-element`
+  already exercises this fallback path generically); no code gap, lower
+  priority, listed here for enumeration completeness. Full-schema audit, see
+  TODO.md)
+- [ ] keyword / keywordset / subjectset / subjectterm — (missing; document
+  classification metadata, no dedicated mapping, falls to the generic-span/
+  div catch-all depending on position; narrow, low priority. Full-schema
+  audit, see TODO.md)
 - [x] footnoteref — `footnoteref` (`<footnoteref linkend="…">`, mapped to the
   standard `footnote_ref` node with `linkend` as the standard `label` property)
 - [ ] co (callout reference) — (missing; `<co>` — left open together with the
