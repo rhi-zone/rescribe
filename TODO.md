@@ -2114,12 +2114,15 @@ here. Headlines only:
   documented justification (HTML5 tree construction can rearrange already-seen
   nodes) so it is not counted as a violation.
 - **`events()` derived from `parse()`+walk** (ADR 0003 violation) in 14 crates:
-  `bbcode-fmt`, `dokuwiki`, `tikiwiki` (all three via `unsafe { transmute }` to fake
-  a borrowed lifetime — a soundness smell on top of the perf one), `creole`,
-  `fountain-fmt`, `haddock-fmt`, `jira-fmt`, `man-fmt` (`Box::leak` — an actual
-  permanent memory leak per call), `markua` (doc comment claims independence, code
+  `bbcode-fmt`, `dokuwiki`, `tikiwiki`, `creole`, `fountain-fmt`, `haddock-fmt`,
+  `jira-fmt`, `man-fmt`, `markua` (doc comment claims independence, code
   contradicts it), `mediawiki-fmt`, `muse-fmt`, `pod-fmt` (dead `unreachable!()`
-  stub), `odf-fmt`, `texinfo`, `textile-fmt`, `t2t`.
+  stub), `odf-fmt`, `texinfo`, `textile-fmt`, `t2t`. **This architectural gap is
+  still open for all 14** — none of them has a genuine standalone incremental
+  parser at the free-function `events(input)` entry point; see the dedicated
+  memory-safety fix below for the subset where this also caused a real
+  soundness bug or a leak (now fixed, but the derived-from-`parse()` shape
+  itself is unchanged).
 - **No feature-declared-but-module-missing cases found** — every declared streaming
   feature has some code behind it everywhere. But real `#[cfg(feature = ...)]`
   gating of `mod events`/`batch`/`writer` exists only in `commonmark-fmt` and
@@ -2133,6 +2136,70 @@ here. Headlines only:
   completion" (CLAUDE.md), the next streaming-fix vertical should be chosen from this
   list rather than swept horizontally; `ooxml-wml` is highest-priority by consequence,
   the wiki/small-format Tier-1 group is highest-count by breadth.
+
+#### FIXED (2026-07-29): the memory-safety/leak subset of the `events()` audit
+
+Of the 14 `events()`-derived-from-`parse()` crates above, 4 were flagged as
+memory-safety or leak issues (not just architecture/perf) and were fixed in a
+follow-up pass — each was first independently re-verified against the actual
+code before changing anything, since the original audit's mechanism claims
+were not all accurate as stated:
+
+- **`dokuwiki`** — **confirmed genuinely unsound.**
+  `events::InputEventIter::new` took `&doc` where `doc` was a local `DokuwikiDoc`,
+  built an `EventIter<'_>` borrowing it, `transmute`d that iterator to
+  `EventIter<'static>`, and *then* moved `doc` into the returned struct — so the
+  transmuted reference could be left dangling relative to the doc's post-move
+  location. Fixed (Option B — sound but still derived): `InputEventIter::new`
+  now walks the doc with the already-sound `EventIter<'a>` (borrows a real
+  `&'a DokuwikiDoc`, O(depth), unaffected) and eagerly collects into an owned
+  `Vec<OwnedEvent>` before returning, all within one function scope — no
+  self-reference, no `unsafe`. `crates/formats/dokuwiki/src/events.rs`.
+- **`man-fmt`** — **confirmed genuine leak, not UB.** `events::events()` used
+  `Box::leak(Box::new(doc))` to manufacture a `'static` reference for
+  `EventIter::new`, permanently leaking one `ManDoc` (and its scratch Vec) on
+  every call — safe Rust, but a real unbounded resource leak. Fixed the same
+  way as dokuwiki: eager collection into an owned `Vec` inside the function so
+  `doc` drops normally. `crates/formats/man-fmt/src/events.rs`.
+- **`bbcode-fmt`** — **audit's characterization was wrong for `events()` itself.**
+  `events()` has no `unsafe` and is not self-referential — every event it
+  builds is already `Cow::Owned`, so the `'a` on the returned `EventIter<'a>`
+  was vacuous (nothing actually borrows the input). The real (and only)
+  `unsafe` was in `Event::into_owned()`'s catch-all arm, transmuting
+  `Event<'a>` to `Event<'static>` for variants known (by elimination) to hold
+  no `'a` data — currently sound given the current variant set, but a latent
+  hazard: a future `Cow`-bearing variant added without updating that arm would
+  silently mis-convert instead of failing to compile. Replaced the catch-all
+  with an exhaustive explicit match. `crates/formats/bbcode-fmt/src/events.rs`.
+- **`tikiwiki`** — **checked and found sound, but pointless.**
+  `EventIter::new` used `unsafe { transmute::<Event<'static>, Event<'a>> }` —
+  widening a `'static` lifetime to any `'a` cannot dangle, so this was never
+  UB, just unnecessary lifetime laundering (every pushed event already owns
+  its data). Removed by making `emit_block`/`emit_inlines` generic over the
+  output lifetime and building `Vec<Event<'a>>` directly.
+  `crates/formats/tikiwiki/src/events.rs`.
+
+All four crates now have `#![deny(unsafe_code)]` at the crate root (man-fmt's
+test-only `GlobalAlloc` harness carries a narrowly-scoped
+`#[allow(unsafe_code)]`), and each has a regression test:
+`man-fmt::events::tests::test_events_no_per_call_leak` is an allocation-growth
+guard (modeled on rst-fmt's `test_writer_no_subtree_reconstruction_blowup`)
+verified to fail against the reintroduced `Box::leak` code (662KB net growth
+over 200 calls vs. a 50KB bound); `dokuwiki`/`tikiwiki` have iterator-churn
+tests exercising many short-lived borrowing iterators dropped out of creation
+order; `bbcode-fmt` has an exhaustive `into_owned()` round-trip test across
+every event family. `cargo miri` was not available in the dev shell (no
+`rustup`, `cargo miri` not otherwise installed) — not run; soundness was
+verified by code inspection and reliance on the borrow checker instead.
+
+**Still open for all four** (unchanged by this fix, tracked above): the
+`events(input: &str)` free function in each crate is still a parse-then-walk
+convenience wrapper, not a genuine streaming parser — ADR 0003 non-compliant.
+The already-sound `EventIter::new(&doc)` two-step path (parse yourself, then
+walk) is the closest thing to real O(depth) streaming available in
+`dokuwiki`/`man-fmt`/`tikiwiki`/`bbcode-fmt` today; a true single-call
+streaming rewrite (Option A, rst-fmt-style) was judged out of scope for this
+memory-safety pass per "scope discipline: fix minimally, fence the rest."
 
 ### `org-fmt` — API modes complete (2026-03-23)
 

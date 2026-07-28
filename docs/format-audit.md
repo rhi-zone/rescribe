@@ -414,17 +414,59 @@ parenting/adoption agency — matching html5ever's own architecture), so it is n
 counted as a violation.
 
 **`events()` derived from `parse()`+walk** (the ADR 0003 violation) in: `bbcode-fmt`,
-`dokuwiki`, `tikiwiki` (all three additionally use `unsafe { transmute }` to fake a
-borrowed lifetime over a fully-materialized `Vec` — a soundness smell layered on the
-performance one), `creole`, `fountain-fmt`, `haddock-fmt`, `jira-fmt` (its own
-`EagerEventIter` name self-admits it), `man-fmt` (`Box::leak` — an actual permanent
-memory leak per call, worse than the others), `markua` (doc comment claims "the
+`dokuwiki`, `tikiwiki`, `creole`, `fountain-fmt`, `haddock-fmt`, `jira-fmt` (its own
+`EagerEventIter` name self-admits it), `man-fmt`, `markua` (doc comment claims "the
 parser IS the iterator" while `EventIter::new` calls `p.parse()` immediately —
 contradicts itself), `mediawiki-fmt`, `muse-fmt`, `pod-fmt` (dead `unreachable!()`
 stub in its own internal `events()` helper), `odf-fmt` (pre-drains into a
 `VecDeque` before returning — O(full event stream), same effective cost as
 materializing the AST despite its module doc's claim otherwise), `texinfo`,
-`textile-fmt`, `t2t`.
+`textile-fmt`, `t2t`. This is still an open architectural gap for all of these —
+none of them are a genuine standalone incremental parser at the free-function
+`events(input)` entry point.
+
+**Memory-safety/leak subset fixed 2026-07-29** (verified and corrected in a
+follow-up pass; the underlying "derived from `parse()`" architecture gap above
+is *not* resolved by this fix and remains tracked in TODO.md):
+- `dokuwiki` — `events::InputEventIter` previously used `unsafe { transmute }` to
+  build a self-referential struct around a locally-parsed `DokuwikiDoc`; the
+  reference was taken *before* the doc was moved into the returned struct, so it
+  could dangle. This was genuinely unsound, not just a performance smell. Fixed
+  by eagerly collecting into an owned `Vec<OwnedEvent>` inside `new()` (no
+  self-reference, no `unsafe`); `events::EventIter` (the real O(depth) walker
+  over a caller-supplied `&DokuwikiDoc`) was already sound and is unchanged.
+- `man-fmt` — `events::events()` used `Box::leak` to manufacture a `'static`
+  reference to the parsed `ManDoc`, permanently leaking one `ManDoc` per call.
+  This was a genuine memory leak (safe Rust, but a real resource leak), not UB.
+  Fixed the same way as `dokuwiki`: eager collection into an owned `Vec` inside
+  the function, so the parsed doc is dropped normally. `events::EventIter`
+  (O(depth) walker over a caller-supplied `&ManDoc`) was already sound.
+- `bbcode-fmt` — on inspection, `events()` itself had no `unsafe` and was not
+  self-referential (every event it builds is already `Cow::Owned`, so the `'a`
+  lifetime on the returned `EventIter<'a>` was vacuous). The one `unsafe {
+  transmute }` was in `Event::into_owned()`'s catch-all arm converting
+  lifetime-free variants — currently sound (transmuting `Event<'a>` to
+  `Event<'static>` is safe when the matched variant provably holds no `'a` data)
+  but fragile: a future `Cow`-bearing variant added without updating that arm
+  would silently mis-convert. Replaced the catch-all with an exhaustive
+  explicit match so this is a compile error instead of a latent hazard.
+- `tikiwiki` — the `unsafe { transmute::<Event<'static>, Event<'a>> }` in
+  `EventIter::new` was checked and found to be actually sound (widening a
+  `'static` lifetime to any `'a` cannot dangle), just unnecessary — all pushed
+  events already own their data. Removed by making `emit_block`/`emit_inlines`
+  generic over the output lifetime directly.
+
+All four crates now carry `#![deny(unsafe_code)]` at the crate root (with a
+narrowly-scoped `#[allow(unsafe_code)]` on man-fmt's test-only `GlobalAlloc`
+harness), each has a regression test targeting its specific issue
+(`man-fmt::events::tests::test_events_no_per_call_leak` is an allocation-growth
+guard verified to fail against the old `Box::leak` code; `dokuwiki`/`tikiwiki`
+have iterator-lifetime-churn tests; `bbcode-fmt` has an exhaustive
+`into_owned()` round-trip test), and full workspace `cargo test`/`cargo clippy
+-D warnings` pass. `cargo miri` was not available in the dev shell (no
+`rustup`, and `cargo miri` isn't otherwise installed), so the dokuwiki fix
+was verified by code inspection and the borrow checker rather than by an
+actual Miri run.
 
 **Feature-declared-but-missing modules: none found** — every declared
 `reader-streaming`/`reader-batch`/`writer-streaming` feature has some code behind it
