@@ -2,7 +2,10 @@
 //!
 //! Generates strict CommonMark output (no extensions) from rescribe's document IR.
 
-use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
+use rescribe_core::{
+    ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
+    WarningKind,
+};
 use rescribe_std::{node, prop};
 
 /// Emit a document to CommonMark.
@@ -15,9 +18,76 @@ pub fn emit_with_options(
     doc: &Document,
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
-    let mut output = String::new();
+    let mut warnings = Vec::new();
+    let frontmatter = emit_frontmatter(doc, &mut warnings);
+    let mut output = frontmatter;
     emit_nodes(&doc.content.children, &mut output, 0);
-    Ok(ConversionResult::ok(output.into_bytes()))
+    Ok(ConversionResult::with_warnings(
+        output.into_bytes(),
+        warnings,
+    ))
+}
+
+/// Emit `doc.metadata` as YAML front matter. See the equivalent function in
+/// `rescribe-write-markdown` for the flat-emission caveat (nested dot-notation
+/// keys are not reconstructed into nested YAML).
+fn emit_frontmatter(doc: &Document, warnings: &mut Vec<FidelityWarning>) -> String {
+    if doc.metadata.is_empty() {
+        return String::new();
+    }
+    let mut keys: Vec<&String> = doc.metadata.iter().map(|(k, _)| k).collect();
+    keys.sort();
+    let mut out = String::from("---\n");
+    for key in keys {
+        let Some(value) = doc.metadata.get(key) else {
+            continue;
+        };
+        match yaml_scalar(value) {
+            Some(s) => {
+                out.push_str(key);
+                out.push_str(": ");
+                out.push_str(&s);
+                out.push('\n');
+            }
+            None => warnings.push(FidelityWarning::new(
+                Severity::Minor,
+                WarningKind::FeatureLost("frontmatter_nested_value".to_string()),
+                format!(
+                    "metadata key {key:?} has a List/Map value; the CommonMark writer only \
+                     emits flat scalar frontmatter values"
+                ),
+            )),
+        }
+    }
+    out.push_str("---\n\n");
+    out
+}
+
+fn yaml_scalar(value: &rescribe_core::PropValue) -> Option<String> {
+    use rescribe_core::PropValue;
+    match value {
+        PropValue::String(s) => Some(yaml_scalar_string(s)),
+        PropValue::Int(i) => Some(i.to_string()),
+        PropValue::Float(f) => Some(f.to_string()),
+        PropValue::Bool(b) => Some(b.to_string()),
+        PropValue::List(_) | PropValue::Map(_) => None,
+    }
+}
+
+fn yaml_scalar_string(s: &str) -> String {
+    let needs_quoting = s.is_empty()
+        || s.contains(": ")
+        || s.contains('#')
+        || matches!(s.trim(), "true" | "false" | "null" | "~")
+        || s.parse::<f64>().is_ok()
+        || s.starts_with([
+            '-', '*', '&', '!', '|', '>', '\'', '"', '%', '@', '`', '[', '{',
+        ]);
+    if needs_quoting {
+        format!("{:?}", s)
+    } else {
+        s.to_string()
+    }
 }
 
 fn emit_nodes(nodes: &[Node], output: &mut String, indent: usize) {
@@ -86,6 +156,9 @@ fn emit_node(node: &Node, output: &mut String, indent: usize) {
                         item_num += 1;
                     } else {
                         output.push_str("- ");
+                    }
+                    if let Some(checked) = child.props.get_bool(prop::CHECKED) {
+                        output.push_str(if checked { "[x] " } else { "[ ] " });
                     }
 
                     for (i, item_child) in child.children.iter().enumerate() {

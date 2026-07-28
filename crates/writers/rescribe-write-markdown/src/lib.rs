@@ -25,11 +25,85 @@ pub fn emit_with_options(
     // Emit children of the root document node
     emit_nodes(&doc.content.children, &mut ctx);
 
-    let output = ctx.output.trim_end().to_string() + "\n";
+    let body = ctx.output.trim_end().to_string() + "\n";
+    let frontmatter = emit_frontmatter(doc, &mut ctx.warnings);
+    let output = frontmatter + &body;
     Ok(ConversionResult::with_warnings(
         output.into_bytes(),
         ctx.warnings,
     ))
+}
+
+/// Emit `doc.metadata` as a YAML front-matter block (`---\n...\n---\n\n`), if
+/// any metadata is present.
+///
+/// This is a **flat** emitter: each metadata key is written as a top-level
+/// `key: value` line, without reconstructing the dot-notation
+/// (`author.name`) back into nested YAML mappings the reader would flatten
+/// on the way back in. Round-tripping deeply nested frontmatter is therefore
+/// lossy in this direction; see TODO.md.
+fn emit_frontmatter(doc: &Document, warnings: &mut Vec<FidelityWarning>) -> String {
+    if doc.metadata.is_empty() {
+        return String::new();
+    }
+    let mut keys: Vec<&String> = doc.metadata.iter().map(|(k, _)| k).collect();
+    keys.sort();
+    let mut out = String::from("---\n");
+    for key in keys {
+        let Some(value) = doc.metadata.get(key) else {
+            continue;
+        };
+        match yaml_scalar(value) {
+            Some(s) => {
+                out.push_str(key);
+                out.push_str(": ");
+                out.push_str(&s);
+                out.push('\n');
+            }
+            None => {
+                warnings.push(FidelityWarning::new(
+                    Severity::Minor,
+                    WarningKind::FeatureLost("frontmatter_nested_value".to_string()),
+                    format!(
+                        "metadata key {key:?} has a List/Map value; the markdown writer only \
+                         emits flat scalar frontmatter values"
+                    ),
+                ));
+            }
+        }
+    }
+    out.push_str("---\n\n");
+    out
+}
+
+fn yaml_scalar(value: &rescribe_core::PropValue) -> Option<String> {
+    use rescribe_core::PropValue;
+    match value {
+        PropValue::String(s) => Some(yaml_scalar_string(s)),
+        PropValue::Int(i) => Some(i.to_string()),
+        PropValue::Float(f) => Some(f.to_string()),
+        PropValue::Bool(b) => Some(b.to_string()),
+        PropValue::List(_) | PropValue::Map(_) => None,
+    }
+}
+
+/// Quote a YAML scalar string only when necessary (contains `:`, starts with
+/// a YAML-significant character, etc.) — otherwise emit it bare for
+/// readability.
+fn yaml_scalar_string(s: &str) -> String {
+    let needs_quoting = s.is_empty()
+        || s.contains(": ")
+        || s.contains('#')
+        || matches!(s.trim(), "true" | "false" | "null" | "~")
+        || s.parse::<f64>().is_ok()
+        || s.starts_with([
+            '-', '*', '&', '!', '|', '>', '\'', '"', '%', '@', '`', '[', '{',
+        ]);
+    if needs_quoting {
+        format!("{:?}", s)
+    } else {
+        s.to_string()
+    }
 }
 
 /// Emit context for tracking state during emission.
@@ -287,10 +361,10 @@ fn emit_list_item_content(node: &Node, ctx: &mut EmitContext) {
     if ctx.in_tight_list {
         // Tight list item — children may be either a single paragraph (old
         // loose-reader output) or inline nodes directly (tight-reader output).
-        let is_single_para = node.children.len() == 1
-            && node.children[0].kind.as_str() == node::PARAGRAPH;
-        let is_all_inline = !node.children.is_empty()
-            && node.children.iter().all(|c| !is_block_node(c));
+        let is_single_para =
+            node.children.len() == 1 && node.children[0].kind.as_str() == node::PARAGRAPH;
+        let is_all_inline =
+            !node.children.is_empty() && node.children.iter().all(|c| !is_block_node(c));
         if is_single_para {
             emit_nodes(&node.children[0].children, ctx);
             ctx.newline();
@@ -719,6 +793,20 @@ mod tests {
         let output = emit_str(&doc);
         assert!(output.contains("- item 1"));
         assert!(output.contains("- item 2"));
+    }
+
+    #[test]
+    fn test_emit_frontmatter_roundtrips_through_default_reader() {
+        let mut doc = markdown(|d| d.para(|i| i.text("body")));
+        doc.metadata.set("title", "My Doc");
+        let output = emit_str(&doc);
+        assert!(
+            output.starts_with("---\ntitle: My Doc\n---\n\n"),
+            "got: {output:?}"
+        );
+
+        let parsed = rescribe_read_markdown::parse(&output).unwrap().value;
+        assert_eq!(parsed.metadata.get_str("title"), Some("My Doc"));
     }
 }
 
