@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-07-28).
+Accepted.
 
 ## Context
 
@@ -11,10 +11,10 @@ subset of what pulldown-cmark can parse: paragraphs, headings, code blocks, bloc
 lists, emphasis/strong, links/images, HTML — plus GFM strikethrough, which was turned on
 unconditionally via `Options::ENABLE_STRIKETHROUGH` with no feature gate at all.
 
-Six pulldown-cmark extension families were unimplemented: YAML/TOML front matter, GFM
-tables, GFM task lists, GFM (bare-URL) autolinks, footnotes, definition lists, and math.
-Because the crate's Cargo features (`reader-ast`, `reader-streaming`, `reader-batch`,
-`writer-streaming`, `writer-builder`) only gate *API modes*, not *constructs*, and because
+Several pulldown-cmark extension families were unimplemented: YAML/TOML front matter, GFM
+tables, GFM task lists, footnotes, definition lists, and math. Because the crate's Cargo
+features (`reader-ast`, `reader-streaming`, `reader-batch`, `writer-streaming`,
+`writer-builder`) only gate *API modes*, not *constructs*, and because
 `rescribe-read-markdown`'s default backend used this crate without enabling any construct
 beyond strikethrough, real input hit a specific failure mode worse than "unsupported":
 YAML front matter (`---\ntitle: X\n---`) parsed as a `ThematicBreak` followed by a setext
@@ -48,39 +48,55 @@ a spec claim.
 
 ## Decision
 
-Every construct beyond bare CommonMark is gated behind its own Cargo feature, off by
-default: `tables`, `task-lists`, `strikethrough`, `frontmatter`, `footnotes`,
+Every implemented construct beyond bare CommonMark is gated behind its own Cargo feature, off
+by default: `tables`, `task-lists`, `strikethrough`, `frontmatter`, `footnotes`,
 `definition-lists`, `math`. `strikethrough` — previously unconditional — is now gated like
-every other extension; this is a breaking change for any existing consumer relying on the
-old always-on behavior, but consistency was judged more valuable than backward
-compatibility for a crate still at `0.1.0`.
+every other extension; this is a breaking change for any existing consumer relying on the old
+always-on behavior, but consistency was judged more valuable than backward compatibility for a
+crate still at `0.1.0`.
 
-Two umbrella aliases exist purely as Cargo feature composition (`feature = [...]` lists,
-no independent code path):
-- `gfm = ["tables", "task-lists", "strikethrough"]` — the GitHub Flavored Markdown spec's
-  own construct list (tables, task lists, strikethrough). See the autolinks note below for
-  why autolinks are *not* in this list.
+Two umbrella aliases exist purely as Cargo feature composition (`feature = [...]` lists, no
+independent code path):
+- `gfm = ["tables", "task-lists", "strikethrough"]` — the GitHub Flavored Markdown spec's own
+  construct list (tables, task lists, strikethrough). See the autolinks note below for why
+  autolinks are *not* in this list.
 - `extensions = ["gfm", "frontmatter", "footnotes", "definition-lists", "math"]` — every
-  construct feature.
+  construct feature this crate currently defines (see "Not yet covered" below for extensions
+  pulldown-cmark itself exposes that have no feature at all yet).
 
 Plain CommonMark (`commonmark-fmt` with only the API-mode features, i.e. `--no-default-features
 --features reader-ast,reader-streaming,reader-batch,writer-streaming,writer-builder`, or
 equivalently the *default* feature set with no construct features added) now round-trips
-`~~text~~`, `| a | b |`, `---\nfoo\n---`, etc. as literal spec-CommonMark text — no
-extension syntax is recognized — matching the crate's name.
+`~~text~~`, `| a | b |`, `---\nfoo\n---`, etc. as literal spec-CommonMark text — no extension
+syntax is recognized — matching the crate's name.
 
 ### Autolinks — a discovered gap, not a feature
 
-The GFM spec defines bare-URL autolinking (`https://example.com` linkified without
-`<...>`) as an extension. Angle-bracket autolinks (`<https://example.com>`) are core
-CommonMark and were already unconditionally supported (pulldown-cmark parses `Tag::Link`
-with `LinkType::Autolink` regardless of `Options`). Investigating pulldown-cmark 0.13.1's
-`Options` bitflags directly (`grep ENABLE_GFM` across the vendored source) found that
-`Options::ENABLE_GFM` gates only GitHub-style blockquote alert tags (`[!NOTE]` etc.) — bare-URL
-autolinking is not implemented in pulldown-cmark 0.13 as a togglable Option at all. There is
+The GFM spec defines bare-URL autolinking (`https://example.com` linkified without `<...>`)
+as an extension. Angle-bracket autolinks (`<https://example.com>`) are core CommonMark and
+were already unconditionally supported (pulldown-cmark parses `Tag::Link` with
+`LinkType::Autolink` regardless of `Options`). Investigating pulldown-cmark 0.13.1's `Options`
+bitflags directly (`Options::ENABLE_GFM`'s doc comment and its one use site in
+`firstpass.rs:231`, both read in the vendored source) found that `Options::ENABLE_GFM` gates
+only GitHub-style blockquote alert tags (`[!NOTE]` etc., surfaced as `BlockQuoteKind`) — bare-URL
+autolinking is not implemented in pulldown-cmark 0.13 as a togglable `Option` at all. There is
 therefore no Cargo feature for "autolinks" in this crate: adding one would be adding a knob
 that does nothing, which is worse than not adding it. This is tracked as a real, disclosed
 gap in TODO.md, not silently worked around.
+
+### Not yet covered: six more pulldown-cmark 0.13 options with no feature at all
+
+Beyond the seven features this crate defines, pulldown-cmark 0.13.1's `Options` bitflags
+(`src/lib.rs:651-735`) include six more real, independently-togglable extensions this crate
+does not gate, wire up, or even reserve a feature name for: `ENABLE_SMART_PUNCTUATION`,
+`ENABLE_HEADING_ATTRIBUTES`, `ENABLE_DEFINITION_LIST` (this crate's own `definition-lists`
+feature is a reserved, currently-inert name — see Consequences — not yet wired to this flag),
+`ENABLE_SUPERSCRIPT`, `ENABLE_SUBSCRIPT`, `ENABLE_WIKILINKS`, plus `ENABLE_OLD_FOOTNOTES` as an
+alternate footnote syntax alongside `ENABLE_FOOTNOTES`. None of these currently have a Cargo
+feature, reserved or otherwise. This is a real gap in this crate's extension coverage, not
+implied by "every construct is gated" language elsewhere in this ADR — that phrasing means
+every construct this crate *implements* is gated, not that this crate covers every extension
+pulldown-cmark exposes.
 
 ### Feature independence and interaction risk
 
@@ -88,16 +104,9 @@ Each construct feature only toggles its own `pulldown_cmark::Options` bit (see
 `options.rs::build_options`) and its own AST variant / event variant / emit arm. They were
 verified to compile and pass their own tests individually
 (`cargo test -p commonmark-fmt --no-default-features --features reader-ast,reader-streaming,
-reader-batch,writer-streaming,writer-builder,<one-feature>` for each of the seven).
-Exhaustive pairwise/combination testing was **not** done — only the "all off" (plain
-CommonMark), "each one alone", and "all on" (`--all-features`) points in the combination
-space are verified. One real interaction was found during pulldown-cmark source
-investigation (not guessed): `Options::ENABLE_GFM` — irrelevant to any construct feature in
-this crate as shipped, since it's only used for blockquote alert tags — also affects
-footnote reference *kind* internally in pulldown-cmark's firstpass parser
-(`firstpass.rs:231`). Since neither `footnotes` nor any autolinks feature exists yet, this
-interaction is inert today; it must be re-examined before `footnotes` support is added if
-that implementation ever turns on `ENABLE_GFM`.
+reader-batch,writer-streaming,writer-builder,<one-feature>` for each). Exhaustive
+pairwise/combination testing was **not** done — only the "all off" (plain CommonMark), "each
+one alone", and "all on" (`--all-features`) points in the combination space are verified.
 
 ## Consequences
 
@@ -106,10 +115,21 @@ that implementation ever turns on `ENABLE_GFM`.
   own `Cargo.toml` — they now depend on `features = ["frontmatter", "tables", "task-lists",
   "strikethrough"]` rather than getting strikethrough for free and everything else never.
 - `commonmark-fmt`'s own test suite must be run with `--all-features` to exercise every
-  construct; a plain `cargo test -p commonmark-fmt` (default features) only exercises the
-  spec-CommonMark core plus the five API-mode paths.
+  construct this crate implements; a plain `cargo test -p commonmark-fmt` (default features)
+  only exercises the spec-CommonMark core plus the five API-mode paths. `--all-features` still
+  does not exercise smart punctuation, heading attributes, superscript, subscript, or
+  wikilinks, since no feature wires those up yet.
 - `footnotes`, `definition-lists`, and `math` are declared as empty (inert) Cargo features
   today — reserved names, no `Options` bit wired up yet, no AST variant. This is
   intentional: the feature names are settled so downstream `Cargo.toml` files depending on
   `commonmark-fmt` can request them now and get real behavior later without a breaking
-  rename. See TODO.md for the tracked implementation gap.
+  rename. See TODO.md for the tracked implementation gap, and for the separate, only
+  just-discovered gap of the six pulldown-cmark options with no reserved feature name at all.
+
+## Alternatives considered
+
+- **All constructs on by default**: rejected, breaks the crate's name-implied spec-compliance
+  contract (see "The naming problem" above).
+- **One `extensions` feature bundling everything, off by default**: rejected as too coarse — a
+  caller who wants only tables would still compile and reason about footnotes/math/definition
+  lists.

@@ -2,705 +2,316 @@
 
 ## Status
 
-Accepted (2026-07-28); amended three times the same day. The first amendment corrected a
-factual error in decision 3 and replaced the single-slice rule with a two-field model
-(normative vs. pragmatic slices). The second amendment resolves open questions 2 and 4: it
-adds content models to the registry schema (`registry_version` 2 → 3) and replaces
-`SourceKind::HandCurated` with `SourceKind::ScriptedExtraction`. Both are implemented in the
-JATS pilot (`jats-fmt`'s `registry` / `registry-derive` features) in the same commit range the
-second amendment lands in. The third amendment resolves open question 5 — the OOXML
-slice/Cargo-feature collapse rule — with OR-of-all, implemented in `ooxml-codegen`. Rollout to
-DocBook, TEI, and the OOXML migration (onto the registry design itself, as opposed to this
-narrower codegen fix) is planned but not done — see `TODO.md`.
-
-## Amendment 1 (2026-07-28): decision 3 misstated OOXML's prior art, and the rule it produced was wrong
-
-**The factual error.** Decision 3, as originally written, claimed OOXML's slices come from
-"namespace/part schemas." They do not. `spec/ooxml-features.yaml` tags every construct with
-one of ~20 hand-chosen functional groupings — `core`, `styling`, `structure`, `formulas`,
-`charts`, `layout`, `protection`, `filtering`, `validation`, `comments`, `drawings`,
-`hyperlinks`, `metadata`, `i18n`, `pivot`, `tables`, `extensions`, `revisions`, `external`,
-and more — documented only in a header comment, and that comment has already drifted from
-the data it describes (it documents `revisions`, 0 uses; the data uses `track-changes`, 70
-uses; see `TODO.md`'s rollout item 3). These tags were invented by this project. They are
-not derived from, and do not correspond to, ECMA-376's own modularization, which is real and
-is something else entirely: 21 namespace schemas and ~59 part entry-points, correctly
-described in this ADR's own Consequences table (the "OOXML (ECMA-376)" row, "Yes — 21
-namespace schemas, ~59 part entry-points"). The ADR's Decision section and its own
-Consequences table disagreed with each other about what OOXML's slices are, and Decision 3
-was the one that had it wrong. This was confirmed against the live `spec/ooxml-features.yaml`
-header and body (verified again while writing this amendment).
-
-**The consequence.** Decision 3 forbade "inventing a partition and presenting it as
-authoritative" and named that "the one thing decision 3 forbids." Applied literally, that
-rule outlaws the ooxml tags that already ship in this repo — they are exactly the invented
-partition the rule forbids — while simultaneously leaving DocBook stuck: DocBook's normative
-RELAX NG is a flattened monolith with no module identity (open question 1), so under a
-single-slice rule its only moves were "ship empty" or "adopt a partition and hope its
-provenance passes muster," and the second of those was blocked on an unresolved license
-question for a source (the Codeberg TC repo) nobody had asked to be a prerequisite. TODO.md's
-rollout plan recorded this exactly as "DocBook is blocked on an open question, not on
-effort" — a direct symptom of the single-slice rule being unable to represent something that
-is simultaneously legitimate (a useful, honestly-labeled grouping) and non-authoritative (not
-sourced from the format's own publication of its structure).
-
-**Root cause.** The word "slice" was doing two jobs the original decision 3 never separated:
-
-- A **normative/spec-published partition** — JATS's 29 DTD Suite modules, TEI's 22
-  `<moduleSpec>` modules, (potentially) OOXML's 21 namespace schemas. Authoritative and
-  citable: it tells a downstream implementer how the format itself decomposes. It may
-  legitimately not exist, as for DocBook.
-- A **pragmatic partition** — ooxml's `core`/`styling`/`charts`. Ours, invented, genuinely
-  useful for feature-gating and for telling a consumer what they can skip without reading
-  everything. Honest exactly so long as it is labeled as ours rather than presented as the
-  format's own structure.
-
-Conflating these into one field forced a choice that need not exist: either the invented
-partition gets to claim spec authority it doesn't have, or a legitimately useful invented
-partition isn't allowed to exist at all. Both horns are wrong, and the fix is not to pick one
-— it is to stop forcing the choice.
-
-**The corrected rule: two independent fields, not one.**
-
-Both `Registry` and `Construct` carry two separate slice collections instead of one:
-
-- `normative_slices` — populated *only* from a partition the format itself publishes (a DTD
-  Suite module, a `<moduleSpec>`, a namespace/part schema). Each entry is a `Slice` with the
-  module's own declared name, its source file, and a resolvable URL, exactly as decision 3
-  originally specified — that part of the design was right, it was just mislabeled as
-  OOXML's status quo. **May legitimately be empty** for a format whose normative schema
-  publishes no modularization (DocBook today). When empty, the registry must record why (a
-  short reason string, not silence) rather than leaving an unexplained gap.
-- `pragmatic_slices` — a partition curated by whoever maintains the registry, for whatever
-  purpose is useful (feature gating, a reading order, a "start here" grouping). **Always
-  permitted, unconditionally** — it never needs the format to publish a modularization, and
-  it never needs to wait on a licensing question, because it makes no claim to reflect the
-  format's own structure. It must be **explicitly marked non-normative** wherever it is
-  surfaced (registry documentation, any generated report, any consumer-facing label) — the
-  whole point of splitting the field is that a consumer can always tell which kind of
-  partition they are looking at. **May also legitimately be empty** — a format doesn't need
-  a pragmatic partition just because the field exists; JATS's pilot populates only
-  `normative_slices` and leaves `pragmatic_slices` empty, because inventing a grouping nobody
-  asked for would recreate exactly the "invented and presented without qualification" problem
-  decision 3 was trying to avoid, just moved to the other field.
-
-A construct may appear in either, both, or (transiently, before triage) neither list.
-`primary_slice()` is no longer well-defined as a single method — it is now
-`primary_normative_slice()` and `primary_pragmatic_slice()`, each `Option<&str>`, since either
-list may be empty for a given construct or for a whole format.
-
-**What this unblocks.**
-
-- **OOXML's existing ~20 tags become legitimate as-is**, once `ooxml-*` migrates onto the
-  registry design (not done by this amendment — see `TODO.md` rollout item 3): they populate
-  `pragmatic_slices`, explicitly marked as ours, and stop being mischaracterized anywhere as
-  "namespace/part schemas." The real namespace/part decomposition (21 namespace schemas, ~59
-  parts) remains available as a *future* `normative_slices` source if someone does that
-  derivation work; nothing here requires it.
-- **DocBook can roll out now**, without resolving the Codeberg source's license first: ship
-  with `normative_slices` empty and the reason recorded ("the normative OASIS RNG partitions
-  414 elements into 420 anonymous `div {}` blocks with no module identity"), and, if a
-  maintainer wants one, an invented `pragmatic_slices` grouping — built the same way ooxml's
-  tags were, with no license question at all, because a pragmatic partition is our own
-  taxonomy, not a redistribution of someone else's text or structure. The Codeberg TC
-  source's ~35 named modules and its unverified license remain exactly what they were: a
-  possible *future* way to populate `normative_slices`, if someone wants to argue that
-  non-normative build source can stand in for a normative citation and gets the license
-  question answered first. That question is not a prerequisite for DocBook's rollout anymore
-  — only for that one specific way of eventually filling in the normative field.
-
-**Open question 1, restated under the new model.** The old fork ("ship empty, or adopt the
-non-normative Codeberg modules with non-normativity stamped in provenance") no longer has the
-same shape, because "adopt the Codeberg modules, marked non-normative" is just populating
-`pragmatic_slices` — which needs no decision at all, since pragmatic partitions are
-unconditionally permitted. What remains genuinely open is narrower: *should DocBook's
-`pragmatic_slices` be populated at all for the initial rollout, and if so, from what* — invent
-a fresh grouping, or borrow the Codeberg TC's ~35-module shape as a starting point (still
-without claiming it as normative, and still without needing its license resolved, since
-nothing would be redistributed verbatim — only the *idea* of a grouping, if even that)? This
-is a much smaller question than the original one, and it does not block shipping
-`normative_slices: []` with a recorded reason, which can happen immediately.
-
-**Open question 2 (hand-curated registries) is not resolved by this amendment, and the two
-are separable.** `SourceKind::HandCurated` is about the *construct list itself* — the
-denominator: does the registry's list of "every element/attribute this format defines" come
-from a machine-readable schema, or was it typed by a person? That is the exact thing this
-whole design exists to make auditable, and a hand-curated denominator is exactly as fallible
-as the `COVERAGE.md` checklist it replaces, regardless of how its slices are labeled. A
-hand-curated **slice** (a partition *over* an already-trustworthy construct list) is a
-different and much lower-stakes claim, and this amendment settles it: explicitly marking a
-slice `pragmatic` is sufficient honesty, no further permission needed. Whether a
-hand-curated **construct list** should be allowed at all remains exactly as open as it was —
-this amendment does not touch it, and no connection between the two should be inferred from
-one being resolved.
-
-**The OOXML slice/Cargo-feature conflation flagged by the pilot is only partly resolved.**
-The pilot's open item was that ooxml's tags currently serve two jobs at once — a slice
-(descriptive grouping) and a Cargo feature gate (`#[cfg(feature = "...")]` selection) — and
-that `primary_feature` silently keeps only the first of a construct's tags, so
-`drawingHF: [drawings, layout]` compiles behind `sml-drawings` while `layout` is inert with no
-diagnostic. The two-field model answers *which list* a feature-gate tag belongs in — clearly
-`pragmatic_slices`, since a Cargo feature is unambiguously our own build concern, never a
-claim about the format's structure. It does **not** answer the second half of the problem: a
-Cargo feature is compiled as a single `#[cfg]` predicate per field, so multi-membership in
-`pragmatic_slices` (which the data model explicitly allows, same as `normative_slices`) still
-has to collapse to one decision — gate on the intersection, gate on the first tag with the
-rest silently inert (today's behavior), gate on an OR of all tags, or refuse multi-tagged
-constructs a single feature and require the mapping be stated per-construct. That collapse
-rule is a real design choice with real tradeoffs (binary size vs. granularity vs. surprise)
-and this amendment does not make it — it is restated below as open question 5, for a human
-call.
-
-**This amendment changes only the ADR text — see `TODO.md` for whether the corresponding
-`jats-fmt` schema/type/YAML update has landed yet, and whether it was committed separately
-from this amendment.**
-
-## Amendment 2 (2026-07-28): content models added to the schema; hand-curation replaced by scripted extraction
-
-Two human decisions resolve open questions 4 (content models) and 2 (hand-curated
-registries), respectively. Both are implemented in `jats-fmt`; see `TODO.md`'s registry
-rollout entry for the commit range.
-
-### Decision A: content models are in scope, flattened rather than full-grammar
-
-Open question 4 asked whether the registry should record content models (permitted children
-and attributes per construct), not just construct existence — and, if so, how much of the
-source schema's expressiveness to preserve. Decided: **in scope, flattened.**
-
-**What is recorded**, per element construct, in a new `Construct::content_model: Option<ContentModel>`
-(`None` for attribute constructs, which have a value type, not a content model):
-
-- `children: Vec<{ name, repeatable }>` — every element name permitted as a direct child,
-  each tagged with whether the schema permits more than one occurrence (reachable under a
-  `zeroOrMore`/`oneOrMore` without crossing into another element's own body first).
-- `attributes: Vec<{ name, required }>` — every attribute name the element permits, each
-  tagged required/optional (a member of a RELAX NG `<choice>` is recorded as not required,
-  since no single choice member is individually required).
-- `mixed: bool` — whether character data is permitted directly alongside children
-  (RELAX NG `<text/>`/`<mixed>`).
-
-**What is *not* recorded**: relative order, which children mutually exclude each other
-(`<choice>`), and which must co-occur (`<group>`/`<interleave>`) — the full pattern structure
-RELAX NG (and DTD content models) can express. This is a deliberate flattening, not an
-oversight, and it is the one place this amendment makes a call the original open question
-explicitly said might itself need to come back to a human: **it is not being kicked back**,
-because the two questions a registry consumer actually asks are different in kind, and the
-chosen scope answers the one this design is for. "Can `sec` contain `fig`?" is a
-set-membership question the flattened form answers directly. "Is *this specific* `<sec>`
-element valid?" is a validation question that needs the full grammar (order, choice
-exclusivity, interleave) — and that is not this registry's job; a consumer that needs real
-validation should run the source schema through a RELAX NG validator, which already exists
-and already does this correctly. Recording the full pattern structure was considered and
-rejected for the pilot: it would substantially increase the derivation tool's complexity (a
-tree-shaped content-model type mirroring RELAX NG's own pattern grammar, instead of two flat
-maps) to answer a question this design does not need to answer, and JATS's `<define>`-based
-customization layer means many patterns are shared across dozens of elements, so a literal
-per-element grammar tree would also be far more repetitive on disk than the flattened form.
-
-**Whether a richer, validation-capable representation is worth building is left as a new
-open question (open question 6, below)** rather than decided here — per the instructions
-that produced this amendment, a fork that the flattened-vs-full choice could itself be
-contested is exactly the kind of thing to flag rather than guess past.
-
-**Size impact, measured on the JATS pilot**: the committed registry grew from 4,079 lines /
-90 KB to 39,946 lines / 885 KB — roughly 10×. This is not concentrated in one place: of the
-~12,962 permitted-child entries added, 5,404 belong to the 181 embedded MathML elements
-(foreign to JATS's own vocabulary, raw-preserved wholesale by the reader) and 7,558 belong to
-JATS's own 305 elements — both halves are substantial, so this is an inherent property of the
-flattened design at this vocabulary size (~25-30 permitted children per element on average),
-not a MathML-specific artifact that could be filtered away.
-
-**Decided: no new Cargo sub-feature for content models.** They stay inside the existing
-`registry` feature rather than being split into e.g. a `registry-content-models` feature
-behind a second committed file. Justification: (1) this repo already has a size precedent at
-this order of magnitude — `ooxml-wml`'s committed `generated.rs` is 3.6 MB — so 885 KB of
-opt-in YAML is not disproportionate; (2) `registry` is already the opt-in gate that decides
-whether a consumer pays for the catalog *at all*; a consumer who wants existence/slice
-queries only and never reads `Construct::content_model` pays an unused-field cost, not a
-new capability's cost, and Cargo feature gating exists to scope contracts, not to save bytes
-within one contract (per `CLAUDE.md`: "Feature gating is about contract scoping, not binary
-size"); (3) splitting into two committed artifacts would also fork `--check` drift detection,
-provenance, and the derivation tool's output into two parallel things to keep in sync, for a
-benefit (some consumers skip an 800 KB parse) that is real but modest, since the `registry`
-feature is already off by default and `Registry::from_yaml` is a one-time, lazily-triggered
-cost (`OnceLock`), never a hot path. **This call is per-format, not general**: TEI (614
-elements) and DocBook (414 elements) may produce a different size profile once their
-registries are derived, and that measurement — not this one — should decide whether *those*
-formats need a different answer. Flagged for re-check at rollout time, not assumed to
-generalize.
-
-### Decision B: `SourceKind::HandCurated` is removed; scripted extraction is a first-class alternative to a schema
-
-Open question 2 asked whether hand-curated registries (for a format with no machine-readable
-schema) should be permitted at all, given that a hand-curated construct *list* delivers none
-of this design's guarantee — it is exactly as fallible as the `COVERAGE.md` checklist it
-replaces. The human decision resolves this with a third option neither original alternative
-offered: **the property that matters is not "came from a schema," it is "reproducibly
-derived."** A format with no machine-readable schema does not get an exemption to hand-type
-its list; it gets pointed at its own published prose (an HTML element index, a printed
-reference table, whatever the format publishes) and required to extract that list
-*mechanically* — a script, committed alongside the registry, that fetches the published
-artifact and parses it, the same way `derive-registry`'s RELAX NG walk does for JATS. A
-scripted extraction is re-runnable, diffable against a fresh fetch, and auditable by reading
-the script; a hand-typed list is none of those, regardless of how careful the person typing
-it was.
-
-**Implementation**: `SourceKind::HandCurated` is **removed outright**, not retained as a
-marked-unreliable fallback. `SourceKind::ScriptedExtraction` replaces it as a fully permitted,
-first-class source kind — named for the mechanism (an extraction script), by the same
-convention as its siblings (`Relaxng`, `Rnc`, `Dtd`, `Xsd`, `Odd` each name a schema *form*;
-`ScriptedExtraction` names an extraction *method*, since there is no schema form to name in
-this case — that category difference is documented on the variant, not hidden).
-
-**Why remove rather than retain as a documented fallback**: keeping `HandCurated` around
-"for when even scripted extraction is impossible" preserves exactly the escape hatch this
-whole design exists to close, on the strength of a case that has not actually arisen — no
-format encountered so far (JATS, DocBook, TEI, OOXML, ODF) lacks *some* published,
-script-extractable artifact of its own element vocabulary; even DocBook, the format with the
-worst schema story (a flattened, unmodularized RELAX NG), still has a machine-readable
-schema to derive the construct *list* from — its modularization is what's missing, which
-Amendment 1 already settled does not require an exemption, only an honestly-empty
-`normative_slices`. Per `CLAUDE.md`'s disposition ("no menu of invented options dressed up
-as a choice"), inventing a hand-curation fallback for a hypothetical case not yet in evidence
-would be exactly that: a guess wearing the hat of a design decision. If a genuine
-no-extractable-artifact case is found later, that is new information a future ADR amendment
-can act on — reintroducing the variant then, with the specific format that needed it named as
-the motivating case, costs nothing and is cheaper than carrying an unused escape hatch now.
-
-**Provenance carried by a `ScriptedExtraction` registry**: the existing `Provenance` /
-`SourceDigest` shape already covers what a re-runnable extraction needs, with one small
-addition (`SourceDigest.url`, a per-entry URL for when a scripted extraction spans several
-distinct published pages that don't share one `source_base_url` + relative-file join) —
-
-- source URL(s): `Provenance::source_base_url` (+ `SourceDigest.file`), or `SourceDigest.url`
-  per entry for a multi-page extraction.
-- retrieval date: `Provenance::derived_on` (already existed; no format-specific meaning
-  change — "derived" already meant "fetched and processed on this date").
-- checksum of the fetched artifact: `Provenance::source_digests[].sha256` + `.bytes` (already
-  existed; a downloaded HTML page checksums exactly like a downloaded schema file).
-- reference to the extraction script: `Provenance::derived_by` (already existed as "tool and
-  version"; for a scripted extraction this names the script path and version, e.g.
-  `scripts/docbook/extract-element-index.py v1`, the same slot `jats-fmt derive-registry v2`
-  occupies for JATS).
-
-No new top-level provenance fields were needed — the existing shape generalizes, because it
-was already designed around "what does a reader need to re-derive and check for drift,"
-which turns out to be the same question for a downloaded schema and a downloaded prose page.
-
-**Practical consequence**: this makes DocBook's *construct-list* rollout tractable the same
-way Amendment 1 made its *slice* rollout tractable, without lowering the bar the design
-exists to hold. It also retires a framing this ADR used uncritically until now —
-"schema-derived vs. hand-curated" was a false dichotomy; the real axis was always
-reproducible-vs-not, and a schema was only ever one way to be reproducible.
-
-**Not resolved by this amendment**: which specific published artifact and script DocBook (or
-any other schema-less format) should use — that is rollout work for the format in question,
-tracked in `TODO.md`, not a design decision this ADR needs to make in the abstract.
-
-## Amendment 3 (2026-07-28): OOXML's slice/Cargo-feature collapse rule is OR-of-all
-
-Open question 5 (from Amendment 1) asked how a construct's multiple `pragmatic_slices`
-memberships collapse into the single `#[cfg]` predicate a Cargo feature requires, once
-ooxml's tags are recognized as `pragmatic_slices` rather than a violation to fix. Four
-options were on the table: intersection, first-tag (the pre-existing silent behavior),
-OR-of-all, or a hard requirement that multi-tagged constructs name their gate explicitly.
-This amendment is scoped narrower than Amendments 1 and 2: it does not touch the registry
-*design* (this ADR's two-field model, content models, or `ScriptedExtraction`) — ooxml has
-not yet migrated onto the registry at all (that migration is still `TODO.md` rollout item 3).
-It answers only the collapse-rule question Amendment 1 explicitly deferred, applied directly
-to `ooxml-codegen`'s existing `FeatureMappings`/`primary_feature` mechanism as it stands today.
-
-**The decision: OR-of-all.** A construct tagged with several slices — e.g. `Worksheet.drawingHF:
-[drawings, layout]` — is gated `#[cfg(any(feature = "sml-drawings", feature = "sml-layout"))]`,
-so the construct compiles in when *any one* of its tagged slices is enabled. Rust's `any(...)`
-predicate accepts arbitrarily many terms and nests without restriction, so this scales to
-constructs tagged with three or more slices (verified: `wml` has no 3+-tag cases today, but
-`ooxml-codegen`'s implementation does not special-case the two-tag case — the same code path
-handles any tag count).
-
-**Rationale.** Most permissive, fewest surprises: enabling a slice is expected to get a
-consumer everything tagged with it, and OR-of-all is the only one of the four options that
-honors that expectation for *every* tag on a multi-tagged construct, not just whichever the
-data lists first. It also requires no change to `spec/ooxml-features.yaml` itself — the
-existing tag lists, unmodified, already express exactly the membership OR-of-all needs.
-
-**Rejected alternatives:**
-
-- **First-tag (the status quo being fixed).** This is not a design choice, it is the bug: a
-  construct's non-first tags become permanently inert with no diagnostic anywhere. A consumer
-  enabling `sml-layout` alone would never get `drawingHF`, even though the data says it should,
-  and nothing would tell them why. Rejected as the thing this amendment exists to stop doing.
-- **Intersection** (gate on *all* tags being enabled simultaneously, i.e. `#[cfg(all(...))]`).
-  Rejected: this is the least permissive option and the most surprising in the failure
-  direction opposite to first-tag — enabling `sml-drawings` alone would silently exclude
-  `drawingHF` too, because `sml-layout` isn't *also* on. A consumer who reads
-  "`drawingHF` is tagged drawings" and enables exactly that feature would still not get the
-  construct, for a reason nothing surfaces. Strictly worse than first-tag for discoverability,
-  while being no more precise about scope than OR-of-all in the cases that actually matter.
-- **Hard requirement to name an explicit gate per multi-tagged construct** (reject the
-  multi-tag data as under-specified and force `spec/ooxml-features.yaml` to carry a single
-  disambiguating tag per construct, in addition to its descriptive slice list). Rejected:
-  this is the most principled option in the abstract — it never has to average across
-  conflicting consumer expectations — but it demands the human curator make ~76 individual
-  calls (the count of non-core multi-tagged constructs found in the current data) about which
-  single slice should "win" the gate for each one, values judgments no more informed than
-  "OR-of-all" already makes uniformly, and it would have blocked this fix from landing at all
-  until that curation pass was done. The cost OR-of-all accepts instead — a consumer enabling
-  one slice may pull in constructs they'd consider out of scope of *that* slice alone, because
-  the construct is also tagged with something else — was judged worth it against a curation
-  project neither requested nor already underway.
-
-**Cost accepted.** Enabling a single slice can pull in constructs a consumer might not expect
-under that slice's name alone (`sml-layout` alone now also compiles in `Worksheet.drawingHF`,
-which is arguably as much a drawings construct as a layout one). This is the accepted
-trade-off, not an oversight: it was weighed against silent omission (first-tag) and judged
-better, per the rationale above.
-
-**Implementation shape**, since this is a Rust-code fix rather than a schema change:
-`FeatureMappings::primary_feature` (returned `Option<&str>`, the first non-core tag) is
-replaced by `FeatureMappings::feature_gates` (returns `Option<Vec<&str>>`, every non-core
-tag). A new `cfg_predicate(module, gates) -> String` helper, shared by `codegen.rs`,
-`parser_gen.rs`, and `serializer_gen.rs` (the only three modules that previously called
-`primary_feature`), builds `feature = "mod-tag"` for a single gate or `any(feature = "mod-tag1",
-feature = "mod-tag2", ...)` for several — this is the only place the OR-of-all rule is encoded,
-so all three codegen passes (struct fields, parser variables/match-arms/struct-literal-builds,
-serializer attribute/child/emptiness checks) stay in lockstep by construction rather than by
-convention. A struct field's own generated `#[cfg]` and the parser/serializer code that
-declares, matches, and builds that same field must agree, or a partial-feature build fails to
-compile (a struct-literal initializer omitting a field the struct itself requires, or a
-`match` arm for an element the struct can't hold) — verified in practice: building `ooxml-sml`
-with `--features sml-layout` alone (excluding `sml-drawings`) now correctly compiles `drawingHF`
-in, where it previously would have compiled it in when `sml-drawings` was the enabled feature
-regardless of `sml-layout`'s state, and vice versa, an inversion of the tags' stated meaning.
-
-**Guard against silent recurrence.** The root failure that motivated this whole amendment was
-silence — a tag disappearing with no signal — not the specific choice of collapse rule. Unit
-tests in `ooxml-codegen` (`codegen.rs`'s `tests` module) pin `feature_gates` and `cfg_predicate`
-against multi-tag inputs, asserting every tag survives into the emitted predicate; an
-integration test (`ooxml-codegen/tests/multi_tag_feature_gates.rs`) runs the real
-`spec/ooxml-features.yaml` + `spec/sml.rnc` through the full `generate()`/`generate_parsers()`
-pipeline and asserts the real `Worksheet.drawingHF` construct's generated code contains the
-`any(...)` predicate verbatim — so a future edit that reverts to keeping only `tags.first()`
-fails these tests rather than silently shipping.
-
-**Hand-written (non-generated) consumer code must stay in sync.** `ooxml-{sml,wml,pml,dml}`'s
-hand-written adapter files (`writer.rs`, `workbook.rs`, `ext.rs`, and similar) construct and
-read the generated structs directly, and some carry their own copy of a field's `#[cfg]` gate
-(e.g. to conditionally set a struct-literal field). These copies must match the generated
-struct's actual gate exactly, or a partial-feature build fails with a missing/unknown-field
-error — this is not a new problem this amendment introduces, but multi-tagged fields' gates
-widening from a single feature to an OR of several makes any pre-existing hand-written
-single-feature copy of that gate wrong where it previously happened to agree. There is no
-compile-time link between a hand-written `#[cfg]` and the codegen's `cfg_predicate` output for
-the same field; keeping them in sync today is a matter of grep-and-fix at edit time, checked by
-building each crate under a narrow feature set that isolates one tag of a multi-tagged pair
-from the others. A structural fix (e.g. a codegen-emitted constant or macro hand-written code
-could reference instead of retyping the predicate) is not built here — flagged as a possible
-follow-up in `TODO.md` rather than solved speculatively, since no second instance of the
-problem existed to generalize from.
+Accepted. Piloted end-to-end on JATS (`crates/formats/jats-fmt`). Rollout to DocBook, TEI, and
+migrating `ooxml-*` onto this design is planned but not done — see `TODO.md`'s registry
+rollout entries.
 
 ## Context
 
-Every format vertical's completion claim rests on a ratio: "101/117 constructs covered."
-The numerator is real work. The denominator was, until now, a hand-written list in
+Every format vertical's completion claim rests on a ratio: "101/117 constructs covered." The
+numerator is real work. The denominator was, until this design, a hand-written list in
 `fixtures/{format}/COVERAGE.md` — and a hand-written list cannot supply a trustworthy
 denominator, because it only ever grows when somebody happens to notice something missing.
 
 The 2026-07-28 COVERAGE.md audit (see `TODO.md`) measured exactly how badly this fails.
-DocBook's denominator had drifted 94 → 105 → 117 and JATS's 106 → 109 → 133 across a
-single session, each bump prompted by an incidental discovery during unrelated bug-fixing.
-Diffing both checklists against the formats' authoritative element indexes found **265
-DocBook element names and 216 JATS element names enumerated nowhere at all**. So "101/105
-covered" was reporting 96% of a list someone wrote, not 96% of DocBook. The ratio was not
-merely imprecise; it was measuring the wrong set, and no amount of care in maintaining the
-checklist would have revealed that — a list can only be diligently maintained against
-itself.
+DocBook's denominator had drifted 94 → 105 → 117 and JATS's 106 → 109 → 133 across a single
+session, each bump prompted by an incidental discovery during unrelated bug-fixing. Diffing
+both checklists against the formats' authoritative element indexes found 265 DocBook element
+names and 216 JATS element names enumerated nowhere at all. So "101/105 covered" was reporting
+96% of a list someone wrote, not 96% of DocBook.
 
-ADR 0004's 2026-07-28 amendment identifies the same failure in its own domain and names
-the structural reason: *"a presence-checking pass over an incomplete list can find 'have
-but shouldn't' but cannot structurally find 'should have but don't,' no matter how
-carefully each listed entry is re-verified."* That amendment prescribes extracting the
-format's full element index and diffing. This ADR is the mechanization of that
-prescription: rather than each verification pass re-fetching and re-deriving the index by
-hand — which is itself a fallible manual step, performed differently each time — the index
-becomes a committed, machine-readable artifact with recorded provenance.
+`docs/adr/0004-xml-classifier-schema-verification-methodology.md` names the same failure in
+its own domain: a presence-checking pass over an incomplete list can find "have but shouldn't"
+but cannot structurally find "should have but don't," no matter how carefully each listed entry
+is re-verified. This ADR is the mechanization of that fix: rather than each verification pass
+re-fetching and re-deriving the index by hand — a fallible manual step, performed differently
+each time — the index becomes a committed, machine-readable artifact with recorded provenance.
 
 Existing prior art in this repo is `spec/ooxml-features.yaml` (3849 lines) plus
 `spec/ooxml-names.yaml` and `spec/ooxml-events-*.yaml`, consumed by
-`crates/formats/ooxml-*/build.rs` through `crates/tools/ooxml-codegen`. It establishes
-several patterns worth keeping (a committed derived artifact; an escape hatch for
-"everything under here"; regeneration gated behind an env var so contributors need not
-hold the spec) and several worth not repeating: workspace-central placement, a tag
-vocabulary that is a header comment rather than data and has already drifted from the data
-it describes, an advisory-only completeness lint (`analysis.rs`, gated behind
-`OOXML_ANALYZE`, whose `has_unmapped()` is dead code), and **zero provenance metadata of
-any kind** — no spec edition, no checksum, no derivation date.
+`crates/formats/ooxml-*/build.rs` through `crates/tools/ooxml-codegen`. It establishes several
+patterns worth keeping (a committed derived artifact; an escape hatch for "everything under
+here"; regeneration gated behind an env var so contributors need not hold the spec) and several
+worth not repeating: a tag vocabulary that is a header comment rather than data and has already
+drifted from the data it describes (the comment documents `revisions`, 0 uses; the data uses
+`track-changes`, 70 uses), an advisory-only completeness lint (`analysis.rs`, gated behind
+`OOXML_ANALYZE`, whose `has_unmapped()` is dead code), and zero provenance metadata of any kind
+— no spec edition, no checksum, no derivation date. `spec/ooxml-features.yaml`'s tags are also
+this project's own hand-chosen functional groupings (`core`, `styling`, `structure`, `charts`,
+etc., documented only in that header comment) — they are not derived from, and do not
+correspond to, ECMA-376's own modularization (21 namespace schemas, ~59 part entry-points).
+That distinction — a format's own published modularization vs. a partition this project
+invents for its own purposes — is load-bearing for this design (see "Two kinds of slice"
+below). Get this from `spec/ooxml-features.yaml` itself, not from a description of it.
 
 ## Decision
 
-**Decision 3 below is superseded by Amendment 1 above — retained for the
-historical record of what was originally decided (including its factual error about OOXML),
-not as current guidance.** See Amendment 1 for the corrected two-field model. Decisions 1,
-2, and 4–9 below are unaffected by either amendment and remain as originally decided. (Open
-questions 2 and 4, a separate numbering from these Decision-section items, are resolved by
-Amendment 2 above — not to be confused with Decision 2/4 here, which are the Cargo-feature
-and runtime-queryable decisions respectively.)
-
-Each `-fmt` crate carries a **construct registry**: a committed, machine-readable catalog
-of every construct its format defines, derived from the format's own published schema.
+Each `-fmt` crate carries a **construct registry**: a committed, machine-readable catalog of
+every construct its format defines, derived from the format's own published schema (or, where
+none exists, from a reproducible extraction — see "Source kinds" below).
 
 ### 1. Per-crate, not centralized
 
 The registry lives in the `-fmt` crate (`crates/formats/jats-fmt/registry/`), not in
-workspace-level `spec/`. This is a deliberate change from ooxml's current placement.
-
-The `-fmt` crates are first-class ecosystem libraries; rescribe is one consumer among many.
-Someone depending on `jats-fmt` alone — for a search indexer, a linter, a validator — has
-the same need to ask "what does JATS define" as rescribe's coverage tooling does, and a
-catalog in rescribe's workspace root is invisible to them. Placement follows the artifact's
-audience, and the audience is the crate's users.
-
-This also deletes a structural wart: ooxml's central YAMLs are keyed by a closed set of
-four module names, mirrored by hard-coded `match module { "sml" => …, "wml" => … }` in
-`ooxml-codegen`, whose fallback arm silently routes unknown modules to `sml`. Per-crate
-files make each registry its own document, and the module dimension disappears.
+workspace-level `spec/`. The `-fmt` crates are first-class ecosystem libraries; rescribe is one
+consumer among many. Someone depending on `jats-fmt` alone — for a search indexer, a linter, a
+validator — has the same need to ask "what does JATS define" as rescribe's coverage tooling
+does, and a catalog in rescribe's workspace root is invisible to them. This also avoids
+ooxml's central-YAML wart: a closed set of module names mirrored by hard-coded `match module {
+"sml" => …, "wml" => … }` dispatch in `ooxml-codegen`, whose fallback arm silently routes
+unknown modules to `sml`. Per-crate files make each registry its own document, with no module
+dimension to keep in sync.
 
 ### 2. Opt-in Cargo feature
 
-`registry` is off by default. A consumer that only wants to parse XML should not compile,
-or pay for, the catalog. The derivation tool sits behind a further `registry-derive`
-feature, since it additionally needs the source schema present.
+`registry` is off by default. A consumer that only wants to parse XML should not compile, or
+pay for, the catalog. The derivation tool sits behind a further `registry-derive` feature,
+since it additionally needs the source schema present.
 
-### 3. Slices come from the format's own modularization
+### 3. Two kinds of slice: normative and pragmatic
 
-Every construct is annotated with the **slice**(s) it belongs to. A slice is a partition
-the format itself publishes — JATS's DTD Suite modules, TEI's 22 `<moduleSpec>` modules,
-OOXML's namespace/part schemas. It is emphatically *not* an implementation concern
-("things we've done", "things that are hard"): those churn with our work and tell a
-downstream implementer nothing. A spec-published partition tells them how the format
-actually decomposes, so "implement the section and para modules first" becomes a statement
-the format supports.
+Every construct may be annotated with slices from two independent, separately-populated
+fields:
 
-Slices are first-class entries with an id, the module's *own* declared name, its source
-file, and a resolvable URL — not the bare strings ooxml's feature tags are today. A
-construct may belong to several slices; they are listed in the schema's own `<include>`
-order, so `slices[0]` is a stable primary.
+- **`normative_slices`** — a partition the format *itself* publishes: JATS's 29 DTD Suite
+  modules, TEI's 22 `<moduleSpec>` modules, OOXML's 21 namespace schemas / ~59 part
+  entry-points (if a future derivation targets that decomposition). Each entry is a `Slice`
+  with the module's own declared name, its source file, and a resolvable URL. **May
+  legitimately be empty** for a format whose normative schema publishes no modularization —
+  DocBook 5.2 is exactly this case (its normative RELAX NG is a flattened monolith, 414
+  elements in 420 anonymous `div {}` blocks with no module identity). When empty, the registry
+  records why, as a short reason string, rather than leaving an unexplained gap.
+- **`pragmatic_slices`** — a partition curated by whoever maintains the registry, for whatever
+  purpose is useful (feature gating, a reading order, a "start here" grouping). Always
+  permitted, unconditionally — it never needs the format to publish a modularization and never
+  needs a licensing question resolved, because it makes no claim to reflect the format's own
+  structure. It must be explicitly marked non-normative wherever it's surfaced. ooxml's
+  existing ~20 functional tags (`core`/`styling`/`charts`/etc.) are exactly this kind of
+  slice, once `ooxml-*` migrates onto this registry design (not done yet — see `TODO.md`); they
+  were never the format's own modularization and should stop being described as such.
 
-Where a format publishes no modularization, we say so and leave slices empty rather than
-inventing a partition and presenting it as authoritative. **DocBook 5.2 is exactly this
-case** — see Consequences.
+A construct may appear in either, both, or neither list. `primary_normative_slice()` and
+`primary_pragmatic_slice()` are each `Option<&str>`, since either list may be empty for a given
+construct or for a whole format.
 
-### 4. Runtime-queryable
+### 4. Runtime-queryable, and zero-cost at runtime
 
-The registry is a typed, `serde`-serializable Rust API (`jats_fmt::registry`), not
-build-time-only data that evaporates into `#[cfg]` attributes. `registry().elements()`,
-`.in_slice(id)`, `.contains_element(name)`, `.not_handled(kind, handled)` are ordinary
-runtime calls, and because the types implement `Serialize`, the whole document composes
-with the `rescribe query` / jaq pattern without the registry depending on the query crate.
+The registry is a typed Rust API (`jats_fmt::registry`). `registry()` returns a `&'static
+Registry` compiled directly into the binary — no parsing, no `OnceLock`, no allocation at call
+time (`crates/formats/jats-fmt/src/registry_generated.rs`, committed, matching `ooxml-wml`'s
+committed `generated.rs` precedent). `registry().elements()`, `.in_slice(id)`,
+`.contains_element(name)`, `.not_handled(kind, handled)` are ordinary calls over static data.
+`Construct`/`Registry`/`ContentModel` implement `Serialize`, so the whole document composes
+with the `rescribe query`/jaq pattern without the registry crate depending on the query crate.
 
 ### 5. Support status is not in the registry
 
-The registry is **spec-pure**: it records what the format defines, never what any crate
-supports. Mixing the two would make it churn on every implementation commit, and would
-recreate the original problem in a new file — a support column is a hand-maintained
-claim, and hand-maintained claims are what this design exists to eliminate.
-
-"Do we support X" is a **join**, performed by the consumer:
-`Registry::not_handled(kind, what_i_handle)`. The pilot's consumer
-(`crates/readers/rescribe-read-jats/tests/registry_coverage.rs`) supplies the numerator by
-extracting element names from the reader's own source text and prints the difference.
+The registry is spec-pure: it records what the format defines, never what any crate supports.
+Mixing the two would make it churn on every implementation commit and recreate a
+hand-maintained claim in a new file. "Do we support X" is a **join**, performed by the
+consumer: `Registry::not_handled(kind, what_i_handle)`.
 
 ### 6. Citations are external references, never file+line into a vendored schema
 
-A citation must still resolve when the schema is absent from the checkout — because for
-most formats it is. `spec/*` is gitignored: `git ls-files spec/OfficeOpenXML-RELAXNG-Transitional`
-returns nothing, and the ECMA-376 schemas exist only in a developer's working tree after
-running `scripts/ooxml/download-spec.sh`. A `file:line` citation into a file nobody has is
-worse than no citation, because it looks actionable.
+`spec/*` is gitignored and absent from most checkouts and all of CI, so a citation must resolve
+without it: a spec identifier (`ANSI/NISO Z39.96-2021`), a canonical base URL per source file,
+and a per-construct URL template (`…/tag-library/1.3/element/{name}.html`).
 
-So citations are: a spec identifier (`ANSI/NISO Z39.96-2021`), a canonical base URL per
-source file, and a per-construct URL template
-(`…/tag-library/1.3/element/{name}.html`). These resolve from a bare checkout, from CI,
-and from a downstream crate that has never heard of `spec/`.
+### 7. Content models: flattened, deduplicated
 
-### 7. The registry is a committed derived artifact, and provenance is load-bearing
+Each element construct carries an optional `ContentModel`: `children: [{name, repeatable}]`
+(every element name permitted as a direct child, tagged repeatable/not), `attributes:
+[{name, required}]`, and `mixed: bool` (character data permitted alongside children). This
+deliberately drops relative order, choice exclusivity, and group/interleave co-occurrence — the
+full pattern structure RELAX NG can express — because "can `sec` contain `fig`" is a
+set-membership question this flattened form answers directly, while "is *this* `<sec>` valid"
+is a validation question a RELAX NG validator already answers correctly; recording the full
+grammar would substantially complicate the derivation tool to answer a question this registry
+isn't for. Distinct content-model shapes are deduplicated and emitted once each as a named
+static (`CM_0`, `CM_1`, …), referenced by pointer from every construct that shares the shape,
+pinned by a pointer-identity test (`crate::registry::tests::content_models_are_deduplicated`).
+Measured on JATS: 486 elements carry a content model; only 270 distinct shapes exist (44.4%
+would otherwise be duplicate data).
+
+Whether a second, full-grammar representation is worth adding alongside the flattened one is
+open — no consumer has asked for validation-grade output yet, so it isn't built speculatively.
+
+### 8. Source kinds: schema forms, or a reproducible extraction
+
+`SourceKind` names the form the construct list was derived from: `Relaxng`, `Rnc`, `Dtd`,
+`Xsd`, `Odd` for the schema forms this repo has encountered, or `ScriptedExtraction` for a
+format with no machine-readable schema at all. The property that matters is not "came from a
+schema," it's "reproducibly derived": a format with no schema is pointed at its own published
+prose (an HTML element index, a printed reference table) and required to extract that list
+*mechanically* — a script, committed alongside the registry, that fetches the published
+artifact and parses it, the same way `derive-registry`'s RELAX NG walk does for JATS. A
+scripted extraction is re-runnable, diffable against a fresh fetch, and auditable by reading the
+script; a hand-typed list is none of those. No format encountered so far (JATS, DocBook, TEI,
+OOXML, ODF) lacks some published, script-extractable artifact of its own element vocabulary,
+so no hand-curated, unreproducible source kind is offered as an escape hatch.
+
+### 9. The registry is a committed derived artifact; provenance is load-bearing
 
 Neither CI nor any downstream consumer will have the schema, so the registry cannot be
-build-time codegen from a local input. It is generated once, committed, and read as data
-— the same shape as ooxml's committed `generated.rs`, for the same reason.
+build-time codegen from a local input — it's generated once, committed, and read as data.
+Provenance is the only way a reader can judge staleness, so it's recorded in full: spec
+identifier, schema form, driver file, canonical base URL, source license and whether it permits
+redistribution, whether this repo vendors it, derivation date, deriving tool and version, and a
+SHA-256 plus byte count for every source file consumed.
 
-That makes provenance the *only* way a reader can judge staleness, so it is recorded in
-full rather than as decoration: spec identifier, schema form, driver file, canonical base
-URL, the source license and whether it permits redistribution, whether this repo actually
-vendors it, derivation date, deriving tool and version, and a **SHA-256 plus byte count for
-every source file consumed**. ooxml's existing YAMLs have none of this; that gap matters
-far more once the source input is unavailable to almost everyone who might want to check.
+### 10. Verification: two independent drift checks
 
-### 8. Verification mode
+A developer who fetches the schema can re-derive and diff against it:
+`cargo run -p jats-fmt --features registry-derive --bin derive-registry -- --schema-dir
+spec/jats-1.3-archiving-rng --check`. This compares parsed documents, not bytes, so
+reformatting doesn't read as spec drift.
 
-A developer who *does* fetch the schema can re-derive and diff:
+A second, independent check needs no schema at all:
+`registry_derive::drift_tests::generated_rust_matches_committed_source` regenerates
+`registry_generated.rs` from the committed JSON source and diffs it against the committed file
+— this runs as an ordinary `cargo test`, in CI, with nothing fetched. A third test,
+`committed_source_round_trips`, confirms the JSON model survives a serialize/deserialize round
+trip.
 
-```
-scripts/jats/download-spec.sh
-cargo run -p jats-fmt --features registry-derive --bin derive-registry -- \
-    --schema-dir spec/jats-1.3-archiving-rng --check
-```
+### 11. Human-readable committed source: JSON, not YAML
 
-`--check` exits non-zero on drift and names the constructs added or removed. It compares
-*parsed documents*, not bytes, so reformatting the YAML does not read as spec drift. This
-is the analogue of ooxml's `analysis.rs` lint, and the reason the "auditable, re-derivable
-denominator" claim survives the schema being absent for everyone else.
+The registry's runtime representation is committed generated Rust (decision 4); the
+human-readable committed source that `derive-registry` reads and writes is JSON
+(`registry/jats-1.3-archiving.json`), parsed only by the offline `registry-derive` tool via
+`serde_json` — never at runtime, and never by a normal `registry`-feature build. `serde_yaml`
+has been removed from `jats-fmt` entirely, in every feature; no YAML parser of any kind remains
+in its dependency graph (verified via `cargo tree -p jats-fmt --features registry-derive -e
+normal`).
 
-### 9. YAML as the canonical committed form
+An earlier draft of this design chose YAML, copied from `spec/ooxml-features.yaml`'s own format
+without checking what role that file actually plays: it's ooxml's hand-curated *input*, read by
+a build-time codegen step that still needs a human-editable format. This registry's committed
+Rust statics are generated *output*, analogous to `ooxml-wml`'s committed `generated.rs`, not to
+ooxml's YAML — the human-editable layer here is the offline derivation tool's source file,
+which nobody hand-edits directly (it's produced by `derive-registry` from the schema and
+regenerated, not typed). Once the runtime path parses nothing, the choice of source-format
+serialization is unconstrained by runtime concerns, and JSON was picked over YAML because it
+parses more uniformly across language ecosystems for what's meant to be a language-agnostic
+artifact (the same reasoning `fixtures/` follows), and because it removes any reason to keep a
+`serde_yaml` dependency around for a file nothing runtime-critical reads. `serde_json` was
+already a workspace dependency (used by `rescribe query`).
 
-The registry document is YAML, parsed at runtime under the `registry` feature. YAML rather
-than generated Rust because the artifact is language-agnostic — the same reasoning that
-makes `fixtures/` the primary deliverable applies here: a Python or Go JATS
-implementation should be able to consume this file directly. Runtime parsing rather than
-build-time codegen keeps a single source of truth with no committed-Rust copy to drift from
-it; the cost is a few milliseconds on first access, and registry queries are audit tooling,
-never a hot path.
+### 12. Cargo-feature collapse for multi-slice constructs: OR-of-all
+
+Where a construct's `pragmatic_slices` membership must collapse into a single `#[cfg]`
+predicate for a Cargo feature gate (as `ooxml-codegen` does today, ahead of ooxml's own
+migration onto this registry design), the rule is **OR-of-all**: a construct tagged with
+several slices — e.g. `Worksheet.drawingHF: [drawings, layout]` — compiles in when *any one* of
+its tagged features is enabled (`#[cfg(any(feature = "sml-drawings", feature =
+"sml-layout"))]`), via `FeatureMappings::feature_gates` (returns every tag, not just the first)
+and a shared `cfg_predicate` helper used identically by `codegen.rs`, `parser_gen.rs`, and
+`serializer_gen.rs` so struct fields and the parser/serializer code that reads them can never
+disagree. This was chosen over intersection (silently excludes a construct unless *every* tagged
+feature is enabled — more surprising than the bug it replaces) and over requiring an explicit
+single gate per multi-tagged construct (more principled in the abstract, but demands ~76
+individual human judgment calls with no request driving that curation). The rejected prior
+behavior — keeping only a construct's first tag, with the rest silently inert and no
+diagnostic anywhere — is exactly the failure mode this rule exists to close; regression tests
+in `ooxml-codegen` (`codegen.rs`'s unit tests plus the integration test
+`ooxml-codegen/tests/multi_tag_feature_gates.rs`) pin the real `Worksheet.drawingHF` construct's
+generated predicate so a future edit reverting to `tags.first()` fails rather than silently
+ships.
 
 ## Consequences
 
-- **The pilot found mechanically what the audit found by hand.** `jats-fmt`'s registry
-  derives **305 JATS elements** (excluding embedded MathML) from the Archiving driver
-  schema — against the ~306 the Tag Library's alpha index lists, i.e. the derivation is
-  essentially exact. Of those, 176 are never mentioned anywhere in `rescribe-read-jats`'s
-  source. Every element the 2026-07-28 hand audit called out — `hr`, `sub-article`,
-  `response`, the `ruby`/`rb`/`rt`/`rp` family, `chem-struct`, `array`, `index-term`,
-  `media`, `alt-text` — appears in that gap list without anyone having to notice it, and a
-  regression test pins them so a future derivation cannot silently lose them.
-
-- **The gap report is grouped by slice**, which turns a flat list of 176 names into
-  workable units: all 18 funding elements, all 8 BITS question-and-answer elements, 40
-  article-metadata elements. That is the decomposition argument for spec-sourced slices,
-  demonstrated rather than asserted.
-
+- **The pilot found mechanically what the audit found by hand.** `jats-fmt`'s registry derives
+  305 JATS-native elements — plus 181 embedded MathML elements (486 total) — against the ~306
+  the Tag Library's own alphabetical element index lists for JATS-native vocabulary alone,
+  i.e. the derivation is essentially exact. Of the 305 native elements, 176 are never mentioned
+  anywhere in `rescribe-read-jats`'s source; every element the 2026-07-28 hand audit called out
+  (`hr`, `sub-article`, `response`, the `ruby`/`rb`/`rt`/`rp` family, `chem-struct`, `array`,
+  `index-term`, `media`, `alt-text`) appears in that gap list without anyone having to notice
+  it, pinned by a regression test.
 - **A derivation boundary was found and fixed rather than accepted.** The first derivation
-  produced no `<table>`/`<tr>`/`<td>` at all. The cause: JATS embeds XHTML tables and
-  MathML by reference (`JATS-XHTMLtablesetup1-3.ent` includes `xhtml-table-1.mod.rng`), so
-  walking only the driver's direct `<include>` list loses them. Both the derivation tool
-  and `scripts/jats/download-spec.sh` now resolve the include graph transitively. A
-  hand-written checklist has no equivalent of this failure being *detectable*.
+  produced no `<table>`/`<tr>`/`<td>` at all, because JATS embeds XHTML tables and MathML by
+  reference through an include chain the derivation tool's first pass didn't walk
+  transitively. Both the derivation tool and `scripts/jats/download-spec.sh` now resolve the
+  include graph transitively. A hand-written checklist has no equivalent of this failure being
+  detectable.
+- **Redistributability is not uniform, and the design must not assume it is.** Verified per
+  format:
 
-- **Redistributability is not uniform, and the design must not assume it is.** Verified
-  per format:
-
-  | Format | Schema | License | Vendorable? | Modularization |
+  | Format | Schema | License | Vendorable? | Normative modularization |
   |---|---|---|---|---|
-  | JATS 1.3 Archiving | DTD (canonical) + RNG + XSD | Public domain, per module headers; "do not redistribute modified versions" | Yes, verbatim | **Yes** — 29 DTD-suite modules, mirrored 1:1 in RNG |
-  | TEI P5 | RELAX NG + DTD + XSD + ODD | CC BY 3.0 **or** BSD-2-Clause, chooser's option | Yes | **Yes** — 22 `<moduleSpec>`; membership is a literal `module=` attribute on each of 614 `<elementSpec>` |
-  | DocBook 5.2 | RELAX NG (RNC + XML) | Permissive perpetual grant in the schema header | Yes | **No** — the normative OASIS artifact is a flattened monolith |
-  | OOXML (ECMA-376) | RNC + XSD, Strict + Transitional | **Unresolved** — no copyright or license statement found in the schemas or in Parts 1/2 | **Assume not** | Yes — 21 namespace schemas, ~59 part entry-points |
+  | JATS 1.3 Archiving | DTD (canonical) + RNG + XSD | Public domain, per module headers | Yes, verbatim | **Yes** — 29 DTD-suite modules |
+  | TEI P5 | RELAX NG + DTD + XSD + ODD | CC BY 3.0 or BSD-2-Clause | Yes | **Yes** — 22 `<moduleSpec>` |
+  | DocBook 5.2 | RELAX NG (RNC + XML) | Permissive perpetual grant in schema header | Yes | **No** — normative artifact is a flattened monolith |
+  | OOXML (ECMA-376) | RNC + XSD, Strict + Transitional | Unresolved — no copyright/license statement found in schemas or Parts 1/2 | Assume not | Yes — 21 namespace schemas, ~59 part entry-points (not yet derived) |
 
-  Formats with vendorable schemas *could* additionally support real file+line citations and
-  fully local re-derivation. The design does not require that, precisely so one uniform
-  citation form serves every format including OOXML.
-
-- **DocBook cannot source *normative* slices from its normative schema.** Confirmed by
-  fetching `docs.oasis-open.org/docbook/docbook/v5.2/os/rng/docbook.rnc`: 414 distinct
-  elements in a single file, partitioned into **420 anonymous `div { }` blocks** carrying no
-  module identity. The upstream TC source repo *is* modular (~35 named `.rnc` files) but is
-  build source, not the normative artifact, and its license was not verified. Under the
-  amended two-field model this no longer blocks rollout: DocBook's registry ships with
-  `normative_slices: []` and a recorded reason, and may separately carry an invented, always-
-  permitted `pragmatic_slices` grouping — see Amendment 1 and open question 1.
-
-- **Why JATS was piloted rather than DocBook.** DocBook has the larger known-failure
-  dataset, but piloting it would have forced inventing a slice partition under the
-  then-single-slice rule — the one thing decision 3 (as originally written) forbade — so it
-  could not have validated the design's central claim. JATS has a normative machine-readable
-  modularization, a public-domain license, a stable per-element citation URL, an RNG (XML, so
-  `jats_fmt`'s own parser derives it with no new tooling and no dependency on
-  `ooxml-codegen`'s RNC subset), *and* known-failure data. It exercises every part of the
-  design at once. (This historical reasoning is why JATS went first, not a claim that
-  DocBook is still blocked the same way — see Amendment 1.)
-
-- **`jats-fmt` gained optional `serde`/`serde_yaml`/`sha2` dependencies**, all behind
-  `registry`/`registry-derive`. A default build is unchanged. `sha2` is new to the
-  workspace.
-
-- **Costs.** Two artifacts must be kept honest: the committed YAML and the schema it came
-  from. `--check` closes that loop but only for a developer who has fetched the schema, so
-  drift is *detectable on demand*, not *prevented*. And a registry is only as good as its
-  derivation: this one trusts that a construct is what the schema declares with
-  `<element name="…">`, which is right for RELAX NG but will need a different reader per
-  schema form (DTD, XSD, ODD).
-
-## Open questions
-
-Genuine forks, recorded rather than decided unilaterally:
-
-1. **DocBook's `pragmatic_slices`.** *(Narrowed by Amendment 1 — was "ship
-   empty or adopt Codeberg," now only about the pragmatic field, since `normative_slices: []`
-   with a recorded reason can ship unconditionally.)* Should DocBook's rollout populate
-   `pragmatic_slices` at all, and if so, invent a fresh grouping or borrow the shape of the
-   non-normative Codeberg TC source's ~35 modules (as an idea, not a redistribution — so its
-   license, still unverified, does not need resolving for this)? Separately, and not blocking
-   rollout: should the Codeberg source ever be used to populate `normative_slices` instead —
-   i.e. treated as authoritative enough to cite as the format's own decomposition despite not
-   being the normative artifact? That would need its license resolved first, because it would
-   be a citation claim, not an invented grouping.
-
-2. ~~**Hand-curated registries.**~~ **Resolved by Amendment 2**: `SourceKind::HandCurated` is
-   removed; `SourceKind::ScriptedExtraction` is the answer for a format with no
-   machine-readable schema. See Amendment 2, Decision B.
-
-3. **OOXML's license.** No copyright or license statement was found in the ECMA-376 schema
-   files or in Parts 1 and 2. Ecma publishes two boilerplate notices and neither is tied to
-   ECMA-376 anywhere we could find. Microsoft's Open Specification Promise is a patent
-   non-assert, not a copyright license. The conservative reading — treat as
-   non-redistributable — is what the design assumes; confirming it needs someone who can ask
-   Ecma. **This only gates a future `normative_slices` derivation from the ECMA-376 namespace/
-   part schemas** (a real citation into the spec's own text); it does not gate
-   `pragmatic_slices`, which is our own invented grouping and carries no redistribution claim
-   either way.
-
-4. ~~**Attributes/content models.**~~ **Resolved by Amendment 2**: content models (permitted
-   children and attributes, flattened, no ordering/choice/grouping structure) are now in the
-   registry. See Amendment 2, Decision A.
-
-5. ~~**OOXML's slice/Cargo-feature collapse rule.**~~ **Resolved by Amendment 3**: OR-of-all —
-   a construct tagged with several pragmatic slices is gated on the disjunction of every tag,
-   not just the first. See Amendment 3 for the decision, rejected alternatives, and
-   implementation shape.
-
-6. **A full, validation-capable content-model representation.** *(New, from Amendment 2.)*
-   Amendment 2's flattened `children`/`attributes`/`mixed` shape answers "what can this
-   element contain" but not "is this specific document instance valid" — it deliberately
-   drops ordering, choice exclusivity, and group/interleave co-occurrence. Should a future
-   revision add a second, richer representation (a tree mirroring the source pattern
-   structure) alongside the flattened one, for consumers that want real validation without
-   reaching for a RELAX NG validator directly? Not decided: this was flagged rather than
-   guessed past per the instructions that produced Amendment 2, and no consumer has yet asked
-   for validation-grade output — if one does, that request should drive the shape, rather
-   than speculatively building it now.
+  DocBook's registry, when rolled out, ships `normative_slices: []` with the recorded reason
+  above, and may separately carry a `pragmatic_slices` grouping (invented or borrowed as an
+  idea, not a redistribution, from the non-normative Codeberg TC source's ~35-module shape —
+  its license remains unverified and unresolved, but doesn't block a pragmatic slice, since
+  nothing would be redistributed verbatim).
+- **Why JATS was piloted rather than DocBook.** DocBook has the larger known-failure dataset,
+  but it has no normative modularization to source `normative_slices` from, while JATS has one,
+  a public-domain license, a stable per-element citation URL, and an RNG (XML, parsed by
+  `jats_fmt`'s own parser with no dependency on `ooxml-codegen`'s RNC subset) — it exercises
+  every part of the design at once.
+- **Measured runtime cost.** rlib size with the `registry` feature: 2,275,366 bytes (down from
+  4,244,748 bytes under an earlier YAML/`serde_yaml`-parsed design, ~52% smaller); without the
+  feature, unchanged at 440,032 bytes. The remaining growth over baseline is the construct data
+  itself (734 constructs, ~12,900 permitted-child/attribute entries even after content-model
+  dedup) compiled into rodata, not parser machinery.
+- **MathML sharing across formats was assessed and deliberately deferred, not built.** JATS,
+  DocBook, TEI, and BITS all embed the same MathML vocabulary (181 of JATS's 486 registry
+  elements are MathML). Building a shared crate now would be speculative — no second format has
+  a registry yet to validate the sharing shape against. If picked up later, the shape is a
+  small crate exporting the same `&'static`-statics shape, consumed as an ordinary dependency by
+  each format's own generated registry. The cost of deferring is committed-file duplication
+  only (each format would embed its own copy of the MathML block); zero runtime cost either
+  way, since both shapes are statics.
+- **Costs.** Two artifacts must be kept honest: the committed JSON and the schema it came from
+  — `--check` closes that loop, but only for a developer who has fetched the schema, so
+  drift is detectable on demand, not prevented at commit time for that half. The
+  source→generated half (JSON vs. `registry_generated.rs`) *is* prevented at commit time,
+  since it runs as an ordinary test with no schema needed.
 
 ## Alternatives considered
 
 - **Keep hand-written COVERAGE.md, apply ADR 0004's absence-check methodology more
   diligently.** Rejected: the methodology is right, but performing it by hand is a fallible
-  manual step repeated per verification pass, with the fetched index discarded each time.
-  That is precisely how the denominator drifted 94 → 105 → 117 while every individual pass
-  was conscientious. Mechanizing the index is what makes the check repeatable.
-
-- **One central registry for all formats,** extending `spec/ooxml-*.yaml`. Rejected: it
-  serves rescribe and nobody else, and the ecosystem consumers of the `-fmt` crates are the
-  point (CLAUDE.md's priority hierarchy puts them above rescribe's own needs).
-
-- **Derive at build time from the schema.** Rejected: neither CI nor downstream consumers
-  have the schema, and for OOXML they may not legally be given it.
-
+  manual step repeated per verification pass, with the fetched index discarded each time —
+  precisely how the denominator drifted while every individual pass was conscientious.
+- **One central registry for all formats,** extending `spec/ooxml-*.yaml`. Rejected: it serves
+  rescribe and nobody else, and the ecosystem consumers of the `-fmt` crates are the point
+  (CLAUDE.md's priority hierarchy puts them above rescribe's own needs).
+- **Derive at build time from the schema.** Rejected: neither CI nor downstream consumers have
+  the schema, and for OOXML they may not legally be given it.
 - **Put support status in the registry** (a `supported: bool` per construct). Rejected: it
   would churn the registry on every implementation commit and reintroduce a hand-maintained
-  claim. The join is cheap and cannot go stale.
+  claim; the join is cheap and cannot go stale.
+- **Ship the committed artifact as YAML instead of JSON, or as parsed-at-runtime data instead
+  of generated Rust statics.** Rejected on both axes: runtime YAML parsing was measured to cost
+  ~52% more compiled size than committed Rust statics for no behavioral benefit, since registry
+  queries are audit tooling, never a hot path where avoiding codegen would matter; and once the
+  runtime path is generated Rust rather than parsed data, the committed human-readable source
+  format is free to be whatever parses most uniformly across language ecosystems, which JSON
+  does at least as well as YAML.
+- **Reuse `ooxml-codegen`'s `parse_rnc` for the pilot.** Not applicable to JATS (its schema is
+  RNG, i.e. XML) and not currently viable in general: that parser handles no `grammar`,
+  `include`, or `|=`/`&=` combine, and discards RNC annotations before lexing. It's the right
+  foundation for a DocBook registry, but needs that work first.
 
-- **Generate Rust instead of shipping YAML.** Rejected: it would make the catalog useless to
-  non-Rust implementations, against the same reasoning that makes `fixtures/` the primary
-  deliverable.
+## Open questions
 
-- **Reuse `ooxml-codegen`'s `parse_rnc` for the pilot.** Not applicable to JATS (its schema
-  is RNG, i.e. XML) and not currently viable in general: that parser handles no `grammar`,
-  `include`, or `|=`/`&=` combine, and discards RNC annotations before lexing. It is the
-  right foundation for a DocBook registry, but needs that work first — see `TODO.md`.
+1. **DocBook's `pragmatic_slices`.** Should DocBook's rollout populate `pragmatic_slices` at
+   all, and if so, invent a fresh grouping or borrow the shape of the non-normative Codeberg TC
+   source's ~35 modules (as an idea, not a redistribution)? Separately: should the Codeberg
+   source ever be treated as authoritative enough to populate `normative_slices` instead of
+   staying empty — a citation claim that would need its license resolved first, unlike a
+   pragmatic slice?
+2. **OOXML's license.** No copyright or license statement was found in the ECMA-376 schema
+   files or in Parts 1 and 2. The conservative reading — treat as non-redistributable — is what
+   the design assumes; confirming it needs someone who can ask Ecma. This only gates a future
+   `normative_slices` derivation from the namespace/part schemas, not `pragmatic_slices`.
+3. **A full, validation-capable content-model representation**, alongside the flattened one, if
+   a consumer ever asks for validation-grade output rather than set-membership queries. Not
+   built speculatively.
+4. **MathML sharing across JATS/DocBook/TEI/BITS registries**, once a second format has a
+   registry to validate the sharing shape against.

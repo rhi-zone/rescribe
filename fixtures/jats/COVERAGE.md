@@ -13,7 +13,7 @@ section for the full evidence; this format's `CC` status there is `U` (unverifie
 construct registry (in design, see `docs/adr/`) checks this list against the format's own
 spec.
 
-JATS reference: JATS 1.3 (NISO Z39.96-2019), Journal Archiving and Interchange Tag Set.
+JATS reference: JATS 1.3 (NISO Z39.96-2021), Journal Archiving and Interchange Tag Set.
 https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 
 Archiving (not Publishing or Authoring) is the deliberate reference tag set — it is the

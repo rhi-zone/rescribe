@@ -588,6 +588,19 @@ and not being retracted — only the construct-list-completeness component of it
   bracket autolinks are core CommonMark and already unconditional; verified by reading
   pulldown-cmark 0.13.1's source directly, not guessed).
 
+  **Gap found during 2026-07-28 ADR audit, not previously tracked here:** pulldown-cmark
+  0.13.1 exposes six more real `Options` bits this crate neither gates nor reserves a feature
+  name for: `ENABLE_SMART_PUNCTUATION`, `ENABLE_HEADING_ATTRIBUTES`, `ENABLE_SUPERSCRIPT`,
+  `ENABLE_SUBSCRIPT`, `ENABLE_WIKILINKS`, and `ENABLE_OLD_FOOTNOTES` (an alternate footnote
+  syntax alongside the already-reserved `ENABLE_FOOTNOTES`/`footnotes` feature). None of these
+  have a Cargo feature today, not even an inert reserved one the way `footnotes`/
+  `definition-lists`/`math` already are. See `docs/adr/0011-commonmark-extension-feature-
+  gating.md`'s "Not yet covered" section. Also, an earlier draft of that ADR claimed
+  `Options::ENABLE_GFM` affects footnote-reference *kind* internally at `firstpass.rs:231` —
+  false, that line builds a `BlockQuoteKind`, unrelated to footnotes; `has_gfm_footnotes()`
+  doesn't check `ENABLE_GFM` at all. Corrected in the ADR; flagging here so the miscount isn't
+  silently repeated in future construct-coverage work on this crate.
+
   **Fully complete (all API modes — AST/events/batch/emit/writer — both backends verified
   to agree via the new `markdown_backends_agree` fixture-parity test in
   `crates/rescribe-fixtures/tests/run.rs`):** YAML + TOML front matter, GFM tables, GFM

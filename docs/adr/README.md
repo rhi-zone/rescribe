@@ -16,6 +16,18 @@ settled as a plan with implementation still pending — the ADR says which). res
 `Proposed`/`Superseded` entries yet; add that status vocabulary if/when a decision here is
 later revisited.
 
+**Amendments are for genuine supersession only** — a decision that was correct when made and
+was later legitimately changed by new context (a spec clarification, a new requirement). An
+amendment is the wrong tool for correcting a claim that was false at the time the ADR was
+written; that gets rewritten in place instead, with no struck-through history preserved,
+because the false claim was never legitimately "current guidance" to begin with. (A 2026-07-28
+audit found several ADRs in this log had used "Amendment" sections to patch factual errors
+rather than to record genuine supersession; those ADRs — 0001, 0002, 0004, 0007, 0011, 0013 —
+were rewritten in place under this convention rather than left with amendment scaffolding on
+top of a wrong original. Same file, same number, on the reasoning that nothing referencing the
+old text was relying on a correct decision — see each ADR's git history for the prior,
+incorrect text if needed.)
+
 ## Index
 
 | ADR | Title | Status |
@@ -23,16 +35,16 @@ later revisited.
 | [0001](0001-footnote-ref-def-separate-node-kinds.md) | `footnote_ref`/`footnote_def` as separate node kinds | Accepted |
 | [0002](0002-span-semantics-include-delimiters.md) | Span semantics: full syntactic construct including delimiters | Accepted |
 | [0003](0003-streaming-events-not-derived-from-parse.md) | `events()` is a true pull iterator; `parse()` is implemented as `events().collect()`, never the reverse | Accepted |
-| [0004](0004-xml-classifier-schema-verification-methodology.md) | Schema-verification methodology for block/inline element classifiers | Accepted (amended 2026-07-28: original method insufficient) |
+| [0004](0004-xml-classifier-schema-verification-methodology.md) | Schema-verification methodology for block/inline element classifiers: absence-check first, then entry-check | Accepted |
 | [0005](0005-citation-bibliography-ir-shape.md) | Citation/bibliography IR shape: `bibliography`/`bibliography_entry`/`bibliography_field` | Accepted |
 | [0006](0006-content-model-decides-properties-vs-child-nodes.md) | Properties-vs-child-nodes is decided by content-model markup permission, not precedent | Accepted |
-| [0007](0007-dtd-entity-resolution-build-vs-buy.md) | DTD-aware entity resolution: buy the entity table, build the DTD subset parser | Accepted (design only; not yet implemented) |
+| [0007](0007-dtd-entity-resolution-build-vs-buy.md) | DTD-aware entity resolution: standalone `xml-entities` crate, layered over a bought standard table | Accepted; implemented |
 | [0008](0008-ris-sn-tag-not-disambiguated.md) | RIS `SN` tag stays `field:scheme = "sn"`, not resolved to `isbn`/`issn` via `TY` | Accepted |
 | [0009](0009-propvalue-float-json-sentinel.md) | `PropValue::Float` non-finite values serialize as a string sentinel in JSON | Accepted |
 | [0010](0010-resource-data-base64-json.md) | `Resource::data` serializes as base64 in JSON, unconditionally | Accepted |
 | [0011](0011-commonmark-extension-feature-gating.md) | `commonmark-fmt` construct extensions are opt-in Cargo features, not default-on | Accepted |
 | [0012](0012-jats-archiving-tag-set-scope.md) | `jats-fmt`/`jats` fixtures target the Archiving and Interchange Tag Set; no per-tag-set crates or validation modes | Accepted |
-| [0013](0013-per-format-construct-registry.md) | Per-format construct registries: a spec-derived, machine-readable denominator | Accepted (amended three times 2026-07-28: 1. decision 3's OOXML claim was factually wrong, replaced with a normative/pragmatic two-field slice model; 2. added flattened content models, `registry_version` 3, and replaced `SourceKind::HandCurated` with `SourceKind::ScriptedExtraction`; 3. resolved the OOXML slice/Cargo-feature collapse rule as OR-of-all) |
+| [0013](0013-per-format-construct-registry.md) | Per-format construct registries: a spec-derived, machine-readable denominator, committed as generated Rust statics | Accepted |
 
 ## Numbering and format
 
