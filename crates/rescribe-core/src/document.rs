@@ -4,6 +4,7 @@ use crate::{Node, Properties, Resource, ResourceId, ResourceMap};
 
 /// A document with content and embedded resources.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Document {
     /// Root content node.
     pub content: Node,
@@ -17,6 +18,7 @@ pub struct Document {
 
 /// Information about the source format, for better roundtrip fidelity.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct SourceInfo {
     /// Source format identifier (e.g., "markdown", "html", "docx").
     pub format: String,
@@ -69,5 +71,38 @@ impl Document {
 impl Default for Document {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    use super::*;
+    use crate::{Node, PropValue};
+
+    #[test]
+    fn document_serializes_full_tree() {
+        let mut doc = Document::new();
+        doc.content =
+            Node::new("document").child(Node::new("paragraph").prop("style:align", "center"));
+        doc.metadata.set("title", "Test");
+        let json = serde_json::to_value(&doc).unwrap();
+        assert_eq!(json["content"]["kind"], serde_json::json!("document"));
+        assert_eq!(
+            json["content"]["children"][0]["kind"],
+            serde_json::json!("paragraph")
+        );
+        assert_eq!(
+            json["content"]["children"][0]["props"]["style:align"],
+            serde_json::json!("center")
+        );
+        assert_eq!(json["metadata"]["title"], serde_json::json!("Test"));
+    }
+
+    #[test]
+    fn node_kind_serializes_as_plain_string_not_wrapped() {
+        let node = Node::new("heading").prop("level", PropValue::Int(2));
+        let json = serde_json::to_value(&node).unwrap();
+        assert_eq!(json["kind"], serde_json::json!("heading"));
+        assert_eq!(json["props"]["level"], serde_json::json!(2));
     }
 }

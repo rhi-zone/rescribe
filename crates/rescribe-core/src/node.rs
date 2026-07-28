@@ -4,6 +4,7 @@ use crate::Properties;
 
 /// A content node in the document tree.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Node {
     /// Node type (e.g., "paragraph", "heading", "table").
     pub kind: NodeKind,
@@ -20,10 +21,13 @@ pub struct Node {
 /// This is a newtype wrapper around String to allow any node kind.
 /// Standard node kinds are defined in `rescribe-std`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", serde(transparent))]
 pub struct NodeKind(pub String);
 
 /// Source span for error reporting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Span {
     pub start: usize,
     pub end: usize,
