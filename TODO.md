@@ -38,51 +38,77 @@ and not being retracted — only the construct-list-completeness component of it
   decided here, and not something to guess past. Pick this up as its own task if/when a
   consumer actually needs uniform footnote handling across formats.
 
-- **`rst-fmt`'s streaming/batch/writer-streaming APIs are dead code AND do not compile once
-  wired in — root cause found, full re-implementation required (2026-07-28, follow-up to the
-  2026-07-28 ADR audit finding below).** Attempted the wiring fix: added `pub mod events; pub
-  mod batch; pub mod writer;` to `lib.rs` (mirroring `docbook-fmt`'s unconditional-mod-
-  declaration pattern — Cargo features gate the contract, not compilation, per CLAUDE.md) and
-  ran `cargo build -p rst-fmt --all-features`. It fails for two independent reasons, both
-  structural, not "type mismatch" drift:
-  1. **`crate::EventIter` / `crate::events()` don't exist.** `git log --follow` bisection
-     (`git diff 4b0a0ad05d 79ea2ce7af -- crates/formats/rst-fmt/src/lib.rs`) found the exact
-     commit: `79ea2ce7af` ("fix(rst-fmt): support multi-line footnote definition
-     continuation", 2026-03-29 21:25, the same evening as the original 5-Production sign-off)
-     replaced the `EventIter` struct — which implemented `Iterator` and was the actual pull-
-     iterator engine behind `pub fn events()` — with a plain non-iterator `Parser` struct, and
-     deleted `mod events;`/`mod batch;`/`mod writer;` plus the `pub fn events()` free function.
-     This reads as unintentional collateral damage from an unrelated parser refactor (the
-     commit message doesn't mention removing any public API), not a deliberate decision — no
-     ADR or comment records it.
-  2. **AST divergence.** `events.rs` (`BlockFrame::LineBlock`, `push_block(Block::LineBlock
-     {...})`) and `writer.rs` (`Frame::LineBlock`, same construction) both reference
-     `Block::LineBlock { lines: Vec<Vec<Inline>> }`. Current `lib.rs`'s `Block` enum has no
-     `LineBlock` variant — line blocks are represented as `Block::Div { class:
-     Some("line-block".into()), .. }` since a later commit (`try_parse_line_block`, added
-     between the same two commits above). This is independent of finding (1): fixing the
-     `EventIter` gap alone would still leave these two files failing to compile.
-  Re-implementing `events()`/`EventIter` is judged **out of scope for a wiring task**: per
-  ADR 0003 ("parser IS the iterator", not derived from `parse()`), it requires a real lazy
-  frame-stack pull-iterator state machine over `Parser`'s block-detection logic, covering
-  strictly more constructs than the deleted implementation ever handled — grid/simple table
-  parsing (`100ad1b0c4`) and footnote parsing (`4b0a0ad05d`) were both added *after* the
-  Iterator impl was removed, so the pre-`79ea2ce7af` `EventIter` is not even a valid restore
-  target; a correct implementation must be written fresh against the current `Parser`.
-  **Action needed**: (a) decide whether `Block::LineBlock` should be reinstated as a first-
-  class variant or whether `events.rs`/`writer.rs` should instead emit `StartDiv{class:
-  "line-block"}`/`EndDiv` to match the current `Div`-based representation; (b) write a real
-  frame-stack `EventIter: Iterator<Item = Event>` over the current `Parser`'s block methods
-  (headings, lists, tables, footnotes, field lists, definition lists, admonitions, figures,
-  directives — the full current construct set) with O(nesting depth) memory per the existing
-  module-doc comment in `events.rs`; (c) re-verify `batch.rs`'s `StreamingParser` (which
-  calls `crate::events(&block_text)` per accumulated block — its O(largest block) design is
-  otherwise sound once `events()` exists again) and `writer.rs`'s `Writer` (whose production
-  code doesn't depend on `EventIter` at all, only on `OwnedEvent`/`Block`/`Inline` — it will
-  compile once the `LineBlock` question above is resolved) against the reconstructed
-  `Event`/`OwnedEvent` API; (d) re-run `cargo test -p rst-fmt --all-features`, then
-  re-verify the 5-Production claim. `docs/format-audit.md`'s rst row demoted R:5→R:4/W:5→W:2
-  to reflect this (reader-ast/writer-builder are real and unaffected).
+- **`rst-fmt`'s streaming/batch/writer-streaming APIs recovered (2026-07-28) — resolves the
+  previous entry.** Root cause pinned exactly: not commit `79ea2ce7af` itself but merge
+  commit `383d4e6adf` (`Merge: 395a7ee532 79ea2ce7af`), which took the `79ea2ce7af` topic
+  branch's entire `lib.rs` verbatim instead of merging it — discarding 1443 lines mainline
+  had gained in parallel (`mod events;`/`mod batch;`/`mod writer;`, the `EventIter` struct,
+  and the `Block::LineBlock`→`Block::Div{class:"line-block"}` migration). Confirmed via
+  `git log --format=%H --follow --reverse -- .../lib.rs` showing `pub mod events` present at
+  every commit through `395a7ee532` and absent from `79ea2ce7af` onward, then
+  `git show 383d4e6adf --stat` showing the 1443-line loss landed in the merge, not the
+  topic-branch commit.
+  What was done:
+  - `events()`/`EventIter`: **not** a resurrection of the old ~1300-line duplicate grammar
+    (the salvaged `events.rs` embedded a full second copy of every `try_parse_*` method,
+    operating on its own state instead of `Parser`'s). Rebuilt as a thin composition —
+    `EventIter` holds a `Parser<'a>` and calls its `try_parse_block()` one top-level block
+    at a time, then `expand_block`/`expand_inline` lazily turn that already-parsed `Block`
+    into a `Vec<Frame>` stack (`O(nesting depth)` to drain, not `O(full document)`). `parse()`
+    and `events()` now share the one parser implementation, satisfying ADR 0003.
+  - `batch::StreamingParser`: unchanged — it already re-parses each accumulated blank-line-
+    delimited block through `events()`, genuinely `O(largest block)`.
+  - `writer::Writer`: rewritten. The salvaged version buffered the whole `Vec<Event>` and
+    only called `build()` at `finish()` — the "fake streaming, wraps the tree builder"
+    pattern CLAUDE.md explicitly names and rejects. Replaced with a frame stack that flushes
+    each completed **top-level** block to the sink immediately (via the shared, now
+    `pub(crate)` `build_block`/`BuildContext`), `O(largest top-level block + nesting depth)`.
+  - Tests: `events()`≡`parse()` shape-equivalence over 11 inputs covering every `Block`/
+    `Inline` variant (compares discriminant-tag sequences, not concrete types, so it doesn't
+    require `events()` and `parse()` to produce identical Rust values — just the same
+    constructs in the same order); 6 `StreamingParser` tests feeding input one byte at a
+    time with deliberately awkward splits (mid-directive-keyword, mid-heading-underline,
+    mid-list/blank-line boundary, mid-footnote-continuation, mid-UTF-8-character,
+    mid-table-border); one round-trip test through `Writer` covering headings, inline
+    formatting, both list kinds, code blocks, definition lists, grid tables, footnotes,
+    block quotes, and a transition rule in one document. 45 unit tests + 3 doctests pass;
+    `cargo clippy --all-targets --all-features -- -D warnings` clean.
+  - `crates/formats/rst-fmt/tests/no_orphan_modules.rs` added as the recurrence guard: walks
+    `src/` from `lib.rs` following file-backed `mod name;` declarations, fails if any `.rs`
+    file is unreachable. Verified it actually catches this bug class: with a genuinely
+    unreferenced new file added to `src/`, `cargo build` stays green (proving the blind
+    spot) while this test fails. A one-off workspace-wide sweep with the same logic found
+    no real orphans elsewhere in `crates/` — 3 files flagged, all confirmed false positives
+    from heuristic gaps (two crates with a sibling `lib.rs` + `main.rs` in one `src/` dir;
+    one `#[path = "registry_generated.rs"]` redirect in `jats-fmt` that isn't a plain
+    `mod name;`).
+  - Two **pre-existing, unrelated** `build_block` bugs found via the new Writer round-trip
+    test (not fixed — logged here, out of scope for this pass): (1) admonition directives
+    (`.. note::`, `.. warning::`, etc., represented as `Block::Div{class: Some(name), ..}`)
+    lose their directive wrapper entirely on write-back — the builder's `Block::Div { children,
+    .. } => build_blocks(children, ctx)` arm ignores `class`, so `.. note::\n\n   text\n`
+    round-trips to bare `text` with no way to tell it was ever an admonition. (2)
+    `Block::FootnoteDef`'s builder emits only a single trailing `\n`, not a blank-line
+    separator, so a block immediately following a footnote definition with ≥3-space
+    indentation (e.g. a block quote) gets swallowed into the footnote body as a continuation
+    line on re-parse. Both reproduce with plain `crate::build()` — no streaming API involved,
+    confirmed by isolating each with a throwaway `#[test]` calling `parse()`+`build()` only.
+  - **Not promoted to 5-Production**: `fuzz_rst_reader`/`fuzz_rst_roundtrip` only ever drove
+    `parse()`/`build()` via the `rescribe-read-rst`/`rescribe-write-rst` adapters; no fuzz
+    target exercises `events()`, `StreamingParser`, or `Writer` directly. Adding
+    no-panic + chunked-split fuzz targets for those three specifically is the concrete
+    remaining step. `docs/format-audit.md`'s rst row is now R:4/W:4 (up from R:4/W:2 —
+    reader-ast/writer-builder were already fine and unaffected; all five API modes are now
+    real and tested, but not yet fuzzed as such).
+  - **Cross-cutting gap found, explicitly out of scope here**: `crates/rescribe-fixtures/
+    tests/run.rs` tests every format crate via `parse()`/`emit()` only — for every format,
+    not just rst, no fixture is wired through `events()`/`StreamingParser`/a streaming
+    writer. This is the same blind-spot class the markdown suite hit (`backend_pulldown`
+    vs. the default backend). Fixing it is a horizontal sweep across every format crate and
+    does not belong to the rst vertical; flagging it here so it isn't lost.
+  - Two of the two-pre-existing-bug fixes above (admonition wrapper, footnote blank-line
+    separator) remain **open follow-up work** for whoever next touches `rst-fmt`'s
+    writer-builder.
 
 - **Status reset: construct-completeness marked unverified pending a construct registry
   (2026-07-28).** This session's DocBook/JATS/TEI work (see the entries below and in
@@ -1357,73 +1383,52 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] **Lists** — `{\*\pn\pnlvlblt}`/`{\*\pn\pnlvlbody}` → `Block::List`
   - [x] **Zero-diagnostic corpus gate** — `#[ignore]` test; 1125 files, 0% diagnostics
   - [x] **Fuzz clean** — reader/roundtrip/writer all clean; 3 bugs fixed (slice panic, OOM, UTF-8 boundary)
-- [ ] `rst-fmt` vertical — demoted from 5-Production, **R:4/W:2** (was falsely R:5/W:5;
-  corrected 2026-07-28 — see `docs/format-audit.md`'s rst row and "RST reader" section)
-  - [x] No-panic fuzz gate (`fuzz_rst_reader`); roundtrip fuzz (`fuzz_rst_roundtrip`)
+- [x] `rst-fmt` vertical — orphan-API recovery done, **R:4/W:4** (recovered 2026-07-28; see
+  `docs/format-audit.md`'s rst row and "RST reader" section, and the top-of-file entry above
+  for the full root-cause writeup)
+  - [x] No-panic fuzz gate (`fuzz_rst_reader`); roundtrip fuzz (`fuzz_rst_roundtrip`) —
+    covers `parse()`/`build()` only, see gap below
   - [x] Fixtures: 80 total; COVERAGE.md all boxes checked (2 N/A items: include directive, hard break)
   - [x] Oracle harness: 100% word coverage on rst-reader.rst (ref=618)
   - [x] Benchmarks: rst_parse_small 3.3µs, rst_parse_medium 30µs, rst_emit_medium 2.5µs
-  - [x] reader-ast (`parse()`) and writer-builder (`build()`) — real, tested, unaffected by the below
-  - [ ] ~~All API modes: ast + stream + batch + w-build + w-stream~~ — **false**, see below
+  - [x] reader-ast (`parse()`) and writer-builder (`build()`) — real, tested, unaffected throughout
   - [x] Table parsing — grid and simple tables with header support (2026-03-29)
   - [x] Footnote parsing — numbered, auto-symbol, auto-numbered, multi-line continuation (2026-03-29)
-  - **REGRESSION CONFIRMED, ROOT CAUSE FOUND, FIX ATTEMPTED AND REVERTED-IN-SPIRIT
-    (2026-07-28)**: this follows up the 2026-07-28 ADR-audit finding (previously here) that
-    `events.rs`/`batch.rs`/`writer.rs` are orphaned — not referenced by any `mod` declaration
-    in `lib.rs` under any Cargo feature, so `cargo check -p rst-fmt --all-features` passed only
-    because the crate never tried to compile them. This session attempted the actual wiring
-    fix (`pub mod events; pub mod batch; pub mod writer;` added to `lib.rs`, matching
-    `docbook-fmt`'s pattern of unconditional `mod` declarations — Cargo features scope the
-    contract per CLAUDE.md, they don't gate compilation) and ran
-    `cargo build -p rst-fmt --all-features`. **It does not compile** — 5 errors, confirmed by
-    an actual build (not just static reading): `E0432`/`E0433` unresolved
-    `crate::EventIter`/`crate::events` (3 sites: `events.rs:106`, `batch.rs:158`,
-    `batch.rs:198`) and `E0599` no variant `Block::LineBlock` (2 sites: `events.rs:390`,
-    `writer.rs:273`). The `lib.rs` edit was reverted after capturing this (`git diff` on
-    `lib.rs` is clean) since leaving it in place would break the whole crate's default build.
-    Two independent, structural reasons (not fixed, per CLAUDE.md's explicit "STOP and report,
-    don't attempt a large rewrite" guidance for exactly this situation):
-    1. `crate::EventIter` and `crate::events()` — which all three orphaned files reference —
-       don't exist anywhere in `lib.rs`. Root cause via `git log --follow` bisection
-       (`git diff 4b0a0ad05d 79ea2ce7af -- crates/formats/rst-fmt/src/lib.rs`): commit
-       `79ea2ce7af` ("fix(rst-fmt): support multi-line footnote definition continuation",
-       2026-03-29 21:25 — the same evening as the original 5-Production sign-off at
-       2026-03-29) replaced the `EventIter` struct (which implemented `Iterator` and was the
-       actual pull-iterator engine behind `pub fn events()`) with a plain non-iterator
-       `Parser` struct, deleting `mod events;`/`mod batch;`/`mod writer;` and the `pub fn
-       events()` free function in the same commit. The commit message only describes a
-       footnote-parsing fix; nothing indicates this was an intentional API removal, and no
-       ADR records a decision to drop streaming support.
-    2. Independently of (1): `events.rs` (`BlockFrame::LineBlock`,
-       `push_block(Block::LineBlock { lines }, ...)`) and `writer.rs` (`Frame::LineBlock`,
-       same construction) both reference a `Block::LineBlock { lines: Vec<Vec<Inline>> }`
-       variant. Current `lib.rs`'s `Block` enum has no such variant — line blocks are
-       represented as `Block::Div { class: Some("line-block".into()), directive: None,
-       children }` since `try_parse_line_block` was added (also between `4b0a0ad05d` and
-       `79ea2ce7af`). Fixing (1) alone would still leave both files failing to compile.
-    Reconstructing `events()`/`EventIter` is a **re-implementation, not a wiring fix**: per
-    ADR 0003 ("parser IS the iterator", not derived from `parse()`), it needs a real lazy
-    frame-stack pull-iterator over `Parser`'s current block-detection methods, and it must
-    cover *more* constructs than the deleted implementation ever did — grid/simple table
-    parsing (`100ad1b0c4`) and footnote parsing (`4b0a0ad05d`) were both added **after** the
-    Iterator impl was deleted, so the pre-`79ea2ce7af` `EventIter` is not a valid restore
-    target even if resurrected verbatim. `writer.rs`'s `Writer` type, by contrast, has no
-    production-code dependency on `EventIter` (only on `OwnedEvent`/`Block`/`Inline`/
-    `crate::build`) — it should compile on its own once the `Block::LineBlock` question is
-    resolved; only its `#[cfg(test)]` module calls `crate::EventIter::new`.
-    **Action needed** (none of this attempted here — out of scope for a wiring task):
-    (a) decide whether to reinstate `Block::LineBlock` as a first-class variant or change
-    `events.rs`/`writer.rs` to use `StartDiv{class:"line-block"}`/`EndDiv` to match the
-    current representation; (b) write a real `EventIter: Iterator<Item = Event>` frame-stack
-    state machine over the current `Parser`, O(nesting depth) memory, covering the full
-    current construct set (headings, lists, tables, footnotes, field lists, definition lists,
-    admonitions, figures, directives, line blocks); (c) re-verify `batch.rs`'s
-    `StreamingParser` (calls `crate::events(&block_text)` per accumulated block — its
-    O(largest block) design is otherwise sound once `events()` exists) and `writer.rs`'s
-    `Writer` against the reconstructed `Event`/`OwnedEvent` API; (d) `cargo test -p rst-fmt
-    --all-features`, then re-verify 5-Production. Demoted to **R:4/W:2** in
-    `docs/format-audit.md` pending this work (reader-ast/writer-builder are real, tested, and
-    unaffected — the demotion is entirely about the three non-functional API modes).
+  - [x] **reader-streaming (`events()`/`EventIter`)** — rebuilt 2026-07-28 as a thin wrapper
+    composing `Parser` (not a duplicate grammar): `expand_block`/`expand_inline` lazily turn
+    one already-parsed top-level `Block` into a `Vec<Frame>` stack, `O(nesting depth)`.
+    Covers every current construct including tables/footnotes (added after the old iterator
+    was deleted) and the `Div{class:"line-block"}` representation.
+  - [x] **reader-batch (`StreamingParser<H>`)** — needed no changes; already re-parses each
+    accumulated blank-line-delimited block through `events()`, `O(largest block)`.
+  - [x] **writer-streaming (`Writer<W>`)** — rewritten 2026-07-28; the salvaged version
+    buffered the entire event stream and only emitted at `finish()` (the fake-streaming
+    pattern CLAUDE.md rejects). Now flushes each top-level block to the sink the moment its
+    `End*` event arrives, `O(largest top-level block + nesting depth)`.
+  - [x] Tests: events↔parse shape equivalence (11 inputs, all constructs); 6 chunked
+    `StreamingParser` tests with awkward mid-token/mid-line/mid-UTF-8/mid-construct splits;
+    full-construct-mix round-trip through `Writer`. 45 unit + 3 doc tests pass; clippy clean.
+  - [x] Orphan-recurrence guard: `crates/formats/rst-fmt/tests/no_orphan_modules.rs` — walks
+    `src/` from `lib.rs` over `mod` declarations, fails on any unreachable `.rs` file.
+    Verified it actually catches this bug class (confirmed `cargo build` stays green with a
+    genuinely-unreferenced file present, while this test fails). Workspace-wide sweep with
+    the same logic found no real orphans elsewhere (3 flagged, all confirmed heuristic false
+    positives — sibling `lib.rs`+`main.rs` crates, one `#[path=...]` redirect in jats-fmt).
+  - [ ] **Remaining for true 5-Production**: no fuzz target exercises `events()`,
+    `StreamingParser`, or `Writer` directly — `fuzz_rst_reader`/`fuzz_rst_roundtrip` only
+    ever drove `parse()`/`build()` via the adapters. Add no-panic + chunked-split fuzz
+    coverage for the three restored APIs specifically.
+  - [ ] Two pre-existing, unrelated `build_block` bugs found via the new Writer round-trip
+    test (not fixed, logged for whoever next touches the writer-builder): admonition
+    directives (`.. note::` etc.) lose their wrapper on write-back (`Block::Div{class,..}`'s
+    builder arm ignores `class`); `Block::FootnoteDef`'s builder emits only `\n` instead of
+    a blank-line separator, so a following ≥3-space-indented block gets swallowed into the
+    footnote body on re-parse. Both reproduce with plain `crate::build()`, no streaming
+    involved.
+  - [ ] Cross-cutting, explicitly out of scope for the rst vertical: `crates/rescribe-
+    fixtures/tests/run.rs` tests every format via `parse()`/`emit()` only — no format's
+    fixtures exercise `events()`/`StreamingParser`/a streaming writer, for any crate. Same
+    blind-spot class the markdown suite hit. A horizontal sweep, not part of this vertical.
 - [x] `asciidoc` vertical — **5-Production** (2026-03-29)
   - [x] No-panic fuzz gate (`fuzz_asciidoc_reader`); roundtrip fuzz (`fuzz_asciidoc_roundtrip`)
   - [x] Fixtures: 84 total; COVERAGE.md all boxes checked
@@ -1989,33 +1994,42 @@ cleanly to the original input (no escape processing). Implementation: `Frame::In
 - [ ] `Cow::Borrowed` for asciidoc — same as rst-fmt
 - [ ] `Cow::Borrowed` for djot-fmt Verbatim/Math — Verbatim trimming means span ≠ content slice; would need a content-only span separate from the full backtick-construct span
 
-### `rst-fmt` — API modes: **NOT complete, false record corrected 2026-07-28**
+### `rst-fmt` — API modes: **complete and tested, 2026-07-28 (fuzz coverage still open)**
 
-This section previously claimed all API modes complete as of 2026-03-23/25/28. That
-became false the same evening the last item below landed: commit `79ea2ce7af`
-(2026-03-29, "fix(rst-fmt): support multi-line footnote definition continuation")
-deleted the `EventIter` struct/`pub fn events()`/`mod events;`/`mod batch;`/`mod writer;`
-as a side effect of an unrelated refactor. See the "REGRESSION CONFIRMED" entry under the
-`rst-fmt` vertical checklist above for the full 2026-07-28 investigation and root cause.
+This section previously (correctly, at the time) recorded all five API modes as deleted/
+non-functional after merge commit `383d4e6adf` discarded `mod events;`/`mod batch;`/
+`mod writer;`, `EventIter`, and the `Block::LineBlock`→`Div{class:"line-block"}` migration
+as collateral damage (see the top-of-file 2026-07-28 entry and `docs/format-audit.md`'s
+"RST reader" section for the full root-cause writeup). All five are now real:
 
-- [x] `parse() direct recursive descent` — independent of `events()` (2026-03-28) — **the
-  one item below still true**, and the reason `reader-ast` still works today
-- [ ] ~~`stream`: `events(input: &str) -> EventIter` pull iterator~~ — deleted 2026-03-29,
-  never restored; `events.rs` on disk still references it (orphaned, doesn't compile)
-- [ ] ~~`batch`: BatchParser (feed/finish) + BatchSink<F> callback style~~ — same; `batch.rs`
-  calls the now-nonexistent `crate::events()`/`crate::EventIter::new()`
-- [ ] ~~`batch`: StreamingParser<H: Handler> + Handler trait (2026-03-25)~~ — same file,
-  same problem; its own O(largest block) design is otherwise sound, just uncompilable
-- [ ] ~~`w-stream`: Writer<W: Write> streaming writer~~ — `writer.rs`'s production code
-  doesn't actually depend on `EventIter`, but references `Block::LineBlock`, a variant that
-  no longer exists on `Block` (superseded by `Block::Div{class:"line-block"}`)
-- [x] Feature flags exist in `Cargo.toml` (`reader-streaming`, `reader-batch`,
-  `writer-streaming`) but currently gate nothing — the modules they're meant to scope were
-  never `mod`-declared in `lib.rs`
-- [ ] Parser gaps: table parsing, footnote parsing (these predate and are unrelated to the
-  above; table/footnote parsing exist and work in `parse()`, just were added after the
-  streaming `EventIter` was already deleted, so a from-scratch `events()` reimplementation
-  needs to cover them too)
+- [x] `ast`: `parse() direct recursive descent` — unaffected throughout (2026-03-28)
+- [x] `stream`: `events(input: &str) -> EventIter` — rebuilt as a thin composition over
+  `Parser` (calls `Parser::try_parse_block()` one top-level block at a time, then lazily
+  expands that block into a `Vec<Frame>` stack), not a resurrection of the deleted
+  ~1300-line duplicate-grammar `EventIter`. Covers tables/footnotes (added after the old
+  iterator was deleted) and the current `Div{class:"line-block"}` representation.
+- [x] `batch`: `BatchParser` (feed/finish) + `BatchSink<F>` — unaffected; both just call
+  `crate::parse()`/`crate::events()` respectively, which work again now.
+- [x] `batch`: `StreamingParser<H: Handler>` — needed no changes; its O(largest block)
+  design (re-parses each accumulated blank-line-delimited block through `events()`) was
+  already sound, just uncompilable while `events()` didn't exist.
+- [x] `w-stream`: `Writer<W: Write>` — rewritten (not just fixed): the salvaged version
+  buffered the whole event stream and only emitted at `finish()`, the fake-streaming
+  pattern CLAUDE.md rejects; now flushes each completed top-level block to the sink
+  immediately via the shared `build_block`, O(largest top-level block + nesting depth).
+- [x] Feature flags in `Cargo.toml` (`reader-streaming`, `reader-batch`, `writer-streaming`)
+  now gate real, working code.
+- [x] Table/footnote parsing — covered by `events()`/`Writer` (see above); no longer a gap.
+- [x] Tests: events↔parse shape equivalence (11 inputs); 6 chunked `StreamingParser` tests
+  with awkward splits; full-construct-mix `Writer` round-trip. 45 unit + 3 doc tests pass.
+- [x] `tests/no_orphan_modules.rs` — recurrence guard, verified it catches this bug class.
+- [ ] **Still open**: no fuzz target drives `events()`/`StreamingParser`/`Writer` directly
+  (existing `fuzz_rst_reader`/`fuzz_rst_roundtrip` only ever exercised `parse()`/`build()`
+  via the adapters) — needed before re-claiming 5-Production.
+- [ ] Two pre-existing `build_block` bugs found (unrelated to streaming, not fixed): `Div`
+  admonitions lose their directive wrapper on write-back; `FootnoteDef` is missing a
+  blank-line separator after its body, so a following indented block gets swallowed into
+  it on re-parse.
 
 ### `org-fmt` — API modes complete (2026-03-23)
 
