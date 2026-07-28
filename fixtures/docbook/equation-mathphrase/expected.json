@@ -1,0 +1,14 @@
+{
+  "description": "<informalequation> with a <mathphrase> (DocBook phrase-level markup, not MathML/TeX) becomes a math_display node whose <superscript> content survives as real child nodes, not flattened text, since mathphrase is itself markup-capable content per the DocBook 5.2 content model",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    {
+      "path": "/0/0",
+      "kind": "math_display",
+      "props": { "math:format": null, "math:source": null },
+      "children_count": 4
+    },
+    { "path": "/0/0/1", "kind": "superscript" },
+    { "path": "/0/0/3", "kind": "superscript" }
+  ]
+}

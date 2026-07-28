@@ -1,0 +1,15 @@
+{
+  "description": "<equation> with a <title> and embedded <mml:math> MathML markup becomes a math_display node with a CAPTION child and math:source/math:format=\"mathml\" raw-preserved verbatim, instead of being destroyed by flattening to plain text",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    {
+      "path": "/0/0",
+      "kind": "math_display",
+      "props": {
+        "math:format": "mathml",
+        "math:source": "<mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\"><mml:mrow><mml:mi>E</mml:mi><mml:mo>=</mml:mo><mml:mi>m</mml:mi><mml:msup><mml:mi>c</mml:mi><mml:mn>2</mml:mn></mml:msup></mml:mrow></mml:math>"
+      }
+    },
+    { "path": "/0/0/0", "kind": "caption" }
+  ]
+}

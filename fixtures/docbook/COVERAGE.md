@@ -59,9 +59,14 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   dedicated mapping attempted this session, still raw-preserved generically
   via `generic_div`/`generic_span` per the catch-all, but not verified with a
   fixture; a real Q&A-list IR mapping is a design choice, see TODO.md)
-- [ ] equation (display math) — (missing; `<equation>` / `<mathphrase>` or
-  MathML — left open together with `inlineequation`, same MathML-modeling
-  design fork, see TODO.md)
+- [x] equation (display math) — `equation-mathml`, `equation-mathphrase`
+  (`<equation>` / `<informalequation>` map to `math_display`, per the DocBook 5.2
+  content model's three mutually-exclusive alternatives — `<mml:math>` MathML
+  raw-preserved as `math:source`/`math:format="mathml"` following the HTML
+  precedent, `<mathphrase>` phrase-level markup kept as real child nodes rather
+  than flattened text, `<mediaobject>` kept as a plain child `image` node;
+  previously mis-classified as a genuine design fork — see TODO.md's "MathML
+  resolved" entry)
 - [x] mediaobject (block image) — `mediaobject-block` (`<mediaobject>` as a
   direct block child, not inside `<figure>`, passes through to a standard
   `image` node; the writer already had a dedicated block-position IMAGE ->
@@ -108,11 +113,10 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 - [x] markup — `inline-markup`
 - [x] tag — `inline-tag`
 - [x] uri — `inline-uri`
-- [ ] inlineequation (inline math) — (missing; `<inlineequation>` / MathML —
-  left open: modeling this needs a real design decision — whether to reuse
-  rescribe-math's `math_inline` node with the MathML captured as
-  `math:source`/raw content, or something else — not a lookup-verifiable
-  answer, see TODO.md)
+- [x] inlineequation (inline math) — `inlineequation-mathml` (`<inlineequation>`
+  maps to `math_inline`; same content-model handling as `equation` above, using
+  `<inlinemediaobject>` in place of `<mediaobject>` for the image alternative —
+  see TODO.md's "MathML resolved" entry)
 - [x] footnoteref — `footnoteref` (`<footnoteref linkend="…">`, mapped to the
   standard `footnote_ref` node with `linkend` as the standard `label` property)
 - [ ] co (callout reference) — (missing; `<co>` — left open together with the

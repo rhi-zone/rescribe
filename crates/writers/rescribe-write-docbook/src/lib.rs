@@ -131,6 +131,52 @@ fn generic_attrs(node: &Node) -> Vec<(String, String)> {
     attrs
 }
 
+/// Build a `<equation>`/`<informalequation>`/`<inlineequation>`'s children
+/// from a `math_display`/`math_inline` node, per the DocBook 5.2 content
+/// model (`alt?, (mediaobject+ | mathphrase+ | mml:*+)`, optionally preceded
+/// by a title — see `rescribe-read-docbook::build_math_node`'s doc comment
+/// for the full reader-side rationale this mirrors):
+/// - A `CAPTION` child (the equation's own `<title>`) re-emits via
+///   `write_node` regardless of position — a title is always block-shaped
+///   even inside an inline equation (which in practice won't have one).
+/// - An `IMAGE` child re-emits via `write_child` — `write_node` for
+///   `math_display` (producing `<mediaobject>`) or `write_inline` for
+///   `math_inline` (producing `<inlinemediaobject>`), matching each
+///   content model's own alternative.
+/// - `math:format == "mathml"` re-splices the raw-captured `math:source`
+///   verbatim via `DbNode::Raw` (same mechanism as the raw-preserved
+///   `<info>` header fields above).
+/// - Any other remaining children (the `<mathphrase>` case: real inline
+///   markup, not a flat string — see `build_math_node`) are collected and
+///   re-wrapped in a single `<mathphrase>`.
+fn equation_children(node: &Node, write_child: fn(&Node) -> Vec<DbNode>) -> Vec<DbNode> {
+    let mut out = Vec::new();
+    let mut mathphrase_kids = Vec::new();
+    for child in &node.children {
+        match child.kind.as_str() {
+            node::CAPTION => out.extend(write_node(child)),
+            node::IMAGE => out.extend(write_child(child)),
+            _ => mathphrase_kids.push(child),
+        }
+    }
+    if node.props.get_str("math:format") == Some("mathml")
+        && let Some(source) = node.props.get_str("math:source")
+    {
+        out.push(DbNode::Raw {
+            content: source.to_string(),
+            span: docbook_fmt::Span::NONE,
+        });
+    }
+    if !mathphrase_kids.is_empty() {
+        let phrase_children = mathphrase_kids
+            .iter()
+            .flat_map(|c| write_inline(c))
+            .collect();
+        out.push(db_element("mathphrase", vec![], phrase_children));
+    }
+    out
+}
+
 /// Convert one rescribe IR (block-level) node into zero or more DocBook AST
 /// nodes.
 fn write_node(node: &Node) -> Vec<DbNode> {
@@ -428,6 +474,24 @@ fn write_node(node: &Node) -> Vec<DbNode> {
                 )],
             )],
         )],
+
+        // See `rescribe-read-docbook::build_math_node`'s doc comment for the
+        // full DocBook 5.2 content-model rationale this mirrors on write.
+        // `<equation>` (has a `CAPTION` child, from an original `<title>`)
+        // vs `<informalequation>` (doesn't) — same title-presence tag
+        // selection convention as the `TABLE`/`informaltable` arm above.
+        "math_display" => {
+            let has_caption = node
+                .children
+                .iter()
+                .any(|c| c.kind.as_str() == node::CAPTION);
+            let tag = if has_caption {
+                "equation"
+            } else {
+                "informalequation"
+            };
+            vec![db_element(tag, vec![], equation_children(node, write_node))]
+        }
 
         node::HORIZONTAL_RULE => Vec::new(), // DocBook doesn't have HR
 
@@ -766,6 +830,17 @@ fn write_inline(node: &Node) -> Vec<DbNode> {
             )],
         )],
 
+        // Same content-model handling as the block `"math_display"` arm
+        // above (see `rescribe-read-docbook::build_math_node`'s doc
+        // comment), using `write_inline` throughout so an `IMAGE` child
+        // becomes `<inlinemediaobject>` (not `<mediaobject>`) per
+        // `<inlineequation>`'s content model.
+        "math_inline" => vec![db_element(
+            "inlineequation",
+            vec![],
+            equation_children(node, write_inline),
+        )],
+
         // A raw entity reference preserved by the reader: re-emit verbatim.
         node::RAW_INLINE => match node.props.get_str("docbook:entity") {
             Some(name) => vec![DbNode::EntityRef {
@@ -859,5 +934,78 @@ mod tests {
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
         assert!(xml.contains("<para>Hello <emphasis>world</emphasis></para>"));
+    }
+
+    /// An `<equation>` with embedded `<mml:math>` MathML must round-trip
+    /// byte-for-byte through parse -> emit -> reparse: the `mml:math`
+    /// subtree is raw-preserved (see `rescribe-read-docbook`'s
+    /// `mathml-raw` sentinel / `split_mathml`) and re-spliced verbatim on
+    /// write (see `equation_children`'s `DbNode::Raw` branch), so a second
+    /// parse must recover the exact same `math:source`.
+    #[test]
+    fn test_roundtrip_mathml_equation() {
+        let docbook = r#"<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook"><equation><title>T</title><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math></equation></article>"#;
+        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains(r#"<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math>"#),
+            "emitted XML missing raw mml:math: {xml}"
+        );
+        assert!(
+            xml.contains("<equation>"),
+            "expected <equation> (has title): {xml}"
+        );
+
+        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        let formula = &reparsed.value.content.children[0].children[0];
+        assert_eq!(formula.kind.as_str(), "math_display");
+        assert_eq!(formula.props.get_str("math:format"), Some("mathml"));
+        assert_eq!(
+            formula.props.get_str("math:source"),
+            parsed.value.content.children[0].children[0]
+                .props
+                .get_str("math:source")
+        );
+    }
+
+    /// An `<informalequation>` with a `<mathphrase>` must round-trip its
+    /// nested inline markup (e.g. `<superscript>`) as real child nodes, not
+    /// flattened text — see `rescribe-read-docbook::build_math_node`'s doc
+    /// comment.
+    #[test]
+    fn test_roundtrip_mathphrase() {
+        let docbook = r#"<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook"><informalequation><mathphrase>x<superscript>n</superscript></mathphrase></informalequation></article>"#;
+        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains("<informalequation><mathphrase>x<superscript>n</superscript></mathphrase></informalequation>"),
+            "unexpected emitted XML: {xml}"
+        );
+    }
+
+    /// `<inlineequation>` with `<mml:math>` round-trips via
+    /// `<inlinemediaobject>`-style inline write path, producing
+    /// `math_inline` with `math:format = "mathml"` on reparse.
+    #[test]
+    fn test_roundtrip_mathml_inlineequation() {
+        let docbook = r#"<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook"><para>x is <inlineequation><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math></inlineequation>.</para></article>"#;
+        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains(r#"<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math>"#),
+            "emitted XML missing raw mml:math: {xml}"
+        );
+
+        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        let para = &reparsed.value.content.children[0].children[0];
+        let formula = &para.children[1];
+        assert_eq!(formula.kind.as_str(), "math_inline");
+        assert_eq!(formula.props.get_str("math:format"), Some("mathml"));
     }
 }

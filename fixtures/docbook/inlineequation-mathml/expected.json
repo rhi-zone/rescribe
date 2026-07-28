@@ -1,0 +1,15 @@
+{
+  "description": "<inlineequation> with embedded <mml:math> MathML markup becomes a math_inline node with math:source/math:format=\"mathml\" raw-preserved verbatim inside a paragraph",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "paragraph" },
+    {
+      "path": "/0/0/1",
+      "kind": "math_inline",
+      "props": {
+        "math:format": "mathml",
+        "math:source": "<mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\"><mml:mi>x</mml:mi></mml:math>"
+      }
+    }
+  ]
+}

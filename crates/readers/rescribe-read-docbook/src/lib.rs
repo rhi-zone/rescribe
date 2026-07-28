@@ -120,6 +120,44 @@ fn convert_children(
                 children: kids,
                 ..
             } => {
+                // A MathML root element inside `<equation>`/`<informalequation>`/
+                // `<inlineequation>` is real MathML markup — the DocBook 5.2
+                // reference's content model for all three
+                // (https://tdg.docbook.org/tdg/5.2/equation.html /
+                // inlineequation.html) is `alt? , (mediaobject+ | mathphrase+ |
+                // mml:*+)`, i.e. mutually exclusive alternatives, not a
+                // combination. Recursing through the normal pipeline here
+                // would flatten the MathML element structure through the
+                // generic catch-all and then destroy even that when the
+                // `"equation"`/etc. arm below builds `math:source` — the same
+                // class of bug fixed for `rescribe-read-jats`'s
+                // `disp-formula`/`inline-formula`. Capture the whole MathML
+                // subtree verbatim instead (the same `emit_fragment`
+                // raw-preservation mechanism used for unmodeled `<info>`
+                // children below) as a sentinel `SPAN` tagged
+                // `docbook:tag = "mathml-raw"`, which `split_mathml` pulls
+                // back out in the equation arms. Namespace prefix is matched
+                // by local name (`is_mathml_root`), not hardcoded to `mml:`,
+                // since `docbook-fmt`'s AST keeps whatever prefix the source
+                // document declared (mirroring how `xlink:href` is matched
+                // literally elsewhere in this reader) and DocBook documents
+                // are not required to use the `mml:` prefix by convention the
+                // way JATS's Tag Library documents do.
+                if matches!(
+                    parent_name,
+                    "equation" | "informalequation" | "inlineequation"
+                ) && is_mathml_root(name)
+                {
+                    let raw =
+                        String::from_utf8(docbook_fmt::emit_fragment(std::slice::from_ref(child)))
+                            .unwrap_or_default();
+                    out.push(
+                        Node::new(node::SPAN)
+                            .prop("docbook:tag", "mathml-raw")
+                            .prop(prop::CONTENT, raw),
+                    );
+                    continue;
+                }
                 let child_in_header =
                     in_header || matches!(name.as_str(), "info" | "articleinfo" | "bookinfo");
                 // Whether *`name`'s own children* should also be dispatched
@@ -243,6 +281,78 @@ fn convert_children(
         }
     }
     out
+}
+
+/// Whether `name` (the DocBook AST's literal element name, prefix included —
+/// see the `mathml-raw` interception in `convert_children`) is a MathML root
+/// element: either bare `math` (default-namespaced) or `{prefix}:math` for
+/// any namespace prefix the source document chose.
+fn is_mathml_root(name: &str) -> bool {
+    name == "math"
+        || name
+            .rsplit_once(':')
+            .is_some_and(|(_, local)| local == "math")
+}
+
+/// Pull the raw-captured MathML sentinel (see `convert_children`'s
+/// `mathml-raw` interception) out of an equation's already-converted
+/// children, returning its verbatim MathML source alongside the remaining
+/// children (normally empty in the MathML case — MathML, `<mathphrase>`, and
+/// `<mediaobject>` are alternatives per the DocBook 5.2 content model, not
+/// combined).
+fn split_mathml(children: Vec<Node>) -> (Option<String>, Vec<Node>) {
+    let mut mathml = None;
+    let mut rest = Vec::with_capacity(children.len());
+    for child in children {
+        if mathml.is_none()
+            && child.kind.as_str() == node::SPAN
+            && child.props.get_str("docbook:tag") == Some("mathml-raw")
+        {
+            mathml = child.props.get_str(prop::CONTENT).map(|s| s.to_string());
+        } else {
+            rest.push(child);
+        }
+    }
+    (mathml, rest)
+}
+
+/// Build a `math_display`/`math_inline` node from an already-converted
+/// `<equation>`/`<informalequation>`/`<inlineequation>` child list, per the
+/// DocBook 5.2 content model (`alt?, (mediaobject+ | mathphrase+ | mml:*+)`,
+/// optionally preceded by `title`/`info` — see `heading_level_for_parent`,
+/// which already routes an equation's own `<title>` to `CAPTION` rather than
+/// `HEADING`, so it survives here as an ordinary child, same as `<figure>`'s
+/// caption).
+///
+/// Three content alternatives, each handled differently:
+/// - MathML (`<mml:math>` or similar): raw-captured verbatim by
+///   `convert_children` into the `mathml-raw` sentinel this function pulls
+///   back out via `split_mathml` — `math:source` + `math:format = "mathml"`.
+/// - `<mathphrase>`: DocBook *phrase-level markup* (DocBook 5.2 reference:
+///   `<mathphrase>` holds ordinary inline content like `<superscript>`, e.g.
+///   `x<superscript>n</superscript> + y<superscript>n</superscript>` — it is
+///   NOT a flattenable-to-text format the way MathML or TeX source is), so
+///   its already-converted children (superscript/emphasis/text nodes, from
+///   the ordinary `"mathphrase"` catch-all pass-through below) are kept as
+///   real child nodes of the math node — matching the repo's existing
+///   "nested markup survives as real nodes, not a flat string" convention
+///   (see `bibliography_field`'s markup-in-field fixtures) — rather than
+///   collapsed into `math:source` the way `extract_text` would.
+/// - `<mediaobject>`/`<inlinemediaobject>` (an image standing in for the
+///   equation): already converts to a plain `IMAGE` node via the existing
+///   `"mediaobject"`/`"inlinemediaobject"` arm; kept as an ordinary child of
+///   the math node (same treatment as the `<mathphrase>` case) rather than
+///   invented as a special image-only equation representation — it's still
+///   equation content per the spec, just a different encoding of it.
+fn build_math_node(kind: &str, children: Vec<Node>) -> Node {
+    let (mathml, rest) = split_mathml(children);
+    match mathml {
+        Some(source) => Node::new(kind)
+            .prop("math:source", source)
+            .prop("math:format", "mathml")
+            .children(rest),
+        None => Node::new(kind).children(rest),
+    }
 }
 
 fn get_attr<'a>(attrs: &'a [(String, String)], key: &str) -> Option<&'a str> {
@@ -632,6 +742,18 @@ fn convert_element(
         // property, rather than passing both through as separate flat
         // siblings — which would leave the alt text as a stray, unrelated
         // node next to the image instead of properly associated with it.
+        // See `build_math_node`'s doc comment for the full content-model
+        // rationale (MathML raw-captured / mathphrase kept as real child
+        // markup / mediaobject kept as a plain child IMAGE node).
+        "equation" | "informalequation" => Some(build_math_node("math_display", children)),
+        "inlineequation" => Some(build_math_node("math_inline", children)),
+        // `<mathphrase>` is DocBook phrase-level markup (see
+        // `build_math_node`'s doc comment) — a transparent pass-through so
+        // its own children (already-converted `superscript`/`emphasis`/text
+        // nodes) splice directly into the enclosing equation node rather
+        // than being wrapped in another layer.
+        "mathphrase" => None,
+
         "mediaobject" | "inlinemediaobject" => {
             let mut image = None;
             let mut alt = String::new();
