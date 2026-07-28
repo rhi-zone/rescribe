@@ -1990,7 +1990,14 @@ cleanly to the original input (no escape processing). Implementation: `Frame::In
 
 **Remaining (other crates):**
 - [ ] `Cow::Borrowed` for org-fmt — inline parser uses `Span::NONE`; needs span tracking in parse_inline_content before base_offset approach works
-- [ ] `Cow::Borrowed` for rst-fmt — same; `Inline::Text(String)` has no span at all
+- [ ] `Cow::Borrowed` for rst-fmt — confirmed (2026-07-29) larger than "add span tracking to
+  parse_inline_content": `events()` shares the *entire* per-block parse path with `parse()`
+  (builds an owned `Block`/`Inline` tree, then flattens it — see the dedicated rst-fmt entry
+  above), `parse_inline_content` scans `Vec<char>` with no byte offsets at all (and no
+  escape handling, so span exclusion isn't the blocker — char-vs-byte indexing is), and ~15
+  call sites already join multi-line content into owned `String`s before it runs. Needs a
+  parallel byte-offset tokenizer (per the djot-fmt precedent below) plus span-plumbing
+  through those call sites, not a local tweak.
 - [ ] `Cow::Borrowed` for asciidoc — same as rst-fmt
 - [ ] `Cow::Borrowed` for djot-fmt Verbatim/Math — Verbatim trimming means span ≠ content slice; would need a content-only span separate from the full backtick-construct span
 
@@ -2030,6 +2037,53 @@ as collateral damage (see the top-of-file 2026-07-28 entry and `docs/format-audi
   admonitions lose their directive wrapper on write-back; `FootnoteDef` is missing a
   blank-line separator after its body, so a following indented block gets swallowed into
   it on re-parse.
+
+### `rst-fmt` — streaming Writer subtree-reconstruction fix + events() zero-copy scoped (2026-07-29)
+
+A benchmark investigation (methodology + numbers: `docs/format-audit.md`'s 2026-07-29 entry)
+found `Writer::process` was still funneling through `build_block` — it reconstructed a full
+`Block`/`Inline` subtree per top-level block via the `Frame` stack, then called the exact
+function `build()` uses, on top of that reconstruction. Fixed:
+
+- [x] `Writer` rewritten to emit RST text directly from events — every frame accumulates
+  already-formatted `String` buffers (plus a parallel plain-text buffer only where genuinely
+  read: `Heading` underline sizing, `TableCell` content) and each `End*` renders+splices once;
+  no `Block`/`Inline` is ever constructed. Commit `01472e3027`.
+- [x] Follow-up: gated an unconditional plain-text-tracking cost (`heading_depth`/
+  `table_cell_depth` counters) — commit `4daecb99`. Measured before/after: **no wall-clock
+  change** (this was not the dominant cost).
+- [x] `test_writer_roundtrip_nested_lists`, `test_writer_no_subtree_reconstruction_blowup`
+  (allocation-growth regression guard) added; all pre-existing tests still pass.
+- [ ] **Wall-clock still ~7-8x slower than `build()`, unchanged by either commit above** —
+  root cause confirmed via allocation-count instrumentation (not guessed): `build()` grows
+  one `String` for the whole document (amortized geometric growth, ~563 allocs for a
+  50-section doc); the rewritten `Writer` gives every frame its own short-lived buffer that's
+  allocated, filled, spliced into its parent, and dropped (~5,060 allocs for the same doc,
+  ~9x — tracks the wall-clock ratio almost exactly). Closing this needs a genuinely separate,
+  larger redesign: write inline content directly into the nearest ancestor's buffer instead of
+  giving every frame its own, reserving an isolated buffer only where a construct's own
+  post-processing needs one in isolation (`Blockquote`/`Admonition` line-reindent, `Heading`
+  underline-length, `Table` column-width calc, list-item continuation indent). Full
+  alloc-count numbers and reasoning: scratchpad perf report referenced in the format-audit.md
+  entry above (not committed to the repo — see that entry for the pointer). Fencing this
+  rather than half-doing it, per CLAUDE.md.
+- [ ] **`events()` confirmed non-zero-copy, and the fix is a large redesign, not a local
+  tweak** — read `EventIter`/`expand_block`/`expand_inline` directly: `events()` calls the
+  *same* per-block parser `parse()` uses to build a fully owned `Block`/`Inline` tree for
+  each top-level block, then flattens that owned tree into events. So it shares the entire
+  per-block parse path (block-level *and* inline-level), not just `parse_inline_content`.
+  `parse_inline_content` itself scans a `Vec<char>` copy of each span (no byte-offset
+  tracking anywhere — and no backslash-escape handling exists in this tokenizer at all, so
+  the "escape detection" framing from earlier investigation doesn't apply; the real blocker
+  is char-indexing vs byte-offset-indexing) and ~15 call sites already join multi-line
+  content into owned `String`s before calling it. A genuine fix needs: (1) a parallel
+  byte-offset-based inline tokenizer yielding `Cow<'a, str>` events directly (following the
+  `djot-fmt` `Frame::InlineText`/`ParseContext::line_offset_at()`/`base_offset` precedent
+  noted below), independent from the owned-`String`-building `parse_inline_content` used by
+  `parse()`/`EventIter`'s current tree-then-flatten approach, and (2) plumbing real byte
+  spans through the ~15 block-extraction call sites so the content handed to that tokenizer
+  is itself a borrow of the original input wherever no line-joining/dedent is required. Not
+  attempted this pass — confirmed large enough to fence rather than half-do.
 
 ### DEBT: Fake-streaming writer/reader audit across all `crates/formats/` — identified 2026-07-28
 
