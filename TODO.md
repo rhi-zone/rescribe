@@ -52,6 +52,12 @@ This file describes milestones, format tiers, and cross-cutting work.
   table cell) had no `write_inline` arm and silently lost its `<footnote>`
   wrapper. All four fixed this session.
 
+  **[Superseded 2026-07-28 — see "MathML resolved for DocBook and JATS" below: the
+  `equation`/`inlineequation` MathML fork described here was NOT actually a fork (the
+  HTML precedent transferred cleanly) and is now implemented/closed; the fixture count
+  below is stale, now 101/105. The other forks named here are re-verified as still
+  genuinely open, with sharpened writeups in that same section.]**
+
   **Left open, genuine design forks (not lookup-resolvable), 6 of 94 boxes**:
   `qandaset`/`qandaentry` (no Q&A-list IR shape attempted — still raw-preserves
   generically via `generic_div`, just unverified with a fixture); `equation`/
@@ -110,6 +116,11 @@ This file describes milestones, format tiers, and cross-cutting work.
   for `<disp-formula>`/`<inline-formula>` absorbed the `<label>` text into the
   math content — fixed with a `split_label()` helper.
 
+  **[Superseded 2026-07-28 — see "MathML resolved for DocBook and JATS" below: the
+  MathML fork described here was NOT actually a fork and is now implemented/closed
+  (citation/ref-list was already separately closed by a later session, see the JATS
+  citation vertical entry below). Current count: 108/109, `<alternatives>` only.]**
+
   **Left open, genuine design forks (not lookup-resolvable), 7 of 106 boxes**:
   MathML `<math>` as an alternative to `<tex-math>` inside
   `disp-formula`/`inline-formula` — the same math-modeling fork docbook's
@@ -153,6 +164,13 @@ This file describes milestones, format tiers, and cross-cutting work.
   `statement`/`verse-group`/`table-wrap-group`/`tfoot`/`disp-formula-group`/
   `kwd-group`/`ack`/`app-group`/`app`/`notes` — full citation trail in the doc
   comment above `is_block_element`.
+- **[Superseded 2026-07-28: the counts and residue list below are stale — citation/
+  ref-list IR shape was closed for all three formats in later 2026-07-28 sessions
+  (see the citation-vertical entries below), and MathML was resolved for docbook/jats
+  the same day (see "MathML resolved for DocBook and JATS" below). Current state:
+  docbook 101/105 (3 remaining: qandaset/qandaentry, programlistingco/co/calloutlist),
+  jats 108/109 (1 remaining: alternatives). Both re-verified as genuine, not
+  lookup-resolvable, with sharpened writeups in that section.]**
 - **The docbook/jats/tei extraction-and-closing arc is essentially wound down**
   as of 2026-07-27. All three verticals have had their fixture suites deepened
   (tei 118/118, docbook 88/94, jats 99/106) and their `is_block_element`
@@ -1552,3 +1570,175 @@ original non-guess) remains the correct, honest representation. This question is
 as "investigated, genuinely unresolvable from the spec" rather than left dangling; a future
 session should not reopen it without new spec evidence (e.g., a rediscovered current
 EndNote/Clarivate authoritative document that does state a rule).
+
+## MathML resolved for DocBook and JATS; two boxes closed, three re-verified as genuine forks (2026-07-28)
+
+TODO.md previously described DocBook's `equation`/`inlineequation` and JATS's MathML box
+as genuinely undecided design forks ("whether to reuse `math_inline`/`math_display` with
+MathML as raw content, or something else"). Re-investigated this session: **it was not
+actually a fork.** A MathML convention already exists in this repo, established for HTML
+(`rescribe-read-html`'s `convert_mathml`/`rescribe-write-html`'s `convert_math_inline`,
+documented in this file at the "Inline MathML (2026-07-26)" entry): raw-preserve the
+`<math>…</math>` subtree verbatim as `math_inline`/`math_display` with
+`math:format="mathml"` + `math:source` holding the exact markup, via each format's own
+`emit_fragment`. Checking DocBook 5.2 (tdg.docbook.org) and JATS 1.3
+(jats.nlm.nih.gov) confirmed this precedent transfers cleanly to both.
+
+**JATS** (`disp-formula`/`inline-formula`, commit below): the Tag Library's content model
+is `label?, (tex-math | mml:math)?` — i.e. MathML and TeX are alternatives, not combined.
+The reader previously matched `"tex-math" | "mml:math" => None` ("already captured by the
+parent") and then built `math:source` via `extract_text(&rest)` — correct for `tex-math`
+(genuinely flat text), but for `mml:math` this flattened the real `<mml:mrow>`/`<mml:mi>`/…
+element structure to bare text, a live, currently-shipping loss bug (not a "waiting on a
+design decision" situation — the bug existed regardless of any MathML-modeling choice).
+Fixed: `convert_children` now intercepts an `<mml:math>` child of `disp-formula`/
+`inline-formula` before generic conversion, raw-capturing it via `jats_fmt::emit_fragment`
+into a transient sentinel (`split_mathml`, mirroring the existing `split_label` pattern).
+`tex-math`'s existing behavior (implicit/no `math:format`, matching the repo's convention
+that only the MathML case sets `math:format` — HTML's LaTeX case leaves it unset too) is
+unchanged. Writer: `formula_children` re-splices the raw MathML via `JNode::Raw` when
+`math:format == "mathml"`, otherwise keeps the pre-existing `<tex-math>` text path.
+Fixtures: `fixtures/jats/math-display-mathml`, `fixtures/jats/math-inline-mathml`. Writer
+round-trip verified both via the fixture's parse assertions and two new unit tests in
+`rescribe-write-jats` (parse -> emit -> reparse, confirming byte-identical `math:source`
+recovery). Closes `fixtures/jats/COVERAGE.md`'s "MathML math" box (now 108/109).
+
+**DocBook** (`equation`/`informalequation`/`inlineequation`): the 5.2 reference's content
+model is `title?, alt?, (mediaobject+ | mathphrase+ | mml:*+), caption?` — three *mutually
+exclusive* content alternatives, not one construct with one obvious shape, so each needed
+its own decision rather than a single MathML answer:
+- **MathML** (`<mml:math>` or any `{prefix}:math` — DocBook, unlike JATS's Tag Library,
+  doesn't mandate the `mml:` prefix specifically, so matching is by local name via
+  `is_mathml_root`, not a hardcoded prefix string): same raw-capture-before-generic-
+  conversion treatment as JATS, via a new `mathml-raw` sentinel / `split_mathml` in
+  `rescribe-read-docbook`, `math:format="mathml"` + verbatim `math:source`.
+- **`<mathphrase>`**: confirmed via the DocBook 5.2 reference this is NOT a flat-text
+  format — it holds ordinary DocBook phrase-level markup (the reference's own example:
+  `x<superscript>n</superscript> + y<superscript>n</superscript>`). Flattening it with
+  `extract_text` (the tex-math-style treatment) would destroy that markup the same way the
+  JATS MathML bug did. Resolved by keeping its already-converted children (real
+  `superscript`/`emphasis`/`text` nodes) as literal children of the `math_display`/
+  `math_inline` node — no `math:source`/`math:format` set — matching the repo's existing
+  "nested markup survives as real child nodes, not a flat string" convention (the same one
+  `bibliography_field` uses for citation markup). This is a genuine, spec-grounded modeling
+  decision (not a guess): mathphrase content literally *is* markup-shaped, so it gets
+  markup-shaped IR treatment.
+- **`<mediaobject>`/`<inlinemediaobject>`** (an image standing in for the equation):
+  already converts to a plain `image` node via the pre-existing `mediaobject` arm; kept as
+  an ordinary child of the `math_display`/`math_inline` node rather than inventing a
+  separate representation — it's still equation content per the spec (one of the three
+  content alternatives), just encoded as an image instead of markup or MathML.
+
+  Writer (`equation_children` in `rescribe-write-docbook`, used identically for both
+  `math_display` and `math_inline` via a `write_child` fn parameter so an image child
+  becomes `<mediaobject>` at block position / `<inlinemediaobject>` at inline position,
+  matching each content model's own alternative): re-splices MathML via `DbNode::Raw`,
+  wraps any leftover non-image children back in `<mathphrase>`, and picks `<equation>` vs
+  `<informalequation>` by title presence (same convention the existing `TABLE`/
+  `informaltable` arm uses). `docbook-fmt` itself needed no changes (its AST is generic
+  XML, like jats-fmt's) — all the work is in the adapter layer, per CLAUDE.md.
+
+  Fixtures: `fixtures/docbook/equation-mathml` (title + MathML, closes `equation`),
+  `fixtures/docbook/inlineequation-mathml` (closes `inlineequation`),
+  `fixtures/docbook/equation-mathphrase` (informalequation + mathphrase markup
+  round-trip, extra coverage beyond the two closed boxes). Three new unit tests in
+  `rescribe-write-docbook` verify parse -> emit -> reparse round-trips (MathML byte-
+  identical recovery for both equation/inlineequation, and mathphrase markup structure
+  preserved through emit). Closes `fixtures/docbook/COVERAGE.md`'s "equation (display
+  math)" and "inlineequation (inline math)" boxes (now 101/105).
+
+**Second-precedent check (per CLAUDE.md's priority hierarchy — checked whether another
+format's math handling conflicts with or refines the HTML convention before applying it
+here):** `ooxml-omml` (Office Math ML, `crates/formats/ooxml-omml/src/math.rs`) exists as a
+standalone library crate but is **not wired into `rescribe-read-docx`/`rescribe-write-docx`
+at all** (confirmed: no `math_inline`/`math_display`/`math:format`/`math:source` reference
+anywhere in either adapter crate) — DOCX math isn't consumed into the rescribe IR yet in any
+form. No conflicting precedent exists; nothing to reconcile. This is a separate, unstarted
+gap (DOCX's own math vertical), not touched by this session.
+
+**Not implemented — still genuine, re-verified design forks, not lookup-resolvable (the
+`equation`/`inlineequation` MathML fork was the only one collapsed by the HTML precedent;
+these three were re-checked against the DocBook/JATS specs and Pandoc's own DocBook reader
+source this session and remain genuinely open):**
+
+- **DocBook `qandaset`/`qandaentry`** (`fixtures/docbook/COVERAGE.md`, still 1 box).
+  `<qandaset>` (DocBook 5.2 reference, tdg.docbook.org/tdg/5.2/qandaset.html) is "a list
+  consisting of questions and answers," structured as `title?, info?, (block content)*,
+  (qandadiv+ | qandaentry+)`; each `<qandaentry>` requires at least one `<question>` and
+  permits zero or more `<answer>`s (DocBook allows a question with no recorded answer).
+  Checked how Pandoc's DocBook reader (`src/Text/Pandoc/Readers/DocBook.hs`) handles it,
+  since CLAUDE.md asks whether another tool has a convention: **Pandoc's own source marks
+  `qandaset`/`qandaentry` `[o]` (deliberately unimplemented, pass-through) and converts
+  `question`/`answer` each to a plain paragraph-prefix — `strong (str "Q:") <> " "` /
+  `strong (str "A:") <> " "` prepended to the first paragraph of their content, with no
+  list/pairing structure preserved at all.** That's acceptable for Pandoc (which has no
+  fidelity-tracking obligation) but fails rescribe's losslessness bar outright: the Q&A
+  *pairing* (which answer belongs to which question) and the `qandaset`-level
+  `defaultlabel` attribute (`none`/`number`/`qanda` — controls whether entries render
+  unlabeled, numbered, or "Q:"/"A:"-prefixed) would both be silently lost if rescribe copied
+  this convention. So Pandoc's behavior rules out "just do what Pandoc does" as an option
+  rather than resolving the question. **What's actually undecided, precisely:** does
+  `rescribe-std` gain a dedicated node-kind pair (e.g. `qa_list`/`qa_entry` with `question`/
+  `answer` children, modeled after how `definition_list`/`definition_term`/`definition_desc`
+  already pairs term-to-definition) — a real cross-format IR addition, not just a DocBook
+  adapter change, since it would need to be justified as a *general* Q&A-list construct
+  useful beyond DocBook — or does it stay raw-preserved wholesale via `generic_div` (already
+  the current, lossless-but-unstructured fallback: nothing is silently dropped today,
+  `qandaset` just has no dedicated node kind, which is a coverage gap rather than a fidelity
+  bug). This is a genuine IR-design call (add a new cross-format node-kind pair vs. accept
+  format-specific raw preservation for a construct only DocBook currently has) that only a
+  human should make, not something a spec or existing-convention lookup resolves — no other
+  currently-modeled format in this repo has an equivalent Q&A-list construct to generalize
+  from, and Pandoc's own choice was demonstrated above to be unusable as-is.
+
+- **DocBook `programlistingco`/`co`/calloutlist composition** (`fixtures/docbook/
+  COVERAGE.md`, 3 boxes: `programlistingco`, `co`, "callout listing + callout list").
+  Per the DocBook 5.2 reference (tdg.docbook.org/tdg/5.2/programlistingco.html):
+  `<programlistingco>` wraps an `<areaspec>` (a list of `<area>` coordinates identifying
+  positions within the listing) and a `<programlisting>`, with an associated `<calloutlist>`
+  whose `<callout>` elements reference areas by `arearefs`; alternatively, `<co>` markers can
+  be embedded directly inline in the `<programlisting>` text instead of computing external
+  `<area>` coordinates, with each `<callout>` then referencing a `<co>`'s `id` via
+  `arearefs`. Checked Pandoc's convention here too: **`calloutlist` -> `BulletList` (each
+  `<callout>`'s content becomes a list item, structurally reasonable and probably the right
+  general shape), but `co`/`area`/`areaset`/`areaspec` are all explicitly `skip`ped —
+  dropped with an "ignored element" warning, not preserved in any form.** Again, acceptable
+  for Pandoc, not acceptable for rescribe: dropping `co` loses the actual callout-to-code-
+  line linkage, which is the entire point of the construct (a `calloutlist` alone, without
+  knowing which list item annotates which line, is much less useful than the paired
+  original). **What's actually undecided:** rescribe has no existing "numbered marker
+  embedded in verbatim content, cross-referenced by a list elsewhere in the document"
+  concept anywhere in its IR — footnote_ref/footnote_def is the closest existing pattern
+  (an inline marker + a separately-located definition, linked by id) but footnotes aren't
+  positioned *inside* a `code_block`'s literal text, which raises a real question
+  `footnote_ref`'s design never had to answer: does a marker id inside verbatim/preserved
+  text content count as a "real" inline node splicing into `code_block`'s children (breaking
+  the assumption that `code_block` content is a single flat string), or does it need a new
+  raw-content-with-embedded-markers representation? This is a genuine IR-shape question
+  (whether `code_block` content can ever be non-flat) that a lookup cannot answer — it
+  requires deciding whether to extend `code_block`'s contract repo-wide (affecting every
+  writer that currently assumes flat string content) just to serve this one DocBook
+  construct, or accept a `co`-specific raw-preservation escape hatch instead. Left open
+  together as three boxes since designing `co` without also designing where its target
+  `calloutlist` attaches (and vice versa) would be guessing at half a linked structure.
+
+- **JATS `<alternatives>`** (`fixtures/jats/COVERAGE.md`, 1 box, unchanged this session —
+  re-checked, still genuinely undecided). The JATS 1.3 Tag Library's own description
+  (jats.nlm.nih.gov/archiving/tag-library/1.3/element/alternatives.html) states its content
+  is classified separately for block (`%block-alternatives.class;`) vs inline
+  (`%alternatives-display.class;`) contexts — i.e. JATS itself declines to give
+  `<alternatives>` one fixed structural role; it adapts to whichever context it's used in.
+  Nothing here is MathML-specific (the box name is inherited from an earlier session's
+  audit, but the current fixture-suite gap is the general block/inline non-classification,
+  not a math-alternatives-only concern — MathML itself is now fully handled per the section
+  above). Since the format's own reference declines to commit to a block-or-inline answer,
+  this remains a case where `rescribe-read-jats`'s existing default-to-inline behavior for
+  unclassified elements is a reasonable, disclosed fallback, not a guess dressed up as a
+  fixture-verified feature — a human call on whether `<alternatives>` deserves dual
+  classification logic (inspect context/parent, like `heading_level_for_parent` does for
+  `<title>`) is what's actually open here, not a fact a spec lookup can settle.
+
+Commits (JATS, then DocBook, both after `cargo clippy --all-targets --all-features -- -D
+warnings` and `cargo test -q` clean): `fix(jats): raw-preserve MathML in disp-formula/
+inline-formula; close MathML fixture box`, `feat(docbook): raw-preserve MathML and model
+mathphrase markup in equation/inlineequation; close 2 fixture boxes`.
