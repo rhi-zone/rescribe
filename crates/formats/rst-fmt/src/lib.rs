@@ -5,6 +5,16 @@
 
 #![allow(clippy::collapsible_if)]
 
+pub mod batch;
+pub mod events;
+pub mod writer;
+
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
+pub use events::{Event, OwnedEvent};
+pub use writer::Writer;
+
+use std::borrow::Cow;
+
 // ── Error ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
@@ -322,7 +332,10 @@ impl<'a> Parser<'a> {
                 let first = trimmed.chars().next().unwrap_or(' ');
                 if "-=~^\"#*+_".contains(first) && trimmed.chars().all(|c| c == first) {
                     // Only treat as transition if the next line is blank or EOF (not a heading)
-                    let next_is_blank = self.peek_line().map(|l| l.trim().is_empty()).unwrap_or(true);
+                    let next_is_blank = self
+                        .peek_line()
+                        .map(|l| l.trim().is_empty())
+                        .unwrap_or(true);
                     if next_is_blank {
                         self.advance_line();
                         return Some(Block::HorizontalRule);
@@ -473,10 +486,7 @@ impl<'a> Parser<'a> {
                             break;
                         }
                         // Continuation line must be indented by at least 3 spaces
-                        let indent = cont
-                            .chars()
-                            .take_while(|c| *c == ' ' || *c == '\t')
-                            .count();
+                        let indent = cont.chars().take_while(|c| *c == ' ' || *c == '\t').count();
                         if indent < 3 {
                             break;
                         }
@@ -487,8 +497,7 @@ impl<'a> Parser<'a> {
                         self.advance_line();
                     }
 
-                    let inlines =
-                        parse_inline_content(&body, &self.link_targets);
+                    let inlines = parse_inline_content(&body, &self.link_targets);
                     return Some(Block::FootnoteDef {
                         label: label.to_string(),
                         inlines,
@@ -643,7 +652,11 @@ impl<'a> Parser<'a> {
                     vec![Block::Paragraph { inlines }]
                 };
                 Block::Div {
-                    class: if argument.is_empty() { None } else { Some(argument.to_string()) },
+                    class: if argument.is_empty() {
+                        None
+                    } else {
+                        Some(argument.to_string())
+                    },
                     directive: Some("container".to_string()),
                     children,
                 }
@@ -736,7 +749,9 @@ impl<'a> Parser<'a> {
             }
 
             // Border line
-            if row_line.starts_with('+') && row_line.chars().all(|c| c == '+' || c == '-' || c == '=') {
+            if row_line.starts_with('+')
+                && row_line.chars().all(|c| c == '+' || c == '-' || c == '=')
+            {
                 let has_equals = row_line.contains('=');
                 self.advance_line();
                 if has_equals && !rows.is_empty() {
@@ -765,7 +780,10 @@ impl<'a> Parser<'a> {
                     })
                     .collect();
                 if !cells.is_empty() {
-                    rows.push(TableRow { cells, is_header: false });
+                    rows.push(TableRow {
+                        cells,
+                        is_header: false,
+                    });
                 }
                 self.advance_line();
                 continue;
@@ -840,7 +858,12 @@ impl<'a> Parser<'a> {
                 self.advance_line();
                 is_header_section = false;
                 // Check if this is the final border
-                if self.is_eof() || self.current_line().map(|l| l.trim().is_empty()).unwrap_or(true) {
+                if self.is_eof()
+                    || self
+                        .current_line()
+                        .map(|l| l.trim().is_empty())
+                        .unwrap_or(true)
+                {
                     break;
                 }
                 // Check if next line is also a border (end of table)
@@ -855,17 +878,23 @@ impl<'a> Parser<'a> {
             }
 
             // Data row
-            let cells: Vec<Vec<Inline>> = col_spans.iter().map(|(start, end)| {
-                let cell_text = if *start < row_line.len() {
-                    let end_pos = (*end).min(row_line.len());
-                    row_line[*start..end_pos].trim()
-                } else {
-                    ""
-                };
-                parse_inline_content(cell_text, &self.link_targets)
-            }).collect();
+            let cells: Vec<Vec<Inline>> = col_spans
+                .iter()
+                .map(|(start, end)| {
+                    let cell_text = if *start < row_line.len() {
+                        let end_pos = (*end).min(row_line.len());
+                        row_line[*start..end_pos].trim()
+                    } else {
+                        ""
+                    };
+                    parse_inline_content(cell_text, &self.link_targets)
+                })
+                .collect();
 
-            rows.push(TableRow { cells, is_header: is_header_section });
+            rows.push(TableRow {
+                cells,
+                is_header: is_header_section,
+            });
             self.advance_line();
         }
 
@@ -905,7 +934,9 @@ impl<'a> Parser<'a> {
 
             if let Some(rest) = trimmed.strip_prefix(&format!("{} ", bullet)) {
                 let item_inlines = self.parse_list_item(rest);
-                let mut item_blocks = vec![Block::Paragraph { inlines: item_inlines }];
+                let mut item_blocks = vec![Block::Paragraph {
+                    inlines: item_inlines,
+                }];
                 // Check for immediately indented sub-list (no blank line between)
                 // Only handle the case where the next non-blank line is a bullet at higher indent
                 while !self.is_eof() {
@@ -1409,6 +1440,411 @@ impl<'a> Parser<'a> {
     }
 }
 
+// ── Streaming event iterator ───────────────────────────────────────────────────
+//
+// `EventIter` is the parser: it holds a `Parser<'a>` (the same recursive-descent
+// engine `parse()` uses — there is exactly one implementation of RST grammar,
+// not two parallel copies) plus a lazy `frame_stack` that expands one
+// already-parsed top-level `Block` into events at a time. `next()` never
+// materializes a `Vec<Block>` for the whole document: only the current
+// top-level block's subtree (bounded by that construct's own size) plus
+// `frame_stack` (O(nesting depth)) are live at once. This mirrors the same
+// memory tradeoff `StreamingParser` (batch.rs) makes for chunked input.
+//
+// `parse()` is NOT implemented as `events().collect()` — it drives `Parser`
+// directly with no event-dispatch overhead (see `parse()` above). `events()`
+// is a wholly separate, genuinely lazy pull iterator over the same grammar.
+
+/// Lazy-traversal frame for the event iterator.
+/// Frames are pushed in reverse-emission order, so `pop()` yields the next event.
+enum Frame {
+    Event(OwnedEvent),
+    Blocks(std::vec::IntoIter<Block>),
+    Inlines(std::vec::IntoIter<Inline>),
+    /// List items are `Vec<Block>`.
+    ListItems(std::vec::IntoIter<Vec<Block>>),
+    TableRows(std::vec::IntoIter<TableRow>),
+    /// Table cells are `Vec<Inline>`.
+    TableCells(std::vec::IntoIter<Vec<Inline>>),
+    DefinitionItems(std::vec::IntoIter<DefinitionItem>),
+}
+
+/// Streaming pull iterator over an RST document.
+///
+/// `next()` advances an internal [`Parser`] one top-level block at a time and
+/// lazily expands that block's subtree into a sequence of [`Event`]s. This is
+/// the same grammar `parse()` uses — not a re-implementation — so `events()`
+/// and `parse()` can never disagree on what constitutes a block.
+///
+/// Text fields on [`Event`] use `Cow<'a, str>` in the public API so a future
+/// zero-copy inline tokenizer can slice directly from the input without an
+/// API break. Today's implementation always yields `Cow::Owned`, because the
+/// shared inline parser (`parse_inline_content`) already builds owned
+/// `String`s — the same one `parse()` relies on. This is a documented,
+/// narrow limitation (like `commonmark-fmt`'s `StreamingParser` buffering
+/// exemption), not a "fake streaming" API: block-at-a-time traversal and
+/// `O(nesting depth)` expansion are both genuinely lazy today.
+pub struct EventIter<'a> {
+    parser: Parser<'a>,
+    frame_stack: Vec<Frame>,
+    iter_done: bool,
+}
+
+impl<'a> EventIter<'a> {
+    /// Construct an `EventIter` ready to be used as an `Iterator`.
+    ///
+    /// Runs the same link-target/substitution/anonymous-target pre-scan
+    /// `parse()` runs, so link resolution matches exactly.
+    pub fn new(input: &'a str) -> Self {
+        let mut parser = Parser::new(input);
+        parser.collect_link_targets();
+        parser.collect_anonymous_targets();
+        parser.collect_substitutions();
+        Self {
+            parser,
+            frame_stack: Vec::new(),
+            iter_done: false,
+        }
+    }
+
+    fn expand_block(&mut self, block: Block) {
+        match block {
+            Block::Paragraph { inlines } => {
+                self.frame_stack.push(Frame::Event(Event::EndParagraph));
+                if !inlines.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(Event::StartParagraph));
+            }
+            Block::Heading { level, inlines } => {
+                self.frame_stack.push(Frame::Event(Event::EndHeading));
+                if !inlines.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartHeading { level }));
+            }
+            Block::CodeBlock { language, content } => {
+                self.frame_stack.push(Frame::Event(Event::EndCodeBlock));
+                self.frame_stack
+                    .push(Frame::Event(Event::CodeBlockContent(Cow::Owned(content))));
+                self.frame_stack
+                    .push(Frame::Event(Event::StartCodeBlock { language }));
+            }
+            Block::Blockquote { children } => {
+                self.frame_stack.push(Frame::Event(Event::EndBlockquote));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Blocks(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(Event::StartBlockquote));
+            }
+            Block::List { ordered, items } => {
+                self.frame_stack.push(Frame::Event(Event::EndList));
+                if !items.is_empty() {
+                    self.frame_stack.push(Frame::ListItems(items.into_iter()));
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartList { ordered }));
+            }
+            Block::DefinitionList { items } => {
+                self.frame_stack
+                    .push(Frame::Event(Event::EndDefinitionList));
+                if !items.is_empty() {
+                    self.frame_stack
+                        .push(Frame::DefinitionItems(items.into_iter()));
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartDefinitionList));
+            }
+            Block::Figure { url, alt, caption } => {
+                self.frame_stack.push(Frame::Event(Event::EndFigure));
+                if let Some(cap_inlines) = caption {
+                    if !cap_inlines.is_empty() {
+                        self.frame_stack
+                            .push(Frame::Inlines(cap_inlines.into_iter()));
+                    }
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartFigure { url, alt }));
+            }
+            Block::Image { url, alt, title } => {
+                self.frame_stack
+                    .push(Frame::Event(Event::ImageBlock { url, alt, title }));
+            }
+            Block::RawBlock { format, content } => {
+                self.frame_stack
+                    .push(Frame::Event(Event::RawBlock { format, content }));
+            }
+            Block::Div {
+                class,
+                directive,
+                children,
+            } => {
+                self.frame_stack.push(Frame::Event(Event::EndDiv));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Blocks(children.into_iter()));
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartDiv { class, directive }));
+            }
+            Block::HorizontalRule => {
+                self.frame_stack.push(Frame::Event(Event::HorizontalRule));
+            }
+            Block::Table { rows } => {
+                self.frame_stack.push(Frame::Event(Event::EndTable));
+                if !rows.is_empty() {
+                    self.frame_stack.push(Frame::TableRows(rows.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(Event::StartTable));
+            }
+            Block::FootnoteDef { label, inlines } => {
+                self.frame_stack.push(Frame::Event(Event::EndFootnoteDef));
+                if !inlines.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartFootnoteDef { label }));
+            }
+            Block::MathDisplay { source } => {
+                self.frame_stack
+                    .push(Frame::Event(Event::MathDisplay { source }));
+            }
+            Block::Admonition {
+                admonition_type,
+                children,
+            } => {
+                self.frame_stack.push(Frame::Event(Event::EndAdmonition));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Blocks(children.into_iter()));
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartAdmonition { admonition_type }));
+            }
+        }
+    }
+
+    fn expand_inline(&mut self, inline: Inline) {
+        match inline {
+            Inline::Text(s) => {
+                self.frame_stack
+                    .push(Frame::Event(Event::Text(Cow::Owned(s))));
+            }
+            Inline::SoftBreak => {
+                self.frame_stack.push(Frame::Event(Event::SoftBreak));
+            }
+            Inline::LineBreak => {
+                self.frame_stack.push(Frame::Event(Event::LineBreak));
+            }
+            Inline::Emphasis(children) => {
+                self.frame_stack.push(Frame::Event(Event::EndEmphasis));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(Event::StartEmphasis));
+            }
+            Inline::Strong(children) => {
+                self.frame_stack.push(Frame::Event(Event::EndStrong));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(Event::StartStrong));
+            }
+            Inline::Strikeout(children) => {
+                self.frame_stack.push(Frame::Event(Event::EndStrikeout));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(Event::StartStrikeout));
+            }
+            Inline::Underline(children) => {
+                self.frame_stack.push(Frame::Event(Event::EndUnderline));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(Event::StartUnderline));
+            }
+            Inline::Subscript(children) => {
+                self.frame_stack.push(Frame::Event(Event::EndSubscript));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(Event::StartSubscript));
+            }
+            Inline::Superscript(children) => {
+                self.frame_stack.push(Frame::Event(Event::EndSuperscript));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(Event::StartSuperscript));
+            }
+            Inline::SmallCaps(children) => {
+                self.frame_stack.push(Frame::Event(Event::EndSmallCaps));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack.push(Frame::Event(Event::StartSmallCaps));
+            }
+            Inline::Code(s) => {
+                self.frame_stack
+                    .push(Frame::Event(Event::Code(Cow::Owned(s))));
+            }
+            Inline::Link { url, children } => {
+                self.frame_stack.push(Frame::Event(Event::EndLink));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartLink { url }));
+            }
+            Inline::Image { url, alt } => {
+                self.frame_stack
+                    .push(Frame::Event(Event::InlineImage { url, alt }));
+            }
+            Inline::FootnoteRef { label } => {
+                self.frame_stack
+                    .push(Frame::Event(Event::FootnoteRef { label }));
+            }
+            Inline::FootnoteDef { label, children } => {
+                self.frame_stack
+                    .push(Frame::Event(Event::EndFootnoteDefInline));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartFootnoteDefInline { label }));
+            }
+            Inline::Quoted {
+                quote_type,
+                children,
+            } => {
+                self.frame_stack.push(Frame::Event(Event::EndQuoted));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartQuoted { quote_type }));
+            }
+            Inline::MathInline { source } => {
+                self.frame_stack
+                    .push(Frame::Event(Event::MathInline { source }));
+            }
+            Inline::RstSpan { role, children } => {
+                self.frame_stack.push(Frame::Event(Event::EndRstSpan));
+                if !children.is_empty() {
+                    self.frame_stack.push(Frame::Inlines(children.into_iter()));
+                }
+                self.frame_stack
+                    .push(Frame::Event(Event::StartRstSpan { role }));
+            }
+        }
+    }
+}
+
+impl<'a> Iterator for EventIter<'a> {
+    type Item = Event<'a>;
+
+    fn next(&mut self) -> Option<Event<'a>> {
+        loop {
+            match self.frame_stack.pop() {
+                Some(Frame::Event(ev)) => return Some(ev),
+                Some(Frame::Blocks(mut iter)) => {
+                    if let Some(block) = iter.next() {
+                        self.frame_stack.push(Frame::Blocks(iter));
+                        self.expand_block(block);
+                    }
+                    continue;
+                }
+                Some(Frame::Inlines(mut iter)) => {
+                    if let Some(inline) = iter.next() {
+                        self.frame_stack.push(Frame::Inlines(iter));
+                        self.expand_inline(inline);
+                    }
+                    continue;
+                }
+                Some(Frame::ListItems(mut iter)) => {
+                    if let Some(item_blocks) = iter.next() {
+                        self.frame_stack.push(Frame::ListItems(iter));
+                        self.frame_stack.push(Frame::Event(Event::EndListItem));
+                        if !item_blocks.is_empty() {
+                            self.frame_stack
+                                .push(Frame::Blocks(item_blocks.into_iter()));
+                        }
+                        self.frame_stack.push(Frame::Event(Event::StartListItem));
+                    }
+                    continue;
+                }
+                Some(Frame::TableRows(mut iter)) => {
+                    if let Some(row) = iter.next() {
+                        let is_header = row.is_header;
+                        self.frame_stack.push(Frame::TableRows(iter));
+                        self.frame_stack.push(Frame::Event(Event::EndTableRow));
+                        if !row.cells.is_empty() {
+                            self.frame_stack
+                                .push(Frame::TableCells(row.cells.into_iter()));
+                        }
+                        self.frame_stack
+                            .push(Frame::Event(Event::StartTableRow { is_header }));
+                    }
+                    continue;
+                }
+                Some(Frame::TableCells(mut iter)) => {
+                    if let Some(cell_inlines) = iter.next() {
+                        self.frame_stack.push(Frame::TableCells(iter));
+                        self.frame_stack.push(Frame::Event(Event::EndTableCell));
+                        if !cell_inlines.is_empty() {
+                            self.frame_stack
+                                .push(Frame::Inlines(cell_inlines.into_iter()));
+                        }
+                        self.frame_stack.push(Frame::Event(Event::StartTableCell));
+                    }
+                    continue;
+                }
+                Some(Frame::DefinitionItems(mut iter)) => {
+                    if let Some(item) = iter.next() {
+                        self.frame_stack.push(Frame::DefinitionItems(iter));
+                        self.frame_stack
+                            .push(Frame::Event(Event::EndDefinitionDesc));
+                        if !item.desc.is_empty() {
+                            self.frame_stack.push(Frame::Inlines(item.desc.into_iter()));
+                        }
+                        self.frame_stack
+                            .push(Frame::Event(Event::StartDefinitionDesc));
+                        self.frame_stack
+                            .push(Frame::Event(Event::EndDefinitionTerm));
+                        if !item.term.is_empty() {
+                            self.frame_stack.push(Frame::Inlines(item.term.into_iter()));
+                        }
+                        self.frame_stack
+                            .push(Frame::Event(Event::StartDefinitionTerm));
+                    }
+                    continue;
+                }
+                None => {
+                    if self.iter_done {
+                        return None;
+                    }
+                    self.parser.skip_blank_lines();
+                    if self.parser.is_eof() {
+                        self.iter_done = true;
+                        return None;
+                    }
+                    if let Some(block) = self.parser.try_parse_block() {
+                        self.expand_block(block);
+                    } else {
+                        self.parser.advance_line();
+                    }
+                    continue;
+                }
+            }
+        }
+    }
+}
+
+/// Parse `input` as RST and return a streaming [`EventIter`].
+pub fn events(input: &str) -> EventIter<'_> {
+    EventIter::new(input)
+}
+
 // ── Inline parser (free function) ─────────────────────────────────────────────
 
 fn parse_inline_content(
@@ -1503,7 +1939,8 @@ fn parse_inline_content(
                 if end + 2 < chars.len() && chars[end + 1] == '_' && chars[end + 2] == '_' {
                     // Anonymous link — look up next anon target
                     let counter_key = "__anon_counter";
-                    let counter: usize = link_targets.get(counter_key)
+                    let counter: usize = link_targets
+                        .get(counter_key)
                         .and_then(|s| s.parse().ok())
                         .unwrap_or(0);
                     let anon_key = format!("__anon{}", counter);
@@ -1710,13 +2147,13 @@ pub fn build(doc: &RstDoc) -> String {
     ctx.output
 }
 
-struct BuildContext {
-    output: String,
+pub(crate) struct BuildContext {
+    pub(crate) output: String,
     list_depth: usize,
 }
 
 impl BuildContext {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             output: String::new(),
             list_depth: 0,
@@ -1740,7 +2177,7 @@ fn build_blocks(blocks: &[Block], ctx: &mut BuildContext) {
     }
 }
 
-fn build_block(block: &Block, ctx: &mut BuildContext) {
+pub(crate) fn build_block(block: &Block, ctx: &mut BuildContext) {
     match block {
         Block::Paragraph { inlines } => {
             build_inlines(inlines, ctx);
@@ -2417,8 +2854,14 @@ mod tests {
     fn test_parse_grid_table() {
         let input = "+--------+--------+\n| A      | B      |\n+========+========+\n| Cell 1 | Cell 2 |\n+--------+--------+\n";
         let doc = parse(input).unwrap();
-        assert!(matches!(doc.blocks[0], Block::Table { .. }), "expected Table, got {:?}", doc.blocks[0]);
-        let Block::Table { rows } = &doc.blocks[0] else { panic!() };
+        assert!(
+            matches!(doc.blocks[0], Block::Table { .. }),
+            "expected Table, got {:?}",
+            doc.blocks[0]
+        );
+        let Block::Table { rows } = &doc.blocks[0] else {
+            panic!()
+        };
         assert_eq!(rows.len(), 2);
         assert!(rows[0].is_header);
         assert!(!rows[1].is_header);
@@ -2428,10 +2871,250 @@ mod tests {
     fn test_parse_simple_table() {
         let input = "=====  =====\nA      B\n=====  =====\n1      2\n=====  =====\n";
         let doc = parse(input).unwrap();
-        assert!(matches!(doc.blocks[0], Block::Table { .. }), "expected Table, got {:?}", doc.blocks[0]);
-        let Block::Table { rows } = &doc.blocks[0] else { panic!() };
+        assert!(
+            matches!(doc.blocks[0], Block::Table { .. }),
+            "expected Table, got {:?}",
+            doc.blocks[0]
+        );
+        let Block::Table { rows } = &doc.blocks[0] else {
+            panic!()
+        };
         assert_eq!(rows.len(), 2);
         assert!(rows[0].is_header);
         assert!(!rows[1].is_header);
+    }
+
+    // ── events() vs parse() equivalence ───────────────────────────────────────
+    //
+    // `events()` and `parse()` are independent implementations sharing only
+    // `Parser` (see the module doc comment on `EventIter`). This test proves
+    // they agree on which constructs are produced and in what order, without
+    // requiring identical Rust types — by reducing each side to a "shape
+    // signature" of discriminant tags.
+
+    /// Reduce a parsed `Block`/`Inline` tree to a flat sequence of
+    /// Start/End/Leaf tag names, in emission order — the same shape an
+    /// event stream produces.
+    fn block_shape(block: &Block, out: &mut Vec<&'static str>) {
+        match block {
+            Block::Paragraph { inlines } => {
+                out.push("StartParagraph");
+                inlines.iter().for_each(|i| inline_shape(i, out));
+                out.push("EndParagraph");
+            }
+            Block::Heading { inlines, .. } => {
+                out.push("StartHeading");
+                inlines.iter().for_each(|i| inline_shape(i, out));
+                out.push("EndHeading");
+            }
+            Block::CodeBlock { .. } => {
+                out.push("StartCodeBlock");
+                out.push("CodeBlockContent");
+                out.push("EndCodeBlock");
+            }
+            Block::Blockquote { children } => {
+                out.push("StartBlockquote");
+                children.iter().for_each(|b| block_shape(b, out));
+                out.push("EndBlockquote");
+            }
+            Block::List { items, .. } => {
+                out.push("StartList");
+                for item in items {
+                    out.push("StartListItem");
+                    item.iter().for_each(|b| block_shape(b, out));
+                    out.push("EndListItem");
+                }
+                out.push("EndList");
+            }
+            Block::DefinitionList { items } => {
+                out.push("StartDefinitionList");
+                for item in items {
+                    out.push("StartDefinitionTerm");
+                    item.term.iter().for_each(|i| inline_shape(i, out));
+                    out.push("EndDefinitionTerm");
+                    out.push("StartDefinitionDesc");
+                    item.desc.iter().for_each(|i| inline_shape(i, out));
+                    out.push("EndDefinitionDesc");
+                }
+                out.push("EndDefinitionList");
+            }
+            Block::Figure { caption, .. } => {
+                out.push("StartFigure");
+                if let Some(cap) = caption {
+                    cap.iter().for_each(|i| inline_shape(i, out));
+                }
+                out.push("EndFigure");
+            }
+            Block::Image { .. } => out.push("ImageBlock"),
+            Block::RawBlock { .. } => out.push("RawBlock"),
+            Block::Div { children, .. } => {
+                out.push("StartDiv");
+                children.iter().for_each(|b| block_shape(b, out));
+                out.push("EndDiv");
+            }
+            Block::HorizontalRule => out.push("HorizontalRule"),
+            Block::Table { rows } => {
+                out.push("StartTable");
+                for row in rows {
+                    out.push("StartTableRow");
+                    for cell in &row.cells {
+                        out.push("StartTableCell");
+                        cell.iter().for_each(|i| inline_shape(i, out));
+                        out.push("EndTableCell");
+                    }
+                    out.push("EndTableRow");
+                }
+                out.push("EndTable");
+            }
+            Block::FootnoteDef { inlines, .. } => {
+                out.push("StartFootnoteDef");
+                inlines.iter().for_each(|i| inline_shape(i, out));
+                out.push("EndFootnoteDef");
+            }
+            Block::MathDisplay { .. } => out.push("MathDisplay"),
+            Block::Admonition { children, .. } => {
+                out.push("StartAdmonition");
+                children.iter().for_each(|b| block_shape(b, out));
+                out.push("EndAdmonition");
+            }
+        }
+    }
+
+    fn inline_shape(inline: &Inline, out: &mut Vec<&'static str>) {
+        match inline {
+            Inline::Text(_) => out.push("Text"),
+            Inline::Emphasis(c) => wrap(out, "Emphasis", c),
+            Inline::Strong(c) => wrap(out, "Strong", c),
+            Inline::Strikeout(c) => wrap(out, "Strikeout", c),
+            Inline::Underline(c) => wrap(out, "Underline", c),
+            Inline::Subscript(c) => wrap(out, "Subscript", c),
+            Inline::Superscript(c) => wrap(out, "Superscript", c),
+            Inline::SmallCaps(c) => wrap(out, "SmallCaps", c),
+            Inline::Code(_) => out.push("Code"),
+            Inline::Link { children, .. } => wrap(out, "Link", children),
+            Inline::Image { .. } => out.push("InlineImage"),
+            Inline::LineBreak => out.push("LineBreak"),
+            Inline::SoftBreak => out.push("SoftBreak"),
+            Inline::FootnoteRef { .. } => out.push("FootnoteRef"),
+            Inline::FootnoteDef { children, .. } => wrap(out, "FootnoteDefInline", children),
+            Inline::Quoted { children, .. } => wrap(out, "Quoted", children),
+            Inline::MathInline { .. } => out.push("MathInline"),
+            Inline::RstSpan { children, .. } => wrap(out, "RstSpan", children),
+        }
+
+        fn wrap(out: &mut Vec<&'static str>, name: &'static str, children: &[Inline]) {
+            out.push(name);
+            children.iter().for_each(|i| inline_shape(i, out));
+            // Close tags aren't disambiguated per-name here since the open tag
+            // already anchors nesting; sufficient for a shape comparison.
+        }
+    }
+
+    /// Reduce an `Event` stream to the same tag vocabulary as `block_shape`/
+    /// `inline_shape`, dropping payload data.
+    fn event_shape(input: &str) -> Vec<&'static str> {
+        events(input)
+            .map(|e| match e {
+                Event::StartParagraph => "StartParagraph",
+                Event::EndParagraph => "EndParagraph",
+                Event::StartHeading { .. } => "StartHeading",
+                Event::EndHeading => "EndHeading",
+                Event::StartBlockquote => "StartBlockquote",
+                Event::EndBlockquote => "EndBlockquote",
+                Event::StartList { .. } => "StartList",
+                Event::EndList => "EndList",
+                Event::StartListItem => "StartListItem",
+                Event::EndListItem => "EndListItem",
+                Event::StartCodeBlock { .. } => "StartCodeBlock",
+                Event::CodeBlockContent(_) => "CodeBlockContent",
+                Event::EndCodeBlock => "EndCodeBlock",
+                Event::RawBlock { .. } => "RawBlock",
+                Event::StartDiv { .. } => "StartDiv",
+                Event::EndDiv => "EndDiv",
+                Event::HorizontalRule => "HorizontalRule",
+                Event::StartTable => "StartTable",
+                Event::EndTable => "EndTable",
+                Event::StartTableRow { .. } => "StartTableRow",
+                Event::EndTableRow => "EndTableRow",
+                Event::StartTableCell => "StartTableCell",
+                Event::EndTableCell => "EndTableCell",
+                Event::StartDefinitionList => "StartDefinitionList",
+                Event::EndDefinitionList => "EndDefinitionList",
+                Event::StartDefinitionTerm => "StartDefinitionTerm",
+                Event::EndDefinitionTerm => "EndDefinitionTerm",
+                Event::StartDefinitionDesc => "StartDefinitionDesc",
+                Event::EndDefinitionDesc => "EndDefinitionDesc",
+                Event::StartFootnoteDef { .. } => "StartFootnoteDef",
+                Event::EndFootnoteDef => "EndFootnoteDef",
+                Event::MathDisplay { .. } => "MathDisplay",
+                Event::StartAdmonition { .. } => "StartAdmonition",
+                Event::EndAdmonition => "EndAdmonition",
+                Event::StartFigure { .. } => "StartFigure",
+                Event::EndFigure => "EndFigure",
+                Event::ImageBlock { .. } => "ImageBlock",
+                Event::Text(_) => "Text",
+                Event::SoftBreak => "SoftBreak",
+                Event::LineBreak => "LineBreak",
+                Event::StartEmphasis => "Emphasis",
+                Event::EndEmphasis => "__skip",
+                Event::StartStrong => "Strong",
+                Event::EndStrong => "__skip",
+                Event::StartStrikeout => "Strikeout",
+                Event::EndStrikeout => "__skip",
+                Event::StartUnderline => "Underline",
+                Event::EndUnderline => "__skip",
+                Event::StartSubscript => "Subscript",
+                Event::EndSubscript => "__skip",
+                Event::StartSuperscript => "Superscript",
+                Event::EndSuperscript => "__skip",
+                Event::StartSmallCaps => "SmallCaps",
+                Event::EndSmallCaps => "__skip",
+                Event::Code(_) => "Code",
+                Event::StartLink { .. } => "Link",
+                Event::EndLink => "__skip",
+                Event::InlineImage { .. } => "InlineImage",
+                Event::FootnoteRef { .. } => "FootnoteRef",
+                Event::StartFootnoteDefInline { .. } => "FootnoteDefInline",
+                Event::EndFootnoteDefInline => "__skip",
+                Event::StartQuoted { .. } => "Quoted",
+                Event::EndQuoted => "__skip",
+                Event::MathInline { .. } => "MathInline",
+                Event::StartRstSpan { .. } => "RstSpan",
+                Event::EndRstSpan => "__skip",
+            })
+            .filter(|s| *s != "__skip")
+            .collect()
+    }
+
+    fn parse_shape(input: &str) -> Vec<&'static str> {
+        let doc = parse(input).unwrap();
+        let mut out = Vec::new();
+        doc.blocks.iter().for_each(|b| block_shape(b, &mut out));
+        out
+    }
+
+    #[test]
+    fn test_events_matches_parse_shape() {
+        let inputs = [
+            "Section\n=======\n\nHello *world* and **strong** and ``code``.\n",
+            "- item one\n- item two\n  - nested\n",
+            "1. first\n2. second\n",
+            ".. code-block:: rust\n\n   let x = 1;\n",
+            ".. note::\n\n   A note.\n",
+            "term\n    definition text\n",
+            "+--------+--------+\n| A      | B      |\n+========+========+\n| Cell 1 | Cell 2 |\n+--------+--------+\n",
+            "=====  =====\nA      B\n=====  =====\n1      2\n=====  =====\n",
+            "See [1]_ for details.\n\n.. [1] A footnote body that continues\n   on a second line.\n",
+            "    indented block quote text\n\nAfter.\n",
+            "----\n\nAfter the rule.\n",
+        ];
+        for input in inputs {
+            let via_parse = parse_shape(input);
+            let via_events = event_shape(input);
+            assert_eq!(
+                via_parse, via_events,
+                "shape mismatch for input {input:?}\nparse: {via_parse:?}\nevents: {via_events:?}"
+            );
+        }
     }
 }

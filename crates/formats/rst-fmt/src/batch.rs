@@ -143,9 +143,12 @@ impl<H: Handler> StreamingParser<H> {
 
         let trimmed = line.trim();
         // Lines that introduce an indented body (directives, literal blocks)
-        let introduces_body = trimmed.ends_with("::")
-            || trimmed.starts_with(".. ");
-        self.state = if introduces_body { BlockState::InDirectiveBody } else { BlockState::Accumulating };
+        let introduces_body = trimmed.ends_with("::") || trimmed.starts_with(".. ");
+        self.state = if introduces_body {
+            BlockState::InDirectiveBody
+        } else {
+            BlockState::Accumulating
+        };
         self.block_lines.push(line);
     }
 
@@ -184,7 +187,10 @@ pub struct BatchSink<F: FnMut(OwnedEvent)> {
 
 impl<F: FnMut(OwnedEvent)> BatchSink<F> {
     pub fn new(callback: F) -> Self {
-        BatchSink { buf: Vec::new(), callback }
+        BatchSink {
+            buf: Vec::new(),
+            callback,
+        }
     }
 
     /// Feed a chunk of input bytes.
@@ -232,7 +238,10 @@ mod tests {
         p.feed(b"Section\n=======\n\n");
         p.feed(b"A paragraph.\n");
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 
@@ -244,7 +253,10 @@ mod tests {
             p.feed(std::slice::from_ref(b));
         }
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { .. }))
+        );
     }
 
     #[test]
@@ -273,7 +285,74 @@ mod tests {
         sink.feed(b"Section\n=======\n\n");
         sink.feed(b"A paragraph.\n");
         sink.finish();
-        assert!(events.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
-        assert!(events.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartParagraph))
+        );
+    }
+
+    /// Feed `input` one byte at a time — the most awkward possible split:
+    /// every UTF-8 continuation byte, every keyword, every line ending, and
+    /// every blank-line boundary is torn apart across `feed()` calls.
+    fn streamed_events(input: &[u8]) -> Vec<OwnedEvent> {
+        let mut streamed = Vec::new();
+        let mut p = StreamingParser::new(|ev| streamed.push(ev));
+        for byte in input {
+            p.feed(std::slice::from_ref(byte));
+        }
+        p.finish();
+        streamed
+    }
+
+    fn bulk_events(input: &[u8]) -> Vec<OwnedEvent> {
+        let s = String::from_utf8_lossy(input);
+        crate::events(&s).map(|e| e.into_owned()).collect()
+    }
+
+    #[test]
+    fn test_streaming_split_mid_directive_keyword() {
+        // Split lands inside "code-block" and inside the "::" marker.
+        let input = b".. code-block:: rust\n\n   let x = 1;\n   let y = 2;\n";
+        assert_eq!(bulk_events(input), streamed_events(input));
+    }
+
+    #[test]
+    fn test_streaming_split_mid_heading_underline() {
+        // One byte at a time tears the underline run apart from the title line.
+        let input = b"A Heading\n=========\n\nBody text.\n";
+        assert_eq!(bulk_events(input), streamed_events(input));
+    }
+
+    #[test]
+    fn test_streaming_split_mid_list_and_blank_line() {
+        let input = b"- item one\n- item two\n\nParagraph after list.\n";
+        assert_eq!(bulk_events(input), streamed_events(input));
+    }
+
+    #[test]
+    fn test_streaming_split_mid_footnote_continuation() {
+        // Splits inside "[1]_", inside the ".. [1]" marker, and inside the
+        // indented continuation line of the footnote body.
+        let input = b"See [1]_ here.\n\n.. [1] First line\n   second line.\n";
+        assert_eq!(bulk_events(input), streamed_events(input));
+    }
+
+    #[test]
+    fn test_streaming_split_mid_utf8_char() {
+        // "café" — the 'é' is 2 UTF-8 bytes, split across separate feed() calls.
+        let input = "café society\n\nAnother caf\u{e9} paragraph.\n".as_bytes();
+        assert_eq!(bulk_events(input), streamed_events(input));
+    }
+
+    #[test]
+    fn test_streaming_split_mid_table_border() {
+        let input = b"+--------+--------+\n| A      | B      |\n+========+========+\n| Cell 1 | Cell 2 |\n+--------+--------+\n";
+        assert_eq!(bulk_events(input), streamed_events(input));
     }
 }
