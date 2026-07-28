@@ -3,8 +3,20 @@
 A fixture suite is complete when all items below are checked.
 See `fixtures/spec.md` for category definitions.
 
+**Coverage-completeness caveat (2026-07-28):** the checklist below is a hand-curated list of
+constructs, not yet verified against a spec-derived, machine-readable construct index. An
+audit of `fixtures/docbook/COVERAGE.md` and `fixtures/jats/COVERAGE.md` against authoritative
+element indexes found hundreds of element names enumerated nowhere, moving denominators
+mid-session purely from incidentally-noticed gaps -- a ratio over a hand-written list like this
+one is not a coverage measurement. See `docs/format-audit.md`'s "Construct Coverage (CC)"
+section for the full evidence; this format's `CC` status there is `U` (unverified) until a
+construct registry (in design, see `docs/adr/`) checks this list against the format's own
+spec.
+
 RTF reference: Microsoft RTF Specification 1.9.1.
-RTF format crate is at 5-Production; this checklist validates full construct coverage.
+RTF format crate is at 5-Production on API/fuzz/fixture-suite grounds; whether this
+checklist validates *full* construct coverage is the open question the caveat above
+covers — see `docs/format-audit.md`'s `CC` column.
 
 ## Block constructs
 

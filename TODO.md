@@ -9,9 +9,77 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-07-28: every "5-Production" / "done" claim below (and in `docs/format-audit.md`,
+`README.md`, crate doc comments, and every `fixtures/*/COVERAGE.md` header) carries an
+unverified construct-completeness caveat.** The hand-written construct checklists these
+claims are partly based on have not been checked against any spec-derived source; see
+`docs/format-audit.md`'s new "Construct Coverage (CC)" section for the evidence and the
+"Status reset: construct-completeness marked unverified pending registry" entry below for
+what this does and doesn't change. The reader/writer/API/fuzz work behind each "5" is real
+and not being retracted — only the construct-list-completeness component of it is unverified.
+
 ---
 
 ## Open Threads
+
+- **Status reset: construct-completeness marked unverified pending a construct registry
+  (2026-07-28).** This session's DocBook/JATS/TEI work (see the entries below and in
+  `docs/format-audit.md`'s change log) produced four pieces of evidence that no format's
+  hand-written construct checklist can be trusted as a completeness measurement:
+  (1) `fixtures/docbook/COVERAGE.md` and `fixtures/jats/COVERAGE.md` denominators moved
+  94→105→117 and 106→109→133 across one session purely from incidentally-noticed gaps
+  (commit `c2d6028c9a`, 265/216 element names found enumerated nowhere against the
+  authoritative DocBook 5.2 / JATS 1.3 element indexes); (2) the `is_block_element`
+  "schema-verification" methodology used on DocBook (`abd6dd447d`), JATS (`20c27d032e`),
+  and TEI (`3e3d84bcef`) only re-checked elements already on each list against the spec —
+  it never asked which elements were absent from the list entirely, and a later full
+  re-check against DocBook's ~392-element index (`be578fb98c`) found 17 more genuine
+  misclassifications beyond the 4 the audit had named, meaning the JATS/TEI "verified,
+  zero/one misclassifications" results carry the same unchecked blind spot; (3) a
+  COVERAGE.md checkmark has only ever asserted one of `fixtures/spec.md`'s six coverage
+  dimensions (one basic fixture per named construct), never the Adversarial/Pathological
+  dimensions per-construct; (4) `crates/rescribe-fixtures/tests/run.rs` was found
+  validating `backend_pulldown::parse` for markdown while the actual default backend
+  silently misparsed front matter (fixed in `1574db80e8`) — a green suite had not been
+  proof the default path worked.
+
+  None of this says any specific format's coverage is wrong — it says the ratio was never
+  a measurement to begin with, for any format, because it was hand-typed against memory
+  rather than checked against the format's own spec. Per CLAUDE.md, "5-Production requires
+  100% construct coverage — not enough for common cases," so this is a real gap in every
+  existing 5-Production sign-off, not just the three XML formats audited this session.
+
+  **What changed:** `docs/format-audit.md` gained a `CC` (Construct Coverage) column,
+  `U` (unverified) for every format, with a section explaining what would close it out (a
+  spec-derived construct registry — see below) and citing the four findings above. Every
+  `fixtures/*/COVERAGE.md` gained an identical boilerplate header note stating the
+  denominator is hand-curated and unverified. `docs/adr/0004-xml-classifier-schema-
+  verification-methodology.md` was amended to record the corrected methodology (check the
+  full spec element index for elements that *should* be classified and aren't; the
+  original method is documented as insufficient, not deleted).
+
+  **What did NOT change:** no reader/writer/classifier code, no `R`/`W` stage numbers, no
+  fuzz results, no fixture content. The API-modes/fuzz/fixture-suite work behind every
+  existing "5" is real and stays exactly as recorded; only the construct-list-completeness
+  claim is now explicitly flagged unverified instead of implicitly assumed true.
+
+  **What closes `CC` out:** a construct registry — machine-readable, generated or checked
+  against each format's actual spec/schema/DTD, not hand-typed from memory or "typical
+  usage" — is being designed as a separate effort (an ADR + pilot; check `docs/adr/` for
+  whether it has landed by the time this is picked up, and coordinate with it rather than
+  re-deriving the same design). `CC` moves from `U` to `✓` per format only once that
+  registry (or an equivalent spec-derived check) has actually been run against the format's
+  construct list.
+
+  **Concrete pending work, stated so it isn't repeated with the flawed method:** the JATS
+  and TEI `is_block_element` classifiers need the same full re-verification DocBook already
+  got in `be578fb98c` — enumerate every block-level element name from each format's own
+  authoritative reference (JATS 1.3 Tag Library alpha-index; TEI P5 Guidelines element
+  index), diff against every element `is_block_element` (and the reader's dedicated match
+  arms) already handles, and confirm each candidate miss against the spec directly — not a
+  re-check of entries already on the list. This is unstarted; do not mark JATS/TEI
+  `is_block_element` "re-verified" on the basis of the original `20c27d032e`/`3e3d84bcef`
+  passes, which used the insufficient method.
 
 - **DocBook's two confirmed code gaps from the 2026-07-28 element-index audit fixed;
   audit re-verified and extended, not just patched (2026-07-28).** Follow-up to the

@@ -3,6 +3,16 @@
 A fixture suite is complete when all items below are checked.
 See `fixtures/spec.md` for category definitions.
 
+**Coverage-completeness caveat (2026-07-28):** the checklist below is a hand-curated list of
+constructs, not yet verified against a spec-derived, machine-readable construct index. An
+audit of `fixtures/docbook/COVERAGE.md` and `fixtures/jats/COVERAGE.md` against authoritative
+element indexes found hundreds of element names enumerated nowhere, moving denominators
+mid-session purely from incidentally-noticed gaps -- a ratio over a hand-written list like this
+one is not a coverage measurement. See `docs/format-audit.md`'s "Construct Coverage (CC)"
+section for the full evidence; this format's `CC` status there is `U` (unverified) until a
+construct registry (in design, see `docs/adr/`) checks this list against the format's own
+spec.
+
 TSV (Tab-Separated Values) is a variant of CSV using tab (`\t`) as the field delimiter.
 There is no formal RFC; the rescribe reader maps TSV to a `table` with `table_header` cells
 for the first row and `table_cell` cells for data rows.

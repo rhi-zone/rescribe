@@ -17,10 +17,80 @@ Assessed 2026-02-24; stages updated 2026-03-21 (wiki formats 2→4; csv/tsv/ris/
 | **4-Fuzz** | No-panic + roundtrip fuzz targets exist and have been run clean |
 | **5-Production** | Reader complete + writer complete + all API modes + fuzz clean + fixtures complete (see CLAUDE.md) |
 
+**2026-07-28 status note:** CLAUDE.md's definition of 5-Production requires "100% construct
+coverage." No format's construct list has been verified against a spec-derived source — see
+the new `CC` (Construct Coverage) column below, `U` for every format. Existing `5` values in
+this table are not being retracted (the API/fuzz/fixture-suite work is real), but should be
+read as "5 on every dimension except construct-list completeness, which is unverified" until
+`CC` is closed out.
+
 **Conventions:**
 `†` = library-backed (upstream provides correctness guarantee; wrapper still needs fixtures and fuzz).
 `–` = not applicable (no crate exists, or stage is not meaningful for this format).
 Stage 3 is marked `–` for formats Pandoc cannot read — their path skips directly from fixtures to fuzz.
+
+## Construct Coverage (CC) — a separate, currently-unverified dimension
+
+**Added 2026-07-28. Every format's `CC` value below is `U` (unverified) — no exceptions.**
+
+The `R`/`W` stage numbers above measure API surface, fuzz cleanliness, and whether a
+*hand-curated* fixture checklist (`fixtures/{format}/COVERAGE.md`) is fully checked off.
+They do not, and never did, measure whether that checklist itself enumerates every
+construct the format actually defines. `CC` is that missing measurement, tracked
+separately rather than folded into `R`/`W` so the real, unquestioned work those numbers
+represent (fuzz campaigns that genuinely ran, writers that genuinely exist, round-trips
+that genuinely pass) isn't erased by a blanket demotion.
+
+**Why every format is `U`, not just the ones touched most recently:** four findings from
+the 2026-07-28 session, none of which are specific to any one format:
+
+1. **Hand-written COVERAGE.md denominators proved badly wrong when checked.** An audit
+   (commit `c2d6028c9a`) diffed `fixtures/docbook/COVERAGE.md` and `fixtures/jats/COVERAGE.md`
+   against authoritative element indexes (DocBook 5.2's `tdg.docbook.org` reference, JATS
+   1.3's Archiving Tag Library alpha-index) and found 265 DocBook and 216 JATS element names
+   enumerated nowhere in either checklist. The denominators moved 94→105→117 (DocBook) and
+   106→109→133 (JATS) across the session purely as gaps were noticed incidentally — a ratio
+   over a list built this way is not a coverage measurement, for any format, hand-written the
+   same way.
+2. **The classifier-verification methodology used to "verify" block/inline classification was
+   structurally incapable of finding omissions.** Commit `abd6dd447d` (DocBook's
+   `is_block_element` "schema-verification pass") only re-checked elements *already on the
+   list* against the spec — it never asked which block elements were absent from the list
+   entirely. A later full re-check against DocBook's ~392-element index (commit `be578fb98c`)
+   found 17 additional genuine misclassifications beyond the 4 the original audit had named.
+   The identical method was then used on JATS (`20c27d032e`) and TEI (`3e3d84bcef`) in the
+   same session, so those "N misclassifications found" results carry the same blind spot — a
+   clean result from a presence-only check is not evidence of completeness. See
+   `docs/adr/0004-xml-classifier-schema-verification-methodology.md`, amended 2026-07-28 to
+   record this.
+3. **Checkmarks only ever proved happy-path.** Per `fixtures/spec.md`, a fixture suite is
+   measured across six dimensions (Block, Inline, Metadata, Properties, Integration/E2E,
+   Adversarial, Pathological); a `[x]` in a COVERAGE.md's Block/Inline/Metadata/Properties
+   section means one basic fixture exists for that construct name, while Adversarial and
+   Pathological are covered globally by a handful of file-bottom fixtures, not per-construct.
+   The checkmarks assert one dimension out of six.
+4. **A fixture harness was found validating a code path users don't run.**
+   `crates/rescribe-fixtures/tests/run.rs` called `backend_pulldown::parse` for the markdown
+   suite while the default backend (`rescribe_read_markdown::parse`, what every real caller
+   gets) silently misparsed front matter (fixed in `1574db80e8`). A green fixture suite is not
+   evidence the default configuration works — the same category of gap (fixtures target a path
+   nobody actually calls) is unverified for every other format's suite too.
+
+**What would satisfy `CC` for a format:** a construct list generated or checked against a
+machine-readable, spec-derived registry for that format (rather than typed by hand from
+memory/typical-usage judgment), with every registry entry accounted for as modeled,
+raw-preserved, or explicitly out-of-scope. A construct-registry ADR and pilot are being
+designed separately (see `docs/adr/` — not yet landed as of this writing); `CC` moves from
+`U` to `✓` per format only once that registry (or an equivalent spec-derived check) has
+actually verified the format's construct list, not on a re-read of the existing hand-written
+checklist.
+
+**`CC` does not retroactively demote `R`/`W`.** A format can legitimately be `R:5†/W:5†/CC:U`
+— its API/fuzz/fixture-suite work is real and done; its construct-list completeness is simply
+not yet known. Per CLAUDE.md's own definition, "100% construct coverage" is part of what
+5-Production means — `CC:U` is the flag that this specific part of every existing
+5-Production claim in this document, `TODO.md`, and the `fixtures/*/COVERAGE.md` headers is
+currently unverified, not that the claim is false.
 
 ---
 
@@ -28,118 +98,128 @@ Stage 3 is marked `–` for formats Pandoc cannot read — their path skips dire
 
 ### Markdown family
 
-| Format | R | W | Library | R-next | W-next |
-|--------|---|---|---------|--------|--------|
-| commonmark | 5† | 5† | pulldown-cmark | – | – |
-| gfm | 5† | 5† | pulldown-cmark | – | – |
-| markdown | 4† | 4† | pulldown-cmark | production | production |
-| markdown-strict | 4† | 2† | pulldown-cmark | production | harness |
-| multimarkdown | 4† | 2† | pulldown-cmark | production | harness |
+| Format | R | W | CC | Library | R-next | W-next |
+|--------|---|---|----|---------|--------|--------|
+| commonmark | 5† | 5† | U | pulldown-cmark | – | – |
+| gfm | 5† | 5† | U | pulldown-cmark | – | – |
+| markdown | 4† | 4† | U | pulldown-cmark | production | production |
+| markdown-strict | 4† | 2† | U | pulldown-cmark | production | harness |
+| multimarkdown | 4† | 2† | U | pulldown-cmark | production | harness |
 
 ### Lightweight markup
 
-| Format | R | W | Library | R-next | W-next |
-|--------|---|---|---------|--------|--------|
-| djot | 5 | 5 | djot-fmt | – | – |
-| org | 5 | 5 | hand | – | – |
-| rst | 5 | 5 | hand | – | – |
-| asciidoc | 5 | 5 | hand | – | – |
-| textile | 5 | 5 | hand | – | – |
-| muse | 5 | 5 | hand | – | – |
-| t2t | 5 | 5 | hand | – | – |
-| markua | 5 | 5 | hand | – | – |
-| fountain | 5 | 5 | hand | – | – |
-| typst | 1 | 2 | hand | partial→fixtures | harness |
-| texinfo | 5 | 5 | hand | – | – |
-| bbcode | 5 | 5 | hand | – | – |
-| pod | 5 | 5 | hand | – | – |
-| haddock | 5 | 5 | hand | – | – |
-| ansi | 5 | 5 | hand | – | – |
-| man | 5 | 5 | hand | – | – |
+| Format | R | W | CC | Library | R-next | W-next |
+|--------|---|---|----|---------|--------|--------|
+| djot | 5 | 5 | U | djot-fmt | – | – |
+| org | 5 | 5 | U | hand | – | – |
+| rst | 5 | 5 | U | hand | – | – |
+| asciidoc | 5 | 5 | U | hand | – | – |
+| textile | 5 | 5 | U | hand | – | – |
+| muse | 5 | 5 | U | hand | – | – |
+| t2t | 5 | 5 | U | hand | – | – |
+| markua | 5 | 5 | U | hand | – | – |
+| fountain | 5 | 5 | U | hand | – | – |
+| typst | 1 | 2 | U | hand | partial→fixtures | harness |
+| texinfo | 5 | 5 | U | hand | – | – |
+| bbcode | 5 | 5 | U | hand | – | – |
+| pod | 5 | 5 | U | hand | – | – |
+| haddock | 5 | 5 | U | hand | – | – |
+| ansi | 5 | 5 | U | hand | – | – |
+| man | 5 | 5 | U | hand | – | – |
 
 † Pandoc cannot read AsciiDoc (`--from asciidoc` unsupported); consider asciidoctor as alternate oracle.
 
 ### Wiki formats
 
-| Format | R | W | Library | R-next | W-next |
-|--------|---|---|---------|--------|--------|
-| mediawiki | 5 | 5 | hand | – | – |
-| creole | 5 | 5 | hand | – | – |
-| dokuwiki | 5 | 5 | hand | – | – |
-| vimwiki | 5 | 5 | hand | – | – |
-| zimwiki | 5 | 5 | hand | – | – |
-| xwiki | 5 | 5 | hand | – | – |
-| twiki | 5 | 5 | hand | – | – |
-| tikiwiki | 5 | 5 | hand | – | – |
-| jira | 5 | 5 | hand | – | – |
+| Format | R | W | CC | Library | R-next | W-next |
+|--------|---|---|----|---------|--------|--------|
+| mediawiki | 5 | 5 | U | hand | – | – |
+| creole | 5 | 5 | U | hand | – | – |
+| dokuwiki | 5 | 5 | U | hand | – | – |
+| vimwiki | 5 | 5 | U | hand | – | – |
+| zimwiki | 5 | 5 | U | hand | – | – |
+| xwiki | 5 | 5 | U | hand | – | – |
+| twiki | 5 | 5 | U | hand | – | – |
+| tikiwiki | 5 | 5 | U | hand | – | – |
+| jira | 5 | 5 | U | hand | – | – |
 
 ### Office / binary
 
-| Format | R | W | Library | R-next | W-next |
-|--------|---|---|---------|--------|--------|
-| docx | 5† | 5† | ooxml-wml | – | – |
-| odt | 5 | 5 | odf-fmt (standalone) | – | – |
-| epub | 5† | 5† | epub / epub-builder | – | – |
-| fb2 | 5† | 5† | fb2-fmt | – | – |
-| pptx | 5† | 5† | ooxml-pml | – | – |
-| xlsx | 5† | 5† | ooxml-sml | – | – |
-| pdf | 4† | – | pdf-extract | production | – |
-| rtf | 5 | 5 | rtf-fmt (standalone) | – | – |
-| mobi | – | – | – (planned) | – | – |
-| azw3 | – | – | – (planned) | – | – |
-| kfx | – | – | – (planned) | – | – |
+| Format | R | W | CC | Library | R-next | W-next |
+|--------|---|---|----|---------|--------|--------|
+| docx | 5† | 5† | U | ooxml-wml | – | – |
+| odt | 5 | 5 | U | odf-fmt (standalone) | – | – |
+| epub | 5† | 5† | U | epub / epub-builder | – | – |
+| fb2 | 5† | 5† | U | fb2-fmt | – | – |
+| pptx | 5† | 5† | U | ooxml-pml | – | – |
+| xlsx | 5† | 5† | U | ooxml-sml | – | – |
+| pdf | 4† | – | U | pdf-extract | production | – |
+| rtf | 5 | 5 | U | rtf-fmt (standalone) | – | – |
+| mobi | – | – | – | – (planned) | – | – |
+| azw3 | – | – | – | – (planned) | – | – |
+| kfx | – | – | – | – (planned) | – | – |
 
 ### HTML and structured XML
 
-| Format | R | W | Library | R-next | W-next |
-|--------|---|---|---------|--------|--------|
-| html | 5† | 5† | html5ever / hand | – | – |
-| docbook | 4 | 2 | quick-xml (docbook-fmt) | production | harness |
-| jats | 4 | 2 | quick-xml (jats-fmt) | production | harness |
-| tei | 4 | 2 | quick-xml (tei-fmt) | production | – |
-| opml | 4 | 2 | hand | production | harness |
-| ipynb | 4† | 2† | serde_json | production | harness |
-| latex | 4 | 2 | hand | production | harness |
+| Format | R | W | CC | Library | R-next | W-next |
+|--------|---|---|----|---------|--------|--------|
+| html | 5† | 5† | U | html5ever / hand | – | – |
+| docbook | 4 | 2 | U | quick-xml (docbook-fmt) | production | harness |
+| jats | 4 | 2 | U | quick-xml (jats-fmt) | production | harness |
+| tei | 4 | 2 | U | quick-xml (tei-fmt) | production | – |
+| opml | 4 | 2 | U | hand | production | harness |
+| ipynb | 4† | 2† | U | serde_json | production | harness |
+| latex | 4 | 2 | U | hand | production | harness |
 
 ‡ Pandoc cannot read TEI (`--from tei` unsupported, output-only per
 `pandoc --list-input-formats`); oracle-harness stage is N/A, same as AsciiDoc.
 
+**docbook/jats/tei `CC:U` note:** these three are the formats the 2026-07-28 audit actually
+touched — the ones with a *measured* denominator swing (94→105→117, 106→109→133) and a
+*measured* classifier blind spot (17 additional DocBook misclassifications found on
+re-check). Every other format's `CC:U` is the same unverified status for a different
+reason: nobody has yet run the equivalent audit against it, not that the audit found it
+clean.
+
 ### Bibliographic
 
-| Format | R | W | Library | R-next | W-next |
-|--------|---|---|---------|--------|--------|
-| bibtex | 4† | 2† | biblatex | production | harness |
-| biblatex | 4† | 2† | biblatex | production | harness |
-| csl-json | 4† | 2† | serde_json | production | harness |
-| ris | 4 | 4 | hand | – (harness N/A) | production |
-| endnotexml | 4 | 2 | hand | – (harness N/A) | fuzz |
+| Format | R | W | CC | Library | R-next | W-next |
+|--------|---|---|----|---------|--------|--------|
+| bibtex | 4† | 2† | U | biblatex | production | harness |
+| biblatex | 4† | 2† | U | biblatex | production | harness |
+| csl-json | 4† | 2† | U | serde_json | production | harness |
+| ris | 4 | 4 | U | hand | – (harness N/A) | production |
+| endnotexml | 4 | 2 | U | hand | – (harness N/A) | fuzz |
 
 ### Data / interchange
 
-| Format | R | W | Library | R-next | W-next |
-|--------|---|---|---------|--------|--------|
-| csv | 4 | 4 | hand | – (harness N/A) | production |
-| tsv | 4 | 4 | hand | – (harness N/A) | production |
-| pandoc-json | 4† | 3† | serde_json | production | fuzz |
-| native | 4 | 2 | hand | production | harness |
+| Format | R | W | CC | Library | R-next | W-next |
+|--------|---|---|----|---------|--------|--------|
+| csv | 4 | 4 | U | hand | – (harness N/A) | production |
+| tsv | 4 | 4 | U | hand | – (harness N/A) | production |
+| pandoc-json | 4† | 3† | U | serde_json | production | fuzz |
+| native | 4 | 2 | U | hand | production | harness |
 
 ### Presentation / output-only
 
-These formats have no reader; stage 3 (harness) is not applicable.
+These formats have no reader; stage 3 (harness) is not applicable. They also have no
+`fixtures/{format}/COVERAGE.md` construct checklist to begin with (no fixture suite exists
+in the same sense as reader-bearing formats), so `CC` is `–` (not applicable) rather than
+`U` (unverified) — there is no existing claim to qualify.
 
-| Format | W | Library | W-next |
-|--------|---|---------|--------|
-| beamer | 4 | hand | coverage |
-| revealjs | 4 | hand | coverage |
-| slidy | 4 | hand | coverage |
-| s5 | 4 | hand | coverage |
-| dzslides | 4 | hand | coverage |
-| slideous | 4 | hand | coverage |
-| context | 4 | hand | coverage |
-| ms | 4 | hand | coverage |
-| icml | 4 | hand | coverage |
-| chunkedhtml | 4 | hand | coverage |
-| plaintext | 4 | hand | coverage |
+| Format | W | CC | Library | W-next |
+|--------|---|----|---------|--------|
+| beamer | 4 | – | hand | coverage |
+| revealjs | 4 | – | hand | coverage |
+| slidy | 4 | – | hand | coverage |
+| s5 | 4 | – | hand | coverage |
+| dzslides | 4 | – | hand | coverage |
+| slideous | 4 | – | hand | coverage |
+| context | 4 | – | hand | coverage |
+| ms | 4 | – | hand | coverage |
+| icml | 4 | – | hand | coverage |
+| chunkedhtml | 4 | – | hand | coverage |
+| plaintext | 4 | – | hand | coverage |
 
 ---
 

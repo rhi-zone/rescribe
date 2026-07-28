@@ -23,7 +23,7 @@ later revisited.
 | [0001](0001-footnote-ref-def-separate-node-kinds.md) | `footnote_ref`/`footnote_def` as separate node kinds | Accepted |
 | [0002](0002-span-semantics-include-delimiters.md) | Span semantics: full syntactic construct including delimiters | Accepted |
 | [0003](0003-streaming-events-not-derived-from-parse.md) | `events()` is a true pull iterator; `parse()` is implemented as `events().collect()`, never the reverse | Accepted |
-| [0004](0004-xml-classifier-schema-verification-methodology.md) | Schema-verification methodology for block/inline element classifiers | Accepted |
+| [0004](0004-xml-classifier-schema-verification-methodology.md) | Schema-verification methodology for block/inline element classifiers | Accepted (amended 2026-07-28: original method insufficient) |
 | [0005](0005-citation-bibliography-ir-shape.md) | Citation/bibliography IR shape: `bibliography`/`bibliography_entry`/`bibliography_field` | Accepted |
 | [0006](0006-content-model-decides-properties-vs-child-nodes.md) | Properties-vs-child-nodes is decided by content-model markup permission, not precedent | Accepted |
 | [0007](0007-dtd-entity-resolution-build-vs-buy.md) | DTD-aware entity resolution: buy the entity table, build the DTD subset parser | Accepted (design only; not yet implemented) |
