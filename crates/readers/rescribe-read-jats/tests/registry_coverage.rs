@@ -82,7 +82,7 @@ fn jats_elements() -> Vec<&'static jats_fmt::registry::Construct> {
     registry()
         .elements()
         .filter(|c| {
-            !c.slices
+            !c.normative_slices
                 .iter()
                 .all(|s| FOREIGN_SLICES.contains(&s.as_str()))
         })
@@ -127,14 +127,17 @@ fn report_unmentioned_elements() {
         gaps.len()
     );
     if !gaps.is_empty() {
-        println!("Unmentioned, by slice:");
+        println!("Unmentioned, by normative slice:");
         let mut by_slice: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
         for c in &gaps {
-            by_slice.entry(c.primary_slice()).or_default().push(&c.name);
+            by_slice
+                .entry(c.primary_normative_slice().unwrap_or("(none)"))
+                .or_default()
+                .push(&c.name);
         }
         for (slice, names) in by_slice {
             let label = registry()
-                .slice(slice)
+                .normative_slice(slice)
                 .map(|s| s.name.as_str())
                 .unwrap_or(slice);
             println!("  {label} ({slice}): {}", names.join(", "));
@@ -184,18 +187,27 @@ fn registry_contains_the_elements_the_hand_written_checklist_missed() {
     );
 }
 
-/// Slices must be usable as a work-decomposition axis: a maintainer asking
-/// "what's left in the references module" must get a real answer.
+/// Normative slices must be usable as a work-decomposition axis: a
+/// maintainer asking "what's left in the references module" must get a real
+/// answer. JATS's normative modularization is never empty (unlike DocBook's
+/// would be), so every element must land in at least one.
 #[test]
-fn slices_partition_the_format() {
+fn normative_slices_partition_the_format() {
     let r = registry();
-    assert!(r.slices().len() > 10, "suspiciously few slices");
-    for slice in r.slices() {
-        let n = r.in_slice(&slice.id).count();
+    assert!(
+        r.normative_slices().len() > 10,
+        "suspiciously few normative slices"
+    );
+    for slice in r.normative_slices() {
+        let n = r.in_normative_slice(&slice.id).count();
         println!("{:>34}  {:>4}  {}", slice.id, n, slice.name);
     }
-    // Every element belongs to at least one declared slice.
+    // Every element belongs to at least one declared normative slice.
     for c in r.elements() {
-        assert!(!c.slices.is_empty(), "{} has no slice", c.id);
+        assert!(
+            !c.normative_slices.is_empty(),
+            "{} has no normative slice",
+            c.id
+        );
     }
 }

@@ -13,22 +13,32 @@
 //! The registry is **spec-pure**. It records what JATS defines, never what
 //! this crate or any downstream consumer supports. Support status is a
 //! *join* the consumer performs — see [`Registry::contains_element`] and the
-//! `in_slice` / `elements` iterators — so the registry never churns when
+//! `in_normative_slice` / `elements` iterators — so the registry never churns when
 //! implementation work lands.
 //!
-//! # Slices
+//! # Slices: normative vs. pragmatic
 //!
-//! Every construct is annotated with the **slice**(s) it belongs to. A slice
-//! is not an invented grouping: it is one of the JATS DTD Suite's own module
-//! files (`JATS-section1-3.ent`, `JATS-phrase1-3.ent`, …). The format
-//! publishes this partition itself, so a downstream implementer can use it to
-//! decide how to decompose the work — "implement the section and para
-//! modules first" is a statement the format supports, unlike "implement the
-//! easy elements first."
+//! Every construct is annotated with the **slice**(s) it belongs to, in two
+//! independent, separately-provenanced collections (per
+//! `docs/adr/0013-per-format-construct-registry.md`'s 2026-07-28 amendment):
 //!
-//! A construct can belong to more than one slice when several modules declare
-//! it; [`Construct::slices`] lists them in the driver schema's `<include>`
-//! order, so `slices[0]` is a stable primary.
+//! - [`Construct::normative_slices`] — a partition the format itself
+//!   publishes. For JATS this is the DTD Suite's own module files
+//!   (`JATS-section1-3.ent`, `JATS-phrase1-3.ent`, …); a construct can belong
+//!   to more than one when several modules declare it, listed in the driver
+//!   schema's `<include>` order so `normative_slices[0]` is a stable primary.
+//!   A downstream implementer can use these to decide how to decompose work —
+//!   "implement the section and para modules first" is a statement the format
+//!   supports, unlike "implement the easy elements first." This list may be
+//!   empty for a format whose normative schema publishes no modularization at
+//!   all (DocBook is the motivating case); JATS's is never empty.
+//! - [`Construct::pragmatic_slices`] — a partition invented by whoever
+//!   maintains this registry (e.g. ooxml's `core`/`styling`/`charts` feature
+//!   groupings), explicitly non-normative. Always permitted, since it makes
+//!   no claim to reflect the format's own structure. The JATS pilot leaves
+//!   this empty for every construct: JATS's normative modularization already
+//!   does the decomposition job, so inventing a second grouping nobody asked
+//!   for would just be noise.
 //!
 //! # Citations survive an absent schema
 //!
@@ -48,7 +58,7 @@
 //! # #[cfg(feature = "registry")] {
 //! let reg = jats_fmt::registry::registry();
 //! assert!(reg.contains_element("sec"));
-//! for c in reg.in_slice("JATS-section1-3.ent") {
+//! for c in reg.in_normative_slice("JATS-section1-3.ent") {
 //!     println!("{} ({})", c.name, reg.citation_url(c).unwrap_or_default());
 //! }
 //! # }
@@ -180,16 +190,27 @@ pub struct Citation {
     pub attribute_url_template: Option<String>,
 }
 
-/// One partition of the format, as the format itself defines it.
+/// One partition of the format — either the format's own published
+/// modularization, or a hand-curated grouping. Which one a given `Slice`
+/// belongs to is determined by *which list it lives in*
+/// (`Registry::normative_slices` vs. `Registry::pragmatic_slices`), not by a
+/// field on this type — see the module docs and
+/// `docs/adr/0013-per-format-construct-registry.md`'s 2026-07-28 amendment.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slice {
-    /// Stable id — the format's own module identifier.
+    /// Stable id. For a normative slice, the format's own module identifier;
+    /// for a pragmatic slice, whatever id its curator chose.
     pub id: String,
-    /// The module's own declared name, taken from the schema file.
+    /// Declared name. For a normative slice, taken from the schema file; for
+    /// a pragmatic slice, curator-chosen.
     pub name: String,
-    /// Source schema file that declares this slice's constructs.
+    /// Source schema file that declares this slice's constructs. Empty for a
+    /// pragmatic slice with no backing schema file.
+    #[serde(default)]
     pub source_file: String,
-    /// Resolvable URL for that file.
+    /// Resolvable URL for that file, or for whatever explains the pragmatic
+    /// grouping's rationale. Empty if none exists.
+    #[serde(default)]
     pub url: String,
 }
 
@@ -202,18 +223,32 @@ pub struct Construct {
     pub name: String,
     /// Element, attribute, …
     pub kind: ConstructKind,
-    /// Slice ids that declare this construct, in driver `<include>` order.
-    /// Never empty; `slices[0]` is the stable primary slice.
-    pub slices: Vec<String>,
+    /// Ids into `Registry::normative_slices` that declare this construct, in
+    /// driver `<include>` order. Empty only when the format's normative
+    /// schema publishes no modularization at all; JATS's is never empty.
+    /// `normative_slices[0]`, when non-empty, is the stable primary.
+    #[serde(default)]
+    pub normative_slices: Vec<String>,
+    /// Ids into `Registry::pragmatic_slices` this construct has been
+    /// hand-assigned to. Always legitimately empty — no format is required
+    /// to have a pragmatic partition, and JATS's pilot leaves this empty for
+    /// every construct.
+    #[serde(default)]
+    pub pragmatic_slices: Vec<String>,
 }
 
 impl Construct {
-    /// The primary slice id — the first module to declare this construct in
-    /// the driver schema's include order.
-    pub fn primary_slice(&self) -> &str {
-        // Derivation guarantees non-empty; be total anyway rather than panic
-        // in a query API.
-        self.slices.first().map(String::as_str).unwrap_or("")
+    /// The primary normative slice id — the first module to declare this
+    /// construct in the driver schema's include order, if the format
+    /// publishes a normative modularization at all.
+    pub fn primary_normative_slice(&self) -> Option<&str> {
+        self.normative_slices.first().map(String::as_str)
+    }
+
+    /// The primary pragmatic slice id, if this construct has been assigned
+    /// to any pragmatic grouping.
+    pub fn primary_pragmatic_slice(&self) -> Option<&str> {
+        self.pragmatic_slices.first().map(String::as_str)
     }
 }
 
@@ -221,7 +256,9 @@ impl Construct {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Registry {
     /// Schema version of the *registry document format* itself, so a
-    /// consumer can tell v1 from v2. Currently always 1.
+    /// consumer can tell v1 from v2. `2` introduced the normative/pragmatic
+    /// slice split (`docs/adr/0013-...`'s 2026-07-28 amendment); `1` had a
+    /// single `slices` field.
     pub registry_version: u32,
     /// Which format this describes.
     pub format: FormatInfo,
@@ -230,8 +267,20 @@ pub struct Registry {
     /// How to cite an individual construct.
     #[serde(default)]
     pub citation: Citation,
-    /// The format's own modularization.
-    pub slices: Vec<Slice>,
+    /// The format's own published modularization. May be empty for a format
+    /// whose normative schema publishes no modularization (e.g. DocBook);
+    /// when empty, `normative_slices_absent_reason` should say why.
+    #[serde(default)]
+    pub normative_slices: Vec<Slice>,
+    /// Why `normative_slices` is empty, when it is. `None` when
+    /// `normative_slices` is non-empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normative_slices_absent_reason: Option<String>,
+    /// A hand-curated, explicitly non-normative partition. Always
+    /// legitimately empty — a format gains nothing from a pragmatic grouping
+    /// nobody asked for. JATS's pilot leaves this empty.
+    #[serde(default)]
+    pub pragmatic_slices: Vec<Slice>,
     /// Every construct, sorted by id.
     pub constructs: Vec<Construct>,
 }
@@ -247,14 +296,24 @@ impl Registry {
         &self.constructs
     }
 
-    /// The format's own modules.
-    pub fn slices(&self) -> &[Slice] {
-        &self.slices
+    /// The format's own published modules.
+    pub fn normative_slices(&self) -> &[Slice] {
+        &self.normative_slices
     }
 
-    /// Look up a slice by id.
-    pub fn slice(&self, id: &str) -> Option<&Slice> {
-        self.slices.iter().find(|s| s.id == id)
+    /// This registry's hand-curated, explicitly non-normative groupings.
+    pub fn pragmatic_slices(&self) -> &[Slice] {
+        &self.pragmatic_slices
+    }
+
+    /// Look up a normative slice by id.
+    pub fn normative_slice(&self, id: &str) -> Option<&Slice> {
+        self.normative_slices.iter().find(|s| s.id == id)
+    }
+
+    /// Look up a pragmatic slice by id.
+    pub fn pragmatic_slice(&self, id: &str) -> Option<&Slice> {
+        self.pragmatic_slices.iter().find(|s| s.id == id)
     }
 
     /// Look up a construct by its stable id, e.g. `element:sec`.
@@ -295,11 +354,24 @@ impl Registry {
         self.constructs.iter().filter(move |c| c.kind == kind)
     }
 
-    /// Every construct declared by a given slice.
-    pub fn in_slice<'a>(&'a self, slice_id: &'a str) -> impl Iterator<Item = &'a Construct> {
+    /// Every construct declared by a given normative slice.
+    pub fn in_normative_slice<'a>(
+        &'a self,
+        slice_id: &'a str,
+    ) -> impl Iterator<Item = &'a Construct> {
         self.constructs
             .iter()
-            .filter(move |c| c.slices.iter().any(|s| s == slice_id))
+            .filter(move |c| c.normative_slices.iter().any(|s| s == slice_id))
+    }
+
+    /// Every construct assigned to a given pragmatic slice.
+    pub fn in_pragmatic_slice<'a>(
+        &'a self,
+        slice_id: &'a str,
+    ) -> impl Iterator<Item = &'a Construct> {
+        self.constructs
+            .iter()
+            .filter(move |c| c.pragmatic_slices.iter().any(|s| s == slice_id))
     }
 
     /// A resolvable citation URL for a construct, if a template is defined.
@@ -335,11 +407,24 @@ impl Registry {
             .filter(move |c| !handled.contains(&c.name))
     }
 
-    /// Count of constructs per slice, for a coverage-report-style summary.
-    pub fn counts_by_slice(&self, kind: ConstructKind) -> BTreeMap<&str, usize> {
+    /// Count of constructs per normative slice, for a coverage-report-style
+    /// summary.
+    pub fn counts_by_normative_slice(&self, kind: ConstructKind) -> BTreeMap<&str, usize> {
         let mut out = BTreeMap::new();
         for c in self.of_kind(kind) {
-            for s in &c.slices {
+            for s in &c.normative_slices {
+                *out.entry(s.as_str()).or_insert(0) += 1;
+            }
+        }
+        out
+    }
+
+    /// Count of constructs per pragmatic slice, for a coverage-report-style
+    /// summary.
+    pub fn counts_by_pragmatic_slice(&self, kind: ConstructKind) -> BTreeMap<&str, usize> {
+        let mut out = BTreeMap::new();
+        for c in self.of_kind(kind) {
+            for s in &c.pragmatic_slices {
                 *out.entry(s.as_str()).or_insert(0) += 1;
             }
         }
@@ -370,7 +455,7 @@ mod tests {
     #[test]
     fn committed_document_parses() {
         let r = registry();
-        assert_eq!(r.registry_version, 1);
+        assert_eq!(r.registry_version, 2);
         assert_eq!(r.format.id, "jats");
         assert_eq!(r.format.version, "1.3");
         assert_eq!(r.format.profile.as_deref(), Some("archiving"));
@@ -396,9 +481,26 @@ mod tests {
     fn every_construct_slice_is_declared() {
         let r = registry();
         for c in r.constructs() {
-            assert!(!c.slices.is_empty(), "{} has no slice", c.id);
-            for s in &c.slices {
-                assert!(r.slice(s).is_some(), "{} cites undeclared slice {s}", c.id);
+            // JATS has a normative modularization, so every construct must
+            // cite at least one; pragmatic slices remain unused by the pilot.
+            assert!(
+                !c.normative_slices.is_empty(),
+                "{} has no normative slice",
+                c.id
+            );
+            for s in &c.normative_slices {
+                assert!(
+                    r.normative_slice(s).is_some(),
+                    "{} cites undeclared normative slice {s}",
+                    c.id
+                );
+            }
+            for s in &c.pragmatic_slices {
+                assert!(
+                    r.pragmatic_slice(s).is_some(),
+                    "{} cites undeclared pragmatic slice {s}",
+                    c.id
+                );
             }
         }
     }
@@ -411,8 +513,8 @@ mod tests {
         assert_eq!(
             r.lookup(ConstructKind::Element, "sec")
                 .unwrap()
-                .primary_slice(),
-            "JATS-section1-3.ent"
+                .primary_normative_slice(),
+            Some("JATS-section1-3.ent")
         );
         assert!(r.contains_element("article"));
         assert!(r.contains_element("italic"));

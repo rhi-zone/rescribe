@@ -103,9 +103,9 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     println!(
-        "wrote {OUT_REL}: {} constructs across {} slices",
+        "wrote {OUT_REL}: {} constructs across {} normative slices",
         reg.constructs.len(),
-        reg.slices.len()
+        reg.normative_slices.len()
     );
     ExitCode::SUCCESS
 }
@@ -185,13 +185,13 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
     }
 
     let mut digests = vec![digest_of(DRIVER, &driver)];
-    let mut slices = Vec::new();
-    // name -> (kind, slice ids in include order)
+    let mut normative_slices = Vec::new();
+    // name -> (kind, normative slice ids in include order)
     let mut found: BTreeMap<(ConstructKind, String), Vec<String>> = BTreeMap::new();
 
     // The driver itself declares constructs too (notably <article>).
     let driver_slice = DRIVER.to_string();
-    slices.push(Slice {
+    normative_slices.push(Slice {
         id: driver_slice.clone(),
         name: module_name(&driver_doc.nodes).unwrap_or_else(|| "Archiving Driver".into()),
         source_file: DRIVER.to_string(),
@@ -210,7 +210,7 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
         // Slice id drops the `.rng` mirror suffix: the module's identity is
         // the DTD-suite module name, which the RNG is a 1:1 mirror of.
         let id = file.strip_suffix(".rng").unwrap_or(file).to_string();
-        slices.push(Slice {
+        normative_slices.push(Slice {
             id: id.clone(),
             name: module_name(&doc.nodes).unwrap_or_else(|| id.clone()),
             source_file: file.clone(),
@@ -221,17 +221,23 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
 
     let mut constructs: Vec<Construct> = found
         .into_iter()
-        .map(|((kind, name), slices)| Construct {
+        .map(|((kind, name), normative_slices)| Construct {
             id: format!("{}:{}", kind.id_prefix(), name),
             name,
             kind,
-            slices,
+            normative_slices,
+            // JATS's normative modularization already does the decomposition
+            // job; this derivation tool has no basis for inventing a second,
+            // pragmatic grouping, so it leaves this empty for every
+            // construct rather than guessing one (ADR 0013's 2026-07-28
+            // amendment: an unasked-for pragmatic slice is noise, not value).
+            pragmatic_slices: Vec::new(),
         })
         .collect();
     constructs.sort_by(|a, b| a.id.cmp(&b.id));
 
     Ok(Registry {
-        registry_version: 1,
+        registry_version: 2,
         format: FormatInfo {
             id: "jats".into(),
             name: "JATS (Journal Article Tag Suite)".into(),
@@ -262,7 +268,12 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
                 "https://jats.nlm.nih.gov/archiving/tag-library/1.3/attribute/{name}.html".into(),
             ),
         },
-        slices,
+        normative_slices,
+        normative_slices_absent_reason: None,
+        // JATS's own DTD Suite modularization already provides the
+        // decomposition axis; the pilot does not invent a second, pragmatic
+        // partition on top of it (see the comment above).
+        pragmatic_slices: Vec::new(),
         constructs,
     })
 }
