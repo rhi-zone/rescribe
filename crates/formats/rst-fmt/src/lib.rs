@@ -1858,7 +1858,7 @@ fn parse_inline_content(
     while pos < chars.len() {
         // Strong: **text**
         if pos + 1 < chars.len() && chars[pos] == '*' && chars[pos + 1] == '*' {
-            if let Some((end, text)) = find_closing(&chars, pos + 2, "**") {
+            if let Some((end, text)) = find_closing(&chars, pos + 2, "**", true) {
                 let children = parse_inline_content(&text, link_targets);
                 nodes.push(Inline::Strong(children));
                 pos = end + 2;
@@ -1880,7 +1880,10 @@ fn parse_inline_content(
 
         // Inline literal: ``text``
         if pos + 1 < chars.len() && chars[pos] == '`' && chars[pos + 1] == '`' {
-            if let Some((end, text)) = find_closing(&chars, pos + 2, "``") {
+            // Inline literals are the one span the RST spec exempts from
+            // escape processing: a backslash inside ``…`` is a literal
+            // backslash, and cannot hide the closing delimiter.
+            if let Some((end, text)) = find_closing(&chars, pos + 2, "``", false) {
                 nodes.push(Inline::Code(text));
                 pos = end + 2;
                 continue;
@@ -2037,6 +2040,25 @@ fn parse_inline_content(
         let mut text = String::new();
         while pos < chars.len() {
             let c = chars[pos];
+            // RST escaping mechanism: a backslash strips the special meaning
+            // of the character that follows, so the escaped character is
+            // emitted as literal text and never inspected as markup. Escaped
+            // whitespace disappears entirely (it exists only to make markup
+            // adjacent to a word). This is the one place escapes are
+            // resolved — `find_closing`/`find_closing_char` deliberately copy
+            // them through so a nested span's content resolves them here too.
+            if c == '\\' {
+                if let Some(&next) = chars.get(pos + 1) {
+                    if !next.is_whitespace() {
+                        text.push(next);
+                    }
+                    pos += 2;
+                } else {
+                    text.push('\\');
+                    pos += 1;
+                }
+                continue;
+            }
             // Stop at potential inline markup starts
             if c == '*' || c == '`' || c == ':' || c == '[' {
                 break;
@@ -2081,12 +2103,32 @@ fn parse_inline_content(
     nodes
 }
 
-fn find_closing(chars: &[char], start: usize, pattern: &str) -> Option<(usize, String)> {
+/// Find `pattern`'s next occurrence, returning its position and the text
+/// before it.
+///
+/// When `escapes` is set, a backslash-escaped character cannot close the span
+/// (RST's escaping mechanism): the escape is *copied through* into `text`
+/// rather than resolved here, because the span's content is re-parsed by
+/// `parse_inline_content`, which resolves escapes exactly once, at the level
+/// that actually emits the text. Inline literals pass `false` — the spec
+/// exempts them from escape processing entirely.
+fn find_closing(
+    chars: &[char],
+    start: usize,
+    pattern: &str,
+    escapes: bool,
+) -> Option<(usize, String)> {
     let pat_chars: Vec<char> = pattern.chars().collect();
     let mut pos = start;
     let mut text = String::new();
 
     while pos + pat_chars.len() <= chars.len() {
+        if escapes && chars[pos] == '\\' && pos + 1 < chars.len() {
+            text.push(chars[pos]);
+            text.push(chars[pos + 1]);
+            pos += 2;
+            continue;
+        }
         let mut matches = true;
         for (i, pc) in pat_chars.iter().enumerate() {
             if chars[pos + i] != *pc {
@@ -2104,11 +2146,22 @@ fn find_closing(chars: &[char], start: usize, pattern: &str) -> Option<(usize, S
     None
 }
 
+/// Find the next unescaped `close`, returning its position and the text
+/// before it. As in [`find_closing`], escapes are copied through rather than
+/// resolved — every span this is used for (emphasis, interpreted text, roles)
+/// has its content re-parsed, and resolving here would let `\*` re-enter the
+/// tokenizer as live markup.
 fn find_closing_char(chars: &[char], start: usize, close: char) -> Option<(usize, String)> {
     let mut pos = start;
     let mut text = String::new();
 
     while pos < chars.len() {
+        if chars[pos] == '\\' && pos + 1 < chars.len() {
+            text.push(chars[pos]);
+            text.push(chars[pos + 1]);
+            pos += 2;
+            continue;
+        }
         if chars[pos] == close {
             return Some((pos, text));
         }
@@ -2481,9 +2534,33 @@ fn build_inlines(inlines: &[Inline], ctx: &mut BuildContext) {
     }
 }
 
+/// Re-apply RST's escaping mechanism to literal text on emit.
+///
+/// The reader resolves `\*` to a literal `*`, so the writer must put the
+/// backslash back — otherwise `parse(emit(parse(x))) != parse(x)` for any
+/// document containing a literal asterisk, backtick, or backslash: the bare
+/// character would be re-read as live markup. Borrows unless an escape is
+/// actually needed, which is the overwhelmingly common case.
+pub(crate) fn escape_text(s: &str) -> Cow<'_, str> {
+    if !s.bytes().any(|b| b == b'\\' || b == b'*' || b == b'`') {
+        return Cow::Borrowed(s);
+    }
+    let mut out = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        if c == '\\' || c == '*' || c == '`' {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    Cow::Owned(out)
+}
+
 fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
     match inline {
-        Inline::Text(s) => ctx.write(s),
+        Inline::Text(s) => {
+            let escaped = escape_text(s);
+            ctx.write(&escaped);
+        }
 
         Inline::Emphasis(children) => {
             ctx.write("*");
@@ -2600,7 +2677,10 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
 fn collect_text_from_inlines(inlines: &[Inline], out: &mut String) {
     for inline in inlines {
         match inline {
-            Inline::Text(s) => out.push_str(s),
+            // Escaped, because this text is what actually gets *emitted* into
+            // a heading line or a table cell: underline widths and column
+            // widths have to count the bytes that will be written.
+            Inline::Text(s) => out.push_str(&escape_text(s)),
             Inline::Code(s) => out.push_str(s),
             Inline::MathInline { source } => out.push_str(source),
             Inline::Emphasis(ch)
@@ -2644,6 +2724,75 @@ mod tests {
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(doc.blocks[0], Block::Paragraph { .. }));
         assert!(matches!(doc.blocks[1], Block::Paragraph { .. }));
+    }
+
+    /// RST's escaping mechanism: a backslash strips the special meaning of
+    /// the next character, so `\*not emphasis\*` is literal text. Before this
+    /// was implemented the parser saw live emphasis markup there and silently
+    /// misread the document.
+    #[test]
+    fn test_parse_escaped_markup_is_literal_text() {
+        let doc = parse(r"This is \*not emphasis\* here.").unwrap();
+        let Block::Paragraph { inlines } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(
+            !inlines.iter().any(|i| matches!(i, Inline::Emphasis(_))),
+            "escaped asterisks must not open emphasis: {inlines:?}"
+        );
+        assert!(
+            matches!(&inlines[0], Inline::Text(s) if s == "This is *not emphasis* here."),
+            "escape must resolve to a literal asterisk: {inlines:?}"
+        );
+    }
+
+    /// Escaped whitespace is removed entirely — that is the whole point of
+    /// `word\ *markup*`, which makes markup adjacent to a word.
+    #[test]
+    fn test_parse_escaped_whitespace_is_removed() {
+        let doc = parse(r"star\ *adjacent*").unwrap();
+        let Block::Paragraph { inlines } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(
+            matches!(&inlines[0], Inline::Text(s) if s == "star"),
+            "{inlines:?}"
+        );
+        assert!(matches!(&inlines[1], Inline::Emphasis(_)), "{inlines:?}");
+    }
+
+    /// Inline literals are exempt from escape processing per the RST spec:
+    /// a backslash inside ``…`` is a literal backslash.
+    #[test]
+    fn test_parse_inline_literal_keeps_backslashes() {
+        let doc = parse(r"``literal \* stays``").unwrap();
+        let Block::Paragraph { inlines } = &doc.blocks[0] else {
+            panic!("expected paragraph");
+        };
+        assert!(
+            matches!(&inlines[0], Inline::Code(s) if s == r"literal \* stays"),
+            "{inlines:?}"
+        );
+    }
+
+    /// The escape has to survive emission, or the round trip silently turns
+    /// literal text back into markup: `parse(emit(parse(x))) == parse(x)`.
+    #[test]
+    fn test_escaped_markup_roundtrips() {
+        for input in [
+            r"This is \*not emphasis\* here.",
+            r"A backslash \\ and \`not literal\`.",
+            r"Real *emphasis* and \*escaped\* together.",
+        ] {
+            let doc = parse(input).unwrap();
+            let emitted = build(&doc);
+            let doc2 = parse(&emitted).unwrap();
+            assert_eq!(
+                format!("{:?}", doc.blocks),
+                format!("{:?}", doc2.blocks),
+                "escape round-trip lost information for {input:?} (emitted {emitted:?})"
+            );
+        }
     }
 
     #[test]

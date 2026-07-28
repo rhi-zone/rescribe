@@ -657,7 +657,12 @@ impl<W: Write> Writer<W> {
 
             // ── Inline events ──────────────────────────────────────────────────
             OwnedEvent::Text(cow) => {
-                self.push_inline(&cow, &cow);
+                // Same re-escaping `build_inline` applies (see
+                // `crate::escape_text`): literal `*`/`` ` ``/`\` in text must
+                // go back out escaped or they re-parse as markup. Borrows
+                // unless an escape is actually needed.
+                let escaped = crate::escape_text(&cow);
+                self.push_inline(&escaped, &escaped);
             }
             OwnedEvent::SoftBreak | OwnedEvent::LineBreak => {
                 self.push_inline("\n", " ");
@@ -962,6 +967,8 @@ mod tests {
             ".. figure:: img.png\n   :alt: alt text\n\n   The caption.\n",
             ".. image:: img.png\n   :alt: alt text\n",
             "| line one\n| line two\n",
+            "Text with \\*escaped\\* markup and a \\\\ backslash.\n",
+            "Escaped\n=======\n\nheading text is fine.\n",
             "A para\n\n- item\n\n  continued paragraph in item\n",
         ];
         for input in inputs {

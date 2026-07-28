@@ -1,0 +1,8 @@
+{
+  "description": "Backslash-escaped markup characters are literal text, not emphasis",
+  "category": "happy",
+  "assertions": [
+    { "path": "/0", "kind": "paragraph" },
+    { "path": "/0/0", "kind": "text", "props": { "content": "This is *not emphasis* here." } }
+  ]
+}

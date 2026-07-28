@@ -78,6 +78,8 @@ spec.
 - [x] substitution reference (|sub|) — `substitution`
 - [x] substitution definition (.. |sub| replace::) — `substitution`
 - [x] interpreted text (`:role:`text`` with unknown role → span; default role → emphasis) — covered by `rst-span` and `emphasis`
+- [x] escaped markup (`\*`, `` \` ``, `\\` → literal characters, no markup) — `escaped-markup`
+- [x] escaped whitespace (`word\ *markup*` → escape removed, markup adjacent) — `escaped-whitespace`
 - [x] image inline (|image_sub| → literal text; image:: substitutions not expanded) — `image-inline`
 - [ ] line break (hard) — (N/A: RST has no hard line break outside line blocks)
 
