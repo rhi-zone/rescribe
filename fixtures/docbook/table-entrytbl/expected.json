@@ -1,0 +1,15 @@
+{
+  "description": "<entrytbl> (a table nested inside a table cell) is block-shaped per the DocBook 5.2 reference ('formatted, as a table, to fit within the table cell') and must classify as a raw-preserved div, not fall through the catch-all as inline text merged into the cell",
+  "assertions": [
+    { "path": "/0",             "kind": "div" },
+    { "path": "/0/0",           "kind": "table" },
+    { "path": "/0/0/0",         "kind": "table_row" },
+    { "path": "/0/0/0/0",       "kind": "table_cell" },
+    { "path": "/0/0/0/0/0",     "kind": "div", "props": { "docbook:tag": "entrytbl" } },
+    { "path": "/0/0/0/0/0/0",   "kind": "table_row" },
+    { "path": "/0/0/0/0/0/0/0", "kind": "table_cell" },
+    { "path": "/0/0/0/0/0/0/0/0", "kind": "text", "props": { "content": "Nested" } },
+    { "path": "/0/0/0/1",       "kind": "table_cell" },
+    { "path": "/0/0/0/1/0",     "kind": "text", "props": { "content": "Sibling" } }
+  ]
+}

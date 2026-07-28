@@ -1,0 +1,13 @@
+{
+  "description": "<glossentry> and <glossdef> are block-shaped per the DocBook 5.2 reference (both 'Formatted as a displayed block', glossdef holding real paragraph content) and must classify as a raw-preserved div, not fall through the catch-all as an inline span; <glossterm> is genuinely phrase-level and correctly stays a span",
+  "assertions": [
+    { "path": "/0",           "kind": "div", "props": { "docbook:tag": "article" } },
+    { "path": "/0/0",         "kind": "div", "props": { "docbook:tag": "glossary" } },
+    { "path": "/0/0/0",       "kind": "div", "props": { "docbook:tag": "glossentry" } },
+    { "path": "/0/0/0/0",     "kind": "span", "props": { "docbook:tag": "glossterm" } },
+    { "path": "/0/0/0/0/0",   "kind": "text", "props": { "content": "API" } },
+    { "path": "/0/0/0/1",     "kind": "div", "props": { "docbook:tag": "glossdef" } },
+    { "path": "/0/0/0/1/0",   "kind": "paragraph" },
+    { "path": "/0/0/0/1/0/0", "kind": "text", "props": { "content": "Application Programming Interface." } }
+  ]
+}

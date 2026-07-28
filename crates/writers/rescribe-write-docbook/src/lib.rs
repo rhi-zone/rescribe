@@ -50,6 +50,7 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         .collect();
     info_raw_fields.sort_unstable_by_key(|(tag, _)| *tag);
     let title = doc.metadata.get_str("title");
+    let mut info: Option<DbNode> = None;
     if title.is_some() || !info_raw_fields.is_empty() {
         let mut info_children = Vec::new();
         if let Some(title) = title {
@@ -68,23 +69,48 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
                 span: docbook_fmt::Span::NONE,
             });
         }
-        root_children.push(db_element("info", vec![], info_children));
-    }
-    for child in &doc.content.children {
-        root_children.extend(write_node(child));
+        info = Some(db_element("info", vec![], info_children));
     }
 
-    let root = DbNode::Element {
-        name: "article".to_string(),
-        attrs: vec![
-            (
-                "xmlns".to_string(),
-                "http://docbook.org/ns/docbook".to_string(),
-            ),
-            ("version".to_string(), "5.0".to_string()),
-        ],
-        children: root_children,
-        span: docbook_fmt::Span::NONE,
+    let xmlns_attrs = vec![
+        (
+            "xmlns".to_string(),
+            "http://docbook.org/ns/docbook".to_string(),
+        ),
+        ("version".to_string(), "5.0".to_string()),
+    ];
+
+    // If the document's content is exactly one structural sectioning
+    // container (see `is_structural_sectioning_tag`) — the overwhelmingly
+    // common case, since `rescribe-read-docbook`'s `parse` wraps a whole
+    // parsed file in exactly one such `DIV` — reuse *its* tag as the XML
+    // root instead of always hardcoding `<article>`. Before `docbook:tag`
+    // was added to these DIVs, hardcoding `<article>` was the only
+    // information available here at all, but it silently turned every
+    // `<book>`/`<chapter>`/`<part>`/`<appendix>` root back into `<article>`
+    // on round-trip — the exact bug this reader/writer change fixes. Any
+    // other shape of `doc.content` (multiple top-level children, or a
+    // top-level child this writer doesn't recognize as a root — e.g. a
+    // document built programmatically rather than round-tripped) falls
+    // back to the pre-existing synthesized-`<article>`-wrapper behavior.
+    let root = match doc.content.children.as_slice() {
+        [only]
+            if only.kind.as_str() == node::DIV
+                && only
+                    .props
+                    .get_str("docbook:tag")
+                    .is_some_and(is_structural_sectioning_tag) =>
+        {
+            let tag = only.props.get_str("docbook:tag").unwrap().to_string();
+            write_sectioning_container(&tag, only, xmlns_attrs, info.into_iter().collect())
+        }
+        _ => {
+            root_children.extend(info);
+            for child in &doc.content.children {
+                root_children.extend(write_node(child));
+            }
+            db_element("article", xmlns_attrs, root_children)
+        }
     };
 
     let doc_ast = DocBookDoc {
@@ -298,16 +324,95 @@ fn write_area(map: &HashMap<String, PropValue>) -> DbNode {
 
 /// Convert one rescribe IR (block-level) node into zero or more DocBook AST
 /// nodes.
+/// Whether `tag` is one of the DocBook structural sectioning containers
+/// that `rescribe-read-docbook` tags a `DIV` with via `docbook:tag`
+/// (article/book/chapter/part/appendix/section/sect1-5/simplesect — see
+/// that reader's "Document level"/"Sections" `convert_element` arms).
+/// These need [`write_sectioning_container`]'s title-extraction treatment
+/// rather than the generic `Some(tag) =>` handling the rest of `docbook:tag`
+/// uses, because their own `<title>` reads in as a `HEADING` child (per
+/// `heading_level_for_parent`) — letting that `HEADING` reach the generic
+/// `node::HEADING` write arm would wrap it in a synthesized `<sectN>`,
+/// double-nesting a spurious section inside the real one.
+fn is_structural_sectioning_tag(tag: &str) -> bool {
+    matches!(
+        tag,
+        "article"
+            | "book"
+            | "chapter"
+            | "part"
+            | "appendix"
+            | "section"
+            | "sect1"
+            | "sect2"
+            | "sect3"
+            | "sect4"
+            | "sect5"
+            | "simplesect"
+    )
+}
+
+/// Re-emit a DocBook structural sectioning container (`<book>`, `<chapter>`,
+/// `<sect1>`, `<bibliography>`, ...) as `tag` wrapping its children, with
+/// its own leading `HEADING` child (its `<title>`, per
+/// `heading_level_for_parent`) converted directly to a `<title>` in natural
+/// position instead of falling through to the generic `node::HEADING` write
+/// arm — which always synthesizes its own `<sectN>` wrapper and would
+/// double-wrap the title in a spurious nested section, and (for `<book>`/
+/// `<chapter>`/etc, which the generic arm can't produce at all) would
+/// silently discard the container's real body content that follows the
+/// title, since that content is a sibling of the DIV/BIBLIOGRAPHY node the
+/// generic arm never sees.
+///
+/// Only the first `HEADING` child is treated as the title — later
+/// `HEADING`s belong to nested sections and go through the ordinary
+/// `write_node` recursion (a nested section is its own separately-tagged
+/// `DIV`, so its `HEADING` is a child of *that* `DIV`, never a direct
+/// sibling here — but the position-based flag is kept as defense in depth).
+///
+/// `extra_attrs`/`leading_children` let [`emit`] fold in the document-root
+/// concerns (the `xmlns`/`version` attributes, and a synthesized `<info>`
+/// front-matter block from `doc.metadata`) when this container is also the
+/// XML document root, without duplicating the title-extraction loop.
+fn write_sectioning_container(
+    tag: &str,
+    node: &Node,
+    extra_attrs: Vec<(String, String)>,
+    leading_children: Vec<DbNode>,
+) -> DbNode {
+    let mut attrs = extra_attrs;
+    attrs.extend(generic_attrs(node));
+    let mut db_children = leading_children;
+    let mut title_written = false;
+    for child in &node.children {
+        if !title_written && child.kind.as_str() == node::HEADING {
+            db_children.push(db_element(
+                "title",
+                vec![],
+                child.children.iter().flat_map(write_inline).collect(),
+            ));
+            title_written = true;
+        } else {
+            db_children.extend(write_node(child));
+        }
+    }
+    db_element(tag, attrs, db_children)
+}
+
 fn write_node(node: &Node) -> Vec<DbNode> {
     match node.kind.as_str() {
         node::DOCUMENT => node.children.iter().flat_map(write_node).collect(),
 
-        // A `div` tagged `docbook:tag` is a `generic_div` (an unrecognized
-        // block-level element raw-preserved by the reader's catch-all, see
-        // `rescribe-read-docbook::generic_div`) — re-emit its original tag
-        // name. Any other `div` (article/book/chapter/section/etc, which
-        // the reader unwraps regardless of the writer re-wrapping them)
-        // just flattens into its children, same as `DOCUMENT`.
+        // A `div` tagged `docbook:tag` is either a structural sectioning
+        // container (article/book/chapter/part/appendix/section/sect1-5/
+        // simplesect — see `rescribe-read-docbook::convert_element`'s
+        // "Document level"/"Sections" arms) or a `generic_div` (an
+        // unrecognized block-level element raw-preserved by the reader's
+        // catch-all, see `rescribe-read-docbook::generic_div`) — either way
+        // re-emit its original tag name. A `div` with no `docbook:tag` at
+        // all (pre-existing content from before every DIV carried one, or a
+        // synthetic wrapper) just flattens into its children, same as
+        // `DOCUMENT`.
         node::DIV => match node.props.get_str("docbook:tag") {
             // `<programlistingco>` (see rescribe-read-docbook's
             // "programlistingco" arm): content model `areaspec?,
@@ -336,6 +441,9 @@ fn write_node(node: &Node) -> Vec<DbNode> {
                     generic_attrs(node),
                     children,
                 )]
+            }
+            Some(tag) if is_structural_sectioning_tag(tag) => {
+                vec![write_sectioning_container(tag, node, vec![], vec![])]
             }
             Some(tag) => {
                 let mut attrs = generic_attrs(node);
@@ -665,10 +773,19 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             node.children.iter().flat_map(write_node).collect(),
         )],
 
-        node::BIBLIOGRAPHY => vec![db_element(
+        // Same title-double-wrap risk as the structural `DIV`s handled by
+        // `write_sectioning_container` above: `<bibliography>`'s own
+        // `<title>` reads in as a `HEADING` too (`heading_level_for_parent`
+        // gives it level 1, same as `<chapter>`) but `BIBLIOGRAPHY` is a
+        // dedicated node kind, not a `docbook:tag`-carrying `DIV`, so it
+        // needs the same treatment applied directly rather than via the
+        // `DIV` match arm. Found while fixing the `DIV` case (same root
+        // cause), not part of the audit's named findings.
+        node::BIBLIOGRAPHY => vec![write_sectioning_container(
             "bibliography",
-            generic_attrs(node),
-            node.children.iter().flat_map(write_node).collect(),
+            node,
+            vec![],
+            vec![],
         )],
 
         node::BIBLIOGRAPHY_ENTRY => vec![write_bibliography_entry(node)],
@@ -1112,6 +1229,24 @@ fn write_inline(node: &Node) -> Vec<DbNode> {
             )],
             None => node.children.iter().flat_map(write_inline).collect(),
         },
+
+        // A `div` landing in an inline-content position — e.g. a
+        // raw-preserved block-shaped element like `<entrytbl>` (a table
+        // nested inside a table cell; see `is_block_element`'s `entrytbl`
+        // entry) that ends up as a `TABLE_CELL`/`TABLE_HEADER` child, which
+        // writes its children via `write_inline`, not `write_node` — must
+        // not fall through to the generic "unknown inline - recurse"
+        // catch-all below: that catch-all also recurses via `write_inline`
+        // for every descendant, which has no arm for further block node
+        // kinds either (`TABLE_ROW`, `TABLE_CELL`, `PARAGRAPH`, ...),
+        // silently flattening the whole subtree down to bare text and
+        // losing every intermediate tag — found while fixture-testing the
+        // `entrytbl` block-classification fix, not part of the audit's
+        // named findings. `write_node`'s `DIV` arm already has the correct
+        // tag/title/children dispatch for arbitrarily-nested block content
+        // regardless of which context invoked it, so delegate to it
+        // directly rather than duplicating that dispatch here.
+        node::DIV => write_node(node),
 
         _ => {
             // Unknown inline - recurse

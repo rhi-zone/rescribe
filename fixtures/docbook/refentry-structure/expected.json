@@ -1,0 +1,20 @@
+{
+  "description": "<refmeta>, <refnamediv>, and <refsynopsisdiv> are block-shaped per the DocBook 5.2 reference ('Formatted as a displayed block', <refnamediv> 'usually generates a section heading') and must classify as a raw-preserved div, not fall through the catch-all as an inline span",
+  "assertions": [
+    { "path": "/0",       "kind": "div", "props": { "docbook:tag": "article" } },
+    { "path": "/0/0",     "kind": "div", "props": { "docbook:tag": "refentry" } },
+    { "path": "/0/0/0",   "kind": "div", "props": { "docbook:tag": "refmeta" } },
+    { "path": "/0/0/0/0", "kind": "span", "props": { "docbook:tag": "refentrytitle" } },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "grep" } },
+    { "path": "/0/0/0/1", "kind": "span", "props": { "docbook:tag": "manvolnum" } },
+    { "path": "/0/0/0/1/0", "kind": "text", "props": { "content": "1" } },
+    { "path": "/0/0/1",   "kind": "div", "props": { "docbook:tag": "refnamediv" } },
+    { "path": "/0/0/1/0", "kind": "span", "props": { "docbook:tag": "refname" } },
+    { "path": "/0/0/1/0/0", "kind": "text", "props": { "content": "grep" } },
+    { "path": "/0/0/1/1", "kind": "span", "props": { "docbook:tag": "refpurpose" } },
+    { "path": "/0/0/1/1/0", "kind": "text", "props": { "content": "print lines matching a pattern" } },
+    { "path": "/0/0/2",   "kind": "div", "props": { "docbook:tag": "refsynopsisdiv" } },
+    { "path": "/0/0/2/0", "kind": "div", "props": { "docbook:tag": "cmdsynopsis" } },
+    { "path": "/0/0/2/0/0", "kind": "code", "props": { "content": "grep" } }
+  ]
+}

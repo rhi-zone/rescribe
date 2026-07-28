@@ -13,6 +13,141 @@ This file describes milestones, format tiers, and cross-cutting work.
 
 ## Open Threads
 
+- **DocBook's two confirmed code gaps from the 2026-07-28 element-index audit fixed;
+  audit re-verified and extended, not just patched (2026-07-28).** Follow-up to the
+  "DocBook and JATS COVERAGE.md audited against the full format schema element lists"
+  entry below, which flagged exactly two genuine code gaps (as opposed to bookkeeping/
+  checklist gaps) in DocBook: (1) `<book>`/`<chapter>`/`<part>`/`<appendix>`/sectN/
+  `<simplesect>` mapping to a bare untagged `DIV`, losing element identity on
+  round-trip; (2) `<glossentry>`/`<indexentry>`/`<indexdiv>`/`<refnamediv>`/
+  `<refsynopsisdiv>`/`<refmeta>`/`<entrytbl>` absent from `is_block_element`,
+  misclassified as inline. Both confirmed real (not audit false-positives) by reading
+  the reader/writer source and round-tripping concrete documents through
+  `rescribe-cli convert --from docbook --to docbook`, then fixed. JATS not started
+  this session — DocBook alone was a full vertical's worth of work; see the JATS scope
+  note at the end of this entry.
+
+  **Bug 1 fix — element identity.** `rescribe-read-docbook::convert_element`'s
+  "Document level"/"Sections" arms now tag every one of these `DIV`s with
+  `docbook:tag = <original element name>` — the same convention `generic_div` already
+  used for every other raw-preserved block element (this reader has used that
+  convention consistently since it was introduced; these fourteen elements were simply
+  never migrated onto it, being handled by dedicated match arms predating the
+  convention rather than falling through the generic catch-all). On the writer side,
+  a new `write_sectioning_container` helper (in `rescribe-write-docbook`) re-emits the
+  tagged `DIV` as its real element, extracting the container's own leading `HEADING`
+  child back into a plain `<title>` in natural position — replacing the old behavior
+  where the generic `node::HEADING` write arm always synthesized a fresh `<sectN>`/
+  `<section>` wrapper around *just* the title, both losing the real tag (could never
+  produce `<book>`/`<chapter>`/`<part>`/`<appendix>`) and leaving the container's actual
+  body content as siblings *outside* that synthesized wrapper. Fixing this also fixes,
+  for these specific tags, the previously-disclosed "DIV containing a HEADING plus
+  following block siblings doesn't reassemble into one shared element on write" writer
+  bug (see the "docbook-fmt fixture suite closed to 88/94" entry below) — a side effect
+  of the identity fix, not separately re-engineered. Also fixed the same title-
+  double-wrap bug on `BIBLIOGRAPHY` (a dedicated node kind, not a `docbook:tag`-carrying
+  `DIV`, so it needed the same treatment applied directly) — found while fixing the
+  `DIV` case, same root cause, not named in the original audit.
+
+  Fixing this exposed a second bug the audit didn't anticipate: `rescribe-write-docbook`'s
+  top-level `emit()` always hardcoded `<article>` as the XML document root regardless of
+  `doc.content`'s actual shape — harmless before this fix (since book/chapter/part/
+  appendix/article DIVs were always untagged and flattened away, so `<article>` was the
+  *only* source of a root tag), but once these DIVs carry their real tag, the previous
+  hardcoding produced a doubled root (`<article><book>...`) for every document whose top
+  level actually was `<book>`/`<part>`/etc — caught by 8 failing existing writer round-trip
+  tests, not missed. Fixed: `emit()` now reuses the single top-level structural
+  container's own tag as the XML root when `doc.content` is exactly one such `DIV`,
+  falling back to the old synthesized-`<article>`-wrapper behavior otherwise.
+
+  **Bug 2 fix — block/inline misclassification, re-verified beyond the audit's four
+  named element families.** The task brief asked *why* the earlier `is_block_element`
+  schema-verification pass (commit `abd6dd447d`, same session as the audit) missed
+  these seven elements at all, since it was explicitly a schema-verification pass.
+  Reading that commit: **it checked every element name already present in
+  `is_block_element` against the DocBook 5.2 reference to see if any were wrongly
+  classified — it never asked the inverse question, whether the format defines block
+  elements absent from the list entirely.** A presence-checking pass over an
+  incomplete list can only find "have but shouldn't"; it structurally cannot find
+  "should have but don't" no matter how carefully each listed entry is re-verified.
+  This is a real methodology gap, not a one-off oversight — the JATS and TEI
+  classifiers were verified the same session with the same method (per the task brief),
+  so the same class of gap plausibly exists there too and has not been re-checked by
+  this session (DocBook-only scope; noted for a future JATS/TEI pass).
+
+  Given that finding, this session did the full check rather than patching only the
+  four named families: extracted every DocBook 5.2 element name from
+  `tdg.docbook.org/tdg/5.2/ref-elements.html` (392 raw names, matching the original
+  audit's ~390 estimate) and diffed against every tag `rescribe-read-docbook` already
+  handles explicitly (`convert_element`'s match arms) or lists in `is_block_element`,
+  narrowing candidates by DocBook-domain knowledge (most misses are legitimately
+  phrase-level, e.g. bibliographic citation fields consumed by the separate
+  `convert_biblio_field` path) and confirming the remainder against tdg.docbook.org
+  directly (each element's own reference page, not just the audit's original claim).
+  Result: the seven elements the audit named were all confirmed genuinely block-shaped
+  and genuinely absent, and seventeen more were found the same way: `<glossdef>`
+  (glossentry's own definition body — the audit named `<glossentry>` but not this
+  direct child, which holds the actual paragraph/list content), `<refsection>` (the
+  generic recursive refentry subsection, sibling of `<refsect1>`/`<refsect2>`/
+  `<refsect3>`, likely missed by the audit for the same "wasn't already on the list to
+  re-check" reason), `<bibliodiv>`, `<bibliolist>`, `<glossdiv>`, `<glosslist>`,
+  `<qandadiv>`, `<simplelist>`, `<partintro>`, `<setindex>`, `<toc>`/`<tocdiv>`/
+  `<tocentry>`, `<productionset>`/`<production>`/`<productionrecap>`,
+  `<constraintdef>`, `<msgset>`. All added to `is_block_element`. Not claimed
+  exhaustive — this was one more thorough pass, not a formal proof of completeness;
+  a handful of rarer families (deeper Message Set fields, `<colgroup>`/`<col>`/
+  `<spanspec>` in table/entrytbl headers) were assessed as plausible-but-unverified and
+  left out rather than guessed at, see `fixtures/docbook/COVERAGE.md`.
+
+  Fixture-testing the `<entrytbl>` fix (a table nested inside a table cell) surfaced a
+  third, independent writer bug: `write_inline` (used by `TABLE_CELL`/`TABLE_HEADER`
+  for their children) had no arm for a `DIV` landing in inline position, so its generic
+  "unknown inline - recurse" catch-all recursed via `write_inline` into the `DIV`'s
+  block children too — which also have no `write_inline` arm — silently flattening the
+  entire nested table down to bare text and losing every intermediate tag. This bug
+  predates this session (the same collapse would have hit `<entrytbl>`'s block children
+  even under its old, wrong inline classification) but was only surfaced by round-trip-
+  testing the new fixture. Fixed with a `node::DIV => write_node(node)` arm in
+  `write_inline`.
+
+  **Not fixed, disclosed, out of scope:** `<cmdsynopsis><command>grep</command>...`
+  round-trips as `<cmdsynopsis><para><code>grep</code></para></cmdsynopsis>` — a
+  bare `CODE` inline node landing directly under a block-position `DIV` (not inside a
+  `paragraph`) gets `<para>`-wrapped by `write_node`'s generic "inline nodes appearing
+  at block level" arm, which is correct for genuine prose but wrong for phrase-level
+  children of structured verbatim elements like `<cmdsynopsis>`/`<funcsynopsis>` per
+  their DocBook 5.2 content models. Pre-existing (this session didn't touch that code
+  path), found incidentally while round-trip-verifying the new `refentry-structure`
+  fixture, not gating any box closed this session.
+
+  **Fixtures added** (all in `fixtures/docbook/`, reader-only per `fixtures/spec.md`,
+  round-trip-verified manually via `rescribe-cli convert --from docbook --to docbook`
+  in addition to the automated reader-only assertions): `book-chapter-part-appendix`,
+  `glossary-glossentry`, `index-indexentry`, `refentry-structure`, `table-entrytbl`,
+  `rare-additional-block-elements`. `fixtures/docbook/COVERAGE.md` updated:
+  **112/118** (was 101/117 after the audit; +1 to the denominator from a new
+  consolidated line for the seventeen additional `is_block_element` finds beyond the
+  audit's four named families). The six still-open boxes are unrelated to this
+  session's two bugs (front-matter/back-matter division elements, programming-language
+  synopsis family, indexterm/primary/secondary, person/org detail phrases,
+  technical/UI phrase elements, keyword/keywordset — all pre-existing bookkeeping gaps
+  where the generic fallback already round-trips losslessly, just unenumerated).
+
+  Full test suite (`cargo clippy --all-targets --all-features -- -D warnings && cargo
+  test -q`) green at commit boundaries.
+
+  **JATS scope, not started this session:** the task brief's JATS list — `<hr>`,
+  `<sub-article>`, `<response>`, the ruby family (`<ruby>`/`<rb>`/`<rt>`/`<rp>`), Q&A
+  elements, `<chem-struct>`, `<array>`, and the `ali:` license namespace — needs the
+  same treatment: confirm each is a real code gap (not just unenumerated) by reading
+  `rescribe-read-jats`/`rescribe-write-jats` and round-tripping concrete documents,
+  fix what's genuinely broken, raw-preserve or model what's merely unhandled, fixture
+  everything. Per CLAUDE.md's one-vertical-at-a-time rule, this is a fresh vertical
+  slice, not a continuation of the DocBook work above — start it fresh rather than
+  assuming any DocBook finding (e.g. the `is_block_element` methodology gap) transfers
+  without re-verification, since JATS's `convert_element` catch-all is architecturally
+  different (universal, no destructive drop arm, per the audit) from DocBook's.
+
 - **JATS tag-set scope audited and documented (2026-07-28): Archiving stays the
   reference tag set, no crate split, no validation modes — ADR only, no code change.**
   An audit flagged that `jats-fmt`/`fixtures/jats/` targeting the Archiving and

@@ -1,0 +1,13 @@
+{
+  "description": "<indexdiv> and <indexentry> are block-shaped per the DocBook 5.2 reference ('Formatted as a displayed block') and must classify as a raw-preserved div, not fall through the catch-all as an inline span",
+  "assertions": [
+    { "path": "/0",         "kind": "div", "props": { "docbook:tag": "article" } },
+    { "path": "/0/0",       "kind": "div", "props": { "docbook:tag": "index" } },
+    { "path": "/0/0/0",     "kind": "div", "props": { "docbook:tag": "indexdiv" } },
+    { "path": "/0/0/0/0",   "kind": "caption" },
+    { "path": "/0/0/0/0/0", "kind": "text", "props": { "content": "A" } },
+    { "path": "/0/0/0/1",   "kind": "div", "props": { "docbook:tag": "indexentry" } },
+    { "path": "/0/0/0/1/0", "kind": "span", "props": { "docbook:tag": "primaryie" } },
+    { "path": "/0/0/0/1/0/0", "kind": "text", "props": { "content": "API" } }
+  ]
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <simplelist>
+    <member>One</member>
+    <member>Two</member>
+  </simplelist>
+  <refsection>
+    <title>Ref Section</title>
+    <para>Text.</para>
+  </refsection>
+  <productionset>
+    <production>
+      <lhs>expr</lhs>
+    </production>
+  </productionset>
+</article>

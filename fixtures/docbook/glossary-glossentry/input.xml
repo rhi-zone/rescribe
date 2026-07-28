@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <glossary>
+    <glossentry>
+      <glossterm>API</glossterm>
+      <glossdef>
+        <para>Application Programming Interface.</para>
+      </glossdef>
+    </glossentry>
+  </glossary>
+</article>

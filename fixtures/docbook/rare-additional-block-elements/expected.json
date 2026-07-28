@@ -1,0 +1,21 @@
+{
+  "description": "a representative sample of DocBook 5.2 block-shaped elements found missing from is_block_element by a full audit against the format's element index (beyond the four families named by the original audit — glossentry/indexentry/refnamediv/entrytbl, each with their own dedicated fixture): <simplelist>, <refsection> (the generic recursive refentry subsection, sibling of refsect1/2/3), <productionset>/<production> (EBNF grammar). Each must classify as a raw-preserved div, not fall through the catch-all as an inline span",
+  "category": "rare",
+  "assertions": [
+    { "path": "/0",         "kind": "div" },
+    { "path": "/0/0",       "kind": "div", "props": { "docbook:tag": "simplelist" } },
+    { "path": "/0/0/0",     "kind": "span", "props": { "docbook:tag": "member" } },
+    { "path": "/0/0/0/0",   "kind": "text", "props": { "content": "One" } },
+    { "path": "/0/0/1",     "kind": "span", "props": { "docbook:tag": "member" } },
+    { "path": "/0/0/1/0",   "kind": "text", "props": { "content": "Two" } },
+    { "path": "/0/1",       "kind": "div", "props": { "docbook:tag": "refsection" } },
+    { "path": "/0/1/0",     "kind": "caption" },
+    { "path": "/0/1/0/0",   "kind": "text", "props": { "content": "Ref Section" } },
+    { "path": "/0/1/1",     "kind": "paragraph" },
+    { "path": "/0/1/1/0",   "kind": "text", "props": { "content": "Text." } },
+    { "path": "/0/2",       "kind": "div", "props": { "docbook:tag": "productionset" } },
+    { "path": "/0/2/0",     "kind": "div", "props": { "docbook:tag": "production" } },
+    { "path": "/0/2/0/0",   "kind": "span", "props": { "docbook:tag": "lhs" } },
+    { "path": "/0/2/0/0/0", "kind": "text", "props": { "content": "expr" } }
+  ]
+}

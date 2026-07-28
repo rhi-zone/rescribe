@@ -76,51 +76,93 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   `write_definition_list` in `rescribe-write-docbook`. `defaultlabel`
   preserved as `docbook:qanda-defaultlabel`; multi-answer and
   zero-answer entries both covered)
-- [ ] document division elements (book/chapter/part/appendix) — (missing;
-  `<book>`, `<chapter>`, `<part>`, `<appendix>` — genuine code gap, not just a
-  checklist gap: the reader maps these to a bare `DIV` with no `docbook:tag`,
-  unlike every other recognized element; the writer's `DIV` arm only re-emits
-  a tag when `docbook:tag` is present, so on round-trip these collapse into
-  plain nested sections inferred purely from heading level — the specific
-  element identity is lost, not just re-nested; same root cause as the
-  disclosed nested-section writer bug above but broader in scope; see
-  `rescribe-read-docbook::convert_element`'s `"article" | "book" | "chapter"
-  | "part" | "appendix"` arm. Full-schema audit, see TODO.md)
+- [x] document division elements (book/chapter/part/appendix) —
+  `book-chapter-part-appendix` (fixed a genuine code gap, not just a
+  checklist gap: `<book>`/`<chapter>`/`<part>`/`<appendix>` — and
+  `<article>`/`<section>`/`sect1`-`sect5`/`<simplesect>` alongside them —
+  now carry `docbook:tag` on their `DIV`, the same convention every other
+  raw-preserved element already used; the writer's `DIV` arm re-emits the
+  exact original tag instead of inferring `sectN`/`section` purely from a
+  `HEADING` child's outline level, which could never produce `book`/
+  `chapter`/`part`/`appendix`/`article` and silently corrupted the element
+  identity on every round-trip, and (a second, related identity-loss case)
+  could not tell a nested `<section>` from a `<sect1>` apart either. Fixing
+  this also fixed the writer side of the previously-disclosed
+  "DIV containing a HEADING plus following block siblings doesn't
+  reassemble" bug for these tags — see `write_sectioning_container` in
+  `rescribe-write-docbook` — and the top-level `emit()` entry point, which
+  previously always hardcoded an `<article>` XML root regardless of what
+  `doc.content` actually held)
 - [ ] front-matter/back-matter division elements — (missing;
   `<preface>`, `<colophon>`, `<dedication>`, `<glossary>`, `<index>` —
   missing-but-handled: raw-preserved via the generic-div catch-all
   (`docbook:tag` round-trips correctly), just not enumerated or
   fixture-tested. Full-schema audit, see TODO.md)
-- [ ] reference/refentry structure — (missing; `<reference>`, `<refentry>`,
-  `<refsect1>`/`<refsect2>`/`<refsect3>` — container handled via the
-  generic-div catch-all (bookkeeping gap); their child elements
-  `<refnamediv>`, `<refname>`, `<refpurpose>`, `<refsynopsisdiv>`,
-  `<refmeta>`, `<refmiscinfo>`, `<refentrytitle>`, `<refclass>`,
-  `<refdescriptor>` are genuinely unhandled — absent from `is_block_element`
-  entirely, so a `<refnamediv>`/`<refsynopsisdiv>`/`<refmeta>` (block-shaped
-  in the real content model) is misclassified as an inline span by the
-  catch-all, a real fidelity risk beyond simple non-enumeration. Full-schema
-  audit, see TODO.md)
-- [ ] glossary entry structure — (missing; `<glossentry>`, `<glossterm>`,
-  `<glossdef>`, `<glossdiv>`, `<glosslist>`, `<glosssee>`, `<glossseealso>` —
-  genuinely unhandled: none appear in `rescribe-read-docbook` at all, and
-  absent from `is_block_element` so `<glossentry>` (block-shaped: a
-  term+definition pair) is misclassified as an inline span by the catch-all.
-  Full-schema audit, see TODO.md)
-- [ ] index structure — (missing; `<indexterm>`, `<indexentry>`, `<indexdiv>`,
-  `<primary>`/`<secondary>`/`<tertiary>`, `<see>`/`<seealso>` — genuinely
-  unhandled: none appear in `rescribe-read-docbook`; `<indexentry>`/
-  `<indexdiv>` are block-shaped and misclassified as inline by the catch-all
-  the same way as glossentry above. Full-schema audit, see TODO.md)
+- [x] reference/refentry structure — `refentry-structure` (`<refentry>`,
+  `<refsect1>`/`<refsect2>`/`<refsect3>` were already handled via the
+  generic-div catch-all; the real gap — `<refnamediv>`, `<refsynopsisdiv>`,
+  `<refmeta>` absent from `is_block_element` entirely, so a block-shaped
+  container was misclassified as an inline span by the catch-all — is
+  fixed; their leaf fields `<refname>`/`<refpurpose>`/`<refentrytitle>`/
+  `<manvolnum>`/`<refclass>`/`<refdescriptor>`/`<refmiscinfo>` are correctly
+  phrase-level and stay raw-preserved spans, verified individually against
+  the DocBook 5.2 reference, not by re-patching the audit's four named
+  elements only — see TODO.md's methodology finding on why the prior
+  `is_block_element` pass missed these)
+- [x] glossary entry structure — `glossary-glossentry` (`<glossentry>` and
+  `<glossdef>` — both "Formatted as a displayed block" per the DocBook 5.2
+  reference, `<glossdef>` holding real paragraph/list content — were
+  genuinely unhandled and misclassified as inline spans by the catch-all;
+  fixed. `<glossterm>` is genuinely phrase-level per the reference and
+  correctly stays a span; `<glossdiv>`/`<glosslist>` are also now fixed —
+  see `rare-additional-block-elements` and the classifier note above;
+  `<glosssee>`/`<glossseealso>` remain unenumerated bookkeeping gaps, not
+  verified block/inline either way this session)
+- [x] index structure — `index-indexentry` (`<indexentry>`/`<indexdiv>` —
+  both "Formatted as a displayed block" per the DocBook 5.2 reference —
+  were genuinely unhandled and misclassified as inline spans by the
+  catch-all; fixed. `<indexterm>`/`<primary>`/`<secondary>`/`<tertiary>`/
+  `<see>`/`<seealso>` remain unenumerated bookkeeping gaps, not verified
+  block/inline either way this session — `<indexterm>` in particular is
+  plausibly inline/anchor-like rather than block, per TODO.md's audit
+  writeup, so left unclassified rather than guessed at)
 - [x] Q&A sub-structure — `qandaset-qandadiv` (`<qandadiv>` nests
   recursively inside `<qandaset>`, each with its own title — `DIV`'s
   existing arbitrary-nesting support handles this directly, no separate
   gap from the `qandaset` box above)
-- [ ] entry table (nested table in a cell) — (missing; `<entrytbl>`,
-  `<colgroup>`, `<col>`, `<spanspec>` — genuinely unhandled: none appear in
-  the reader; absent from `is_block_element`, so `<entrytbl>` — a table
-  nested inside a table cell — is misclassified as inline text rather than
-  raw-preserved as a block. Full-schema audit, see TODO.md)
+- [x] entry table (nested table in a cell) — `table-entrytbl` (`<entrytbl>`
+  — "formatted, as a table, to fit within the table cell" per the DocBook
+  5.2 reference — was genuinely unhandled and misclassified as inline text
+  by the catch-all; fixed. Fixture-testing this also found and fixed a
+  second, independent writer bug: `write_inline` (used by `TABLE_CELL`/
+  `TABLE_HEADER` for their children) had no arm for a `DIV` landing in
+  inline position, so its generic "unknown inline - recurse" catch-all
+  recursed via `write_inline` into the `DIV`'s block children too — which
+  also have no `write_inline` arm — silently flattening the entire nested
+  table down to bare text and losing every intermediate tag (`<entrytbl>`,
+  its `<row>`/`<entry>`). This wasn't newly introduced by the
+  classification fix — the same collapse would have hit `<entrytbl>`'s
+  block children even under the old, wrong inline classification — but was
+  only surfaced by round-trip-testing this fixture. `<colgroup>`/`<col>`/
+  `<spanspec>` remain unenumerated bookkeeping gaps, not fixture-tested this
+  session)
+- [x] additional `is_block_element` gaps beyond the audit's four named
+  families — `rare-additional-block-elements` (a from-scratch pass cross-
+  referencing every DocBook 5.2 element name against `is_block_element`,
+  not just the four families the original audit named — see TODO.md's
+  methodology finding on why that audit's own `is_block_element` pass
+  missed these too, the same flaw being investigated. Confirmed block via
+  tdg.docbook.org and added: `<refsection>` (the generic recursive
+  refentry subsection, sibling of `<refsect1>`/`<refsect2>`/`<refsect3>`),
+  `<bibliodiv>`, `<bibliolist>`, `<qandadiv>` (was already reachable via
+  `DIV`'s arbitrary nesting per the `qandaset-qandadiv` box above, but
+  hadn't been in `is_block_element` itself), `<simplelist>`, `<partintro>`,
+  `<setindex>`, `<toc>`/`<tocdiv>`/`<tocentry>`, `<productionset>`/
+  `<production>`/`<productionrecap>`, `<constraintdef>`, `<msgset>` — the
+  fixture exercises `<simplelist>`, `<refsection>`, and `<productionset>`/
+  `<production>` directly as a representative sample; the rest share the
+  identical generic-div catch-all code path so are covered by the same fix
+  but not independently fixture-verified this session)
 - [ ] programming-language synopsis family — (missing; `<classsynopsis>`,
   `<fieldsynopsis>`, `<methodsynopsis>`, `<constructorsynopsis>`,
   `<destructorsynopsis>`, `<enumsynopsis>`/`<enumitem>`/`<enumvalue>`,

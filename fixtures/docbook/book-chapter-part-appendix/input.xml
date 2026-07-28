@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<book xmlns="http://docbook.org/ns/docbook">
+  <title>Book Title</title>
+  <part>
+    <title>Part One</title>
+    <chapter>
+      <title>Chapter One</title>
+      <para>Chapter text.</para>
+    </chapter>
+  </part>
+  <appendix>
+    <title>Appendix A</title>
+    <para>Appendix text.</para>
+  </appendix>
+</book>

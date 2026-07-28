@@ -521,6 +521,37 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             | "refsect1"
             | "refsect2"
             | "refsect3"
+            | "refsection"
+            | "setindex"
+            | "partintro"
+            // Bibliography/glossary/qanda/index subdivisions and standalone
+            // list-shaped elements. All confirmed "Formatted as a displayed
+            // block" against the DocBook 5.2 reference (tdg.docbook.org) —
+            // found missing by a full audit of every DocBook 5.2 element
+            // name against this list (see TODO.md), not just the four
+            // element families that audit flagged as confirmed code gaps.
+            | "glossentry"
+            | "glossdef"
+            | "glossdiv"
+            | "glosslist"
+            | "indexentry"
+            | "indexdiv"
+            | "refnamediv"
+            | "refsynopsisdiv"
+            | "refmeta"
+            | "entrytbl"
+            | "bibliodiv"
+            | "bibliolist"
+            | "qandadiv"
+            | "simplelist"
+            | "toc"
+            | "tocdiv"
+            | "tocentry"
+            | "productionset"
+            | "production"
+            | "productionrecap"
+            | "constraintdef"
+            | "msgset"
             // Block content
             | "para"
             | "simpara"
@@ -608,15 +639,33 @@ fn convert_element(
     let language = get_attr(attrs, "language");
 
     let result = match name {
-        // Document level
-        "article" | "book" | "chapter" | "part" | "appendix" => {
-            Some(Node::new(node::DIV).children(children))
-        }
+        // Document level. Tagged with `docbook:tag` (same convention as
+        // `generic_div`) so `rescribe-write-docbook` can re-emit the exact
+        // original element instead of losing the distinction between
+        // `<book>`/`<chapter>`/`<part>`/`<appendix>`/`<article>` — before
+        // this tag was added, the writer's only way to reconstruct a
+        // wrapper was inferring a `sectN`/`section` tag from a `HEADING`
+        // child's outline level, which can never produce `book`/`chapter`/
+        // `part`/`appendix`/`article` and silently corrupted the element
+        // identity on every round-trip.
+        "article" | "book" | "chapter" | "part" | "appendix" => Some(
+            Node::new(node::DIV)
+                .prop("docbook:tag", name.to_string())
+                .children(children),
+        ),
 
-        // Sections
-        "section" | "sect1" | "sect2" | "sect3" | "sect4" | "sect5" | "simplesect" => {
-            Some(Node::new(node::DIV).children(children))
-        }
+        // Sections. Same `docbook:tag` treatment as above — additionally
+        // fixes a second identity-loss case: a `<section>` nested inside
+        // another `<section>` (real depth 2+) previously read in at
+        // `heading_level_for_parent`'s fixed level-2 and would write back
+        // out as `<sect1>` rather than `<section>`, since the writer had no
+        // way to know the original tag was `<section>` and not `<sect1>`.
+        // Preserving the tag makes reconstruction depth-independent.
+        "section" | "sect1" | "sect2" | "sect3" | "sect4" | "sect5" | "simplesect" => Some(
+            Node::new(node::DIV)
+                .prop("docbook:tag", name.to_string())
+                .children(children),
+        ),
 
         // A <title> is a section heading only inside a genuine sectioning
         // container (see `heading_level_for_parent`) — everywhere else
