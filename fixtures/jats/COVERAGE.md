@@ -6,6 +6,16 @@ See `fixtures/spec.md` for category definitions.
 JATS reference: JATS 1.3 (NISO Z39.96-2019), Journal Archiving and Interchange Tag Set.
 https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 
+Archiving (not Publishing or Authoring) is the deliberate reference tag set — it is the
+element superset of the three journal-article tag sets (Publishing and Authoring are
+validity-constrained subsets of the same vocabulary, not divergent element sets), so a
+fixture suite and adapter element-mapping table built against Archiving already covers
+Publishing/Authoring documents. `jats-fmt` itself parses any well-formed XML with no
+DTD/schema validation, so this choice affects fixture/mapping scope only, not parser
+behavior. See `docs/adr/0012-jats-archiving-tag-set-scope.md` for the full rationale,
+including why BITS (book content) and the `ooxml-wml`/`ooxml-sml`/`ooxml-pml` precedent
+do not apply here.
+
 ## Block constructs
 
 - [x] paragraph — `paragraph` (`<p>`)

@@ -30,6 +30,8 @@ later revisited.
 | [0008](0008-ris-sn-tag-not-disambiguated.md) | RIS `SN` tag stays `field:scheme = "sn"`, not resolved to `isbn`/`issn` via `TY` | Accepted |
 | [0009](0009-propvalue-float-json-sentinel.md) | `PropValue::Float` non-finite values serialize as a string sentinel in JSON | Accepted |
 | [0010](0010-resource-data-base64-json.md) | `Resource::data` serializes as base64 in JSON, unconditionally | Accepted |
+| [0011](0011-commonmark-extension-feature-gating.md) | `commonmark-fmt` construct extensions are opt-in Cargo features, not default-on | Accepted |
+| [0012](0012-jats-archiving-tag-set-scope.md) | `jats-fmt`/`jats` fixtures target the Archiving and Interchange Tag Set; no per-tag-set crates or validation modes | Accepted |
 
 ## Numbering and format
 

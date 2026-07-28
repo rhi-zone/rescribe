@@ -13,6 +13,28 @@ This file describes milestones, format tiers, and cross-cutting work.
 
 ## Open Threads
 
+- **JATS tag-set scope audited and documented (2026-07-28): Archiving stays the
+  reference tag set, no crate split, no validation modes — ADR only, no code change.**
+  An audit flagged that `jats-fmt`/`fixtures/jats/` targeting the Archiving and
+  Interchange Tag Set had never been an explicit decision. Investigated whether the
+  `ooxml-wml`/`ooxml-sml`/`ooxml-pml` (schema-specific crates + `ooxml-opc`/`ooxml-xml`/
+  `ooxml-dml`/`ooxml-omml` shared crates) precedent should apply. It does not: wml/sml/
+  pml are genuinely different vocabularies for different document types (word
+  processing/spreadsheet/presentation share almost no element names), whereas JATS's
+  Archiving (~306 elements)/Publishing (~298 elements)/Authoring tag sets are the *same*
+  vocabulary with progressively tighter content-model constraints — Publishing and
+  Authoring are validity subsets of Archiving per JATS's own documentation, not
+  divergent element sets. Also confirmed `jats-fmt`'s parser is already fully generic
+  XML with zero tag-set awareness (no DTD/schema validation anywhere in the crate; any
+  element round-trips, unrecognized ones raw-preserve via the existing `jats:tag`
+  mechanism) — so "which tag set" only ever affected fixture/mapping-table scope, never
+  parser behavior, making this a documentation question rather than an architecture
+  fork. BITS (Book Interchange Tag Suite) is the one JATS relative that *would* fit the
+  ooxml pattern if ever undertaken (genuinely additive book-specific elements, not just
+  tighter constraints) — noted as future scope, not implemented. See
+  `docs/adr/0012-jats-archiving-tag-set-scope.md` for the full writeup;
+  `crates/formats/jats-fmt/src/lib.rs` and `fixtures/jats/COVERAGE.md` now cite it.
+
 - **`commonmark-fmt` construct-feature vertical (2026-07-28): frontmatter/tables/task-lists/
   strikethrough landed; footnotes/definition-lists/math deferred.** Fixed the headline bug
   this session existed to chase: `rescribe_read_markdown::parse()` (default path) was

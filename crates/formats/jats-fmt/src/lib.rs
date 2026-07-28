@@ -8,6 +8,21 @@
 //! etc. — map to which document semantics) lives in those adapters, not
 //! here — this crate only knows XML structure.
 //!
+//! # Tag-set scope
+//!
+//! JATS (NISO Z39.96) is published as three sibling tag sets — Archiving and
+//! Interchange, Journal Publishing, and Article Authoring — that share the
+//! same element vocabulary with progressively tighter content-model
+//! constraints (Publishing/Authoring are validity *subsets* of Archiving,
+//! not divergent vocabularies), plus BITS, a genuinely separate book-content
+//! extension. This crate does not parse against any DTD/schema at all — it
+//! accepts any well-formed XML regardless of tag set, so "which tag set" has
+//! no effect on this crate's behavior; it only affects which elements
+//! `rescribe-read-jats`/`rescribe-write-jats` and `fixtures/jats/` choose to
+//! model explicitly. See `docs/adr/0012-jats-archiving-tag-set-scope.md` for
+//! the rationale (Archiving chosen as the fixture/mapping reference because
+//! it's the element superset).
+//!
 //! # API layers
 //!
 //! ```text
