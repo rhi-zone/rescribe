@@ -197,13 +197,56 @@ impl Registry {
 }
 
 /// Emit the committed `src/registry_generated.rs` text for a registry model,
-/// deduplicating identical [`ContentModel`]s into shared named statics.
+/// deduplicating identical [`ContentModel`]s into shared named statics, then
+/// run it through `rustfmt` so the result is byte-identical to what this
+/// repo's pre-commit hook (`.githooks/pre-commit`, which reformats every
+/// staged `.rs` file) would produce from it. Without this, the *committed*
+/// file (post-hook) would always differ from this function's raw output,
+/// and the source→generated drift test below could never pass.
 ///
 /// This is the only place that decides the generated file's shape, so both
 /// `derive-registry` (regenerating from a live schema walk) and the
 /// source→generated drift test (regenerating from the committed JSON alone)
 /// go through the same code path and cannot disagree by construction.
 pub fn emit_rust(reg: &Registry) -> String {
+    run_rustfmt(&emit_rust_unformatted(reg))
+}
+
+/// Shell out to `rustfmt --edition 2024` (matching `.githooks/pre-commit`'s
+/// invocation) on `source`, via stdin/stdout. Panics if `rustfmt` cannot be
+/// run or reports an error — this tool is dev/CI-only and every environment
+/// that can build this workspace already has `rustfmt` (it gates every
+/// commit via the pre-commit hook), so a missing binary here is an
+/// environment problem worth surfacing loudly, not a case to degrade
+/// gracefully for.
+fn run_rustfmt(source: &str) -> String {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new("rustfmt")
+        .args(["--edition", "2024"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn rustfmt — is it on PATH?");
+    child
+        .stdin
+        .take()
+        .expect("rustfmt stdin")
+        .write_all(source.as_bytes())
+        .expect("failed to write to rustfmt stdin");
+    let output = child.wait_with_output().expect("failed to wait on rustfmt");
+    if !output.status.success() {
+        panic!(
+            "rustfmt failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    String::from_utf8(output.stdout).expect("rustfmt output was not valid UTF-8")
+}
+
+fn emit_rust_unformatted(reg: &Registry) -> String {
     let mut out = String::new();
     out.push_str(
         "// GENERATED — do not edit by hand.\n\
