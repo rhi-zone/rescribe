@@ -135,9 +135,10 @@ fn entry_to_node(entry: &ris::RisEntry) -> Node {
         fields.push(identifier_field("url", url, "UR"));
     }
     if let Some(sn) = entry.get_first("SN") {
-        // RIS's SN tag is used for both ISBN and ISSN depending on entry
-        // type, with no way to tell which from the tag alone — naming the
-        // scheme after the RIS tag itself avoids guessing which one it is.
+        // RIS's SN tag is used for ISBN, ISSN, or a report/patent number,
+        // with no authoritative spec rule to tell which from `TY` (see
+        // ADR 0008) — naming the scheme after the RIS tag itself avoids
+        // inventing a disambiguation the format doesn't define.
         fields.push(identifier_field("sn", sn, "SN"));
     }
 

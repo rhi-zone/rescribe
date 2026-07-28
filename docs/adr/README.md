@@ -27,6 +27,7 @@ later revisited.
 | [0005](0005-citation-bibliography-ir-shape.md) | Citation/bibliography IR shape: `bibliography`/`bibliography_entry`/`bibliography_field` | Accepted |
 | [0006](0006-content-model-decides-properties-vs-child-nodes.md) | Properties-vs-child-nodes is decided by content-model markup permission, not precedent | Accepted |
 | [0007](0007-dtd-entity-resolution-build-vs-buy.md) | DTD-aware entity resolution: buy the entity table, build the DTD subset parser | Accepted (design only; not yet implemented) |
+| [0008](0008-ris-sn-tag-not-disambiguated.md) | RIS `SN` tag stays `field:scheme = "sn"`, not resolved to `isbn`/`issn` via `TY` | Accepted |
 
 ## Numbering and format
 
