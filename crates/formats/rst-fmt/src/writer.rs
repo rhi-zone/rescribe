@@ -116,6 +116,21 @@ pub struct Writer<W: Write> {
     /// before that list's own output is finalized) — the same bracketing
     /// `build_list` uses around its item loop.
     list_depth: usize,
+    /// Count of currently-open `Heading` frames. `Heading` is the only
+    /// construct that reads *both* `buf` and `plain` off its own inline
+    /// accumulator (formatted text for display, plain length for the
+    /// underline) — every other inline-accepting frame reads exactly one of
+    /// the two and discards the other. Gates `plain` tracking in
+    /// [`Writer::push_multi`] so ordinary markup (`**bold**`, links, etc.)
+    /// nested only inside paragraphs/list items/etc. — the overwhelming
+    /// common case — never pays for building a plain-text copy nothing will
+    /// read. Bracketed exactly like `list_depth`: `+= 1` on `StartHeading`,
+    /// `-= 1` on `EndHeading`.
+    heading_depth: usize,
+    /// Count of currently-open `TableCell` frames — the other construct that
+    /// needs `plain` (its formatted `buf` is discarded entirely; see
+    /// [`Dest::PlainOnly`]). Bracketed like `heading_depth`.
+    table_cell_depth: usize,
 }
 
 impl<W: Write> Writer<W> {
@@ -124,6 +139,8 @@ impl<W: Write> Writer<W> {
             sink,
             stack: Vec::new(),
             list_depth: 0,
+            heading_depth: 0,
+            table_cell_depth: 0,
         }
     }
 
@@ -184,12 +201,22 @@ impl<W: Write> Writer<W> {
     /// `format!`-allocated string), plus `plain` to its plain-text tracking
     /// (where the destination tracks plain text at all — see [`Dest`]).
     fn push_multi(&mut self, bufs: &[&str], plain: &str) {
+        // Only `Heading` (needs both `buf` and `plain` off its own
+        // accumulator) and `TableCell` (needs `plain` only, discards `buf`
+        // entirely) ever read `plain` back out. Every other inline-accepting
+        // frame — the overwhelming common case, e.g. `**bold**` inside an
+        // ordinary paragraph — discards it. Skip building it unless we're
+        // actually inside one of those two contexts, so plain markup never
+        // pays for a plain-text copy nothing will read.
+        let need_plain = self.heading_depth > 0 || self.table_cell_depth > 0;
         match self.dest() {
             Dest::Full(acc) => {
                 for b in bufs {
                     acc.buf.push_str(b);
                 }
-                acc.plain.push_str(plain);
+                if need_plain {
+                    acc.plain.push_str(plain);
+                }
             }
             Dest::BufOnly(buf) => {
                 for b in bufs {
@@ -276,6 +303,7 @@ impl<W: Write> Writer<W> {
                 }
             }
             OwnedEvent::StartHeading { level } => {
+                self.heading_depth += 1;
                 self.stack.push(Frame::Heading {
                     level,
                     acc: InlineAccum::new(),
@@ -283,6 +311,7 @@ impl<W: Write> Writer<W> {
             }
             OwnedEvent::EndHeading => {
                 if let Some(Frame::Heading { level, acc }) = self.stack.pop() {
+                    self.heading_depth -= 1;
                     let text = render_heading(level, &acc);
                     self.push_block(text, BlockTag::Other);
                 }
@@ -406,12 +435,14 @@ impl<W: Write> Writer<W> {
                 }
             }
             OwnedEvent::StartTableCell => {
+                self.table_cell_depth += 1;
                 self.stack.push(Frame::TableCell {
                     plain: String::new(),
                 });
             }
             OwnedEvent::EndTableCell => {
                 if let Some(Frame::TableCell { plain }) = self.stack.pop() {
+                    self.table_cell_depth -= 1;
                     if let Some(Frame::TableRow { cells, .. }) = self.stack.last_mut() {
                         cells.push(plain);
                     }
