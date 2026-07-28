@@ -1881,3 +1881,60 @@ Commits (JATS, then DocBook, both after `cargo clippy --all-targets --all-featur
 warnings` and `cargo test -q` clean): `fix(jats): raw-preserve MathML in disp-formula/
 inline-formula; close MathML fixture box`, `feat(docbook): raw-preserve MathML and model
 mathphrase markup in equation/inlineequation; close 2 fixture boxes`.
+
+## `rescribe query` shipped: IR serde + jq embedding, library + CLI (2026-07-28)
+
+Implemented the `rescribe query` capability end to end, per a prior scope-research pass
+(now superseded by the actual implementation below):
+
+- **`rescribe-core` `serde` feature wired up** (was declared in `Cargo.toml` but
+  completely dead — no derives anywhere). `Document`/`Node`/`NodeKind`/`Span`/
+  `Properties`/`SourceInfo`/`ResourceId` derive `Serialize`; `NodeKind`/`ResourceId`/
+  `Properties` use `#[serde(transparent)]` so they serialize as plain JSON strings/objects
+  rather than wrapped newtypes (this matters for jq ergonomics — `.kind` reads as a plain
+  string, `.metadata.title` works without a `.0` hop). `PropValue` and `Resource` have
+  hand-written `Serialize` impls for two acknowledged compromises, each recorded as its
+  own ADR: [0009](docs/adr/0009-propvalue-float-json-sentinel.md) (non-finite floats →
+  string sentinel) and [0010](docs/adr/0010-resource-data-base64-json.md) (resource bytes
+  → base64, unconditionally, no lazy/opt-in mode yet). `Deserialize` was deliberately not
+  implemented — `PropValue::Int` vs `Float` and the float sentinel vs a genuine string are
+  both ambiguous from raw JSON, so a lossless inverse isn't possible without a tagged wire
+  format; Serialize-only is the honest scope for the query/export use case.
+- **`rescribe::query` module** (opt-in `query` feature on the `rescribe` umbrella crate,
+  not part of `all` — keeps the `jaq` engine out of the dependency graph for consumers who
+  don't want it). `query(doc, expr) -> Result<Vec<serde_json::Value>, QueryError>` plus a
+  reusable `CompiledQuery` for running one filter against many documents. Followed
+  `normalize`'s jaq embedding precedent (`normalize-knowledge-graph::jq_compile`/
+  `jq_run_all` in `crates/normalize-knowledge-graph/src/store.rs`, read directly rather
+  than inferred from docs.rs) — `serde_json::to_value(doc)` → `serde_json::from_value::<Val>`
+  (jaq-json's `serde` feature) → run → `serde_json::from_str(&format!("{val}"))` to convert
+  results back. This resolved the scope doc's open question about jaq-json's serde-interop
+  surface concretely: `Val` gets `Deserialize` (not `Serialize`) from the `serde` feature,
+  and `normalize` converts `Val → serde_json::Value` via `Val`'s `Display` impl, not a
+  direct serde path.
+- **`rescribe query` CLI subcommand**, reusing `convert`'s format-detection/read plumbing
+  verbatim. Default output: pretty-printed JSON per result (matches plain `jq`); `-c`/
+  `--compact` for one-line-per-result; `-r`/`--raw-output` unquotes string results like
+  `jq -r`. Fidelity warnings from the reader print to stderr exactly as `convert` does.
+- **Verified concretely** (not just asserted) that `query` subsumes both use cases the
+  scope doc claimed it would: `.metadata` for metadata inspection, and
+  `[.. | .kind?] | map(select(. != null)) | group_by(.) | map({kind: .[0], count: length})`
+  for a node-kind census — both have passing unit tests (`crates/rescribe/src/query.rs`)
+  and CLI end-to-end tests (`crates/rescribe-cli/tests/query.rs`) asserting on actual
+  output, not just "it compiles."
+
+**Observed overlap not acted on** (per task scope — out of scope for this pass):
+`rescribe-write-native` and `rescribe-write-pandoc-json` hand-roll their own IR-walking
+JSON/pretty-printer emitters against *Pandoc's* JSON schema (not rescribe's own IR shape),
+predating and unrelated to the generic `Document: Serialize` impl added here. They are a
+different target schema (Pandoc's `{"t": ..., "c": ...}` AST, not a dump of rescribe's own
+node/property shape) and were explicitly left alone. Worth a future look at whether either
+could be rebuilt on top of `serde_json::Value` + a schema-mapping layer instead of manual
+tree-walking, but that's a distinct refactor from what `query` needed.
+
+**Not implemented (see ADR 0010's reopening condition)**: a `--resources=omit|hash|base64`
+flag or lazy/on-demand resource encoding. Every `query` run currently base64-encodes every
+embedded resource's bytes unconditionally, even when the filter never touches
+`.resources`. Fine for the fixture-sized documents this was tested against; would need
+revisiting before recommending `query` for large-corpus batch use against documents with
+many/large embedded images.
