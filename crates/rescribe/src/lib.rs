@@ -58,6 +58,10 @@ pub mod math {
     pub use rescribe_math::*;
 }
 
+/// jq-style querying of the document IR (embeds the `jaq` engine).
+#[cfg(feature = "query")]
+pub mod query;
+
 /// ANSI terminal format support.
 #[cfg(any(feature = "read-ansi", feature = "write-ansi"))]
 pub mod ansi {
