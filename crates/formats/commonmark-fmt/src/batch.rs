@@ -56,7 +56,10 @@ pub struct StreamingParser<H: Handler> {
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
-        StreamingParser { buf: Vec::new(), handler }
+        StreamingParser {
+            buf: Vec::new(),
+            handler,
+        }
     }
 
     /// Append a chunk of bytes to the internal buffer.
@@ -81,7 +84,7 @@ impl<H: Handler> StreamingParser<H> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::{events_str, OwnedEvent};
+    use crate::events::{OwnedEvent, events_str};
 
     #[test]
     fn test_batch_parser_basic() {
@@ -89,7 +92,10 @@ mod tests {
         let mut p = StreamingParser::new(|ev| evs.push(ev));
         p.feed(b"# Hello\n\nA paragraph.\n");
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 
@@ -101,7 +107,10 @@ mod tests {
             p.feed(std::slice::from_ref(b));
         }
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 
@@ -109,8 +118,9 @@ mod tests {
     fn test_batch_matches_events_iter() {
         let input = b"# Hello\n\nA paragraph.\n";
 
-        let direct: Vec<OwnedEvent> =
-            events_str(std::str::from_utf8(input).unwrap()).map(|e| e.into_owned()).collect();
+        let direct: Vec<OwnedEvent> = events_str(std::str::from_utf8(input).unwrap())
+            .map(|e| e.into_owned())
+            .collect();
 
         let mut batch: Vec<OwnedEvent> = Vec::new();
         let mut p = StreamingParser::new(|ev| batch.push(ev));
@@ -125,7 +135,9 @@ mod tests {
     fn test_batch_invalid_utf8_no_panic() {
         // Should not panic; handler never called.
         let mut called = false;
-        let mut p = StreamingParser::new(|_ev: OwnedEvent| { called = true; });
+        let mut p = StreamingParser::new(|_ev: OwnedEvent| {
+            called = true;
+        });
         p.feed(b"\xff\xfe");
         p.finish();
         assert!(!called);

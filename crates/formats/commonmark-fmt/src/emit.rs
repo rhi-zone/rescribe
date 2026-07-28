@@ -8,6 +8,8 @@ use crate::ast::*;
 /// for any valid [`CmDoc`].
 pub fn emit(doc: &CmDoc) -> Vec<u8> {
     let mut out = Emitter::new();
+    #[cfg(feature = "frontmatter")]
+    out.emit_frontmatter(&doc.frontmatter);
     out.emit_blocks(&doc.blocks, false);
     out.finish().into_bytes()
 }
@@ -37,6 +39,24 @@ impl Emitter {
 
     fn newline(&mut self) {
         self.buf.push('\n');
+    }
+
+    #[cfg(feature = "frontmatter")]
+    fn emit_frontmatter(&mut self, fm: &Option<FrontMatter>) {
+        let Some(fm) = fm else { return };
+        let delim = match fm.kind {
+            FrontMatterKind::Yaml => "---",
+            FrontMatterKind::Toml => "+++",
+        };
+        self.push(delim);
+        self.newline();
+        self.push(&fm.content);
+        if !fm.content.ends_with('\n') {
+            self.newline();
+        }
+        self.push(delim);
+        self.newline();
+        self.newline();
     }
 
     /// Emit a sequence of blocks.
@@ -74,7 +94,9 @@ impl Emitter {
                 self.emit_inlines(inlines);
                 self.newline();
             }
-            Block::CodeBlock { language, content, .. } => {
+            Block::CodeBlock {
+                language, content, ..
+            } => {
                 // Choose fence style: use ~~~ if content contains ```
                 let (fence_open, fence_close) = if content.contains("```") {
                     ("~~~", "~~~")
@@ -117,7 +139,12 @@ impl Emitter {
                     self.push(">\n");
                 }
             }
-            Block::List { kind, items, tight: is_tight, .. } => {
+            Block::List {
+                kind,
+                items,
+                tight: is_tight,
+                ..
+            } => {
                 self.emit_list(kind, items, *is_tight);
                 // No extra newline here — each item already ends with '\n', and
                 // inter-block blank lines are added by emit_blocks when !tight.
@@ -128,6 +155,47 @@ impl Emitter {
                 self.push("---");
                 self.newline();
             }
+            #[cfg(feature = "tables")]
+            Block::Table {
+                alignments,
+                head,
+                rows,
+                ..
+            } => {
+                self.emit_table(alignments, head, rows);
+            }
+        }
+    }
+
+    #[cfg(feature = "tables")]
+    fn emit_table_row(&mut self, row: &TableRow) {
+        self.push_char('|');
+        for cell in &row.cells {
+            self.push_char(' ');
+            self.emit_inlines(&cell.inlines);
+            self.push(" |");
+        }
+        self.newline();
+    }
+
+    #[cfg(feature = "tables")]
+    fn emit_table(&mut self, alignments: &[ColumnAlignment], head: &TableRow, rows: &[TableRow]) {
+        self.emit_table_row(head);
+        self.push_char('|');
+        for a in alignments {
+            let cell = match a {
+                ColumnAlignment::None => "---",
+                ColumnAlignment::Left => ":--",
+                ColumnAlignment::Center => ":-:",
+                ColumnAlignment::Right => "--:",
+            };
+            self.push_char(' ');
+            self.push(cell);
+            self.push(" |");
+        }
+        self.newline();
+        for row in rows {
+            self.emit_table_row(row);
         }
     }
 
@@ -136,7 +204,14 @@ impl Emitter {
             if !tight && idx > 0 {
                 self.newline(); // blank line between loose items
             }
-            let (marker, indent) = list_item_marker(kind, idx);
+            #[allow(unused_mut)]
+            let (mut marker, mut indent) = list_item_marker(kind, idx);
+            #[cfg(feature = "task-lists")]
+            if let Some(checked) = item.checked {
+                let checkbox = if checked { "[x] " } else { "[ ] " };
+                marker.push_str(checkbox);
+                indent += checkbox.len();
+            }
             // Emit item blocks into a buffer.
             let inner = {
                 let mut e = Emitter::new();
@@ -199,6 +274,7 @@ impl Emitter {
                 self.emit_inlines(inlines);
                 self.push("**");
             }
+            #[cfg(feature = "strikethrough")]
             Inline::Strikethrough { inlines, .. } => {
                 self.push("~~");
                 self.emit_inlines(inlines);
@@ -220,7 +296,12 @@ impl Emitter {
             Inline::HtmlInline { content, .. } => {
                 self.push(content);
             }
-            Inline::Link { inlines, url, title, .. } => {
+            Inline::Link {
+                inlines,
+                url,
+                title,
+                ..
+            } => {
                 self.push_char('[');
                 self.emit_inlines(inlines);
                 self.push("](");
@@ -232,7 +313,9 @@ impl Emitter {
                 }
                 self.push_char(')');
             }
-            Inline::Image { alt, url, title, .. } => {
+            Inline::Image {
+                alt, url, title, ..
+            } => {
                 self.push("![");
                 self.push(&escape_text(alt));
                 self.push("](");
@@ -309,7 +392,12 @@ fn escape_text(s: &str) -> String {
 /// spaces need special treatment. We wrap in angle brackets if the URL contains
 /// spaces or parentheses, which is the safest approach.
 fn escape_url(url: &str) -> String {
-    if url.contains(' ') || url.contains('(') || url.contains(')') || url.contains('<') || url.contains('>') {
+    if url.contains(' ')
+        || url.contains('(')
+        || url.contains(')')
+        || url.contains('<')
+        || url.contains('>')
+    {
         // Wrap in angle brackets; escape any `>` inside.
         let inner = url.replace('>', "%3E").replace('<', "%3C");
         format!("<{inner}>")
@@ -359,8 +447,33 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "strikethrough")]
     fn test_roundtrip_strikethrough() {
         roundtrip("~~deleted text~~\n");
+    }
+
+    #[test]
+    #[cfg(feature = "frontmatter")]
+    fn test_roundtrip_yaml_frontmatter() {
+        roundtrip("---\ntitle: X\n---\n\nbody\n");
+    }
+
+    #[test]
+    #[cfg(feature = "frontmatter")]
+    fn test_roundtrip_toml_frontmatter() {
+        roundtrip("+++\ntitle = \"X\"\n+++\n\nbody\n");
+    }
+
+    #[test]
+    #[cfg(feature = "tables")]
+    fn test_roundtrip_table() {
+        roundtrip("| a | b |\n| --- | --- |\n| 1 | 2 |\n");
+    }
+
+    #[test]
+    #[cfg(feature = "task-lists")]
+    fn test_roundtrip_task_list() {
+        roundtrip("- [ ] todo\n- [x] done\n");
     }
 
     #[test]

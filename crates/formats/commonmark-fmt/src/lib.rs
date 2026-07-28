@@ -36,6 +36,8 @@
 //!
 //! Superseding pulldown-cmark (77M+ weekly downloads) is a non-goal.
 
+mod options;
+
 #[cfg(feature = "reader-ast")]
 pub mod ast;
 #[cfg(feature = "reader-ast")]
@@ -54,12 +56,20 @@ pub mod writer;
 #[cfg(feature = "writer-streaming")]
 pub use writer::Writer;
 
+#[cfg(all(feature = "reader-ast", feature = "frontmatter"))]
+pub use ast::FrontMatter;
 #[cfg(feature = "reader-ast")]
 pub use ast::{
     Block, CmDoc, Diagnostic, Inline, LinkDef, ListItem, ListKind, OrderedMarker, Severity, Span,
 };
+#[cfg(all(feature = "reader-ast", feature = "tables"))]
+pub use ast::{TableCell, TableRow};
 #[cfg(feature = "reader-ast")]
 pub use emit::emit;
+#[cfg(feature = "tables")]
+pub use options::ColumnAlignment;
+#[cfg(feature = "frontmatter")]
+pub use options::FrontMatterKind;
 #[cfg(feature = "reader-ast")]
 pub use parse::parse;
 

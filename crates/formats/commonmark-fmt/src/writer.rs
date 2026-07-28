@@ -36,7 +36,10 @@ pub struct Writer<W: Write> {
 impl<W: Write> Writer<W> {
     /// Create a new writer that emits to `sink`.
     pub fn new(sink: W) -> Self {
-        Writer { sink, events: Vec::new() }
+        Writer {
+            sink,
+            events: Vec::new(),
+        }
     }
 
     /// Feed one event to the writer. Events are buffered until `finish()`.
@@ -64,27 +67,81 @@ fn events_to_doc(events: Vec<OwnedEvent>) -> CmDoc {
 }
 
 enum Frame {
-    Document { blocks: Vec<Block> },
-    Paragraph { inlines: Vec<Inline> },
-    Heading { level: u8, inlines: Vec<Inline> },
-    Blockquote { blocks: Vec<Block> },
-    List { ordered: bool, start: u64, tight: bool, items: Vec<ListItem> },
-    ListItem { blocks: Vec<Block>, tight_inlines: Vec<Inline> },
+    Document {
+        blocks: Vec<Block>,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+    },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+    },
+    Blockquote {
+        blocks: Vec<Block>,
+    },
+    List {
+        ordered: bool,
+        start: u64,
+        tight: bool,
+        items: Vec<ListItem>,
+    },
+    ListItem {
+        blocks: Vec<Block>,
+        tight_inlines: Vec<Inline>,
+        #[cfg(feature = "task-lists")]
+        checked: Option<bool>,
+    },
     // Inline spans
-    Emphasis { inlines: Vec<Inline> },
-    Strong { inlines: Vec<Inline> },
-    Strikethrough { inlines: Vec<Inline> },
-    Link { inlines: Vec<Inline>, url: String, title: Option<String> },
-    Image { url: String, title: Option<String>, alt: String },
+    Emphasis {
+        inlines: Vec<Inline>,
+    },
+    Strong {
+        inlines: Vec<Inline>,
+    },
+    #[cfg(feature = "strikethrough")]
+    Strikethrough {
+        inlines: Vec<Inline>,
+    },
+    Link {
+        inlines: Vec<Inline>,
+        url: String,
+        title: Option<String>,
+    },
+    Image {
+        url: String,
+        title: Option<String>,
+        alt: String,
+    },
+    #[cfg(feature = "tables")]
+    Table {
+        alignments: Vec<crate::ast::ColumnAlignment>,
+        head: Option<TableRow>,
+        rows: Vec<TableRow>,
+    },
+    #[cfg(feature = "tables")]
+    TableRow {
+        cells: Vec<TableCell>,
+    },
+    #[cfg(feature = "tables")]
+    TableCell {
+        inlines: Vec<Inline>,
+    },
 }
 
 struct DocBuilder {
     stack: Vec<Frame>,
+    #[cfg(feature = "frontmatter")]
+    frontmatter: Option<FrontMatter>,
 }
 
 impl DocBuilder {
     fn new() -> Self {
-        DocBuilder { stack: vec![Frame::Document { blocks: vec![] }] }
+        DocBuilder {
+            stack: vec![Frame::Document { blocks: vec![] }],
+            #[cfg(feature = "frontmatter")]
+            frontmatter: None,
+        }
     }
 
     fn process(&mut self, event: OwnedEvent) {
@@ -99,15 +156,25 @@ impl DocBuilder {
             }
             OwnedEvent::EndParagraph => {
                 if let Some(Frame::Paragraph { inlines }) = self.stack.pop() {
-                    self.push_block(Block::Paragraph { inlines, span: Span::NONE });
+                    self.push_block(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartHeading { level } => {
-                self.stack.push(Frame::Heading { level, inlines: vec![] });
+                self.stack.push(Frame::Heading {
+                    level,
+                    inlines: vec![],
+                });
             }
             OwnedEvent::EndHeading { .. } => {
                 if let Some(Frame::Heading { level, inlines }) = self.stack.pop() {
-                    self.push_block(Block::Heading { level, inlines, span: Span::NONE });
+                    self.push_block(Block::Heading {
+                        level,
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartBlockquote => {
@@ -115,27 +182,66 @@ impl DocBuilder {
             }
             OwnedEvent::EndBlockquote => {
                 if let Some(Frame::Blockquote { blocks }) = self.stack.pop() {
-                    self.push_block(Block::Blockquote { blocks, span: Span::NONE });
+                    self.push_block(Block::Blockquote {
+                        blocks,
+                        span: Span::NONE,
+                    });
                 }
             }
-            OwnedEvent::StartList { ordered, start, tight } => {
-                self.stack.push(Frame::List { ordered, start, tight, items: vec![] });
+            OwnedEvent::StartList {
+                ordered,
+                start,
+                tight,
+            } => {
+                self.stack.push(Frame::List {
+                    ordered,
+                    start,
+                    tight,
+                    items: vec![],
+                });
             }
             OwnedEvent::EndList => {
-                if let Some(Frame::List { ordered, start, tight, items }) = self.stack.pop() {
+                if let Some(Frame::List {
+                    ordered,
+                    start,
+                    tight,
+                    items,
+                }) = self.stack.pop()
+                {
                     let kind = if ordered {
-                        ListKind::Ordered { start, marker: OrderedMarker::Period }
+                        ListKind::Ordered {
+                            start,
+                            marker: OrderedMarker::Period,
+                        }
                     } else {
                         ListKind::Unordered { marker: '-' }
                     };
-                    self.push_block(Block::List { kind, items, tight, span: Span::NONE });
+                    self.push_block(Block::List {
+                        kind,
+                        items,
+                        tight,
+                        span: Span::NONE,
+                    });
                 }
             }
-            OwnedEvent::StartItem => {
-                self.stack.push(Frame::ListItem { blocks: vec![], tight_inlines: vec![] });
+            OwnedEvent::StartItem {
+                #[cfg(feature = "task-lists")]
+                checked,
+            } => {
+                self.stack.push(Frame::ListItem {
+                    blocks: vec![],
+                    tight_inlines: vec![],
+                    #[cfg(feature = "task-lists")]
+                    checked,
+                });
             }
             OwnedEvent::EndItem => {
-                if let Some(Frame::ListItem { mut blocks, tight_inlines }) = self.stack.pop()
+                if let Some(Frame::ListItem {
+                    mut blocks,
+                    tight_inlines,
+                    #[cfg(feature = "task-lists")]
+                    checked,
+                }) = self.stack.pop()
                     && let Some(Frame::List { items, .. }) = self.stack.last_mut()
                 {
                     // Flush any tight-item inlines as an implicit paragraph.
@@ -145,7 +251,12 @@ impl DocBuilder {
                             span: Span::NONE,
                         });
                     }
-                    items.push(ListItem { blocks, span: Span::NONE });
+                    items.push(ListItem {
+                        blocks,
+                        span: Span::NONE,
+                        #[cfg(feature = "task-lists")]
+                        checked,
+                    });
                 }
             }
 
@@ -166,6 +277,82 @@ impl DocBuilder {
             OwnedEvent::ThematicBreak => {
                 self.push_block(Block::ThematicBreak { span: Span::NONE });
             }
+            #[cfg(feature = "frontmatter")]
+            OwnedEvent::FrontMatter { kind, content } => {
+                self.frontmatter.get_or_insert(FrontMatter {
+                    kind,
+                    content: content.into_owned(),
+                    span: Span::NONE,
+                });
+            }
+            #[cfg(feature = "tables")]
+            OwnedEvent::StartTable { alignments } => {
+                self.stack.push(Frame::Table {
+                    alignments,
+                    head: None,
+                    rows: vec![],
+                });
+            }
+            #[cfg(feature = "tables")]
+            OwnedEvent::EndTable => {
+                if let Some(Frame::Table {
+                    alignments,
+                    head,
+                    rows,
+                }) = self.stack.pop()
+                {
+                    self.push_block(Block::Table {
+                        alignments,
+                        head: head.unwrap_or(TableRow {
+                            cells: vec![],
+                            span: Span::NONE,
+                        }),
+                        rows,
+                        span: Span::NONE,
+                    });
+                }
+            }
+            #[cfg(feature = "tables")]
+            OwnedEvent::StartTableHead | OwnedEvent::StartTableRow => {
+                self.stack.push(Frame::TableRow { cells: vec![] });
+            }
+            #[cfg(feature = "tables")]
+            OwnedEvent::EndTableHead => {
+                if let Some(Frame::TableRow { cells }) = self.stack.pop()
+                    && let Some(Frame::Table { head, .. }) = self.stack.last_mut()
+                {
+                    *head = Some(TableRow {
+                        cells,
+                        span: Span::NONE,
+                    });
+                }
+            }
+            #[cfg(feature = "tables")]
+            OwnedEvent::EndTableRow => {
+                if let Some(Frame::TableRow { cells }) = self.stack.pop()
+                    && let Some(Frame::Table { rows, .. }) = self.stack.last_mut()
+                {
+                    rows.push(TableRow {
+                        cells,
+                        span: Span::NONE,
+                    });
+                }
+            }
+            #[cfg(feature = "tables")]
+            OwnedEvent::StartTableCell => {
+                self.stack.push(Frame::TableCell { inlines: vec![] });
+            }
+            #[cfg(feature = "tables")]
+            OwnedEvent::EndTableCell => {
+                if let Some(Frame::TableCell { inlines }) = self.stack.pop()
+                    && let Some(Frame::TableRow { cells }) = self.stack.last_mut()
+                {
+                    cells.push(TableCell {
+                        inlines,
+                        span: Span::NONE,
+                    });
+                }
+            }
 
             // ── Inline opens ───────────────────────────────────────────────────
             OwnedEvent::StartEmphasis => {
@@ -173,7 +360,10 @@ impl DocBuilder {
             }
             OwnedEvent::EndEmphasis => {
                 if let Some(Frame::Emphasis { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Emphasis { inlines, span: Span::NONE });
+                    self.push_inline(Inline::Emphasis {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartStrong => {
@@ -181,15 +371,23 @@ impl DocBuilder {
             }
             OwnedEvent::EndStrong => {
                 if let Some(Frame::Strong { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Strong { inlines, span: Span::NONE });
+                    self.push_inline(Inline::Strong {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
+            #[cfg(feature = "strikethrough")]
             OwnedEvent::StartStrikethrough => {
                 self.stack.push(Frame::Strikethrough { inlines: vec![] });
             }
+            #[cfg(feature = "strikethrough")]
             OwnedEvent::EndStrikethrough => {
                 if let Some(Frame::Strikethrough { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Strikethrough { inlines, span: Span::NONE });
+                    self.push_inline(Inline::Strikethrough {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartLink { url, title } => {
@@ -200,8 +398,18 @@ impl DocBuilder {
                 });
             }
             OwnedEvent::EndLink => {
-                if let Some(Frame::Link { inlines, url, title }) = self.stack.pop() {
-                    self.push_inline(Inline::Link { inlines, url, title, span: Span::NONE });
+                if let Some(Frame::Link {
+                    inlines,
+                    url,
+                    title,
+                }) = self.stack.pop()
+                {
+                    self.push_inline(Inline::Link {
+                        inlines,
+                        url,
+                        title,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartImage { url, title, alt } => {
@@ -213,16 +421,27 @@ impl DocBuilder {
             }
             OwnedEvent::EndImage => {
                 if let Some(Frame::Image { url, title, alt }) = self.stack.pop() {
-                    self.push_inline(Inline::Image { alt, url, title, span: Span::NONE });
+                    self.push_inline(Inline::Image {
+                        alt,
+                        url,
+                        title,
+                        span: Span::NONE,
+                    });
                 }
             }
 
             // ── Inline leaf events ─────────────────────────────────────────────
             OwnedEvent::Text(cow) => {
-                self.push_inline(Inline::Text { content: cow.into_owned(), span: Span::NONE });
+                self.push_inline(Inline::Text {
+                    content: cow.into_owned(),
+                    span: Span::NONE,
+                });
             }
             OwnedEvent::Code(cow) => {
-                self.push_inline(Inline::Code { content: cow.into_owned(), span: Span::NONE });
+                self.push_inline(Inline::Code {
+                    content: cow.into_owned(),
+                    span: Span::NONE,
+                });
             }
             OwnedEvent::HtmlInline(cow) => {
                 self.push_inline(Inline::HtmlInline {
@@ -254,8 +473,11 @@ impl DocBuilder {
             Some(Frame::Heading { inlines, .. }) => inlines.push(inline),
             Some(Frame::Emphasis { inlines }) => inlines.push(inline),
             Some(Frame::Strong { inlines }) => inlines.push(inline),
+            #[cfg(feature = "strikethrough")]
             Some(Frame::Strikethrough { inlines }) => inlines.push(inline),
             Some(Frame::Link { inlines, .. }) => inlines.push(inline),
+            #[cfg(feature = "tables")]
+            Some(Frame::TableCell { inlines }) => inlines.push(inline),
             // Tight list item: no Paragraph frame exists; accumulate for wrapping at EndItem.
             Some(Frame::ListItem { tight_inlines, .. }) => tight_inlines.push(inline),
             // For images we only collect the alt text via StartImage; Text events
@@ -271,7 +493,12 @@ impl DocBuilder {
             Some(Frame::Document { blocks }) => blocks,
             _ => vec![],
         };
-        CmDoc { blocks, link_defs: vec![] }
+        CmDoc {
+            blocks,
+            link_defs: vec![],
+            #[cfg(feature = "frontmatter")]
+            frontmatter: self.frontmatter,
+        }
     }
 }
 
@@ -326,8 +553,9 @@ mod tests {
         let expected = String::from_utf8(crate::emit::emit(&doc)).unwrap();
 
         // Build output via Writer fed from events().
-        let evts: Vec<_> =
-            crate::events::events_str(input).map(|e| e.into_owned()).collect();
+        let evts: Vec<_> = crate::events::events_str(input)
+            .map(|e| e.into_owned())
+            .collect();
         let out = run(evts);
 
         // Parse both and compare ASTs (strips span differences).

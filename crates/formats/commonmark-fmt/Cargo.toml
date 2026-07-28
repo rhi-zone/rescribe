@@ -15,6 +15,28 @@ writer-streaming = []
 writer-builder = ["writer-streaming"]
 arbitrary = ["dep:arbitrary"]
 
+# ── Construct features ──────────────────────────────────────────────────────
+# commonmark-fmt is a spec-named crate: plain CommonMark parses/emits with
+# *no* construct features enabled. Every pulldown-cmark extension is opt-in,
+# gated individually so callers only pay (in API surface) for what they use.
+# See docs/adr/0011-commonmark-extension-feature-gating.md.
+tables = []
+task-lists = []
+strikethrough = []
+frontmatter = []
+footnotes = []
+definition-lists = []
+math = []
+
+# Umbrella aliases — pure convenience, no independent behavior of their own.
+# GFM (https://github.github.com/gfm/) defines tables, task lists, and
+# strikethrough as part of the spec. It also defines autolink extensions
+# (bare URL linkification without `<...>`), but pulldown-cmark 0.13 does not
+# expose that as an Options flag — only spec-CommonMark `<url>` autolinks are
+# implemented, and those are unconditional (no feature needed). See the ADR.
+gfm = ["tables", "task-lists", "strikethrough"]
+extensions = ["gfm", "frontmatter", "footnotes", "definition-lists", "math"]
+
 [dependencies]
 pulldown-cmark = { version = "0.13", default-features = false }
 arbitrary = { version = "1", features = ["derive"], optional = true }

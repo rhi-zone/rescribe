@@ -15,6 +15,11 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
 
+#[cfg(feature = "tables")]
+use crate::options::ColumnAlignment;
+#[cfg(feature = "frontmatter")]
+use crate::options::FrontMatterKind;
+
 // ── Public event types ────────────────────────────────────────────────────────
 
 /// A streaming event produced while iterating over a CommonMark document.
@@ -47,15 +52,49 @@ pub enum Event<'a> {
         tight: bool,
     },
     EndList,
-    StartItem,
+    /// `checked` is `Some` for GFM task-list items (`- [ ]`/`- [x]`), `None`
+    /// for ordinary items. Always `None` when the `task-lists` feature is off.
+    StartItem {
+        #[cfg(feature = "task-lists")]
+        checked: Option<bool>,
+    },
     EndItem,
+
+    // ── Table open/close (`tables` feature) ──────────────────────────────────
+    #[cfg(feature = "tables")]
+    StartTable {
+        alignments: Vec<ColumnAlignment>,
+    },
+    #[cfg(feature = "tables")]
+    EndTable,
+    #[cfg(feature = "tables")]
+    StartTableHead,
+    #[cfg(feature = "tables")]
+    EndTableHead,
+    #[cfg(feature = "tables")]
+    StartTableRow,
+    #[cfg(feature = "tables")]
+    EndTableRow,
+    #[cfg(feature = "tables")]
+    StartTableCell,
+    #[cfg(feature = "tables")]
+    EndTableCell,
+
+    // ── Front matter (`frontmatter` feature) — single self-contained event ──
+    #[cfg(feature = "frontmatter")]
+    FrontMatter {
+        kind: FrontMatterKind,
+        content: Cow<'a, str>,
+    },
 
     // ── Inline open/close ────────────────────────────────────────────────────
     StartEmphasis,
     EndEmphasis,
     StartStrong,
     EndStrong,
+    #[cfg(feature = "strikethrough")]
     StartStrikethrough,
+    #[cfg(feature = "strikethrough")]
     EndStrikethrough,
     StartLink {
         url: Cow<'a, str>,
@@ -103,17 +142,49 @@ impl<'a> Event<'a> {
             Event::EndHeading { level } => Event::EndHeading { level },
             Event::StartBlockquote => Event::StartBlockquote,
             Event::EndBlockquote => Event::EndBlockquote,
-            Event::StartList { ordered, start, tight } => {
-                Event::StartList { ordered, start, tight }
-            }
+            Event::StartList {
+                ordered,
+                start,
+                tight,
+            } => Event::StartList {
+                ordered,
+                start,
+                tight,
+            },
             Event::EndList => Event::EndList,
-            Event::StartItem => Event::StartItem,
+            #[cfg(feature = "task-lists")]
+            Event::StartItem { checked } => Event::StartItem { checked },
+            #[cfg(not(feature = "task-lists"))]
+            Event::StartItem {} => Event::StartItem {},
             Event::EndItem => Event::EndItem,
+            #[cfg(feature = "tables")]
+            Event::StartTable { alignments } => Event::StartTable { alignments },
+            #[cfg(feature = "tables")]
+            Event::EndTable => Event::EndTable,
+            #[cfg(feature = "tables")]
+            Event::StartTableHead => Event::StartTableHead,
+            #[cfg(feature = "tables")]
+            Event::EndTableHead => Event::EndTableHead,
+            #[cfg(feature = "tables")]
+            Event::StartTableRow => Event::StartTableRow,
+            #[cfg(feature = "tables")]
+            Event::EndTableRow => Event::EndTableRow,
+            #[cfg(feature = "tables")]
+            Event::StartTableCell => Event::StartTableCell,
+            #[cfg(feature = "tables")]
+            Event::EndTableCell => Event::EndTableCell,
+            #[cfg(feature = "frontmatter")]
+            Event::FrontMatter { kind, content } => Event::FrontMatter {
+                kind,
+                content: Cow::Owned(content.into_owned()),
+            },
             Event::StartEmphasis => Event::StartEmphasis,
             Event::EndEmphasis => Event::EndEmphasis,
             Event::StartStrong => Event::StartStrong,
             Event::EndStrong => Event::EndStrong,
+            #[cfg(feature = "strikethrough")]
             Event::StartStrikethrough => Event::StartStrikethrough,
+            #[cfg(feature = "strikethrough")]
             Event::EndStrikethrough => Event::EndStrikethrough,
             Event::StartLink { url, title } => Event::StartLink {
                 url: Cow::Owned(url.into_owned()),
@@ -169,6 +240,9 @@ pub struct EventIter<'a> {
     inner: pulldown_cmark::OffsetIter<'a, pulldown_cmark::DefaultBrokenLinkCallback>,
     /// Pre-translated events not yet delivered to the caller.
     pending: VecDeque<Event<'a>>,
+    /// Raw pulldown-cmark events peeked ahead (e.g. to check for a
+    /// `TaskListMarker` following `Tag::Item`) and not yet consumed.
+    pending_pd: VecDeque<(pulldown_cmark::Event<'a>, std::ops::Range<usize>)>,
     /// When `Some`, we are inside a `Tag::CodeBlock` and buffering content.
     code_block: Option<CodeBlockState>,
     /// When `Some`, we are inside a `Tag::Image` and buffering alt text.
@@ -184,18 +258,25 @@ pub struct EventIter<'a> {
 impl<'a> EventIter<'a> {
     /// Create an iterator over the given CommonMark string.
     pub fn new(input: &'a str) -> Self {
-        use pulldown_cmark::{Options, Parser};
-        let opts = Options::ENABLE_STRIKETHROUGH;
+        use pulldown_cmark::Parser;
+        let opts = crate::options::build_options();
         let inner = Parser::new_ext(input, opts).into_offset_iter();
         EventIter {
             inner,
             pending: VecDeque::new(),
+            pending_pd: VecDeque::new(),
             code_block: None,
             image: None,
             list_stack: Vec::new(),
             started: false,
             ended: false,
         }
+    }
+
+    /// Pull the next raw pulldown-cmark event, preferring anything peeked
+    /// ahead and buffered in `pending_pd`.
+    fn next_pd(&mut self) -> Option<(pulldown_cmark::Event<'a>, std::ops::Range<usize>)> {
+        self.pending_pd.pop_front().or_else(|| self.inner.next())
     }
 }
 
@@ -216,7 +297,7 @@ impl<'a> Iterator for EventIter<'a> {
             }
 
             // Pull the next pulldown-cmark event.
-            let (pd_event, _range) = match self.inner.next() {
+            let (pd_event, _range) = match self.next_pd() {
                 Some(pair) => pair,
                 None => {
                     // Pulldown stream exhausted.
@@ -236,7 +317,9 @@ impl<'a> Iterator for EventIter<'a> {
                     return Some(Event::StartParagraph);
                 }
                 PdEvent::Start(Tag::Heading { level, .. }) => {
-                    return Some(Event::StartHeading { level: heading_level_to_u8(level) });
+                    return Some(Event::StartHeading {
+                        level: heading_level_to_u8(level),
+                    });
                 }
                 PdEvent::Start(Tag::BlockQuote(_)) => {
                     return Some(Event::StartBlockquote);
@@ -249,7 +332,10 @@ impl<'a> Iterator for EventIter<'a> {
                         }
                         CodeBlockKind::Indented => None,
                     };
-                    self.code_block = Some(CodeBlockState { language, content: String::new() });
+                    self.code_block = Some(CodeBlockState {
+                        language,
+                        content: String::new(),
+                    });
                     // Continue looping — we emit a single CodeBlock event on End.
                 }
                 PdEvent::Start(Tag::List(first)) => {
@@ -261,14 +347,78 @@ impl<'a> Iterator for EventIter<'a> {
                     // Tightness is unknown until we see paragraphs; emit with
                     // tight=true tentatively. Callers that need accurate tightness
                     // should use the AST API instead.
-                    return Some(Event::StartList { ordered, start, tight: true });
+                    return Some(Event::StartList {
+                        ordered,
+                        start,
+                        tight: true,
+                    });
                 }
+                #[cfg(feature = "task-lists")]
                 PdEvent::Start(Tag::Item) => {
-                    return Some(Event::StartItem);
+                    // Peek ahead: a task-list item is immediately followed by
+                    // a `TaskListMarker` event before any other content.
+                    match self.next_pd() {
+                        Some((PdEvent::TaskListMarker(checked), _)) => {
+                            return Some(Event::StartItem {
+                                checked: Some(checked),
+                            });
+                        }
+                        Some(other) => {
+                            self.pending_pd.push_front(other);
+                            return Some(Event::StartItem { checked: None });
+                        }
+                        None => {
+                            return Some(Event::StartItem { checked: None });
+                        }
+                    }
+                }
+                #[cfg(not(feature = "task-lists"))]
+                PdEvent::Start(Tag::Item) => {
+                    return Some(Event::StartItem {});
                 }
                 PdEvent::Start(Tag::HtmlBlock) => {
                     // Content arrives as PdEvent::Html; we accumulate inline until End.
                     // No sub-state needed — Html events go directly through.
+                }
+                #[cfg(feature = "frontmatter")]
+                PdEvent::Start(Tag::MetadataBlock(kind)) => {
+                    let kind = match kind {
+                        pulldown_cmark::MetadataBlockKind::YamlStyle => FrontMatterKind::Yaml,
+                        pulldown_cmark::MetadataBlockKind::PlusesStyle => FrontMatterKind::Toml,
+                    };
+                    let mut content = String::new();
+                    loop {
+                        match self.next_pd() {
+                            Some((PdEvent::Text(t), _)) => content.push_str(&t),
+                            Some((PdEvent::End(TagEnd::MetadataBlock(_)), _)) => break,
+                            Some(_) => {} // shouldn't happen; ignore
+                            None => break,
+                        }
+                    }
+                    return Some(Event::FrontMatter {
+                        kind,
+                        content: Cow::Owned(content),
+                    });
+                }
+                #[cfg(feature = "tables")]
+                PdEvent::Start(Tag::Table(alignments)) => {
+                    let alignments = alignments
+                        .iter()
+                        .map(crate::options::pd_alignment_to_ast)
+                        .collect();
+                    return Some(Event::StartTable { alignments });
+                }
+                #[cfg(feature = "tables")]
+                PdEvent::Start(Tag::TableHead) => {
+                    return Some(Event::StartTableHead);
+                }
+                #[cfg(feature = "tables")]
+                PdEvent::Start(Tag::TableRow) => {
+                    return Some(Event::StartTableRow);
+                }
+                #[cfg(feature = "tables")]
+                PdEvent::Start(Tag::TableCell) => {
+                    return Some(Event::StartTableCell);
                 }
 
                 // ── Inline opens ──────────────────────────────────────────────
@@ -278,10 +428,13 @@ impl<'a> Iterator for EventIter<'a> {
                 PdEvent::Start(Tag::Strong) => {
                     return Some(Event::StartStrong);
                 }
+                #[cfg(feature = "strikethrough")]
                 PdEvent::Start(Tag::Strikethrough) => {
                     return Some(Event::StartStrikethrough);
                 }
-                PdEvent::Start(Tag::Link { dest_url, title, .. }) => {
+                PdEvent::Start(Tag::Link {
+                    dest_url, title, ..
+                }) => {
                     let url = Cow::Owned(dest_url.into_string());
                     let title = if title.is_empty() {
                         None
@@ -290,11 +443,20 @@ impl<'a> Iterator for EventIter<'a> {
                     };
                     return Some(Event::StartLink { url, title });
                 }
-                PdEvent::Start(Tag::Image { dest_url, title, .. }) => {
+                PdEvent::Start(Tag::Image {
+                    dest_url, title, ..
+                }) => {
                     let url = dest_url.into_string();
-                    let title =
-                        if title.is_empty() { None } else { Some(title.into_string()) };
-                    self.image = Some(ImageState { url, title, alt: String::new() });
+                    let title = if title.is_empty() {
+                        None
+                    } else {
+                        Some(title.into_string())
+                    };
+                    self.image = Some(ImageState {
+                        url,
+                        title,
+                        alt: String::new(),
+                    });
                     // We buffer alt text and emit StartImage on End.
                 }
 
@@ -306,7 +468,9 @@ impl<'a> Iterator for EventIter<'a> {
                     return Some(Event::EndParagraph);
                 }
                 PdEvent::End(TagEnd::Heading(level)) => {
-                    return Some(Event::EndHeading { level: heading_level_to_u8(level) });
+                    return Some(Event::EndHeading {
+                        level: heading_level_to_u8(level),
+                    });
                 }
                 PdEvent::End(TagEnd::BlockQuote(_)) => {
                     return Some(Event::EndBlockquote);
@@ -328,6 +492,22 @@ impl<'a> Iterator for EventIter<'a> {
                 PdEvent::End(TagEnd::HtmlBlock) => {
                     // Nothing extra to emit — Html events already forwarded.
                 }
+                #[cfg(feature = "tables")]
+                PdEvent::End(TagEnd::Table) => {
+                    return Some(Event::EndTable);
+                }
+                #[cfg(feature = "tables")]
+                PdEvent::End(TagEnd::TableHead) => {
+                    return Some(Event::EndTableHead);
+                }
+                #[cfg(feature = "tables")]
+                PdEvent::End(TagEnd::TableRow) => {
+                    return Some(Event::EndTableRow);
+                }
+                #[cfg(feature = "tables")]
+                PdEvent::End(TagEnd::TableCell) => {
+                    return Some(Event::EndTableCell);
+                }
 
                 // ── Inline closes ─────────────────────────────────────────────
                 PdEvent::End(TagEnd::Emphasis) => {
@@ -336,6 +516,7 @@ impl<'a> Iterator for EventIter<'a> {
                 PdEvent::End(TagEnd::Strong) => {
                     return Some(Event::EndStrong);
                 }
+                #[cfg(feature = "strikethrough")]
                 PdEvent::End(TagEnd::Strikethrough) => {
                     return Some(Event::EndStrikethrough);
                 }
@@ -368,7 +549,8 @@ impl<'a> Iterator for EventIter<'a> {
                         // at this point we have not yet emitted StartImage.
                         // The text will flow between Start/End once we emit
                         // StartImage at End(Image) with pending = [Text, EndImage].
-                        self.pending.push_back(Event::Text(Cow::Owned(text.into_string())));
+                        self.pending
+                            .push_back(Event::Text(Cow::Owned(text.into_string())));
                     } else {
                         return Some(Event::Text(Cow::Owned(text.into_string())));
                     }
@@ -442,7 +624,10 @@ mod tests {
         let evs = collect("Hello\n");
         assert!(evs.iter().any(|e| matches!(e, Event::StartDocument)));
         assert!(evs.iter().any(|e| matches!(e, Event::StartParagraph)));
-        assert!(evs.iter().any(|e| matches!(e, Event::Text(t) if t == "Hello")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Text(t) if t == "Hello"))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndParagraph)));
         assert!(evs.iter().any(|e| matches!(e, Event::EndDocument)));
     }
@@ -450,9 +635,18 @@ mod tests {
     #[test]
     fn test_events_heading() {
         let evs = collect("# Hello\n");
-        assert!(evs.iter().any(|e| matches!(e, Event::StartHeading { level: 1 })));
-        assert!(evs.iter().any(|e| matches!(e, Event::Text(t) if t == "Hello")));
-        assert!(evs.iter().any(|e| matches!(e, Event::EndHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartHeading { level: 1 }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Text(t) if t == "Hello"))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::EndHeading { level: 1 }))
+        );
     }
 
     #[test]
@@ -494,6 +688,53 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "strikethrough")]
+    fn test_events_strikethrough() {
+        let evs = collect("~~deleted~~\n");
+        assert!(evs.iter().any(|e| matches!(e, Event::StartStrikethrough)));
+        assert!(evs.iter().any(|e| matches!(e, Event::EndStrikethrough)));
+    }
+
+    #[test]
+    #[cfg(feature = "frontmatter")]
+    fn test_events_frontmatter() {
+        let evs = collect("---\ntitle: X\n---\n\nbody\n");
+        assert!(evs.iter().any(|e| matches!(
+            e,
+            Event::FrontMatter { kind: FrontMatterKind::Yaml, content }
+            if content.trim() == "title: X"
+        )));
+    }
+
+    #[test]
+    #[cfg(feature = "tables")]
+    fn test_events_table() {
+        let evs = collect("| a | b |\n|---|---|\n| 1 | 2 |\n");
+        assert!(evs.iter().any(|e| matches!(e, Event::StartTable { .. })));
+        assert!(evs.iter().any(|e| matches!(e, Event::StartTableHead)));
+        assert_eq!(
+            evs.iter()
+                .filter(|e| matches!(e, Event::StartTableCell))
+                .count(),
+            4
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "task-lists")]
+    fn test_events_task_list() {
+        let evs = collect("- [ ] todo\n- [x] done\n");
+        let checked: Vec<_> = evs
+            .iter()
+            .filter_map(|e| match e {
+                Event::StartItem { checked } => Some(*checked),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(checked, vec![Some(false), Some(true)]);
+    }
+
+    #[test]
     fn test_events_thematic_break() {
         let evs = collect("---\n");
         assert!(evs.iter().any(|e| matches!(e, Event::ThematicBreak)));
@@ -502,14 +743,29 @@ mod tests {
     #[test]
     fn test_events_list() {
         let evs = collect("- one\n- two\n");
-        assert!(evs.iter().any(|e| matches!(e, Event::StartList { ordered: false, .. })));
-        assert_eq!(evs.iter().filter(|e| matches!(e, Event::StartItem)).count(), 2);
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartList { ordered: false, .. }))
+        );
+        assert_eq!(
+            evs.iter()
+                .filter(|e| matches!(e, Event::StartItem { .. }))
+                .count(),
+            2
+        );
     }
 
     #[test]
     fn test_events_ordered_list() {
         let evs = collect("1. first\n2. second\n");
-        assert!(evs.iter().any(|e| matches!(e, Event::StartList { ordered: true, start: 1, .. })));
+        assert!(evs.iter().any(|e| matches!(
+            e,
+            Event::StartList {
+                ordered: true,
+                start: 1,
+                ..
+            }
+        )));
     }
 
     #[test]
@@ -541,8 +797,9 @@ mod tests {
         use crate::batch::StreamingParser;
 
         // Collect via events() directly.
-        let direct: Vec<OwnedEvent> =
-            events_str("# Hello\n\nA paragraph.\n").map(|e| e.into_owned()).collect();
+        let direct: Vec<OwnedEvent> = events_str("# Hello\n\nA paragraph.\n")
+            .map(|e| e.into_owned())
+            .collect();
 
         // Collect via StreamingParser fed in two chunks.
         let mut collected = Vec::new();

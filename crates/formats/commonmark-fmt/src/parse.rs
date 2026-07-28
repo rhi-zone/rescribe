@@ -3,29 +3,116 @@
 use crate::ast::{
     Block, CmDoc, Diagnostic, Inline, LinkDef, ListItem, ListKind, OrderedMarker, Severity, Span,
 };
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
+#[cfg(feature = "frontmatter")]
+use crate::ast::{FrontMatter, FrontMatterKind};
+#[cfg(feature = "tables")]
+use crate::ast::{TableCell, TableRow};
+#[cfg(feature = "tables")]
+use crate::options::{ColumnAlignment, pd_alignment_to_ast};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Parser, Tag, TagEnd};
+
+use crate::options::build_options;
 
 // ── Frame stack ──────────────────────────────────────────────────────────────
 
 /// One level in the tree-builder stack.
 enum Frame {
     /// The root document accumulates top-level blocks.
-    Doc { blocks: Vec<Block> },
-    Blockquote { blocks: Vec<Block>, start: usize },
-    List { kind: ListKind, items: Vec<ListItem>, tight: bool, start: usize },
-    Item { blocks: Vec<Block>, tight_para: bool, tight_inlines: Vec<Inline>, start: usize },
-    Paragraph { inlines: Vec<Inline>, start: usize },
-    Heading { level: u8, inlines: Vec<Inline>, start: usize },
-    Emphasis { inlines: Vec<Inline>, start: usize },
-    Strong { inlines: Vec<Inline>, start: usize },
-    Strikethrough { inlines: Vec<Inline>, start: usize },
-    Link { inlines: Vec<Inline>, url: String, title: Option<String>, start: usize },
+    Doc {
+        blocks: Vec<Block>,
+    },
+    Blockquote {
+        blocks: Vec<Block>,
+        start: usize,
+    },
+    List {
+        kind: ListKind,
+        items: Vec<ListItem>,
+        tight: bool,
+        start: usize,
+    },
+    Item {
+        blocks: Vec<Block>,
+        tight_para: bool,
+        tight_inlines: Vec<Inline>,
+        #[cfg(feature = "task-lists")]
+        checked: Option<bool>,
+        start: usize,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+        start: usize,
+    },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+        start: usize,
+    },
+    Emphasis {
+        inlines: Vec<Inline>,
+        start: usize,
+    },
+    Strong {
+        inlines: Vec<Inline>,
+        start: usize,
+    },
+    #[cfg(feature = "strikethrough")]
+    Strikethrough {
+        inlines: Vec<Inline>,
+        start: usize,
+    },
+    Link {
+        inlines: Vec<Inline>,
+        url: String,
+        title: Option<String>,
+        start: usize,
+    },
     /// Accumulates the alt text from the text events inside an image tag.
-    Image { alt: String, url: String, title: Option<String>, start: usize },
+    Image {
+        alt: String,
+        url: String,
+        title: Option<String>,
+        start: usize,
+    },
     /// A buffered HTML block: content is accumulated from consecutive Html events.
-    HtmlBlock { content: String, start: usize },
+    HtmlBlock {
+        content: String,
+        start: usize,
+    },
     /// A code block: accumulates a single Text event as content.
-    CodeBlock { language: Option<String>, content: String, start: usize },
+    CodeBlock {
+        language: Option<String>,
+        content: String,
+        start: usize,
+    },
+    /// Front-matter block: accumulates raw text content.
+    #[cfg(feature = "frontmatter")]
+    FrontMatter {
+        kind: FrontMatterKind,
+        content: String,
+        start: usize,
+    },
+    /// GFM table: accumulates the head row and body rows.
+    #[cfg(feature = "tables")]
+    Table {
+        alignments: Vec<ColumnAlignment>,
+        head: Option<TableRow>,
+        rows: Vec<TableRow>,
+        start: usize,
+    },
+    /// A table row (either the head row or a body row).
+    #[cfg(feature = "tables")]
+    TableRow {
+        cells: Vec<TableCell>,
+        start: usize,
+    },
+    /// A single table cell — accumulates inline content only (GFM table cells
+    /// cannot contain block content).
+    #[cfg(feature = "tables")]
+    TableCell {
+        inlines: Vec<Inline>,
+        start: usize,
+    },
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -41,7 +128,12 @@ pub fn parse(input: &[u8]) -> (CmDoc, Vec<Diagnostic>) {
         Ok(s) => s,
         Err(_) => {
             return (
-                CmDoc { blocks: vec![], link_defs: vec![] },
+                CmDoc {
+                    blocks: vec![],
+                    link_defs: vec![],
+                    #[cfg(feature = "frontmatter")]
+                    frontmatter: None,
+                },
                 vec![Diagnostic {
                     span: Span::NONE,
                     severity: Severity::Warning,
@@ -56,11 +148,13 @@ pub fn parse(input: &[u8]) -> (CmDoc, Vec<Diagnostic>) {
 
 /// Parse CommonMark (plus GFM strikethrough) from a `&str`.
 pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
-    let opts = Options::ENABLE_STRIKETHROUGH;
+    let opts = build_options();
     let iter = Parser::new_ext(input, opts).into_offset_iter();
 
     let mut stack: Vec<Frame> = vec![Frame::Doc { blocks: vec![] }];
     let diagnostics: Vec<Diagnostic> = vec![];
+    #[cfg(feature = "frontmatter")]
+    let mut frontmatter: Option<FrontMatter> = None;
 
     // pulldown-cmark exposes reference link definitions via a separate API.
     let link_defs = collect_link_defs(input);
@@ -72,14 +166,24 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
         match event {
             // ── Block opens ──────────────────────────────────────────────────
             Event::Start(Tag::Paragraph) => {
-                stack.push(Frame::Paragraph { inlines: vec![], start });
+                stack.push(Frame::Paragraph {
+                    inlines: vec![],
+                    start,
+                });
             }
             Event::Start(Tag::Heading { level, .. }) => {
                 let level_u8 = heading_level_to_u8(level);
-                stack.push(Frame::Heading { level: level_u8, inlines: vec![], start });
+                stack.push(Frame::Heading {
+                    level: level_u8,
+                    inlines: vec![],
+                    start,
+                });
             }
             Event::Start(Tag::BlockQuote(_)) => {
-                stack.push(Frame::Blockquote { blocks: vec![], start });
+                stack.push(Frame::Blockquote {
+                    blocks: vec![],
+                    start,
+                });
             }
             Event::Start(Tag::CodeBlock(kind)) => {
                 let language = match kind {
@@ -89,39 +193,114 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
                     }
                     CodeBlockKind::Indented => None,
                 };
-                stack.push(Frame::CodeBlock { language, content: String::new(), start });
+                stack.push(Frame::CodeBlock {
+                    language,
+                    content: String::new(),
+                    start,
+                });
             }
             Event::Start(Tag::List(first)) => {
                 let kind = match first {
                     None => ListKind::Unordered { marker: '-' },
-                    Some(n) => ListKind::Ordered { start: n, marker: OrderedMarker::Period },
+                    Some(n) => ListKind::Ordered {
+                        start: n,
+                        marker: OrderedMarker::Period,
+                    },
                 };
                 // tight is determined later by whether Item children contain paragraphs
-                stack.push(Frame::List { kind, items: vec![], tight: true, start });
+                stack.push(Frame::List {
+                    kind,
+                    items: vec![],
+                    tight: true,
+                    start,
+                });
             }
             Event::Start(Tag::Item) => {
                 stack.push(Frame::Item {
                     blocks: vec![],
                     tight_para: false,
                     tight_inlines: vec![],
+                    #[cfg(feature = "task-lists")]
+                    checked: None,
                     start,
                 });
             }
             Event::Start(Tag::HtmlBlock) => {
-                stack.push(Frame::HtmlBlock { content: String::new(), start });
+                stack.push(Frame::HtmlBlock {
+                    content: String::new(),
+                    start,
+                });
+            }
+            #[cfg(feature = "frontmatter")]
+            Event::Start(Tag::MetadataBlock(kind)) => {
+                let kind = match kind {
+                    pulldown_cmark::MetadataBlockKind::YamlStyle => FrontMatterKind::Yaml,
+                    pulldown_cmark::MetadataBlockKind::PlusesStyle => FrontMatterKind::Toml,
+                };
+                stack.push(Frame::FrontMatter {
+                    kind,
+                    content: String::new(),
+                    start,
+                });
+            }
+            #[cfg(feature = "tables")]
+            Event::Start(Tag::Table(alignments)) => {
+                let alignments = alignments.iter().map(pd_alignment_to_ast).collect();
+                stack.push(Frame::Table {
+                    alignments,
+                    head: None,
+                    rows: vec![],
+                    start,
+                });
+            }
+            #[cfg(feature = "tables")]
+            Event::Start(Tag::TableHead) => {
+                stack.push(Frame::TableRow {
+                    cells: vec![],
+                    start,
+                });
+            }
+            #[cfg(feature = "tables")]
+            Event::Start(Tag::TableRow) => {
+                stack.push(Frame::TableRow {
+                    cells: vec![],
+                    start,
+                });
+            }
+            #[cfg(feature = "tables")]
+            Event::Start(Tag::TableCell) => {
+                stack.push(Frame::TableCell {
+                    inlines: vec![],
+                    start,
+                });
             }
 
             // ── Inline opens ──────────────────────────────────────────────────
             Event::Start(Tag::Emphasis) => {
-                stack.push(Frame::Emphasis { inlines: vec![], start });
+                stack.push(Frame::Emphasis {
+                    inlines: vec![],
+                    start,
+                });
             }
             Event::Start(Tag::Strong) => {
-                stack.push(Frame::Strong { inlines: vec![], start });
+                stack.push(Frame::Strong {
+                    inlines: vec![],
+                    start,
+                });
             }
+            #[cfg(feature = "strikethrough")]
             Event::Start(Tag::Strikethrough) => {
-                stack.push(Frame::Strikethrough { inlines: vec![], start });
+                stack.push(Frame::Strikethrough {
+                    inlines: vec![],
+                    start,
+                });
             }
-            Event::Start(Tag::Link { link_type, dest_url, title, .. }) => {
+            Event::Start(Tag::Link {
+                link_type,
+                dest_url,
+                title,
+                ..
+            }) => {
                 let raw_url = dest_url.into_string();
                 let url = if link_type == pulldown_cmark::LinkType::Email
                     && !raw_url.starts_with("mailto:")
@@ -130,23 +309,49 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
                 } else {
                     raw_url
                 };
-                let title = if title.is_empty() { None } else { Some(title.into_string()) };
-                stack.push(Frame::Link { inlines: vec![], url, title, start });
+                let title = if title.is_empty() {
+                    None
+                } else {
+                    Some(title.into_string())
+                };
+                stack.push(Frame::Link {
+                    inlines: vec![],
+                    url,
+                    title,
+                    start,
+                });
             }
-            Event::Start(Tag::Image { dest_url, title, .. }) => {
+            Event::Start(Tag::Image {
+                dest_url, title, ..
+            }) => {
                 let url = dest_url.into_string();
-                let title = if title.is_empty() { None } else { Some(title.into_string()) };
-                stack.push(Frame::Image { alt: String::new(), url, title, start });
+                let title = if title.is_empty() {
+                    None
+                } else {
+                    Some(title.into_string())
+                };
+                stack.push(Frame::Image {
+                    alt: String::new(),
+                    url,
+                    title,
+                    start,
+                });
             }
 
             // ── Closes ────────────────────────────────────────────────────────
             Event::End(TagEnd::Paragraph) => {
                 let frame = stack.pop();
                 if let Some(Frame::Paragraph { inlines, start: s }) = frame {
-                    let block = Block::Paragraph { inlines, span: Span { start: s, end } };
+                    let block = Block::Paragraph {
+                        inlines,
+                        span: Span { start: s, end },
+                    };
                     // If inside an item, mark it as having an explicit paragraph child
                     // (→ loose list).
-                    if let Some(Frame::Item { blocks, tight_para, .. }) = stack.last_mut() {
+                    if let Some(Frame::Item {
+                        blocks, tight_para, ..
+                    }) = stack.last_mut()
+                    {
                         *tight_para = true;
                         blocks.push(block);
                     } else {
@@ -156,49 +361,91 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
             }
             Event::End(TagEnd::Heading(_)) => {
                 let frame = stack.pop();
-                if let Some(Frame::Heading { level, inlines, start: s }) = frame {
-                    let block = Block::Heading { level, inlines, span: Span { start: s, end } };
+                if let Some(Frame::Heading {
+                    level,
+                    inlines,
+                    start: s,
+                }) = frame
+                {
+                    let block = Block::Heading {
+                        level,
+                        inlines,
+                        span: Span { start: s, end },
+                    };
                     push_block(&mut stack, block);
                 }
             }
             Event::End(TagEnd::BlockQuote(_)) => {
                 let frame = stack.pop();
                 if let Some(Frame::Blockquote { blocks, start: s }) = frame {
-                    let block = Block::Blockquote { blocks, span: Span { start: s, end } };
+                    let block = Block::Blockquote {
+                        blocks,
+                        span: Span { start: s, end },
+                    };
                     push_block(&mut stack, block);
                 }
             }
             Event::End(TagEnd::CodeBlock) => {
                 let frame = stack.pop();
-                if let Some(Frame::CodeBlock { language, content, start: s }) = frame {
-                    let block = Block::CodeBlock { language, content, span: Span { start: s, end } };
+                if let Some(Frame::CodeBlock {
+                    language,
+                    content,
+                    start: s,
+                }) = frame
+                {
+                    let block = Block::CodeBlock {
+                        language,
+                        content,
+                        span: Span { start: s, end },
+                    };
                     push_block(&mut stack, block);
                 }
             }
             Event::End(TagEnd::List(_)) => {
                 let frame = stack.pop();
-                if let Some(Frame::List { kind, items, tight, start: s }) = frame {
-                    let block = Block::List { kind, items, tight, span: Span { start: s, end } };
+                if let Some(Frame::List {
+                    kind,
+                    items,
+                    tight,
+                    start: s,
+                }) = frame
+                {
+                    let block = Block::List {
+                        kind,
+                        items,
+                        tight,
+                        span: Span { start: s, end },
+                    };
                     push_block(&mut stack, block);
                 }
             }
             Event::End(TagEnd::Item) => {
                 let frame = stack.pop();
-                if let Some(Frame::Item { mut blocks, tight_para, tight_inlines, start: s }) = frame {
+                if let Some(Frame::Item {
+                    mut blocks,
+                    tight_para,
+                    tight_inlines,
+                    #[cfg(feature = "task-lists")]
+                    checked,
+                    start: s,
+                }) = frame
+                {
                     // Tight list items accumulate inlines directly (no Paragraph wrapper
                     // from pulldown). Wrap them in an implicit paragraph so every item
-                    // always has Block children — consistent with loose items.
-                    if !tight_inlines.is_empty() {
-                        blocks.push(Block::Paragraph {
-                            inlines: tight_inlines,
-                            span: Span { start: s, end },
-                        });
-                    }
-                    let item = ListItem { blocks, span: Span { start: s, end } };
+                    // always has Block children — consistent with loose items. (Any
+                    // tight_inlines preceding a nested block were already flushed by
+                    // push_block, in source order; this handles inlines that are the
+                    // item's only/trailing content.)
+                    let mut tight_inlines = tight_inlines;
+                    flush_tight_inlines(&mut blocks, &mut tight_inlines);
+                    let item = ListItem {
+                        blocks,
+                        span: Span { start: s, end },
+                        #[cfg(feature = "task-lists")]
+                        checked,
+                    };
                     // If this item had explicit paragraphs, mark the parent list as loose.
-                    if tight_para
-                        && let Some(Frame::List { tight, .. }) = stack.last_mut()
-                    {
+                    if tight_para && let Some(Frame::List { tight, .. }) = stack.last_mut() {
                         *tight = false;
                     }
                     if let Some(Frame::List { items, .. }) = stack.last_mut() {
@@ -209,42 +456,162 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
             Event::End(TagEnd::HtmlBlock) => {
                 let frame = stack.pop();
                 if let Some(Frame::HtmlBlock { content, start: s }) = frame {
-                    let block = Block::HtmlBlock { content, span: Span { start: s, end } };
+                    let block = Block::HtmlBlock {
+                        content,
+                        span: Span { start: s, end },
+                    };
                     push_block(&mut stack, block);
                 }
             }
             Event::End(TagEnd::Emphasis) => {
                 let frame = stack.pop();
                 if let Some(Frame::Emphasis { inlines, start: s }) = frame {
-                    let inline = Inline::Emphasis { inlines, span: Span { start: s, end } };
+                    let inline = Inline::Emphasis {
+                        inlines,
+                        span: Span { start: s, end },
+                    };
                     push_inline(&mut stack, inline);
                 }
             }
             Event::End(TagEnd::Strong) => {
                 let frame = stack.pop();
                 if let Some(Frame::Strong { inlines, start: s }) = frame {
-                    let inline = Inline::Strong { inlines, span: Span { start: s, end } };
+                    let inline = Inline::Strong {
+                        inlines,
+                        span: Span { start: s, end },
+                    };
                     push_inline(&mut stack, inline);
                 }
             }
+            #[cfg(feature = "strikethrough")]
             Event::End(TagEnd::Strikethrough) => {
                 let frame = stack.pop();
                 if let Some(Frame::Strikethrough { inlines, start: s }) = frame {
-                    let inline = Inline::Strikethrough { inlines, span: Span { start: s, end } };
+                    let inline = Inline::Strikethrough {
+                        inlines,
+                        span: Span { start: s, end },
+                    };
                     push_inline(&mut stack, inline);
+                }
+            }
+            #[cfg(feature = "frontmatter")]
+            Event::End(TagEnd::MetadataBlock(_)) => {
+                let frame = stack.pop();
+                if let Some(Frame::FrontMatter {
+                    kind,
+                    content,
+                    start: s,
+                }) = frame
+                {
+                    // First front-matter block wins, matching pulldown-cmark's own
+                    // one-per-document behavior.
+                    frontmatter.get_or_insert(FrontMatter {
+                        kind,
+                        content,
+                        span: Span { start: s, end },
+                    });
+                }
+            }
+            #[cfg(feature = "tables")]
+            Event::End(TagEnd::TableCell) => {
+                let frame = stack.pop();
+                if let Some(Frame::TableCell { inlines, start: s }) = frame {
+                    let cell = TableCell {
+                        inlines,
+                        span: Span { start: s, end },
+                    };
+                    if let Some(Frame::TableRow { cells, .. }) = stack.last_mut() {
+                        cells.push(cell);
+                    }
+                }
+            }
+            #[cfg(feature = "tables")]
+            Event::End(TagEnd::TableHead) => {
+                let frame = stack.pop();
+                if let Some(Frame::TableRow {
+                    cells, start: s, ..
+                }) = frame
+                {
+                    let row = TableRow {
+                        cells,
+                        span: Span { start: s, end },
+                    };
+                    if let Some(Frame::Table { head, .. }) = stack.last_mut() {
+                        *head = Some(row);
+                    }
+                }
+            }
+            #[cfg(feature = "tables")]
+            Event::End(TagEnd::TableRow) => {
+                let frame = stack.pop();
+                if let Some(Frame::TableRow {
+                    cells, start: s, ..
+                }) = frame
+                {
+                    let row = TableRow {
+                        cells,
+                        span: Span { start: s, end },
+                    };
+                    if let Some(Frame::Table { rows, .. }) = stack.last_mut() {
+                        rows.push(row);
+                    }
+                }
+            }
+            #[cfg(feature = "tables")]
+            Event::End(TagEnd::Table) => {
+                let frame = stack.pop();
+                if let Some(Frame::Table {
+                    alignments,
+                    head,
+                    rows,
+                    start: s,
+                }) = frame
+                {
+                    let block = Block::Table {
+                        alignments,
+                        head: head.unwrap_or(TableRow {
+                            cells: vec![],
+                            span: Span::NONE,
+                        }),
+                        rows,
+                        span: Span { start: s, end },
+                    };
+                    push_block(&mut stack, block);
                 }
             }
             Event::End(TagEnd::Link) => {
                 let frame = stack.pop();
-                if let Some(Frame::Link { inlines, url, title, start: s }) = frame {
-                    let inline = Inline::Link { inlines, url, title, span: Span { start: s, end } };
+                if let Some(Frame::Link {
+                    inlines,
+                    url,
+                    title,
+                    start: s,
+                }) = frame
+                {
+                    let inline = Inline::Link {
+                        inlines,
+                        url,
+                        title,
+                        span: Span { start: s, end },
+                    };
                     push_inline(&mut stack, inline);
                 }
             }
             Event::End(TagEnd::Image) => {
                 let frame = stack.pop();
-                if let Some(Frame::Image { alt, url, title, start: s }) = frame {
-                    let inline = Inline::Image { alt, url, title, span: Span { start: s, end } };
+                if let Some(Frame::Image {
+                    alt,
+                    url,
+                    title,
+                    start: s,
+                }) = frame
+                {
+                    let inline = Inline::Image {
+                        alt,
+                        url,
+                        title,
+                        span: Span { start: s, end },
+                    };
                     push_inline(&mut stack, inline);
                 }
             }
@@ -259,8 +626,13 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
                     content.push_str(&s);
                 } else if let Some(Frame::HtmlBlock { content, .. }) = stack.last_mut() {
                     content.push_str(&s);
+                } else if push_frontmatter_text(&mut stack, &s) {
+                    // handled inside push_frontmatter_text
                 } else {
-                    let inline = Inline::Text { content: s, span: Span { start, end } };
+                    let inline = Inline::Text {
+                        content: s,
+                        span: Span { start, end },
+                    };
                     push_inline(&mut stack, inline);
                 }
             }
@@ -277,8 +649,10 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
                     content.push_str(&text);
                 } else {
                     // Unexpected Html event outside HtmlBlock frame — treat as HtmlBlock directly.
-                    let block =
-                        Block::HtmlBlock { content: text.into_string(), span: Span { start, end } };
+                    let block = Block::HtmlBlock {
+                        content: text.into_string(),
+                        span: Span { start, end },
+                    };
                     push_block(&mut stack, block);
                 }
             }
@@ -290,21 +664,36 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
                 push_inline(&mut stack, inline);
             }
             Event::SoftBreak => {
-                let inline = Inline::SoftBreak { span: Span { start, end } };
+                let inline = Inline::SoftBreak {
+                    span: Span { start, end },
+                };
                 push_inline(&mut stack, inline);
             }
             Event::HardBreak => {
-                let inline = Inline::HardBreak { span: Span { start, end } };
+                let inline = Inline::HardBreak {
+                    span: Span { start, end },
+                };
                 push_inline(&mut stack, inline);
             }
             Event::Rule => {
-                let block = Block::ThematicBreak { span: Span { start, end } };
+                let block = Block::ThematicBreak {
+                    span: Span { start, end },
+                };
                 push_block(&mut stack, block);
+            }
+            #[cfg(feature = "task-lists")]
+            Event::TaskListMarker(checked) => {
+                if let Some(Frame::Item { checked: c, .. }) = stack.last_mut() {
+                    *c = Some(checked);
+                }
             }
 
             // ── Ignored events ───────────────────────────────────────────────
-            // FootnoteReference, TaskListMarker, Math, etc. are pulldown-cmark
-            // extensions we don't model here.
+            // FootnoteReference, Math, etc. are pulldown-cmark extensions we
+            // don't model here (see `footnotes`/`math` features — currently
+            // unimplemented, tracked in TODO.md). When the corresponding
+            // feature is off, its Options bit is never set, so pulldown never
+            // produces these events for us to reach this arm.
             _ => {}
         }
     }
@@ -315,23 +704,101 @@ pub fn parse_str(input: &str) -> (CmDoc, Vec<Diagnostic>) {
         _ => vec![],
     };
 
-    (CmDoc { blocks, link_defs }, diagnostics)
+    (
+        CmDoc {
+            blocks,
+            link_defs,
+            #[cfg(feature = "frontmatter")]
+            frontmatter,
+        },
+        diagnostics,
+    )
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Accumulate text into the top-of-stack front-matter frame, if present.
+/// Returns `true` if the text was consumed this way.
+#[cfg(feature = "frontmatter")]
+fn push_frontmatter_text(stack: &mut [Frame], s: &str) -> bool {
+    if let Some(Frame::FrontMatter { content, .. }) = stack.last_mut() {
+        content.push_str(s);
+        true
+    } else {
+        false
+    }
+}
+#[cfg(not(feature = "frontmatter"))]
+fn push_frontmatter_text(_stack: &mut [Frame], _s: &str) -> bool {
+    false
+}
 
 /// Push a completed block onto the nearest block-accepting frame.
 fn push_block(stack: &mut [Frame], block: Block) {
     for frame in stack.iter_mut().rev() {
         match frame {
-            Frame::Doc { blocks }
-            | Frame::Blockquote { blocks, .. }
-            | Frame::Item { blocks, .. } => {
+            Frame::Doc { blocks } | Frame::Blockquote { blocks, .. } => {
+                blocks.push(block);
+                return;
+            }
+            Frame::Item {
+                blocks,
+                tight_inlines,
+                ..
+            } => {
+                // A tight list item can start with inline content (no
+                // Paragraph wrapper from pulldown) followed by a nested
+                // block (e.g. a sublist): "- outer\n  - inner\n". The
+                // leading inlines accumulate in `tight_inlines` and are
+                // normally flushed into an implicit paragraph at End(Item)
+                // — but a sibling block like this nested list arrives via
+                // push_block *before* End(Item) fires, so without flushing
+                // here first, the block would land ahead of text that
+                // precedes it in the source. Flush any pending tight_inlines
+                // now, before appending, to preserve source order.
+                flush_tight_inlines(blocks, tight_inlines);
                 blocks.push(block);
                 return;
             }
             _ => {}
         }
+    }
+}
+
+/// Flush accumulated tight-list-item inline content into an implicit
+/// `Block::Paragraph`, using the span bounds of the flushed inlines
+/// themselves (not the enclosing item's span).
+fn flush_tight_inlines(blocks: &mut Vec<Block>, tight_inlines: &mut Vec<Inline>) {
+    if tight_inlines.is_empty() {
+        return;
+    }
+    let inlines = std::mem::take(tight_inlines);
+    let span = Span {
+        start: inline_span_start(&inlines[0]),
+        end: inline_span_end(&inlines[inlines.len() - 1]),
+    };
+    blocks.push(Block::Paragraph { inlines, span });
+}
+
+fn inline_span_start(inline: &Inline) -> usize {
+    inline_span(inline).start
+}
+fn inline_span_end(inline: &Inline) -> usize {
+    inline_span(inline).end
+}
+fn inline_span(inline: &Inline) -> Span {
+    match inline {
+        Inline::Text { span, .. }
+        | Inline::SoftBreak { span }
+        | Inline::HardBreak { span }
+        | Inline::Emphasis { span, .. }
+        | Inline::Strong { span, .. }
+        | Inline::Code { span, .. }
+        | Inline::HtmlInline { span, .. }
+        | Inline::Link { span, .. }
+        | Inline::Image { span, .. } => span.clone(),
+        #[cfg(feature = "strikethrough")]
+        Inline::Strikethrough { span, .. } => span.clone(),
     }
 }
 
@@ -347,8 +814,11 @@ fn push_inline(stack: &mut [Frame], inline: Inline) {
             | Frame::Heading { inlines, .. }
             | Frame::Emphasis { inlines, .. }
             | Frame::Strong { inlines, .. }
-            | Frame::Strikethrough { inlines, .. }
             | Frame::Link { inlines, .. } => inlines,
+            #[cfg(feature = "strikethrough")]
+            Frame::Strikethrough { inlines, .. } => inlines,
+            #[cfg(feature = "tables")]
+            Frame::TableCell { inlines, .. } => inlines,
             // Tight list item: accumulate inlines for later wrapping in a paragraph.
             Frame::Item { tight_inlines, .. } => tight_inlines,
             // Image alt text is handled before push_inline is called.
@@ -356,7 +826,14 @@ fn push_inline(stack: &mut [Frame], inline: Inline) {
         };
         // Merge consecutive Text nodes — pulldown-cmark can split a single logical
         // text run into multiple Text events (e.g. backslash escapes).
-        if let (Inline::Text { content: new_content, span: new_span }, Some(Inline::Text { content, span })) = (&inline, target.last_mut()) {
+        if let (
+            Inline::Text {
+                content: new_content,
+                span: new_span,
+            },
+            Some(Inline::Text { content, span }),
+        ) = (&inline, target.last_mut())
+        {
             content.push_str(new_content);
             span.end = new_span.end;
             return;
@@ -381,7 +858,7 @@ fn heading_level_to_u8(level: HeadingLevel) -> u8 {
 ///
 /// pulldown-cmark exposes these through [`Parser::reference_definitions`].
 fn collect_link_defs(input: &str) -> Vec<LinkDef> {
-    let opts = Options::ENABLE_STRIKETHROUGH;
+    let opts = build_options();
     let parser = Parser::new_ext(input, opts);
     let defs = parser.reference_definitions();
     let mut out: Vec<LinkDef> = defs
@@ -447,7 +924,13 @@ mod tests {
     fn test_unordered_list() {
         let (doc, diags) = parse(b"- one\n- two\n- three\n");
         assert!(diags.is_empty());
-        assert!(matches!(&doc.blocks[0], Block::List { kind: ListKind::Unordered { .. }, .. }));
+        assert!(matches!(
+            &doc.blocks[0],
+            Block::List {
+                kind: ListKind::Unordered { .. },
+                ..
+            }
+        ));
         if let Block::List { items, .. } = &doc.blocks[0] {
             assert_eq!(items.len(), 3);
         }
@@ -459,7 +942,10 @@ mod tests {
         assert!(diags.is_empty());
         assert!(matches!(
             &doc.blocks[0],
-            Block::List { kind: ListKind::Ordered { start: 1, .. }, .. }
+            Block::List {
+                kind: ListKind::Ordered { start: 1, .. },
+                ..
+            }
         ));
     }
 
@@ -491,7 +977,11 @@ mod tests {
         let (doc, diags) = parse(b"![alt text](img.png)\n");
         assert!(diags.is_empty());
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
-            assert!(inlines.iter().any(|i| matches!(i, Inline::Image { alt, .. } if alt == "alt text")));
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::Image { alt, .. } if alt == "alt text"))
+            );
         }
     }
 
@@ -507,7 +997,11 @@ mod tests {
         let (doc, diags) = parse(b"text <em>inline</em> html\n");
         assert!(diags.is_empty());
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
-            assert!(inlines.iter().any(|i| matches!(i, Inline::HtmlInline { .. })));
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::HtmlInline { .. }))
+            );
         }
     }
 
@@ -563,11 +1057,89 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "strikethrough")]
     fn test_gfm_strikethrough() {
         let (doc, diags) = parse(b"~~deleted~~\n");
         assert!(diags.is_empty());
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
-            assert!(inlines.iter().any(|i| matches!(i, Inline::Strikethrough { .. })));
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::Strikethrough { .. }))
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "strikethrough"))]
+    fn test_no_strikethrough_by_default() {
+        // Without the `strikethrough` feature, `~~text~~` is plain CommonMark
+        // (tildes are literal characters), matching the CommonMark spec.
+        let (doc, diags) = parse(b"~~deleted~~\n");
+        assert!(diags.is_empty());
+        if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::Text { content, .. } if content.contains("~~")))
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "frontmatter")]
+    fn test_yaml_frontmatter() {
+        let (doc, diags) = parse(b"---\ntitle: X\n---\n\nbody\n");
+        assert!(diags.is_empty());
+        let fm = doc.frontmatter.as_ref().expect("expected frontmatter");
+        assert_eq!(fm.kind, FrontMatterKind::Yaml);
+        assert_eq!(fm.content.trim(), "title: X");
+        // No bogus ThematicBreak/Heading in the body.
+        assert_eq!(doc.blocks.len(), 1);
+        assert!(matches!(&doc.blocks[0], Block::Paragraph { .. }));
+    }
+
+    #[test]
+    #[cfg(feature = "frontmatter")]
+    fn test_toml_frontmatter() {
+        let (doc, diags) = parse(b"+++\ntitle = \"X\"\n+++\n\nbody\n");
+        assert!(diags.is_empty());
+        let fm = doc.frontmatter.as_ref().expect("expected frontmatter");
+        assert_eq!(fm.kind, FrontMatterKind::Toml);
+        assert_eq!(fm.content.trim(), "title = \"X\"");
+        assert_eq!(doc.blocks.len(), 1);
+    }
+
+    #[test]
+    #[cfg(feature = "tables")]
+    fn test_table() {
+        let (doc, diags) = parse(b"| a | b |\n|---|---|\n| 1 | 2 |\n");
+        assert!(diags.is_empty());
+        assert!(matches!(&doc.blocks[0], Block::Table { .. }));
+        if let Block::Table {
+            head,
+            rows,
+            alignments,
+            ..
+        } = &doc.blocks[0]
+        {
+            assert_eq!(alignments.len(), 2);
+            assert_eq!(head.cells.len(), 2);
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].cells.len(), 2);
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "task-lists")]
+    fn test_task_list() {
+        let (doc, diags) = parse(b"- [ ] todo\n- [x] done\n");
+        assert!(diags.is_empty());
+        if let Block::List { items, .. } = &doc.blocks[0] {
+            assert_eq!(items[0].checked, Some(false));
+            assert_eq!(items[1].checked, Some(true));
+        } else {
+            panic!("expected list");
         }
     }
 }

@@ -25,6 +25,16 @@ pub struct CmDoc {
     pub blocks: Vec<Block>,
     /// Reference-style link definitions collected during parsing.
     pub link_defs: Vec<LinkDef>,
+    /// YAML (`---`) or TOML (`+++`) front matter, if present.
+    ///
+    /// Only populated when the `frontmatter` feature is enabled (see
+    /// [`Options::ENABLE_YAML_STYLE_METADATA_BLOCKS`] /
+    /// [`Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS`] in pulldown-cmark).
+    /// The content is captured verbatim; parsing the YAML/TOML itself is left
+    /// to callers (e.g. the rescribe adapter), since that is a different
+    /// format entirely, not CommonMark parsing.
+    #[cfg(feature = "frontmatter")]
+    pub frontmatter: Option<FrontMatter>,
 }
 
 impl CmDoc {
@@ -34,6 +44,33 @@ impl CmDoc {
         CmDoc {
             blocks: self.blocks.iter().map(|b| b.strip_spans()).collect(),
             link_defs: self.link_defs.clone(),
+            #[cfg(feature = "frontmatter")]
+            frontmatter: self.frontmatter.as_ref().map(|f| f.strip_spans()),
+        }
+    }
+}
+
+#[cfg(feature = "frontmatter")]
+pub use crate::options::FrontMatterKind;
+
+/// A front-matter block: raw YAML or TOML text captured verbatim.
+#[cfg(feature = "frontmatter")]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+pub struct FrontMatter {
+    pub kind: FrontMatterKind,
+    /// Raw content between the delimiters, not including the `---`/`+++` lines.
+    pub content: String,
+    pub span: Span,
+}
+
+#[cfg(feature = "frontmatter")]
+impl FrontMatter {
+    pub fn strip_spans(&self) -> FrontMatter {
+        FrontMatter {
+            kind: self.kind,
+            content: self.content.clone(),
+            span: Span::NONE,
         }
     }
 }
@@ -73,6 +110,57 @@ pub enum Block {
     ThematicBreak {
         span: Span,
     },
+    /// GFM table (`Options::ENABLE_TABLES`).
+    #[cfg(feature = "tables")]
+    Table {
+        alignments: Vec<ColumnAlignment>,
+        head: TableRow,
+        rows: Vec<TableRow>,
+        span: Span,
+    },
+}
+
+#[cfg(feature = "tables")]
+pub use crate::options::ColumnAlignment;
+
+/// A single row of a [`Block::Table`] (either the header row or a body row).
+#[cfg(feature = "tables")]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+pub struct TableRow {
+    pub cells: Vec<TableCell>,
+    pub span: Span,
+}
+
+#[cfg(feature = "tables")]
+impl TableRow {
+    pub fn strip_spans(&self) -> TableRow {
+        TableRow {
+            cells: self.cells.iter().map(|c| c.strip_spans()).collect(),
+            span: Span::NONE,
+        }
+    }
+}
+
+/// A single cell of a [`Block::Table`] row.
+///
+/// GFM table cells contain only inline content — no nested block content.
+#[cfg(feature = "tables")]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+pub struct TableCell {
+    pub inlines: Vec<Inline>,
+    pub span: Span,
+}
+
+#[cfg(feature = "tables")]
+impl TableCell {
+    pub fn strip_spans(&self) -> TableCell {
+        TableCell {
+            inlines: self.inlines.iter().map(|i| i.strip_spans()).collect(),
+            span: Span::NONE,
+        }
+    }
 }
 
 impl Block {
@@ -88,7 +176,9 @@ impl Block {
                 inlines: inlines.iter().map(|i| i.strip_spans()).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { language, content, .. } => Block::CodeBlock {
+            Block::CodeBlock {
+                language, content, ..
+            } => Block::CodeBlock {
                 language: language.clone(),
                 content: content.clone(),
                 span: Span::NONE,
@@ -101,13 +191,27 @@ impl Block {
                 blocks: blocks.iter().map(|b| b.strip_spans()).collect(),
                 span: Span::NONE,
             },
-            Block::List { kind, items, tight, .. } => Block::List {
+            Block::List {
+                kind, items, tight, ..
+            } => Block::List {
                 kind: kind.clone(),
                 items: items.iter().map(|item| item.strip_spans()).collect(),
                 tight: *tight,
                 span: Span::NONE,
             },
             Block::ThematicBreak { .. } => Block::ThematicBreak { span: Span::NONE },
+            #[cfg(feature = "tables")]
+            Block::Table {
+                alignments,
+                head,
+                rows,
+                ..
+            } => Block::Table {
+                alignments: alignments.clone(),
+                head: head.strip_spans(),
+                rows: rows.iter().map(|r| r.strip_spans()).collect(),
+                span: Span::NONE,
+            },
         }
     }
 }
@@ -145,6 +249,10 @@ pub enum OrderedMarker {
 pub struct ListItem {
     pub blocks: Vec<Block>,
     pub span: Span,
+    /// GFM task-list checkbox state (`Options::ENABLE_TASKLISTS`); `None` for
+    /// ordinary (non-task) list items.
+    #[cfg(feature = "task-lists")]
+    pub checked: Option<bool>,
 }
 
 impl ListItem {
@@ -153,6 +261,8 @@ impl ListItem {
         ListItem {
             blocks: self.blocks.iter().map(|b| b.strip_spans()).collect(),
             span: Span::NONE,
+            #[cfg(feature = "task-lists")]
+            checked: self.checked,
         }
     }
 }
@@ -179,7 +289,8 @@ pub enum Inline {
         inlines: Vec<Inline>,
         span: Span,
     },
-    /// GFM strikethrough extension (`~~text~~`).
+    /// GFM strikethrough extension (`~~text~~`, `Options::ENABLE_STRIKETHROUGH`).
+    #[cfg(feature = "strikethrough")]
     Strikethrough {
         inlines: Vec<Inline>,
         span: Span,
@@ -226,6 +337,7 @@ impl Inline {
                 inlines: inlines.iter().map(|i| i.strip_spans()).collect(),
                 span: Span::NONE,
             },
+            #[cfg(feature = "strikethrough")]
             Inline::Strikethrough { inlines, .. } => Inline::Strikethrough {
                 inlines: inlines.iter().map(|i| i.strip_spans()).collect(),
                 span: Span::NONE,
@@ -238,13 +350,20 @@ impl Inline {
                 content: content.clone(),
                 span: Span::NONE,
             },
-            Inline::Link { inlines, url, title, .. } => Inline::Link {
+            Inline::Link {
+                inlines,
+                url,
+                title,
+                ..
+            } => Inline::Link {
                 inlines: inlines.iter().map(|i| i.strip_spans()).collect(),
                 url: url.clone(),
                 title: title.clone(),
                 span: Span::NONE,
             },
-            Inline::Image { alt, url, title, .. } => Inline::Image {
+            Inline::Image {
+                alt, url, title, ..
+            } => Inline::Image {
                 alt: alt.clone(),
                 url: url.clone(),
                 title: title.clone(),
