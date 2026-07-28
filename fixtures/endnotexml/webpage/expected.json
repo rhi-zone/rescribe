@@ -1,8 +1,9 @@
 {
-  "description": "EndNote Web Page type (12) maps to online",
+  "description": "EndNote Web Page type (12) becomes a bibliography_entry; urls/related-urls/url becomes an identifier field with field:scheme url",
   "assertions": [
-    { "path": "/0",   "kind": "definition_list" },
-    { "path": "/0/0", "kind": "endnote:entry" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "endnote:type": "12" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "endnote:type": "12" } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "url", "endnote:field": "urls/related-urls/url" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "https://example.com" } }
   ]
 }

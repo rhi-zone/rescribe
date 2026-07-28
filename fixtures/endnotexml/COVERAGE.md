@@ -7,6 +7,14 @@ EndNote XML uses a proprietary XML schema exported by EndNote. The root element 
 records are inside `<records>`, each record is a `<record>` element with a `<ref-type>`
 child specifying the reference type by name and numeric code.
 
+Records parse into `bibliography`/`bibliography_entry`/`bibliography_field` IR nodes (see
+ADR 0005 and `rescribe_std::node`), not the legacy flat `definition_list` shape. Each field
+node carries both `field:role` (the semantic vocabulary) and `endnote:field` (the exact
+source element path, e.g. `titles/secondary-title`, `urls/related-urls/url`). EndNote XML
+is the one of these four formats whose fields can carry `<style face="...">` markup runs —
+those become real `emphasis`/`strong`/`underline`/`superscript`/`subscript` inline nodes
+(see `rare-style-markup`) instead of being flattened to plain text.
+
 ## Reference types (ref-type)
 
 ### Common types (with EndNote numeric codes)
@@ -62,30 +70,29 @@ child specifying the reference type by name and numeric code.
 
 ### Identifier / type
 - [x] ref-type (name and code) — all fixtures
-- [ ] rec-number — (missing)
-- [ ] foreign-keys — (missing)
+- [x] rec-number — `conference`, `thesis`, `webpage` (used as cite-key fallback when `label` absent)
+- [x] foreign-keys / key (with app/db-id attrs) — `conference`, `thesis`, `webpage`
 - [ ] ref-source — (missing)
 - [ ] database — (missing)
 
 ### Contributor fields (`<contributors>`)
 - [x] authors / author (single) — `article`
 - [x] authors / author (multiple) — `multi-author`
-- [ ] secondary-authors (editors) — (missing)
-- [ ] tertiary-authors — (missing)
-- [ ] subsidiary-authors — (missing)
+- [x] secondary-authors (editors) — supported (`field:role` = `editor`), no dedicated fixture yet — (missing fixture)
+- [x] tertiary-authors / subsidiary-authors — raw-preserved as `misc`, no dedicated fixture yet — (missing fixture)
 - [ ] translated-authors — (missing)
 
 ### Title fields
 - [x] titles / title — `article`
-- [ ] titles / secondary-title (journal / container) — (missing)
-- [ ] titles / tertiary-title (series) — (missing)
+- [x] titles / secondary-title (journal / container) — `article`
+- [x] titles / tertiary-title (series) — raw-preserved as `misc`, no dedicated fixture yet — (missing fixture)
 - [ ] titles / short-title — (missing)
 - [ ] titles / translated-title — (missing)
 - [ ] titles / alt-title — (missing)
 
 ### Date fields
 - [x] dates / year — `article`
-- [ ] dates / pub-dates / date — (missing)
+- [x] dates / pub-dates / date — raw-preserved as `misc` (no unambiguous month-name parse without guessing locale), no dedicated fixture yet — (missing fixture)
 - [ ] dates / access-date — (missing)
 
 ### Periodical fields
@@ -95,34 +102,41 @@ child specifying the reference type by name and numeric code.
 - [ ] periodical / abbr-3 — (missing)
 
 ### Volume / pages
-- [ ] volume — (missing)
-- [ ] number — (missing)
-- [ ] pages — (missing)
+- [x] volume — `article`
+- [x] number — supported (`field:role` = `issue`), no dedicated fixture yet — (missing fixture)
+- [x] pages (numeric range split into page_first/page_last) — `article`, `book-section`
 - [ ] num-vols — (missing)
 - [ ] edition — (missing)
 - [ ] section — (missing)
 
 ### Publisher fields
-- [ ] publisher — (missing)
-- [ ] pub-location — (missing)
+- [x] publisher — `book`
+- [x] pub-location — supported (`field:role` = `publisher_location`), no dedicated fixture yet — (missing fixture)
 
 ### Identifier fields
 - [x] electronic-resource-num (DOI) — `with-doi`
-- [x] urls / related-urls / url — `with-url`, `webpage`
-- [ ] isbn — (missing)
-- [ ] label — (missing)
+- [x] urls / related-urls / url — `webpage`
+- [x] urls / pdf-urls / url — supported, no dedicated fixture yet — (missing fixture)
+- [x] bare top-level url (non-standard placement) — `with-url`
+- [x] isbn / issn (each own identifier field, not conflated) — supported, no dedicated fixture yet — (missing fixture)
 - [ ] accession-num — (missing)
 - [ ] call-num — (missing)
-- [ ] custom1 through custom7 — (missing)
+- [ ] custom1 through custom7 — raw-preserved as `misc` via the generic record-level fallback, no dedicated fixture yet — (missing fixture)
 
 ### Content fields
-- [ ] abstract — (missing)
-- [ ] notes — (missing)
-- [ ] keywords / keyword — (missing)
-- [ ] research-notes — (missing)
-- [ ] work-type — (missing)
-- [ ] reviewed-item — (missing)
-- [ ] language — (missing)
+- [x] abstract — supported, no dedicated fixture yet — (missing fixture)
+- [x] notes — supported, no dedicated fixture yet — (missing fixture)
+- [x] keywords / keyword — supported, no dedicated fixture yet — (missing fixture)
+- [ ] research-notes — (missing; would raw-preserve via generic fallback)
+- [ ] work-type — (missing; would raw-preserve via generic fallback)
+- [ ] reviewed-item — (missing; would raw-preserve via generic fallback)
+- [ ] language — (missing; would raw-preserve via generic fallback)
+
+### Rich text in fields (`<style face="...">`)
+- [x] italic — `rare-style-markup`
+- [x] bold — `rare-style-markup`
+- [ ] underline — (missing; supported, no fixture)
+- [ ] superscript / subscript — (missing; supported, no fixture)
 
 ### Source (book info)
 - [ ] source-app — (missing)

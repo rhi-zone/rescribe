@@ -1,11 +1,12 @@
 {
-  "description": "Book record produces endnote:entry with type=book and key jones2018",
+  "description": "Book record becomes a bibliography_entry with endnote:type 6 and cite key jones2018",
   "category": "happy",
   "assertions": [
-    { "path": "/0", "kind": "definition_list" },
-    { "path": "/0/0", "kind": "endnote:entry" },
-    { "path": "/0/0/0", "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "jones2018" } },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "endnote:type": "6", "endnote:key": "jones2018" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "endnote:type": "6", "endnote:key": "jones2018", "date": { "year": 2018 } } },
+    { "path": "/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "title" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "publisher", "endnote:field": "publisher" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "Academic Press" } }
   ]
 }

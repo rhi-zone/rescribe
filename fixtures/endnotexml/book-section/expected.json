@@ -1,8 +1,11 @@
 {
-  "description": "EndNote Book Section (type 5) record becomes endnote:entry",
+  "description": "EndNote Book Section (type 5) record becomes a bibliography_entry with a numeric page range split into page_first/page_last",
   "assertions": [
-    { "path": "/0",   "kind": "definition_list" },
-    { "path": "/0/0", "kind": "endnote:entry" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "endnote:type": "5" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "endnote:type": "5" } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "page_first" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "100" } },
+    { "path": "/0/0/4",   "kind": "bibliography_field", "props": { "field:role": "page_last" } },
+    { "path": "/0/0/4/0", "kind": "text", "props": { "content": "120" } }
   ]
 }

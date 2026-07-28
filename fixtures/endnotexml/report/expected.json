@@ -1,8 +1,7 @@
 {
-  "description": "EndNote Report (type 27) record becomes endnote:entry",
+  "description": "EndNote Report (type 27) record becomes a bibliography_entry",
   "assertions": [
-    { "path": "/0",   "kind": "definition_list" },
-    { "path": "/0/0", "kind": "endnote:entry" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "endnote:type": "27" } }
+    { "path": "/0",     "kind": "bibliography" },
+    { "path": "/0/0",   "kind": "bibliography_entry", "props": { "endnote:type": "27" } }
   ]
 }

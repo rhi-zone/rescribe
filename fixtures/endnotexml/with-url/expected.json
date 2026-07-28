@@ -1,11 +1,10 @@
 {
-  "description": "Journal article with URL field produces entry with endnote:type=article",
+  "description": "A bare top-level <url> (outside <urls>) becomes an identifier field with field:scheme url, same as urls/related-urls/url",
   "category": "rare",
   "assertions": [
-    { "path": "/0", "kind": "definition_list" },
-    { "path": "/0/0", "kind": "endnote:entry" },
-    { "path": "/0/0/0", "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "brown2022" } },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "endnote:type": "17", "endnote:key": "brown2022" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "endnote:type": "17", "endnote:key": "brown2022", "date": { "year": 2022 } } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "url", "endnote:field": "url" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "https://example.com/paper" } }
   ]
 }

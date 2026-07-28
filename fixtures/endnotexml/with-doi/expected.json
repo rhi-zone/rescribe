@@ -1,8 +1,9 @@
 {
-  "description": "electronic-resource-num field becomes a DOI link in the description",
+  "description": "electronic-resource-num field becomes an identifier field with field:scheme doi",
   "assertions": [
-    { "path": "/0",   "kind": "definition_list" },
-    { "path": "/0/0", "kind": "endnote:entry" },
-    { "path": "/0/0/1", "kind": "definition_desc" }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry" },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "doi", "endnote:field": "electronic-resource-num" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "10.1234/example.5678" } }
   ]
 }

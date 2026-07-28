@@ -4,10 +4,15 @@
 
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
-use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node};
+use rescribe_core::{
+    ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, PropValue,
+};
+use rescribe_std::{node, prop};
 use std::io::Cursor;
 
-/// EndNote entry node type.
+/// Legacy flat entry kinds, still accepted for backwards compatibility with
+/// documents built by hand or by an older reader version (not produced by
+/// `rescribe-read-endnotexml` any more, which now emits `bibliography_entry`).
 const ENDNOTE_ENTRY: &str = "endnote:entry";
 const BIBTEX_ENTRY: &str = "bibtex:entry";
 const RIS_ENTRY: &str = "ris:entry";
@@ -85,7 +90,10 @@ impl EmitContext {
 
     fn write_node(&mut self, node: &Node) -> Result<(), EmitError> {
         match node.kind.as_str() {
-            "document" | "definition_list" => self.write_nodes(&node.children)?,
+            "document" | "definition_list" | node::BIBLIOGRAPHY => {
+                self.write_nodes(&node.children)?
+            }
+            node::BIBLIOGRAPHY_ENTRY => self.write_bibliography_entry(node)?,
             ENDNOTE_ENTRY => self.write_endnote_entry(node)?,
             BIBTEX_ENTRY => self.write_bibtex_entry(node)?,
             RIS_ENTRY => self.write_ris_entry(node)?,
@@ -96,6 +104,382 @@ impl EmitContext {
                 } else {
                     self.write_nodes(&node.children)?;
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// Write a `bibliography_entry` node (see `rescribe-read-endnotexml`'s
+    /// `convert_record`) back to a `<record>`. `endnote:field` on each
+    /// `bibliography_field` child (set by every field-producing arm of the
+    /// reader) names the exact source element path (`"titles/title"`,
+    /// `"urls/related-urls/url"`, ...), so fields are grouped back into
+    /// their original nested wrappers instead of guessing a shape from
+    /// `field:role` alone. A `page_first`/`page_last` pair recombines into
+    /// one `<pages>`; each field's inline children go through
+    /// `write_inline_children`, which is the inverse of the reader's
+    /// `convert_inline_children` — `emphasis`/`strong`/`underline`/
+    /// `superscript`/`subscript` become `<style face="...">` runs.
+    fn write_bibliography_entry(&mut self, node: &Node) -> Result<(), EmitError> {
+        self.record_count += 1;
+
+        self.writer
+            .write_event(Event::Start(BytesStart::new("record")))
+            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+
+        let rec_number = node
+            .props
+            .get_str("endnote:rec-number")
+            .map(str::to_string)
+            .unwrap_or_else(|| self.record_count.to_string());
+        self.write_element("rec-number", &rec_number)?;
+
+        if let Some(label) = node.props.get_str("endnote:label") {
+            self.write_element("label", label)?;
+        }
+
+        let ref_type = node.props.get_str("endnote:type").unwrap_or("");
+        let mut start = BytesStart::new("ref-type");
+        if let Some(name) = node.props.get_str("endnote:ref-type-name") {
+            start.push_attribute(("name", name));
+        }
+        self.writer
+            .write_event(Event::Start(start))
+            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        self.writer
+            .write_event(Event::Text(BytesText::new(ref_type)))
+            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        self.writer
+            .write_event(Event::End(BytesEnd::new("ref-type")))
+            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+
+        let mut authors = Vec::new();
+        let mut secondary_authors = Vec::new();
+        let mut foreign_keys = Vec::new();
+        let mut title = None;
+        let mut secondary_title = None;
+        let mut tertiary_title = None;
+        let mut volume = None;
+        let mut number = None;
+        let mut page_first = None;
+        let mut page_last = None;
+        let mut pages_misc = None;
+        let mut publisher = None;
+        let mut pub_location = None;
+        let mut isbn = None;
+        let mut issn = None;
+        let mut doi = None;
+        let mut related_urls = Vec::new();
+        let mut pdf_urls = Vec::new();
+        let mut bare_url = None;
+        let mut abstract_ = None;
+        let mut notes = None;
+        let mut keywords = Vec::new();
+        let mut extra: Vec<(&str, &Node)> = Vec::new();
+
+        for child in &node.children {
+            if child.kind.as_str() != node::BIBLIOGRAPHY_FIELD {
+                continue;
+            }
+            let role = child.props.get_str(prop::FIELD_ROLE).unwrap_or("misc");
+            let tag = child.props.get_str("endnote:field").unwrap_or(role);
+            match tag {
+                "authors/author" => authors.push(child),
+                "secondary-authors/author" => secondary_authors.push(child),
+                "titles/title" => title = Some(child),
+                "titles/secondary-title" => secondary_title = Some(child),
+                "titles/tertiary-title" => tertiary_title = Some(child),
+                "volume" => volume = Some(child),
+                "number" => number = Some(child),
+                "pages" if role == "page_first" => page_first = Some(child),
+                "pages" if role == "page_last" => page_last = Some(child),
+                "pages" => pages_misc = Some(child),
+                "publisher" => publisher = Some(child),
+                "pub-location" => pub_location = Some(child),
+                "isbn" => isbn = Some(child),
+                "issn" => issn = Some(child),
+                "electronic-resource-num" => doi = Some(child),
+                "urls/related-urls/url" => related_urls.push(child),
+                "urls/pdf-urls/url" => pdf_urls.push(child),
+                "url" => bare_url = Some(child),
+                "foreign-keys/key" => foreign_keys.push(child),
+                "abstract" => abstract_ = Some(child),
+                "notes" => notes = Some(child),
+                "keywords/keyword" => keywords.push(child),
+                other => extra.push((other, child)),
+            }
+        }
+
+        if !authors.is_empty() || !secondary_authors.is_empty() {
+            self.writer
+                .write_event(Event::Start(BytesStart::new("contributors")))
+                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            if !authors.is_empty() {
+                self.writer
+                    .write_event(Event::Start(BytesStart::new("authors")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+                for author in authors {
+                    self.write_field_element("author", author)?;
+                }
+                self.writer
+                    .write_event(Event::End(BytesEnd::new("authors")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+            }
+            if !secondary_authors.is_empty() {
+                self.writer
+                    .write_event(Event::Start(BytesStart::new("secondary-authors")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+                for author in secondary_authors {
+                    self.write_field_element("author", author)?;
+                }
+                self.writer
+                    .write_event(Event::End(BytesEnd::new("secondary-authors")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+            }
+            self.writer
+                .write_event(Event::End(BytesEnd::new("contributors")))
+                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        }
+
+        if title.is_some() || secondary_title.is_some() || tertiary_title.is_some() {
+            self.writer
+                .write_event(Event::Start(BytesStart::new("titles")))
+                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            if let Some(t) = title {
+                self.write_field_element("title", t)?;
+            }
+            if let Some(t) = secondary_title {
+                self.write_field_element("secondary-title", t)?;
+            }
+            if let Some(t) = tertiary_title {
+                self.write_field_element("tertiary-title", t)?;
+            }
+            self.writer
+                .write_event(Event::End(BytesEnd::new("titles")))
+                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        }
+
+        if let Some(PropValue::Map(date)) = node.props.get(prop::DATE) {
+            let year = match date.get("year") {
+                Some(PropValue::Int(y)) => Some(y.to_string()),
+                _ => None,
+            };
+            if let Some(year) = year {
+                self.writer
+                    .write_event(Event::Start(BytesStart::new("dates")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+                self.write_element("year", &year)?;
+                self.writer
+                    .write_event(Event::End(BytesEnd::new("dates")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+            }
+        }
+
+        if let Some(v) = volume {
+            self.write_field_element("volume", v)?;
+        }
+        if let Some(n) = number {
+            self.write_field_element("number", n)?;
+        }
+        match (page_first, page_last) {
+            (Some(first), Some(last)) => {
+                let combined =
+                    format!("{}-{}", flatten_field_text(first), flatten_field_text(last));
+                self.write_element("pages", &combined)?;
+            }
+            (Some(first), None) => self.write_field_element("pages", first)?,
+            (None, Some(last)) => self.write_field_element("pages", last)?,
+            (None, None) => {
+                if let Some(p) = pages_misc {
+                    self.write_field_element("pages", p)?;
+                }
+            }
+        }
+        if let Some(p) = publisher {
+            self.write_field_element("publisher", p)?;
+        }
+        if let Some(p) = pub_location {
+            self.write_field_element("pub-location", p)?;
+        }
+        if let Some(i) = isbn {
+            self.write_field_element("isbn", i)?;
+        }
+        if let Some(i) = issn {
+            self.write_field_element("issn", i)?;
+        }
+        if let Some(d) = doi {
+            self.write_field_element("electronic-resource-num", d)?;
+        }
+
+        if !related_urls.is_empty() || !pdf_urls.is_empty() {
+            self.writer
+                .write_event(Event::Start(BytesStart::new("urls")))
+                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            if !related_urls.is_empty() {
+                self.writer
+                    .write_event(Event::Start(BytesStart::new("related-urls")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+                for u in related_urls {
+                    self.write_field_element("url", u)?;
+                }
+                self.writer
+                    .write_event(Event::End(BytesEnd::new("related-urls")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+            }
+            if !pdf_urls.is_empty() {
+                self.writer
+                    .write_event(Event::Start(BytesStart::new("pdf-urls")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+                for u in pdf_urls {
+                    self.write_field_element("url", u)?;
+                }
+                self.writer
+                    .write_event(Event::End(BytesEnd::new("pdf-urls")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+            }
+            self.writer
+                .write_event(Event::End(BytesEnd::new("urls")))
+                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        }
+        if let Some(u) = bare_url {
+            self.write_field_element("url", u)?;
+        }
+
+        if !foreign_keys.is_empty() {
+            self.writer
+                .write_event(Event::Start(BytesStart::new("foreign-keys")))
+                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            for key in foreign_keys {
+                let mut start = BytesStart::new("key");
+                if let Some(app) = key.props.get_str("endnote:app") {
+                    start.push_attribute(("app", app));
+                }
+                if let Some(db_id) = key.props.get_str("endnote:db-id") {
+                    start.push_attribute(("db-id", db_id));
+                }
+                self.writer.write_event(Event::Start(start)).map_err(|e| {
+                    EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                })?;
+                self.write_inline_children(&key.children)?;
+                self.writer
+                    .write_event(Event::End(BytesEnd::new("key")))
+                    .map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+            }
+            self.writer
+                .write_event(Event::End(BytesEnd::new("foreign-keys")))
+                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        }
+
+        if let Some(a) = abstract_ {
+            self.write_field_element("abstract", a)?;
+        }
+        if let Some(n) = notes {
+            self.write_field_element("notes", n)?;
+        }
+        if !keywords.is_empty() {
+            self.writer
+                .write_event(Event::Start(BytesStart::new("keywords")))
+                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+            for k in keywords {
+                self.write_field_element("keyword", k)?;
+            }
+            self.writer
+                .write_event(Event::End(BytesEnd::new("keywords")))
+                .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        }
+
+        // Everything else (a plain top-level tag name with no "/", from the
+        // reader's record-level generic fallback) round-trips as its own
+        // bare element.
+        for (tag, field) in extra {
+            if !tag.contains('/') {
+                self.write_field_element(tag, field)?;
+            }
+        }
+
+        self.writer
+            .write_event(Event::End(BytesEnd::new("record")))
+            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+
+        Ok(())
+    }
+
+    /// Write `field`'s inline children (see `write_inline_children`) inside
+    /// a `<name>...</name>` wrapper.
+    fn write_field_element(&mut self, name: &str, field: &Node) -> Result<(), EmitError> {
+        self.writer
+            .write_event(Event::Start(BytesStart::new(name)))
+            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        self.write_inline_children(&field.children)?;
+        self.writer
+            .write_event(Event::End(BytesEnd::new(name)))
+            .map_err(|e| EmitError::Io(std::io::Error::other(format!("XML error: {}", e))))?;
+        Ok(())
+    }
+
+    /// Inverse of `rescribe-read-endnotexml`'s `convert_inline_children`:
+    /// `TEXT` nodes are written as-is; `emphasis`/`strong`/`underline`/
+    /// `superscript`/`subscript` become `<style face="...">` runs around
+    /// their (recursively written) content. Any other inline node kind
+    /// (from a non-EndNote producer) has its content flattened in rather
+    /// than dropped.
+    fn write_inline_children(&mut self, children: &[Node]) -> Result<(), EmitError> {
+        for child in children {
+            let face = match child.kind.as_str() {
+                k if k == node::TEXT => {
+                    if let Some(content) = child.props.get_str(prop::CONTENT) {
+                        self.writer
+                            .write_event(Event::Text(BytesText::new(content)))
+                            .map_err(|e| {
+                                EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                            })?;
+                    }
+                    continue;
+                }
+                k if k == node::EMPHASIS => Some("italic"),
+                k if k == node::STRONG => Some("bold"),
+                k if k == node::UNDERLINE => Some("underline"),
+                k if k == node::SUPERSCRIPT => Some("superscript"),
+                k if k == node::SUBSCRIPT => Some("subscript"),
+                _ => None,
+            };
+            match face {
+                Some(face) => {
+                    let mut start = BytesStart::new("style");
+                    start.push_attribute(("face", face));
+                    self.writer.write_event(Event::Start(start)).map_err(|e| {
+                        EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                    })?;
+                    self.write_inline_children(&child.children)?;
+                    self.writer
+                        .write_event(Event::End(BytesEnd::new("style")))
+                        .map_err(|e| {
+                            EmitError::Io(std::io::Error::other(format!("XML error: {}", e)))
+                        })?;
+                }
+                None => self.write_inline_children(&child.children)?,
             }
         }
         Ok(())
@@ -414,6 +798,27 @@ impl EmitContext {
 
     fn finish(self) -> Vec<u8> {
         self.writer.into_inner().into_inner()
+    }
+}
+
+/// Concatenate a field's descendant `TEXT` node content (depth-first) —
+/// used only for recombining a `page_first`/`page_last` pair back into one
+/// `<pages>first-last</pages>` string, where page numbers are never
+/// expected to carry `<style>` markup.
+fn flatten_field_text(node: &Node) -> String {
+    let mut out = String::new();
+    flatten_field_text_into(node, &mut out);
+    out
+}
+
+fn flatten_field_text_into(node: &Node, out: &mut String) {
+    if node.kind.as_str() == node::TEXT
+        && let Some(content) = node.props.get_str(prop::CONTENT)
+    {
+        out.push_str(content);
+    }
+    for child in &node.children {
+        flatten_field_text_into(child, out);
     }
 }
 

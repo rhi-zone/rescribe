@@ -1,8 +1,9 @@
 {
-  "description": "EndNote Conference Paper type (47) maps to inproceedings",
+  "description": "EndNote Conference Paper type (47) becomes a bibliography_entry; foreign-keys/key has no field:role equivalent so it raw-preserves as a misc field with app/db-id properties",
   "assertions": [
-    { "path": "/0",   "kind": "definition_list" },
-    { "path": "/0/0", "kind": "endnote:entry" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "endnote:type": "47" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "endnote:type": "47" } },
+    { "path": "/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "misc", "endnote:field": "foreign-keys/key", "endnote:app": "EN", "endnote:db-id": "001" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "3" } }
   ]
 }
