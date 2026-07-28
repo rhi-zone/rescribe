@@ -1,5 +1,11 @@
 //! BBCode parser, AST, and emitter.
 //!
+//! This crate denies `unsafe` by default (production code must never use it); a prior version of `Event::into_owned`
+//! used a catch-all `unsafe { transmute }` arm to convert variants with no
+//! borrowed data; it is now an explicit, exhaustive match so a future
+//! `Cow`-bearing variant added without updating this function is a compile
+//! error rather than a silent soundness hazard. See `src/events.rs`.
+//!
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-bbcode` and `rescribe-write-bbcode` as thin adapter layers.
 //!
@@ -12,6 +18,8 @@
 //! - [`Span`], [`Diagnostic`], [`Severity`] — metadata types
 //! - [`BatchParser`], [`StreamingParser`], [`BatchSink`] — batch/streaming parsers
 //! - [`Writer`] — streaming event-driven writer
+
+#![deny(unsafe_code)]
 
 pub mod ast;
 pub mod batch;
@@ -84,10 +92,7 @@ mod tests {
     fn test_parse_heading() {
         let (doc, _) = parse("[h1]Title[/h1]");
         assert_eq!(doc.blocks.len(), 1);
-        assert!(matches!(
-            doc.blocks[0],
-            Block::Heading { level: 1, .. }
-        ));
+        assert!(matches!(doc.blocks[0], Block::Heading { level: 1, .. }));
     }
 
     #[test]
@@ -158,10 +163,7 @@ mod tests {
         let (doc, _) = parse("[img=100x50]https://example.com/img.png[/img]");
         assert!(!doc.blocks.is_empty());
         if let Block::Paragraph { inlines, .. } = &doc.blocks[0] {
-            if let Inline::Image {
-                width, height, ..
-            } = &inlines[0]
-            {
+            if let Inline::Image { width, height, .. } = &inlines[0] {
                 assert_eq!(*width, Some(100));
                 assert_eq!(*height, Some(50));
             } else {

@@ -125,10 +125,59 @@ impl<'a> Event<'a> {
                 content: Cow::Owned(content.into_owned()),
             },
             Event::Noparse(cow) => Event::Noparse(Cow::Owned(cow.into_owned())),
-            // All other variants contain only String/'static fields.
-            // Safety: the only non-'static field is Cow<'a, str> and we've
-            // handled every variant that contains one above.
-            other => unsafe { std::mem::transmute::<Event<'_>, OwnedEvent>(other) },
+            // All other variants contain only String/'static fields, so they
+            // convert without touching any borrowed data. Listed explicitly
+            // (rather than a catch-all `unsafe { transmute }`) so that adding
+            // a new `Cow<'a, str>`-bearing variant without updating this
+            // function is a compile error, not a silent soundness hazard.
+            Event::StartParagraph => Event::StartParagraph,
+            Event::EndParagraph => Event::EndParagraph,
+            Event::StartBlockquote { author } => Event::StartBlockquote { author },
+            Event::EndBlockquote => Event::EndBlockquote,
+            Event::StartList { ordered } => Event::StartList { ordered },
+            Event::EndList => Event::EndList,
+            Event::StartListItem => Event::StartListItem,
+            Event::EndListItem => Event::EndListItem,
+            Event::StartTable => Event::StartTable,
+            Event::EndTable => Event::EndTable,
+            Event::StartTableRow => Event::StartTableRow,
+            Event::EndTableRow => Event::EndTableRow,
+            Event::StartTableCell { is_header } => Event::StartTableCell { is_header },
+            Event::EndTableCell => Event::EndTableCell,
+            Event::HorizontalRule => Event::HorizontalRule,
+            Event::StartHeading { level } => Event::StartHeading { level },
+            Event::EndHeading => Event::EndHeading,
+            Event::StartAlignment { kind } => Event::StartAlignment { kind },
+            Event::EndAlignment => Event::EndAlignment,
+            Event::StartSpoiler => Event::StartSpoiler,
+            Event::EndSpoiler => Event::EndSpoiler,
+            Event::StartIndent => Event::StartIndent,
+            Event::EndIndent => Event::EndIndent,
+            Event::StartBold => Event::StartBold,
+            Event::EndBold => Event::EndBold,
+            Event::StartItalic => Event::StartItalic,
+            Event::EndItalic => Event::EndItalic,
+            Event::StartUnderline => Event::StartUnderline,
+            Event::EndUnderline => Event::EndUnderline,
+            Event::StartStrikethrough => Event::StartStrikethrough,
+            Event::EndStrikethrough => Event::EndStrikethrough,
+            Event::StartSubscript => Event::StartSubscript,
+            Event::EndSubscript => Event::EndSubscript,
+            Event::StartSuperscript => Event::StartSuperscript,
+            Event::EndSuperscript => Event::EndSuperscript,
+            Event::StartLink { url } => Event::StartLink { url },
+            Event::EndLink => Event::EndLink,
+            Event::InlineImage { url, width, height } => Event::InlineImage { url, width, height },
+            Event::StartColor { value } => Event::StartColor { value },
+            Event::EndColor => Event::EndColor,
+            Event::StartSize { value } => Event::StartSize { value },
+            Event::EndSize => Event::EndSize,
+            Event::StartFont { name } => Event::StartFont { name },
+            Event::EndFont => Event::EndFont,
+            Event::StartEmail { addr } => Event::StartEmail { addr },
+            Event::EndEmail => Event::EndEmail,
+            Event::StartSpan { attr, value } => Event::StartSpan { attr, value },
+            Event::EndSpan => Event::EndSpan,
         }
     }
 }
@@ -247,9 +296,7 @@ fn emit_block_events<'a>(block: &Block, out: &mut Vec<Event<'a>>) {
             }
             out.push(Event::EndHeading);
         }
-        Block::Alignment {
-            kind, children, ..
-        } => {
+        Block::Alignment { kind, children, .. } => {
             out.push(Event::StartAlignment { kind: *kind });
             for child in children {
                 emit_block_events(child, out);
@@ -315,19 +362,14 @@ fn emit_inline_events<'a>(inline: &Inline, out: &mut Vec<Event<'a>>) {
             out.push(Event::InlineCode(Cow::Owned(s.clone())));
         }
         Inline::Link { url, children, .. } => {
-            out.push(Event::StartLink {
-                url: url.clone(),
-            });
+            out.push(Event::StartLink { url: url.clone() });
             for child in children {
                 emit_inline_events(child, out);
             }
             out.push(Event::EndLink);
         }
         Inline::Image {
-            url,
-            width,
-            height,
-            ..
+            url, width, height, ..
         } => {
             out.push(Event::InlineImage {
                 url: url.clone(),
@@ -371,23 +413,15 @@ fn emit_inline_events<'a>(inline: &Inline, out: &mut Vec<Event<'a>>) {
             }
             out.push(Event::EndSize);
         }
-        Inline::Font {
-            name, children, ..
-        } => {
-            out.push(Event::StartFont {
-                name: name.clone(),
-            });
+        Inline::Font { name, children, .. } => {
+            out.push(Event::StartFont { name: name.clone() });
             for child in children {
                 emit_inline_events(child, out);
             }
             out.push(Event::EndFont);
         }
-        Inline::Email {
-            addr, children, ..
-        } => {
-            out.push(Event::StartEmail {
-                addr: addr.clone(),
-            });
+        Inline::Email { addr, children, .. } => {
+            out.push(Event::StartEmail { addr: addr.clone() });
             for child in children {
                 emit_inline_events(child, out);
             }
@@ -411,5 +445,92 @@ fn emit_inline_events<'a>(inline: &Inline, out: &mut Vec<Event<'a>>) {
             }
             out.push(Event::EndSpan);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression guard for the removed catch-all `unsafe { transmute }` in
+    /// `Event::into_owned`: the old code matched every `Cow`-bearing variant
+    /// explicitly and then transmuted everything else, which was only sound
+    /// because the catch-all happened to cover no borrowed data — a future
+    /// variant with a `Cow<'a, str>` field added without updating that catch
+    /// arm would have silently produced a dangling/incorrect owned event.
+    /// Now every variant is listed explicitly, so this is enforced by
+    /// exhaustiveness checking at compile time; this test just confirms
+    /// `into_owned()` still round-trips correctly across a document that
+    /// exercises every event family (borrowed-text leaves, block containers,
+    /// inline containers, and plain unit/struct variants with no lifetime).
+    #[test]
+    fn test_into_owned_round_trip_all_families() {
+        let input = "[b]bold[/b] [i]italic[/i]\n\
+                     [code]let x = 1;[/code]\n\
+                     [quote=Alice]\nquoted\n[/quote]\n\
+                     [list]\n[*]one\n[*]two\n[/list]\n\
+                     [hr]\n\
+                     [h1]Heading[/h1]\n\
+                     [center]\ncentered\n[/center]\n\
+                     [spoiler]\nhidden\n[/spoiler]\n\
+                     [color=red]red[/color] [size=12]sized[/size] \
+                     [font=Arial]fonted[/font] [email=a@b.com]mail[/email] \
+                     [noparse][b]raw[/b][/noparse] \
+                     [url=https://example.com]link[/url] \
+                     [img]https://example.com/x.png[/img]";
+
+        let borrowed: Vec<Event<'_>> = {
+            let (doc, _) = crate::parse::parse(input);
+            let mut evts = Vec::new();
+            for block in &doc.blocks {
+                emit_block_events(block, &mut evts);
+            }
+            evts
+        };
+        assert!(!borrowed.is_empty());
+
+        // Every variant must survive into_owned() without panicking (no
+        // `unreachable!`/transmute-induced corruption) and text content must
+        // be preserved byte-for-byte.
+        let owned: Vec<OwnedEvent> = borrowed.into_iter().map(Event::into_owned).collect();
+
+        assert!(
+            owned
+                .iter()
+                .any(|e| matches!(e, Event::Text(t) if t == "bold"))
+        );
+        assert!(owned.iter().any(
+            |e| matches!(e, Event::CodeBlock { content, .. } if content.contains("let x = 1;"))
+        ));
+        assert!(
+            owned
+                .iter()
+                .any(|e| matches!(e, Event::Noparse(t) if t.contains("[b]raw[/b]")))
+        );
+        assert!(owned.iter().any(|e| matches!(e, Event::StartBold)));
+        assert!(
+            owned
+                .iter()
+                .any(|e| matches!(e, Event::StartHeading { level: 1 }))
+        );
+        assert!(
+            owned
+                .iter()
+                .any(|e| matches!(e, Event::StartBlockquote { author: Some(a) } if a == "Alice"))
+        );
+        assert!(owned.iter().any(|e| matches!(e, Event::HorizontalRule)));
+
+        // `owned: Vec<OwnedEvent>` is `Vec<Event<'static>>` — this line only
+        // compiles if into_owned() truly produced 'static data, which is the
+        // property the removed transmute was (fragile-ly) relying on.
+        let _: Vec<Event<'static>> = owned;
+    }
+
+    #[test]
+    fn test_events_basic() {
+        let evs: Vec<_> = events("[b]hi[/b]").collect();
+        assert!(evs.iter().any(|e| matches!(e, Event::StartBold)));
+        assert!(evs.iter().any(|e| matches!(e, Event::Text(t) if t == "hi")));
+        assert!(evs.iter().any(|e| matches!(e, Event::EndBold)));
     }
 }
