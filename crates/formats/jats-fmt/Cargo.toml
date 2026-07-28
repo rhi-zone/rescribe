@@ -13,9 +13,22 @@ reader-streaming = []
 reader-batch = []
 writer-streaming = []
 writer-builder = ["reader-ast", "writer-streaming"]
+# Spec-derived construct registry. Opt-in: a consumer that only wants to parse
+# XML should not pay for the catalog.
+registry = ["dep:serde", "dep:serde_yaml"]
+# The registry derivation/verification tool. Needs the published JATS schema
+# fetched locally (`scripts/jats/download-spec.sh`); not part of a normal build.
+registry-derive = ["registry", "reader-ast", "dep:sha2"]
 
 [dependencies]
 quick-xml = { workspace = true }
 xml-entities = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_yaml = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+
+[[bin]]
+name = "derive-registry"
+required-features = ["registry-derive"]
 
 [dev-dependencies]

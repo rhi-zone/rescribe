@@ -1,0 +1,4078 @@
+# GENERATED — do not edit by hand.
+#
+# Derived from the JATS DTD Suite RELAX NG schema by `jats-fmt derive-registry v1`.
+# Regenerate:
+#   scripts/jats/download-spec.sh
+#   cargo run -p jats-fmt --features registry-derive --bin derive-registry -- \
+#       --schema-dir spec/jats-1.3-archiving-rng
+# Verify (fails on drift):  … --schema-dir <dir> --check
+#
+# The source schema is NOT vendored here; see the `provenance` block
+# for the canonical URLs and per-file checksums that make staleness
+# detectable without it.
+
+registry_version: 1
+format:
+  id: jats
+  name: JATS (Journal Article Tag Suite)
+  version: '1.3'
+  profile: archiving
+  profile_name: Archiving and Interchange Tag Set (green)
+provenance:
+  spec: ANSI/NISO Z39.96-2021 (JATS 1.3)
+  source_kind: relaxng
+  source_driver: JATS-archivearticle1-3.rng
+  source_base_url: https://jats.nlm.nih.gov/archiving/1.3/rng/
+  source_license: Public domain (per the JATS DTD Suite module headers). Verbatim redistribution permitted; the headers additionally state "Do not modify the suite directly or redistribute modified versions of the suite."
+  source_redistributable: true
+  source_vendored: false
+  derived_on: 2026-07-28
+  derived_by: jats-fmt derive-registry v1
+  source_digests:
+  - file: JATS-archivearticle1-3.rng
+    bytes: 45893
+    sha256: b8e30c2d0d86302dabc88e2f4b0c81ef252b1045fd8ad3db782da5f49279de72
+  - file: JATS-ali-namespace1-3.ent.rng
+    bytes: 12196
+    sha256: 67a54c8f3f47eb6a307810042be59c04de813a36df0a90461be7004028a1c9a9
+  - file: JATS-common-atts1-3.ent.rng
+    bytes: 15713
+    sha256: 0056d38185d389df59d5590743c460dc13d120185a58ae61ed2214e302bd92fd
+  - file: JATS-archivecustom-classes1-3.ent.rng
+    bytes: 18219
+    sha256: 6bfd2a06f1ec9b303725d5b6371707655fe9081d55e1ea9d85f67ad917fa9d54
+  - file: JATS-default-classes1-3.ent.rng
+    bytes: 64330
+    sha256: 3bfd509e009cbd4a2247e9b3fa9b8a1ce4728fd48bde6b7b83ee0ea8e9d7750f
+  - file: JATS-archivecustom-mixes1-3.ent.rng
+    bytes: 26358
+    sha256: c0563d718d1baa66f72bc9470456c27671a61954ac036a099e12d96c14f0f5c9
+  - file: JATS-default-mixes1-3.ent.rng
+    bytes: 24633
+    sha256: 9ed082d4bee6dfcbeaab4db14e75e2d11c88e6e49e23795548f8ef1a2f6bb7e3
+  - file: JATS-archivecustom-models1-3.ent.rng
+    bytes: 71040
+    sha256: c154e2e8d010d626cf08457228d6af550774bd48bf7906f6d7791e9e55c9d986
+  - file: JATS-common1-3.ent.rng
+    bytes: 195256
+    sha256: ef2a8ea31b047c93a515b0b77503b256657e9542a4e1a784a8c013c110a4a392
+  - file: JATS-articlemeta1-3.ent.rng
+    bytes: 108324
+    sha256: 35bdc693f63d1568e163d94426b576cd31da2827083c08a763fce828d6ed3111
+  - file: JATS-backmatter1-3.ent.rng
+    bytes: 23752
+    sha256: c982a03dede8c68d0bd65a1309998b7861e9820dc4d01b496049b6ed6fdbaca5
+  - file: JATS-display1-3.ent.rng
+    bytes: 58250
+    sha256: 435f2a89b44ea46ff1f14ea7374c5120c7edb6ae11a03e31a2491f14b7774995
+  - file: JATS-format1-3.ent.rng
+    bytes: 44411
+    sha256: 331d4148e682d490609a413eec6536f28f0bc022ca036a5551690998898a7c11
+  - file: JATS-funding1-3.ent.rng
+    bytes: 49465
+    sha256: 1d4ccde94ace9cf6038d5a42576e739b019cb7ecdb68b4e2c716d52755270000
+  - file: JATS-journalmeta1-3.ent.rng
+    bytes: 26714
+    sha256: 9e94dc6b06ead079adc2d811b90200da19c30ee945f7c67061a2c828c44b6d27
+  - file: JATS-link1-3.ent.rng
+    bytes: 26254
+    sha256: 29c913f3f9b21e1ac3163f4c81432bd614ecfb79aa49f2505a0bc5c2d49673dd
+  - file: JATS-list1-3.ent.rng
+    bytes: 28606
+    sha256: a1a11bbc9a0c7381bd5521c1ea97315ee9eed8abd8003bf689eb5f2fb20c736e
+  - file: JATS-math1-3.ent.rng
+    bytes: 24239
+    sha256: dd9abc2b7503526b2cc399c86e93f8b71ce88dcdf0d772490073241acc390118
+  - file: JATS-nlmcitation1-3.ent.rng
+    bytes: 20251
+    sha256: 08cd3080dff0f87ac5dffd9acb0ded6537e140847d006fd08812a07db53e2a8a
+  - file: JATS-para1-3.ent.rng
+    bytes: 28871
+    sha256: 7ff112cfb2106af4c944eebe6db8b05d814a60ccbf248a18da588fad3a429f7e
+  - file: JATS-phrase1-3.ent.rng
+    bytes: 28147
+    sha256: d017d86b02796479295cb73f4fd608a4bd614b59dfbb6b3507c9efacecb55f57
+  - file: JATS-references1-3.ent.rng
+    bytes: 61110
+    sha256: 6ca7ffcc6779d7bf839d65e54e52d734b89d1f2b143d1ac3060a81d4d07edcfe
+  - file: JATS-related-object1-3.ent.rng
+    bytes: 18921
+    sha256: 9c69b8c43fd1cf16cdf49943e03fe76e78747a9d5eea31609c085dee552940aa
+  - file: JATS-section1-3.ent.rng
+    bytes: 20484
+    sha256: 34fa11cf833905fe35ddf0e28ae1fb4da9a4d87ab6e846b368be65aec43c1d5c
+  - file: BITS-embedded-index2.ent.rng
+    bytes: 12281
+    sha256: 690b14cd6317efcb4c8f24ad4433172527d353c93b042caeb976ef0d3a94a67f
+  - file: BITS-question-answer2.ent.rng
+    bytes: 24900
+    sha256: a8bedc391b2db77d30d6ebb724e2c607da36b4c379bde97d5b4ae23a1ee24b5a
+  - file: JATS-mathmlsetup1-3.ent.rng
+    bytes: 19547
+    sha256: a060c47fd255510585eaf0bb81c3105236a8a581e30fd2e02c7c296576b0f354
+  - file: JATS-XHTMLtablesetup1-3.ent.rng
+    bytes: 26209
+    sha256: 9733aa6ee690cc1e733bccb38aa8b622fbae607775fc5716d9a3528acf7d91b1
+  - file: JATS-chars1-3.ent.rng
+    bytes: 28886
+    sha256: 15754fc50712f79a0cbb5dc00fdad9af5ada696a9b3d1989f5069f7a97e18fa3
+  - file: mathml2.rng
+    bytes: 93112
+    sha256: e0501bfbef3380e1c1f3f4d86d5a55e7491e5a2933992cd2fe918afe2528ca72
+  - file: xhtml-inlstyle-1.mod.rng
+    bytes: 1271
+    sha256: 9be98273e4ad63392ec5414ee123cf193227b6c6fd09f70d1c9b3e9b6007d3dc
+  - file: xhtml-table-1.mod.rng
+    bytes: 12019
+    sha256: 93da56a9a01e4a952dc1a0afa3cafc7d8b331355b16f742d50114668753bef64
+  - file: mathml2-qname-1.mod.rng
+    bytes: 2202
+    sha256: 58395cd2f9d1588ee4253b1e8d04b10caceca5f3fbc087e5b94f53c3bd9e82e2
+citation:
+  element_url_template: https://jats.nlm.nih.gov/archiving/tag-library/1.3/element/{name}.html
+  attribute_url_template: https://jats.nlm.nih.gov/archiving/tag-library/1.3/attribute/{name}.html
+slices:
+- id: JATS-archivearticle1-3.rng
+  name: Journal Archiving and Interchange DTD (MathML 2.0)
+  source_file: JATS-archivearticle1-3.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-archivearticle1-3.rng
+- id: JATS-ali-namespace1-3.ent
+  name: ALI Namespace Module (NISO RP-22-2015) NISO Access License and Indicators (ALI)
+  source_file: JATS-ali-namespace1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-ali-namespace1-3.ent.rng
+- id: JATS-common-atts1-3.ent
+  name: Common Attributes (for all elements)
+  source_file: JATS-common-atts1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-common-atts1-3.ent.rng
+- id: JATS-archivecustom-classes1-3.ent
+  name: Journal Archiving DTD Customize Classes Module
+  source_file: JATS-archivecustom-classes1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-archivecustom-classes1-3.ent.rng
+- id: JATS-default-classes1-3.ent
+  name: Default Element Classes Module
+  source_file: JATS-default-classes1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-default-classes1-3.ent.rng
+- id: JATS-archivecustom-mixes1-3.ent
+  name: Journal Archiving DTD Customize Mixes Module
+  source_file: JATS-archivecustom-mixes1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-archivecustom-mixes1-3.ent.rng
+- id: JATS-default-mixes1-3.ent
+  name: Default Element Mixes Module
+  source_file: JATS-default-mixes1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-default-mixes1-3.ent.rng
+- id: JATS-archivecustom-models1-3.ent
+  name: Journal Archiving DTD Customize Content and Attributes Module
+  source_file: JATS-archivecustom-models1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-archivecustom-models1-3.ent.rng
+- id: JATS-common1-3.ent
+  name: Common (Shared) Elements Module
+  source_file: JATS-common1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-common1-3.ent.rng
+- id: JATS-articlemeta1-3.ent
+  name: Journal Article Metadata Elements
+  source_file: JATS-articlemeta1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-articlemeta1-3.ent.rng
+- id: JATS-backmatter1-3.ent
+  name: Back Matter Elements
+  source_file: JATS-backmatter1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-backmatter1-3.ent.rng
+- id: JATS-display1-3.ent
+  name: Display Class Elements
+  source_file: JATS-display1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-display1-3.ent.rng
+- id: JATS-format1-3.ent
+  name: Formatting Element Classes
+  source_file: JATS-format1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-format1-3.ent.rng
+- id: JATS-funding1-3.ent
+  name: Funding Elements
+  source_file: JATS-funding1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-funding1-3.ent.rng
+- id: JATS-journalmeta1-3.ent
+  name: Journal Metadata Elements
+  source_file: JATS-journalmeta1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-journalmeta1-3.ent.rng
+- id: JATS-link1-3.ent
+  name: Link Element Classes
+  source_file: JATS-link1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-link1-3.ent.rng
+- id: JATS-list1-3.ent
+  name: List Element Classes
+  source_file: JATS-list1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-list1-3.ent.rng
+- id: JATS-math1-3.ent
+  name: Math Class Elements
+  source_file: JATS-math1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-math1-3.ent.rng
+- id: JATS-nlmcitation1-3.ent
+  name: NLM Citation
+  source_file: JATS-nlmcitation1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-nlmcitation1-3.ent.rng
+- id: JATS-para1-3.ent
+  name: Paragraph-Like Elements
+  source_file: JATS-para1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-para1-3.ent.rng
+- id: JATS-phrase1-3.ent
+  name: Subject Phrase Class Elements
+  source_file: JATS-phrase1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-phrase1-3.ent.rng
+- id: JATS-references1-3.ent
+  name: Bibliographic Reference (Citation) Class Elements
+  source_file: JATS-references1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-references1-3.ent.rng
+- id: JATS-related-object1-3.ent
+  name: Related Object Element
+  source_file: JATS-related-object1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-related-object1-3.ent.rng
+- id: JATS-section1-3.ent
+  name: Section Class Elements
+  source_file: JATS-section1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-section1-3.ent.rng
+- id: BITS-embedded-index2.ent
+  name: BITS Embedded Index Element Module
+  source_file: BITS-embedded-index2.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/BITS-embedded-index2.ent.rng
+- id: BITS-question-answer2.ent
+  name: BITS Question and Answer Module
+  source_file: BITS-question-answer2.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/BITS-question-answer2.ent.rng
+- id: JATS-mathmlsetup1-3.ent
+  name: MathML DTD SETUP MODULE
+  source_file: JATS-mathmlsetup1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-mathmlsetup1-3.ent.rng
+- id: JATS-XHTMLtablesetup1-3.ent
+  name: XHTML Table Setup Module
+  source_file: JATS-XHTMLtablesetup1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-XHTMLtablesetup1-3.ent.rng
+- id: JATS-chars1-3.ent
+  name: Custom Special Characters Module
+  source_file: JATS-chars1-3.ent.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/JATS-chars1-3.ent.rng
+- id: mathml2
+  name: mathml2
+  source_file: mathml2.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/mathml2.rng
+- id: xhtml-inlstyle-1.mod
+  name: xhtml-inlstyle-1.mod
+  source_file: xhtml-inlstyle-1.mod.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/xhtml-inlstyle-1.mod.rng
+- id: xhtml-table-1.mod
+  name: xhtml-table-1.mod
+  source_file: xhtml-table-1.mod.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/xhtml-table-1.mod.rng
+- id: mathml2-qname-1.mod
+  name: mathml2-qname-1.mod
+  source_file: mathml2-qname-1.mod.rng
+  url: https://jats.nlm.nih.gov/archiving/1.3/rng/mathml2-qname-1.mod.rng
+constructs:
+- id: attribute:abbr
+  name: abbr
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:abbrev-type
+  name: abbrev-type
+  kind: attribute
+  slices:
+  - JATS-journalmeta1-3.ent
+- id: attribute:abstract-type
+  name: abstract-type
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:accent
+  name: accent
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:accentunder
+  name: accentunder
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:actiontype
+  name: actiontype
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:align
+  name: align
+  kind: attribute
+  slices:
+  - mathml2
+  - xhtml-table-1.mod
+- id: attribute:alignmentscope
+  name: alignmentscope
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:alt
+  name: alt
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-phrase1-3.ent
+  - mathml2
+- id: attribute:alt-title-type
+  name: alt-title-type
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:altimg
+  name: altimg
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:alttext
+  name: alttext
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:arrange
+  name: arrange
+  kind: attribute
+  slices:
+  - JATS-format1-3.ent
+- id: attribute:article-type
+  name: article-type
+  kind: attribute
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: attribute:article-version-type
+  name: article-version-type
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:assigning-authority
+  name: assigning-authority
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-funding1-3.ent
+- id: attribute:audience
+  name: audience
+  kind: attribute
+  slices:
+  - BITS-question-answer2.ent
+- id: attribute:authenticated
+  name: authenticated
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:award-id-type
+  name: award-id-type
+  kind: attribute
+  slices:
+  - JATS-funding1-3.ent
+- id: attribute:award-type
+  name: award-type
+  kind: attribute
+  slices:
+  - JATS-funding1-3.ent
+- id: attribute:axis
+  name: axis
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:background
+  name: background
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:base
+  name: base
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:base-tagset
+  name: base-tagset
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:baseline
+  name: baseline
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:baseline-shift
+  name: baseline-shift
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:bevelled
+  name: bevelled
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:border
+  name: border
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:calendar
+  name: calendar
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-references1-3.ent
+- id: attribute:cellpadding
+  name: cellpadding
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:cellspacing
+  name: cellspacing
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:char
+  name: char
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:charoff
+  name: charoff
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:class
+  name: class
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:close
+  name: close
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:closure
+  name: closure
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:code-type
+  name: code-type
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:code-version
+  name: code-version
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:collab-type
+  name: collab-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:color
+  name: color
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:colspan
+  name: colspan
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:columnalign
+  name: columnalign
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:columnlines
+  name: columnlines
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:columnspacing
+  name: columnspacing
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:columnspan
+  name: columnspan
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:columnwidth
+  name: columnwidth
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:content-type
+  name: content-type
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-backmatter1-3.ent
+  - JATS-display1-3.ent
+  - JATS-format1-3.ent
+  - JATS-funding1-3.ent
+  - JATS-journalmeta1-3.ent
+  - JATS-link1-3.ent
+  - JATS-math1-3.ent
+  - JATS-para1-3.ent
+  - JATS-phrase1-3.ent
+  - JATS-references1-3.ent
+  - JATS-related-object1-3.ent
+  - BITS-embedded-index2.ent
+  - BITS-question-answer2.ent
+  - JATS-XHTMLtablesetup1-3.ent
+- id: attribute:continued-from
+  name: continued-from
+  kind: attribute
+  slices:
+  - JATS-list1-3.ent
+- id: attribute:contrib-id-type
+  name: contrib-id-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:contrib-type
+  name: contrib-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:correct
+  name: correct
+  kind: attribute
+  slices:
+  - BITS-question-answer2.ent
+- id: attribute:corresp
+  name: corresp
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:count
+  name: count
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:count-type
+  name: count-type
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:country
+  name: country
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+  - JATS-funding1-3.ent
+  - JATS-references1-3.ent
+- id: attribute:currency
+  name: currency
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:custom-type
+  name: custom-type
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-link1-3.ent
+  - JATS-references1-3.ent
+- id: attribute:date-type
+  name: date-type
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-articlemeta1-3.ent
+- id: attribute:deceased
+  name: deceased
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:definitionURL
+  name: definitionURL
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:degree-contribution
+  name: degree-contribution
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:denomalign
+  name: denomalign
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:depth
+  name: depth
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:description
+  name: description
+  kind: attribute
+  slices:
+  - JATS-chars1-3.ent
+- id: attribute:designator
+  name: designator
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+  - JATS-references1-3.ent
+- id: attribute:disp-level
+  name: disp-level
+  kind: attribute
+  slices:
+  - JATS-section1-3.ent
+- id: attribute:display
+  name: display
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:displaystyle
+  name: displaystyle
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:document-id
+  name: document-id
+  kind: attribute
+  slices:
+  - JATS-related-object1-3.ent
+- id: attribute:document-id-type
+  name: document-id-type
+  kind: attribute
+  slices:
+  - JATS-related-object1-3.ent
+- id: attribute:document-type
+  name: document-type
+  kind: attribute
+  slices:
+  - JATS-related-object1-3.ent
+- id: attribute:dtd-version
+  name: dtd-version
+  kind: attribute
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: attribute:edge
+  name: edge
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:elocation-id
+  name: elocation-id
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:encoding
+  name: encoding
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:end_date
+  name: end_date
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:equal-contrib
+  name: equal-contrib
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:equalcolumns
+  name: equalcolumns
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:equalrows
+  name: equalrows
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:event-type
+  name: event-type
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:executable
+  name: executable
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:ext-link-type
+  name: ext-link-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+  - JATS-related-object1-3.ent
+- id: attribute:fence
+  name: fence
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:fig-type
+  name: fig-type
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:fn-type
+  name: fn-type
+  kind: attribute
+  slices:
+  - JATS-link1-3.ent
+- id: attribute:fontchar
+  name: fontchar
+  kind: attribute
+  slices:
+  - JATS-chars1-3.ent
+- id: attribute:fontfamily
+  name: fontfamily
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:fontname
+  name: fontname
+  kind: attribute
+  slices:
+  - JATS-chars1-3.ent
+- id: attribute:fontsize
+  name: fontsize
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:fontstyle
+  name: fontstyle
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:fontweight
+  name: fontweight
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:form
+  name: form
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:format
+  name: format
+  kind: attribute
+  slices:
+  - JATS-chars1-3.ent
+- id: attribute:frame
+  name: frame
+  kind: attribute
+  slices:
+  - mathml2
+  - xhtml-table-1.mod
+- id: attribute:framespacing
+  name: framespacing
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:glyph-data
+  name: glyph-data
+  kind: attribute
+  slices:
+  - JATS-chars1-3.ent
+- id: attribute:groupalign
+  name: groupalign
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:headers
+  name: headers
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:height
+  name: height
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:hreflang
+  name: hreflang
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+- id: attribute:id
+  name: id
+  kind: attribute
+  slices:
+  - JATS-common-atts1-3.ent
+  - mathml2
+- id: attribute:indent-level
+  name: indent-level
+  kind: attribute
+  slices:
+  - JATS-para1-3.ent
+- id: attribute:index
+  name: index
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:index-type
+  name: index-type
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+- id: attribute:initials
+  name: initials
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:institution-id-type
+  name: institution-id-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:iso-8601-date
+  name: iso-8601-date
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-references1-3.ent
+- id: attribute:issue
+  name: issue
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:journal-id
+  name: journal-id
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:journal-id-type
+  name: journal-id-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:kwd-group-type
+  name: kwd-group-type
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:language
+  name: language
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:language-version
+  name: language-version
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:largeop
+  name: largeop
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:license-type
+  name: license-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:linebreak
+  name: linebreak
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:linethickness
+  name: linethickness
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:link-type
+  name: link-type
+  kind: attribute
+  slices:
+  - JATS-related-object1-3.ent
+- id: attribute:list-content
+  name: list-content
+  kind: attribute
+  slices:
+  - JATS-list1-3.ent
+- id: attribute:list-type
+  name: list-type
+  kind: attribute
+  slices:
+  - JATS-list1-3.ent
+- id: attribute:lquote
+  name: lquote
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:lspace
+  name: lspace
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:macros
+  name: macros
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:math-representation
+  name: math-representation
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:mathbackground
+  name: mathbackground
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:mathcolor
+  name: mathcolor
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:mathml-version
+  name: mathml-version
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:mathsize
+  name: mathsize
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:mathvariant
+  name: mathvariant
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:maxsize
+  name: maxsize
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:mediummathspace
+  name: mediummathspace
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:mime-subtype
+  name: mime-subtype
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+  - JATS-link1-3.ent
+- id: attribute:mimetype
+  name: mimetype
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+  - JATS-link1-3.ent
+- id: attribute:minlabelspacing
+  name: minlabelspacing
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:minsize
+  name: minsize
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:mode
+  name: mode
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:movablelimits
+  name: movablelimits
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:name
+  name: name
+  kind: attribute
+  slices:
+  - JATS-chars1-3.ent
+  - mathml2
+- id: attribute:name-style
+  name: name-style
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:nargs
+  name: nargs
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:notation
+  name: notation
+  kind: attribute
+  slices:
+  - JATS-math1-3.ent
+  - mathml2
+- id: attribute:notes-type
+  name: notes-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:numalign
+  name: numalign
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:object-id
+  name: object-id
+  kind: attribute
+  slices:
+  - JATS-related-object1-3.ent
+- id: attribute:object-id-type
+  name: object-id-type
+  kind: attribute
+  slices:
+  - JATS-related-object1-3.ent
+- id: attribute:object-type
+  name: object-type
+  kind: attribute
+  slices:
+  - JATS-related-object1-3.ent
+- id: attribute:occurrence
+  name: occurrence
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:open
+  name: open
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:order
+  name: order
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:orientation
+  name: orientation
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:other
+  name: other
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:overflow
+  name: overflow
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:page
+  name: page
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:person-group-type
+  name: person-group-type
+  kind: attribute
+  slices:
+  - JATS-references1-3.ent
+- id: attribute:platforms
+  name: platforms
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:pointer-to-explained
+  name: pointer-to-explained
+  kind: attribute
+  slices:
+  - BITS-question-answer2.ent
+- id: attribute:pointer-to-question
+  name: pointer-to-question
+  kind: attribute
+  slices:
+  - BITS-question-answer2.ent
+- id: attribute:position
+  name: position
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:prefix-word
+  name: prefix-word
+  kind: attribute
+  slices:
+  - JATS-list1-3.ent
+- id: attribute:preformat-type
+  name: preformat-type
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+- id: attribute:product-type
+  name: product-type
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:pub-id-type
+  name: pub-id-type
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+- id: attribute:pub-type
+  name: pub-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+- id: attribute:publication-format
+  name: publication-format
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-nlmcitation1-3.ent
+- id: attribute:publication-type
+  name: publication-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+  - JATS-nlmcitation1-3.ent
+- id: attribute:publisher-type
+  name: publisher-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+  - JATS-nlmcitation1-3.ent
+- id: attribute:question-response-type
+  name: question-response-type
+  kind: attribute
+  slices:
+  - BITS-question-answer2.ent
+- id: attribute:rationale
+  name: rationale
+  kind: attribute
+  slices:
+  - JATS-phrase1-3.ent
+- id: attribute:ref-type
+  name: ref-type
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+- id: attribute:related-article-type
+  name: related-article-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:resolution
+  name: resolution
+  kind: attribute
+  slices:
+  - JATS-chars1-3.ent
+- id: attribute:resource-id-type
+  name: resource-id-type
+  kind: attribute
+  slices:
+  - JATS-funding1-3.ent
+- id: attribute:resource-type
+  name: resource-type
+  kind: attribute
+  slices:
+  - JATS-funding1-3.ent
+- id: attribute:response-type
+  name: response-type
+  kind: attribute
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: attribute:rid
+  name: rid
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-format1-3.ent
+  - JATS-funding1-3.ent
+  - JATS-list1-3.ent
+  - JATS-phrase1-3.ent
+  - BITS-embedded-index2.ent
+- id: attribute:rowalign
+  name: rowalign
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:rowlines
+  name: rowlines
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:rowspacing
+  name: rowspacing
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:rowspan
+  name: rowspan
+  kind: attribute
+  slices:
+  - mathml2
+  - xhtml-table-1.mod
+- id: attribute:rquote
+  name: rquote
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:rspace
+  name: rspace
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:rules
+  name: rules
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:scope
+  name: scope
+  kind: attribute
+  slices:
+  - mathml2
+  - xhtml-table-1.mod
+- id: attribute:scriptlevel
+  name: scriptlevel
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:scriptminsize
+  name: scriptminsize
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:scriptsizemultiplier
+  name: scriptsizemultiplier
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:sec-type
+  name: sec-type
+  kind: attribute
+  slices:
+  - JATS-section1-3.ent
+- id: attribute:selection
+  name: selection
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:separator
+  name: separator
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:separators
+  name: separators
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:seq
+  name: seq
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:side
+  name: side
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:source-id
+  name: source-id
+  kind: attribute
+  slices:
+  - JATS-related-object1-3.ent
+- id: attribute:source-id-type
+  name: source-id-type
+  kind: attribute
+  slices:
+  - JATS-related-object1-3.ent
+- id: attribute:source-type
+  name: source-type
+  kind: attribute
+  slices:
+  - JATS-funding1-3.ent
+  - JATS-related-object1-3.ent
+- id: attribute:span
+  name: span
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:specific-use
+  name: specific-use
+  kind: attribute
+  slices:
+  - JATS-archivearticle1-3.rng
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-backmatter1-3.ent
+  - JATS-display1-3.ent
+  - JATS-format1-3.ent
+  - JATS-funding1-3.ent
+  - JATS-journalmeta1-3.ent
+  - JATS-link1-3.ent
+  - JATS-list1-3.ent
+  - JATS-math1-3.ent
+  - JATS-nlmcitation1-3.ent
+  - JATS-para1-3.ent
+  - JATS-phrase1-3.ent
+  - JATS-references1-3.ent
+  - JATS-related-object1-3.ent
+  - JATS-section1-3.ent
+  - BITS-embedded-index2.ent
+  - BITS-question-answer2.ent
+  - JATS-XHTMLtablesetup1-3.ent
+  - JATS-chars1-3.ent
+- id: attribute:start_date
+  name: start_date
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:stretchy
+  name: stretchy
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:style
+  name: style
+  kind: attribute
+  slices:
+  - JATS-display1-3.ent
+  - JATS-para1-3.ent
+  - JATS-phrase1-3.ent
+  - mathml2
+  - xhtml-inlstyle-1.mod
+- id: attribute:style-detail
+  name: style-detail
+  kind: attribute
+  slices:
+  - JATS-para1-3.ent
+  - JATS-phrase1-3.ent
+- id: attribute:style-type
+  name: style-type
+  kind: attribute
+  slices:
+  - JATS-para1-3.ent
+  - JATS-phrase1-3.ent
+- id: attribute:subj-group-type
+  name: subj-group-type
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:subscriptshift
+  name: subscriptshift
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:summary
+  name: summary
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:superscriptshift
+  name: superscriptshift
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:supplement-type
+  name: supplement-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:support-type
+  name: support-type
+  kind: attribute
+  slices:
+  - JATS-funding1-3.ent
+- id: attribute:symbol
+  name: symbol
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+  - JATS-link1-3.ent
+- id: attribute:symmetric
+  name: symmetric
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:table-model
+  name: table-model
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:tagset-family
+  name: tagset-family
+  kind: attribute
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: attribute:target-type
+  name: target-type
+  kind: attribute
+  slices:
+  - JATS-link1-3.ent
+- id: attribute:term-status
+  name: term-status
+  kind: attribute
+  slices:
+  - JATS-list1-3.ent
+- id: attribute:term-type
+  name: term-type
+  kind: attribute
+  slices:
+  - JATS-list1-3.ent
+- id: attribute:thickmathspace
+  name: thickmathspace
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:thinmathspace
+  name: thinmathspace
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:toggle
+  name: toggle
+  kind: attribute
+  slices:
+  - JATS-format1-3.ent
+  - JATS-phrase1-3.ent
+- id: attribute:type
+  name: type
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:underline-style
+  name: underline-style
+  kind: attribute
+  slices:
+  - JATS-format1-3.ent
+- id: attribute:units
+  name: units
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:use-type
+  name: use-type
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:valign
+  name: valign
+  kind: attribute
+  slices:
+  - xhtml-table-1.mod
+- id: attribute:version
+  name: version
+  kind: attribute
+  slices:
+  - JATS-math1-3.ent
+- id: attribute:verythickmathspace
+  name: verythickmathspace
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:verythinmathspace
+  name: verythinmathspace
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:veryverythickmathspace
+  name: veryverythickmathspace
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:veryverythinmathspace
+  name: veryverythinmathspace
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:vocab
+  name: vocab
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-display1-3.ent
+  - JATS-funding1-3.ent
+  - JATS-list1-3.ent
+  - JATS-phrase1-3.ent
+- id: attribute:vocab-identifier
+  name: vocab-identifier
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-display1-3.ent
+  - JATS-funding1-3.ent
+  - JATS-list1-3.ent
+  - JATS-phrase1-3.ent
+- id: attribute:vocab-term
+  name: vocab-term
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-display1-3.ent
+  - JATS-list1-3.ent
+  - JATS-phrase1-3.ent
+- id: attribute:vocab-term-identifier
+  name: vocab-term-identifier
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-display1-3.ent
+  - JATS-list1-3.ent
+  - JATS-phrase1-3.ent
+- id: attribute:vol
+  name: vol
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+- id: attribute:width
+  name: width
+  kind: attribute
+  slices:
+  - mathml2
+  - xhtml-table-1.mod
+- id: attribute:x-size
+  name: x-size
+  kind: attribute
+  slices:
+  - JATS-chars1-3.ent
+- id: attribute:xlink:actuate
+  name: xlink:actuate
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+- id: attribute:xlink:href
+  name: xlink:href
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - mathml2
+- id: attribute:xlink:role
+  name: xlink:role
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+- id: attribute:xlink:show
+  name: xlink:show
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+- id: attribute:xlink:title
+  name: xlink:title
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+- id: attribute:xlink:type
+  name: xlink:type
+  kind: attribute
+  slices:
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - mathml2
+- id: attribute:xml:base
+  name: xml:base
+  kind: attribute
+  slices:
+  - JATS-common-atts1-3.ent
+- id: attribute:xml:lang
+  name: xml:lang
+  kind: attribute
+  slices:
+  - JATS-archivearticle1-3.rng
+  - JATS-archivecustom-models1-3.ent
+  - JATS-common1-3.ent
+  - JATS-articlemeta1-3.ent
+  - JATS-backmatter1-3.ent
+  - JATS-display1-3.ent
+  - JATS-format1-3.ent
+  - JATS-funding1-3.ent
+  - JATS-journalmeta1-3.ent
+  - JATS-link1-3.ent
+  - JATS-list1-3.ent
+  - JATS-math1-3.ent
+  - JATS-nlmcitation1-3.ent
+  - JATS-para1-3.ent
+  - JATS-phrase1-3.ent
+  - JATS-references1-3.ent
+  - JATS-related-object1-3.ent
+  - JATS-section1-3.ent
+  - BITS-embedded-index2.ent
+  - BITS-question-answer2.ent
+- id: attribute:xml:space
+  name: xml:space
+  kind: attribute
+  slices:
+  - JATS-common1-3.ent
+  - JATS-display1-3.ent
+  - JATS-chars1-3.ent
+- id: attribute:xref
+  name: xref
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:xsi:noNamespaceSchemaLocation
+  name: xsi:noNamespaceSchemaLocation
+  kind: attribute
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: attribute:xsi:schemaLocation
+  name: xsi:schemaLocation
+  kind: attribute
+  slices:
+  - mathml2
+- id: attribute:y-size
+  name: y-size
+  kind: attribute
+  slices:
+  - JATS-chars1-3.ent
+- id: element:abbrev
+  name: abbrev
+  kind: element
+  slices:
+  - JATS-phrase1-3.ent
+- id: element:abbrev-journal-title
+  name: abbrev-journal-title
+  kind: element
+  slices:
+  - JATS-journalmeta1-3.ent
+- id: element:abstract
+  name: abstract
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:access-date
+  name: access-date
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:ack
+  name: ack
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:addr-line
+  name: addr-line
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:address
+  name: address
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:aff
+  name: aff
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:aff-alternatives
+  name: aff-alternatives
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:ali:free_to_read
+  name: ali:free_to_read
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:ali:license_ref
+  name: ali:license_ref
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:alt-text
+  name: alt-text
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:alt-title
+  name: alt-title
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:alternatives
+  name: alternatives
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:annotation
+  name: annotation
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:anonymous
+  name: anonymous
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:answer
+  name: answer
+  kind: element
+  slices:
+  - BITS-question-answer2.ent
+- id: element:answer-set
+  name: answer-set
+  kind: element
+  slices:
+  - BITS-question-answer2.ent
+- id: element:app
+  name: app
+  kind: element
+  slices:
+  - JATS-backmatter1-3.ent
+- id: element:app-group
+  name: app-group
+  kind: element
+  slices:
+  - JATS-backmatter1-3.ent
+- id: element:array
+  name: array
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:article
+  name: article
+  kind: element
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: element:article-categories
+  name: article-categories
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:article-id
+  name: article-id
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:article-meta
+  name: article-meta
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:article-title
+  name: article-title
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:article-version
+  name: article-version
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:article-version-alternatives
+  name: article-version-alternatives
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:attrib
+  name: attrib
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:author-comment
+  name: author-comment
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:author-notes
+  name: author-notes
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:award-desc
+  name: award-desc
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:award-group
+  name: award-group
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:award-id
+  name: award-id
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:award-name
+  name: award-name
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:back
+  name: back
+  kind: element
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: element:bio
+  name: bio
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:block-alternatives
+  name: block-alternatives
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:body
+  name: body
+  kind: element
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: element:bold
+  name: bold
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:boxed-text
+  name: boxed-text
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:break
+  name: break
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:caption
+  name: caption
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:chapter-title
+  name: chapter-title
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:chem-struct
+  name: chem-struct
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:chem-struct-wrap
+  name: chem-struct-wrap
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:citation-alternatives
+  name: citation-alternatives
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:city
+  name: city
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:code
+  name: code
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:col
+  name: col
+  kind: element
+  slices:
+  - xhtml-table-1.mod
+- id: element:colgroup
+  name: colgroup
+  kind: element
+  slices:
+  - xhtml-table-1.mod
+- id: element:collab
+  name: collab
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:collab-alternatives
+  name: collab-alternatives
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:comment
+  name: comment
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:compound-kwd
+  name: compound-kwd
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:compound-kwd-part
+  name: compound-kwd-part
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:compound-subject
+  name: compound-subject
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:compound-subject-part
+  name: compound-subject-part
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:conf-acronym
+  name: conf-acronym
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:conf-date
+  name: conf-date
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:conf-loc
+  name: conf-loc
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:conf-name
+  name: conf-name
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:conf-num
+  name: conf-num
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:conf-sponsor
+  name: conf-sponsor
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:conf-theme
+  name: conf-theme
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:conference
+  name: conference
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:contrib
+  name: contrib
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:contrib-group
+  name: contrib-group
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:contrib-id
+  name: contrib-id
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:contributed-resource-group
+  name: contributed-resource-group
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:copyright-holder
+  name: copyright-holder
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:copyright-statement
+  name: copyright-statement
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:copyright-year
+  name: copyright-year
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:corresp
+  name: corresp
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:count
+  name: count
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:country
+  name: country
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:counts
+  name: counts
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:custom-meta
+  name: custom-meta
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:custom-meta-group
+  name: custom-meta-group
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:data-title
+  name: data-title
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:date
+  name: date
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:date-in-citation
+  name: date-in-citation
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:day
+  name: day
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:def
+  name: def
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:def-head
+  name: def-head
+  kind: element
+  slices:
+  - JATS-list1-3.ent
+- id: element:def-item
+  name: def-item
+  kind: element
+  slices:
+  - JATS-list1-3.ent
+- id: element:def-list
+  name: def-list
+  kind: element
+  slices:
+  - JATS-list1-3.ent
+- id: element:degrees
+  name: degrees
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:disp-formula
+  name: disp-formula
+  kind: element
+  slices:
+  - JATS-math1-3.ent
+- id: element:disp-formula-group
+  name: disp-formula-group
+  kind: element
+  slices:
+  - JATS-math1-3.ent
+- id: element:disp-quote
+  name: disp-quote
+  kind: element
+  slices:
+  - JATS-para1-3.ent
+- id: element:edition
+  name: edition
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:element-citation
+  name: element-citation
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:elocation-id
+  name: elocation-id
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:email
+  name: email
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:equation-count
+  name: equation-count
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:era
+  name: era
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:etal
+  name: etal
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:event
+  name: event
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:event-desc
+  name: event-desc
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:explanation
+  name: explanation
+  kind: element
+  slices:
+  - BITS-question-answer2.ent
+- id: element:ext-link
+  name: ext-link
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:extended-by
+  name: extended-by
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:fax
+  name: fax
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:fig
+  name: fig
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:fig-count
+  name: fig-count
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:fig-group
+  name: fig-group
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:fixed-case
+  name: fixed-case
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:floats-group
+  name: floats-group
+  kind: element
+  slices:
+  - JATS-section1-3.ent
+- id: element:fn
+  name: fn
+  kind: element
+  slices:
+  - JATS-link1-3.ent
+- id: element:fn-group
+  name: fn-group
+  kind: element
+  slices:
+  - JATS-backmatter1-3.ent
+- id: element:fpage
+  name: fpage
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:front
+  name: front
+  kind: element
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: element:front-stub
+  name: front-stub
+  kind: element
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: element:funding-group
+  name: funding-group
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:funding-source
+  name: funding-source
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:funding-statement
+  name: funding-statement
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:given-names
+  name: given-names
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:glossary
+  name: glossary
+  kind: element
+  slices:
+  - JATS-backmatter1-3.ent
+- id: element:glyph-data
+  name: glyph-data
+  kind: element
+  slices:
+  - JATS-chars1-3.ent
+- id: element:glyph-ref
+  name: glyph-ref
+  kind: element
+  slices:
+  - JATS-chars1-3.ent
+- id: element:gov
+  name: gov
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:graphic
+  name: graphic
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:history
+  name: history
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:hr
+  name: hr
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:index-term
+  name: index-term
+  kind: element
+  slices:
+  - BITS-embedded-index2.ent
+- id: element:index-term-range-end
+  name: index-term-range-end
+  kind: element
+  slices:
+  - BITS-embedded-index2.ent
+- id: element:inline-formula
+  name: inline-formula
+  kind: element
+  slices:
+  - JATS-math1-3.ent
+- id: element:inline-graphic
+  name: inline-graphic
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:inline-media
+  name: inline-media
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:inline-supplementary-material
+  name: inline-supplementary-material
+  kind: element
+  slices:
+  - JATS-link1-3.ent
+- id: element:institution
+  name: institution
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:institution-id
+  name: institution-id
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:institution-wrap
+  name: institution-wrap
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:isbn
+  name: isbn
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:issn
+  name: issn
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:issn-l
+  name: issn-l
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:issue
+  name: issue
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:issue-id
+  name: issue-id
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:issue-part
+  name: issue-part
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:issue-sponsor
+  name: issue-sponsor
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:issue-subtitle
+  name: issue-subtitle
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:issue-title
+  name: issue-title
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:issue-title-group
+  name: issue-title-group
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:italic
+  name: italic
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:journal-id
+  name: journal-id
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:journal-meta
+  name: journal-meta
+  kind: element
+  slices:
+  - JATS-journalmeta1-3.ent
+- id: element:journal-subtitle
+  name: journal-subtitle
+  kind: element
+  slices:
+  - JATS-journalmeta1-3.ent
+- id: element:journal-title
+  name: journal-title
+  kind: element
+  slices:
+  - JATS-journalmeta1-3.ent
+- id: element:journal-title-group
+  name: journal-title-group
+  kind: element
+  slices:
+  - JATS-journalmeta1-3.ent
+- id: element:kwd
+  name: kwd
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:kwd-group
+  name: kwd-group
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:label
+  name: label
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:license
+  name: license
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:license-p
+  name: license-p
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:list
+  name: list
+  kind: element
+  slices:
+  - JATS-list1-3.ent
+- id: element:list-item
+  name: list-item
+  kind: element
+  slices:
+  - JATS-list1-3.ent
+- id: element:long-desc
+  name: long-desc
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:lpage
+  name: lpage
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:media
+  name: media
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:meta-name
+  name: meta-name
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:meta-value
+  name: meta-value
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:milestone-end
+  name: milestone-end
+  kind: element
+  slices:
+  - JATS-phrase1-3.ent
+- id: element:milestone-start
+  name: milestone-start
+  kind: element
+  slices:
+  - JATS-phrase1-3.ent
+- id: element:mixed-citation
+  name: mixed-citation
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:mml:abs
+  name: mml:abs
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:and
+  name: mml:and
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:annotation
+  name: mml:annotation
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:annotation-xml
+  name: mml:annotation-xml
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:apply
+  name: mml:apply
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:approx
+  name: mml:approx
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arccos
+  name: mml:arccos
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arccosh
+  name: mml:arccosh
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arccot
+  name: mml:arccot
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arccoth
+  name: mml:arccoth
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arccsc
+  name: mml:arccsc
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arccsch
+  name: mml:arccsch
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arcsec
+  name: mml:arcsec
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arcsech
+  name: mml:arcsech
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arcsin
+  name: mml:arcsin
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arcsinh
+  name: mml:arcsinh
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arctan
+  name: mml:arctan
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arctanh
+  name: mml:arctanh
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:arg
+  name: mml:arg
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:bvar
+  name: mml:bvar
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:card
+  name: mml:card
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:cartesianproduct
+  name: mml:cartesianproduct
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:ceiling
+  name: mml:ceiling
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:ci
+  name: mml:ci
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:cn
+  name: mml:cn
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:codomain
+  name: mml:codomain
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:complexes
+  name: mml:complexes
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:compose
+  name: mml:compose
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:condition
+  name: mml:condition
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:conjugate
+  name: mml:conjugate
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:cos
+  name: mml:cos
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:cosh
+  name: mml:cosh
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:cot
+  name: mml:cot
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:coth
+  name: mml:coth
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:csc
+  name: mml:csc
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:csch
+  name: mml:csch
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:csymbol
+  name: mml:csymbol
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:curl
+  name: mml:curl
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:declare
+  name: mml:declare
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:degree
+  name: mml:degree
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:determinant
+  name: mml:determinant
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:diff
+  name: mml:diff
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:divergence
+  name: mml:divergence
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:divide
+  name: mml:divide
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:domain
+  name: mml:domain
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:domainofapplication
+  name: mml:domainofapplication
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:emptyset
+  name: mml:emptyset
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:eq
+  name: mml:eq
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:equivalent
+  name: mml:equivalent
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:eulergamma
+  name: mml:eulergamma
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:exists
+  name: mml:exists
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:exp
+  name: mml:exp
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:exponentiale
+  name: mml:exponentiale
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:factorial
+  name: mml:factorial
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:factorof
+  name: mml:factorof
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:false
+  name: mml:false
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:floor
+  name: mml:floor
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:fn
+  name: mml:fn
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:forall
+  name: mml:forall
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:gcd
+  name: mml:gcd
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:geq
+  name: mml:geq
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:grad
+  name: mml:grad
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:gt
+  name: mml:gt
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:ident
+  name: mml:ident
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:image
+  name: mml:image
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:imaginary
+  name: mml:imaginary
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:imaginaryi
+  name: mml:imaginaryi
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:implies
+  name: mml:implies
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:in
+  name: mml:in
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:infinity
+  name: mml:infinity
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:int
+  name: mml:int
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:integers
+  name: mml:integers
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:intersect
+  name: mml:intersect
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:interval
+  name: mml:interval
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:inverse
+  name: mml:inverse
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:lambda
+  name: mml:lambda
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:laplacian
+  name: mml:laplacian
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:lcm
+  name: mml:lcm
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:leq
+  name: mml:leq
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:limit
+  name: mml:limit
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:list
+  name: mml:list
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:ln
+  name: mml:ln
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:log
+  name: mml:log
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:logbase
+  name: mml:logbase
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:lowlimit
+  name: mml:lowlimit
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:lt
+  name: mml:lt
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:maction
+  name: mml:maction
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:maligngroup
+  name: mml:maligngroup
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:malignmark
+  name: mml:malignmark
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:math
+  name: mml:math
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:matrix
+  name: mml:matrix
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:matrixrow
+  name: mml:matrixrow
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:max
+  name: mml:max
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mean
+  name: mml:mean
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:median
+  name: mml:median
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:menclose
+  name: mml:menclose
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:merror
+  name: mml:merror
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mfenced
+  name: mml:mfenced
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mfrac
+  name: mml:mfrac
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mglyph
+  name: mml:mglyph
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mi
+  name: mml:mi
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:min
+  name: mml:min
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:minus
+  name: mml:minus
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mlabeledtr
+  name: mml:mlabeledtr
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mmultiscripts
+  name: mml:mmultiscripts
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mn
+  name: mml:mn
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mo
+  name: mml:mo
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mode
+  name: mml:mode
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:moment
+  name: mml:moment
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:momentabout
+  name: mml:momentabout
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mover
+  name: mml:mover
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mpadded
+  name: mml:mpadded
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mphantom
+  name: mml:mphantom
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mprescripts
+  name: mml:mprescripts
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mroot
+  name: mml:mroot
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mrow
+  name: mml:mrow
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:ms
+  name: mml:ms
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mspace
+  name: mml:mspace
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:msqrt
+  name: mml:msqrt
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mstyle
+  name: mml:mstyle
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:msub
+  name: mml:msub
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:msubsup
+  name: mml:msubsup
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:msup
+  name: mml:msup
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mtable
+  name: mml:mtable
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mtd
+  name: mml:mtd
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mtext
+  name: mml:mtext
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:mtr
+  name: mml:mtr
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:munder
+  name: mml:munder
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:munderover
+  name: mml:munderover
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:naturalnumbers
+  name: mml:naturalnumbers
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:neq
+  name: mml:neq
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:none
+  name: mml:none
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:not
+  name: mml:not
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:notanumber
+  name: mml:notanumber
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:notin
+  name: mml:notin
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:notprsubset
+  name: mml:notprsubset
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:notsubset
+  name: mml:notsubset
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:or
+  name: mml:or
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:otherwise
+  name: mml:otherwise
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:outerproduct
+  name: mml:outerproduct
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:partialdiff
+  name: mml:partialdiff
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:pi
+  name: mml:pi
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:piece
+  name: mml:piece
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:piecewise
+  name: mml:piecewise
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:plus
+  name: mml:plus
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:power
+  name: mml:power
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:primes
+  name: mml:primes
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:product
+  name: mml:product
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:prsubset
+  name: mml:prsubset
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:quotient
+  name: mml:quotient
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:rationals
+  name: mml:rationals
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:real
+  name: mml:real
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:reals
+  name: mml:reals
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:reln
+  name: mml:reln
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:rem
+  name: mml:rem
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:root
+  name: mml:root
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:scalarproduct
+  name: mml:scalarproduct
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:sdev
+  name: mml:sdev
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:sec
+  name: mml:sec
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:sech
+  name: mml:sech
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:selector
+  name: mml:selector
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:semantics
+  name: mml:semantics
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:sep
+  name: mml:sep
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:set
+  name: mml:set
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:setdiff
+  name: mml:setdiff
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:sin
+  name: mml:sin
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:sinh
+  name: mml:sinh
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:subset
+  name: mml:subset
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:sum
+  name: mml:sum
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:tan
+  name: mml:tan
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:tanh
+  name: mml:tanh
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:tendsto
+  name: mml:tendsto
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:times
+  name: mml:times
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:transpose
+  name: mml:transpose
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:true
+  name: mml:true
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:union
+  name: mml:union
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:uplimit
+  name: mml:uplimit
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:variance
+  name: mml:variance
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:vector
+  name: mml:vector
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:vectorproduct
+  name: mml:vectorproduct
+  kind: element
+  slices:
+  - mathml2
+- id: element:mml:xor
+  name: mml:xor
+  kind: element
+  slices:
+  - mathml2
+- id: element:monospace
+  name: monospace
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:month
+  name: month
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:name
+  name: name
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:name-alternatives
+  name: name-alternatives
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:named-content
+  name: named-content
+  kind: element
+  slices:
+  - JATS-phrase1-3.ent
+- id: element:nested-kwd
+  name: nested-kwd
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:nlm-citation
+  name: nlm-citation
+  kind: element
+  slices:
+  - JATS-nlmcitation1-3.ent
+- id: element:note
+  name: note
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:notes
+  name: notes
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:object-id
+  name: object-id
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:on-behalf-of
+  name: on-behalf-of
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:open-access
+  name: open-access
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:option
+  name: option
+  kind: element
+  slices:
+  - BITS-question-answer2.ent
+- id: element:overline
+  name: overline
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:overline-end
+  name: overline-end
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:overline-start
+  name: overline-start
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:p
+  name: p
+  kind: element
+  slices:
+  - JATS-para1-3.ent
+- id: element:page-count
+  name: page-count
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:page-range
+  name: page-range
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:part-title
+  name: part-title
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:patent
+  name: patent
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:permissions
+  name: permissions
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:person-group
+  name: person-group
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:phone
+  name: phone
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:postal-code
+  name: postal-code
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:prefix
+  name: prefix
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:preformat
+  name: preformat
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:price
+  name: price
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:principal-award-recipient
+  name: principal-award-recipient
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:principal-investigator
+  name: principal-investigator
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:private-char
+  name: private-char
+  kind: element
+  slices:
+  - JATS-chars1-3.ent
+- id: element:processing-meta
+  name: processing-meta
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:product
+  name: product
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:pub-date
+  name: pub-date
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:pub-date-not-available
+  name: pub-date-not-available
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:pub-history
+  name: pub-history
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:pub-id
+  name: pub-id
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:publisher
+  name: publisher
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:publisher-loc
+  name: publisher-loc
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:publisher-name
+  name: publisher-name
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:question
+  name: question
+  kind: element
+  slices:
+  - BITS-question-answer2.ent
+- id: element:question-preamble
+  name: question-preamble
+  kind: element
+  slices:
+  - BITS-question-answer2.ent
+- id: element:question-wrap
+  name: question-wrap
+  kind: element
+  slices:
+  - BITS-question-answer2.ent
+- id: element:question-wrap-group
+  name: question-wrap-group
+  kind: element
+  slices:
+  - BITS-question-answer2.ent
+- id: element:rb
+  name: rb
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:ref
+  name: ref
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:ref-count
+  name: ref-count
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:ref-list
+  name: ref-list
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:related-article
+  name: related-article
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:related-object
+  name: related-object
+  kind: element
+  slices:
+  - JATS-related-object1-3.ent
+- id: element:resource-group
+  name: resource-group
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:resource-id
+  name: resource-id
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:resource-name
+  name: resource-name
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:resource-wrap
+  name: resource-wrap
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:response
+  name: response
+  kind: element
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: element:restricted-by
+  name: restricted-by
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:role
+  name: role
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:roman
+  name: roman
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:rp
+  name: rp
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:rt
+  name: rt
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:ruby
+  name: ruby
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:sans-serif
+  name: sans-serif
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:sc
+  name: sc
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:season
+  name: season
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:sec
+  name: sec
+  kind: element
+  slices:
+  - JATS-section1-3.ent
+- id: element:sec-meta
+  name: sec-meta
+  kind: element
+  slices:
+  - JATS-section1-3.ent
+- id: element:see
+  name: see
+  kind: element
+  slices:
+  - BITS-embedded-index2.ent
+- id: element:see-also
+  name: see-also
+  kind: element
+  slices:
+  - BITS-embedded-index2.ent
+- id: element:self-uri
+  name: self-uri
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:series
+  name: series
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:series-text
+  name: series-text
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:series-title
+  name: series-title
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:sig
+  name: sig
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:sig-block
+  name: sig-block
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:size
+  name: size
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:source
+  name: source
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:speaker
+  name: speaker
+  kind: element
+  slices:
+  - JATS-para1-3.ent
+- id: element:speech
+  name: speech
+  kind: element
+  slices:
+  - JATS-para1-3.ent
+- id: element:state
+  name: state
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:statement
+  name: statement
+  kind: element
+  slices:
+  - JATS-para1-3.ent
+- id: element:std
+  name: std
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:std-organization
+  name: std-organization
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:strike
+  name: strike
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:string-conf
+  name: string-conf
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:string-date
+  name: string-date
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:string-name
+  name: string-name
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:styled-content
+  name: styled-content
+  kind: element
+  slices:
+  - JATS-phrase1-3.ent
+- id: element:sub
+  name: sub
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:sub-article
+  name: sub-article
+  kind: element
+  slices:
+  - JATS-archivearticle1-3.rng
+- id: element:subj-group
+  name: subj-group
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:subject
+  name: subject
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:subtitle
+  name: subtitle
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:suffix
+  name: suffix
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:sup
+  name: sup
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:supplement
+  name: supplement
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:supplementary-material
+  name: supplementary-material
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:support-description
+  name: support-description
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:support-group
+  name: support-group
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:support-source
+  name: support-source
+  kind: element
+  slices:
+  - JATS-funding1-3.ent
+- id: element:surname
+  name: surname
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:table
+  name: table
+  kind: element
+  slices:
+  - xhtml-table-1.mod
+- id: element:table-count
+  name: table-count
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:table-wrap
+  name: table-wrap
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:table-wrap-foot
+  name: table-wrap-foot
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:table-wrap-group
+  name: table-wrap-group
+  kind: element
+  slices:
+  - JATS-display1-3.ent
+- id: element:target
+  name: target
+  kind: element
+  slices:
+  - JATS-link1-3.ent
+- id: element:tbody
+  name: tbody
+  kind: element
+  slices:
+  - xhtml-table-1.mod
+- id: element:td
+  name: td
+  kind: element
+  slices:
+  - xhtml-table-1.mod
+- id: element:term
+  name: term
+  kind: element
+  slices:
+  - JATS-list1-3.ent
+- id: element:term-head
+  name: term-head
+  kind: element
+  slices:
+  - JATS-list1-3.ent
+- id: element:tex-math
+  name: tex-math
+  kind: element
+  slices:
+  - JATS-math1-3.ent
+- id: element:textual-form
+  name: textual-form
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:tfoot
+  name: tfoot
+  kind: element
+  slices:
+  - xhtml-table-1.mod
+- id: element:th
+  name: th
+  kind: element
+  slices:
+  - xhtml-table-1.mod
+- id: element:thead
+  name: thead
+  kind: element
+  slices:
+  - xhtml-table-1.mod
+- id: element:time-stamp
+  name: time-stamp
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:title
+  name: title
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:title-group
+  name: title-group
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:tr
+  name: tr
+  kind: element
+  slices:
+  - xhtml-table-1.mod
+- id: element:trans-abstract
+  name: trans-abstract
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:trans-source
+  name: trans-source
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:trans-subtitle
+  name: trans-subtitle
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:trans-title
+  name: trans-title
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:trans-title-group
+  name: trans-title-group
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:underline
+  name: underline
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:underline-end
+  name: underline-end
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:underline-start
+  name: underline-start
+  kind: element
+  slices:
+  - JATS-format1-3.ent
+- id: element:unstructured-kwd-group
+  name: unstructured-kwd-group
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:uri
+  name: uri
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:verse-group
+  name: verse-group
+  kind: element
+  slices:
+  - JATS-para1-3.ent
+- id: element:verse-line
+  name: verse-line
+  kind: element
+  slices:
+  - JATS-para1-3.ent
+- id: element:version
+  name: version
+  kind: element
+  slices:
+  - JATS-references1-3.ent
+- id: element:volume
+  name: volume
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:volume-id
+  name: volume-id
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:volume-issue-group
+  name: volume-issue-group
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:volume-series
+  name: volume-series
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:word-count
+  name: word-count
+  kind: element
+  slices:
+  - JATS-articlemeta1-3.ent
+- id: element:x
+  name: x
+  kind: element
+  slices:
+  - JATS-common1-3.ent
+- id: element:xref
+  name: xref
+  kind: element
+  slices:
+  - JATS-link1-3.ent
+- id: element:year
+  name: year
+  kind: element
+  slices:
+  - JATS-common1-3.ent

@@ -62,6 +62,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(feature = "registry")]
+pub mod registry;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────

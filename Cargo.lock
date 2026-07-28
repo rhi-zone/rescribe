@@ -1812,6 +1812,9 @@ name = "jats-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.0",
+ "serde",
+ "serde_yaml",
+ "sha2",
  "xml-entities",
 ]
 
