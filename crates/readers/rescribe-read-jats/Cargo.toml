@@ -10,3 +10,8 @@ description = "JATS XML reader for rescribe"
 rescribe-core.workspace = true
 rescribe-std.workspace = true
 jats-fmt.workspace = true
+
+[dev-dependencies]
+# The spec-derived construct registry supplies the coverage denominator for
+# `tests/registry_coverage.rs`. Dev-only: it is not needed to read JATS.
+jats-fmt = { workspace = true, features = ["registry"] }
