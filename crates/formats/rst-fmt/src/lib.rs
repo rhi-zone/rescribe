@@ -2395,9 +2395,9 @@ fn build_table(rows: &[TableRow], ctx: &mut BuildContext) {
         })
         .collect();
 
-    let col_widths = calculate_column_widths(&text_rows);
+    let col_widths = calculate_column_widths(text_rows.iter().map(Vec::as_slice));
 
-    emit_table_border(&col_widths, ctx);
+    emit_table_border(&col_widths, &mut ctx.output);
 
     let mut is_first = true;
     for (row, text_row) in rows.iter().zip(text_rows.iter()) {
@@ -2415,32 +2415,42 @@ fn build_table(rows: &[TableRow], ctx: &mut BuildContext) {
 
         // Header separator after first row if it's a header
         if is_first && row.is_header && rows.len() > 1 {
-            emit_table_border(&col_widths, ctx);
+            emit_table_border(&col_widths, &mut ctx.output);
         }
         is_first = false;
     }
 
-    emit_table_border(&col_widths, ctx);
+    emit_table_border(&col_widths, &mut ctx.output);
     ctx.write("\n");
 }
 
-fn emit_table_border(widths: &[usize], ctx: &mut BuildContext) {
-    ctx.write("+");
+/// Shared by `build_table` and the streaming writer's `render_table` — the two
+/// emission paths are independent, but the *border geometry* is one function,
+/// not two copies that could drift. Takes a plain `&mut String` rather than a
+/// `BuildContext` so the streaming writer can emit straight into its own
+/// shared output buffer.
+pub(crate) fn emit_table_border(widths: &[usize], out: &mut String) {
+    out.push('+');
     for w in widths {
         for _ in 0..(*w + 2) {
-            ctx.write("-");
+            out.push('-');
         }
-        ctx.write("+");
+        out.push('+');
     }
-    ctx.write("\n");
+    out.push('\n');
 }
 
-fn calculate_column_widths(rows: &[Vec<String>]) -> Vec<usize> {
-    let num_cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
-    let mut widths = vec![1usize; num_cols];
-
+/// Column widths for a table, as an iterator over rows of already-collected
+/// cell text. Iterator-shaped (rather than `&[Vec<String>]`) so the streaming
+/// writer can pass a projection of its `(cells, is_header)` rows without
+/// cloning every cell into a parallel `Vec<Vec<String>>` first.
+pub(crate) fn calculate_column_widths<'a, I: Iterator<Item = &'a [String]>>(rows: I) -> Vec<usize> {
+    let mut widths: Vec<usize> = Vec::new();
     for row in rows {
         for (i, cell) in row.iter().enumerate() {
+            if i == widths.len() {
+                widths.push(1);
+            }
             if cell.len() > widths[i] {
                 widths[i] = cell.len();
             }

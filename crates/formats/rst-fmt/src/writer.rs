@@ -4,16 +4,49 @@
 //! # Memory model
 //!
 //! [`Writer`] never constructs a [`crate::Block`]/[`crate::Inline`] value and
-//! never calls [`crate::build_block`]/`build_inlines`/`build_inline`. Instead
-//! each frame on its `Vec<Frame>` stack (`O(nesting depth)`) accumulates
-//! **already-formatted text** (`String` buffers) as child events close; when
-//! a construct's `End*` event arrives, the frame renders its own final text
-//! once from those buffers (mirroring the `build_*` functions' output
-//! byte-for-byte) and splices it into the parent frame's buffer — or writes
-//! it straight to the sink if the stack is now empty. This is a second,
-//! independent emission path from the tree-based `build()`/`emit()`
-//! functions, not a thin wrapper around them: no intermediate `Block`/
-//! `Inline` subtree is ever materialized. Memory is
+//! never calls [`crate::build_block`]/`build_inlines`/`build_inline`. It is a
+//! second, independent emission path from the tree-based `build()`/`emit()`
+//! functions, not a thin wrapper around them.
+//!
+//! # Buffer model
+//!
+//! There is exactly **one** growing output buffer (`Writer::out`) for the
+//! whole document, mirroring `BuildContext::output`'s single amortized
+//! geometric growth. Frames on the `Vec<Frame>` stack (`O(nesting depth)`)
+//! hold only small metadata — a `usize` mark into `out`, a `&'static str`
+//! closing delimiter, a bool — never a copy of accumulated content. Children
+//! write **straight through** into `out`; a frame that needs to decorate its
+//! own content afterwards post-processes the `out[mark..]` range in place.
+//! Constructs split into three classes:
+//!
+//! - **Write-through** (zero per-frame buffering, prefix known at `Start*`):
+//!   `Paragraph`, `List`, `ListItem`, `Div`, `DefinitionList`/`Term`/`Desc`,
+//!   `FootnoteDef`, `Image`/`HorizontalRule`/`MathDisplay`/`RawBlock`, and
+//!   every inline span (`Emphasis`, `Strong`, `Link`, `RstSpan`, …). Even
+//!   `build_list_item`'s per-child dispatch is write-through: the child's kind
+//!   and the first/subsequent flag are both known when the *child* opens, so
+//!   its continuation indent is emitted then rather than reconstructed later.
+//! - **Write-through + one in-place insert** (prefix length depends on
+//!   content, but content is contiguous at the end of `out` when it becomes
+//!   known): `Heading` (underline width = plain-text byte length) and
+//!   `Figure` (the `"\n   "` caption lead-in is emitted only if the caption
+//!   turned out non-empty).
+//! - **Deferred per-line transform** (every line of already-written content
+//!   must be re-indented): `Blockquote`, `Admonition`, `CodeBlock`. These
+//!   post-process `out[mark..]` through a *pooled, reused* scratch buffer
+//!   (`Writer::scratch`), so the pool holds at most `O(nesting depth)`
+//!   buffers for the whole document rather than one fresh allocation per
+//!   construct.
+//!
+//! `Table` is the one genuinely content-dependent-prefix construct: column
+//! widths are unknown until every cell of every row has been seen, so cells
+//! are collected as owned strings and rendered by [`render_table`] at
+//! `EndTable`. That collection is bounded by the table's own size, which is
+//! already inside the documented `O(largest top-level block)` limit.
+//!
+//! Each top-level block is flushed to the sink and `out` is cleared (keeping
+//! its capacity, so the buffer is allocated once for the whole document) as
+//! soon as the frame stack empties. Memory is
 //! `O(largest top-level block + nesting depth)`, not `O(full document)`.
 //!
 //! # Example
@@ -29,70 +62,14 @@
 //! ```
 
 use crate::events::OwnedEvent;
-use crate::{BuildContext, calculate_column_widths, emit_table_border};
+use crate::{calculate_column_widths, emit_table_border};
 use std::io::Write;
 
-/// Accumulator for inline content that may itself be nested inside further
-/// markup: a formatted-RST buffer (`buf`, e.g. `**bold**`) and a plain-text
-/// buffer (`plain`) matching `collect_text_from_inlines`'s rules exactly
-/// (delimiters never count as plain text). Only frames whose own contents
-/// might need to contribute *plain* text further up the tree (inline
-/// wrapping spans, which may end up nested inside anything, and `Heading`,
-/// which needs its own plain-text length for the underline) carry this;
-/// frames whose formatted output is a dead end (`Paragraph`, definition
-/// list terms/descriptions, footnote defs) use a bare `String` instead —
-/// tracking `plain` for those would be pure overhead, since nothing ever
-/// reads it.
-#[derive(Default)]
-struct InlineAccum {
-    buf: String,
-    plain: String,
-}
-
-impl InlineAccum {
-    fn new() -> Self {
-        Self::default()
-    }
-}
-
-/// One item's children in a list, tagged by dispatch kind so `EndListItem`
-/// can replicate `build_list_item`'s per-child-kind formatting exactly.
-enum ListChild {
-    /// Formatted (unwrapped) inline buffer of a paragraph child.
-    Paragraph(String),
-    /// Already-fully-rendered text of a nested list child.
-    NestedList(String),
-    /// Already-fully-rendered text of any other block child.
-    Other(String),
-}
-
-/// Where an inline contribution goes.
-///
-/// - `Full`: a frame that might itself be nested further up (inline spans,
-///   `Heading`) — needs both the formatted buffer and the plain-text buffer.
-/// - `BufOnly`: a frame whose formatted output is a dead end (`Paragraph`,
-///   definition term/desc, footnote def) — plain text is never read back out
-///   of these, so it is not tracked.
-/// - `BufAndFlag`: like `BufOnly`, plus a presence flag (`Figure`'s caption,
-///   which distinguishes "no caption content at all" from "caption content
-///   that renders to an empty string" via `any`, not a plain-text length).
-/// - `PlainOnly`: table cells — `build_table` never writes formatted markup
-///   into a cell, only plain text.
-/// - `None`: no enclosing inline-accepting frame; contribution is discarded.
-enum Dest<'a> {
-    Full(&'a mut InlineAccum),
-    BufOnly(&'a mut String),
-    BufAndFlag(&'a mut String, &'a mut bool),
-    PlainOnly(&'a mut String),
-    None,
-}
-
-/// Tag describing what kind of block just closed, so `push_block` can
-/// replicate `build_list_item`'s per-child dispatch when the parent frame is
-/// a `ListItem` (a `Paragraph` and a `List` are each formatted specially;
-/// everything else is verbatim, matching the `other => build_block(other,
-/// ctx)` arm).
-enum BlockTag {
+/// Which arm of `build_list_item`'s per-child dispatch a block takes when its
+/// parent frame is a `ListItem`. Known at the child's `Start*` event, which is
+/// what makes list items write-through.
+#[derive(Clone, Copy)]
+enum BlockKind {
     Paragraph,
     List,
     Other,
@@ -106,30 +83,41 @@ enum BlockTag {
 /// fed.
 pub struct Writer<W: Write> {
     sink: W,
-    /// Frame stack for the block/inline subtree currently being assembled.
-    /// Empty at top level — a `push_block` reaching an empty stack means the
-    /// block just closed at the document's top level, so it is written
-    /// immediately instead of being retained.
+    /// The single shared output buffer. Every construct writes here directly;
+    /// frames record marks into it. Cleared (capacity retained) after each
+    /// top-level block is flushed.
+    out: String,
+    /// The single shared plain-text buffer, mirroring
+    /// `collect_text_from_inlines` (delimiters never contribute). Appended to
+    /// only inside a `Heading` or `TableCell` (the only two constructs that
+    /// read plain text back out); a frame records a mark and truncates back to
+    /// it when it closes. Nesting needs no per-frame copy because nested
+    /// spans contribute nothing but their children's text.
+    plain: String,
+    /// Reusable scratch for runs of repeated underline/overline characters.
+    rule: String,
+    /// Pool of scratch buffers for the deferred per-line re-indent constructs
+    /// (`Blockquote`, `Admonition`, `CodeBlock`). Buffers are returned after
+    /// use, so at most `O(nesting depth)` are ever allocated for a whole
+    /// document instead of one per construct.
+    scratch: Vec<String>,
+    /// Frame stack for the block/inline construct currently being assembled.
+    /// Empty at top level — a block closing with an empty stack is flushed to
+    /// the sink immediately.
     stack: Vec<Frame>,
     /// Mirrors `BuildContext::list_depth`: incremented when a `List` frame is
-    /// pushed (`StartList`), decremented when it is popped (`EndList`, right
-    /// before that list's own output is finalized) — the same bracketing
-    /// `build_list` uses around its item loop.
+    /// pushed (`StartList`), decremented when it is popped (`EndList`) — the
+    /// same bracketing `build_list` uses around its item loop.
     list_depth: usize,
-    /// Count of currently-open `Heading` frames. `Heading` is the only
-    /// construct that reads *both* `buf` and `plain` off its own inline
-    /// accumulator (formatted text for display, plain length for the
-    /// underline) — every other inline-accepting frame reads exactly one of
-    /// the two and discards the other. Gates `plain` tracking in
-    /// [`Writer::push_multi`] so ordinary markup (`**bold**`, links, etc.)
-    /// nested only inside paragraphs/list items/etc. — the overwhelming
-    /// common case — never pays for building a plain-text copy nothing will
-    /// read. Bracketed exactly like `list_depth`: `+= 1` on `StartHeading`,
-    /// `-= 1` on `EndHeading`.
+    /// Count of currently-open `Heading` frames — one of the two contexts in
+    /// which `plain` is tracked at all (a heading needs its own plain-text
+    /// byte length to size the underline). Ordinary markup nested only inside
+    /// paragraphs/list items never pays for a plain-text copy nothing reads.
     heading_depth: usize,
-    /// Count of currently-open `TableCell` frames — the other construct that
-    /// needs `plain` (its formatted `buf` is discarded entirely; see
-    /// [`Dest::PlainOnly`]). Bracketed like `heading_depth`.
+    /// Count of currently-open `TableCell` frames — the other `plain` context.
+    /// `build_table` never writes formatted markup into a cell, so while this
+    /// is non-zero *all* writes to `out` are suppressed and only `plain`
+    /// accumulates.
     table_cell_depth: usize,
 }
 
@@ -137,6 +125,10 @@ impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
         Writer {
             sink,
+            out: String::new(),
+            plain: String::new(),
+            rule: String::new(),
+            scratch: Vec::new(),
             stack: Vec::new(),
             list_depth: 0,
             heading_depth: 0,
@@ -156,81 +148,161 @@ impl<W: Write> Writer<W> {
         self.sink
     }
 
-    /// Dispatch a just-rendered block's text to whatever is enclosing it:
-    /// another block container's buffer, the current list item's tagged
-    /// child sequence, or straight to the sink if nothing encloses it.
-    fn push_block(&mut self, text: String, tag: BlockTag) {
-        match self.stack.last_mut() {
-            Some(Frame::ListItem { children }) => {
-                // A paragraph child keeps its raw (no trailing blank line)
-                // form here — `render_list_item` appends the single "\n"
-                // `build_list_item` uses for paragraph children, not the
-                // "\n\n" a standalone paragraph gets elsewhere.
-                children.push(match tag {
-                    BlockTag::Paragraph => ListChild::Paragraph(text),
-                    BlockTag::List => ListChild::NestedList(text),
-                    BlockTag::Other => ListChild::Other(text),
-                });
-            }
-            Some(
-                Frame::Blockquote { buf } | Frame::Div { buf } | Frame::Admonition { buf, .. },
-            ) => {
-                buf.push_str(&text);
-                if matches!(tag, BlockTag::Paragraph) {
-                    buf.push_str("\n\n");
-                }
-            }
-            None => {
-                let _ = self.sink.write_all(text.as_bytes());
-                if matches!(tag, BlockTag::Paragraph) {
-                    let _ = self.sink.write_all(b"\n\n");
-                }
-            }
-            _ => {} // unexpected context, discard
+    // ── Buffer primitives ─────────────────────────────────────────────────
+
+    /// Append to the shared output buffer. Suppressed inside a table cell,
+    /// where only plain text is meaningful (`build_table` writes no markup
+    /// into cells).
+    fn push_out(&mut self, s: &str) {
+        if self.table_cell_depth == 0 {
+            self.out.push_str(s);
         }
     }
 
-    /// Dispatch a leaf/closed inline's formatted+plain contribution to
-    /// whatever inline-accumulating frame is on top of the stack.
+    /// Flush the completed top-level block to the sink and reset the buffer,
+    /// keeping its capacity so the document only ever grows one buffer.
+    fn flush(&mut self) {
+        if !self.out.is_empty() {
+            let _ = self.sink.write_all(self.out.as_bytes());
+            self.out.clear();
+        }
+    }
+
+    /// Whether the top-of-stack frame accepts block children. Anything else
+    /// (a heading, a table row, an inline span, …) discards them — the same
+    /// "unexpected context" behaviour the buffer-per-frame design got by
+    /// dropping the child's buffer, achieved here by truncating back to the
+    /// child's mark.
+    fn accepts_blocks(&self) -> bool {
+        matches!(
+            self.stack.last(),
+            None | Some(
+                Frame::Blockquote { .. }
+                    | Frame::Div { .. }
+                    | Frame::Admonition { .. }
+                    | Frame::ListItem { .. }
+            )
+        )
+    }
+
+    /// Whether the top-of-stack frame accepts inline children.
+    fn accepts_inline(&self) -> bool {
+        matches!(
+            self.stack.last(),
+            Some(
+                Frame::Paragraph { .. }
+                    | Frame::Heading { .. }
+                    | Frame::DefinitionTerm { .. }
+                    | Frame::DefinitionDesc { .. }
+                    | Frame::FootnoteDef { .. }
+                    | Frame::Figure { .. }
+                    | Frame::TableCell { .. }
+                    | Frame::Inline { .. }
+                    | Frame::Link { .. }
+            )
+        )
+    }
+
+    /// Only `Heading` and `TableCell` ever read `plain` back out.
+    fn need_plain(&self) -> bool {
+        self.heading_depth > 0 || self.table_cell_depth > 0
+    }
+
+    fn write_indent(&mut self) {
+        for _ in 0..self.list_depth {
+            self.push_out("   ");
+        }
+    }
+
+    /// Open a block: emit the list-item continuation prefix if this block is a
+    /// child of a `ListItem` (replicating `build_list_item`'s dispatch at the
+    /// child's *start*, where its kind and position are already known), and
+    /// return the mark to truncate back to if it turns out this block had no
+    /// valid enclosing context.
+    fn block_start(&mut self, kind: BlockKind) -> usize {
+        let mark = self.out.len();
+        let was_first = match self.stack.last_mut() {
+            Some(Frame::ListItem { first, .. }) => Some(std::mem::replace(first, false)),
+            _ => None,
+        };
+        if let Some(was_first) = was_first {
+            match kind {
+                BlockKind::Paragraph => {
+                    if !was_first {
+                        self.write_indent();
+                        self.push_out("   ");
+                    }
+                }
+                BlockKind::List => {
+                    self.push_out("\n");
+                    self.write_indent();
+                }
+                BlockKind::Other => {}
+            }
+        }
+        mark
+    }
+
+    /// Close a block: discard it if the enclosing frame does not take block
+    /// children, otherwise flush if it completed a top-level block.
+    fn block_end(&mut self, mark: usize) {
+        if !self.accepts_blocks() {
+            self.out.truncate(mark);
+            return;
+        }
+        if self.stack.is_empty() {
+            self.flush();
+        }
+    }
+
+    /// Close an inline span: discard it if the enclosing frame does not take
+    /// inline children.
+    fn inline_end(&mut self, mark: usize, plain_mark: usize) {
+        if !self.accepts_inline() {
+            self.out.truncate(mark);
+            self.plain.truncate(plain_mark);
+        }
+    }
+
+    /// Re-indent every line of `out[mark..]` by three spaces, in place,
+    /// replicating `build_blockquote`/`build_admonition`/`build_code_block`'s
+    /// `for line in inner.lines() { "   " + line + "\n" }` exactly (including
+    /// its normalisation of the final newline). Uses a pooled scratch buffer
+    /// rather than a fresh allocation per construct.
+    fn reindent(&mut self, mark: usize) {
+        let mut buf = self.scratch.pop().unwrap_or_default();
+        buf.clear();
+        for line in self.out[mark..].lines() {
+            buf.push_str("   ");
+            buf.push_str(line);
+            buf.push('\n');
+        }
+        self.out.truncate(mark);
+        self.out.push_str(&buf);
+        self.scratch.push(buf);
+    }
+
+    // ── Inline contribution ───────────────────────────────────────────────
+
+    /// Dispatch a leaf inline's formatted + plain contribution.
     fn push_inline(&mut self, formatted: &str, plain: &str) {
         self.push_multi(&[formatted], plain);
     }
 
-    /// Append each of `bufs` in order to the current top-of-stack frame's
-    /// formatted buffer (direct `push_str` calls, no intermediate
-    /// `format!`-allocated string), plus `plain` to its plain-text tracking
-    /// (where the destination tracks plain text at all — see [`Dest`]).
+    /// Append each of `bufs` in order to the shared output buffer, plus
+    /// `plain` to the shared plain-text buffer when we are in a context that
+    /// reads plain text back out.
     fn push_multi(&mut self, bufs: &[&str], plain: &str) {
-        // Only `Heading` (needs both `buf` and `plain` off its own
-        // accumulator) and `TableCell` (needs `plain` only, discards `buf`
-        // entirely) ever read `plain` back out. Every other inline-accepting
-        // frame — the overwhelming common case, e.g. `**bold**` inside an
-        // ordinary paragraph — discards it. Skip building it unless we're
-        // actually inside one of those two contexts, so plain markup never
-        // pays for a plain-text copy nothing will read.
-        let need_plain = self.heading_depth > 0 || self.table_cell_depth > 0;
-        match self.dest() {
-            Dest::Full(acc) => {
-                for b in bufs {
-                    acc.buf.push_str(b);
-                }
-                if need_plain {
-                    acc.plain.push_str(plain);
-                }
+        if !self.accepts_inline() {
+            return;
+        }
+        if self.table_cell_depth == 0 {
+            for b in bufs {
+                self.out.push_str(b);
             }
-            Dest::BufOnly(buf) => {
-                for b in bufs {
-                    buf.push_str(b);
-                }
-            }
-            Dest::BufAndFlag(buf, any) => {
-                for b in bufs {
-                    buf.push_str(b);
-                }
-                *any = true;
-            }
-            Dest::PlainOnly(cell_plain) => cell_plain.push_str(plain),
-            Dest::None => {} // unexpected context, discard
+        }
+        if self.need_plain() {
+            self.plain.push_str(plain);
         }
     }
 
@@ -240,48 +312,31 @@ impl<W: Write> Writer<W> {
         self.push_multi(&[prefix, body, suffix], plain);
     }
 
-    /// The current top-of-stack frame's inline-accumulation target, if any.
-    /// See [`Dest`] for what each variant means and why.
-    fn dest(&mut self) -> Dest<'_> {
-        match self.stack.last_mut() {
-            Some(
-                Frame::Emphasis(acc)
-                | Frame::Strong(acc)
-                | Frame::Strikeout(acc)
-                | Frame::Underline(acc)
-                | Frame::Subscript(acc)
-                | Frame::Superscript(acc)
-                | Frame::SmallCaps(acc)
-                | Frame::Heading { acc, .. }
-                | Frame::Link { acc, .. }
-                | Frame::FootnoteDefInline { acc, .. }
-                | Frame::Quoted { acc, .. }
-                | Frame::RstSpan { acc, .. },
-            ) => Dest::Full(acc),
-            Some(
-                Frame::Paragraph(buf)
-                | Frame::DefinitionTerm(buf)
-                | Frame::DefinitionDesc(buf)
-                | Frame::FootnoteDef { buf, .. },
-            ) => Dest::BufOnly(buf),
-            Some(Frame::Figure {
-                caption_buf,
-                caption_any,
-                ..
-            }) => Dest::BufAndFlag(caption_buf, caption_any),
-            Some(Frame::TableCell { plain }) => Dest::PlainOnly(plain),
-            None
-            | Some(
-                Frame::Blockquote { .. }
-                | Frame::List { .. }
-                | Frame::ListItem { .. }
-                | Frame::CodeBlock { .. }
-                | Frame::Div { .. }
-                | Frame::Table { .. }
-                | Frame::TableRow { .. }
-                | Frame::DefinitionList { .. }
-                | Frame::Admonition { .. },
-            ) => Dest::None,
+    /// Open an inline span whose opening delimiter is already known: write it
+    /// straight through and record the marks needed to undo it if the span
+    /// turns out to have no valid enclosing context.
+    fn open_span(&mut self, open: &str, close: &'static str) {
+        let mark = self.out.len();
+        let plain_mark = self.plain.len();
+        if self.accepts_inline() {
+            self.push_out(open);
+        }
+        self.stack.push(Frame::Inline {
+            close,
+            mark,
+            plain_mark,
+        });
+    }
+
+    fn close_span(&mut self) {
+        if let Some(Frame::Inline {
+            close,
+            mark,
+            plain_mark,
+        }) = self.stack.pop()
+        {
+            self.push_out(close);
+            self.inline_end(mark, plain_mark);
         }
     }
 
@@ -290,135 +345,171 @@ impl<W: Write> Writer<W> {
         match event {
             // ── Block open/close ───────────────────────────────────────────────
             OwnedEvent::StartParagraph => {
-                self.stack.push(Frame::Paragraph(String::new()));
+                let mark = self.block_start(BlockKind::Paragraph);
+                self.stack.push(Frame::Paragraph { mark });
             }
             OwnedEvent::EndParagraph => {
-                if let Some(Frame::Paragraph(buf)) = self.stack.pop() {
-                    // Note: no trailing "\n\n" appended here — `build_list_item`
-                    // overrides paragraph formatting for list-item children
-                    // (single "\n", no blank line), so the block-level "\n\n"
-                    // is added in `push_block` only when the destination is
-                    // NOT a list item.
-                    self.push_block(buf, BlockTag::Paragraph);
+                if let Some(Frame::Paragraph { mark }) = self.stack.pop() {
+                    // `build_list_item` overrides paragraph formatting for
+                    // list-item children (single "\n", no blank line);
+                    // everywhere else `build_block` writes "\n\n".
+                    if matches!(self.stack.last(), Some(Frame::ListItem { .. })) {
+                        self.push_out("\n");
+                    } else {
+                        self.push_out("\n\n");
+                    }
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartHeading { level } => {
+                let mark = self.block_start(BlockKind::Other);
+                let content = self.out.len();
+                let plain_mark = self.plain.len();
                 self.heading_depth += 1;
                 self.stack.push(Frame::Heading {
                     level,
-                    acc: InlineAccum::new(),
+                    mark,
+                    content,
+                    plain_mark,
                 });
             }
             OwnedEvent::EndHeading => {
-                if let Some(Frame::Heading { level, acc }) = self.stack.pop() {
+                if let Some(Frame::Heading {
+                    level,
+                    mark,
+                    content,
+                    plain_mark,
+                }) = self.stack.pop()
+                {
                     self.heading_depth -= 1;
-                    let text = render_heading(level, &acc);
-                    self.push_block(text, BlockTag::Other);
+                    // Underline width comes from the *plain* text's byte
+                    // length (matching `collect_text_from_inlines`), never the
+                    // formatted text's — which would wrongly count delimiters.
+                    let width = self.plain.len() - plain_mark;
+                    self.plain.truncate(plain_mark);
+                    if self.table_cell_depth == 0 {
+                        let underline_char = match level {
+                            1 => '=',
+                            2 => '-',
+                            3 => '~',
+                            4 => '^',
+                            5 => '"',
+                            _ => '\'',
+                        };
+                        self.rule.clear();
+                        for _ in 0..width {
+                            self.rule.push(underline_char);
+                        }
+                        self.out.push('\n');
+                        self.out.push_str(&self.rule);
+                        self.out.push_str("\n\n");
+                        if level == 1 {
+                            // Overline: same run plus its newline, inserted
+                            // ahead of the heading text now that its width is
+                            // known. The heading's text is the only thing
+                            // after `content`, so this is a short memmove
+                            // inside the shared buffer — not a second buffer.
+                            self.rule.push('\n');
+                            self.out.insert_str(content, &self.rule);
+                        }
+                    }
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartBlockquote => {
-                self.stack.push(Frame::Blockquote { buf: String::new() });
+                let mark = self.block_start(BlockKind::Other);
+                let content = self.out.len();
+                self.stack.push(Frame::Blockquote { mark, content });
             }
             OwnedEvent::EndBlockquote => {
-                if let Some(Frame::Blockquote { buf }) = self.stack.pop() {
-                    let mut text = String::new();
-                    for line in buf.lines() {
-                        text.push_str("   ");
-                        text.push_str(line);
-                        text.push('\n');
-                    }
-                    text.push('\n');
-                    self.push_block(text, BlockTag::Other);
+                if let Some(Frame::Blockquote { mark, content }) = self.stack.pop() {
+                    self.reindent(content);
+                    self.push_out("\n");
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartList { ordered } => {
+                let mark = self.block_start(BlockKind::List);
                 self.list_depth += 1;
-                self.stack.push(Frame::List {
-                    ordered,
-                    buf: String::new(),
-                });
+                self.stack.push(Frame::List { ordered, mark });
             }
             OwnedEvent::EndList => {
-                if let Some(Frame::List { buf, .. }) = self.stack.pop() {
+                if let Some(Frame::List { mark, .. }) = self.stack.pop() {
                     self.list_depth -= 1;
-                    // `buf` already holds every item's rendered text,
-                    // appended directly as each `EndListItem` completed
-                    // (matching `build_list`'s single growing `ctx.output`,
-                    // not a collect-then-concatenate pass).
-                    let mut text = buf;
-                    text.push('\n');
-                    self.push_block(text, BlockTag::List);
+                    self.push_out("\n");
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartListItem => {
-                self.stack.push(Frame::ListItem { children: vec![] });
+                let ordered = matches!(self.stack.last(), Some(Frame::List { ordered: true, .. }));
+                let mark = self.out.len();
+                if matches!(self.stack.last(), Some(Frame::List { .. })) {
+                    self.push_out(if ordered { "#. " } else { "- " });
+                }
+                self.stack.push(Frame::ListItem { first: true, mark });
             }
             OwnedEvent::EndListItem => {
-                if let Some(Frame::ListItem { children }) = self.stack.pop() {
-                    let ordered =
-                        matches!(self.stack.last(), Some(Frame::List { ordered: true, .. }));
-                    let text = self.render_list_item(ordered, children);
-                    if let Some(Frame::List { buf, .. }) = self.stack.last_mut() {
-                        buf.push_str(&text);
+                if let Some(Frame::ListItem { mark, .. }) = self.stack.pop() {
+                    if !matches!(self.stack.last(), Some(Frame::List { .. })) {
+                        self.out.truncate(mark);
                     }
                 }
             }
             OwnedEvent::StartCodeBlock { language } => {
-                self.stack.push(Frame::CodeBlock {
-                    language,
-                    content: String::new(),
-                });
+                let mark = self.block_start(BlockKind::Other);
+                if let Some(lang) = &language {
+                    self.push_out(".. code-block:: ");
+                    self.push_out(lang);
+                    self.push_out("\n\n");
+                } else {
+                    self.push_out("::\n\n");
+                }
+                let content = self.out.len();
+                self.stack.push(Frame::CodeBlock { mark, content });
             }
             OwnedEvent::CodeBlockContent(content) => {
-                if let Some(Frame::CodeBlock { content: buf, .. }) = self.stack.last_mut() {
-                    buf.push_str(&content);
+                if matches!(self.stack.last(), Some(Frame::CodeBlock { .. })) {
+                    self.push_out(&content);
                 }
             }
             OwnedEvent::EndCodeBlock => {
-                if let Some(Frame::CodeBlock { language, content }) = self.stack.pop() {
-                    let mut text = String::new();
-                    if let Some(lang) = &language {
-                        text.push_str(".. code-block:: ");
-                        text.push_str(lang);
-                        text.push_str("\n\n");
-                    } else {
-                        text.push_str("::\n\n");
-                    }
-                    for line in content.lines() {
-                        text.push_str("   ");
-                        text.push_str(line);
-                        text.push('\n');
-                    }
-                    text.push('\n');
-                    self.push_block(text, BlockTag::Other);
+                if let Some(Frame::CodeBlock { mark, content }) = self.stack.pop() {
+                    self.reindent(content);
+                    self.push_out("\n");
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::RawBlock { format, content } => {
-                let text = if format == "rst" {
-                    content
-                } else {
-                    String::new()
-                };
-                self.push_block(text, BlockTag::Other);
+                let mark = self.block_start(BlockKind::Other);
+                if format == "rst" {
+                    self.push_out(&content);
+                }
+                self.block_end(mark);
             }
             OwnedEvent::StartDiv { .. } => {
-                self.stack.push(Frame::Div { buf: String::new() });
+                let mark = self.block_start(BlockKind::Other);
+                self.stack.push(Frame::Div { mark });
             }
             OwnedEvent::EndDiv => {
-                if let Some(Frame::Div { buf }) = self.stack.pop() {
-                    self.push_block(buf, BlockTag::Other);
+                if let Some(Frame::Div { mark }) = self.stack.pop() {
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::HorizontalRule => {
-                self.push_block("----\n\n".to_string(), BlockTag::Other);
+                let mark = self.block_start(BlockKind::Other);
+                self.push_out("----\n\n");
+                self.block_end(mark);
             }
             OwnedEvent::StartTable => {
-                self.stack.push(Frame::Table { rows: vec![] });
+                let mark = self.block_start(BlockKind::Other);
+                self.stack.push(Frame::Table { mark, rows: vec![] });
             }
             OwnedEvent::EndTable => {
-                if let Some(Frame::Table { rows }) = self.stack.pop() {
-                    let text = render_table(&rows);
-                    self.push_block(text, BlockTag::Other);
+                if let Some(Frame::Table { mark, rows }) = self.stack.pop() {
+                    if self.table_cell_depth == 0 {
+                        render_table(&rows, &mut self.out);
+                    }
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartTableRow { is_header } => {
@@ -429,242 +520,188 @@ impl<W: Write> Writer<W> {
             }
             OwnedEvent::EndTableRow => {
                 if let Some(Frame::TableRow { cells, is_header }) = self.stack.pop() {
-                    if let Some(Frame::Table { rows }) = self.stack.last_mut() {
+                    if let Some(Frame::Table { rows, .. }) = self.stack.last_mut() {
                         rows.push((cells, is_header));
                     }
                 }
             }
             OwnedEvent::StartTableCell => {
                 self.table_cell_depth += 1;
-                self.stack.push(Frame::TableCell {
-                    plain: String::new(),
-                });
+                let plain_mark = self.plain.len();
+                self.stack.push(Frame::TableCell { plain_mark });
             }
             OwnedEvent::EndTableCell => {
-                if let Some(Frame::TableCell { plain }) = self.stack.pop() {
+                if let Some(Frame::TableCell { plain_mark }) = self.stack.pop() {
                     self.table_cell_depth -= 1;
+                    let cell = self.plain[plain_mark..].to_string();
+                    self.plain.truncate(plain_mark);
                     if let Some(Frame::TableRow { cells, .. }) = self.stack.last_mut() {
-                        cells.push(plain);
+                        cells.push(cell);
                     }
                 }
             }
             OwnedEvent::StartDefinitionList => {
-                self.stack.push(Frame::DefinitionList {
-                    buf: String::new(),
-                    pending_term: String::new(),
-                });
+                let mark = self.block_start(BlockKind::Other);
+                self.stack.push(Frame::DefinitionList { mark });
             }
             OwnedEvent::EndDefinitionList => {
-                if let Some(Frame::DefinitionList { buf, .. }) = self.stack.pop() {
-                    self.push_block(buf, BlockTag::Other);
+                if let Some(Frame::DefinitionList { mark }) = self.stack.pop() {
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartDefinitionTerm => {
-                self.stack.push(Frame::DefinitionTerm(String::new()));
+                let mark = self.out.len();
+                self.stack.push(Frame::DefinitionTerm { mark });
             }
             OwnedEvent::EndDefinitionTerm => {
-                if let Some(Frame::DefinitionTerm(term)) = self.stack.pop() {
-                    if let Some(Frame::DefinitionList { pending_term, .. }) = self.stack.last_mut()
-                    {
-                        *pending_term = term;
+                if let Some(Frame::DefinitionTerm { mark }) = self.stack.pop() {
+                    if matches!(self.stack.last(), Some(Frame::DefinitionList { .. })) {
+                        self.push_out("\n");
+                    } else {
+                        self.out.truncate(mark);
                     }
                 }
             }
             OwnedEvent::StartDefinitionDesc => {
-                self.stack.push(Frame::DefinitionDesc(String::new()));
+                let mark = self.out.len();
+                if matches!(self.stack.last(), Some(Frame::DefinitionList { .. })) {
+                    self.push_out("   ");
+                }
+                self.stack.push(Frame::DefinitionDesc { mark });
             }
             OwnedEvent::EndDefinitionDesc => {
-                if let Some(Frame::DefinitionDesc(desc)) = self.stack.pop() {
-                    if let Some(Frame::DefinitionList { buf, pending_term }) = self.stack.last_mut()
-                    {
-                        // Each definition list item completes (term, then
-                        // desc) in strict sequence, so the term is held only
-                        // momentarily and immediately spliced in here — no
-                        // `Vec<(String, String)>` of items is ever retained.
-                        buf.push_str(pending_term);
-                        buf.push('\n');
-                        buf.push_str("   ");
-                        buf.push_str(&desc);
-                        buf.push_str("\n\n");
-                        pending_term.clear();
+                if let Some(Frame::DefinitionDesc { mark }) = self.stack.pop() {
+                    if matches!(self.stack.last(), Some(Frame::DefinitionList { .. })) {
+                        self.push_out("\n\n");
+                    } else {
+                        self.out.truncate(mark);
                     }
                 }
             }
             OwnedEvent::StartFootnoteDef { label } => {
-                self.stack.push(Frame::FootnoteDef {
-                    label,
-                    buf: String::new(),
-                });
+                let mark = self.block_start(BlockKind::Other);
+                self.push_out(".. [");
+                self.push_out(&label);
+                self.push_out("] ");
+                self.stack.push(Frame::FootnoteDef { mark });
             }
             OwnedEvent::EndFootnoteDef => {
-                if let Some(Frame::FootnoteDef { label, buf }) = self.stack.pop() {
-                    let mut text = String::new();
-                    text.push_str(".. [");
-                    text.push_str(&label);
-                    text.push_str("] ");
-                    text.push_str(&buf);
-                    text.push('\n');
-                    self.push_block(text, BlockTag::Other);
+                if let Some(Frame::FootnoteDef { mark }) = self.stack.pop() {
+                    self.push_out("\n");
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::MathDisplay { source } => {
-                let mut text = String::new();
-                text.push_str(".. math::\n\n   ");
-                text.push_str(&source.replace('\n', "\n   "));
-                text.push_str("\n\n");
-                self.push_block(text, BlockTag::Other);
+                let mark = self.block_start(BlockKind::Other);
+                self.push_out(".. math::\n\n   ");
+                self.push_out(&source.replace('\n', "\n   "));
+                self.push_out("\n\n");
+                self.block_end(mark);
             }
             OwnedEvent::StartAdmonition { admonition_type } => {
-                self.stack.push(Frame::Admonition {
-                    admonition_type,
-                    buf: String::new(),
-                });
+                let mark = self.block_start(BlockKind::Other);
+                self.push_out(".. ");
+                self.push_out(&admonition_type);
+                self.push_out("::\n\n");
+                let content = self.out.len();
+                self.stack.push(Frame::Admonition { mark, content });
             }
             OwnedEvent::EndAdmonition => {
-                if let Some(Frame::Admonition {
-                    admonition_type,
-                    buf,
-                }) = self.stack.pop()
-                {
-                    let mut text = String::new();
-                    text.push_str(".. ");
-                    text.push_str(&admonition_type);
-                    text.push_str("::\n\n");
-                    for line in buf.lines() {
-                        text.push_str("   ");
-                        text.push_str(line);
-                        text.push('\n');
-                    }
-                    text.push('\n');
-                    self.push_block(text, BlockTag::Other);
+                if let Some(Frame::Admonition { mark, content }) = self.stack.pop() {
+                    self.reindent(content);
+                    self.push_out("\n");
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartFigure { url, alt } => {
-                self.stack.push(Frame::Figure {
-                    url,
-                    alt,
-                    caption_buf: String::new(),
-                    caption_any: false,
-                });
+                let mark = self.block_start(BlockKind::Other);
+                self.push_out(".. figure:: ");
+                self.push_out(&url);
+                self.push_out("\n");
+                if let Some(alt_text) = &alt {
+                    self.push_out("   :alt: ");
+                    self.push_out(alt_text);
+                    self.push_out("\n");
+                }
+                let caption = self.out.len();
+                self.stack.push(Frame::Figure { mark, caption });
             }
             OwnedEvent::EndFigure => {
-                if let Some(Frame::Figure {
-                    url,
-                    alt,
-                    caption_buf,
-                    caption_any,
-                }) = self.stack.pop()
-                {
-                    let mut text = String::new();
-                    text.push_str(".. figure:: ");
-                    text.push_str(&url);
-                    text.push('\n');
-                    if let Some(alt_text) = &alt {
-                        text.push_str("   :alt: ");
-                        text.push_str(alt_text);
-                        text.push('\n');
+                if let Some(Frame::Figure { mark, caption }) = self.stack.pop() {
+                    // The caption lead-in is only emitted if caption content
+                    // actually arrived — `build_figure` distinguishes "no
+                    // caption" from "a caption". Inserting it now (the caption
+                    // text is the only thing after `caption`) avoids buffering
+                    // the caption separately just to learn whether it existed.
+                    if self.out.len() > caption {
+                        self.out.insert_str(caption, "\n   ");
+                        self.out.push('\n');
                     }
-                    if caption_any {
-                        text.push_str("\n   ");
-                        text.push_str(&caption_buf);
-                        text.push('\n');
-                    }
-                    text.push('\n');
-                    self.push_block(text, BlockTag::Other);
+                    self.push_out("\n");
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::ImageBlock { url, alt, .. } => {
-                let mut text = String::new();
-                text.push_str(".. image:: ");
-                text.push_str(&url);
-                text.push('\n');
+                let mark = self.block_start(BlockKind::Other);
+                self.push_out(".. image:: ");
+                self.push_out(&url);
+                self.push_out("\n");
                 if let Some(alt_text) = &alt {
-                    text.push_str("   :alt: ");
-                    text.push_str(alt_text);
-                    text.push('\n');
+                    self.push_out("   :alt: ");
+                    self.push_out(alt_text);
+                    self.push_out("\n");
                 }
-                text.push('\n');
-                self.push_block(text, BlockTag::Other);
+                self.push_out("\n");
+                self.block_end(mark);
             }
 
             // ── Inline events ──────────────────────────────────────────────────
             OwnedEvent::Text(cow) => {
                 self.push_inline(&cow, &cow);
             }
-            OwnedEvent::SoftBreak => {
+            OwnedEvent::SoftBreak | OwnedEvent::LineBreak => {
                 self.push_inline("\n", " ");
             }
-            OwnedEvent::LineBreak => {
-                self.push_inline("\n", " ");
-            }
-            OwnedEvent::StartEmphasis => {
-                self.stack.push(Frame::Emphasis(InlineAccum::new()));
-            }
-            OwnedEvent::EndEmphasis => {
-                if let Some(Frame::Emphasis(acc)) = self.stack.pop() {
-                    self.push_wrapped("*", &acc.buf, "*", &acc.plain);
-                }
-            }
-            OwnedEvent::StartStrong => {
-                self.stack.push(Frame::Strong(InlineAccum::new()));
-            }
-            OwnedEvent::EndStrong => {
-                if let Some(Frame::Strong(acc)) = self.stack.pop() {
-                    self.push_wrapped("**", &acc.buf, "**", &acc.plain);
-                }
-            }
-            OwnedEvent::StartStrikeout => {
-                self.stack.push(Frame::Strikeout(InlineAccum::new()));
-            }
-            OwnedEvent::EndStrikeout => {
-                if let Some(Frame::Strikeout(acc)) = self.stack.pop() {
-                    self.push_wrapped(":strike:`", &acc.buf, "`", &acc.plain);
-                }
-            }
-            OwnedEvent::StartUnderline => {
-                self.stack.push(Frame::Underline(InlineAccum::new()));
-            }
-            OwnedEvent::EndUnderline => {
-                if let Some(Frame::Underline(acc)) = self.stack.pop() {
-                    self.push_wrapped(":underline:`", &acc.buf, "`", &acc.plain);
-                }
-            }
-            OwnedEvent::StartSubscript => {
-                self.stack.push(Frame::Subscript(InlineAccum::new()));
-            }
-            OwnedEvent::EndSubscript => {
-                if let Some(Frame::Subscript(acc)) = self.stack.pop() {
-                    self.push_wrapped(":sub:`", &acc.buf, "`", &acc.plain);
-                }
-            }
-            OwnedEvent::StartSuperscript => {
-                self.stack.push(Frame::Superscript(InlineAccum::new()));
-            }
-            OwnedEvent::EndSuperscript => {
-                if let Some(Frame::Superscript(acc)) = self.stack.pop() {
-                    self.push_wrapped(":sup:`", &acc.buf, "`", &acc.plain);
-                }
-            }
-            OwnedEvent::StartSmallCaps => {
-                self.stack.push(Frame::SmallCaps(InlineAccum::new()));
-            }
-            OwnedEvent::EndSmallCaps => {
-                if let Some(Frame::SmallCaps(acc)) = self.stack.pop() {
-                    self.push_wrapped(":sc:`", &acc.buf, "`", &acc.plain);
-                }
-            }
+            OwnedEvent::StartEmphasis => self.open_span("*", "*"),
+            OwnedEvent::EndEmphasis => self.close_span(),
+            OwnedEvent::StartStrong => self.open_span("**", "**"),
+            OwnedEvent::EndStrong => self.close_span(),
+            OwnedEvent::StartStrikeout => self.open_span(":strike:`", "`"),
+            OwnedEvent::EndStrikeout => self.close_span(),
+            OwnedEvent::StartUnderline => self.open_span(":underline:`", "`"),
+            OwnedEvent::EndUnderline => self.close_span(),
+            OwnedEvent::StartSubscript => self.open_span(":sub:`", "`"),
+            OwnedEvent::EndSubscript => self.close_span(),
+            OwnedEvent::StartSuperscript => self.open_span(":sup:`", "`"),
+            OwnedEvent::EndSuperscript => self.close_span(),
+            OwnedEvent::StartSmallCaps => self.open_span(":sc:`", "`"),
+            OwnedEvent::EndSmallCaps => self.close_span(),
             OwnedEvent::Code(cow) => {
                 self.push_wrapped("``", &cow, "``", &cow);
             }
             OwnedEvent::StartLink { url } => {
+                let mark = self.out.len();
+                let plain_mark = self.plain.len();
+                if self.accepts_inline() {
+                    self.push_out("`");
+                }
                 self.stack.push(Frame::Link {
                     url,
-                    acc: InlineAccum::new(),
+                    mark,
+                    plain_mark,
                 });
             }
             OwnedEvent::EndLink => {
-                if let Some(Frame::Link { url, acc }) = self.stack.pop() {
-                    self.push_multi(&["`", &acc.buf, " <", &url, ">`_"], &acc.plain);
+                if let Some(Frame::Link {
+                    url,
+                    mark,
+                    plain_mark,
+                }) = self.stack.pop()
+                {
+                    self.push_out(" <");
+                    self.push_out(&url);
+                    self.push_out(">`_");
+                    self.inline_end(mark, plain_mark);
                 }
             }
             OwnedEvent::InlineImage { url, alt } => {
@@ -678,185 +715,129 @@ impl<W: Write> Writer<W> {
                 self.push_wrapped("[", &label, "]_", &label);
             }
             OwnedEvent::StartFootnoteDefInline { label } => {
-                self.stack.push(Frame::FootnoteDefInline {
-                    label,
-                    acc: InlineAccum::new(),
+                let mark = self.out.len();
+                let plain_mark = self.plain.len();
+                if self.accepts_inline() {
+                    self.push_out(".. [");
+                    self.push_out(&label);
+                    self.push_out("] ");
+                }
+                self.stack.push(Frame::Inline {
+                    close: "",
+                    mark,
+                    plain_mark,
                 });
             }
-            OwnedEvent::EndFootnoteDefInline => {
-                if let Some(Frame::FootnoteDefInline { label, acc }) = self.stack.pop() {
-                    self.push_multi(&[".. [", &label, "] ", &acc.buf], &acc.plain);
-                }
-            }
+            OwnedEvent::EndFootnoteDefInline => self.close_span(),
             OwnedEvent::StartQuoted { quote_type } => {
-                self.stack.push(Frame::Quoted {
-                    quote_type,
-                    acc: InlineAccum::new(),
-                });
+                let quote = if quote_type == "single" { "'" } else { "\"" };
+                self.open_span(quote, quote);
             }
-            OwnedEvent::EndQuoted => {
-                if let Some(Frame::Quoted { quote_type, acc }) = self.stack.pop() {
-                    let quote = if quote_type == "single" { "'" } else { "\"" };
-                    self.push_wrapped(quote, &acc.buf, quote, &acc.plain);
-                }
-            }
+            OwnedEvent::EndQuoted => self.close_span(),
             OwnedEvent::MathInline { source } => {
                 self.push_wrapped(":math:`", &source, "`", &source);
             }
             OwnedEvent::StartRstSpan { role } => {
-                self.stack.push(Frame::RstSpan {
-                    role,
-                    acc: InlineAccum::new(),
+                let mark = self.out.len();
+                let plain_mark = self.plain.len();
+                if self.accepts_inline() {
+                    self.push_out(":");
+                    self.push_out(&role);
+                    self.push_out(":`");
+                }
+                self.stack.push(Frame::Inline {
+                    close: "`",
+                    mark,
+                    plain_mark,
                 });
             }
-            OwnedEvent::EndRstSpan => {
-                if let Some(Frame::RstSpan { role, acc }) = self.stack.pop() {
-                    self.push_multi(&[":", &role, ":`", &acc.buf, "`"], &acc.plain);
-                }
-            }
+            OwnedEvent::EndRstSpan => self.close_span(),
         }
     }
-
-    /// Render one list item's final text, replicating `build_list_item`'s
-    /// per-child-kind dispatch: the "- "/"#. " prefix precedes the first
-    /// child; subsequent `Paragraph` children get a continuation indent;
-    /// `NestedList` children get a blank line + indent before their
-    /// already-rendered text; everything else is written verbatim.
-    /// `self.list_depth` is read here (not passed in) because it is still
-    /// valid — we're still inside the enclosing list's Start/End bracket.
-    fn render_list_item(&self, ordered: bool, children: Vec<ListChild>) -> String {
-        let mut text = String::new();
-        if ordered {
-            text.push_str("#. ");
-        } else {
-            text.push_str("- ");
-        }
-        let mut first = true;
-        for child in children {
-            match child {
-                ListChild::Paragraph(buf) => {
-                    if !first {
-                        for _ in 0..self.list_depth {
-                            text.push_str("   ");
-                        }
-                        text.push_str("   ");
-                    }
-                    text.push_str(&buf);
-                    text.push('\n');
-                }
-                ListChild::NestedList(rendered) => {
-                    text.push('\n');
-                    for _ in 0..self.list_depth {
-                        text.push_str("   ");
-                    }
-                    text.push_str(&rendered);
-                }
-                ListChild::Other(rendered) => {
-                    text.push_str(&rendered);
-                }
-            }
-            first = false;
-        }
-        text
-    }
-}
-
-/// Mirrors `build_heading`: underline length (and overline, for level 1) is
-/// computed from the *plain* text's byte length, matching
-/// `collect_text_from_inlines`, not the formatted buffer's length (which
-/// would wrongly include markup delimiters).
-fn render_heading(level: i64, acc: &InlineAccum) -> String {
-    let underline_char = match level {
-        1 => '=',
-        2 => '-',
-        3 => '~',
-        4 => '^',
-        5 => '"',
-        _ => '\'',
-    };
-    let mut text = String::new();
-    if level == 1 {
-        let line: String = std::iter::repeat_n(underline_char, acc.plain.len()).collect();
-        text.push_str(&line);
-        text.push('\n');
-    }
-    text.push_str(&acc.buf);
-    text.push('\n');
-    let line: String = std::iter::repeat_n(underline_char, acc.plain.len()).collect();
-    text.push_str(&line);
-    text.push_str("\n\n");
-    text
 }
 
 /// Mirrors `build_table`: cells only ever carry plain text (never formatted
 /// markup), so `rows` is `(cell plain text, is_header)` pairs directly —
 /// no `text_rows` recomputation needed since the cells were never anything
 /// but plain text to begin with.
-fn render_table(rows: &[(Vec<String>, bool)]) -> String {
+///
+/// This is the one construct whose *prefix* genuinely depends on content not
+/// yet seen: the first border line cannot be emitted until every cell of every
+/// row is known. So cells are collected (bounded by the table's own size, well
+/// inside the documented `O(largest top-level block)` limit) — but the render
+/// itself still writes straight into the shared output buffer, and borrows the
+/// collected cells for the width pass rather than cloning them.
+fn render_table(rows: &[(Vec<String>, bool)], out: &mut String) {
     if rows.is_empty() {
-        return String::new();
+        return;
     }
 
-    let text_rows: Vec<Vec<String>> = rows.iter().map(|(cells, _)| cells.clone()).collect();
-    let col_widths = calculate_column_widths(&text_rows);
+    let col_widths = calculate_column_widths(rows.iter().map(|(cells, _)| cells.as_slice()));
 
-    let mut ctx = BuildContext::new();
-    emit_table_border(&col_widths, &mut ctx);
+    emit_table_border(&col_widths, out);
 
     let mut is_first = true;
-    for (row, text_row) in rows.iter().zip(text_rows.iter()) {
-        let (_, is_header) = row;
-        ctx.output.push('|');
-        for (i, cell) in text_row.iter().enumerate() {
+    for (cells, is_header) in rows {
+        out.push('|');
+        for (i, cell) in cells.iter().enumerate() {
             let width = col_widths.get(i).copied().unwrap_or(1);
-            ctx.output.push(' ');
-            ctx.output.push_str(cell);
+            out.push(' ');
+            out.push_str(cell);
             for _ in cell.len()..width {
-                ctx.output.push(' ');
+                out.push(' ');
             }
-            ctx.output.push_str(" |");
+            out.push_str(" |");
         }
-        ctx.output.push('\n');
+        out.push('\n');
 
         if is_first && *is_header && rows.len() > 1 {
-            emit_table_border(&col_widths, &mut ctx);
+            emit_table_border(&col_widths, out);
         }
         is_first = false;
     }
 
-    emit_table_border(&col_widths, &mut ctx);
-    ctx.output.push('\n');
-    ctx.output
+    emit_table_border(&col_widths, out);
+    out.push('\n');
 }
 
+/// Frames carry only marks into the shared buffers and tiny scalars — never
+/// accumulated content. `mark` is where this construct's output begins in
+/// `Writer::out` (so it can be discarded wholesale if it turns out to have no
+/// valid enclosing context); `content` is where its *inner* content begins,
+/// after any header the construct emits up front.
 enum Frame {
-    /// A paragraph's formatted buffer. No `plain` tracking — nothing ever
-    /// reads a paragraph's plain text back out (see [`Dest::BufOnly`]).
-    Paragraph(String),
+    Paragraph {
+        mark: usize,
+    },
     Heading {
         level: i64,
-        acc: InlineAccum,
+        mark: usize,
+        content: usize,
+        plain_mark: usize,
     },
     Blockquote {
-        buf: String,
+        mark: usize,
+        content: usize,
     },
     List {
         ordered: bool,
-        /// Rendered item texts appended directly as each item completes —
-        /// see the comment at `EndList`.
-        buf: String,
+        mark: usize,
     },
     ListItem {
-        children: Vec<ListChild>,
+        /// Whether the next child is this item's first — the flag
+        /// `build_list_item` uses to decide the continuation indent.
+        first: bool,
+        mark: usize,
     },
     CodeBlock {
-        language: Option<String>,
-        content: String,
+        mark: usize,
+        content: usize,
     },
     Div {
-        buf: String,
+        mark: usize,
     },
     Table {
+        mark: usize,
         rows: Vec<(Vec<String>, bool)>,
     },
     TableRow {
@@ -864,60 +845,44 @@ enum Frame {
         is_header: bool,
     },
     TableCell {
-        plain: String,
+        plain_mark: usize,
     },
     DefinitionList {
-        /// Rendered `term\n   desc\n\n` text, appended directly as each item
-        /// completes (see `EndDefinitionDesc`).
-        buf: String,
-        /// Holds the most recently closed term until its matching
-        /// description arrives.
-        pending_term: String,
+        mark: usize,
     },
-    /// Term/description buffers — `plain` not tracked, see [`Frame::Paragraph`].
-    DefinitionTerm(String),
-    DefinitionDesc(String),
+    DefinitionTerm {
+        mark: usize,
+    },
+    DefinitionDesc {
+        mark: usize,
+    },
     FootnoteDef {
-        label: String,
-        buf: String,
+        mark: usize,
     },
     Figure {
-        url: String,
-        alt: Option<String>,
-        /// Formatted caption text and whether any caption content was seen
-        /// at all (`build_figure` distinguishes "no caption" from "caption
-        /// content that happens to be empty" — a plain-text length can't
-        /// tell those apart, hence the separate flag rather than `InlineAccum`).
-        caption_buf: String,
-        caption_any: bool,
+        mark: usize,
+        /// Where the caption's text would begin — compared against
+        /// `out.len()` at `EndFigure` to tell "had a caption" from "had none".
+        caption: usize,
     },
     Admonition {
-        admonition_type: String,
-        buf: String,
+        mark: usize,
+        content: usize,
     },
-    // Inline spans
-    Emphasis(InlineAccum),
-    Strong(InlineAccum),
-    Strikeout(InlineAccum),
-    Underline(InlineAccum),
-    Subscript(InlineAccum),
-    Superscript(InlineAccum),
-    SmallCaps(InlineAccum),
+    /// Any inline span whose closing delimiter is a fixed string known when
+    /// the span opens (emphasis, strong, roles, quotes, inline footnote defs).
+    Inline {
+        close: &'static str,
+        mark: usize,
+        plain_mark: usize,
+    },
+    /// Links are the one inline span whose closing text depends on data
+    /// carried by the frame (the URL, moved out of the opening event — not a
+    /// content buffer).
     Link {
         url: String,
-        acc: InlineAccum,
-    },
-    FootnoteDefInline {
-        label: String,
-        acc: InlineAccum,
-    },
-    Quoted {
-        quote_type: String,
-        acc: InlineAccum,
-    },
-    RstSpan {
-        role: String,
-        acc: InlineAccum,
+        mark: usize,
+        plain_mark: usize,
     },
 }
 
@@ -972,11 +937,56 @@ mod tests {
         );
     }
 
+    /// The streaming `Writer` must produce *byte-identical* output to the
+    /// tree-based `build()` for the same document. This is the guard that
+    /// keeps the two independent emission paths honest: the write-through
+    /// buffer model may not drift from `build_*`'s formatting in any
+    /// construct, including the deferred ones (heading underline widths,
+    /// blockquote/admonition/code re-indent, list-item continuation indents,
+    /// figure caption lead-in, table column widths).
+    #[test]
+    fn test_writer_byte_identical_to_builder() {
+        let inputs = [
+            "Title\n=====\n\nIntro paragraph with **strong** and ``code``.\n",
+            "Sub\n---\n\ntext with *em* and a `link <http://x/>`_ here.\n",
+            "- bullet one\n- bullet two\n\n  - nested a\n  - nested b\n",
+            "#. ordered one\n#. ordered two\n",
+            ".. code-block:: rust\n\n   let x = 1;\n   let y = 2;\n",
+            "::\n\n   literal block\n",
+            "    An indented block quote.\n\n    Second para of quote.\n",
+            ".. note::\n\n   Some note body.\n\n   Second para.\n",
+            "term\n    definition body\n\nterm2\n    another definition\n",
+            "+--------+--------+\n| A      | B      |\n+========+========+\n| Cell 1 | Cell 2 |\n+--------+--------+\n",
+            "See [1]_ for details.\n\n.. [1] Footnote body text.\n",
+            "----\n\nAfter the transition.\n",
+            ".. figure:: img.png\n   :alt: alt text\n\n   The caption.\n",
+            ".. image:: img.png\n   :alt: alt text\n",
+            "| line one\n| line two\n",
+            "A para\n\n- item\n\n  continued paragraph in item\n",
+        ];
+        for input in inputs {
+            let doc = crate::parse(input).unwrap();
+            let built = crate::build(&doc);
+
+            let mut w = Writer::new(Vec::<u8>::new());
+            for e in crate::EventIter::new(input) {
+                w.write_event(e);
+            }
+            let streamed = String::from_utf8(w.finish()).unwrap();
+
+            assert_eq!(
+                built, streamed,
+                "streaming Writer diverged from build() for input:\n{input}\n\
+                 build():\n{built:?}\nWriter:\n{streamed:?}"
+            );
+        }
+    }
+
     /// Round-trip a broader construct mix (headings, lists, code blocks,
     /// tables, definition lists, footnotes, admonitions, block quotes)
     /// entirely through `events() -> Writer`, proving the incremental
-    /// per-top-level-block flush in `Writer::push_block` handles every
-    /// construct `parse()` produces, not just paragraphs/headings/lists.
+    /// per-top-level-block flush handles every construct `parse()`
+    /// produces, not just paragraphs/headings/lists.
     #[test]
     fn test_writer_roundtrip_full_construct_mix() {
         let input = "\
@@ -1052,8 +1062,8 @@ After the transition.
     /// Nested lists (bullet-in-bullet, ordered-in-bullet) are the trickiest
     /// path in the streaming rewrite: `list_depth` bookkeeping happens on
     /// `Writer` itself (bracketing `StartList`/`EndList`), and each nested
-    /// list's rendered text is captured as an already-rendered `ListChild`
-    /// entry rather than re-rendered from a reconstructed tree.
+    /// list's text is written straight into the shared buffer behind the
+    /// continuation indent emitted when the nested list *opened*.
     #[test]
     fn test_writer_roundtrip_nested_lists() {
         let input = "\
