@@ -22,6 +22,31 @@ and not being retracted — only the construct-list-completeness component of it
 
 ## Open Threads
 
+- **Footnote IR shape: embedded-content vs. linked-by-label are both live, unreconciled
+  conventions (found during 2026-07-28 ADR audit).** `docs/adr/0001-footnote-ref-def-
+  separate-node-kinds.md` originally claimed `footnote_ref`/`footnote_def` are always linked
+  by an id/label property, never one embedding the other. That's false as a description of
+  the codebase: `rescribe-read-rtf`, `rescribe-read-docx`, and JATS's `<xref ref-type="fn">`
+  handling in `rescribe-read-jats` all embed the footnote body directly as children of
+  `footnote_ref`, with no `footnote_def` node ever created. Only `rescribe-read-odt` and
+  `rescribe-read-docbook`'s `<footnote>`/`<footnoteref>` pair implement the claimed
+  linked-by-label shape. The ADR has been rewritten to describe both shapes as they actually
+  exist, rather than asserting a uniform rule that isn't followed. **Not resolved**: whether
+  the IR should converge on one shape (most likely always-linked, since it can represent both
+  inline-at-marker and hoisted-elsewhere placement, while the embedded shape cannot express
+  hoisting) is a real design fork with real migration cost across at least three readers — not
+  decided here, and not something to guess past. Pick this up as its own task if/when a
+  consumer actually needs uniform footnote handling across formats.
+
+- **`rst-fmt`'s streaming/batch/writer-streaming APIs are currently dead code, contradicting
+  both its own "5-Production" checklist and ADR 0003 (found during 2026-07-28 ADR audit).**
+  See the `rst-fmt` vertical entry further down for the full finding: `events.rs`, `batch.rs`,
+  and `writer.rs` exist on disk but are not referenced by any `mod` declaration in `lib.rs`, so
+  `rst-fmt` currently only has a working `parse()` — no `events()`, no `StreamingParser`, no
+  streaming writer, despite `Cargo.toml`'s feature flags implying otherwise. Needs re-wiring
+  and re-verification, not re-implementation from scratch (the files' own content looks
+  substantial per `git log --follow`, this wasn't checked line-by-line for correctness).
+
 - **Status reset: construct-completeness marked unverified pending a construct registry
   (2026-07-28).** This session's DocBook/JATS/TEI work (see the entries below and in
   `docs/format-audit.md`'s change log) produced four pieces of evidence that no format's
@@ -54,9 +79,13 @@ and not being retracted — only the construct-list-completeness component of it
   spec-derived construct registry — see below) and citing the four findings above. Every
   `fixtures/*/COVERAGE.md` gained an identical boilerplate header note stating the
   denominator is hand-curated and unverified. `docs/adr/0004-xml-classifier-schema-
-  verification-methodology.md` was amended to record the corrected methodology (check the
-  full spec element index for elements that *should* be classified and aren't; the
-  original method is documented as insufficient, not deleted).
+  verification-methodology.md` records the corrected methodology (check the full spec
+  element index for elements that *should* be classified and aren't, before re-checking
+  entries already listed). **2026-07-28 ADR-audit note**: this ADR was later rewritten in
+  place rather than kept as an amendment layered on the original insufficient method — the
+  original method was wrong from the moment it was written, not something that became
+  insufficient later, so the amendment convention didn't fit. See the ADR itself for the
+  current, single, corrected methodology.
 
   **What did NOT change:** no reader/writer/classifier code, no `R`/`W` stage numbers, no
   fuzz results, no fixture content. The API-modes/fuzz/fixture-suite work behind every
@@ -155,12 +184,90 @@ and not being retracted — only the construct-list-completeness component of it
     specific artifact/script DocBook (or any other schema-less format) should use — that's
     rollout work, not a design decision.
 
-  **Pilot: JATS 1.3 Archiving, end to end.** `crates/formats/jats-fmt/registry/jats-1.3-archiving.yaml`
-  (derived), `crates/formats/jats-fmt/src/registry.rs` (runtime API),
-  `crates/formats/jats-fmt/src/bin/derive-registry.rs` (derivation + `--check` drift
-  verification), `scripts/jats/download-spec.sh` (fetches the schema; `spec/` is
-  gitignored so it is never committed), and one real consumer,
+  **Pilot: JATS 1.3 Archiving, end to end.** `crates/formats/jats-fmt/registry/jats-1.3-archiving.json`
+  (human-readable derived source; see the 2026-07-28 runtime-representation entry below —
+  this was `.yaml` until that change), `crates/formats/jats-fmt/src/registry.rs` (runtime
+  API), `crates/formats/jats-fmt/src/registry_generated.rs` (committed generated Rust
+  statics the runtime API reads), `crates/formats/jats-fmt/src/registry_derive.rs` (owned
+  model, JSON I/O, Rust codegen — `registry-derive` feature),
+  `crates/formats/jats-fmt/src/bin/derive-registry.rs` (schema walk + CLI wrapper around the
+  above; `--check` drift verification), `scripts/jats/download-spec.sh` (fetches the schema;
+  `spec/` is gitignored so it is never committed), and one real consumer,
   `crates/readers/rescribe-read-jats/tests/registry_coverage.rs`.
+
+  **2026-07-28, later the same day: runtime representation changed from YAML/`serde_yaml` to
+  committed generated Rust statics; source-of-truth format changed from YAML to JSON.**
+  Implemented in `jats-fmt` only; DocBook/TEI have not been rolled out yet (rollout plan
+  below updated to target this shape from the start).
+
+  - `serde_yaml` is removed from `jats-fmt` entirely, in every feature (`registry` and
+    `registry-derive`). No YAML parser of any kind is now in `jats-fmt`'s dependency graph
+    (verified via `cargo tree -p jats-fmt --features registry-derive -e normal`).
+  - `crate::registry`'s types (`Construct`, `ContentModel`, `Registry`, etc.) now hold
+    `&'static str` / `&'static [T]` fields instead of owned `String`/`Vec`. `registry()`
+    returns a reference to a `static REGISTRY: Registry` compiled directly into the binary
+    (`crates/formats/jats-fmt/src/registry_generated.rs`, committed) — no parsing, no
+    `OnceLock`, no allocation at call time.
+  - The human-readable source moved to `registry/jats-1.3-archiving.json`
+    (`serde_json`, not YAML), read only by the offline `registry-derive` tool, never at
+    runtime. `serde_json` is an existing workspace dependency (used by `rescribe query`),
+    gated behind `registry-derive` only — not part of a normal `registry`-feature build.
+  - New module `crates/formats/jats-fmt/src/registry_derive.rs` (feature `registry-derive`)
+    holds the owned model types (mirroring `crate::registry`'s shapes with `String`/`Vec`),
+    `Registry::from_json`/`to_json`, and `emit_rust` (the codegen that produces
+    `registry_generated.rs`'s text, with content-model deduplication — see below).
+    `src/bin/derive-registry.rs` is now a thin CLI: schema walk (unchanged logic) →
+    `registry_derive::Registry` → write both the JSON source and the generated Rust file.
+    New `--emit-rust-only` flag regenerates `registry_generated.rs` from the committed JSON
+    alone, with no schema involved.
+  - **Two independent drift checks**, per the ADR's existing schema-vs-source pattern
+    extended one level: (1) `derive-registry --check` — schema vs. committed JSON, needs the
+    schema fetched locally, unchanged from before; (2)
+    `registry_derive::drift_tests::generated_rust_matches_committed_source` — committed JSON
+    vs. committed `registry_generated.rs`, needs **no schema**, runs as an ordinary
+    `cargo test -p jats-fmt --features registry-derive`. A third test,
+    `committed_source_round_trips`, confirms the JSON model survives a
+    serialize/deserialize round trip.
+  - **Content-model deduplication**: distinct `ContentModel` values (children set +
+    attributes set + `mixed`) are emitted once each as a named `static` (`CM_0`, `CM_1`, …)
+    and referenced by pointer from every construct sharing that shape, instead of each
+    construct carrying its own copy. Measured on the current derivation: 486 elements have a
+    content model; only 270 distinct shapes exist (44.4% would be duplicate data without
+    this). `crate::registry::tests::content_models_are_deduplicated` pins this by pointer
+    identity.
+  - **Measured rlib size** (`cargo build -p jats-fmt --release`, clean builds,
+    `target/release/libjats_fmt.rlib`): no `registry` feature, 440,032 bytes (unchanged —
+    this path never touched YAML). With `registry` feature: was 4,244,748 bytes under the
+    old YAML/`serde_yaml` runtime-parsed design; now 2,251,814 bytes under committed Rust
+    statics. Growth over baseline dropped from 3,804,716 bytes to 1,811,782 bytes (~52%
+    reduction). The remaining growth is the construct data itself (734 constructs, ~12,900
+    permitted-child/attribute entries even after dedup) compiled into rodata, not parser
+    machinery.
+  - **File sizes**: `registry/jats-1.3-archiving.json` is 76,735 lines / ~1.66 MB (was
+    39,943 lines / 885 KB as YAML — JSON's punctuation overhead and one-entry-per-line
+    formatting account for the growth; this file is not read by any normal build).
+    `src/registry_generated.rs` is 12,017 lines / ~776 KB, committed, and is what
+    `registry`-feature builds actually compile.
+  - **MathML sharing across formats (JATS/DocBook/TEI/BITS all embed the same MathML
+    vocabulary) was assessed and explicitly deferred, not built.** 181 of JATS's 486
+    registry elements are MathML (confirmed again this session via
+    `registry_coverage.rs`'s `denominator_is_plausible` test: 486 total − 305 JATS-native =
+    181). Deferred because no second format has a registry yet to prove the sharing shape
+    against — building a shared crate now would be speculative. If picked up later: the
+    shape is a small crate (e.g. `mathml-registry-fmt`) exporting the same
+    `&'static`-statics shape as this rollout, consumed as an ordinary Cargo dependency by
+    `jats-fmt`/`docbook-fmt`/`tei-fmt`'s own `registry_generated.rs`-equivalents; cost of
+    deferring is committed-file duplication only (each format's generated file would embed
+    its own copy of the ~181-element/~5,400-entry MathML block) — zero runtime cost either
+    way, since both shapes are statics.
+  - Flow-style/compact-array source formatting was considered and not implemented: the JSON
+    source is pretty-printed one entry per line (not compacted), so that adding or removing
+    one child/attribute is a one-line diff. This is a JSON-vs-YAML question now, not a
+    YAML-flow-style question, since the source format itself changed.
+  - All prior tests pass unchanged in behavior: `cargo clippy --all-targets --all-features --
+    -D warnings` and `cargo test --all-features -q` both clean;
+    `registry_coverage.rs`'s regression guard for the 176-element gap
+    (`registry_contains_the_elements_the_hand_written_checklist_missed`) still passes.
 
   **It works.** 305 JATS elements derived against the ~306 the Tag Library's alpha index
   lists; 176 of them are never mentioned anywhere in `rescribe-read-jats`'s source, grouped
@@ -1155,6 +1262,24 @@ Each Tier A format at 5-Production with a published standalone crate.
   - [x] All API modes: ast + stream + batch + w-build + w-stream
   - [x] Table parsing — grid and simple tables with header support (2026-03-29)
   - [x] Footnote parsing — numbered, auto-symbol, auto-numbered, multi-line continuation (2026-03-29)
+  - **REGRESSION FOUND (2026-07-28, ADR audit session)**: the "All API modes" line above no
+    longer reflects reality. `crates/formats/rst-fmt/src/lib.rs` today has no `mod events;`,
+    `mod batch;`, or `mod writer;` declaration at all (confirmed via
+    `grep -n "^mod \|^pub mod "` — only `mod tests` at the bottom). `events.rs`, `batch.rs`, and
+    `writer.rs` still exist on disk with substantial history (see `git log --follow` on each),
+    but are orphaned, uncompiled files: nothing in `lib.rs` references them, under any Cargo
+    feature. `cargo check -p rst-fmt --all-features` succeeds only because the crate doesn't
+    try to compile them. This means `rst-fmt` currently has **no working `events()`,
+    `StreamingParser`, or streaming writer API** — only `reader-ast` (`parse()`) and whatever
+    `writer-builder` provides. This directly contradicts ADR 0003
+    (`docs/adr/0003-streaming-events-not-derived-from-parse.md`), which mandates all three
+    reader APIs plus both writer modes for every hand-rolled format crate. Not fixed here (this
+    was found during a docs-only ADR audit, not an implementation pass) — root cause (when/how
+    the `mod` declarations were dropped from `lib.rs`) was not tracked down. **Action needed**:
+    re-wire `events.rs`/`batch.rs`/`writer.rs` into `lib.rs` (behind the existing
+    `reader-streaming`/`reader-batch`/`writer-streaming` features, which already exist in
+    `Cargo.toml` and currently do nothing), verify the code in those files still compiles and
+    passes its own tests, and re-verify the "5-Production" claim above once that's done.
 - [x] `asciidoc` vertical — **5-Production** (2026-03-29)
   - [x] No-panic fuzz gate (`fuzz_asciidoc_reader`); roundtrip fuzz (`fuzz_asciidoc_roundtrip`)
   - [x] Fixtures: 84 total; COVERAGE.md all boxes checked

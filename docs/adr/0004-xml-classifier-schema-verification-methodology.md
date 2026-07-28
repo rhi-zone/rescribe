@@ -2,56 +2,7 @@
 
 ## Status
 
-Accepted, methodology corrected (2026-07-28) after the originally-accepted version proved
-insufficient. Original passes: docbook: commit `abd6dd447d`, 2026-07-27; tei: commit
-`3e3d84bcef`; jats: commit `20c27d032e`, 2026-07-27. Corrected-methodology re-run: docbook
-only, commit `be578fb98c`, 2026-07-28 (found 17 additional misclassifications beyond the
-original pass's 4). **JATS and TEI have not yet been re-run with the corrected methodology
-— see `TODO.md`'s "Status reset" entry for the pending work.**
-
-## Amendment (2026-07-28): the originally-accepted method was structurally insufficient
-
-The methodology this ADR originally recorded (see "Decision" below, describing the
-2026-07-27 passes) checked every element **already present** in `is_block_element` against
-each format's reference to see if it was classified correctly. It did not check whether the
-format defines block elements **absent from the list entirely**. This is a real methodology
-gap, not a one-off oversight: a presence-checking pass over an incomplete list can find
-"have but shouldn't" but cannot structurally find "should have but don't," no matter how
-carefully each listed entry is re-verified.
-
-This was discovered when a follow-up DocBook pass (commit `be578fb98c`) extracted DocBook
-5.2's full ~392-element index and diffed it against every element `is_block_element` and
-`convert_element`'s match arms *actually handle*, rather than re-checking only what was
-already listed. That pass found 17 additional genuine block-shaped elements missing from
-the list, on top of the 4 the original 2026-07-27 pass had named — using the *same*
-element-family knowledge, the only change was checking for absence, not just for wrong
-presence.
-
-**The JATS (`20c27d032e`) and TEI (`3e3d84bcef`) passes used the original, insufficient
-method** (per this ADR's own "Decision" text as originally written: "every entry... is
-checked against that format's own authoritative reference" — entry-checking, not
-gap-finding). Their "zero misclassifications" (TEI) and "one misclassification, four
-missing elements found incidentally" (JATS) results are therefore not reliable indicators
-of completeness — the four missing elements JATS did find were presumably found by the same
-kind of incidental noticing that inflated the DocBook COVERAGE.md denominator (see
-`docs/format-audit.md`'s Construct Coverage section), not by a systematic absence-check.
-
-**Corrected methodology, going forward:** for each format, extract the *full* element index
-from the format's own authoritative reference (not just the elements already in
-`is_block_element`), and diff it against every element the reader already handles (both
-`is_block_element` and any dedicated match arms elsewhere in `convert_element` or
-equivalent) to find candidates absent from either. Triage each candidate against the
-format's actual content model before adding it — most misses are legitimately phrase-level
-or handled by a separate dedicated path (e.g. DocBook's bibliographic citation fields via
-`convert_biblio_field`) and should not be added just for appearing on the diff. Only after
-this absence-check is complete does re-verifying entries *already listed* (the original
-method) add further value, as a second pass, not a substitute for the first.
-
-This does not change the original ADR's decision to require the checks in the first place,
-or its record of *which* misclassifications the original 2026-07-27 passes correctly caught
-— it corrects what "verified" is allowed to mean going forward. An ADR that documents a
-flawed method without this amendment is worse than no ADR, because it would read as
-license to repeat the same insufficient check.
+Accepted.
 
 ## Context
 
@@ -63,53 +14,73 @@ captures everything verbatim either way) but does produce the wrong wrapper shap
 round-trip, which is a real, if subtler, fidelity bug.
 
 These classifiers were originally written by typical-usage judgment — "this element usually
-reads like a block in practice" — not by checking each format's authoritative reference. That
-gap was flagged explicitly rather than left implicit: docbook's own commit that introduced the
-classifier called out that several fields (`author`/`date`/`copyright`/`pubdate`/`releaseinfo`
-classified inline; `authorgroup`/`legalnotice`/`revhistory`/`revision` classified block) were
-unverified guesses, and a follow-up task was dispatched specifically to check them against
-DocBook's real content model rather than trust the guess.
+reads like a block in practice" — not by checking each format's authoritative reference.
+DocBook's own commit that introduced the classifier flagged this gap explicitly: several
+fields (`author`/`date`/`copyright`/`pubdate`/`releaseinfo` classified inline;
+`authorgroup`/`legalnotice`/`revhistory`/`revision` classified block) were unverified guesses.
+
+A first verification attempt checked every element **already present** in `is_block_element`
+against each format's reference to see if it was classified correctly, but did not check
+whether the format defines block elements **absent from the list entirely**. That is a
+structural gap, not a matter of care: a presence-checking pass over an incomplete list can
+find "have but shouldn't" but cannot find "should have but don't," no matter how carefully
+each listed entry is re-verified. Running that check against DocBook found 4 misclassified
+entries; separately extracting DocBook 5.2's full ~392-element index and diffing it against
+every element `is_block_element` and `convert_element` actually handle — rather than only
+re-checking what was already listed — found 17 *additional* genuine block-shaped elements
+missing from the list, using the same element-family knowledge and no new information other
+than checking for absence instead of just wrong presence.
 
 ## Decision
 
-**Superseded by the 2026-07-28 amendment above — retained for the historical record of what
-was originally decided, not as current guidance.** For each XML-based format vertical,
-`is_block_element` gets a dedicated verification pass: every entry (not just the ones already
-flagged as suspect) is checked against that format's own authoritative reference — the live
-schema/Tag Library/Guidelines pages fetched directly (e.g. docbook.org for DocBook,
-jats.nlm.nih.gov's JATS 1.3 Tag Library, TEI P5 Guidelines) — using each element's actual
-expanded content model and "may be contained in" list as ground truth, not memory or
-typical-usage inference. Corrections and additions are recorded with an explicit citation
-trail (which page, what the content model said) in the doc comment above the classifier, not
-just in the commit message.
+For each XML-based format vertical, `is_block_element` gets a two-part verification pass:
 
-This entry-checking step is still valid as a *second* pass — see the amendment's "corrected
-methodology" for what must happen first.
+1. **Absence check (must run first).** Extract the format's *full* element index from its own
+   authoritative reference (docbook.org for DocBook, jats.nlm.nih.gov's JATS 1.3 Tag Library,
+   TEI P5 Guidelines) — not just the elements already in `is_block_element` — and diff it
+   against every element the reader already handles (`is_block_element` and any dedicated
+   match arms elsewhere in `convert_element` or equivalent) to surface candidates absent from
+   both. Triage each candidate against the format's actual content model before adding it:
+   most misses are legitimately phrase-level or handled by a separate dedicated path (e.g.
+   DocBook's bibliographic citation fields via `convert_biblio_field`) and should not be added
+   just for appearing on the diff.
+2. **Entry check (second pass, not a substitute for the first).** Every entry already in
+   `is_block_element` is checked against the format's own authoritative reference, using each
+   element's actual expanded content model and "may be contained in" list as ground truth, not
+   memory or typical-usage inference. Corrections are recorded with an explicit citation trail
+   (which page, what the content model said) in the doc comment above the classifier.
 
-Where the format's own reference declines to commit either way — e.g. JATS's Tag Library states
-`<alternatives>` "is neither inherently block nor inherently inline in nature... determined by
-context and usage" — the classifier leaves that element unclassified (defaulting to inline)
-rather than guessing a side the spec itself won't take.
+Where the format's own reference declines to commit either way — e.g. JATS's Tag Library
+states `<alternatives>` "is neither inherently block nor inherently inline in nature...
+determined by context and usage" — the classifier leaves that element unclassified
+(defaulting to inline) rather than guessing a side the spec itself won't take.
+
+Doing only the entry check (skipping the absence check) is not an acceptable partial
+application of this methodology: it structurally cannot find missing elements regardless of
+how carefully it's performed, so a report of "N misclassifications, zero missing" produced by
+an entry-check-only pass is not a completeness claim and must not be read as one.
 
 ## Consequences
 
-- Applied uniformly across all three XML verticals in the same session arc: docbook found
-  three misclassifications; tei found zero misclassifications but three missing block elements;
-  jats found one misclassification (`related-article`, wrongly block) and four missing block
-  elements (`speech`/`speaker`/`supplementary-material`/`block-alternatives`). **Per the
-  2026-07-28 amendment, these tei/jats numbers are not reliable completeness results** — they
-  used the entry-checking-only method, and DocBook's own corrected re-run found 17 additional
-  misclassifications the entry-checking pass had missed. Re-verification of tei/jats with the
-  corrected methodology is pending (`TODO.md`).
-- The pattern is reusable for any future format vertical with a similar catch-all classifier —
-  the methodology (fetch the live reference, check every entry's content model and containment
-  list, cite the source in a doc comment, leave genuinely undecidable cases unclassified rather
-  than guessed) generalizes beyond XML formats to any format with an ambiguous-construct
-  fallback path.
+- DocBook has run the full two-part methodology (commits `abd6dd447d`, `be578fb98c`): 4
+  misclassifications from the entry check, 17 additional missing block elements from the
+  absence check.
+- JATS (commit `20c27d032e`) and TEI (commit `3e3d84bcef`) have so far only run an
+  entry-check-only pass: JATS found one misclassification (`related-article`, wrongly block)
+  and four missing block elements found incidentally rather than by systematic absence-check;
+  TEI found zero misclassifications and three missing block elements, also incidental. Neither
+  result is a completeness claim under this ADR — both need the absence check run against
+  their full element indexes before `is_block_element` can be called verified for those
+  formats. This is open, tracked work; see `TODO.md`.
+- The pattern is reusable for any future format vertical with a similar catch-all
+  classifier — the methodology (extract the full reference index, diff for absence first,
+  then re-check entries already listed, cite the source in a doc comment, leave genuinely
+  undecidable cases unclassified rather than guessed) generalizes beyond XML formats to any
+  format with an ambiguous-construct fallback path.
 - Cost: requires network access to the format's live reference (or an explicit, disclosed
   fallback to documented knowledge with a stated confidence level if fetching isn't available)
-  — this is a deliberate tradeoff of thoroughness over speed, consistent with CLAUDE.md's rule
-  against guessing when a lookup is possible.
+  — a deliberate tradeoff of thoroughness over speed, consistent with CLAUDE.md's rule against
+  guessing when a lookup is possible.
 
 ## Alternatives considered
 
@@ -117,3 +88,9 @@ rather than guessing a side the spec itself won't take.
   disposition rules treat "something unexpected is a signal" and forbid guessing when
   verification is possible; an already-flagged unverified guess is exactly the kind of thing
   that must be checked, not carried forward.
+- **Entry-check only (verify every already-listed element against the reference, skip
+  extracting the full index)**: rejected — this was the first approach tried, and it is
+  structurally incapable of finding elements missing from the list entirely, regardless of
+  how carefully each listed entry is re-verified. DocBook's own corrected re-run found 17
+  additional misclassifications this method could not have found no matter how many times it
+  was repeated.
