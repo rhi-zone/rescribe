@@ -88,10 +88,24 @@ and not being retracted — only the construct-list-completeness component of it
 
   **Shape, in one line:** each `-fmt` crate carries a committed, spec-derived,
   machine-readable catalog of every construct its format defines, behind an opt-in
-  `registry` Cargo feature, runtime-queryable, with constructs annotated by *slice* — the
-  format's own published modularization. The registry is spec-pure: support status is
-  never a field, only a caller-side join (`Registry::not_handled`), so it doesn't churn
-  when reader/writer work lands.
+  `registry` Cargo feature, runtime-queryable, with constructs annotated by *slice*. The
+  registry is spec-pure: support status is never a field, only a caller-side join
+  (`Registry::not_handled`), so it doesn't churn when reader/writer work lands.
+
+  **2026-07-28 amendment: slices are now two separate fields, not one.** ADR 0013's
+  original decision 3 claimed OOXML's slices come from "namespace/part schemas" — false;
+  `spec/ooxml-features.yaml`'s ~20 tags (`core`, `styling`, `charts`, …) are hand-chosen by
+  this project, not spec-derived. That error produced a rule that outlawed OOXML's own
+  shipping tags while blocking DocBook. Corrected in the ADR's amendment (read it) and
+  implemented in `jats-fmt` (commit range starting `73c040bd`): `Registry`/`Construct` now
+  carry `normative_slices` (spec-published, may be empty) and `pragmatic_slices` (ours,
+  always permitted, explicitly non-normative). `registry_version` bumped 1 → 2. JATS's
+  pilot populates only `normative_slices`; `pragmatic_slices` is empty throughout, since
+  JATS's own modularization already does the decomposition job and inventing a second one
+  would be noise, not value. Everything below in this entry that says "slice" without
+  qualification is describing the *pre-amendment* single-field design as it stood at
+  landing time (2026-07-28, same day) — read it as history, and see the ADR amendment for
+  what actually ships now.
 
   **Pilot: JATS 1.3 Archiving, end to end.** `crates/formats/jats-fmt/registry/jats-1.3-archiving.yaml`
   (derived), `crates/formats/jats-fmt/src/registry.rs` (runtime API),
@@ -122,17 +136,22 @@ and not being retracted — only the construct-list-completeness component of it
      JATS pilot. Note the ODD declares 22 modules while the Guidelines' ST chapter prose
      says 23; resolve that discrepancy rather than picking one.
 
-  2. **DocBook is blocked on an open question, not on effort.** DocBook 5.2's *normative*
-     OASIS artifact (`docs.oasis-open.org/docbook/docbook/v5.2/os/rng/docbook.rnc`) is a
-     flattened monolith: 414 distinct elements in 420 **anonymous** `div { }` blocks with
-     no module identity anywhere. So DocBook cannot source slices from its normative
-     schema. The upstream TC source (codeberg.org/docbook/docbook,
-     `schemas/docbook/src/main/docbook/`) *is* modular (~35 named `.rnc`), but it is build
-     source, not normative, and its license was not verified. ADR 0013 open question 1
-     records the fork: ship empty slices with a recorded reason, or adopt the
-     non-normative modules with non-normativity stamped in provenance. **Decide that before
-     implementing.** Separately, DocBook's schema is RNC, not RNG, so derivation needs a
-     compact-syntax reader — see item 4.
+  2. **DocBook is unblocked for rollout (2026-07-28 amendment; was "blocked on an open
+     question, not on effort").** DocBook 5.2's *normative* OASIS artifact
+     (`docs.oasis-open.org/docbook/docbook/v5.2/os/rng/docbook.rnc`) is a flattened
+     monolith: 414 distinct elements in 420 **anonymous** `div { }` blocks with no module
+     identity anywhere. So DocBook still cannot source *normative* slices from its
+     normative schema — that fact hasn't changed. What changed is that this no longer
+     blocks anything: under the two-field model, DocBook ships with `normative_slices: []`
+     and a recorded reason immediately, no decision needed first. The only genuinely open
+     piece is narrower and optional — whether to also populate `pragmatic_slices`, and if
+     so from what (invent fresh, or borrow the shape of the non-normative Codeberg TC
+     source's ~35 `.rnc` modules, codeberg.org/docbook/docbook,
+     `schemas/docbook/src/main/docbook/` — as an idea, not a redistribution, so its
+     unverified license doesn't need resolving for this use). See ADR 0013 open question 1
+     (as amended) for the full statement. Separately, unaffected by any of this: DocBook's
+     schema is RNC, not RNG, so deriving its *construct list* (the denominator) still needs
+     a compact-syntax reader — see item 4.
 
   3. **ooxml migration onto the uniform design.** Concretely:
      - **What stays:** `crates/tools/ooxml-codegen`'s `lexer.rs`/`parser.rs`/`ast.rs` (they
@@ -153,16 +172,33 @@ and not being retracted — only the construct-list-completeness component of it
        the data uses `track-changes`, which has 70 — already drifted, nothing checks it);
        and promotion of `analyze_schema` from `OOXML_ANALYZE`-gated stderr to a real test
        (`has_unmapped()` is already written and is dead code).
-     - **What needs a decision:** ooxml's feature tags conflate two things the new design
-       separates — *slice* (spec modularization) and *Cargo feature gate*. `primary_feature`
-       silently uses only the first tag, so `drawingHF: [drawings, layout]` gates on
-       `sml-drawings` and `layout` is inert. Multi-slice membership is first-class in the
-       new design; multi-*gate* is not, and that mapping must be chosen deliberately.
-       OOXML's slices should be the namespace/part schemas, not the current editorial tags.
-     - **Licensing constrains this more than the others:** no copyright or license statement
-       was found in the ECMA-376 schema files or in Parts 1/2 (ADR 0013 open question 3).
-       Treat as non-redistributable. `spec/` is already gitignored, which is exactly why the
-       committed-artifact + external-citation design was built the way it is.
+     - **Corrected by the 2026-07-28 amendment: OOXML's existing ~20 tags are legitimate
+       `pragmatic_slices` as-is, not a violation to fix.** ADR 0013 originally claimed
+       OOXML's slices come from "namespace/part schemas" — that was factually wrong; the
+       tags in `spec/ooxml-features.yaml` are hand-chosen by this project. The corrected
+       migration: the existing `core`/`styling`/`charts`/… tags move into each shard's
+       `pragmatic_slices`, explicitly marked non-normative, with no further justification
+       needed. The *real* namespace/part decomposition (21 namespace schemas, ~59 parts)
+       remains available as a separate, future `normative_slices` source if someone does
+       that derivation work — it is not required for this migration to land.
+     - **Still needs a decision, unresolved by the amendment:** ooxml's tags conflate a
+       slice with a Cargo feature gate. `primary_feature` silently uses only the first tag,
+       so `drawingHF: [drawings, layout]` gates on `sml-drawings` and `layout` is inert with
+       no diagnostic. The amendment settles *which list* the tags belong in
+       (`pragmatic_slices`, since a Cargo feature is unambiguously our own build concern)
+       but not how a construct's multiple pragmatic-slice memberships collapse into the one
+       `#[cfg]` predicate a Cargo feature requires — intersection, first-tag (today's
+       silent behavior), OR-of-all, or requiring multi-tagged constructs to name their gate
+       explicitly. ADR 0013 open question 5 (as amended) restates this; it needs a human
+       call before or during this migration.
+     - **Licensing constrains the construct list and any future normative-slice citation,
+       not the pragmatic tags.** No copyright or license statement was found in the
+       ECMA-376 schema files or in Parts 1/2 (ADR 0013 open question 3). Treat as
+       non-redistributable. `spec/` is already gitignored, which is exactly why the
+       committed-artifact + external-citation design was built the way it is. This gates
+       deriving the *element list itself* from ECMA-376 text and any future
+       `normative_slices` sourced from the namespace/part schemas; it does not gate
+       `pragmatic_slices`, which carries no redistribution claim.
      - **Effort shape:** the sharding is mechanical and large-diff/low-risk. The genuinely
        uncertain part is that the registry must describe constructs `#[cfg]`'d *out* of the
        current build — get that wrong and the catalog lies about what the binary can parse.
@@ -185,7 +221,10 @@ and not being retracted — only the construct-list-completeness component of it
      fallible as the checklist it replaces. ADR 0013 open question 2 leaves undecided
      whether such registries should be allowed at all (clearly marked) or whether those
      formats should keep a COVERAGE.md and not pretend otherwise. Decide before the first
-     schema-less format wants one; do not let it happen by default.
+     schema-less format wants one; do not let it happen by default. **Not the same question
+     as a hand-curated *slice*** — the 2026-07-28 amendment already settled that a
+     `pragmatic_slices` grouping is fine when explicitly marked non-normative, regardless
+     of how this question (about the construct *list*) resolves.
 
 - **DocBook's two confirmed code gaps from the 2026-07-28 element-index audit fixed;
   audit re-verified and extended, not just patched (2026-07-28).** Follow-up to the
