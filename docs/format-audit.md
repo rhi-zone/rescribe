@@ -208,6 +208,96 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 
 odt, fb2, docbook, jats, tei, opml, latex, endnotexml, native
 
+*(stale — superseded by the full inventory below; odt/fb2/docbook/jats/tei/native now have crates.)*
+
+---
+
+## Adapter parsing/emitting-logic inventory (audited 2026-07-28)
+
+Full sweep of all 54 reader crates and 64 writer crates against CLAUDE.md's rule
+"the adapter layer must never contain parsing or writing logic". Method: read the
+non-`#[cfg(test)]`, non-`[[bin]]` functions in each adapter's `src/*.rs` and check
+whether they call a `crates/formats/` crate or do the byte-level work themselves.
+`Cargo.toml` was treated as a weak signal only (verified per CLAUDE.md).
+
+**65 formats audited: 38 clean, 14 violating, 13 uncertain.**
+
+This section supersedes the "Formats still needing a standalone crate" line above and
+is the single inventory for this dimension; `TODO.md`'s DEBT section links here rather
+than repeating it.
+
+### Clean (38) — adapter is a thin AST↔IR translator on both sides
+
+Backed by a repo-local `crates/formats/` crate: org, rst, asciidoc, textile, muse, t2t,
+markua, fountain, texinfo, bbcode, pod, haddock, man, mediawiki, creole, dokuwiki,
+vimwiki, zimwiki, xwiki, twiki, tikiwiki, jira, docx (`ooxml-wml`), pptx (`ooxml-pml`),
+xlsx (`ooxml-sml`), odt (`odf-fmt`), fb2 (`fb2-fmt`), docbook (`docbook-fmt`),
+jats (`jats-fmt`), tei (`tei-fmt`), html (`html-fmt`), rtf (`rtf-fmt`), ris (`ris`),
+csv (`csv-fmt`), tsv (`tsv-fmt`), native (`native`).
+
+Backed by a sanctioned third-party library with no hand-rolled logic layered on top:
+epub (`epub` / `epub-builder`), pdf (`pdf-extract`, read-only).
+
+Residual `zip::` usage in `rescribe-read-odt` and `rescribe-read-pptx` is confined to
+`#[cfg(test)]` fixture builders — verified, not a violation.
+
+### Violating (14)
+
+`-fmt?` = a usable standalone crate exists in `crates/formats/`. `R`/`W` = reader /
+writer adapter contains parsing / emitting logic. Tier is eyeballed from adapter line
+count and the fraction that is format syntax rather than AST↔IR translation.
+
+| Format | -fmt? | R | W | Tier | Notes |
+|--------|-------|---|---|------|-------|
+| commonmark | yes | no | **yes** | large | **PARTIAL MIGRATION** — reader uses `commonmark_fmt::parse`; writer (276 ln) hand-rolls markdown and never calls the existing `commonmark_fmt::emit` |
+| djot | yes | no | **yes** | large | **PARTIAL MIGRATION** — reader uses `djot_fmt`; writer (641 ln) hand-rolls, `djot_fmt::emit` unused, crate not even a dependency |
+| ansi | yes | no | **yes** | large | **PARTIAL MIGRATION** — `ansi-fmt` *is* a writer dependency but deliberately bypassed; the file's own doc comment says "Does not go through the ansi-fmt AST — sequences are emitted directly" |
+| markdown | yes | no | **yes** | large | reader dispatches to `commonmark_fmt`/`pulldown_cmark`; writer (1606 ln) fully hand-rolled |
+| gfm | (pulldown) | no | **yes** | large | reader walks `pulldown_cmark` events (sanctioned); writer (350 ln) hand-rolled with no backing crate |
+| markdown-strict | (pulldown) | no | **yes** | large | same shape as gfm; writer 377 ln |
+| multimarkdown | (pulldown) | no | **yes** | large | same shape as gfm; writer 552 ln |
+| typst | no | no | **yes** | large | reader is thin over third-party `typst-syntax`; writer (508 ln) hand-rolls Typst markup with no emit crate to delegate to |
+| latex | **no** | **yes** | **yes** | large | worst case: `handwritten.rs` (895 ln) is a full recursive-descent LaTeX parser *inside the reader adapter*, plus a 662-ln tree-sitter backend; writer `builder.rs` (717 ln) is a hand-written emitter |
+| opml | **no** | **yes** | **yes** | small–medium | `quick_xml::Reader` / `quick_xml::Writer` driven directly in production code; reader 307 ln / writer 278 ln, essentially all of it |
+| endnotexml | **no** | **yes** | **yes** | large | `quick_xml::Reader`/`Writer` plus a hand-rolled generic-XML tree walker; 722 / 967 ln |
+| bibtex | **no** | **yes** | **yes** | medium | reader calls third-party `biblatex::Bibliography::parse` directly; writer (643 ln) hand-rolls BibTeX syntax + escaping |
+| biblatex | **no** | **yes** | **yes** | medium | identical shape to bibtex |
+| csl-json | **no** | **yes** | **yes** | large | the CSL-JSON *schema* (`CslItem`/`CslName`/`CslDate`) lives in the adapter, both sides, over raw `serde_json` |
+
+The three PARTIAL MIGRATION cases (commonmark, djot, ansi) are the highest-signal
+finding: from `Cargo.toml` alone the vertical looks migrated, but the writer half never
+was. `djot`'s writer does not even declare the dependency.
+
+### Uncertain (13) — recorded rather than forced to yes/no
+
+**JSON-schema-in-adapter class (2): `pandoc-json`, `ipynb`.** Neither has a standalone
+crate; both define the format's schema structs in the adapter and go through
+`serde_json`, which does the actual byte-level tokenizing. By the literal test (no
+`quick_xml`/`zip`/`regex`/hand-rolled state machine) they pass; by the reasoning already
+applied to `csl-json` in `TODO.md` — that owning the schema *is* owning the format
+knowledge — they fail. They are the same class as `csl-json`, so whatever call stands
+for `csl-json` should apply to both. `pandoc-json`'s reader additionally walks raw
+`serde_json::Value` block/inline trees (805 ln), which leans further toward violation
+than `ipynb` does.
+
+**Output-only rendering targets (11):** beamer, revealjs, slidy, s5, dzslides, slideous,
+context, ms, icml, chunkedhtml, plaintext. All 11 hand-emit their target syntax (LaTeX,
+HTML, troff/ms macros, ICML XML, plain text) via `write!`/`push_str`, and none depends on
+any `crates/formats/` crate or reuses `rescribe-write-html` / `rescribe-write-latex` —
+there is no cross-writer reuse at all. By the letter of the rule this is emitting logic
+in an adapter. The open question is scope: the rule is framed around a *native AST* that
+a reader and writer both round-trip, and these formats have no reader and no round-trip
+consumer, so whether a `beamer-fmt` crate would serve any real ecosystem user is a
+judgment call for a human. Recorded as uncertain, not as a verdict. `plaintext` is the
+weakest case (no escaping or structural rules at all — arguably light string
+manipulation). Sizes: beamer/slideous/chunkedhtml 250–435 ln, revealjs/context/ms/icml
+185–330 ln, slidy/s5/dzslides 185–226 ln.
+
+### Formats with no standalone crate at all
+
+latex, opml, endnotexml, bibtex, biblatex, csl-json, pandoc-json, ipynb, typst (writer
+side), and the 11 output-only targets.
+
 ---
 
 ## Risk areas

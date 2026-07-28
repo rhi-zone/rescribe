@@ -671,6 +671,33 @@ The violation is format-parsing deps (quick-xml, zip, etc.) called from producti
 
 Fix each when doing that format's vertical. Do NOT fix all at once (horizontal sweep).
 
+**Superseded by a full sweep, 2026-07-28.** The list above was incidental (only the
+crates that happened to come up during other work). Every reader and writer adapter has
+now been audited against the rule; the complete inventory lives in
+`docs/format-audit.md` § "Adapter parsing/emitting-logic inventory" — 65 formats,
+38 clean, 14 violating, 13 uncertain. Not repeated here. Headlines only:
+
+- **Three PARTIAL MIGRATION cases** — `commonmark`, `djot`, `ansi`: the `-fmt` crate
+  exists and the *reader* uses it, but the writer hand-rolls emission and never calls
+  the crate's `emit()`. These look done from `Cargo.toml` and are not; `djot`'s writer
+  doesn't even declare the dependency. Highest-value fixes (backing crate already there).
+- **Worst violation: `latex`** — `rescribe-read-latex/src/handwritten.rs` is an 895-line
+  recursive-descent LaTeX parser living inside the reader adapter, plus a 662-line
+  tree-sitter backend and a 717-line hand-written emitter in the writer. No `latex-fmt`.
+- **No standalone crate at all**: latex, opml, endnotexml, bibtex, biblatex, csl-json,
+  pandoc-json, ipynb, typst (writer side).
+- **New findings beyond the bibliographic four**: `pandoc-json` has the same
+  schema-in-adapter shape as `csl-json` (not previously listed); the whole markdown
+  writer family (`markdown`, `gfm`, `markdown-strict`, `multimarkdown`) plus `typst`'s
+  writer are hand-rolled emitters with no backing crate.
+- **Open policy call, not decided**: whether the 11 output-only rendering targets
+  (beamer, revealjs, slidy, s5, dzslides, slideous, context, ms, icml, chunkedhtml,
+  plaintext) fall under the rule at all — they have no reader and no round-trip
+  consumer, so a `beamer-fmt` crate may serve no real ecosystem user. Recorded as
+  uncertain in the audit doc rather than guessed either way.
+- Confirmed clean on re-verification: the previously-listed docx/odt/pptx/fb2/docbook/
+  jats/tei entries above, plus `ris` (the one bibliographic vertical done right).
+
 ### `docbook-fmt` crate created (2026-07-26)
 
 Standalone DocBook/generic-XML AST + parser + emitter (`crates/formats/docbook-fmt`),
