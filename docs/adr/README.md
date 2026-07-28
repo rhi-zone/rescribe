@@ -38,7 +38,7 @@ incorrect text if needed.)
 | [0004](0004-xml-classifier-schema-verification-methodology.md) | Schema-verification methodology for block/inline element classifiers: absence-check first, then entry-check | Accepted |
 | [0005](0005-citation-bibliography-ir-shape.md) | Citation/bibliography IR shape: `bibliography`/`bibliography_entry`/`bibliography_field` | Accepted |
 | [0006](0006-content-model-decides-properties-vs-child-nodes.md) | Properties-vs-child-nodes is decided by content-model markup permission, not precedent | Accepted |
-| [0007](0007-dtd-entity-resolution-build-vs-buy.md) | DTD-aware entity resolution: standalone `xml-entities` crate, layered over a bought standard table | Accepted; implemented |
+| [0007](0007-dtd-entity-resolution-build-vs-buy.md) | DTD-aware entity resolution: standalone `xml-entities` crate, layered over quick-xml and a bought standard table | Accepted; implemented |
 | [0008](0008-ris-sn-tag-not-disambiguated.md) | RIS `SN` tag stays `field:scheme = "sn"`, not resolved to `isbn`/`issn` via `TY` | Accepted |
 | [0009](0009-propvalue-float-json-sentinel.md) | `PropValue::Float` non-finite values serialize as a string sentinel in JSON | Accepted |
 | [0010](0010-resource-data-base64-json.md) | `Resource::data` serializes as base64 in JSON, unconditionally | Accepted |

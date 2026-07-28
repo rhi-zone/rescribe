@@ -930,6 +930,44 @@ and not being retracted — only the construct-list-completeness component of it
   deliberate, disclosed scope boundary (no network/filesystem access from this crate),
   not a bug; such entities still raw-preserve losslessly exactly as before.
 
+- **ADR 0007's open parser-swap question — resolved (2026-07-28).** ADR 0007 originally
+  shipped `xml-entities` without ever weighing "switch the underlying parser to `xml-rs`/
+  `roxmltree` to get internal-subset entity discovery natively" against building a standalone
+  crate — that comparison is now done and the ADR rewritten with the evidence in place.
+  `roxmltree` is disqualified outright: `Document::parse(&str)` needs the whole document
+  pre-allocated, no `Read`/chunked entry point, no streaming per its own docs — building
+  `StreamingParser` on it would require the buffer-everything-then-wrap anti-pattern CLAUDE.md
+  bans by name. `xml-rs` is a real contender on capability but loses on two measured,
+  non-negotiable axes: zero-copy (owned `String` per token by design, confirmed via its own
+  README) and throughput (19–21x slower than quick-xml on an out-of-repo synthetic-DocBook
+  benchmark, quick-xml 0.39.4 vs. `xml` 0.8.28 vs. `roxmltree` 0.20.0, release build,
+  best-of-3; quick-xml's own README shows ~50x on its input). Whether `xml-rs`'s error model
+  can support the same truncation-vs-malformed distinction `docbook-fmt::batch::StreamingParser`
+  exploits for chunked feeding is unverified on top of that. Net: quick-xml stays; see ADR 0007
+  for the full writeup.
+
+  **Also corrected in the same pass**: the ADR previously mischaracterized quick-xml as not
+  resolving entities at all. Verified against quick-xml 0.39.4 source and the live GitHub
+  thread (`gh issue view 258 --repo tafia/quick-xml --comments`): quick-xml resolves the 5
+  predefined entities and numeric char refs today (`resolve_xml_entity`, `unescape`/
+  `unescape_with`, opt-in per-call), and has exposed a custom-entity resolution hook
+  (`unescape_with`'s closure) since contributor `pchampin`'s PR #261 shipped years ago — the
+  *resolution* half of issue #258. What's still missing, confirmed by maintainer `Mingun` on
+  that thread, is DOCTYPE internal-subset *discovery*: quick-xml's DTD skip-state-machine
+  (`src/parser/dtd.rs`) only tracks nesting well enough to find the closing `>` ("we simply
+  count `<` and `>`"), never builds an entity table from a document's own DOCTYPE. Mingun
+  called a `reader::Config`-level entity map with transparent expansion "the plan for further
+  improvements" — unshipped, no committed timeline. `xml-entities` fills exactly that gap
+  (`decl.rs`), not "entity resolution" in general, and doesn't duplicate quick-xml's
+  `unescape_with` (none of docbook-fmt/jats-fmt/tei-fmt call it; they dispatch
+  `Event::GeneralRef` manually instead).
+
+  **Open, future work, not a defect**: if quick-xml ships that `reader::Config` entity map,
+  `xml-entities` could drop `decl.rs` and shrink to a pure table + resolution layer at zero
+  performance cost. Upstreaming DOCTYPE internal-subset discovery to quick-xml directly (rather
+  than waiting) would serve the wider Rust ecosystem per CLAUDE.md's priority hierarchy and is
+  worth someone picking up, but isn't scheduled here.
+
 - **DocBook and JATS `COVERAGE.md` audited against the full format schema element
   lists (2026-07-28)** — prompted by the observation that both checklists' denominators
   had grown ad hoc during this session (docbook 94→105, jats 106→109) purely from gaps
