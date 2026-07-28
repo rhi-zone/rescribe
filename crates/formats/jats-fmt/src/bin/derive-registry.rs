@@ -21,19 +21,20 @@
 //! how the "auditable, re-derivable denominator" promise survives the source
 //! schema being absent for almost everyone.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use jats_fmt::Node;
 use jats_fmt::registry::{
-    Citation, Construct, ConstructKind, FormatInfo, Provenance, Registry, Slice, SourceDigest,
-    SourceKind,
+    Citation, Construct, ConstructKind, ContentModel, FormatInfo, PermittedAttribute,
+    PermittedChild, Provenance, Registry, Slice, SourceDigest, SourceKind,
 };
 use sha2::{Digest, Sha256};
 
 const DRIVER: &str = "JATS-archivearticle1-3.rng";
 const BASE_URL: &str = "https://jats.nlm.nih.gov/archiving/1.3/rng/";
-const TOOL: &str = "jats-fmt derive-registry v1";
+const TOOL: &str = "jats-fmt derive-registry v2";
 const OUT_REL: &str = "registry/jats-1.3-archiving.yaml";
 
 fn main() -> ExitCode {
@@ -188,6 +189,12 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
     let mut normative_slices = Vec::new();
     // name -> (kind, normative slice ids in include order)
     let mut found: BTreeMap<(ConstructKind, String), Vec<String>> = BTreeMap::new();
+    // Every parsed document's nodes, retained for the second, content-model
+    // resolution pass below: <define> bodies and <element> bodies can (and
+    // routinely do, via JATS's customization-layer <ref>s) live in a
+    // different module than the <element name="…"> declaration that uses
+    // them, so resolution needs the whole schema assembled first.
+    let mut all_docs: Vec<Vec<Node>> = vec![driver_doc.nodes.clone()];
 
     // The driver itself declares constructs too (notably <article>).
     let driver_slice = DRIVER.to_string();
@@ -217,27 +224,48 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
             url: format!("{BASE_URL}{file}"),
         });
         collect_constructs(&doc.nodes, &id, &mut found);
+        all_docs.push(doc.nodes);
+    }
+
+    // Content-model resolution: build a global `<define name="…">` table and
+    // a global `<element name="…">` body table across every parsed module,
+    // then resolve each element's body against the define table. See
+    // `resolve_content_model`'s doc comment for the flattening rules.
+    let mut defines: BTreeMap<String, Vec<Node>> = BTreeMap::new();
+    let mut element_bodies: BTreeMap<String, Vec<Node>> = BTreeMap::new();
+    for doc in &all_docs {
+        collect_defines(doc, &mut defines);
+        collect_element_bodies(doc, &mut element_bodies);
     }
 
     let mut constructs: Vec<Construct> = found
         .into_iter()
-        .map(|((kind, name), normative_slices)| Construct {
-            id: format!("{}:{}", kind.id_prefix(), name),
-            name,
-            kind,
-            normative_slices,
-            // JATS's normative modularization already does the decomposition
-            // job; this derivation tool has no basis for inventing a second,
-            // pragmatic grouping, so it leaves this empty for every
-            // construct rather than guessing one (ADR 0013's 2026-07-28
-            // amendment: an unasked-for pragmatic slice is noise, not value).
-            pragmatic_slices: Vec::new(),
+        .map(|((kind, name), normative_slices)| {
+            let content_model = match kind {
+                ConstructKind::Element => element_bodies
+                    .get(&name)
+                    .map(|body| resolve_content_model(body, &defines)),
+                ConstructKind::Attribute => None,
+            };
+            Construct {
+                id: format!("{}:{}", kind.id_prefix(), name),
+                name,
+                kind,
+                normative_slices,
+                // JATS's normative modularization already does the decomposition
+                // job; this derivation tool has no basis for inventing a second,
+                // pragmatic grouping, so it leaves this empty for every
+                // construct rather than guessing one (ADR 0013's 2026-07-28
+                // amendment: an unasked-for pragmatic slice is noise, not value).
+                pragmatic_slices: Vec::new(),
+                content_model,
+            }
         })
         .collect();
     constructs.sort_by(|a, b| a.id.cmp(&b.id));
 
     Ok(Registry {
-        registry_version: 2,
+        registry_version: 3,
         format: FormatInfo {
             id: "jats".into(),
             name: "JATS (Journal Article Tag Suite)".into(),
@@ -278,6 +306,229 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
     })
 }
 
+/// `<define name="…">…</define>` bodies, keyed by name, across every parsed
+/// module. Multiple modules may legitimately declare the same name (JATS's
+/// customization layer splits several definitions across files with
+/// `combine="interleave"`/`"choice"`); for the *flattened* content model this
+/// registry records, that distinction doesn't matter — every occurrence's
+/// children are simply unioned into the same bucket.
+fn collect_defines(nodes: &[Node], out: &mut BTreeMap<String, Vec<Node>>) {
+    for n in nodes {
+        if let Node::Element {
+            name,
+            attrs,
+            children,
+            ..
+        } = n
+        {
+            let local = name.rsplit(':').next().unwrap_or(name);
+            if local == "define"
+                && let Some((_, dname)) = attrs.iter().find(|(k, _)| k == "name")
+            {
+                out.entry(dname.clone())
+                    .or_default()
+                    .extend(children.clone());
+            }
+            collect_defines(children, out);
+        }
+    }
+}
+
+/// `<element name="…">…</element>` bodies, keyed by local element name,
+/// across every parsed module. A body mixes the element's attribute-list
+/// `<ref>` and its content-model `<ref>` side by side (e.g. `<element
+/// name="sec"><ref name="sec-attlist"/><ref name="sec-model"/></element>`),
+/// so resolving the whole body in one pass picks up both children and
+/// attributes without needing to guess at a `-model`/`-attlist` naming
+/// convention the schema does not actually guarantee everywhere.
+fn collect_element_bodies(nodes: &[Node], out: &mut BTreeMap<String, Vec<Node>>) {
+    for n in nodes {
+        if let Node::Element {
+            name,
+            attrs,
+            children,
+            ..
+        } = n
+        {
+            let local = name.rsplit(':').next().unwrap_or(name);
+            if local == "element"
+                && let Some((_, ename)) = attrs.iter().find(|(k, _)| k == "name")
+            {
+                out.entry(ename.clone())
+                    .or_default()
+                    .extend(children.clone());
+            }
+            collect_element_bodies(children, out);
+        }
+    }
+}
+
+/// Resolve one element's `<element>` body into a flattened [`ContentModel`]:
+/// every permitted direct child element and attribute, whether each is
+/// repeatable/required, and whether character data is permitted. Walks
+/// `<ref>` through the global `defines` table, transparently descends through
+/// `<choice>`/`<group>`/`<interleave>`/`<optional>`/`<zeroOrMore>`/
+/// `<oneOrMore>`, and stops at each nested `<element>` boundary — a
+/// grandchild element's own permitted content is *its* content model, not
+/// this one's, which is exactly what keeps this a one-level, per-element
+/// catalog rather than an unrolled document grammar.
+///
+/// Deliberately **not** recorded: relative order, which children exclude
+/// which others (choice), and which children must co-occur (group/
+/// interleave) — see the module docs on `jats_fmt::registry` for why the
+/// flattened form was chosen over preserving the full pattern structure.
+fn resolve_content_model(body: &[Node], defines: &BTreeMap<String, Vec<Node>>) -> ContentModel {
+    let mut children: BTreeMap<String, bool> = BTreeMap::new();
+    let mut attributes: BTreeMap<String, bool> = BTreeMap::new();
+    let mut mixed = false;
+    let mut visiting: BTreeSet<String> = BTreeSet::new();
+    resolve_body(
+        body,
+        defines,
+        &mut visiting,
+        false,
+        false,
+        &mut children,
+        &mut attributes,
+        &mut mixed,
+    );
+    let mut children: Vec<PermittedChild> = children
+        .into_iter()
+        .map(|(name, repeatable)| PermittedChild { name, repeatable })
+        .collect();
+    children.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut attributes: Vec<PermittedAttribute> = attributes
+        .into_iter()
+        .map(|(name, required)| PermittedAttribute { name, required })
+        .collect();
+    attributes.sort_by(|a, b| a.name.cmp(&b.name));
+    ContentModel {
+        children,
+        attributes,
+        mixed,
+    }
+}
+
+/// Recursive worker for [`resolve_content_model`].
+///
+/// `repeat_ctx` is true once the walk has passed under a `zeroOrMore`/
+/// `oneOrMore`, so any `<element>` reached below is recorded as repeatable.
+/// `constrained_ctx` is true once the walk has passed under an `optional` or
+/// a `choice` (a choice member is never individually required), so any
+/// `<attribute>` reached below is recorded as not required. `visiting` guards
+/// against `<ref>` cycles: JATS's patterns bottom out at concrete
+/// `<element>`/`<attribute>` declarations in practice, but the guard makes
+/// that an enforced property of this resolver rather than an assumption
+/// about the schema.
+#[allow(clippy::too_many_arguments)]
+fn resolve_body(
+    nodes: &[Node],
+    defines: &BTreeMap<String, Vec<Node>>,
+    visiting: &mut BTreeSet<String>,
+    repeat_ctx: bool,
+    constrained_ctx: bool,
+    children: &mut BTreeMap<String, bool>,
+    attributes: &mut BTreeMap<String, bool>,
+    mixed: &mut bool,
+) {
+    for n in nodes {
+        let Node::Element {
+            name,
+            attrs,
+            children: sub,
+            ..
+        } = n
+        else {
+            continue;
+        };
+        let local = name.rsplit(':').next().unwrap_or(name);
+        match local {
+            "element" => {
+                if let Some((_, ename)) = attrs.iter().find(|(k, _)| k == "name") {
+                    let entry = children.entry(ename.clone()).or_insert(false);
+                    *entry = *entry || repeat_ctx;
+                }
+                // Do not descend: a nested element's own body is that
+                // element's content model, not this one's.
+            }
+            "attribute" => {
+                if let Some((_, aname)) = attrs.iter().find(|(k, _)| k == "name") {
+                    let required = !constrained_ctx;
+                    let entry = attributes.entry(aname.clone()).or_insert(required);
+                    // Required only if every reachable occurrence says so.
+                    *entry = *entry && required;
+                }
+            }
+            "text" => *mixed = true,
+            "mixed" => {
+                *mixed = true;
+                resolve_body(
+                    sub,
+                    defines,
+                    visiting,
+                    repeat_ctx,
+                    constrained_ctx,
+                    children,
+                    attributes,
+                    mixed,
+                );
+            }
+            "ref" => {
+                if let Some((_, target)) = attrs.iter().find(|(k, _)| k == "name")
+                    && visiting.insert(target.clone())
+                {
+                    if let Some(def) = defines.get(target) {
+                        resolve_body(
+                            def,
+                            defines,
+                            visiting,
+                            repeat_ctx,
+                            constrained_ctx,
+                            children,
+                            attributes,
+                            mixed,
+                        );
+                    }
+                    visiting.remove(target);
+                }
+            }
+            "optional" => resolve_body(
+                sub, defines, visiting, repeat_ctx, true, children, attributes, mixed,
+            ),
+            "zeroOrMore" => resolve_body(
+                sub, defines, visiting, true, true, children, attributes, mixed,
+            ),
+            "oneOrMore" => resolve_body(
+                sub,
+                defines,
+                visiting,
+                true,
+                constrained_ctx,
+                children,
+                attributes,
+                mixed,
+            ),
+            "choice" => resolve_body(
+                sub, defines, visiting, repeat_ctx, true, children, attributes, mixed,
+            ),
+            "group" | "interleave" => resolve_body(
+                sub,
+                defines,
+                visiting,
+                repeat_ctx,
+                constrained_ctx,
+                children,
+                attributes,
+                mixed,
+            ),
+            // "empty", "notAllowed", "data", "value", "param", "name",
+            // "anyName", "nsName", "except", "list" and anything else carry
+            // no child-element/attribute/mixed information for this purpose.
+            _ => {}
+        }
+    }
+}
+
 fn digest_of(file: &str, bytes: &[u8]) -> SourceDigest {
     let mut h = Sha256::new();
     h.update(bytes);
@@ -285,6 +536,7 @@ fn digest_of(file: &str, bytes: &[u8]) -> SourceDigest {
         file: file.to_string(),
         bytes: bytes.len() as u64,
         sha256: format!("{:x}", h.finalize()),
+        url: String::new(),
     }
 }
 

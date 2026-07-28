@@ -40,6 +40,37 @@
 //!   does the decomposition job, so inventing a second grouping nobody asked
 //!   for would just be noise.
 //!
+//! # Content models: flattened, not full grammar
+//!
+//! [`Construct::content_model`] records, per element, the *set* of permitted
+//! direct children and attributes — plus whether each child can repeat, each
+//! attribute is required, and whether character data may appear directly —
+//! but **not** the source schema's ordering, choice, group, or interleave
+//! structure. RELAX NG can express "an optional `title`, then one or more
+//! `p`, in that order, interleaved with `fn-group`"; this registry records
+//! only "`title` (not repeatable), `p` (repeatable), `fn-group` (not
+//! repeatable) are permitted children," with no claim about sequence or
+//! grouping.
+//!
+//! This is a deliberate scope decision, not an oversight. The two questions
+//! a registry consumer asks are different in kind: "can `sec` contain `fig`?"
+//! (a set-membership question, answered by the flattened form) versus "is
+//! *this specific* `sec` element valid?" (a validation question, which needs
+//! the full grammar — order, choice exclusivity, interleave). This design
+//! serves the first and explicitly does not attempt the second: a linter or
+//! validator that needs true schema validation should run the source schema
+//! through a RELAX NG validator, not this registry. Recording the full
+//! pattern structure (nested choice/group/interleave trees mirroring the
+//! source grammar) was considered and rejected for the pilot: it would
+//! roughly double the derivation tool's complexity for a question the
+//! flattened form doesn't need to answer, and JATS's `<define>`-based
+//! customization layer means many patterns are shared/reused across dozens
+//! of elements, so a literal per-element grammar tree would also be far more
+//! repetitive on disk than the flattened form. Whether a richer,
+//! validation-capable content-model representation is worth that cost is
+//! left as an open question in `docs/adr/0013-per-format-construct-registry.md`
+//! rather than decided here.
+//!
 //! # Citations survive an absent schema
 //!
 //! Citations are **external** references (canonical URLs and a spec
@@ -96,7 +127,8 @@ impl ConstructKind {
     }
 }
 
-/// The form of the authoritative schema a registry was derived from.
+/// The form of the authoritative schema (or, for [`SourceKind::ScriptedExtraction`],
+/// the published artifact) a registry was derived from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum SourceKind {
@@ -110,12 +142,33 @@ pub enum SourceKind {
     Xsd,
     /// TEI ODD (literate schema source).
     Odd,
-    /// No machine-readable schema exists; entries were curated by hand.
+    /// The format has no machine-readable schema, so the construct list was
+    /// produced by a script that mechanically extracts it from a published
+    /// prose artifact (e.g. an HTML element index), rather than by parsing a
+    /// grammar.
     ///
-    /// A registry carrying this kind does **not** deliver the guarantee the
-    /// rest of the design exists to provide — it is as fallible as the
-    /// hand-written checklist it replaces, and must say so.
-    HandCurated,
+    /// This is a first-class, fully permitted source kind — not a marked-down
+    /// fallback — because the property this design actually needs is
+    /// *reproducibility*, not "came from a schema." A scripted extraction is
+    /// re-runnable, diffable against a fresh fetch, and auditable by reading
+    /// the script; a hand-typed list is none of those, no matter how careful
+    /// the person typing it was. See
+    /// `docs/adr/0013-per-format-construct-registry.md`'s 2026-07-28
+    /// hand-curation amendment.
+    ///
+    /// A registry with this `source_kind` must still carry everything
+    /// [`Provenance`] requires: `source_base_url` (and, where the extraction
+    /// spans several published pages, a `url` per entry in
+    /// `source_digests`), `derived_on` as the retrieval date, `derived_by`
+    /// naming the extraction script (path and version, e.g.
+    /// `scripts/docbook/extract-element-index.py v1`), and a `sha256` +
+    /// `bytes` digest of every fetched artifact in `source_digests` — the
+    /// same fields a schema-derived registry carries, just describing a
+    /// downloaded page instead of a downloaded schema file. Without those,
+    /// re-running the extraction to check for drift is not actually
+    /// possible, and the reproducibility claim is just asserted, not
+    /// delivered.
+    ScriptedExtraction,
 }
 
 /// Which format, version, and profile this registry describes.
@@ -135,9 +188,10 @@ pub struct FormatInfo {
     pub profile_name: Option<String>,
 }
 
-/// A checksum of one source schema file, so staleness is detectable even
-/// when the schema itself is not present in the checkout.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// A checksum of one source file (a schema module, or, for
+/// [`SourceKind::ScriptedExtraction`], one fetched prose page) so staleness
+/// is detectable even when the source itself is not present in the checkout.
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SourceDigest {
     /// File name as published, e.g. `JATS-section1-3.ent.rng`.
     pub file: String,
@@ -145,6 +199,13 @@ pub struct SourceDigest {
     pub bytes: u64,
     /// Lowercase hex SHA-256 of the file's bytes at derivation time.
     pub sha256: String,
+    /// The exact URL this entry was fetched from, when it differs per entry
+    /// rather than sharing `Provenance::source_base_url` (e.g. a scripted
+    /// extraction spanning several distinct prose pages). Empty when
+    /// `source_base_url` plus `file` already resolves it, which is the
+    /// common case for schema-module digests.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub url: String,
 }
 
 /// Where the registry came from and how, so a reader can judge staleness
@@ -214,6 +275,60 @@ pub struct Slice {
     pub url: String,
 }
 
+/// One child element a construct's content model permits, flattened out of
+/// whatever ordering/choice/group structure the source schema expressed it
+/// with. See the module docs ("Content models: flattened, not full grammar")
+/// for why this registry records a permitted-children *set* rather than the
+/// full pattern structure.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PermittedChild {
+    /// Local element name.
+    pub name: String,
+    /// Whether the schema permits more than one occurrence of this child
+    /// (reachable under a `zeroOrMore`/`oneOrMore` — or DTD `*`/`+` — without
+    /// crossing into another element's own body first). `false` means the
+    /// schema never allows more than one, though it says nothing about
+    /// relative order, since order is exactly what flattening discards.
+    #[serde(default)]
+    pub repeatable: bool,
+}
+
+/// One attribute a construct's content model permits, with its
+/// required/optional status *for this element* — the same attribute name can
+/// be required on one element and optional on another, so this cannot live
+/// on the global attribute [`Construct`] and is recorded per element instead.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PermittedAttribute {
+    /// Local attribute name.
+    pub name: String,
+    /// Whether the schema requires this attribute on every instance of the
+    /// element (reached with no enclosing `optional`/`choice`). `false`
+    /// covers both "optional" and "one of a choice of alternatives" — a
+    /// choice member is never individually required.
+    #[serde(default)]
+    pub required: bool,
+}
+
+/// What a construct permits as content: which child elements, which
+/// attributes, and whether character data may appear directly inside it.
+/// Only populated for [`ConstructKind::Element`] — attributes have a value
+/// type, not a content model, and this registry does not model datatypes.
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ContentModel {
+    /// Every element name permitted as a direct child, in no particular
+    /// order (order is not recorded — see the module docs).
+    #[serde(default)]
+    pub children: Vec<PermittedChild>,
+    /// Every attribute name this element permits, with required/optional
+    /// status.
+    #[serde(default)]
+    pub attributes: Vec<PermittedAttribute>,
+    /// Whether character data (`#PCDATA` / RELAX NG `<text/>`/`<mixed>`) is
+    /// permitted directly inside this element, alongside its children.
+    #[serde(default)]
+    pub mixed: bool,
+}
+
 /// One construct the format defines.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Construct {
@@ -235,6 +350,40 @@ pub struct Construct {
     /// every construct.
     #[serde(default)]
     pub pragmatic_slices: Vec<String>,
+    /// What this construct permits as content. `Some` for every
+    /// [`ConstructKind::Element`] the schema actually defines a body for;
+    /// `None` for [`ConstructKind::Attribute`] constructs and for any
+    /// element the derivation could not resolve a model for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_model: Option<ContentModel>,
+}
+
+impl Construct {
+    /// Does this element's content model permit `child` as a direct child?
+    /// `None` if this construct has no recorded content model at all.
+    pub fn permits_child(&self, child: &str) -> Option<bool> {
+        self.content_model
+            .as_ref()
+            .map(|m| m.children.iter().any(|c| c.name == child))
+    }
+
+    /// Does this element's content model require `attr`? `Some(false)` also
+    /// covers "permitted but optional"; distinguish via
+    /// [`Construct::permits_attribute`] if needed. `None` if this construct
+    /// has no recorded content model at all.
+    pub fn requires_attribute(&self, attr: &str) -> Option<bool> {
+        self.content_model
+            .as_ref()
+            .map(|m| m.attributes.iter().any(|a| a.name == attr && a.required))
+    }
+
+    /// Does this element's content model permit `attr` at all (required or
+    /// optional)? `None` if this construct has no recorded content model.
+    pub fn permits_attribute(&self, attr: &str) -> Option<bool> {
+        self.content_model
+            .as_ref()
+            .map(|m| m.attributes.iter().any(|a| a.name == attr))
+    }
 }
 
 impl Construct {
@@ -256,9 +405,11 @@ impl Construct {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Registry {
     /// Schema version of the *registry document format* itself, so a
-    /// consumer can tell v1 from v2. `2` introduced the normative/pragmatic
-    /// slice split (`docs/adr/0013-...`'s 2026-07-28 amendment); `1` had a
-    /// single `slices` field.
+    /// consumer can tell v1 from v2 from v3. `3` added
+    /// [`Construct::content_model`] (`docs/adr/0013-...`'s 2026-07-28
+    /// content-model amendment); `2` introduced the normative/pragmatic slice
+    /// split (the same ADR's earlier 2026-07-28 slice amendment); `1` had a
+    /// single `slices` field and no content models.
     pub registry_version: u32,
     /// Which format this describes.
     pub format: FormatInfo,
@@ -455,7 +606,7 @@ mod tests {
     #[test]
     fn committed_document_parses() {
         let r = registry();
-        assert_eq!(r.registry_version, 2);
+        assert_eq!(r.registry_version, 3);
         assert_eq!(r.format.id, "jats");
         assert_eq!(r.format.version, "1.3");
         assert_eq!(r.format.profile.as_deref(), Some("archiving"));
@@ -541,6 +692,35 @@ mod tests {
         for d in &p.source_digests {
             assert_eq!(d.sha256.len(), 64, "{} digest is not sha-256", d.file);
         }
+    }
+
+    #[test]
+    fn content_models_are_populated_for_elements() {
+        let r = registry();
+        let sec = r.lookup(ConstructKind::Element, "sec").unwrap();
+        let model = sec.content_model.as_ref().expect("sec has a content model");
+        assert!(
+            model.children.iter().any(|c| c.name == "title"),
+            "sec-model permits <title>"
+        );
+        assert!(
+            model.children.iter().any(|c| c.name == "p" && c.repeatable),
+            "sec-model permits repeatable <p> via para-level"
+        );
+        assert_eq!(sec.permits_child("title"), Some(true));
+        assert_eq!(sec.permits_child("this-child-does-not-exist"), Some(false));
+        assert!(
+            model.attributes.iter().any(|a| a.name == "sec-type"),
+            "sec-atts permits sec-type"
+        );
+        assert_eq!(sec.permits_attribute("sec-type"), Some(true));
+    }
+
+    #[test]
+    fn attribute_constructs_have_no_content_model() {
+        let r = registry();
+        let attr = r.lookup(ConstructKind::Attribute, "id").unwrap();
+        assert!(attr.content_model.is_none());
     }
 
     #[test]
