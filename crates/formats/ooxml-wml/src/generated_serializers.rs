@@ -26259,7 +26259,7 @@ impl ToXml for Settings {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "wml-settings")]
+        #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
         if let Some(ref val) = self.revision_view {
             val.write_element("w:revisionView", writer)?;
         }
@@ -26276,7 +26276,7 @@ impl ToXml for Settings {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "wml-settings")]
+        #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
         if let Some(ref val) = self.track_revisions {
             val.write_element("w:trackRevisions", writer)?;
         }
@@ -27500,11 +27500,11 @@ impl ToXml for Settings {
         if self.mail_merge.is_some() {
             return false;
         }
-        #[cfg(feature = "wml-settings")]
+        #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
         if self.revision_view.is_some() {
             return false;
         }
-        #[cfg(feature = "wml-settings")]
+        #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
         if self.track_revisions.is_some() {
             return false;
         }

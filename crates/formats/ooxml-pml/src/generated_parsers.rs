@@ -734,7 +734,7 @@ impl FromXml for SlideTransition {
         let mut f_wipe = None;
         #[cfg(feature = "pml-transitions")]
         let mut f_zoom = None;
-        #[cfg(feature = "pml-transitions")]
+        #[cfg(any(feature = "pml-transitions", feature = "pml-media"))]
         let mut f_snd_ac = None;
         #[cfg(feature = "pml-extensions")]
         let mut f_ext_lst = None;
@@ -971,7 +971,7 @@ impl FromXml for SlideTransition {
                                     child_idx += 1;
                                 }
                             }
-                            #[cfg(feature = "pml-transitions")]
+                            #[cfg(any(feature = "pml-transitions", feature = "pml-media"))]
                             b"sndAc" => {
                                 f_snd_ac = Some(Box::new(CTTransitionSoundAction::from_xml(
                                     reader, &e, false,
@@ -1203,7 +1203,7 @@ impl FromXml for SlideTransition {
                                     child_idx += 1;
                                 }
                             }
-                            #[cfg(feature = "pml-transitions")]
+                            #[cfg(any(feature = "pml-transitions", feature = "pml-media"))]
                             b"sndAc" => {
                                 f_snd_ac = Some(Box::new(CTTransitionSoundAction::from_xml(
                                     reader, &e, true,
@@ -1294,7 +1294,7 @@ impl FromXml for SlideTransition {
             wipe: f_wipe,
             #[cfg(feature = "pml-transitions")]
             zoom: f_zoom,
-            #[cfg(feature = "pml-transitions")]
+            #[cfg(any(feature = "pml-transitions", feature = "pml-media"))]
             snd_ac: f_snd_ac,
             #[cfg(feature = "pml-extensions")]
             ext_lst: f_ext_lst,
@@ -14322,7 +14322,7 @@ impl FromXml for Slide {
     ) -> Result<Self, ParseError> {
         #[cfg(feature = "pml-masters")]
         let mut f_show_master_sp = None;
-        #[cfg(feature = "pml-masters")]
+        #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
         let mut f_show_master_ph_anim = None;
         let mut f_show = None;
         let mut f_common_slide_data: Option<Box<CommonSlideData>> = None;
@@ -14349,7 +14349,7 @@ impl FromXml for Slide {
                 b"showMasterSp" => {
                     f_show_master_sp = Some(val == "true" || val == "1");
                 }
-                #[cfg(feature = "pml-masters")]
+                #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
                 b"showMasterPhAnim" => {
                     f_show_master_ph_anim = Some(val == "true" || val == "1");
                 }
@@ -14512,7 +14512,7 @@ impl FromXml for Slide {
         Ok(Self {
             #[cfg(feature = "pml-masters")]
             show_master_sp: f_show_master_sp,
-            #[cfg(feature = "pml-masters")]
+            #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
             show_master_ph_anim: f_show_master_ph_anim,
             show: f_show,
             common_slide_data: f_common_slide_data
@@ -14541,7 +14541,7 @@ impl FromXml for SlideLayout {
     ) -> Result<Self, ParseError> {
         #[cfg(feature = "pml-masters")]
         let mut f_show_master_sp = None;
-        #[cfg(feature = "pml-masters")]
+        #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
         let mut f_show_master_ph_anim = None;
         #[cfg(feature = "pml-masters")]
         let mut f_matching_name = None;
@@ -14577,7 +14577,7 @@ impl FromXml for SlideLayout {
                 b"showMasterSp" => {
                     f_show_master_sp = Some(val == "true" || val == "1");
                 }
-                #[cfg(feature = "pml-masters")]
+                #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
                 b"showMasterPhAnim" => {
                     f_show_master_ph_anim = Some(val == "true" || val == "1");
                 }
@@ -14769,7 +14769,7 @@ impl FromXml for SlideLayout {
         Ok(Self {
             #[cfg(feature = "pml-masters")]
             show_master_sp: f_show_master_sp,
-            #[cfg(feature = "pml-masters")]
+            #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
             show_master_ph_anim: f_show_master_ph_anim,
             #[cfg(feature = "pml-masters")]
             matching_name: f_matching_name,
@@ -15728,9 +15728,13 @@ impl FromXml for NotesSlide {
         start_tag: &BytesStart,
         is_empty: bool,
     ) -> Result<Self, ParseError> {
-        #[cfg(feature = "pml-notes")]
+        #[cfg(any(feature = "pml-notes", feature = "pml-masters"))]
         let mut f_show_master_sp = None;
-        #[cfg(feature = "pml-notes")]
+        #[cfg(any(
+            feature = "pml-notes",
+            feature = "pml-masters",
+            feature = "pml-animations"
+        ))]
         let mut f_show_master_ph_anim = None;
         let mut f_common_slide_data: Option<Box<CommonSlideData>> = None;
         #[cfg(feature = "pml-styling")]
@@ -15748,11 +15752,15 @@ impl FromXml for NotesSlide {
         for attr in start_tag.attributes().filter_map(|a| a.ok()) {
             let val = String::from_utf8_lossy(&attr.value);
             match attr.key.local_name().as_ref() {
-                #[cfg(feature = "pml-notes")]
+                #[cfg(any(feature = "pml-notes", feature = "pml-masters"))]
                 b"showMasterSp" => {
                     f_show_master_sp = Some(val == "true" || val == "1");
                 }
-                #[cfg(feature = "pml-notes")]
+                #[cfg(any(
+                    feature = "pml-notes",
+                    feature = "pml-masters",
+                    feature = "pml-animations"
+                ))]
                 b"showMasterPhAnim" => {
                     f_show_master_ph_anim = Some(val == "true" || val == "1");
                 }
@@ -15875,9 +15883,13 @@ impl FromXml for NotesSlide {
         }
 
         Ok(Self {
-            #[cfg(feature = "pml-notes")]
+            #[cfg(any(feature = "pml-notes", feature = "pml-masters"))]
             show_master_sp: f_show_master_sp,
-            #[cfg(feature = "pml-notes")]
+            #[cfg(any(
+                feature = "pml-notes",
+                feature = "pml-masters",
+                feature = "pml-animations"
+            ))]
             show_master_ph_anim: f_show_master_ph_anim,
             common_slide_data: f_common_slide_data
                 .ok_or_else(|| ParseError::MissingAttribute("cSld".to_string()))?,

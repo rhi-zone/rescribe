@@ -13326,7 +13326,7 @@ impl ToXml for Worksheet {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-structure"))]
         if let Some(ref val) = self.sheet_properties {
             val.write_element("sheetPr", writer)?;
         }
@@ -13833,7 +13833,7 @@ impl ToXml for Worksheet {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "sml-comments")]
+        #[cfg(any(feature = "sml-comments", feature = "sml-drawings"))]
         if let Some(ref val) = self.legacy_drawing {
             val.write_element("legacyDrawing", writer)?;
         }
@@ -13850,7 +13850,7 @@ impl ToXml for Worksheet {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "sml-layout")]
+        #[cfg(any(feature = "sml-layout", feature = "sml-drawings"))]
         if let Some(ref val) = self.legacy_drawing_h_f {
             val.write_element("legacyDrawingHF", writer)?;
         }
@@ -13867,7 +13867,7 @@ impl ToXml for Worksheet {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "sml-drawings")]
+        #[cfg(any(feature = "sml-drawings", feature = "sml-layout"))]
         if let Some(ref val) = self.drawing_h_f {
             val.write_element("drawingHF", writer)?;
         }
@@ -13985,7 +13985,7 @@ impl ToXml for Worksheet {
     }
 
     fn is_empty_element(&self) -> bool {
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-structure"))]
         if self.sheet_properties.is_some() {
             return false;
         }
@@ -16321,7 +16321,7 @@ impl ToXml for DataValidation {
                 start.push_attribute(("errorStyle", s.as_str()));
             }
         }
-        #[cfg(feature = "sml-validation")]
+        #[cfg(any(feature = "sml-validation", feature = "sml-i18n"))]
         if let Some(ref val) = self.ime_mode {
             {
                 let s = val.to_string();
@@ -16464,7 +16464,7 @@ impl ToXml for ConditionalFormatting {
     fn write_attrs<'a>(&self, start: BytesStart<'a>) -> BytesStart<'a> {
         #[allow(unused_mut)]
         let mut start = start;
-        #[cfg(feature = "sml-pivot")]
+        #[cfg(any(feature = "sml-pivot", feature = "sml-styling"))]
         if let Some(ref val) = self.pivot {
             start.push_attribute(("pivot", if *val { "1" } else { "0" }));
         }
@@ -17391,7 +17391,7 @@ impl ToXml for PageSetup {
         if let Some(ref val) = self.draft {
             start.push_attribute(("draft", if *val { "1" } else { "0" }));
         }
-        #[cfg(feature = "sml-layout")]
+        #[cfg(any(feature = "sml-layout", feature = "sml-comments"))]
         if let Some(ref val) = self.cell_comments {
             {
                 let s = val.to_string();
@@ -21025,7 +21025,7 @@ impl ToXml for Stylesheet {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-tables"))]
         if let Some(ref val) = self.table_styles {
             val.write_element("tableStyles", writer)?;
         }
@@ -21107,7 +21107,7 @@ impl ToXml for Stylesheet {
         if self.dxfs.is_some() {
             return false;
         }
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-tables"))]
         if self.table_styles.is_some() {
             return false;
         }
@@ -21178,7 +21178,7 @@ impl ToXml for CellAlignment {
         if let Some(ref val) = self.shrink_to_fit {
             start.push_attribute(("shrinkToFit", if *val { "1" } else { "0" }));
         }
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-i18n"))]
         if let Some(ref val) = self.reading_order {
             {
                 let s = val.to_string();
@@ -22248,7 +22248,7 @@ impl ToXml for Format {
         if let Some(ref val) = self.quote_prefix {
             start.push_attribute(("quotePrefix", if *val { "1" } else { "0" }));
         }
-        #[cfg(feature = "sml-pivot")]
+        #[cfg(any(feature = "sml-pivot", feature = "sml-styling"))]
         if let Some(ref val) = self.pivot_button {
             start.push_attribute(("pivotButton", if *val { "1" } else { "0" }));
         }
@@ -22272,7 +22272,7 @@ impl ToXml for Format {
         if let Some(ref val) = self.apply_alignment {
             start.push_attribute(("applyAlignment", if *val { "1" } else { "0" }));
         }
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-protection"))]
         if let Some(ref val) = self.apply_protection {
             start.push_attribute(("applyProtection", if *val { "1" } else { "0" }));
         }
@@ -23233,7 +23233,7 @@ impl ToXml for Font {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-i18n"))]
         if let Some(ref val) = self.charset {
             val.write_element("charset", writer)?;
         }
@@ -23474,7 +23474,7 @@ impl ToXml for Font {
         if self.name.is_some() {
             return false;
         }
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-i18n"))]
         if self.charset.is_some() {
             return false;
         }
@@ -24639,61 +24639,61 @@ impl ToXml for Table {
         if let Some(ref val) = self.published {
             start.push_attribute(("published", if *val { "1" } else { "0" }));
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if let Some(ref val) = self.header_row_dxf_id {
             {
                 let s = val.to_string();
                 start.push_attribute(("headerRowDxfId", s.as_str()));
             }
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if let Some(ref val) = self.data_dxf_id {
             {
                 let s = val.to_string();
                 start.push_attribute(("dataDxfId", s.as_str()));
             }
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if let Some(ref val) = self.totals_row_dxf_id {
             {
                 let s = val.to_string();
                 start.push_attribute(("totalsRowDxfId", s.as_str()));
             }
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if let Some(ref val) = self.header_row_border_dxf_id {
             {
                 let s = val.to_string();
                 start.push_attribute(("headerRowBorderDxfId", s.as_str()));
             }
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if let Some(ref val) = self.table_border_dxf_id {
             {
                 let s = val.to_string();
                 start.push_attribute(("tableBorderDxfId", s.as_str()));
             }
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if let Some(ref val) = self.totals_row_border_dxf_id {
             {
                 let s = val.to_string();
                 start.push_attribute(("totalsRowBorderDxfId", s.as_str()));
             }
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if let Some(ref val) = self.header_row_cell_style {
             start.push_attribute(("headerRowCellStyle", val.as_str()));
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if let Some(ref val) = self.data_cell_style {
             start.push_attribute(("dataCellStyle", val.as_str()));
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if let Some(ref val) = self.totals_row_cell_style {
             start.push_attribute(("totalsRowCellStyle", val.as_str()));
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-external"))]
         if let Some(ref val) = self.connection_id {
             {
                 let s = val.to_string();
@@ -24721,7 +24721,7 @@ impl ToXml for Table {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-filtering"))]
         if let Some(ref val) = self.auto_filter {
             val.write_element("autoFilter", writer)?;
         }
@@ -24738,7 +24738,7 @@ impl ToXml for Table {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-filtering"))]
         if let Some(ref val) = self.sort_state {
             val.write_element("sortState", writer)?;
         }
@@ -24773,7 +24773,7 @@ impl ToXml for Table {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if let Some(ref val) = self.table_style_info {
             val.write_element("tableStyleInfo", writer)?;
         }
@@ -24806,17 +24806,17 @@ impl ToXml for Table {
     }
 
     fn is_empty_element(&self) -> bool {
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-filtering"))]
         if self.auto_filter.is_some() {
             return false;
         }
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-filtering"))]
         if self.sort_state.is_some() {
             return false;
         }
         #[cfg(feature = "sml-tables")]
         return false;
-        #[cfg(feature = "sml-tables")]
+        #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
         if self.table_style_info.is_some() {
             return false;
         }

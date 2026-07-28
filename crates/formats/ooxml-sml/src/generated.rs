@@ -11439,7 +11439,7 @@ pub struct CTDialogsheet {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename = "worksheet")]
 pub struct Worksheet {
-    #[cfg(feature = "sml-styling")]
+    #[cfg(any(feature = "sml-styling", feature = "sml-structure"))]
     #[serde(rename = "sheetPr")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sheet_properties: Option<Box<SheetProperties>>,
@@ -11554,15 +11554,15 @@ pub struct Worksheet {
     #[serde(rename = "drawing")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drawing: Option<Box<Drawing>>,
-    #[cfg(feature = "sml-comments")]
+    #[cfg(any(feature = "sml-comments", feature = "sml-drawings"))]
     #[serde(rename = "legacyDrawing")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub legacy_drawing: Option<Box<LegacyDrawing>>,
-    #[cfg(feature = "sml-layout")]
+    #[cfg(any(feature = "sml-layout", feature = "sml-drawings"))]
     #[serde(rename = "legacyDrawingHF")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub legacy_drawing_h_f: Option<Box<LegacyDrawing>>,
-    #[cfg(feature = "sml-drawings")]
+    #[cfg(any(feature = "sml-drawings", feature = "sml-layout"))]
     #[serde(rename = "drawingHF")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drawing_h_f: Option<Box<DrawingHeaderFooter>>,
@@ -12981,7 +12981,7 @@ pub struct DataValidation {
     #[serde(rename = "@errorStyle")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_style: Option<ValidationErrorStyle>,
-    #[cfg(feature = "sml-validation")]
+    #[cfg(any(feature = "sml-validation", feature = "sml-i18n"))]
     #[serde(rename = "@imeMode")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ime_mode: Option<STDataValidationImeMode>,
@@ -13065,7 +13065,7 @@ pub struct DataValidation {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename = "conditionalFormatting")]
 pub struct ConditionalFormatting {
-    #[cfg(feature = "sml-pivot")]
+    #[cfg(any(feature = "sml-pivot", feature = "sml-styling"))]
     #[serde(rename = "@pivot")]
     #[serde(
         default,
@@ -13625,7 +13625,7 @@ pub struct PageSetup {
         with = "ooxml_xml::ooxml_bool"
     )]
     pub draft: Option<bool>,
-    #[cfg(feature = "sml-layout")]
+    #[cfg(any(feature = "sml-layout", feature = "sml-comments"))]
     #[serde(rename = "@cellComments")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cell_comments: Option<STCellComments>,
@@ -15524,7 +15524,7 @@ pub struct Stylesheet {
     #[serde(rename = "dxfs")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dxfs: Option<Box<DifferentialFormats>>,
-    #[cfg(feature = "sml-styling")]
+    #[cfg(any(feature = "sml-styling", feature = "sml-tables"))]
     #[serde(rename = "tableStyles")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub table_styles: Option<Box<TableStyles>>,
@@ -15590,7 +15590,7 @@ pub struct CellAlignment {
         with = "ooxml_xml::ooxml_bool"
     )]
     pub shrink_to_fit: Option<bool>,
-    #[cfg(feature = "sml-styling")]
+    #[cfg(any(feature = "sml-styling", feature = "sml-i18n"))]
     #[serde(rename = "@readingOrder")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reading_order: Option<u32>,
@@ -16055,7 +16055,7 @@ pub struct Format {
         with = "ooxml_xml::ooxml_bool"
     )]
     pub quote_prefix: Option<bool>,
-    #[cfg(feature = "sml-pivot")]
+    #[cfg(any(feature = "sml-pivot", feature = "sml-styling"))]
     #[serde(rename = "@pivotButton")]
     #[serde(
         default,
@@ -16103,7 +16103,7 @@ pub struct Format {
         with = "ooxml_xml::ooxml_bool"
     )]
     pub apply_alignment: Option<bool>,
-    #[cfg(feature = "sml-styling")]
+    #[cfg(any(feature = "sml-styling", feature = "sml-protection"))]
     #[serde(rename = "@applyProtection")]
     #[serde(
         default,
@@ -16504,7 +16504,7 @@ pub struct Font {
     #[serde(rename = "name")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<Box<FontName>>,
-    #[cfg(feature = "sml-styling")]
+    #[cfg(any(feature = "sml-styling", feature = "sml-i18n"))]
     #[serde(rename = "charset")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub charset: Option<Box<IntProperty>>,
@@ -17091,58 +17091,58 @@ pub struct Table {
         with = "ooxml_xml::ooxml_bool"
     )]
     pub published: Option<bool>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
     #[serde(rename = "@headerRowDxfId")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub header_row_dxf_id: Option<STDxfId>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
     #[serde(rename = "@dataDxfId")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_dxf_id: Option<STDxfId>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
     #[serde(rename = "@totalsRowDxfId")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub totals_row_dxf_id: Option<STDxfId>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
     #[serde(rename = "@headerRowBorderDxfId")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub header_row_border_dxf_id: Option<STDxfId>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
     #[serde(rename = "@tableBorderDxfId")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub table_border_dxf_id: Option<STDxfId>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
     #[serde(rename = "@totalsRowBorderDxfId")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub totals_row_border_dxf_id: Option<STDxfId>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
     #[serde(rename = "@headerRowCellStyle")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub header_row_cell_style: Option<XmlString>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
     #[serde(rename = "@dataCellStyle")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_cell_style: Option<XmlString>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
     #[serde(rename = "@totalsRowCellStyle")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub totals_row_cell_style: Option<XmlString>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-external"))]
     #[serde(rename = "@connectionId")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connection_id: Option<u32>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-filtering"))]
     #[serde(rename = "autoFilter")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_filter: Option<Box<AutoFilter>>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-filtering"))]
     #[serde(rename = "sortState")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sort_state: Option<Box<SortState>>,
     #[cfg(feature = "sml-tables")]
     #[serde(rename = "tableColumns")]
     pub table_columns: Box<TableColumns>,
-    #[cfg(feature = "sml-tables")]
+    #[cfg(any(feature = "sml-tables", feature = "sml-styling"))]
     #[serde(rename = "tableStyleInfo")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub table_style_info: Option<Box<TableStyleInfo>>,

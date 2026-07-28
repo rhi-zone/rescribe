@@ -713,7 +713,7 @@ impl ToXml for SlideTransition {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "pml-transitions")]
+        #[cfg(any(feature = "pml-transitions", feature = "pml-media"))]
         if let Some(ref val) = self.snd_ac {
             val.write_element("p:sndAc", writer)?;
         }
@@ -830,7 +830,7 @@ impl ToXml for SlideTransition {
         if self.zoom.is_some() {
             return false;
         }
-        #[cfg(feature = "pml-transitions")]
+        #[cfg(any(feature = "pml-transitions", feature = "pml-media"))]
         if self.snd_ac.is_some() {
             return false;
         }
@@ -8526,7 +8526,7 @@ impl ToXml for Slide {
         if let Some(ref val) = self.show_master_sp {
             start.push_attribute(("showMasterSp", if *val { "1" } else { "0" }));
         }
-        #[cfg(feature = "pml-masters")]
+        #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
         if let Some(ref val) = self.show_master_ph_anim {
             start.push_attribute(("showMasterPhAnim", if *val { "1" } else { "0" }));
         }
@@ -8650,7 +8650,7 @@ impl ToXml for SlideLayout {
         if let Some(ref val) = self.show_master_sp {
             start.push_attribute(("showMasterSp", if *val { "1" } else { "0" }));
         }
-        #[cfg(feature = "pml-masters")]
+        #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
         if let Some(ref val) = self.show_master_ph_anim {
             start.push_attribute(("showMasterPhAnim", if *val { "1" } else { "0" }));
         }
@@ -9356,11 +9356,15 @@ impl ToXml for NotesSlide {
     fn write_attrs<'a>(&self, start: BytesStart<'a>) -> BytesStart<'a> {
         #[allow(unused_mut)]
         let mut start = start;
-        #[cfg(feature = "pml-notes")]
+        #[cfg(any(feature = "pml-notes", feature = "pml-masters"))]
         if let Some(ref val) = self.show_master_sp {
             start.push_attribute(("showMasterSp", if *val { "1" } else { "0" }));
         }
-        #[cfg(feature = "pml-notes")]
+        #[cfg(any(
+            feature = "pml-notes",
+            feature = "pml-masters",
+            feature = "pml-animations"
+        ))]
         if let Some(ref val) = self.show_master_ph_anim {
             start.push_attribute(("showMasterPhAnim", if *val { "1" } else { "0" }));
         }

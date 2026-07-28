@@ -36307,9 +36307,9 @@ impl FromXml for Settings {
         let mut f_document_type = None;
         #[cfg(feature = "wml-settings")]
         let mut f_mail_merge = None;
-        #[cfg(feature = "wml-settings")]
+        #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
         let mut f_revision_view = None;
-        #[cfg(feature = "wml-settings")]
+        #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
         let mut f_track_revisions = None;
         #[cfg(feature = "wml-track-changes")]
         let mut f_do_not_track_moves = None;
@@ -36719,7 +36719,7 @@ impl FromXml for Settings {
                                     child_idx += 1;
                                 }
                             }
-                            #[cfg(feature = "wml-settings")]
+                            #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
                             b"revisionView" => {
                                 f_revision_view = Some(Box::new(CTTrackChangesView::from_xml(
                                     reader, &e, false,
@@ -36729,7 +36729,7 @@ impl FromXml for Settings {
                                     child_idx += 1;
                                 }
                             }
-                            #[cfg(feature = "wml-settings")]
+                            #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
                             b"trackRevisions" => {
                                 f_track_revisions =
                                     Some(Box::new(OnOffElement::from_xml(reader, &e, false)?));
@@ -37608,7 +37608,7 @@ impl FromXml for Settings {
                                     child_idx += 1;
                                 }
                             }
-                            #[cfg(feature = "wml-settings")]
+                            #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
                             b"revisionView" => {
                                 f_revision_view =
                                     Some(Box::new(CTTrackChangesView::from_xml(reader, &e, true)?));
@@ -37617,7 +37617,7 @@ impl FromXml for Settings {
                                     child_idx += 1;
                                 }
                             }
-                            #[cfg(feature = "wml-settings")]
+                            #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
                             b"trackRevisions" => {
                                 f_track_revisions =
                                     Some(Box::new(OnOffElement::from_xml(reader, &e, true)?));
@@ -38290,9 +38290,9 @@ impl FromXml for Settings {
             document_type: f_document_type,
             #[cfg(feature = "wml-settings")]
             mail_merge: f_mail_merge,
-            #[cfg(feature = "wml-settings")]
+            #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
             revision_view: f_revision_view,
-            #[cfg(feature = "wml-settings")]
+            #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
             track_revisions: f_track_revisions,
             #[cfg(feature = "wml-track-changes")]
             do_not_track_moves: f_do_not_track_moves,

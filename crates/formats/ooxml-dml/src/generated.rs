@@ -9385,16 +9385,16 @@ pub struct CTStyleMatrix {
     #[serde(rename = "@name")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[cfg(feature = "dml-themes")]
+    #[cfg(any(feature = "dml-themes", feature = "dml-fills"))]
     #[serde(rename = "fillStyleLst")]
     pub fill_style_lst: Box<CTFillStyleList>,
-    #[cfg(feature = "dml-themes")]
+    #[cfg(any(feature = "dml-themes", feature = "dml-lines"))]
     #[serde(rename = "lnStyleLst")]
     pub ln_style_lst: Box<CTLineStyleList>,
-    #[cfg(feature = "dml-themes")]
+    #[cfg(any(feature = "dml-themes", feature = "dml-effects"))]
     #[serde(rename = "effectStyleLst")]
     pub effect_style_lst: Box<CTEffectStyleList>,
-    #[cfg(feature = "dml-themes")]
+    #[cfg(any(feature = "dml-themes", feature = "dml-fills"))]
     #[serde(rename = "bgFillStyleLst")]
     pub bg_fill_style_lst: Box<CTBackgroundFillStyleList>,
     /// Unknown attributes captured for roundtrip fidelity.
@@ -9413,7 +9413,7 @@ pub struct CTStyleMatrix {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CTBaseStyles {
-    #[cfg(feature = "dml-colors")]
+    #[cfg(any(feature = "dml-colors", feature = "dml-themes"))]
     #[serde(rename = "clrScheme")]
     pub clr_scheme: Box<ColorScheme>,
     #[cfg(feature = "dml-themes")]
@@ -10026,7 +10026,7 @@ pub struct CTHyperlink {
         with = "ooxml_xml::ooxml_bool"
     )]
     pub end_snd: Option<bool>,
-    #[cfg(feature = "dml-text")]
+    #[cfg(any(feature = "dml-text", feature = "dml-media"))]
     #[serde(rename = "snd")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snd: Option<Box<CTEmbeddedWAVAudioFile>>,
@@ -12040,71 +12040,71 @@ pub struct Blip {
     #[serde(rename = "@cstate")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cstate: Option<STBlipCompression>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "alphaBiLevel")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub alpha_bi_level: Vec<CTAlphaBiLevelEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "alphaCeiling")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub alpha_ceiling: Vec<CTAlphaCeilingEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "alphaFloor")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub alpha_floor: Vec<CTAlphaFloorEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "alphaInv")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub alpha_inv: Vec<CTAlphaInverseEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "alphaMod")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub alpha_mod: Vec<AlphaModulateEffectElement>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "alphaModFix")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub alpha_mod_fix: Vec<CTAlphaModulateFixedEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "alphaRepl")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub alpha_repl: Vec<CTAlphaReplaceEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "biLevel")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bi_level: Vec<CTBiLevelEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "blur")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blur: Vec<CTBlurEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "clrChange")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub clr_change: Vec<CTColorChangeEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "clrRepl")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub clr_repl: Vec<CTColorReplaceEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "duotone")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub duotone: Vec<CTDuotoneEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "fillOverlay")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fill_overlay: Vec<CTFillOverlayEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "grayscl")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub grayscl: Vec<CTGrayscaleEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "hsl")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hsl: Vec<CTHSLEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "lum")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lum: Vec<CTLuminanceEffect>,
-    #[cfg(feature = "dml-fills")]
+    #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
     #[serde(rename = "tint")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tint: Vec<CTTintEffect>,
@@ -13009,16 +13009,16 @@ pub struct CTFontReference {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShapeStyle {
-    #[cfg(feature = "dml-shapes")]
+    #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
     #[serde(rename = "lnRef")]
     pub ln_ref: Box<CTStyleMatrixReference>,
-    #[cfg(feature = "dml-shapes")]
+    #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
     #[serde(rename = "fillRef")]
     pub fill_ref: Box<CTStyleMatrixReference>,
-    #[cfg(feature = "dml-shapes")]
+    #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
     #[serde(rename = "effectRef")]
     pub effect_ref: Box<CTStyleMatrixReference>,
-    #[cfg(feature = "dml-shapes")]
+    #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
     #[serde(rename = "fontRef")]
     pub font_ref: Box<CTFontReference>,
     /// Unknown child elements captured for roundtrip fidelity.
@@ -13273,31 +13273,31 @@ pub struct CTTableCellProperties {
     #[serde(rename = "@horzOverflow")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub horz_overflow: Option<STTextHorzOverflowType>,
-    #[cfg(feature = "dml-tables")]
+    #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
     #[serde(rename = "lnL")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ln_l: Option<Box<LineProperties>>,
-    #[cfg(feature = "dml-tables")]
+    #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
     #[serde(rename = "lnR")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ln_r: Option<Box<LineProperties>>,
-    #[cfg(feature = "dml-tables")]
+    #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
     #[serde(rename = "lnT")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ln_t: Option<Box<LineProperties>>,
-    #[cfg(feature = "dml-tables")]
+    #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
     #[serde(rename = "lnB")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ln_b: Option<Box<LineProperties>>,
-    #[cfg(feature = "dml-tables")]
+    #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
     #[serde(rename = "lnTlToBr")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ln_tl_to_br: Option<Box<LineProperties>>,
-    #[cfg(feature = "dml-tables")]
+    #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
     #[serde(rename = "lnBlToTr")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ln_bl_to_tr: Option<Box<LineProperties>>,
-    #[cfg(feature = "dml-tables")]
+    #[cfg(any(feature = "dml-tables", feature = "dml-3d"))]
     #[serde(rename = "cell3D")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cell3_d: Option<Box<CTCell3D>>,
@@ -13400,7 +13400,7 @@ pub struct CTTableCell {
     #[serde(rename = "@id")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    #[cfg(feature = "dml-tables")]
+    #[cfg(any(feature = "dml-tables", feature = "dml-text"))]
     #[serde(rename = "txBody")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tx_body: Option<Box<TextBody>>,
@@ -13520,7 +13520,7 @@ pub struct CTTableProperties {
     #[serde(rename = "tableStyle")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub table_style: Option<Box<CTTableStyle>>,
-    #[cfg(feature = "dml-tables")]
+    #[cfg(any(feature = "dml-tables", feature = "dml-themes"))]
     #[serde(rename = "tableStyleId")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub table_style_id: Option<Guid>,
@@ -14275,7 +14275,7 @@ pub struct TextCharacterProperties {
     #[serde(rename = "@bmk")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bmk: Option<String>,
-    #[cfg(feature = "dml-text")]
+    #[cfg(any(feature = "dml-text", feature = "dml-lines"))]
     #[serde(rename = "ln")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<Box<LineProperties>>,

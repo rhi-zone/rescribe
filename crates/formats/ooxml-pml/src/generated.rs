@@ -2767,7 +2767,7 @@ pub struct SlideTransition {
     #[serde(rename = "zoom")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub zoom: Option<Box<CTInOutTransition>>,
-    #[cfg(feature = "pml-transitions")]
+    #[cfg(any(feature = "pml-transitions", feature = "pml-media"))]
     #[serde(rename = "sndAc")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snd_ac: Option<Box<CTTransitionSoundAction>>,
@@ -5717,7 +5717,7 @@ pub struct Slide {
         with = "ooxml_xml::ooxml_bool"
     )]
     pub show_master_sp: Option<bool>,
-    #[cfg(feature = "pml-masters")]
+    #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
     #[serde(rename = "@showMasterPhAnim")]
     #[serde(
         default,
@@ -5776,7 +5776,7 @@ pub struct SlideLayout {
         with = "ooxml_xml::ooxml_bool"
     )]
     pub show_master_sp: Option<bool>,
-    #[cfg(feature = "pml-masters")]
+    #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
     #[serde(rename = "@showMasterPhAnim")]
     #[serde(
         default,
@@ -6007,7 +6007,7 @@ pub type PNotesMaster = Box<NotesMaster>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotesSlide {
-    #[cfg(feature = "pml-notes")]
+    #[cfg(any(feature = "pml-notes", feature = "pml-masters"))]
     #[serde(rename = "@showMasterSp")]
     #[serde(
         default,
@@ -6015,7 +6015,11 @@ pub struct NotesSlide {
         with = "ooxml_xml::ooxml_bool"
     )]
     pub show_master_sp: Option<bool>,
-    #[cfg(feature = "pml-notes")]
+    #[cfg(any(
+        feature = "pml-notes",
+        feature = "pml-masters",
+        feature = "pml-animations"
+    ))]
     #[serde(rename = "@showMasterPhAnim")]
     #[serde(
         default,

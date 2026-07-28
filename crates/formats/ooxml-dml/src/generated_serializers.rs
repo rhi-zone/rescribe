@@ -1182,7 +1182,7 @@ impl ToXml for CTStyleMatrix {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-themes")]
+        #[cfg(any(feature = "dml-themes", feature = "dml-fills"))]
         {
             let val = &self.fill_style_lst;
             val.write_element("a:fillStyleLst", writer)?;
@@ -1200,7 +1200,7 @@ impl ToXml for CTStyleMatrix {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-themes")]
+        #[cfg(any(feature = "dml-themes", feature = "dml-lines"))]
         {
             let val = &self.ln_style_lst;
             val.write_element("a:lnStyleLst", writer)?;
@@ -1218,7 +1218,7 @@ impl ToXml for CTStyleMatrix {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-themes")]
+        #[cfg(any(feature = "dml-themes", feature = "dml-effects"))]
         {
             let val = &self.effect_style_lst;
             val.write_element("a:effectStyleLst", writer)?;
@@ -1236,7 +1236,7 @@ impl ToXml for CTStyleMatrix {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-themes")]
+        #[cfg(any(feature = "dml-themes", feature = "dml-fills"))]
         {
             let val = &self.bg_fill_style_lst;
             val.write_element("a:bgFillStyleLst", writer)?;
@@ -1253,13 +1253,13 @@ impl ToXml for CTStyleMatrix {
     }
 
     fn is_empty_element(&self) -> bool {
-        #[cfg(feature = "dml-themes")]
+        #[cfg(any(feature = "dml-themes", feature = "dml-fills"))]
         return false;
-        #[cfg(feature = "dml-themes")]
+        #[cfg(any(feature = "dml-themes", feature = "dml-lines"))]
         return false;
-        #[cfg(feature = "dml-themes")]
+        #[cfg(any(feature = "dml-themes", feature = "dml-effects"))]
         return false;
-        #[cfg(feature = "dml-themes")]
+        #[cfg(any(feature = "dml-themes", feature = "dml-fills"))]
         return false;
         #[cfg(feature = "extra-children")]
         if !self.extra_children.is_empty() {
@@ -1284,7 +1284,7 @@ impl ToXml for CTBaseStyles {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-colors")]
+        #[cfg(any(feature = "dml-colors", feature = "dml-themes"))]
         {
             let val = &self.clr_scheme;
             val.write_element("a:clrScheme", writer)?;
@@ -1354,7 +1354,7 @@ impl ToXml for CTBaseStyles {
     }
 
     fn is_empty_element(&self) -> bool {
-        #[cfg(feature = "dml-colors")]
+        #[cfg(any(feature = "dml-colors", feature = "dml-themes"))]
         return false;
         #[cfg(feature = "dml-themes")]
         return false;
@@ -2759,7 +2759,7 @@ impl ToXml for CTHyperlink {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-text")]
+        #[cfg(any(feature = "dml-text", feature = "dml-media"))]
         if let Some(ref val) = self.snd {
             val.write_element("a:snd", writer)?;
         }
@@ -2792,7 +2792,7 @@ impl ToXml for CTHyperlink {
     }
 
     fn is_empty_element(&self) -> bool {
-        #[cfg(feature = "dml-text")]
+        #[cfg(any(feature = "dml-text", feature = "dml-media"))]
         if self.snd.is_some() {
             return false;
         }
@@ -7126,7 +7126,7 @@ impl ToXml for Blip {
         let mut extra_iter = self.extra_children.iter().peekable();
         #[cfg(feature = "extra-children")]
         let mut emit_idx: usize = 0;
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.alpha_bi_level {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7143,7 +7143,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.alpha_ceiling {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7160,7 +7160,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.alpha_floor {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7177,7 +7177,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.alpha_inv {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7194,7 +7194,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.alpha_mod {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7211,7 +7211,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.alpha_mod_fix {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7228,7 +7228,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.alpha_repl {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7245,7 +7245,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.bi_level {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7262,7 +7262,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.blur {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7279,7 +7279,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.clr_change {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7296,7 +7296,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.clr_repl {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7313,7 +7313,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.duotone {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7330,7 +7330,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.fill_overlay {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7347,7 +7347,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.grayscl {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7364,7 +7364,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.hsl {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7381,7 +7381,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.lum {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7398,7 +7398,7 @@ impl ToXml for Blip {
                 emit_idx += 1;
             }
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         for item in &self.tint {
             #[cfg(feature = "extra-children")]
             while extra_iter.peek().is_some_and(|e| e.position <= emit_idx) {
@@ -7440,71 +7440,71 @@ impl ToXml for Blip {
     }
 
     fn is_empty_element(&self) -> bool {
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.alpha_bi_level.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.alpha_ceiling.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.alpha_floor.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.alpha_inv.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.alpha_mod.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.alpha_mod_fix.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.alpha_repl.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.bi_level.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.blur.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.clr_change.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.clr_repl.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.duotone.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.fill_overlay.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.grayscl.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.hsl.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.lum.is_empty() {
             return false;
         }
-        #[cfg(feature = "dml-fills")]
+        #[cfg(any(feature = "dml-fills", feature = "dml-effects"))]
         if !self.tint.is_empty() {
             return false;
         }
@@ -10211,7 +10211,7 @@ impl ToXml for ShapeStyle {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-shapes")]
+        #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
         {
             let val = &self.ln_ref;
             val.write_element("a:lnRef", writer)?;
@@ -10229,7 +10229,7 @@ impl ToXml for ShapeStyle {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-shapes")]
+        #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
         {
             let val = &self.fill_ref;
             val.write_element("a:fillRef", writer)?;
@@ -10247,7 +10247,7 @@ impl ToXml for ShapeStyle {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-shapes")]
+        #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
         {
             let val = &self.effect_ref;
             val.write_element("a:effectRef", writer)?;
@@ -10265,7 +10265,7 @@ impl ToXml for ShapeStyle {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-shapes")]
+        #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
         {
             let val = &self.font_ref;
             val.write_element("a:fontRef", writer)?;
@@ -10282,13 +10282,13 @@ impl ToXml for ShapeStyle {
     }
 
     fn is_empty_element(&self) -> bool {
-        #[cfg(feature = "dml-shapes")]
+        #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
         return false;
-        #[cfg(feature = "dml-shapes")]
+        #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
         return false;
-        #[cfg(feature = "dml-shapes")]
+        #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
         return false;
-        #[cfg(feature = "dml-shapes")]
+        #[cfg(any(feature = "dml-shapes", feature = "dml-themes"))]
         return false;
         #[cfg(feature = "extra-children")]
         if !self.extra_children.is_empty() {
@@ -11143,7 +11143,7 @@ impl ToXml for CTTableCellProperties {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if let Some(ref val) = self.ln_l {
             val.write_element("a:lnL", writer)?;
         }
@@ -11160,7 +11160,7 @@ impl ToXml for CTTableCellProperties {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if let Some(ref val) = self.ln_r {
             val.write_element("a:lnR", writer)?;
         }
@@ -11177,7 +11177,7 @@ impl ToXml for CTTableCellProperties {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if let Some(ref val) = self.ln_t {
             val.write_element("a:lnT", writer)?;
         }
@@ -11194,7 +11194,7 @@ impl ToXml for CTTableCellProperties {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if let Some(ref val) = self.ln_b {
             val.write_element("a:lnB", writer)?;
         }
@@ -11211,7 +11211,7 @@ impl ToXml for CTTableCellProperties {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if let Some(ref val) = self.ln_tl_to_br {
             val.write_element("a:lnTlToBr", writer)?;
         }
@@ -11228,7 +11228,7 @@ impl ToXml for CTTableCellProperties {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if let Some(ref val) = self.ln_bl_to_tr {
             val.write_element("a:lnBlToTr", writer)?;
         }
@@ -11245,7 +11245,7 @@ impl ToXml for CTTableCellProperties {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-3d"))]
         if let Some(ref val) = self.cell3_d {
             val.write_element("a:cell3D", writer)?;
         }
@@ -11310,31 +11310,31 @@ impl ToXml for CTTableCellProperties {
     }
 
     fn is_empty_element(&self) -> bool {
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if self.ln_l.is_some() {
             return false;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if self.ln_r.is_some() {
             return false;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if self.ln_t.is_some() {
             return false;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if self.ln_b.is_some() {
             return false;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if self.ln_tl_to_br.is_some() {
             return false;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-lines"))]
         if self.ln_bl_to_tr.is_some() {
             return false;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-3d"))]
         if self.cell3_d.is_some() {
             return false;
         }
@@ -11557,7 +11557,7 @@ impl ToXml for CTTableCell {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-text"))]
         if let Some(ref val) = self.tx_body {
             val.write_element("a:txBody", writer)?;
         }
@@ -11607,7 +11607,7 @@ impl ToXml for CTTableCell {
     }
 
     fn is_empty_element(&self) -> bool {
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-text"))]
         if self.tx_body.is_some() {
             return false;
         }
@@ -11810,7 +11810,7 @@ impl ToXml for CTTableProperties {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-themes"))]
         if let Some(ref val) = self.table_style_id {
             {
                 let val_str = val.as_str();
@@ -11861,7 +11861,7 @@ impl ToXml for CTTableProperties {
         if self.table_style.is_some() {
             return false;
         }
-        #[cfg(feature = "dml-tables")]
+        #[cfg(any(feature = "dml-tables", feature = "dml-themes"))]
         if self.table_style_id.is_some() {
             return false;
         }
@@ -14133,7 +14133,7 @@ impl ToXml for TextCharacterProperties {
                 .write_to(writer)
                 .map_err(SerializeError::from)?;
         }
-        #[cfg(feature = "dml-text")]
+        #[cfg(any(feature = "dml-text", feature = "dml-lines"))]
         if let Some(ref val) = self.line {
             val.write_element("a:ln", writer)?;
         }
@@ -14366,7 +14366,7 @@ impl ToXml for TextCharacterProperties {
     }
 
     fn is_empty_element(&self) -> bool {
-        #[cfg(feature = "dml-text")]
+        #[cfg(any(feature = "dml-text", feature = "dml-lines"))]
         if self.line.is_some() {
             return false;
         }

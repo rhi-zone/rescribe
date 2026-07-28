@@ -13398,11 +13398,11 @@ pub struct Settings {
     #[serde(rename = "mailMerge")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mail_merge: Option<Box<CTMailMerge>>,
-    #[cfg(feature = "wml-settings")]
+    #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
     #[serde(rename = "revisionView")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision_view: Option<Box<CTTrackChangesView>>,
-    #[cfg(feature = "wml-settings")]
+    #[cfg(any(feature = "wml-settings", feature = "wml-track-changes"))]
     #[serde(rename = "trackRevisions")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub track_revisions: Option<Box<OnOffElement>>,
