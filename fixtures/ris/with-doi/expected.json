@@ -1,11 +1,10 @@
 {
-  "description": "Entry with DO field produces a DOI link in description",
+  "description": "Entry with DO field becomes an identifier field with field:scheme doi",
   "category": "happy",
   "assertions": [
-    { "path": "/0", "kind": "definition_list" },
-    { "path": "/0/0", "kind": "ris:entry" },
-    { "path": "/0/0/0", "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "ris:type": "JOUR", "ris:key": "garcia2019" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "ris:type": "JOUR", "ris:key": "garcia2019" } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "doi", "ris:field": "DO" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "10.1234/cell.2019.001" } }
   ]
 }

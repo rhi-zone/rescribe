@@ -1,7 +1,7 @@
 {
-  "description": "RIS CONF type entry produces ris:entry node",
+  "description": "RIS CONF type entry produces a bibliography_entry with ris:type CONF",
   "assertions": [
-    { "path": "/0",     "kind": "definition_list" },
-    { "path": "/0/0",   "kind": "ris:entry" }
+    { "path": "/0",     "kind": "bibliography" },
+    { "path": "/0/0",   "kind": "bibliography_entry", "props": { "ris:type": "CONF" } }
   ]
 }

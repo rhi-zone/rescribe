@@ -1,11 +1,16 @@
 {
-  "description": "Entry with multiple AU fields; cite key uses first author",
+  "description": "Entry with three AU fields becomes three sibling bibliography_field nodes with field:role=author, in document order; cite key uses first author",
   "category": "happy",
   "assertions": [
-    { "path": "/0", "kind": "definition_list" },
-    { "path": "/0/0", "kind": "ris:entry" },
-    { "path": "/0/0/0", "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "ris:type": "JOUR", "ris:key": "smith2022" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "ris:type": "JOUR", "ris:key": "smith2022" } },
+    { "path": "/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Smith, John" } },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Jones, Alice" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "Brown, Bob" } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "title" } },
+    { "path": "/0/0/4",   "kind": "bibliography_field", "props": { "field:role": "container_title" } }
   ]
 }

@@ -1,11 +1,10 @@
 {
-  "description": "Entry with UR field produces a URL link in description",
+  "description": "Entry with UR field becomes an identifier field with field:scheme url",
   "category": "happy",
   "assertions": [
-    { "path": "/0", "kind": "definition_list" },
-    { "path": "/0/0", "kind": "ris:entry" },
-    { "path": "/0/0/0", "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "ris:type": "ELEC", "ris:key": "lee2023" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "ris:type": "ELEC", "ris:key": "lee2023" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "url", "ris:field": "UR" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "https://example.com/resource" } }
   ]
 }

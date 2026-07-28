@@ -7,6 +7,13 @@ RIS format is defined by Research Information Systems. Each record begins with a
 and ends with `ER`. Fields are two-letter tags followed by two spaces, a dash, two spaces,
 and the value.
 
+Records parse into `bibliography`/`bibliography_entry`/`bibliography_field` IR nodes (see
+ADR 0005 and `rescribe_std::node`), not the legacy flat `definition_list` shape. Each field
+node carries both `field:role` (the semantic vocabulary) and `ris:field` (the exact RIS tag).
+`SP`/`EP` map directly to `page_first`/`page_last` (RIS already keeps them as separate tags,
+unlike BibTeX/CSL-JSON's combined page string). Any RIS tag with no `field:role` equivalent
+(`AB`, `N1`/`N2`, `KW`, `AN`, ...) round-trips as a `misc` field distinguished by `ris:field`.
+
 ## Record types (TY tag)
 
 ### Common types

@@ -1,10 +1,17 @@
 //! RIS (Research Information Systems) writer for rescribe.
 //!
-//! Emits documents as RIS format for bibliographic data.
+//! Emits `bibliography`/`bibliography_entry`/`bibliography_field` IR nodes
+//! (see `rescribe_std::node` and ADR 0005 in the rescribe repo) as RIS
+//! format bibliographic data.
 
-use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node};
+use rescribe_core::{
+    ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, PropValue,
+};
+use rescribe_std::{node, prop};
 
-/// RIS entry node type.
+/// Legacy flat entry kinds, still accepted for backwards compatibility with
+/// documents built by hand or by an older reader version (not produced by
+/// `rescribe-read-ris` any more, which now emits `bibliography_entry`).
 const RIS_ENTRY: &str = "ris:entry";
 const BIBTEX_ENTRY: &str = "bibtex:entry";
 const CITATION_ENTRY: &str = "citation_entry";
@@ -49,7 +56,9 @@ fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
 
 fn emit_node(node: &Node, ctx: &mut EmitContext) {
     match node.kind.as_str() {
-        "document" | "definition_list" => emit_nodes(&node.children, ctx),
+        "document" | "definition_list" | node::BIBLIOGRAPHY => emit_nodes(&node.children, ctx),
+
+        node::BIBLIOGRAPHY_ENTRY => emit_bibliography_entry(node, ctx),
 
         RIS_ENTRY => emit_ris_entry(node, ctx),
         BIBTEX_ENTRY => emit_bibtex_entry(node, ctx),
@@ -87,6 +96,102 @@ fn is_bibtex_type(s: &str) -> bool {
             | "software"
             | "dataset"
     )
+}
+
+/// Write a `bibliography_entry` node (see `rescribe-read-ris`'s
+/// `entry_to_node`) back to an RIS record. `ris:field` on each
+/// `bibliography_field` child (set by every field-producing arm of the
+/// reader) names the exact source tag; `field:role` is the fallback for a
+/// field built by a non-RIS producer (a cross-format conversion into RIS).
+/// `page_first`/`page_last` map directly back to `SP`/`EP` (RIS keeps them
+/// as separate tags, unlike BibTeX/CSL-JSON's combined page string, so no
+/// recombining is needed); `prop::DATE` becomes `PY` in `YYYY/MM/DD/`
+/// form (the RIS date convention — a trailing slash even when month/day
+/// are absent).
+fn emit_bibliography_entry(node: &Node, ctx: &mut EmitContext) {
+    let mut entry = ris::RisEntry::new(node.props.get_str("ris:type").unwrap_or("GEN"));
+
+    if let Some(PropValue::Map(date)) = node.props.get(prop::DATE) {
+        entry.add_field("PY", &format_ris_date(date));
+    }
+
+    for child in &node.children {
+        if child.kind.as_str() != node::BIBLIOGRAPHY_FIELD {
+            continue;
+        }
+        let role = child.props.get_str(prop::FIELD_ROLE).unwrap_or("misc");
+        let tag = child
+            .props
+            .get_str("ris:field")
+            .map(str::to_string)
+            .unwrap_or_else(|| default_ris_tag(role).to_string());
+        let text = flatten_field_text(child);
+        if !text.is_empty() {
+            entry.add_field(&tag, &text);
+        }
+    }
+
+    let output = ris::emit(&ris::RisDoc {
+        entries: vec![entry],
+        span: ris::Span::NONE,
+    });
+    ctx.output.push_str(&output);
+}
+
+/// RIS tag fallback for a `bibliography_field` built by a non-RIS producer
+/// (no `ris:field` property to name the exact source tag).
+fn default_ris_tag(role: &str) -> &'static str {
+    match role {
+        "author" => "AU",
+        "editor" => "A2",
+        "title" => "TI",
+        "container_title" => "JO",
+        "publisher" => "PB",
+        "publisher_location" => "CY",
+        "edition" => "ET",
+        "volume" => "VL",
+        "issue" => "IS",
+        "page_first" => "SP",
+        "page_last" => "EP",
+        "identifier" => "UR",
+        _ => "N1",
+    }
+}
+
+fn format_ris_date(map: &std::collections::HashMap<String, PropValue>) -> String {
+    let as_int = |key: &str| match map.get(key) {
+        Some(PropValue::Int(i)) => Some(*i),
+        _ => None,
+    };
+    let Some(year) = as_int("year") else {
+        return String::new();
+    };
+    let mut text = format!("{year:04}/");
+    if let Some(month) = as_int("month") {
+        text.push_str(&format!("{month:02}/"));
+        if let Some(day) = as_int("day") {
+            text.push_str(&format!("{day:02}/"));
+        }
+    }
+    text
+}
+
+/// Concatenate a field's descendant `TEXT` node content (depth-first).
+fn flatten_field_text(node: &Node) -> String {
+    let mut out = String::new();
+    flatten_field_text_into(node, &mut out);
+    out
+}
+
+fn flatten_field_text_into(node: &Node, out: &mut String) {
+    if node.kind.as_str() == node::TEXT
+        && let Some(content) = node.props.get_str(prop::CONTENT)
+    {
+        out.push_str(content);
+    }
+    for child in &node.children {
+        flatten_field_text_into(child, out);
+    }
 }
 
 fn emit_ris_entry(node: &Node, ctx: &mut EmitContext) {

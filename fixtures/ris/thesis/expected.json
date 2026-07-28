@@ -1,7 +1,7 @@
 {
-  "description": "RIS THES type maps to phdthesis bibtex type",
+  "description": "RIS THES type becomes a bibliography_entry with ris:type THES",
   "assertions": [
-    { "path": "/0",     "kind": "definition_list" },
-    { "path": "/0/0",   "kind": "ris:entry" }
+    { "path": "/0",     "kind": "bibliography" },
+    { "path": "/0/0",   "kind": "bibliography_entry", "props": { "ris:type": "THES" } }
   ]
 }
