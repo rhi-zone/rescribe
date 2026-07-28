@@ -1,0 +1,14 @@
+{
+  "description": "disp-formula whose <mml:math>/<tex-math> are wrapped in <alternatives> (the JATS-recommended pattern for offering both a MathML and a TeX rendering of the same formula): MathML is raw-preserved as math:source/math:format=\"mathml\" (not concatenated with the TeX text), and the sibling <tex-math> alternative is raw-preserved verbatim under jats:alternatives-raw rather than dropped",
+  "assertions": [
+    {
+      "path": "/0/0",
+      "kind": "math_display",
+      "props": {
+        "math:format": "mathml",
+        "math:source": "<mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\"><mml:mrow><mml:mi>E</mml:mi><mml:mo>=</mml:mo><mml:mi>m</mml:mi><mml:msup><mml:mi>c</mml:mi><mml:mn>2</mml:mn></mml:msup></mml:mrow></mml:math>",
+        "jats:alternatives-raw": "<tex-math>E=mc^2</tex-math>"
+      }
+    }
+  ]
+}

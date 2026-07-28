@@ -1,0 +1,15 @@
+{
+  "description": "inline-formula whose <mml:math>/<tex-math> are wrapped in <alternatives> inside a paragraph: MathML is raw-preserved as math:source/math:format=\"mathml\" (not concatenated with the TeX text), and the sibling <tex-math> alternative is raw-preserved verbatim under jats:alternatives-raw rather than dropped",
+  "assertions": [
+    { "path": "/0/0",   "kind": "paragraph" },
+    {
+      "path": "/0/0/1",
+      "kind": "math_inline",
+      "props": {
+        "math:format": "mathml",
+        "math:source": "<mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\"><mml:mi>x</mml:mi></mml:math>",
+        "jats:alternatives-raw": "<tex-math>x</tex-math>"
+      }
+    }
+  ]
+}

@@ -148,19 +148,42 @@ fn jats_text(content: impl Into<String>) -> JNode {
 /// via `JNode::Raw`, the same splicing mechanism used for raw-preserved
 /// `<article-meta>`/`<journal-meta>` header content above) or a `<tex-math>`
 /// wrapping the plain-text source (the pre-existing behavior, unchanged).
+///
+/// When the node also carries `jats:alternatives-raw` (set when
+/// `rescribe-read-jats` found the `<mml:math>` inside a wrapping
+/// `<alternatives>` alongside one or more other alternative representations
+/// — e.g. a sibling `<tex-math>`, or a third `<graphic>` alternative — see
+/// its `convert_children`'s `<alternatives>`-inside-formula interception),
+/// re-wrap the primary representation in `<alternatives>` and splice the raw
+/// sibling(s) back in verbatim, restoring the original wrapper rather than
+/// silently losing it.
 fn formula_children(node: &Node) -> Vec<JNode> {
     let mut children = Vec::new();
     if let Some(label) = node.props.get_str(prop::LABEL) {
         children.push(jats_element("label", vec![], vec![jats_text(label)]));
     }
     if let Some(source) = node.props.get_str("math:source") {
-        if node.props.get_str("math:format") == Some("mathml") {
-            children.push(JNode::Raw {
+        let primary = if node.props.get_str("math:format") == Some("mathml") {
+            JNode::Raw {
                 content: source.to_string(),
                 span: jats_fmt::Span::NONE,
-            });
+            }
         } else {
-            children.push(jats_element("tex-math", vec![], vec![jats_text(source)]));
+            jats_element("tex-math", vec![], vec![jats_text(source)])
+        };
+        match node.props.get_str("jats:alternatives-raw") {
+            Some(raw) => children.push(jats_element(
+                "alternatives",
+                vec![],
+                vec![
+                    primary,
+                    JNode::Raw {
+                        content: raw.to_string(),
+                        span: jats_fmt::Span::NONE,
+                    },
+                ],
+            )),
+            None => children.push(primary),
         }
     }
     children
@@ -997,5 +1020,56 @@ mod tests {
         let formula = &para.children[1];
         assert_eq!(formula.kind.as_str(), "math_inline");
         assert_eq!(formula.props.get_str("math:format"), Some("mathml"));
+    }
+
+    /// A `<disp-formula>` whose `<mml:math>`/`<tex-math>` are wrapped in an
+    /// `<alternatives>` (the JATS-recommended pattern for offering both a
+    /// MathML and a TeX rendering of the same formula — see
+    /// `rescribe-read-jats`'s `convert_children`'s `<alternatives>`-inside-
+    /// formula interception) must keep *both* representations through
+    /// parse -> emit -> reparse, not just the MathML one: the MathML becomes
+    /// the modeled `math:source`/`math:format`, and the `<tex-math>` sibling
+    /// round-trips verbatim via `jats:alternatives-raw` /
+    /// `formula_children`'s `<alternatives>` re-wrap.
+    #[test]
+    fn test_roundtrip_mathml_tex_alternatives() {
+        let jats = r#"<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink"><body><disp-formula><alternatives><tex-math>E=mc^2</tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>E</mml:mi></mml:math></alternatives></disp-formula></body></article>"#;
+        let parsed = rescribe_read_jats::parse(jats).unwrap();
+        let formula = &parsed.value.content.children[0].children[0];
+        assert_eq!(formula.kind.as_str(), "math_display");
+        assert_eq!(formula.props.get_str("math:format"), Some("mathml"));
+        assert!(
+            formula
+                .props
+                .get_str("math:source")
+                .unwrap()
+                .contains("mml:mi"),
+            "math:source should hold the MathML, not a concatenation with the TeX text"
+        );
+
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains("<alternatives>"),
+            "emitted XML should re-wrap in <alternatives>: {xml}"
+        );
+        assert!(
+            xml.contains("<tex-math>E=mc^2</tex-math>"),
+            "emitted XML missing raw-preserved tex-math sibling: {xml}"
+        );
+        assert!(
+            xml.contains(r#"<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>E</mml:mi></mml:math>"#),
+            "emitted XML missing raw mml:math: {xml}"
+        );
+
+        let reparsed = rescribe_read_jats::parse(&xml).unwrap();
+        let formula2 = &reparsed.value.content.children[0].children[0];
+        assert_eq!(formula2.kind.as_str(), "math_display");
+        assert_eq!(formula2.props.get_str("math:format"), Some("mathml"));
+        assert_eq!(
+            formula2.props.get_str("math:source"),
+            formula.props.get_str("math:source")
+        );
     }
 }

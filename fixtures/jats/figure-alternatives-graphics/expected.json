@@ -1,0 +1,10 @@
+{
+  "description": "fig with <alternatives> wrapping two <graphic> variants (the JATS Tag Library's own tagged sample for <alternatives>: print/online alternative graphics) keeps both alternatives as real structured image nodes rather than collapsing to one and raw-preserving the other — every alternative already has a dedicated IR node kind (image), so nothing is lost by the existing generic-wrapper fallback and no alternative needs demoting to an opaque raw string",
+  "assertions": [
+    { "path": "/0/0",     "kind": "figure" },
+    { "path": "/0/0/1",   "kind": "figcaption" },
+    { "path": "/0/0/2",   "kind": "span", "props": { "jats:tag": "alternatives" } },
+    { "path": "/0/0/2/0", "kind": "image", "props": { "url": "figures.highres.f3.zip" } },
+    { "path": "/0/0/2/1", "kind": "image", "props": { "url": "figures.online.f3.jpg" } }
+  ]
+}

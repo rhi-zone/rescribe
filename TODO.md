@@ -1801,21 +1801,67 @@ source this session and remain genuinely open):**
   together as three boxes since designing `co` without also designing where its target
   `calloutlist` attaches (and vice versa) would be guessing at half a linked structure.
 
-- **JATS `<alternatives>`** (`fixtures/jats/COVERAGE.md`, 1 box, unchanged this session —
-  re-checked, still genuinely undecided). The JATS 1.3 Tag Library's own description
-  (jats.nlm.nih.gov/archiving/tag-library/1.3/element/alternatives.html) states its content
-  is classified separately for block (`%block-alternatives.class;`) vs inline
-  (`%alternatives-display.class;`) contexts — i.e. JATS itself declines to give
-  `<alternatives>` one fixed structural role; it adapts to whichever context it's used in.
-  Nothing here is MathML-specific (the box name is inherited from an earlier session's
-  audit, but the current fixture-suite gap is the general block/inline non-classification,
-  not a math-alternatives-only concern — MathML itself is now fully handled per the section
-  above). Since the format's own reference declines to commit to a block-or-inline answer,
-  this remains a case where `rescribe-read-jats`'s existing default-to-inline behavior for
-  unclassified elements is a reasonable, disclosed fallback, not a guess dressed up as a
-  fixture-verified feature — a human call on whether `<alternatives>` deserves dual
-  classification logic (inspect context/parent, like `heading_level_for_parent` does for
-  `<title>`) is what's actually open here, not a fact a spec lookup can settle.
+- **JATS `<alternatives>`** (`fixtures/jats/COVERAGE.md`, box now closed —
+  `math-display-mathml-alternatives`, `math-inline-mathml-alternatives`,
+  `figure-alternatives-graphics`). Resolved in two parts, previously conflated as one
+  "genuine design fork" that turned out to be two separable, non-forked questions once
+  actually worked through:
+  - **Math-in-`<alternatives>` (bug fix, not a design question).** The just-shipped
+    `<mml:math>` raw-capture fix (`242d7d9ecb`) only checked direct children of
+    `<disp-formula>`/`<inline-formula>` — but the JATS-recommended pattern for offering
+    both a MathML and a TeX rendering of the same formula wraps them in an intervening
+    `<alternatives>`. Confirmed empirically (before the fix) that this silently
+    *corrupted* content rather than merely dropping it: `<alternatives><tex-math>E=mc^2
+    </tex-math><mml:math>...<mml:mi>E</mml:mi>...</mml:math></alternatives>` parsed to
+    `math:source = "E=mc^2E"` — the TeX and (flattened) MathML text concatenated into one
+    garbled string. Fixed by treating `<alternatives>` as transparent in exactly this
+    context (`convert_children`'s new interception, `rescribe-read-jats/src/lib.rs`):
+    `<mml:math>` is raw-captured via the same `mml-math-raw` sentinel used for the
+    direct-child case (so `split_mathml`/the `disp-formula`/`inline-formula` arms needed
+    no changes), and every *other* sibling inside the `<alternatives>` (the `<tex-math>`,
+    or a rarer third alternative) is raw-preserved verbatim under a new
+    `jats:alternatives-raw` property rather than dropped. `rescribe-write-jats`'s
+    `formula_children` re-wraps in `<alternatives>` and splices the raw sibling back in
+    via `JNode::Raw` when that property is present.
+  - **The general (non-math) case turned out to already be lossless, not a design fork.**
+    JATS 1.3's own expanded content model for `<alternatives>` is `((object-id)*, (array |
+    chem-struct | code | graphic | inline-graphic | inline-media |
+    inline-supplementary-material | media | preformat | private-char |
+    supplementary-material | table | textual-form | tex-math | mml:math)+)` — fetched and
+    verified directly from the Tag Library page (not from a remembered summary — see ADR
+    0006's "check the schema, don't trust a precedent claim" methodology). The natural
+    "pick the richest alternative, raw-preserve the rest" design (matching the DocBook
+    `equation` precedent, `788f8a9b68`) was worked through concretely against the Tag
+    Library's own tagged sample (`<fig>` with `<alternatives>` wrapping two `<graphic>`
+    variants differentiated by `specific-use="print"`/`"online"`) and **rejected**: unlike
+    MathML (which has no IR node kind of its own, so raw-string capture is the only
+    tier-2 option), every element `<alternatives>` can otherwise contain either already has
+    a dedicated IR mapping (`graphic`/`inline-graphic` → `image`, `table` → `table`) or
+    converts through the existing generic fallback with full nested-markup preservation
+    (`textual-form`'s phrase-level content, per its own expanded content model, already
+    round-trips as real child nodes, not flattened text). Demoting a non-chosen `<graphic>`
+    to an opaque raw-XML string would *regress* fidelity — it would turn a structurally
+    addressable second alternative (independently queryable/re-renderable, e.g. by a
+    pipeline swapping the online variant for a different URL) into inert text nobody could
+    ever again treat as "an image with a URL." Empirically verified
+    (`fixtures/jats/figure-alternatives-graphics`): the reader's pre-existing generic-
+    wrapper fallback (`<alternatives>` unrecognized → `generic_span`, whose children
+    convert through the normal per-element pipeline like any other content) already keeps
+    *both* graphics as full `image` nodes with no fidelity warning needed, because nothing
+    is lost. `<alternatives>` itself never becomes an IR node in either sub-case — it's
+    either elided entirely (math case, replaced by the promoted MathML sentinel) or its
+    children simply convert in whatever shape they'd have had without the wrapper (general
+    case) — so JATS's own refusal to classify `<alternatives>` as block-or-inline
+    (`%alternatives-display.class;` vs `%block-alternatives.class;`) is moot: nothing ever
+    needs to classify `<alternatives>` itself.
+  - **Residual, pre-existing, out-of-scope gap found along the way (not fixed here):**
+    `<graphic>`/`<inline-graphic>` attributes other than `xlink:href` (e.g.
+    `specific-use`, which is exactly what distinguishes the two alternatives in the Tag
+    Library's own sample) are silently dropped by the reader's `"graphic" |
+    "inline-graphic"` arm — it builds a bare `IMAGE` node and never calls
+    `attach_all_attrs`, unlike every `generic_span`/`generic_div`. This predates and is
+    unrelated to the `<alternatives>` work (it affects any `<graphic>`, alternatives or
+    not); worth its own fixture-and-fix pass, not folded into this entry.
 
 Commits (JATS, then DocBook, both after `cargo clippy --all-targets --all-features -- -D
 warnings` and `cargo test -q` clean): `fix(jats): raw-preserve MathML in disp-formula/

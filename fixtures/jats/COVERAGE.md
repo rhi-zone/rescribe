@@ -33,9 +33,19 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] caption as standalone block — `caption-standalone`
 - [x] list with `list-type="alpha-lower"` / `"alpha-upper"` / `"roman-lower"` — `list-type-alpha`
 - [x] table-wrap-group — `table-wrap-group`
-- [ ] alternatives — (missing; `<alternatives>` container for math/graphic variants —
-  genuine design fork, see TODO.md: JATS's own Tag Library page says it "is neither
-  inherently block nor inherently inline")
+- [x] alternatives — `math-display-mathml-alternatives`, `math-inline-mathml-alternatives`
+  (`<mml:math>`/`<tex-math>` wrapped in `<alternatives>` inside `<disp-formula>`/
+  `<inline-formula>` — fixes a real corruption bug where the MathML and TeX text got
+  silently concatenated into one `math:source` string; MathML is now raw-preserved and
+  the sibling `<tex-math>` round-trips via `jats:alternatives-raw`), `figure-alternatives-
+  graphics` (the general non-math case — `<alternatives>` anywhere else transparently
+  passes through to its already-existing per-child conversion, keeping *every* alternative
+  as a real structured node rather than picking one and raw-preserving the rest, since
+  each alternative type here already has its own dedicated IR mapping; see TODO.md for
+  why "pick richest, raw-preserve the rest" was considered and rejected for this case).
+  No block-vs-inline classification is ever needed: `<alternatives>` itself never becomes
+  an IR node — either it's elided entirely (math case) or its children convert normally
+  in whatever shape they'd have had without the wrapper (general case).
 - [ ] horizontal rule — (missing-and-unhandled; `<hr>` — rescribe-std already
   defines `horizontal_rule` (`crates/nodes/rescribe-std/src/lib.rs:39`) but the
   JATS reader has no arm for it and it is absent from `is_block_element`, so

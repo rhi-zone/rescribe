@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink">
+  <body>
+    <fig id="f3" position="float">
+      <label>FIG. 3.</label>
+      <caption><p>An example figure with print/online alternative graphics.</p></caption>
+      <alternatives>
+        <graphic specific-use="print" xlink:href="figures.highres.f3.zip"/>
+        <graphic specific-use="online" xlink:href="figures.online.f3.jpg"/>
+      </alternatives>
+    </fig>
+  </body>
+</article>

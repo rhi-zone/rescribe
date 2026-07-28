@@ -175,6 +175,85 @@ fn convert_children(
                     );
                     continue;
                 }
+                // `<mml:math>`/`<tex-math>` are very commonly wrapped in an
+                // intervening `<alternatives>` inside `<disp-formula>`/
+                // `<inline-formula>` — the JATS-recommended pattern for
+                // offering both a MathML and a TeX rendering of the same
+                // formula (JATS 1.3 Tag Library, `<alternatives>`'s own
+                // expanded content model: `((object-id)*, (... | tex-math |
+                // mml:math)+)`). Without this, the interception above never
+                // fires (its immediate parent is `<alternatives>`, not
+                // `<disp-formula>`/`<inline-formula>`), so `<mml:math>` fell
+                // through to the generic catch-all and `extract_text`
+                // flattened *both* the TeX and MathML text into one
+                // concatenated, corrupted `math:source` string — a real,
+                // shipping loss bug in the `<mml:math>` raw-capture fix
+                // (`242d7d9ecb`). Treat `<alternatives>` as transparent here:
+                // find its `<mml:math>` child (if any) and raw-capture it the
+                // same way as the direct-child case above, via the same
+                // `mml-math-raw` sentinel `split_mathml` already knows how to
+                // pull back out — so the `"disp-formula"`/`"inline-formula"`
+                // arms need no changes of their own. Every *other* child of
+                // the `<alternatives>` (a sibling `<tex-math>`, or a rarer
+                // third alternative like `<graphic>`) is raw-preserved
+                // verbatim under `jats:alternatives-raw` on that same
+                // sentinel (see `split_mathml`) rather than dropped, per
+                // CLAUDE.md's losslessness rule — `rescribe-write-jats`
+                // re-wraps them back in `<alternatives>` on write (see
+                // `formula_children`). If no `<mml:math>` is present (e.g. a
+                // lone `<tex-math>` still wrapped in `<alternatives>`, or a
+                // future alternative type this reader doesn't specifically
+                // know about), fall back to ordinary conversion of
+                // `<alternatives>`'s children exactly as before this fix —
+                // `<tex-math>`'s own arm already flattens to plain text via
+                // the normal pass-through path, so existing behavior for the
+                // MathML-less case is unchanged.
+                if matches!(parent_name, "disp-formula" | "inline-formula")
+                    && name == "alternatives"
+                {
+                    let mut mathml_raw: Option<String> = None;
+                    let mut other_raw: Vec<String> = Vec::new();
+                    for alt_child in kids {
+                        let is_mathml =
+                            matches!(alt_child, JNode::Element { name: n, .. } if n == "mml:math");
+                        if is_mathml && mathml_raw.is_none() {
+                            mathml_raw = String::from_utf8(jats_fmt::emit_fragment(
+                                std::slice::from_ref(alt_child),
+                            ))
+                            .ok();
+                        } else if matches!(alt_child, JNode::Element { .. })
+                            && let Ok(raw) = String::from_utf8(jats_fmt::emit_fragment(
+                                std::slice::from_ref(alt_child),
+                            ))
+                        {
+                            other_raw.push(raw);
+                        }
+                    }
+                    if let Some(raw) = mathml_raw {
+                        let mut sentinel = Node::new(node::SPAN)
+                            .prop("jats:tag", "mml-math-raw")
+                            .prop(prop::CONTENT, raw);
+                        if !other_raw.is_empty() {
+                            sentinel = sentinel.prop("jats:alternatives-raw", other_raw.join(""));
+                            warnings.push(FidelityWarning::new(
+                                Severity::Minor,
+                                WarningKind::FeatureLost("alternatives-representation".to_string()),
+                                format!(
+                                    "<alternatives> inside <{parent_name}> offered more than one math representation; kept MathML as the modeled form and raw-preserved the other(s) verbatim"
+                                ),
+                            ));
+                        }
+                        out.push(sentinel);
+                        continue;
+                    }
+                    // No `<mml:math>` found — ordinary conversion (unchanged
+                    // behavior for e.g. a lone `<tex-math>` still wrapped in
+                    // `<alternatives>`).
+                    out.extend(convert_children(
+                        kids, name, in_header, in_biblio, sec_depth, metadata, warnings,
+                    ));
+                    continue;
+                }
                 let child_in_header =
                     in_header || matches!(name.as_str(), "article-meta" | "journal-meta");
                 // Whether *`name`'s own children* should also be dispatched
@@ -806,7 +885,7 @@ fn convert_element(
         // disp-formula-with-label fixture.
         "disp-formula" => {
             let (label, rest) = split_label(children);
-            let (mathml, rest) = split_mathml(rest);
+            let (mathml, alternatives_raw, rest) = split_mathml(rest);
             let mut node = match mathml {
                 // No explicit `math:format` for the `<tex-math>` case,
                 // matching the existing convention (rescribe-read-html's
@@ -820,11 +899,14 @@ fn convert_element(
             if let Some(label) = label {
                 node = node.prop(prop::LABEL, label);
             }
+            if let Some(raw) = alternatives_raw {
+                node = node.prop("jats:alternatives-raw", raw);
+            }
             Some(node)
         }
         "inline-formula" => {
             let (label, rest) = split_label(children);
-            let (mathml, rest) = split_mathml(rest);
+            let (mathml, alternatives_raw, rest) = split_mathml(rest);
             let mut node = match mathml {
                 Some(source) => Node::new("math_inline")
                     .prop("math:source", source)
@@ -833,6 +915,9 @@ fn convert_element(
             };
             if let Some(label) = label {
                 node = node.prop(prop::LABEL, label);
+            }
+            if let Some(raw) = alternatives_raw {
+                node = node.prop("jats:alternatives-raw", raw);
             }
             Some(node)
         }
@@ -1560,11 +1645,16 @@ fn split_label(children: Vec<Node>) -> (Option<String>, Vec<Node>) {
 
 /// Pull the raw-captured `<mml:math>` sentinel (see `convert_children`'s
 /// `mml-math-raw` interception) out of a formula's already-`split_label`ed
-/// children, returning its verbatim MathML source alongside the remaining
-/// children (which, in the MathML case, is normally empty — MathML and
-/// TeX are alternatives, not both present per the JATS 1.3 content model).
-fn split_mathml(children: Vec<Node>) -> (Option<String>, Vec<Node>) {
+/// children, returning its verbatim MathML source, any raw-preserved sibling
+/// alternative(s) captured alongside it (see `convert_children`'s
+/// `<alternatives>`-inside-formula interception — set only when the
+/// `<mml:math>` came from an `<alternatives>` wrapper that also held e.g. a
+/// `<tex-math>` or a third alternative), and the remaining children (which,
+/// in the MathML case, is normally empty — MathML and TeX are alternatives,
+/// not both present as direct siblings per the JATS 1.3 content model).
+fn split_mathml(children: Vec<Node>) -> (Option<String>, Option<String>, Vec<Node>) {
     let mut mathml = None;
+    let mut alternatives_raw = None;
     let mut rest = Vec::with_capacity(children.len());
     for child in children {
         if mathml.is_none()
@@ -1572,11 +1662,15 @@ fn split_mathml(children: Vec<Node>) -> (Option<String>, Vec<Node>) {
             && child.props.get_str("jats:tag") == Some("mml-math-raw")
         {
             mathml = child.props.get_str(prop::CONTENT).map(|s| s.to_string());
+            alternatives_raw = child
+                .props
+                .get_str("jats:alternatives-raw")
+                .map(|s| s.to_string());
         } else {
             rest.push(child);
         }
     }
-    (mathml, rest)
+    (mathml, alternatives_raw, rest)
 }
 
 fn extract_text(nodes: &[Node]) -> String {
