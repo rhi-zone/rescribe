@@ -64,22 +64,46 @@ impl<'a> Parser<'a> {
         }
 
         // Code block: <code> or <code lang>
-        if trimmed.starts_with("<code") && (trimmed.len() == 5 || trimmed.as_bytes().get(5).is_some_and(|&b| b == b'>' || b == b' ')) {
+        if trimmed.starts_with("<code")
+            && (trimmed.len() == 5
+                || trimmed
+                    .as_bytes()
+                    .get(5)
+                    .is_some_and(|&b| b == b'>' || b == b' '))
+        {
             return Some(self.parse_code_block());
         }
 
         // File block: <file>
-        if trimmed.starts_with("<file") && (trimmed.len() == 5 || trimmed.as_bytes().get(5).is_some_and(|&b| b == b'>' || b == b' ')) {
+        if trimmed.starts_with("<file")
+            && (trimmed.len() == 5
+                || trimmed
+                    .as_bytes()
+                    .get(5)
+                    .is_some_and(|&b| b == b'>' || b == b' '))
+        {
             return Some(self.parse_file_block());
         }
 
         // HTML block: <html>
-        if trimmed.starts_with("<html") && (trimmed.len() == 5 || trimmed.as_bytes().get(5).is_some_and(|&b| b == b'>' || b == b' ')) {
+        if trimmed.starts_with("<html")
+            && (trimmed.len() == 5
+                || trimmed
+                    .as_bytes()
+                    .get(5)
+                    .is_some_and(|&b| b == b'>' || b == b' '))
+        {
             return Some(self.parse_raw_block("html"));
         }
 
         // PHP block: <php>
-        if trimmed.starts_with("<php") && (trimmed.len() == 4 || trimmed.as_bytes().get(4).is_some_and(|&b| b == b'>' || b == b' ')) {
+        if trimmed.starts_with("<php")
+            && (trimmed.len() == 4
+                || trimmed
+                    .as_bytes()
+                    .get(4)
+                    .is_some_and(|&b| b == b'>' || b == b' '))
+        {
             return Some(self.parse_raw_block("php"));
         }
 
@@ -139,10 +163,7 @@ impl<'a> Parser<'a> {
         let level = (7 - leading.min(6)) as u8;
 
         // Extract content between = signs
-        let content = trimmed
-            .trim_start_matches('=')
-            .trim_end_matches('=')
-            .trim();
+        let content = trimmed.trim_start_matches('=').trim_end_matches('=').trim();
 
         Block::Heading {
             level,
@@ -412,11 +433,32 @@ impl<'a> Parser<'a> {
             }
             // Stop at block-level elements
             if (trimmed.starts_with('=') && trimmed.ends_with('='))
-                || (trimmed.starts_with("<code") && (trimmed.len() == 5 || trimmed.as_bytes().get(5).is_some_and(|&b| b == b'>' || b == b' ')))
-                || (trimmed.starts_with("<file") && (trimmed.len() == 5 || trimmed.as_bytes().get(5).is_some_and(|&b| b == b'>' || b == b' ')))
-                || (trimmed.starts_with("<html") && (trimmed.len() == 5 || trimmed.as_bytes().get(5).is_some_and(|&b| b == b'>' || b == b' ')))
-                || (trimmed.starts_with("<php") && (trimmed.len() == 4 || trimmed.as_bytes().get(4).is_some_and(|&b| b == b'>' || b == b' ')))
-                || (line.starts_with("  ") && (trimmed.starts_with("* ") || trimmed.starts_with("- ")))
+                || (trimmed.starts_with("<code")
+                    && (trimmed.len() == 5
+                        || trimmed
+                            .as_bytes()
+                            .get(5)
+                            .is_some_and(|&b| b == b'>' || b == b' ')))
+                || (trimmed.starts_with("<file")
+                    && (trimmed.len() == 5
+                        || trimmed
+                            .as_bytes()
+                            .get(5)
+                            .is_some_and(|&b| b == b'>' || b == b' ')))
+                || (trimmed.starts_with("<html")
+                    && (trimmed.len() == 5
+                        || trimmed
+                            .as_bytes()
+                            .get(5)
+                            .is_some_and(|&b| b == b'>' || b == b' ')))
+                || (trimmed.starts_with("<php")
+                    && (trimmed.len() == 4
+                        || trimmed
+                            .as_bytes()
+                            .get(4)
+                            .is_some_and(|&b| b == b'>' || b == b' ')))
+                || (line.starts_with("  ")
+                    && (trimmed.starts_with("* ") || trimmed.starts_with("- ")))
                 || trimmed.starts_with('>')
                 || trimmed.starts_with('^')
                 || trimmed.starts_with('|')
@@ -634,10 +676,7 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
             }
             if let Some((img_content, end)) = find_double_brace(&chars, i + 2) {
                 let (url, alt) = if let Some(pipe_pos) = img_content.find('|') {
-                    (
-                        &img_content[..pipe_pos],
-                        Some(&img_content[pipe_pos + 1..]),
-                    )
+                    (&img_content[..pipe_pos], Some(&img_content[pipe_pos + 1..]))
                 } else {
                     (img_content.as_str(), None)
                 };

@@ -386,8 +386,7 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartStrikethrough => {
-                self.stack
-                    .push(Frame::Strikethrough { inlines: vec![] });
+                self.stack.push(Frame::Strikethrough { inlines: vec![] });
             }
             OwnedEvent::EndStrikethrough => {
                 if let Some(Frame::Strikethrough { inlines }) = self.stack.pop() {
@@ -403,8 +402,7 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartSuperscript => {
-                self.stack
-                    .push(Frame::Superscript { inlines: vec![] });
+                self.stack.push(Frame::Superscript { inlines: vec![] });
             }
             OwnedEvent::EndSuperscript => {
                 if let Some(Frame::Superscript { inlines }) = self.stack.pop() {
@@ -429,11 +427,7 @@ impl DocBuilder {
                     });
                 }
             }
-            OwnedEvent::InlineImage {
-                url,
-                width,
-                height,
-            } => {
+            OwnedEvent::InlineImage { url, width, height } => {
                 self.push_inline(Inline::Image {
                     url,
                     width,

@@ -42,7 +42,8 @@ impl<W: Write> Writer<W> {
 
     /// Flush all buffered events as man page text and return the sink.
     pub fn finish(mut self) -> W {
-        let doc = crate::events::collect_doc_from_events(std::mem::take(&mut self.events).into_iter());
+        let doc =
+            crate::events::collect_doc_from_events(std::mem::take(&mut self.events).into_iter());
         let text = crate::emit::build(&doc);
         let _ = self.sink.write_all(text.as_bytes());
         self.sink

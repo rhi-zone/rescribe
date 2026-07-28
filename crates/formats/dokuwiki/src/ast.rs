@@ -204,9 +204,7 @@ impl Block {
                 children: children.into_iter().map(|b| b.strip_spans()).collect(),
                 span: Span::NONE,
             },
-            Block::List {
-                ordered, items, ..
-            } => Block::List {
+            Block::List { ordered, items, .. } => Block::List {
                 ordered,
                 items: items.into_iter().map(|it| it.strip_spans()).collect(),
                 span: Span::NONE,

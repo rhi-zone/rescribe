@@ -84,9 +84,7 @@ fn emit_block(block: &Block, output: &mut String) {
             output.push_str(&format!("[/h{}]\n\n", level));
         }
 
-        Block::Alignment {
-            kind, children, ..
-        } => {
+        Block::Alignment { kind, children, .. } => {
             let tag = match kind {
                 AlignKind::Center => "center",
                 AlignKind::Left => "left",
@@ -185,10 +183,7 @@ pub(crate) fn emit_inline(inline: &Inline, output: &mut String) {
         }
 
         Inline::Image {
-            url,
-            width,
-            height,
-            ..
+            url, width, height, ..
         } => {
             if let (Some(w), Some(h)) = (width, height) {
                 output.push_str(&format!("[img={}x{}]", w, h));
@@ -227,17 +222,13 @@ pub(crate) fn emit_inline(inline: &Inline, output: &mut String) {
             output.push_str("[/size]");
         }
 
-        Inline::Font {
-            name, children, ..
-        } => {
+        Inline::Font { name, children, .. } => {
             output.push_str(&format!("[font={}]", name));
             emit_inlines(children, output);
             output.push_str("[/font]");
         }
 
-        Inline::Email {
-            addr, children, ..
-        } => {
+        Inline::Email { addr, children, .. } => {
             output.push_str(&format!("[email={}]", addr));
             emit_inlines(children, output);
             output.push_str("[/email]");

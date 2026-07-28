@@ -269,12 +269,14 @@ mod tests {
         p.feed(b".SH NAME\n\n");
         p.feed(b"test program\n");
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedManEvent::StartHeading { level: 2 })));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedManEvent::StartParagraph)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedManEvent::StartHeading { level: 2 }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedManEvent::StartParagraph))
+        );
     }
 
     #[test]
@@ -284,11 +286,15 @@ mod tests {
         sink.feed(b".SH NAME\n");
         sink.feed(b"test program\n");
         sink.finish();
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedManEvent::StartHeading { .. })));
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedManEvent::StartParagraph)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedManEvent::StartHeading { .. }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedManEvent::StartParagraph))
+        );
     }
 }

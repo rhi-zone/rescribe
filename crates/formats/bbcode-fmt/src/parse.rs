@@ -605,9 +605,7 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 "b" => Some(Inline::Bold(parse_inline(&content), Span::NONE)),
                 "i" => Some(Inline::Italic(parse_inline(&content), Span::NONE)),
                 "u" => Some(Inline::Underline(parse_inline(&content), Span::NONE)),
-                "s" | "strike" => {
-                    Some(Inline::Strikethrough(parse_inline(&content), Span::NONE))
-                }
+                "s" | "strike" => Some(Inline::Strikethrough(parse_inline(&content), Span::NONE)),
                 "code" | "icode" | "inlinecode" => Some(Inline::Code(content, Span::NONE)),
                 "sub" => Some(Inline::Subscript(parse_inline(&content), Span::NONE)),
                 "sup" => Some(Inline::Superscript(parse_inline(&content), Span::NONE)),

@@ -27,11 +27,19 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Warning, message: message.into(), span }
+        Self {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
     }
 
     pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Error, message: message.into(), span }
+        Self {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -56,13 +64,36 @@ impl TikiwikiDoc {
 /// Block-level element.
 #[derive(Debug, Clone)]
 pub enum Block {
-    Paragraph { inlines: Vec<Inline>, span: Span },
-    Heading { level: u8, inlines: Vec<Inline>, span: Span },
-    CodeBlock { content: String, language: Option<String>, span: Span },
-    Blockquote { blocks: Vec<Block>, span: Span },
-    List { ordered: bool, items: Vec<ListItem>, span: Span },
-    Table { rows: Vec<TableRow>, span: Span },
-    HorizontalRule { span: Span },
+    Paragraph {
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    CodeBlock {
+        content: String,
+        language: Option<String>,
+        span: Span,
+    },
+    Blockquote {
+        blocks: Vec<Block>,
+        span: Span,
+    },
+    List {
+        ordered: bool,
+        items: Vec<ListItem>,
+        span: Span,
+    },
+    Table {
+        rows: Vec<TableRow>,
+        span: Span,
+    },
+    HorizontalRule {
+        span: Span,
+    },
 }
 
 impl Block {
@@ -77,9 +108,13 @@ impl Block {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { content, language, .. } => {
-                Block::CodeBlock { content, language, span: Span::NONE }
-            }
+            Block::CodeBlock {
+                content, language, ..
+            } => Block::CodeBlock {
+                content,
+                language,
+                span: Span::NONE,
+            },
             Block::Blockquote { blocks, .. } => Block::Blockquote {
                 blocks: blocks.into_iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
@@ -127,11 +162,7 @@ pub struct TableRow {
 impl TableRow {
     pub fn strip_spans(self) -> Self {
         TableRow {
-            cells: self
-                .cells
-                .into_iter()
-                .map(TableCell::strip_spans)
-                .collect(),
+            cells: self.cells.into_iter().map(TableCell::strip_spans).collect(),
             is_header: self.is_header,
             span: Span::NONE,
         }
@@ -165,11 +196,25 @@ pub enum Inline {
     Superscript(Vec<Inline>, Span),
     Subscript(Vec<Inline>, Span),
     Code(String, Span),
-    Link { url: String, children: Vec<Inline>, span: Span },
-    WikiLink { page: String, children: Vec<Inline>, span: Span },
-    Image { url: String, alt: String, span: Span },
+    Link {
+        url: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    WikiLink {
+        page: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    Image {
+        url: String,
+        alt: String,
+        span: Span,
+    },
     Nowiki(String, Span),
-    LineBreak { span: Span },
+    LineBreak {
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -186,16 +231,10 @@ impl Inline {
                 Inline::Underline(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
             Inline::Strikethrough(c, _) => {
-                Inline::Strikethrough(
-                    c.into_iter().map(Inline::strip_spans).collect(),
-                    Span::NONE,
-                )
+                Inline::Strikethrough(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
             Inline::Superscript(c, _) => {
-                Inline::Superscript(
-                    c.into_iter().map(Inline::strip_spans).collect(),
-                    Span::NONE,
-                )
+                Inline::Superscript(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
             Inline::Subscript(c, _) => {
                 Inline::Subscript(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
@@ -211,7 +250,11 @@ impl Inline {
                 children: children.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::Image { url, alt, .. } => Inline::Image { url, alt, span: Span::NONE },
+            Inline::Image { url, alt, .. } => Inline::Image {
+                url,
+                alt,
+                span: Span::NONE,
+            },
             Inline::Nowiki(s, _) => Inline::Nowiki(s, Span::NONE),
             Inline::LineBreak { .. } => Inline::LineBreak { span: Span::NONE },
         }

@@ -51,7 +51,9 @@ fn build_block(block: &Block, output: &mut String) {
             output.push('\n');
         }
 
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             if let Some(lang) = language {
                 output.push_str(&format!("{{CODE(lang={})}}\n", lang));
             } else {
@@ -113,7 +115,11 @@ fn build_list_items(items: &[ListItem], output: &mut String, marker: char, depth
         build_inlines(&item.inlines, output);
         output.push('\n');
         for child in &item.children {
-            if let Block::List { items: nested_items, .. } = child {
+            if let Block::List {
+                items: nested_items,
+                ..
+            } = child
+            {
                 build_list_items(nested_items, output, marker, depth + 1);
             }
         }

@@ -161,9 +161,7 @@ impl Block {
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::Alignment {
-                kind, children, ..
-            } => Block::Alignment {
+            Block::Alignment { kind, children, .. } => Block::Alignment {
                 kind: *kind,
                 children: children.iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
@@ -200,7 +198,10 @@ impl TableRow {
                 .cells
                 .iter()
                 .map(|(is_header, inlines)| {
-                    (*is_header, inlines.iter().map(Inline::strip_spans).collect())
+                    (
+                        *is_header,
+                        inlines.iter().map(Inline::strip_spans).collect(),
+                    )
                 })
                 .collect(),
             span: Span::NONE,
@@ -285,10 +286,7 @@ impl Inline {
                 span: Span::NONE,
             },
             Inline::Image {
-                url,
-                width,
-                height,
-                ..
+                url, width, height, ..
             } => Inline::Image {
                 url: url.clone(),
                 width: *width,
@@ -315,16 +313,12 @@ impl Inline {
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::Font {
-                name, children, ..
-            } => Inline::Font {
+            Inline::Font { name, children, .. } => Inline::Font {
                 name: name.clone(),
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::Email {
-                addr, children, ..
-            } => Inline::Email {
+            Inline::Email { addr, children, .. } => Inline::Email {
                 addr: addr.clone(),
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,

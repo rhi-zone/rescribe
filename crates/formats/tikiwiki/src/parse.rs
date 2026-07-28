@@ -81,7 +81,13 @@ pub fn parse(input: &str) -> (TikiwikiDoc, Vec<Diagnostic>) {
         i = end.max(i + 1);
     }
 
-    (TikiwikiDoc { blocks: result, span: Span::NONE }, vec![])
+    (
+        TikiwikiDoc {
+            blocks: result,
+            span: Span::NONE,
+        },
+        vec![],
+    )
 }
 
 fn collect_paragraph<'a>(lines: &[&'a str], start: usize) -> (Vec<&'a str>, usize) {
@@ -198,13 +204,10 @@ fn parse_table(lines: &[&str], start: usize) -> (Block, usize) {
 
     // Check first line for table params (e.g. ||border=1)
     let first_line = lines[start].trim();
-    let first_inner = first_line
-        .trim_start_matches("||")
-        .trim_end_matches("||");
+    let first_inner = first_line.trim_start_matches("||").trim_end_matches("||");
     // If first line looks like a parameter line (no pipe separators in content)
-    let is_param_line = !first_inner.is_empty()
-        && !first_inner.contains('|')
-        && first_inner.contains('=');
+    let is_param_line =
+        !first_inner.is_empty() && !first_inner.contains('|') && first_inner.contains('=');
     if is_param_line {
         i += 1;
     }
@@ -253,11 +256,21 @@ fn parse_table(lines: &[&str], start: usize) -> (Block, usize) {
             })
             .collect();
 
-        rows.push(TableRow { cells, is_header, span: Span::NONE });
+        rows.push(TableRow {
+            cells,
+            is_header,
+            span: Span::NONE,
+        });
         i += 1;
     }
 
-    (Block::Table { rows, span: Span::NONE }, i)
+    (
+        Block::Table {
+            rows,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 fn parse_list(lines: &[&str], start: usize, depth: usize) -> (Block, usize) {
@@ -305,7 +318,14 @@ fn parse_list(lines: &[&str], start: usize, depth: usize) -> (Block, usize) {
         }
     }
 
-    (Block::List { ordered, items, span: Span::NONE }, i)
+    (
+        Block::List {
+            ordered,
+            items,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
@@ -459,11 +479,13 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 current.clear();
             }
             let img_params = &content[3..].trim(); // skip "img"
-            let url = extract_img_param(img_params, "src")
-                .unwrap_or_default();
-            let alt = extract_img_param(img_params, "alt")
-                .unwrap_or_default();
-            nodes.push(Inline::Image { url, alt, span: Span::NONE });
+            let url = extract_img_param(img_params, "src").unwrap_or_default();
+            let alt = extract_img_param(img_params, "alt").unwrap_or_default();
+            nodes.push(Inline::Image {
+                url,
+                alt,
+                span: Span::NONE,
+            });
             i = end;
             continue;
         }
@@ -519,11 +541,7 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
         }
 
         // Line break: %%%
-        if i + 2 < chars.len()
-            && chars[i] == '%'
-            && chars[i + 1] == '%'
-            && chars[i + 2] == '%'
-        {
+        if i + 2 < chars.len() && chars[i] == '%' && chars[i + 1] == '%' && chars[i + 2] == '%' {
             if !current.is_empty() {
                 nodes.push(Inline::Text(current.clone(), Span::NONE));
                 current.clear();

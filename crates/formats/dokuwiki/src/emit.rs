@@ -144,9 +144,7 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n");
         }
 
-        Block::List {
-            ordered, items, ..
-        } => {
+        Block::List { ordered, items, .. } => {
             ctx.list_depth += 1;
             for item in items {
                 for _ in 0..ctx.list_depth {

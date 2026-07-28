@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use rst_fmt::{parse, build};
+use rst_fmt::{build, parse};
 
 const SMALL: &str = r#"
 Hello World

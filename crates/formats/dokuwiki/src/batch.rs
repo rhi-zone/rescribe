@@ -219,12 +219,11 @@ mod tests {
         p.feed(b"====== Hello ======\n\n");
         p.feed(b"A paragraph.\n");
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 
     #[test]
@@ -251,11 +250,15 @@ mod tests {
         sink.feed(b"====== Hello ======\n\n");
         sink.feed(b"A paragraph.\n");
         sink.finish();
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartParagraph))
+        );
     }
 }

@@ -186,24 +186,24 @@ impl Inline {
     pub fn strip_spans(&self) -> Self {
         match self {
             Inline::Text(s, _) => Inline::Text(s.clone(), Span::NONE),
-            Inline::Bold(children, _) => {
-                Inline::Bold(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
-            Inline::Italic(children, _) => {
-                Inline::Italic(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
+            Inline::Bold(children, _) => Inline::Bold(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Italic(children, _) => Inline::Italic(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::Code(s, _) => Inline::Code(s.clone(), Span::NONE),
-            Inline::Superscript(children, _) => {
-                Inline::Superscript(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
-            Inline::Subscript(children, _) => {
-                Inline::Subscript(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
-            Inline::Link {
-                url,
-                children,
-                ..
-            } => Inline::Link {
+            Inline::Superscript(children, _) => Inline::Superscript(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Subscript(children, _) => Inline::Subscript(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Link { url, children, .. } => Inline::Link {
                 url: url.clone(),
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,

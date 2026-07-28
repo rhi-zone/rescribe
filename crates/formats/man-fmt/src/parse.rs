@@ -13,7 +13,14 @@ pub fn parse(input: &str) -> (ManDoc, Vec<Diagnostic>) {
 
 // ── Internal ──────────────────────────────────────────────────────────────────
 
-type ParseElement = (Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<Block>);
+type ParseElement = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<Block>,
+);
 
 struct Parser<'a> {
     lines: Vec<&'a str>,
@@ -96,7 +103,17 @@ impl<'a> Parser<'a> {
         if line.starts_with(".\\\"") || line.starts_with("'\\\"") {
             let text = line[3..].trim().to_string();
             self.advance();
-            return (None, None, None, None, None, Some(Block::Comment { text, span: Span::NONE }));
+            return (
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(Block::Comment {
+                    text,
+                    span: Span::NONE,
+                }),
+            );
         }
 
         // Macro lines start with .
@@ -583,14 +600,12 @@ impl<'a> Parser<'a> {
 
                 if !styled_text.is_empty() {
                     let styled_inline = match font_code.as_str() {
-                        "B" => Inline::Bold(
-                            vec![Inline::Text(styled_text, Span::NONE)],
-                            Span::NONE,
-                        ),
-                        "I" => Inline::Italic(
-                            vec![Inline::Text(styled_text, Span::NONE)],
-                            Span::NONE,
-                        ),
+                        "B" => {
+                            Inline::Bold(vec![Inline::Text(styled_text, Span::NONE)], Span::NONE)
+                        }
+                        "I" => {
+                            Inline::Italic(vec![Inline::Text(styled_text, Span::NONE)], Span::NONE)
+                        }
                         "CW" | "CR" => Inline::Code(styled_text, Span::NONE),
                         "R" | "P" => Inline::Text(styled_text, Span::NONE),
                         _ => Inline::Text(styled_text, Span::NONE),
@@ -632,11 +647,26 @@ impl<'a> Parser<'a> {
             return None;
         }
         match chars[*i + 1] {
-            '-' => { *i += 2; Some("-".into()) }
-            '\\' => { *i += 2; Some("\\".into()) }
-            'e' => { *i += 2; Some("\\".into()) }
-            '~' => { *i += 2; Some("\u{00a0}".into()) } // non-breaking space
-            '&' => { *i += 2; Some(String::new()) } // zero-width, skip
+            '-' => {
+                *i += 2;
+                Some("-".into())
+            }
+            '\\' => {
+                *i += 2;
+                Some("\\".into())
+            }
+            'e' => {
+                *i += 2;
+                Some("\\".into())
+            }
+            '~' => {
+                *i += 2;
+                Some("\u{00a0}".into())
+            } // non-breaking space
+            '&' => {
+                *i += 2;
+                Some(String::new())
+            } // zero-width, skip
             '(' if *i + 3 < chars.len() => {
                 let code = format!("{}{}", chars[*i + 2], chars[*i + 3]);
                 let replacement = match code.as_str() {

@@ -309,9 +309,10 @@ mod tests {
         let mut p = StreamingParser::new(|ev| evs.push(ev));
         p.feed(b"[code]\nlet x = 1;\n[/code]\n");
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::CodeBlock { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::CodeBlock { .. }))
+        );
     }
 
     #[test]
@@ -320,9 +321,7 @@ mod tests {
 
         let bulk: Vec<OwnedEvent> = {
             let s = String::from_utf8_lossy(input);
-            crate::events::events(&s)
-                .map(|e| e.into_owned())
-                .collect()
+            crate::events::events(&s).map(|e| e.into_owned()).collect()
         };
 
         let mut streamed: Vec<OwnedEvent> = Vec::new();
@@ -343,8 +342,10 @@ mod tests {
         sink.feed(b"A paragraph.\n");
         sink.finish();
         assert!(events.iter().any(|e| matches!(e, OwnedEvent::StartBold)));
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartParagraph))
+        );
     }
 }
