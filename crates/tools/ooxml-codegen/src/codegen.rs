@@ -172,17 +172,55 @@ impl FeatureMappings {
             .is_some_and(|tags| tags.iter().any(|t| t == "core"))
     }
 
-    /// Get the primary feature name for a field (first non-core tag).
-    /// Returns None if no feature gating needed (core or unmapped).
-    pub fn primary_feature(&self, module: &str, element: &str, field: &str) -> Option<&str> {
+    /// Get *all* non-core feature tags for a field, in the order they appear in the
+    /// YAML (`slices[0]` is the stable primary, per ADR 0013).
+    ///
+    /// Returns `None` if no feature gating is needed (the field is untagged, or tagged
+    /// `core`). Returns `Some(tags)` with **every** tag otherwise — a construct tagged
+    /// `[drawings, layout]` yields `["drawings", "layout"]`, not just `"drawings"`.
+    ///
+    /// Per ADR 0013's amendment (open question 5, resolved 2026-07-28): a multi-tagged
+    /// construct is gated on the OR of all its tags, so enabling any one slice makes the
+    /// construct available. Callers must fold every element of the returned slice into
+    /// the emitted `#[cfg(...)]` — dropping any of them silently un-gates that slice
+    /// again, exactly the bug this method replaces (`primary_feature`, removed, kept only
+    /// the first tag and discarded the rest with no diagnostic).
+    pub fn feature_gates(&self, module: &str, element: &str, field: &str) -> Option<Vec<&str>> {
         self.get_tags(module, element, field).and_then(|tags| {
-            // If it's core, no feature gating needed
+            // If it's core, no feature gating needed regardless of other tags.
             if tags.iter().any(|t| t == "core") {
                 return None;
             }
-            // Return first tag as the primary feature
-            tags.first().map(|s| s.as_str())
+            if tags.is_empty() {
+                return None;
+            }
+            Some(tags.iter().map(|s| s.as_str()).collect())
         })
+    }
+}
+
+/// Build the `#[cfg(...)]` predicate content for a construct tagged with one or more
+/// pragmatic slices (ADR 0013). `gates` is the module-unprefixed tag list as returned by
+/// `FeatureMappings::feature_gates` — e.g. `["drawings", "layout"]` for `sml`.
+///
+/// A single tag becomes `feature = "sml-drawings"`. Multiple tags become
+/// `any(feature = "sml-drawings", feature = "sml-layout")`, so the construct is compiled
+/// in when *any* of its slices is enabled (the OR-of-all rule; see ADR 0013's amendment,
+/// open question 5). Shared across `codegen.rs`, `parser_gen.rs`, and `serializer_gen.rs`
+/// so all three generators emit an identical predicate for the same field.
+pub(crate) fn cfg_predicate(module_name: &str, gates: &[&str]) -> String {
+    debug_assert!(
+        !gates.is_empty(),
+        "cfg_predicate called with no gates — caller should have returned None instead"
+    );
+    let prefixed: Vec<String> = gates
+        .iter()
+        .map(|tag| format!("feature = \"{}-{}\"", module_name, tag))
+        .collect();
+    if prefixed.len() == 1 {
+        prefixed.into_iter().next().unwrap()
+    } else {
+        format!("any({})", prefixed.join(", "))
     }
 }
 
@@ -279,9 +317,29 @@ impl<'a> Generator<'a> {
         for def in &simple_types {
             let rust_name = self.to_rust_type_name(&def.name);
             // Skip aliases that would shadow built-in Rust types or std prelude items
-            if matches!(rust_name.as_str(), "String" | "Vec" | "Option" | "Result" | "Box"
-                | "bool" | "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32" | "i64"
-                | "f32" | "f64" | "usize" | "isize" | "char" | "str") {
+            if matches!(
+                rust_name.as_str(),
+                "String"
+                    | "Vec"
+                    | "Option"
+                    | "Result"
+                    | "Box"
+                    | "bool"
+                    | "u8"
+                    | "u16"
+                    | "u32"
+                    | "u64"
+                    | "i8"
+                    | "i16"
+                    | "i32"
+                    | "i64"
+                    | "f32"
+                    | "f64"
+                    | "usize"
+                    | "isize"
+                    | "char"
+                    | "str"
+            ) {
                 continue;
             }
             if !self.generated_names.insert(rust_name) {
@@ -386,7 +444,9 @@ impl<'a> Generator<'a> {
     fn is_inline_attribute_ref(&self, name: &str, pattern: &Pattern) -> bool {
         // Only inline single-attribute defs that use underscore naming (OOXML r_* refs).
         // Hyphenated names (ODF convention) are legitimate *-attlist types that need structs.
-        !name.contains('-') && !name.contains("_CT_") && matches!(pattern, Pattern::Attribute { .. })
+        !name.contains('-')
+            && !name.contains("_CT_")
+            && matches!(pattern, Pattern::Attribute { .. })
     }
 
     /// Check if a pattern resolves to a string type (for text content detection).
@@ -781,7 +841,10 @@ impl<'a> Generator<'a> {
                         "    /// Unknown child elements captured for roundtrip fidelity."
                     )
                     .unwrap();
-                    let ec_type = self.config.extra_children_type.as_deref()
+                    let ec_type = self
+                        .config
+                        .extra_children_type
+                        .as_deref()
                         .unwrap_or("ooxml_xml::PositionedNode");
                     writeln!(code, "    #[cfg(feature = \"extra-children\")]").unwrap();
                     writeln!(code, "    #[serde(skip)]").unwrap();
@@ -830,7 +893,7 @@ impl<'a> Generator<'a> {
 
                 // Add feature cfg attribute if not core
                 if let Some(ref feature) = self.get_field_feature(&rust_name, &field.xml_name) {
-                    writeln!(code, "    #[cfg(feature = \"{}\")]", feature).unwrap();
+                    writeln!(code, "    #[cfg({})]", feature).unwrap();
                 }
 
                 if is_eg_content {
@@ -916,7 +979,10 @@ impl<'a> Generator<'a> {
                     "    /// Unknown child elements captured for roundtrip fidelity."
                 )
                 .unwrap();
-                let ec_type = self.config.extra_children_type.as_deref()
+                let ec_type = self
+                    .config
+                    .extra_children_type
+                    .as_deref()
                     .unwrap_or("ooxml_xml::PositionedNode");
                 writeln!(code, "    #[cfg(feature = \"extra-children\")]").unwrap();
                 writeln!(code, "    #[serde(skip)]").unwrap();
@@ -1219,17 +1285,16 @@ impl<'a> Generator<'a> {
             .map(|s| s.to_string())
     }
 
-    /// Get the feature name for a field if it requires feature gating.
+    /// Get the `#[cfg(...)]` predicate content for a field if it requires feature gating.
     /// Returns None if the field is "core" (always included) or unmapped.
-    /// Returns the feature name prefixed with the module name (e.g., "sml-styling").
+    /// Returns a single `feature = "sml-styling"` predicate for a singly-tagged field, or
+    /// `any(feature = "sml-drawings", feature = "sml-layout")` for a multi-tagged one — see
+    /// `FeatureMappings::feature_gates` and ADR 0013 open question 5.
     fn get_field_feature(&self, struct_name: &str, xml_field_name: &str) -> Option<String> {
-        self.config
-            .feature_mappings
-            .as_ref()
-            .and_then(|fm| {
-                fm.primary_feature(&self.config.module_name, struct_name, xml_field_name)
-            })
-            .map(|feature| format!("{}-{}", self.config.module_name, feature))
+        let gates = self.config.feature_mappings.as_ref().and_then(|fm| {
+            fm.feature_gates(&self.config.module_name, struct_name, xml_field_name)
+        })?;
+        Some(cfg_predicate(&self.config.module_name, &gates))
     }
 
     fn xsd_to_rust(&self, library: &str, name: &str) -> &'static str {
@@ -1481,5 +1546,84 @@ mod tests {
         assert_eq!(to_snake_case("fooBar"), "foo_bar");
         assert_eq!(to_snake_case("FooBar"), "foo_bar");
         assert_eq!(to_snake_case("type"), "r#type");
+    }
+
+    // -------------------------------------------------------------------------
+    // Guard against silent tag-dropping (ADR 0013 open question 5).
+    //
+    // `drawingHF: [drawings, layout]` in ooxml-features.yaml must gate on the OR of
+    // *every* tag, not just the first. These pin that behavior so a future edit that
+    // reverts to "keep tags.first(), drop the rest" (the original bug) fails CI instead
+    // of silently reintroducing an inert feature tag.
+    // -------------------------------------------------------------------------
+
+    fn mappings_with(module: &str, element: &str, field: &str, tags: &[&str]) -> FeatureMappings {
+        let mut elem_features: ElementFeatures = HashMap::new();
+        elem_features.insert(
+            field.to_string(),
+            tags.iter().map(|t| t.to_string()).collect(),
+        );
+        let mut module_features: ModuleFeatures = HashMap::new();
+        module_features.insert(element.to_string(), elem_features);
+        let mut fm = FeatureMappings::default();
+        match module {
+            "sml" => fm.sml = module_features,
+            "wml" => fm.wml = module_features,
+            "pml" => fm.pml = module_features,
+            "dml" => fm.dml = module_features,
+            _ => unreachable!(),
+        }
+        fm
+    }
+
+    #[test]
+    fn feature_gates_returns_every_tag_not_just_the_first() {
+        let fm = mappings_with("sml", "Worksheet", "drawingHF", &["drawings", "layout"]);
+        let gates = fm.feature_gates("sml", "Worksheet", "drawingHF");
+        // The original bug kept only `Some(vec!["drawings"])`, silently discarding
+        // "layout". Every tag must survive.
+        assert_eq!(gates, Some(vec!["drawings", "layout"]));
+    }
+
+    #[test]
+    fn feature_gates_none_for_core_regardless_of_other_tags() {
+        let fm = mappings_with("sml", "Row", "s", &["core", "styling"]);
+        assert_eq!(fm.feature_gates("sml", "Row", "s"), None);
+    }
+
+    #[test]
+    fn feature_gates_single_tag_unaffected() {
+        let fm = mappings_with("sml", "Worksheet", "sheetProtection", &["protection"]);
+        assert_eq!(
+            fm.feature_gates("sml", "Worksheet", "sheetProtection"),
+            Some(vec!["protection"])
+        );
+    }
+
+    #[test]
+    fn cfg_predicate_single_tag_is_a_bare_feature_predicate() {
+        assert_eq!(
+            cfg_predicate("sml", &["drawings"]),
+            "feature = \"sml-drawings\""
+        );
+    }
+
+    #[test]
+    fn cfg_predicate_multi_tag_is_an_any_of_every_tag() {
+        // This is the load-bearing assertion: the emitted predicate must mention
+        // *every* gate, in order, or a slice silently stops being wired to its
+        // constructs exactly as the pre-fix `primary_feature` did.
+        assert_eq!(
+            cfg_predicate("sml", &["drawings", "layout"]),
+            "any(feature = \"sml-drawings\", feature = \"sml-layout\")"
+        );
+    }
+
+    #[test]
+    fn cfg_predicate_three_tags_or_together() {
+        assert_eq!(
+            cfg_predicate("wml", &["styling", "tables", "i18n"]),
+            "any(feature = \"wml-styling\", feature = \"wml-tables\", feature = \"wml-i18n\")"
+        );
     }
 }

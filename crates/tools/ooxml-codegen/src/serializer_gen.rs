@@ -266,7 +266,7 @@ impl<'a> SerializerGenerator<'a> {
                 let attr_name = self.qualified_attr_name(field);
                 let feature = self.get_field_feature(&rust_name, &field.xml_name);
                 if let Some(ref feat) = feature {
-                    writeln!(code, "        #[cfg(feature = \"{}\")]", feat).unwrap();
+                    writeln!(code, "        #[cfg({})]", feat).unwrap();
                 }
 
                 let strategy = self.get_write_strategy(&field.pattern);
@@ -292,7 +292,7 @@ impl<'a> SerializerGenerator<'a> {
             for field in &text_fields {
                 let feature = self.get_field_feature(&rust_name, &field.xml_name);
                 if let Some(ref feat) = feature {
-                    writeln!(code, "        #[cfg(feature = \"{}\")]", feat).unwrap();
+                    writeln!(code, "        #[cfg({})]", feat).unwrap();
                 }
                 writeln!(
                     code,
@@ -337,7 +337,7 @@ impl<'a> SerializerGenerator<'a> {
             for field in &text_fields {
                 let feature = self.get_field_feature(&rust_name, &field.xml_name);
                 if let Some(ref feat) = feature {
-                    writeln!(code, "        #[cfg(feature = \"{}\")]", feat).unwrap();
+                    writeln!(code, "        #[cfg({})]", feat).unwrap();
                 }
                 writeln!(
                     code,
@@ -374,7 +374,7 @@ impl<'a> SerializerGenerator<'a> {
                 if field.is_vec {
                     // Vec field — flush and increment inside loop (per item)
                     if let Some(ref feat) = feature {
-                        writeln!(code, "        #[cfg(feature = \"{}\")]", feat).unwrap();
+                        writeln!(code, "        #[cfg({})]", feat).unwrap();
                     }
                     if self.is_eg_content_field(field) {
                         writeln!(code, "        for item in &self.{} {{", field.name).unwrap();
@@ -418,7 +418,7 @@ impl<'a> SerializerGenerator<'a> {
                     writeln!(code, "        }}").unwrap();
 
                     if let Some(ref feat) = feature {
-                        writeln!(code, "        #[cfg(feature = \"{}\")]", feat).unwrap();
+                        writeln!(code, "        #[cfg({})]", feat).unwrap();
                     }
 
                     if self.is_eg_content_field(field) {
@@ -526,7 +526,7 @@ impl<'a> SerializerGenerator<'a> {
                 }
                 let feature = self.get_field_feature(&rust_name, &field.xml_name);
                 if let Some(ref feat) = feature {
-                    writeln!(code, "        #[cfg(feature = \"{}\")]", feat).unwrap();
+                    writeln!(code, "        #[cfg({})]", feat).unwrap();
                 }
                 writeln!(
                     code,
@@ -541,7 +541,7 @@ impl<'a> SerializerGenerator<'a> {
                 }
                 let feature = self.get_field_feature(&rust_name, &field.xml_name);
                 if let Some(ref feat) = feature {
-                    writeln!(code, "        #[cfg(feature = \"{}\")]", feat).unwrap();
+                    writeln!(code, "        #[cfg({})]", feat).unwrap();
                 }
                 if field.is_vec {
                     writeln!(
@@ -1185,14 +1185,17 @@ impl<'a> SerializerGenerator<'a> {
         to_snake_case(&qname.local)
     }
 
+    /// Get the `#[cfg(...)]` predicate content for a field if it requires feature gating.
+    /// Returns None if the field is "core" (always included) or unmapped. See
+    /// `crate::codegen::cfg_predicate` for the OR-of-all-tags rule (ADR 0013 open question 5).
     fn get_field_feature(&self, struct_name: &str, xml_field_name: &str) -> Option<String> {
-        self.config
-            .feature_mappings
-            .as_ref()
-            .and_then(|fm| {
-                fm.primary_feature(&self.config.module_name, struct_name, xml_field_name)
-            })
-            .map(|feature| format!("{}-{}", self.config.module_name, feature))
+        let gates = self.config.feature_mappings.as_ref().and_then(|fm| {
+            fm.feature_gates(&self.config.module_name, struct_name, xml_field_name)
+        })?;
+        Some(crate::codegen::cfg_predicate(
+            &self.config.module_name,
+            &gates,
+        ))
     }
 
     /// Check if a definition is an element-wrapper type alias (Element { pattern: Ref(...) }).

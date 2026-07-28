@@ -716,7 +716,7 @@ impl<'a> ParserGenerator<'a> {
 
             // Add cfg attribute for feature-gated fields
             if let Some(ref feature) = self.get_field_feature(&rust_name, &field.xml_name) {
-                write!(code, "        #[cfg(feature = \"{}\")] ", feature).unwrap();
+                write!(code, "        #[cfg({})] ", feature).unwrap();
             } else {
                 write!(code, "        ").unwrap();
             }
@@ -787,7 +787,7 @@ impl<'a> ParserGenerator<'a> {
 
                 // Add cfg attribute for feature-gated fields
                 if let Some(ref feature) = self.get_field_feature(&rust_name, &field.xml_name) {
-                    writeln!(code, "                #[cfg(feature = \"{}\")]", feature).unwrap();
+                    writeln!(code, "                #[cfg({})]", feature).unwrap();
                 }
                 writeln!(code, "                b\"{}\" => {{", field.xml_name).unwrap();
                 writeln!(code, "                    {} = {};", var_name, parse_expr).unwrap();
@@ -846,12 +846,7 @@ impl<'a> ParserGenerator<'a> {
 
                 // Add cfg attribute for feature-gated fields
                 if let Some(ref feature) = self.get_field_feature(&rust_name, &field.xml_name) {
-                    writeln!(
-                        code,
-                        "                            #[cfg(feature = \"{}\")]",
-                        feature
-                    )
-                    .unwrap();
+                    writeln!(code, "                            #[cfg({})]", feature).unwrap();
                 }
                 if self.is_eg_content_field(field) {
                     // EG content field: match all variant element names (dedup across fields)
@@ -973,12 +968,7 @@ impl<'a> ParserGenerator<'a> {
 
                 // Add cfg attribute for feature-gated fields
                 if let Some(ref feature) = self.get_field_feature(&rust_name, &field.xml_name) {
-                    writeln!(
-                        code,
-                        "                            #[cfg(feature = \"{}\")]",
-                        feature
-                    )
-                    .unwrap();
+                    writeln!(code, "                            #[cfg({})]", feature).unwrap();
                 }
                 if self.is_eg_content_field(field) {
                     // EG content field: match all variant element names (dedup across fields)
@@ -1159,7 +1149,7 @@ impl<'a> ParserGenerator<'a> {
 
             // Add cfg attribute for feature-gated fields
             if let Some(ref feature) = self.get_field_feature(&rust_name, &field.xml_name) {
-                writeln!(code, "            #[cfg(feature = \"{}\")]", feature).unwrap();
+                writeln!(code, "            #[cfg({})]", feature).unwrap();
             }
 
             // EG content fields that are required in schema are still Option<Box<...>>
@@ -1517,16 +1507,17 @@ impl<'a> ParserGenerator<'a> {
         to_snake_case(&qname.local)
     }
 
-    /// Get the feature name for a field if it requires feature gating.
-    /// Returns None if the field is "core" (always included) or unmapped.
+    /// Get the `#[cfg(...)]` predicate content for a field if it requires feature gating.
+    /// Returns None if the field is "core" (always included) or unmapped. See
+    /// `crate::codegen::cfg_predicate` for the OR-of-all-tags rule (ADR 0013 open question 5).
     fn get_field_feature(&self, struct_name: &str, xml_field_name: &str) -> Option<String> {
-        self.config
-            .feature_mappings
-            .as_ref()
-            .and_then(|fm| {
-                fm.primary_feature(&self.config.module_name, struct_name, xml_field_name)
-            })
-            .map(|feature| format!("{}-{}", self.config.module_name, feature))
+        let gates = self.config.feature_mappings.as_ref().and_then(|fm| {
+            fm.feature_gates(&self.config.module_name, struct_name, xml_field_name)
+        })?;
+        Some(crate::codegen::cfg_predicate(
+            &self.config.module_name,
+            &gates,
+        ))
     }
 
     /// Check if a definition is an element-wrapper type alias (Element { pattern: Ref(...) }).
