@@ -2,9 +2,154 @@
 
 ## Status
 
-Accepted (2026-07-28). Pilot implemented for JATS 1.3 Archiving in `jats-fmt`
-(`registry` / `registry-derive` features). Rollout to DocBook, TEI, and the OOXML
-migration is planned but not done — see `TODO.md`.
+Accepted (2026-07-28); amended the same day to correct a factual error in decision 3 and
+replace the single-slice rule with a two-field model (normative vs. pragmatic slices).
+Pilot implemented for JATS 1.3 Archiving in `jats-fmt` (`registry` / `registry-derive`
+features); the pilot's schema/types are being updated to the two-field model in the same
+session this amendment lands in — check `TODO.md` for whether that update is committed yet.
+Rollout to DocBook, TEI, and the OOXML migration is planned but not done — see `TODO.md`.
+
+## Amendment (2026-07-28): decision 3 misstated OOXML's prior art, and the rule it produced was wrong
+
+**The factual error.** Decision 3, as originally written, claimed OOXML's slices come from
+"namespace/part schemas." They do not. `spec/ooxml-features.yaml` tags every construct with
+one of ~20 hand-chosen functional groupings — `core`, `styling`, `structure`, `formulas`,
+`charts`, `layout`, `protection`, `filtering`, `validation`, `comments`, `drawings`,
+`hyperlinks`, `metadata`, `i18n`, `pivot`, `tables`, `extensions`, `revisions`, `external`,
+and more — documented only in a header comment, and that comment has already drifted from
+the data it describes (it documents `revisions`, 0 uses; the data uses `track-changes`, 70
+uses; see `TODO.md`'s rollout item 3). These tags were invented by this project. They are
+not derived from, and do not correspond to, ECMA-376's own modularization, which is real and
+is something else entirely: 21 namespace schemas and ~59 part entry-points, correctly
+described in this ADR's own Consequences table (the "OOXML (ECMA-376)" row, "Yes — 21
+namespace schemas, ~59 part entry-points"). The ADR's Decision section and its own
+Consequences table disagreed with each other about what OOXML's slices are, and Decision 3
+was the one that had it wrong. This was confirmed against the live `spec/ooxml-features.yaml`
+header and body (verified again while writing this amendment).
+
+**The consequence.** Decision 3 forbade "inventing a partition and presenting it as
+authoritative" and named that "the one thing decision 3 forbids." Applied literally, that
+rule outlaws the ooxml tags that already ship in this repo — they are exactly the invented
+partition the rule forbids — while simultaneously leaving DocBook stuck: DocBook's normative
+RELAX NG is a flattened monolith with no module identity (open question 1), so under a
+single-slice rule its only moves were "ship empty" or "adopt a partition and hope its
+provenance passes muster," and the second of those was blocked on an unresolved license
+question for a source (the Codeberg TC repo) nobody had asked to be a prerequisite. TODO.md's
+rollout plan recorded this exactly as "DocBook is blocked on an open question, not on
+effort" — a direct symptom of the single-slice rule being unable to represent something that
+is simultaneously legitimate (a useful, honestly-labeled grouping) and non-authoritative (not
+sourced from the format's own publication of its structure).
+
+**Root cause.** The word "slice" was doing two jobs the original decision 3 never separated:
+
+- A **normative/spec-published partition** — JATS's 29 DTD Suite modules, TEI's 22
+  `<moduleSpec>` modules, (potentially) OOXML's 21 namespace schemas. Authoritative and
+  citable: it tells a downstream implementer how the format itself decomposes. It may
+  legitimately not exist, as for DocBook.
+- A **pragmatic partition** — ooxml's `core`/`styling`/`charts`. Ours, invented, genuinely
+  useful for feature-gating and for telling a consumer what they can skip without reading
+  everything. Honest exactly so long as it is labeled as ours rather than presented as the
+  format's own structure.
+
+Conflating these into one field forced a choice that need not exist: either the invented
+partition gets to claim spec authority it doesn't have, or a legitimately useful invented
+partition isn't allowed to exist at all. Both horns are wrong, and the fix is not to pick one
+— it is to stop forcing the choice.
+
+**The corrected rule: two independent fields, not one.**
+
+Both `Registry` and `Construct` carry two separate slice collections instead of one:
+
+- `normative_slices` — populated *only* from a partition the format itself publishes (a DTD
+  Suite module, a `<moduleSpec>`, a namespace/part schema). Each entry is a `Slice` with the
+  module's own declared name, its source file, and a resolvable URL, exactly as decision 3
+  originally specified — that part of the design was right, it was just mislabeled as
+  OOXML's status quo. **May legitimately be empty** for a format whose normative schema
+  publishes no modularization (DocBook today). When empty, the registry must record why (a
+  short reason string, not silence) rather than leaving an unexplained gap.
+- `pragmatic_slices` — a partition curated by whoever maintains the registry, for whatever
+  purpose is useful (feature gating, a reading order, a "start here" grouping). **Always
+  permitted, unconditionally** — it never needs the format to publish a modularization, and
+  it never needs to wait on a licensing question, because it makes no claim to reflect the
+  format's own structure. It must be **explicitly marked non-normative** wherever it is
+  surfaced (registry documentation, any generated report, any consumer-facing label) — the
+  whole point of splitting the field is that a consumer can always tell which kind of
+  partition they are looking at. **May also legitimately be empty** — a format doesn't need
+  a pragmatic partition just because the field exists; JATS's pilot populates only
+  `normative_slices` and leaves `pragmatic_slices` empty, because inventing a grouping nobody
+  asked for would recreate exactly the "invented and presented without qualification" problem
+  decision 3 was trying to avoid, just moved to the other field.
+
+A construct may appear in either, both, or (transiently, before triage) neither list.
+`primary_slice()` is no longer well-defined as a single method — it is now
+`primary_normative_slice()` and `primary_pragmatic_slice()`, each `Option<&str>`, since either
+list may be empty for a given construct or for a whole format.
+
+**What this unblocks.**
+
+- **OOXML's existing ~20 tags become legitimate as-is**, once `ooxml-*` migrates onto the
+  registry design (not done by this amendment — see `TODO.md` rollout item 3): they populate
+  `pragmatic_slices`, explicitly marked as ours, and stop being mischaracterized anywhere as
+  "namespace/part schemas." The real namespace/part decomposition (21 namespace schemas, ~59
+  parts) remains available as a *future* `normative_slices` source if someone does that
+  derivation work; nothing here requires it.
+- **DocBook can roll out now**, without resolving the Codeberg source's license first: ship
+  with `normative_slices` empty and the reason recorded ("the normative OASIS RNG partitions
+  414 elements into 420 anonymous `div {}` blocks with no module identity"), and, if a
+  maintainer wants one, an invented `pragmatic_slices` grouping — built the same way ooxml's
+  tags were, with no license question at all, because a pragmatic partition is our own
+  taxonomy, not a redistribution of someone else's text or structure. The Codeberg TC
+  source's ~35 named modules and its unverified license remain exactly what they were: a
+  possible *future* way to populate `normative_slices`, if someone wants to argue that
+  non-normative build source can stand in for a normative citation and gets the license
+  question answered first. That question is not a prerequisite for DocBook's rollout anymore
+  — only for that one specific way of eventually filling in the normative field.
+
+**Open question 1, restated under the new model.** The old fork ("ship empty, or adopt the
+non-normative Codeberg modules with non-normativity stamped in provenance") no longer has the
+same shape, because "adopt the Codeberg modules, marked non-normative" is just populating
+`pragmatic_slices` — which needs no decision at all, since pragmatic partitions are
+unconditionally permitted. What remains genuinely open is narrower: *should DocBook's
+`pragmatic_slices` be populated at all for the initial rollout, and if so, from what* — invent
+a fresh grouping, or borrow the Codeberg TC's ~35-module shape as a starting point (still
+without claiming it as normative, and still without needing its license resolved, since
+nothing would be redistributed verbatim — only the *idea* of a grouping, if even that)? This
+is a much smaller question than the original one, and it does not block shipping
+`normative_slices: []` with a recorded reason, which can happen immediately.
+
+**Open question 2 (hand-curated registries) is not resolved by this amendment, and the two
+are separable.** `SourceKind::HandCurated` is about the *construct list itself* — the
+denominator: does the registry's list of "every element/attribute this format defines" come
+from a machine-readable schema, or was it typed by a person? That is the exact thing this
+whole design exists to make auditable, and a hand-curated denominator is exactly as fallible
+as the `COVERAGE.md` checklist it replaces, regardless of how its slices are labeled. A
+hand-curated **slice** (a partition *over* an already-trustworthy construct list) is a
+different and much lower-stakes claim, and this amendment settles it: explicitly marking a
+slice `pragmatic` is sufficient honesty, no further permission needed. Whether a
+hand-curated **construct list** should be allowed at all remains exactly as open as it was —
+this amendment does not touch it, and no connection between the two should be inferred from
+one being resolved.
+
+**The OOXML slice/Cargo-feature conflation flagged by the pilot is only partly resolved.**
+The pilot's open item was that ooxml's tags currently serve two jobs at once — a slice
+(descriptive grouping) and a Cargo feature gate (`#[cfg(feature = "...")]` selection) — and
+that `primary_feature` silently keeps only the first of a construct's tags, so
+`drawingHF: [drawings, layout]` compiles behind `sml-drawings` while `layout` is inert with no
+diagnostic. The two-field model answers *which list* a feature-gate tag belongs in — clearly
+`pragmatic_slices`, since a Cargo feature is unambiguously our own build concern, never a
+claim about the format's structure. It does **not** answer the second half of the problem: a
+Cargo feature is compiled as a single `#[cfg]` predicate per field, so multi-membership in
+`pragmatic_slices` (which the data model explicitly allows, same as `normative_slices`) still
+has to collapse to one decision — gate on the intersection, gate on the first tag with the
+rest silently inert (today's behavior), gate on an OR of all tags, or refuse multi-tagged
+constructs a single feature and require the mapping be stated per-construct. That collapse
+rule is a real design choice with real tradeoffs (binary size vs. granularity vs. surprise)
+and this amendment does not make it — it is restated below as open question 5, for a human
+call.
+
+**This amendment changes only the ADR text — see `TODO.md` for whether the corresponding
+`jats-fmt` schema/type/YAML update has landed yet, and whether it was committed separately
+from this amendment.**
 
 ## Context
 
@@ -44,6 +189,11 @@ it describes, an advisory-only completeness lint (`analysis.rs`, gated behind
 any kind** — no spec edition, no checksum, no derivation date.
 
 ## Decision
+
+**Decision 3 below is superseded by the 2026-07-28 amendment above — retained for the
+historical record of what was originally decided (including its factual error about OOXML),
+not as current guidance.** See the amendment for the corrected two-field model. Decisions 1,
+2, and 4–9 are unaffected by the amendment and remain as originally decided.
 
 Each `-fmt` crate carries a **construct registry**: a committed, machine-readable catalog
 of every construct its format defines, derived from the format's own published schema.
@@ -197,21 +347,24 @@ never a hot path.
   fully local re-derivation. The design does not require that, precisely so one uniform
   citation form serves every format including OOXML.
 
-- **DocBook cannot source slices from its normative schema.** Confirmed by fetching
-  `docs.oasis-open.org/docbook/docbook/v5.2/os/rng/docbook.rnc`: 414 distinct elements in a
-  single file, partitioned into **420 anonymous `div { }` blocks** carrying no module
-  identity. The upstream TC source repo *is* modular (~35 named `.rnc` files) but is build
-  source, not the normative artifact, and its license was not verified. DocBook's registry
-  should therefore ship with empty slices and a recorded reason, or adopt the non-normative
-  modularization with that provenance stated explicitly — an open question, below.
+- **DocBook cannot source *normative* slices from its normative schema.** Confirmed by
+  fetching `docs.oasis-open.org/docbook/docbook/v5.2/os/rng/docbook.rnc`: 414 distinct
+  elements in a single file, partitioned into **420 anonymous `div { }` blocks** carrying no
+  module identity. The upstream TC source repo *is* modular (~35 named `.rnc` files) but is
+  build source, not the normative artifact, and its license was not verified. Under the
+  amended two-field model this no longer blocks rollout: DocBook's registry ships with
+  `normative_slices: []` and a recorded reason, and may separately carry an invented, always-
+  permitted `pragmatic_slices` grouping — see the amendment and open question 1.
 
 - **Why JATS was piloted rather than DocBook.** DocBook has the larger known-failure
-  dataset, but piloting it would have forced inventing a slice partition — the one thing
-  decision 3 forbids — so it could not have validated the design's central claim. JATS has
-  a normative machine-readable modularization, a public-domain license, a stable per-element
-  citation URL, an RNG (XML, so `jats_fmt`'s own parser derives it with no new tooling and
-  no dependency on `ooxml-codegen`'s RNC subset), *and* known-failure data. It exercises
-  every part of the design at once.
+  dataset, but piloting it would have forced inventing a slice partition under the
+  then-single-slice rule — the one thing decision 3 (as originally written) forbade — so it
+  could not have validated the design's central claim. JATS has a normative machine-readable
+  modularization, a public-domain license, a stable per-element citation URL, an RNG (XML, so
+  `jats_fmt`'s own parser derives it with no new tooling and no dependency on
+  `ooxml-codegen`'s RNC subset), *and* known-failure data. It exercises every part of the
+  design at once. (This historical reasoning is why JATS went first, not a claim that
+  DocBook is still blocked the same way — see the amendment.)
 
 - **`jats-fmt` gained optional `serde`/`serde_yaml`/`sha2` dependencies**, all behind
   `registry`/`registry-derive`. A default build is unchanged. `sha2` is new to the
@@ -228,29 +381,50 @@ never a hot path.
 
 Genuine forks, recorded rather than decided unilaterally:
 
-1. **DocBook slices.** Ship an empty slice set with a recorded "the normative schema
-   publishes no modularization" reason, or adopt the non-normative Codeberg TC source's ~35
-   modules with that non-normativity stamped in provenance? The first is strictly honest and
-   less useful; the second is more useful and cites a non-authoritative source. Its license
-   was also not verified.
+1. **DocBook's `pragmatic_slices`.** *(Narrowed by the 2026-07-28 amendment — was "ship
+   empty or adopt Codeberg," now only about the pragmatic field, since `normative_slices: []`
+   with a recorded reason can ship unconditionally.)* Should DocBook's rollout populate
+   `pragmatic_slices` at all, and if so, invent a fresh grouping or borrow the shape of the
+   non-normative Codeberg TC source's ~35 modules (as an idea, not a redistribution — so its
+   license, still unverified, does not need resolving for this)? Separately, and not blocking
+   rollout: should the Codeberg source ever be used to populate `normative_slices` instead —
+   i.e. treated as authoritative enough to cite as the format's own decomposition despite not
+   being the normative artifact? That would need its license resolved first, because it would
+   be a citation claim, not an invented grouping.
 
-2. **Hand-curated registries.** `SourceKind::HandCurated` exists for a format with no
-   machine-readable schema, but such a registry does **not** deliver this design's guarantee
-   — it is exactly as fallible as the checklist it replaces. Should such registries be
-   allowed at all (clearly marked), or should a format with no schema keep a COVERAGE.md and
-   not pretend otherwise?
+2. **Hand-curated registries.** *(Unaffected by the amendment — see the amendment's own note
+   on why the two questions are separable.)* `SourceKind::HandCurated` exists for a format
+   with no machine-readable schema, but such a registry does **not** deliver this design's
+   guarantee — it is exactly as fallible as the checklist it replaces. Should such registries
+   be allowed at all (clearly marked), or should a format with no schema keep a COVERAGE.md
+   and not pretend otherwise? This is about the construct *list*, not about slices — a
+   hand-curated `pragmatic_slices` grouping is already settled as fine by the amendment,
+   independent of how this question resolves.
 
 3. **OOXML's license.** No copyright or license statement was found in the ECMA-376 schema
    files or in Parts 1 and 2. Ecma publishes two boilerplate notices and neither is tied to
    ECMA-376 anywhere we could find. Microsoft's Open Specification Promise is a patent
    non-assert, not a copyright license. The conservative reading — treat as
    non-redistributable — is what the design assumes; confirming it needs someone who can ask
-   Ecma.
+   Ecma. **This only gates a future `normative_slices` derivation from the ECMA-376 namespace/
+   part schemas** (a real citation into the spec's own text); it does not gate
+   `pragmatic_slices`, which is our own invented grouping and carries no redistribution claim
+   either way.
 
 4. **Attributes.** The pilot registers attributes alongside elements (144 of them). Whether
    the *content model* (which children/attributes each element permits) also belongs in the
    registry is unsettled: it is the natural next question a validator or linter consumer
    would ask, and it is a large increase in derivation complexity and document size.
+
+5. **OOXML's slice/Cargo-feature collapse rule.** *(New, from the 2026-07-28 amendment.)*
+   Once ooxml's tags become `pragmatic_slices`, a construct can still legitimately belong to
+   several of them (`drawingHF: [drawings, layout]`), but a Cargo feature gate is a single
+   `#[cfg]` predicate per field. Today `primary_feature` silently keeps only the first tag and
+   drops the rest with no diagnostic. The two-field model settles *which list* the tags live
+   in but not *how a multi-membership list becomes one gate* — intersection, first-tag
+   (today's silent behavior), OR-of-all, or a hard requirement that multi-tagged constructs
+   name their gate explicitly. This needs a human call before or during the ooxml migration
+   (`TODO.md` rollout item 3); it is not decided here.
 
 ## Alternatives considered
 

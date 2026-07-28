@@ -32,7 +32,7 @@ later revisited.
 | [0010](0010-resource-data-base64-json.md) | `Resource::data` serializes as base64 in JSON, unconditionally | Accepted |
 | [0011](0011-commonmark-extension-feature-gating.md) | `commonmark-fmt` construct extensions are opt-in Cargo features, not default-on | Accepted |
 | [0012](0012-jats-archiving-tag-set-scope.md) | `jats-fmt`/`jats` fixtures target the Archiving and Interchange Tag Set; no per-tag-set crates or validation modes | Accepted |
-| [0013](0013-per-format-construct-registry.md) | Per-format construct registries: a spec-derived, machine-readable denominator | Accepted (JATS pilot done; rollout planned) |
+| [0013](0013-per-format-construct-registry.md) | Per-format construct registries: a spec-derived, machine-readable denominator | Accepted (amended 2026-07-28: decision 3's OOXML claim was factually wrong; replaced with a normative/pragmatic two-field slice model) |
 
 ## Numbering and format
 
