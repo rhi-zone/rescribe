@@ -19,17 +19,27 @@ pub enum ManEvent<'a> {
     EndParagraph,
     StartIndentedParagraph,
     EndIndentedParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
     /// Leaf: a preformatted code block (.nf/.fi).
-    CodeBlock { content: Cow<'a, str> },
+    CodeBlock {
+        content: Cow<'a, str>,
+    },
     /// Leaf: an example block (.EX/.EE).
-    ExampleBlock { content: Cow<'a, str> },
+    ExampleBlock {
+        content: Cow<'a, str>,
+    },
     /// Leaf: a horizontal rule (.sp).
     HorizontalRule,
     /// Leaf: a comment (.\" ...).
-    Comment { text: Cow<'a, str> },
-    StartList { ordered: bool },
+    Comment {
+        text: Cow<'a, str>,
+    },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
@@ -51,7 +61,9 @@ pub enum ManEvent<'a> {
     EndSuperscript,
     StartSubscript,
     EndSubscript,
-    StartLink { url: Cow<'a, str> },
+    StartLink {
+        url: Cow<'a, str>,
+    },
     EndLink,
 }
 
@@ -125,10 +137,7 @@ pub struct EventIter<'a> {
 #[allow(dead_code)]
 enum Frame<'a> {
     /// Iterating over blocks in the document or a container.
-    Blocks {
-        blocks: &'a [Block],
-        index: usize,
-    },
+    Blocks { blocks: &'a [Block], index: usize },
     /// Inside a paragraph-like block, iterating inlines.
     Inlines {
         inlines: &'a [Inline],
@@ -251,7 +260,7 @@ impl<'a> Iterator for EventIter<'a> {
                                 });
                                 // We'll need to emit EndBold after children
                                 // Insert a leaf for EndBold between bold children and continuation
-                                            // Restructure: push close event, then children frame on top
+                                // Restructure: push close event, then children frame on top
                                 // Stack: [... remaining inlines, EndBold leaf, bold children]
                                 // Pop order: bold children first, then EndBold, then remaining
                                 let children_frame = self.frame_stack.pop().unwrap();
@@ -265,7 +274,8 @@ impl<'a> Iterator for EventIter<'a> {
                                 *inlines = remaining_inlines;
                                 *index = 0;
                                 *close = close_kind;
-                                self.frame_stack.push(Frame::Leaf(Some(ManEvent::EndItalic)));
+                                self.frame_stack
+                                    .push(Frame::Leaf(Some(ManEvent::EndItalic)));
                                 self.frame_stack.push(Frame::Inlines {
                                     inlines: children,
                                     index: 0,
@@ -310,8 +320,7 @@ impl<'a> Iterator for EventIter<'a> {
                                 *inlines = remaining_inlines;
                                 *index = 0;
                                 *close = close_kind;
-                                self.frame_stack
-                                    .push(Frame::Leaf(Some(ManEvent::EndLink)));
+                                self.frame_stack.push(Frame::Leaf(Some(ManEvent::EndLink)));
                                 self.frame_stack.push(Frame::Inlines {
                                     inlines: children,
                                     index: 0,
@@ -328,23 +337,16 @@ impl<'a> Iterator for EventIter<'a> {
                         match close {
                             CloseKind::Paragraph => return Some(ManEvent::EndParagraph),
                             CloseKind::IndentedParagraph => {
-                                return Some(ManEvent::EndIndentedParagraph)
+                                return Some(ManEvent::EndIndentedParagraph);
                             }
                             CloseKind::Heading => return Some(ManEvent::EndHeading),
-                            CloseKind::DefinitionTerm => {
-                                return Some(ManEvent::EndDefinitionTerm)
-                            }
-                            CloseKind::DefinitionDesc => {
-                                return Some(ManEvent::EndDefinitionDesc)
-                            }
+                            CloseKind::DefinitionTerm => return Some(ManEvent::EndDefinitionTerm),
+                            CloseKind::DefinitionDesc => return Some(ManEvent::EndDefinitionDesc),
                         }
                     }
                 }
 
-                Frame::Blocks {
-                    blocks,
-                    index,
-                } => {
+                Frame::Blocks { blocks, index } => {
                     if *index >= blocks.len() {
                         self.frame_stack.pop();
                         continue;
@@ -354,9 +356,7 @@ impl<'a> Iterator for EventIter<'a> {
                     *index += 1;
 
                     match block {
-                        Block::Heading {
-                            level, inlines, ..
-                        } => {
+                        Block::Heading { level, inlines, .. } => {
                             self.frame_stack.push(Frame::Inlines {
                                 inlines,
                                 index: 0,
@@ -398,9 +398,7 @@ impl<'a> Iterator for EventIter<'a> {
                                 text: Cow::Borrowed(text),
                             });
                         }
-                        Block::List {
-                            ordered, items, ..
-                        } => {
+                        Block::List { ordered, items, .. } => {
                             self.frame_stack.push(Frame::ListItems {
                                 items,
                                 item_index: 0,
@@ -495,14 +493,25 @@ impl<'a> Iterator for EventIter<'a> {
 }
 
 /// Parse `input` and return a streaming iterator of [`ManEvent`] items.
+///
+/// **Architecture note:** this is *not* a genuine streaming parser. It parses
+/// `input` into a [`ManDoc`] up front, walks it with the lazy, O(depth)
+/// [`EventIter`] (which *is* a legitimate incremental walker over an
+/// already-owned tree), and eagerly collects the result into an owned `Vec`
+/// before returning. Memory use is therefore O(full document), not O(depth).
+///
+/// A prior version of this function used `Box::leak` to manufacture a
+/// `'static` reference to the parsed doc so `EventIter` could borrow it —
+/// that leaked the `ManDoc` on every call, permanently. This version parses,
+/// walks, and converts to owned events entirely within this function's scope,
+/// so `doc` is dropped normally and nothing is leaked. Callers that need
+/// genuine O(depth) streaming should call [`crate::parse::parse`] themselves
+/// and drive [`EventIter::new`] directly over the resulting `&ManDoc` — that
+/// path has no such gap. See TODO.md for the tracked architectural gap.
 pub fn events(input: &str) -> impl Iterator<Item = OwnedManEvent> + '_ {
     let (doc, _) = crate::parse::parse(input);
-    // We need to own the doc so the iterator can borrow from it.
-    // Since we can't return a self-referencing struct, collect into a Vec.
-    let mut iter = EventIter::new(Box::leak(Box::new(doc)));
-    // Safety: we leak the doc so the iterator can borrow from it.
-    // This is a simplification; in production we'd use a different approach.
-    std::iter::from_fn(move || iter.next())
+    let events: Vec<OwnedManEvent> = EventIter::new(&doc).map(ManEvent::into_owned).collect();
+    events.into_iter()
 }
 
 /// Collect a complete `ManDoc` from an event stream.
@@ -535,15 +544,35 @@ pub fn collect_doc_from_events(events: impl Iterator<Item = OwnedManEvent>) -> M
 // ── Block frame stack ─────────────────────────────────────────────────────────
 
 enum BlockFrame {
-    Document { blocks: Vec<Block> },
-    Paragraph { inlines: Vec<Inline> },
-    IndentedParagraph { inlines: Vec<Inline> },
-    Heading { level: u8, inlines: Vec<Inline> },
-    List { ordered: bool, items: Vec<Vec<Block>> },
-    ListItem { blocks: Vec<Block> },
-    DefinitionList { items: Vec<(Vec<Inline>, Vec<Block>)> },
-    DefinitionTerm { inlines: Vec<Inline> },
-    DefinitionDesc { blocks: Vec<Block> },
+    Document {
+        blocks: Vec<Block>,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+    },
+    IndentedParagraph {
+        inlines: Vec<Inline>,
+    },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+    },
+    List {
+        ordered: bool,
+        items: Vec<Vec<Block>>,
+    },
+    ListItem {
+        blocks: Vec<Block>,
+    },
+    DefinitionList {
+        items: Vec<(Vec<Inline>, Vec<Block>)>,
+    },
+    DefinitionTerm {
+        inlines: Vec<Inline>,
+    },
+    DefinitionDesc {
+        blocks: Vec<Block>,
+    },
 }
 
 // ── Inline frame stack ────────────────────────────────────────────────────────
@@ -622,14 +651,10 @@ fn handle_event(
             });
         }
         ManEvent::StartListItem => {
-            block_stack.push(BlockFrame::ListItem {
-                blocks: Vec::new(),
-            });
+            block_stack.push(BlockFrame::ListItem { blocks: Vec::new() });
         }
         ManEvent::StartDefinitionList => {
-            block_stack.push(BlockFrame::DefinitionList {
-                items: Vec::new(),
-            });
+            block_stack.push(BlockFrame::DefinitionList { items: Vec::new() });
         }
         ManEvent::StartDefinitionTerm => {
             block_stack.push(BlockFrame::DefinitionTerm {
@@ -637,9 +662,7 @@ fn handle_event(
             });
         }
         ManEvent::StartDefinitionDesc => {
-            block_stack.push(BlockFrame::DefinitionDesc {
-                blocks: Vec::new(),
-            });
+            block_stack.push(BlockFrame::DefinitionDesc { blocks: Vec::new() });
         }
 
         // ── Block end events ───────────────────────────────────────────────
@@ -744,10 +767,7 @@ fn handle_event(
             );
         }
         ManEvent::HorizontalRule => {
-            push_block(
-                block_stack,
-                Block::HorizontalRule { span: Span::NONE },
-            );
+            push_block(block_stack, Block::HorizontalRule { span: Span::NONE });
         }
         ManEvent::Comment { text } => {
             push_block(
@@ -806,20 +826,12 @@ fn handle_event(
         // ── Inline container end events ────────────────────────────────────
         ManEvent::EndBold => {
             if let Some(InlineFrame::Bold { inlines }) = inline_ctx.pop() {
-                push_inline(
-                    block_stack,
-                    inline_ctx,
-                    Inline::Bold(inlines, Span::NONE),
-                );
+                push_inline(block_stack, inline_ctx, Inline::Bold(inlines, Span::NONE));
             }
         }
         ManEvent::EndItalic => {
             if let Some(InlineFrame::Italic { inlines }) = inline_ctx.pop() {
-                push_inline(
-                    block_stack,
-                    inline_ctx,
-                    Inline::Italic(inlines, Span::NONE),
-                );
+                push_inline(block_stack, inline_ctx, Inline::Italic(inlines, Span::NONE));
             }
         }
         ManEvent::EndSuperscript => {
@@ -871,26 +883,26 @@ mod tests {
         let evs = doc_events(".PP\nHello world");
         assert!(evs.iter().any(|e| matches!(e, ManEvent::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, ManEvent::EndParagraph)));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, ManEvent::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, ManEvent::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
     fn test_events_heading() {
         let evs = doc_events(".SH NAME");
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, ManEvent::StartHeading { level: 2 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, ManEvent::StartHeading { level: 2 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, ManEvent::EndHeading)));
     }
 
     #[test]
     fn test_events_code_block() {
         let evs = doc_events(".nf\ncode here\n.fi");
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, ManEvent::CodeBlock { .. })));
+        assert!(evs.iter().any(|e| matches!(e, ManEvent::CodeBlock { .. })));
     }
 
     #[test]
@@ -903,15 +915,15 @@ mod tests {
     #[test]
     fn test_events_definition_list() {
         let evs = doc_events(".TP\nterm\ndescription");
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, ManEvent::StartDefinitionList)));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, ManEvent::StartDefinitionTerm)));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, ManEvent::EndDefinitionList)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, ManEvent::StartDefinitionList))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, ManEvent::StartDefinitionTerm))
+        );
+        assert!(evs.iter().any(|e| matches!(e, ManEvent::EndDefinitionList)));
     }
 
     #[test]
@@ -919,5 +931,78 @@ mod tests {
         let evs = doc_events(".PP\nhello");
         assert_eq!(evs.first(), Some(&ManEvent::StartDocument));
         assert_eq!(evs.last(), Some(&ManEvent::EndDocument));
+    }
+
+    /// Regression guard for the `Box::leak` this module's `events()` used to
+    /// contain: leaking a freshly-parsed `ManDoc` on every call is *safe*
+    /// Rust (no UB), so a functional test can't detect it — only a memory
+    /// accounting test can. This tracks net allocated bytes (allocated minus
+    /// freed) across many `events()` calls on a document large enough that a
+    /// per-call leak would accumulate to a clearly-observable amount; a
+    /// non-leaking implementation frees the parsed doc when each call
+    /// returns, so net bytes should stay small and bounded, not grow
+    /// linearly with the number of calls.
+    #[test]
+    fn test_events_no_per_call_leak() {
+        use std::alloc::{GlobalAlloc, Layout, System};
+        use std::sync::atomic::{AtomicIsize, Ordering};
+
+        struct CountingAlloc;
+        static NET_BYTES: AtomicIsize = AtomicIsize::new(0);
+        // This crate denies `unsafe` in production code (see lib.rs); the
+        // `GlobalAlloc` impl below is test-only harness plumbing to measure
+        // allocation behavior and is explicitly opted back in here.
+        #[allow(unsafe_code)]
+        unsafe impl GlobalAlloc for CountingAlloc {
+            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+                NET_BYTES.fetch_add(layout.size() as isize, Ordering::Relaxed);
+                unsafe { System.alloc(layout) }
+            }
+            unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+                NET_BYTES.fetch_sub(layout.size() as isize, Ordering::Relaxed);
+                unsafe { System.dealloc(ptr, layout) }
+            }
+        }
+        #[global_allocator]
+        static GLOBAL: CountingAlloc = CountingAlloc;
+
+        // A document with enough structure that parsing it allocates a
+        // non-trivial amount (headings, paragraphs, bold/italic spans, a
+        // list, a definition list) — big enough that leaking it ~200 times
+        // would be unmistakable against a bounded baseline.
+        let input = ".SH NAME\n\
+                      test \\- a test program\n\
+                      .SH DESCRIPTION\n\
+                      This is \\fBbold\\fR and \\fIitalic\\fR text.\n\
+                      .TP\n\
+                      term one\n\
+                      description one\n\
+                      .TP\n\
+                      term two\n\
+                      description two\n";
+
+        // Warm up (first call may pay one-time allocator/thread-cache costs).
+        let _ = doc_events(input);
+        let baseline = NET_BYTES.load(Ordering::Relaxed);
+
+        const CALLS: usize = 200;
+        for _ in 0..CALLS {
+            let evs = doc_events(input);
+            assert!(!evs.is_empty());
+        }
+
+        let after = NET_BYTES.load(Ordering::Relaxed);
+        let growth = after - baseline;
+
+        // A leaking implementation retains one parsed ManDoc (and its Vec<Event>
+        // scratch space) per call, forever. Bound growth well under what 200
+        // leaked docs would cost, so the test fails loudly if the leak comes
+        // back, but allow generous slack for allocator bookkeeping/fragmentation.
+        assert!(
+            growth < 50_000,
+            "net allocated bytes grew by {growth} over {CALLS} calls to events() \
+             on the same input — looks like a per-call leak (expected near-zero \
+             steady-state growth once the parsed doc and events are dropped)"
+        );
     }
 }

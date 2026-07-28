@@ -2,6 +2,13 @@
 //!
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-man` and `rescribe-write-man` as thin adapter layers.
+//!
+//! This crate denies `unsafe` by default (production code must never use it); a prior version of `events::events` used
+//! `Box::leak` to manufacture a `'static` reference to the parsed `ManDoc`,
+//! leaking it on every call. See `src/events.rs` for the sound, non-leaking
+//! replacement and TODO.md for the tracked architecture gap.
+
+#![deny(unsafe_code)]
 
 pub mod ast;
 pub mod batch;
@@ -125,16 +132,21 @@ mod tests {
     #[test]
     fn test_parse_comment() {
         let doc = parse_ok(".\\\" This is a comment\n.PP\nhello");
-        assert!(doc.blocks.iter().any(|b| matches!(b, Block::Comment { .. })));
+        assert!(
+            doc.blocks
+                .iter()
+                .any(|b| matches!(b, Block::Comment { .. }))
+        );
     }
 
     #[test]
     fn test_parse_indented_paragraph() {
         let doc = parse_ok(".IP\nIndented text here");
-        assert!(doc
-            .blocks
-            .iter()
-            .any(|b| matches!(b, Block::IndentedParagraph { .. })));
+        assert!(
+            doc.blocks
+                .iter()
+                .any(|b| matches!(b, Block::IndentedParagraph { .. }))
+        );
     }
 
     #[test]
