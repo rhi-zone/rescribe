@@ -51,6 +51,7 @@ pub fn parse_with_options(
     opts.insert(Options::ENABLE_STRIKETHROUGH);
     opts.insert(Options::ENABLE_TASKLISTS);
     opts.insert(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
+    opts.insert(Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
     opts.insert(Options::ENABLE_GFM); // GitHub-style blockquotes like [!NOTE]
 
     let parser = Parser::new_ext(input, opts);
@@ -141,9 +142,14 @@ fn parse_event(
 ) -> (Option<Node>, usize) {
     let (event, range) = &events[0];
     match event {
-        Event::Start(tag) => {
-            parse_tag(tag.clone(), events, input, warnings, metadata, preserve_spans)
-        }
+        Event::Start(tag) => parse_tag(
+            tag.clone(),
+            events,
+            input,
+            warnings,
+            metadata,
+            preserve_spans,
+        ),
         Event::Text(text) => (
             Some(with_span(
                 Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()),
@@ -258,7 +264,7 @@ fn normalize_item_children(mut children: Vec<Node>) -> Vec<Node> {
         )
     });
     match first_block {
-        None => children, // All inline (tight item) — leave as-is
+        None => children,    // All inline (tight item) — leave as-is
         Some(0) => children, // Already starts with a block
         Some(idx) => {
             // Leading inline nodes before first block — wrap them in a paragraph
@@ -323,8 +329,7 @@ fn parse_tag(
                 let range_text = &input[tag_range.start..end];
                 let style = if let Some(nl_pos) = range_text.find('\n') {
                     let after = range_text.as_bytes().get(nl_pos + 1).copied();
-                    if after == Some(b'=') || after == Some(b'-')
-                    {
+                    if after == Some(b'=') || after == Some(b'-') {
                         "setext"
                     } else {
                         "atx"
@@ -462,7 +467,10 @@ fn parse_tag(
         Tag::TableHead => {
             // pulldown-cmark emits TableCell events directly inside TableHead (no
             // TableRow wrapper). Wrap them in a TABLE_ROW so the structure matches
-            // tree-sitter: TABLE_HEAD → TABLE_ROW → TABLE_CELL.
+            // the established markdown fixture convention (fixtures/markdown/table):
+            // TABLE_HEAD → TABLE_ROW → TABLE_CELL. Note this differs from the HTML
+            // readers (html5ever/tree-sitter), which use TABLE_HEADER for header
+            // cells — an intentional per-format difference, not a bug: see TODO.md.
             let row = Node::new(node::TABLE_ROW).children(children);
             Some(with_span(
                 Node::new(node::TABLE_HEAD).child(row),

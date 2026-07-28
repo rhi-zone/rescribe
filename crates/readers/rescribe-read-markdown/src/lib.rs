@@ -198,6 +198,87 @@ author:
     }
 
     #[test]
+    fn test_default_backend_yaml_frontmatter_no_bogus_nodes() {
+        // Regression test for the headline bug this vertical fixes: on the
+        // DEFAULT path (no backend override), `---\ntitle: X\n---` used to
+        // silently misparse as a horizontal_rule + a setext heading("title:
+        // X") in the document body, with doc.metadata left empty and no
+        // fidelity warning. It must now populate metadata and emit no bogus
+        // structural nodes.
+        let input = "---\ntitle: X\n---\n\nbody\n";
+        let result = parse(input).unwrap();
+        let doc = result.value;
+
+        assert_eq!(doc.metadata.get_str("title"), Some("X"));
+
+        let children = root_children(&doc);
+        assert!(
+            !children
+                .iter()
+                .any(|n| n.kind.as_str() == node::HORIZONTAL_RULE
+                    || n.kind.as_str() == node::HEADING),
+            "body should not contain a bogus horizontal_rule/heading from misparsed \
+             frontmatter, got: {:?}",
+            children.iter().map(|n| n.kind.as_str()).collect::<Vec<_>>()
+        );
+        assert!(children.iter().any(|n| n.kind.as_str() == node::PARAGRAPH));
+    }
+
+    #[test]
+    fn test_default_backend_toml_frontmatter() {
+        let input = "+++\ntitle = \"X\"\n+++\n\nbody\n";
+        let result = parse(input).unwrap();
+        let doc = result.value;
+        assert_eq!(doc.metadata.get_str("title"), Some("X"));
+    }
+
+    #[test]
+    #[cfg(feature = "pulldown")]
+    fn test_backends_agree_on_representative_documents() {
+        // Parse the same representative documents through both the default
+        // (commonmark-fmt) backend and the pulldown backend, and assert the
+        // resulting Documents agree structurally (span-free comparison via
+        // node kind + key props), for constructs both backends model.
+        let docs = [
+            "# Title\n\nA paragraph with *em* and **strong**.\n",
+            "- one\n- two\n- three\n",
+            "1. first\n2. second\n",
+            "> quoted\n",
+            "```rust\nfn main() {}\n```\n",
+            "[text](https://example.com)\n",
+            "---\ntitle: X\nauthor: Y\n---\n\nbody\n",
+            "+++\ntitle = \"X\"\n+++\n\nbody\n",
+            "| a | b |\n|---|---|\n| 1 | 2 |\n",
+            "- [ ] todo\n- [x] done\n",
+            "~~deleted~~\n",
+        ];
+        for input in docs {
+            let default_doc = parse(input).unwrap().value;
+            let pulldown_doc = backend_pulldown::parse(input).unwrap().value;
+            assert_eq!(
+                default_doc.metadata, pulldown_doc.metadata,
+                "metadata mismatch for input: {input:?}"
+            );
+            assert_eq!(
+                node_kind_shape(&default_doc.content),
+                node_kind_shape(&pulldown_doc.content),
+                "node-kind shape mismatch for input: {input:?}"
+            );
+        }
+    }
+
+    /// Reduce a node tree to just its kind names (ignoring spans/most props),
+    /// for a structural-shape comparison between the two backends.
+    #[cfg(feature = "pulldown")]
+    fn node_kind_shape(node: &rescribe_std::Node) -> Vec<String> {
+        let mut out = vec![node.kind.as_str().to_string()];
+        for child in &node.children {
+            out.extend(node_kind_shape(child));
+        }
+        out
+    }
+
+    #[test]
     fn test_parse_task_list() {
         // Task list markers are not modeled by commonmark-fmt (they're a GFM extension).
         // This test just checks that task-list syntax parses without panic.

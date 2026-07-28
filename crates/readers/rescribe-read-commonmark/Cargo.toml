@@ -6,4 +6,11 @@ edition = "2024"
 [dependencies]
 rescribe-core = { path = "../../rescribe-core" }
 rescribe-std = { path = "../../nodes/rescribe-std" }
-commonmark-fmt = { path = "../../formats/commonmark-fmt" }
+commonmark-fmt = { path = "../../formats/commonmark-fmt", features = [
+    "frontmatter",
+    "tables",
+    "task-lists",
+    "strikethrough",
+] }
+serde_yaml.workspace = true
+toml.workspace = true

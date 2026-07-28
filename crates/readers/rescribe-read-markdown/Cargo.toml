@@ -8,15 +8,20 @@ description = "Markdown reader for rescribe"
 
 [features]
 default = []
-pulldown = ["dep:pulldown-cmark", "dep:toml"]
+pulldown = ["dep:pulldown-cmark"]
 
 [dependencies]
 rescribe-core.workspace = true
 rescribe-std.workspace = true
-commonmark-fmt.workspace = true
+commonmark-fmt = { workspace = true, features = [
+    "frontmatter",
+    "tables",
+    "task-lists",
+    "strikethrough",
+] }
 pulldown-cmark = { version = "0.12", optional = true }
 serde_yaml.workspace = true
-toml = { workspace = true, optional = true }
+toml.workspace = true
 
 [dev-dependencies]
 rescribe-write-markdown.workspace = true
