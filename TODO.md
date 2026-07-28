@@ -238,16 +238,21 @@ and not being retracted — only the construct-list-completeness component of it
   - **Measured rlib size** (`cargo build -p jats-fmt --release`, clean builds,
     `target/release/libjats_fmt.rlib`): no `registry` feature, 440,032 bytes (unchanged —
     this path never touched YAML). With `registry` feature: was 4,244,748 bytes under the
-    old YAML/`serde_yaml` runtime-parsed design; now 2,251,814 bytes under committed Rust
-    statics. Growth over baseline dropped from 3,804,716 bytes to 1,811,782 bytes (~52%
+    old YAML/`serde_yaml` runtime-parsed design; now 2,275,366 bytes under committed Rust
+    statics. Growth over baseline dropped from 3,804,716 bytes to 1,835,334 bytes (~52%
     reduction). The remaining growth is the construct data itself (734 constructs, ~12,900
     permitted-child/attribute entries even after dedup) compiled into rodata, not parser
     machinery.
   - **File sizes**: `registry/jats-1.3-archiving.json` is 76,735 lines / ~1.66 MB (was
     39,943 lines / 885 KB as YAML — JSON's punctuation overhead and one-entry-per-line
     formatting account for the growth; this file is not read by any normal build).
-    `src/registry_generated.rs` is 12,017 lines / ~776 KB, committed, and is what
-    `registry`-feature builds actually compile.
+    `src/registry_generated.rs` is 47,572 lines / ~1.02 MB after this repo's pre-commit
+    hook's `rustfmt` pass (one struct literal per multi-line block, not the denser one-line
+    form `emit_rust` originally produced) — `emit_rust` now runs its output through
+    `rustfmt --edition 2024` itself (shelling out, `registry-derive`-only), so its output is
+    already byte-identical to what the hook would otherwise produce, and the
+    source→generated drift test stays meaningful regardless of whether the hook runs.
+    Committed and is what `registry`-feature builds actually compile.
   - **MathML sharing across formats (JATS/DocBook/TEI/BITS all embed the same MathML
     vocabulary) was assessed and explicitly deferred, not built.** 181 of JATS's 486
     registry elements are MathML (confirmed again this session via
@@ -289,7 +294,16 @@ and not being retracted — only the construct-list-completeness component of it
      ever wanted. Citation: `xml:id="gi-<element>"` plus the `ref-<element>.html` reference
      page. Derivation reads XML, so `tei-fmt`'s own parser suffices — same shape as the
      JATS pilot. Note the ODD declares 22 modules while the Guidelines' ST chapter prose
-     says 23; resolve that discrepancy rather than picking one.
+     says 23; resolve that discrepancy rather than picking one. **Target the JATS registry's
+     current shape from the start** (2026-07-28 runtime-representation change, see above):
+     committed generated Rust statics as the runtime artifact
+     (`tei-fmt/src/registry_generated.rs`), a JSON human-readable source
+     (`tei-fmt/registry/tei-p5.json`), an owned model + codegen module
+     (`tei-fmt/src/registry_derive.rs`), and the two-tier drift check (schema-vs-source,
+     source-vs-generated) — do not build a YAML/runtime-parsed version first and migrate it
+     later. With 614 elements (vs. JATS's 486 constructs total), measure the content-model
+     dedup ratio and rlib size before assuming JATS's numbers (44.4% duplicate shapes, ~52%
+     rlib-growth reduction vs. the old design) transfer.
 
   2. **DocBook is unblocked for rollout (2026-07-28 amendment; was "blocked on an open
      question, not on effort").** DocBook 5.2's *normative* OASIS artifact
@@ -306,7 +320,8 @@ and not being retracted — only the construct-list-completeness component of it
      unverified license doesn't need resolving for this use). See ADR 0013 open question 1
      (as amended) for the full statement. Separately, unaffected by any of this: DocBook's
      schema is RNC, not RNG, so deriving its *construct list* (the denominator) still needs
-     a compact-syntax reader — see item 4.
+     a compact-syntax reader — see item 4. **Also target committed generated Rust statics
+     from the start**, same as the TEI note above — no interim YAML/runtime-parsed version.
 
   3. **ooxml migration onto the uniform design.** Concretely:
      - **What stays:** `crates/tools/ooxml-codegen`'s `lexer.rs`/`parser.rs`/`ast.rs` (they
