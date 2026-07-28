@@ -1,0 +1,13 @@
+{
+  "description": "Inline <co/> callout markers embedded in a bare <programlisting> (no <programlistingco>/<areaspec> wrapper needed), paired with a sibling <calloutlist> referencing the markers' ids directly via arearefs",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div", "props": { "docbook:tag": "example" } },
+    { "path": "/0/0/0", "kind": "caption" },
+    { "path": "/0/0/1", "kind": "code_block", "props": { "content": "abc", "language": "python", "docbook:tag": "programlisting" }, "children_count": 0 },
+    { "path": "/0/0/2", "kind": "list", "props": { "docbook:tag": "calloutlist" } },
+    { "path": "/0/0/2/0", "kind": "list_item", "props": { "docbook:tag": "callout", "docbook:arearefs": "co.1" } },
+    { "path": "/0/0/2/1", "kind": "list_item", "props": { "docbook:tag": "callout", "docbook:arearefs": "co.2" } }
+  ]
+}

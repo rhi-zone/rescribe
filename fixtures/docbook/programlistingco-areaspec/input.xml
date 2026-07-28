@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <example>
+    <title>External coordinate callouts</title>
+    <programlistingco>
+      <areaspec units="linecolumn">
+        <area xml:id="area.1" coords="1 1"/>
+        <area xml:id="area.2" coords="2 1" label="2"/>
+      </areaspec>
+      <programlisting language="rust">fn main() {
+    print();
+}</programlisting>
+    </programlistingco>
+    <calloutlist>
+      <callout arearefs="area.1">
+        <para>Function definition.</para>
+      </callout>
+      <callout arearefs="area.2">
+        <para>The call.</para>
+      </callout>
+    </calloutlist>
+  </example>
+</article>

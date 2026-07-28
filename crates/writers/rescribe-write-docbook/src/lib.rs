@@ -177,6 +177,125 @@ fn equation_children(node: &Node, write_child: fn(&Node) -> Vec<DbNode>) -> Vec<
     out
 }
 
+/// Splice a `code_block`'s `docbook:callout-markers` (see
+/// rescribe-read-docbook's `extract_verbatim_text`) back into its flat
+/// `content` string as alternating text/`<co/>` DocBook AST nodes, ordered
+/// by each marker's recorded character offset. Falls back to a single text
+/// node (the previous, marker-less behavior) when the property is absent or
+/// malformed.
+fn write_verbatim_children(content: &str, markers_prop: Option<&PropValue>) -> Vec<DbNode> {
+    let Some(PropValue::List(markers)) = markers_prop else {
+        return vec![db_text(content)];
+    };
+    let mut entries: Vec<(usize, Option<String>, Option<String>)> = markers
+        .iter()
+        .filter_map(|m| {
+            let PropValue::Map(map) = m else {
+                return None;
+            };
+            let offset = match map.get("offset") {
+                Some(PropValue::Int(i)) if *i >= 0 => *i as usize,
+                _ => return None,
+            };
+            let id = match map.get("id") {
+                Some(PropValue::String(s)) => Some(s.clone()),
+                _ => None,
+            };
+            let label = match map.get("label") {
+                Some(PropValue::String(s)) => Some(s.clone()),
+                _ => None,
+            };
+            Some((offset, id, label))
+        })
+        .collect();
+    if entries.is_empty() {
+        return vec![db_text(content)];
+    }
+    entries.sort_by_key(|(offset, ..)| *offset);
+
+    let chars: Vec<char> = content.chars().collect();
+    let mut out = Vec::new();
+    let mut cursor = 0usize;
+    for (offset, id, label) in entries {
+        let offset = offset.min(chars.len());
+        if offset > cursor {
+            out.push(db_text(chars[cursor..offset].iter().collect::<String>()));
+        }
+        let mut attrs = Vec::new();
+        if let Some(id) = id {
+            attrs.push(("id".to_string(), id));
+        }
+        if let Some(label) = label {
+            attrs.push(("label".to_string(), label));
+        }
+        out.push(db_element("co", attrs, vec![]));
+        cursor = offset;
+    }
+    if cursor < chars.len() {
+        out.push(db_text(chars[cursor..].iter().collect::<String>()));
+    }
+    out
+}
+
+/// Re-emit a `<programlistingco>`'s `<areaspec>` sibling from a
+/// `code_block`'s `docbook:areaspec` map (see rescribe-read-docbook's
+/// "areaspec" arm) — `id`/`units`/`otherunits` are `<areaspec>`'s own
+/// attributes (DocBook 5.2 reference: it has no `label` of its own), and
+/// `areas` is the ordered list of `<area>`/`<areaset>` children.
+fn write_areaspec(map: &HashMap<String, PropValue>) -> DbNode {
+    let mut attrs = Vec::new();
+    for key in ["id", "units", "otherunits"] {
+        if let Some(PropValue::String(v)) = map.get(key) {
+            attrs.push((key.to_string(), v.clone()));
+        }
+    }
+    let children = match map.get("areas") {
+        Some(PropValue::List(items)) => items.iter().filter_map(write_area_entry).collect(),
+        _ => vec![],
+    };
+    db_element("areaspec", attrs, children)
+}
+
+/// Re-emit one `<area>` or `<areaset>` from its `docbook:area`-shaped map
+/// (see rescribe-read-docbook's "area"/"areaset" arms) — `kind` selects
+/// which; an `<areaset>` recurses into its own nested `areas` list of plain
+/// `<area>` entries.
+fn write_area_entry(entry: &PropValue) -> Option<DbNode> {
+    let PropValue::Map(map) = entry else {
+        return None;
+    };
+    if map.get("kind") == Some(&PropValue::String("areaset".to_string())) {
+        let mut attrs = Vec::new();
+        for key in ["id", "units", "otherunits", "label"] {
+            if let Some(PropValue::String(v)) = map.get(key) {
+                attrs.push((key.to_string(), v.clone()));
+            }
+        }
+        let nested = match map.get("areas") {
+            Some(PropValue::List(items)) => items.iter().filter_map(write_area_entry).collect(),
+            _ => vec![],
+        };
+        return Some(db_element("areaset", attrs, nested));
+    }
+    Some(write_area(map))
+}
+
+/// Re-emit a single `<area>` (DocBook 5.2 reference: EMPTY plus an optional
+/// `<alt>` child) from its `docbook:area` map.
+fn write_area(map: &HashMap<String, PropValue>) -> DbNode {
+    let mut attrs = Vec::new();
+    for key in ["id", "coords", "units", "otherunits", "label"] {
+        if let Some(PropValue::String(v)) = map.get(key) {
+            attrs.push((key.to_string(), v.clone()));
+        }
+    }
+    let children = match map.get("alt") {
+        Some(PropValue::String(alt)) => vec![db_element("alt", vec![], vec![db_text(alt.clone())])],
+        _ => vec![],
+    };
+    db_element("area", attrs, children)
+}
+
 /// Convert one rescribe IR (block-level) node into zero or more DocBook AST
 /// nodes.
 fn write_node(node: &Node) -> Vec<DbNode> {
@@ -190,6 +309,34 @@ fn write_node(node: &Node) -> Vec<DbNode> {
         // the reader unwraps regardless of the writer re-wrapping them)
         // just flattens into its children, same as `DOCUMENT`.
         node::DIV => match node.props.get_str("docbook:tag") {
+            // `<programlistingco>` (see rescribe-read-docbook's
+            // "programlistingco" arm): content model `areaspec?,
+            // programlisting`. Its (possibly areaspec-augmented) `code_block`
+            // child carries `docbook:areaspec` if the source had an
+            // `<areaspec>` — pulled out here and re-emitted as the `
+            // <areaspec>` sibling *before* the listing, matching the content
+            // model's order; `write_node` on the code_block itself
+            // separately handles splicing any `<co/>` markers back into the
+            // listing's text (see the `CODE_BLOCK` arm below), independent
+            // of whether an `<areaspec>` is also present.
+            Some("programlistingco") => {
+                let areaspec = node.children.iter().find_map(|c| {
+                    if c.kind.as_str() != node::CODE_BLOCK {
+                        return None;
+                    }
+                    match c.props.get("docbook:areaspec") {
+                        Some(PropValue::Map(map)) => Some(write_areaspec(map)),
+                        _ => None,
+                    }
+                });
+                let mut children: Vec<DbNode> = areaspec.into_iter().collect();
+                children.extend(node.children.iter().flat_map(write_node));
+                vec![db_element(
+                    "programlistingco",
+                    generic_attrs(node),
+                    children,
+                )]
+            }
             Some(tag) => {
                 let mut attrs = generic_attrs(node);
                 // `docbook:qanda-defaultlabel` (see rescribe-read-docbook's
@@ -305,11 +452,12 @@ fn write_node(node: &Node) -> Vec<DbNode> {
         )],
 
         node::LIST => {
-            // `docbook:tag` = "procedure"/"substeps" (see
-            // rescribe-read-docbook's "procedure"|"substeps" arm) re-emits
-            // the original element instead of `<orderedlist>`.
+            // `docbook:tag` = "procedure"/"substeps"/"calloutlist" (see
+            // rescribe-read-docbook's "procedure"|"substeps"|"calloutlist"
+            // arms) re-emits the original element instead of
+            // `<orderedlist>`.
             let tag = match node.props.get_str("docbook:tag") {
-                Some(tag @ ("procedure" | "substeps")) => tag,
+                Some(tag @ ("procedure" | "substeps" | "calloutlist")) => tag,
                 _ => {
                     if node.props.get_bool(prop::ORDERED).unwrap_or(false) {
                         "orderedlist"
@@ -325,11 +473,22 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             )]
         }
 
-        node::LIST_ITEM => vec![db_element(
-            node.props.get_str("docbook:tag").unwrap_or("listitem"),
-            vec![],
-            node.children.iter().flat_map(write_node).collect(),
-        )],
+        node::LIST_ITEM => {
+            let tag = node.props.get_str("docbook:tag").unwrap_or("listitem");
+            let mut attrs = Vec::new();
+            // `arearefs` (see rescribe-read-docbook's "callout" arm) only
+            // applies to `<callout>`, the `calloutlist`-flavored `LIST_ITEM`.
+            if tag == "callout"
+                && let Some(arearefs) = node.props.get_str("docbook:arearefs")
+            {
+                attrs.push(("arearefs".to_string(), arearefs.to_string()));
+            }
+            vec![db_element(
+                tag,
+                attrs,
+                node.children.iter().flat_map(write_node).collect(),
+            )]
+        }
 
         node::DEFINITION_LIST => write_definition_list(node),
 
@@ -360,7 +519,14 @@ fn write_node(node: &Node) -> Vec<DbNode> {
                 .props
                 .get_str("docbook:tag")
                 .unwrap_or("programlisting");
-            vec![db_element(tag, attrs, vec![db_text(content)])]
+            // `docbook:callout-markers` (see rescribe-read-docbook's
+            // "programlisting"|... arm / `extract_verbatim_text`) splices
+            // `<co/>` markers back into the text at their recorded offsets;
+            // absent it, this is exactly the previous single-text-node
+            // behavior.
+            let children =
+                write_verbatim_children(content, node.props.get("docbook:callout-markers"));
+            vec![db_element(tag, attrs, children)]
         }
 
         node::TABLE => {
@@ -1239,6 +1405,137 @@ mod tests {
             ),
             "unexpected emitted XML: {xml}"
         );
+        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        assert_eq!(parsed.value.content, reparsed.value.content);
+    }
+
+    /// Inline-marker flavor of the callout composition (see
+    /// rescribe-read-docbook's `"co"`/`extract_verbatim_text` doc comments):
+    /// `<co/>` markers embedded directly in a bare `<programlisting>`
+    /// (no `<programlistingco>`/`<areaspec>` wrapper needed — DocBook 5.2
+    /// permits `<co>` wherever `%co.class;` appears in the verbatim
+    /// elements' own content model), paired with a sibling `<calloutlist>`
+    /// that references the markers' ids directly via `arearefs`.
+    #[test]
+    fn test_roundtrip_inline_co_markers() {
+        let docbook = r#"<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook"><example><programlisting>a<co xml:id="co.1"/>b<co xml:id="co.2" label="2"/>c</programlisting><calloutlist><callout arearefs="co.1"><para>one</para></callout><callout arearefs="co.2"><para>two</para></callout></calloutlist></example></article>"#;
+        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+
+        let example = &parsed.value.content.children[0].children[0];
+        let code_block = &example.children[0];
+        assert_eq!(code_block.kind.as_str(), node::CODE_BLOCK);
+        assert_eq!(code_block.props.get_str(prop::CONTENT), Some("abc"));
+        let markers = match code_block.props.get("docbook:callout-markers") {
+            Some(PropValue::List(m)) => m,
+            other => panic!("expected callout-markers list, got {other:?}"),
+        };
+        assert_eq!(markers.len(), 2);
+        let PropValue::Map(m0) = &markers[0] else {
+            panic!("marker 0 not a map")
+        };
+        assert_eq!(m0.get("id"), Some(&PropValue::String("co.1".to_string())));
+        assert_eq!(m0.get("offset"), Some(&PropValue::Int(1)));
+        let PropValue::Map(m1) = &markers[1] else {
+            panic!("marker 1 not a map")
+        };
+        assert_eq!(m1.get("id"), Some(&PropValue::String("co.2".to_string())));
+        assert_eq!(m1.get("offset"), Some(&PropValue::Int(2)));
+        assert_eq!(m1.get("label"), Some(&PropValue::String("2".to_string())));
+
+        let calloutlist = &example.children[1];
+        assert_eq!(calloutlist.kind.as_str(), node::LIST);
+        assert_eq!(
+            calloutlist.props.get_str("docbook:tag"),
+            Some("calloutlist")
+        );
+        let callout0 = &calloutlist.children[0];
+        assert_eq!(callout0.kind.as_str(), node::LIST_ITEM);
+        assert_eq!(callout0.props.get_str("docbook:tag"), Some("callout"));
+        assert_eq!(callout0.props.get_str("docbook:arearefs"), Some("co.1"));
+
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains(
+                r#"<programlisting>a<co id="co.1"/>b<co id="co.2" label="2"/>c</programlisting>"#
+            ),
+            "unexpected emitted programlisting: {xml}"
+        );
+        assert!(
+            xml.contains(
+                r#"<calloutlist><callout arearefs="co.1"><para>one</para></callout><callout arearefs="co.2"><para>two</para></callout></calloutlist>"#
+            ),
+            "unexpected emitted calloutlist: {xml}"
+        );
+
+        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        assert_eq!(parsed.value.content, reparsed.value.content);
+    }
+
+    /// External-coordinates flavor (see rescribe-read-docbook's
+    /// `"programlistingco"`/`"areaspec"`/`"area"` doc comments):
+    /// `<programlistingco>` wraps an `<areaspec>` (holding `<area>`
+    /// coordinate records, no inline `<co/>` markers in the listing itself)
+    /// and the `<programlisting>` it annotates, with a sibling
+    /// `<calloutlist>` whose `<callout>`s reference the `<area>` ids.
+    #[test]
+    fn test_roundtrip_areaspec_external_coordinates() {
+        let docbook = r#"<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns="http://docbook.org/ns/docbook"><example><programlistingco><areaspec units="linecolumn"><area xml:id="area.1" coords="1 1"/><area xml:id="area.2" coords="2 1" label="2"/></areaspec><programlisting>fn main() {
+    print();
+}</programlisting></programlistingco><calloutlist><callout arearefs="area.1"><para>Function definition.</para></callout><callout arearefs="area.2"><para>The call.</para></callout></calloutlist></example></article>"#;
+        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+
+        let example = &parsed.value.content.children[0].children[0];
+        let wrapper = &example.children[0];
+        assert_eq!(wrapper.kind.as_str(), node::DIV);
+        assert_eq!(
+            wrapper.props.get_str("docbook:tag"),
+            Some("programlistingco")
+        );
+        let code_block = &wrapper.children[0];
+        assert_eq!(code_block.kind.as_str(), node::CODE_BLOCK);
+        assert!(
+            code_block
+                .props
+                .get_str(prop::CONTENT)
+                .unwrap()
+                .contains("fn main")
+        );
+        let areaspec = match code_block.props.get("docbook:areaspec") {
+            Some(PropValue::Map(m)) => m,
+            other => panic!("expected areaspec map, got {other:?}"),
+        };
+        assert_eq!(
+            areaspec.get("units"),
+            Some(&PropValue::String("linecolumn".to_string()))
+        );
+        let areas = match areaspec.get("areas") {
+            Some(PropValue::List(a)) => a,
+            other => panic!("expected areas list, got {other:?}"),
+        };
+        assert_eq!(areas.len(), 2);
+        let PropValue::Map(a0) = &areas[0] else {
+            panic!("area 0 not a map")
+        };
+        assert_eq!(a0.get("id"), Some(&PropValue::String("area.1".to_string())));
+        assert_eq!(
+            a0.get("coords"),
+            Some(&PropValue::String("1 1".to_string()))
+        );
+        let PropValue::Map(a1) = &areas[1] else {
+            panic!("area 1 not a map")
+        };
+        assert_eq!(a1.get("label"), Some(&PropValue::String("2".to_string())));
+
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains(r#"<areaspec units="linecolumn"><area id="area.1" coords="1 1"/><area id="area.2" coords="2 1" label="2"/></areaspec>"#),
+            "unexpected emitted areaspec: {xml}"
+        );
+
         let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
         assert_eq!(parsed.value.content, reparsed.value.content);
     }

@@ -581,6 +581,14 @@ pub(crate) fn is_block_element(tag: &str) -> bool {
             // structurally block like a table row).
             | "authorgroup"
             | "legalnotice"
+            // Callout listing composition (see the `"programlistingco"`/
+            // `"areaspec"`/`"calloutlist"`/`"callout"` arms below) — all
+            // block-shaped; `<co>`/`<area>`/`<areaset>` are the inline/
+            // EMPTY members of this family and correctly excluded here.
+            | "programlistingco"
+            | "areaspec"
+            | "calloutlist"
+            | "callout"
     )
 }
 
@@ -784,13 +792,189 @@ fn convert_element(
         // just without a programming-language association. The original
         // tag name is kept (`docbook:tag`) so the writer re-emits the exact
         // element instead of always defaulting to `<programlisting>`.
+        // `<co/>` callout markers (see the dedicated `"co"` arm below) may be
+        // embedded directly inside the mixed text content of any of these
+        // verbatim elements (DocBook 5.2 reference:
+        // tdg.docbook.org/tdg/5.2/co.html — `<co>` is valid wherever
+        // `%co.class;` appears, which includes `programlisting`/`screen`/
+        // `literallayout`/`synopsis`). Per ADR 0006, `<co>` itself carries no
+        // markup-bearing content (it's EMPTY) so it doesn't need to become a
+        // real child node of `code_block` — but its *position* inside the
+        // flat text is real information (the whole point of the construct is
+        // "this callout annotates this line"), so `extract_verbatim_text`
+        // records each marker's character offset into the extracted text as
+        // a `docbook:callout-markers` property (a list of `{id, offset,
+        // label}` maps) alongside the flat `content` string, rather than
+        // extending `code_block`'s content contract to non-flat text.
         "programlisting" | "screen" | "literallayout" | "synopsis" | "address" => {
-            let text = extract_text(&children);
+            let (text, markers) = extract_verbatim_text(&children);
             let mut node = Node::new(node::CODE_BLOCK)
                 .prop(prop::CONTENT, text)
                 .prop("docbook:tag", name.to_string());
             if let Some(lang) = language {
                 node = node.prop(prop::LANGUAGE, lang.to_string());
+            }
+            if !markers.is_empty() {
+                node = node.prop("docbook:callout-markers", PropValue::List(markers));
+            }
+            Some(node)
+        }
+
+        // A callout marker embedded inline in a verbatim element's mixed
+        // content (see the `"programlisting"|"screen"|...` arm above, which
+        // is where its position actually gets recorded — this arm only
+        // builds the sentinel span `extract_verbatim_text` looks for).
+        // `xml:id`/`id` is required by the DocBook 5.2 reference and is
+        // already captured generically as `prop::ID` by
+        // `attach_generic_attrs`, applied uniformly below; `label` has no
+        // generic handling, so it's captured explicitly here.
+        "co" => {
+            let mut node = Node::new(node::SPAN).prop("docbook:tag", "co");
+            if let Some(label) = get_attr(attrs, "label") {
+                node = node.prop("docbook:label", label.to_string());
+            }
+            Some(node)
+        }
+
+        // The external-coordinates alternative to inline `<co>` markers
+        // (DocBook 5.2 reference: `<area>`/`<areaset>` inside `<areaspec>`).
+        // `coords` never carries nested markup (per ADR 0006's content-model
+        // test — it's plain positional data), so this is a clean Property
+        // case: each `<area>`/`<areaset>` becomes a sentinel `SPAN` carrying
+        // a `docbook:area` map, which the `"areaspec"`/`"areaset"` arms below
+        // collect back out (the same sentinel-then-collect pattern
+        // `convert_children`'s MathML interception and `split_mathml` use).
+        // `<area>`'s optional `<alt>` child (DocBook 5.2: "text, Graphic
+        // inlines (inlinemediaobject)") is flattened to plain text here —
+        // the common case is plain text, and the narrow "image nested inside
+        // an area's alt text" sub-case degrading to flattened text (rather
+        // than a full child-node representation) is a documented residual
+        // gap, not a silent drop: the text itself still round-trips.
+        "area" => Some(
+            Node::new(node::SPAN)
+                .prop("docbook:tag", "area")
+                .prop("docbook:area", build_area_map(attrs, &children)),
+        ),
+        "areaset" => {
+            let mut map = HashMap::new();
+            map.insert("kind".to_string(), PropValue::String("areaset".to_string()));
+            if let Some(id) = get_attr(attrs, "id").or_else(|| get_attr(attrs, "xml:id")) {
+                map.insert("id".to_string(), PropValue::String(id.to_string()));
+            }
+            if let Some(units) = get_attr(attrs, "units") {
+                map.insert("units".to_string(), PropValue::String(units.to_string()));
+            }
+            if let Some(otherunits) = get_attr(attrs, "otherunits") {
+                map.insert(
+                    "otherunits".to_string(),
+                    PropValue::String(otherunits.to_string()),
+                );
+            }
+            if let Some(label) = get_attr(attrs, "label") {
+                map.insert("label".to_string(), PropValue::String(label.to_string()));
+            }
+            let areas: Vec<PropValue> = children
+                .iter()
+                .filter(|c| c.props.get_str("docbook:tag") == Some("area"))
+                .filter_map(|c| c.props.get("docbook:area").cloned())
+                .collect();
+            map.insert("areas".to_string(), PropValue::List(areas));
+            Some(
+                Node::new(node::SPAN)
+                    .prop("docbook:tag", "areaset")
+                    .prop("docbook:area", PropValue::Map(map)),
+            )
+        }
+        // `<areaspec>` itself (DocBook 5.2 reference: optional `units`/
+        // `otherunits`, no `label` of its own) — collects its `<area>`/
+        // `<areaset>` children's sentinel maps into one `docbook:areas` list.
+        // This sentinel is consumed by the `"programlistingco"` arm below,
+        // which folds it into the paired `<programlisting>`'s `code_block`
+        // as `docbook:areaspec` rather than leaving it as an unrelated
+        // sibling node — `<areaspec>` only has meaning paired with the
+        // listing it annotates.
+        "areaspec" => {
+            let mut map = HashMap::new();
+            if let Some(id) = get_attr(attrs, "id").or_else(|| get_attr(attrs, "xml:id")) {
+                map.insert("id".to_string(), PropValue::String(id.to_string()));
+            }
+            if let Some(units) = get_attr(attrs, "units") {
+                map.insert("units".to_string(), PropValue::String(units.to_string()));
+            }
+            if let Some(otherunits) = get_attr(attrs, "otherunits") {
+                map.insert(
+                    "otherunits".to_string(),
+                    PropValue::String(otherunits.to_string()),
+                );
+            }
+            let areas: Vec<PropValue> = children
+                .iter()
+                .filter(|c| {
+                    matches!(
+                        c.props.get_str("docbook:tag"),
+                        Some("area") | Some("areaset")
+                    )
+                })
+                .filter_map(|c| c.props.get("docbook:area").cloned())
+                .collect();
+            map.insert("areas".to_string(), PropValue::List(areas));
+            Some(
+                Node::new(node::SPAN)
+                    .prop("docbook:tag", "areaspec")
+                    .prop("docbook:areas", PropValue::Map(map)),
+            )
+        }
+        // `<programlistingco>` (DocBook 5.2 content model: `areaspec?,
+        // programlisting`) pairs an optional external coordinate list with
+        // the listing it annotates — modeled as a `DIV` tagged
+        // `docbook:tag = "programlistingco"` wrapping the (possibly
+        // areaspec-augmented) `code_block`, per ADR 0006: neither `<co>` nor
+        // `<area>` need `code_block`'s flat-string `content` contract to
+        // change, so no new node kind is needed here either.
+        "programlistingco" => {
+            let mut areaspec_map: Option<HashMap<String, PropValue>> = None;
+            let mut code_block = None;
+            for child in children {
+                if child.props.get_str("docbook:tag") == Some("areaspec") {
+                    if let Some(PropValue::Map(inner)) = child.props.get("docbook:areas") {
+                        areaspec_map = Some(inner.clone());
+                    }
+                } else if child.kind.as_str() == node::CODE_BLOCK {
+                    code_block = Some(child);
+                }
+            }
+            code_block.map(|mut cb| {
+                if let Some(map) = areaspec_map {
+                    cb = cb.prop("docbook:areaspec", PropValue::Map(map));
+                }
+                Node::new(node::DIV)
+                    .prop("docbook:tag", "programlistingco")
+                    .child(cb)
+            })
+        }
+        // `<calloutlist>`/`<callout>` (DocBook 5.2 reference: `calloutlist`
+        // is `title?, info?, (block content)*, callout+`; `callout` is
+        // ordinary block content — real prose, per ADR 0006's test, so it
+        // stays as real child nodes, not a Property). Modeled as a `LIST`/
+        // `LIST_ITEM` pair (matching the existing `procedure`/`step`
+        // convention above) tagged `docbook:tag` so the writer re-emits the
+        // original elements rather than `<itemizedlist>`/`<listitem>`.
+        // `arearefs` (IDREFS — the space-separated `<area>`/`<areaset>`/
+        // `<co>` ids this callout annotates) is plain non-markup-bearing
+        // attribute data, raw-preserved as a single space-joined string
+        // property (the same convention this reader already uses for other
+        // IDREFS-shaped attributes).
+        "calloutlist" => Some(
+            Node::new(node::LIST)
+                .prop("docbook:tag", "calloutlist")
+                .children(children),
+        ),
+        "callout" => {
+            let mut node = Node::new(node::LIST_ITEM)
+                .prop("docbook:tag", "callout")
+                .children(children);
+            if let Some(arearefs) = get_attr(attrs, "arearefs") {
+                node = node.prop("docbook:arearefs", arearefs.to_string());
             }
             Some(node)
         }
@@ -1544,6 +1728,80 @@ fn extract_text(nodes: &[Node]) -> String {
         text.push_str(&extract_text(&node.children));
     }
     text
+}
+
+/// Like [`extract_text`], but for a verbatim element's (`<programlisting>`/
+/// `<screen>`/etc) already-converted children: pulls a `<co/>` marker
+/// sentinel (the `"co"` arm in [`convert_element`]) out of the flow instead
+/// of recursing into it (it's always empty), recording its character offset
+/// into the text built so far — the position information that's the actual
+/// point of the construct — alongside its `id`/`label`. Returns the flat
+/// text (identical to what `extract_text` would produce, since a `co`
+/// sentinel never contributes text) plus the ordered list of markers as
+/// `docbook:callout-markers`-shaped `PropValue::Map`s.
+fn extract_verbatim_text(nodes: &[Node]) -> (String, Vec<PropValue>) {
+    let mut text = String::new();
+    let mut markers = Vec::new();
+    collect_verbatim(nodes, &mut text, &mut markers);
+    (text, markers)
+}
+
+fn collect_verbatim(nodes: &[Node], text: &mut String, markers: &mut Vec<PropValue>) {
+    for node in nodes {
+        if node.kind.as_str() == node::SPAN && node.props.get_str("docbook:tag") == Some("co") {
+            let mut map = HashMap::new();
+            if let Some(id) = node.props.get_str(prop::ID) {
+                map.insert("id".to_string(), PropValue::String(id.to_string()));
+            }
+            map.insert(
+                "offset".to_string(),
+                PropValue::Int(text.chars().count() as i64),
+            );
+            if let Some(label) = node.props.get_str("docbook:label") {
+                map.insert("label".to_string(), PropValue::String(label.to_string()));
+            }
+            markers.push(PropValue::Map(map));
+            continue;
+        }
+        if node.kind.as_str() == node::TEXT
+            && let Some(content) = node.props.get_str(prop::CONTENT)
+        {
+            text.push_str(content);
+        }
+        collect_verbatim(&node.children, text, markers);
+    }
+}
+
+/// Build a `docbook:area`-shaped map from an `<area>` element's attributes
+/// (see the `"area"` arm in [`convert_element`]) — `kind` distinguishes it
+/// from an `<areaset>` entry when both appear together in an `<areaspec>`'s
+/// collected `areas` list.
+fn build_area_map(attrs: &[(String, String)], children: &[Node]) -> PropValue {
+    let mut map = HashMap::new();
+    map.insert("kind".to_string(), PropValue::String("area".to_string()));
+    if let Some(id) = get_attr(attrs, "id").or_else(|| get_attr(attrs, "xml:id")) {
+        map.insert("id".to_string(), PropValue::String(id.to_string()));
+    }
+    if let Some(coords) = get_attr(attrs, "coords") {
+        map.insert("coords".to_string(), PropValue::String(coords.to_string()));
+    }
+    if let Some(units) = get_attr(attrs, "units") {
+        map.insert("units".to_string(), PropValue::String(units.to_string()));
+    }
+    if let Some(otherunits) = get_attr(attrs, "otherunits") {
+        map.insert(
+            "otherunits".to_string(),
+            PropValue::String(otherunits.to_string()),
+        );
+    }
+    if let Some(label) = get_attr(attrs, "label") {
+        map.insert("label".to_string(), PropValue::String(label.to_string()));
+    }
+    let alt = extract_text(children);
+    if !alt.is_empty() {
+        map.insert("alt".to_string(), PropValue::String(alt));
+    }
+    PropValue::Map(map)
 }
 
 #[cfg(test)]

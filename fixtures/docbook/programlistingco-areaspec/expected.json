@@ -1,0 +1,14 @@
+{
+  "description": "<programlistingco> wraps an <areaspec> (external <area> coordinates, no inline <co/> markers) and the <programlisting> it annotates; a sibling <calloutlist> references the <area> ids via arearefs",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0",     "kind": "div" },
+    { "path": "/0/0",   "kind": "div", "props": { "docbook:tag": "example" } },
+    { "path": "/0/0/0", "kind": "caption" },
+    { "path": "/0/0/1", "kind": "div", "props": { "docbook:tag": "programlistingco" }, "children_count": 1 },
+    { "path": "/0/0/1/0", "kind": "code_block", "props": { "docbook:tag": "programlisting", "language": "rust", "docbook:areaspec": { "units": "linecolumn" } } },
+    { "path": "/0/0/2", "kind": "list", "props": { "docbook:tag": "calloutlist" } },
+    { "path": "/0/0/2/0", "kind": "list_item", "props": { "docbook:tag": "callout", "docbook:arearefs": "area.1" } },
+    { "path": "/0/0/2/1", "kind": "list_item", "props": { "docbook:tag": "callout", "docbook:arearefs": "area.2" } }
+  ]
+}

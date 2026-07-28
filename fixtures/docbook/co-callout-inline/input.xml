@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <example>
+    <title>Inline callout markers</title>
+    <programlisting language="python">a<co xml:id="co.1"/>b<co xml:id="co.2" label="2"/>c</programlisting>
+    <calloutlist>
+      <callout arearefs="co.1">
+        <para>First marker.</para>
+      </callout>
+      <callout arearefs="co.2">
+        <para>Second marker.</para>
+      </callout>
+    </calloutlist>
+  </example>
+</article>

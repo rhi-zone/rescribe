@@ -144,9 +144,15 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   direct block child, not inside `<figure>`, passes through to a standard
   `image` node; the writer already had a dedicated block-position IMAGE ->
   `<mediaobject>` arm, so this just adds the missing fixture)
-- [ ] programlistingco (callout listing) — (missing; `<programlistingco>` +
-  `<calloutlist>` — left open together with the `co` inline construct above:
-  designing one without the other would be premature, see TODO.md)
+- [x] programlistingco (callout listing) — `programlistingco-areaspec`
+  (`<programlistingco>` — content model `areaspec?, programlisting` per the
+  DocBook 5.2 reference — maps to a `div` tagged `docbook:tag =
+  "programlistingco"` wrapping the `code_block`; the paired `<areaspec>`'s
+  `<area>`/`<areaset>` coordinate records fold into the `code_block`'s
+  `docbook:areaspec` property rather than surviving as an unrelated sibling
+  node, since `coords`/`units`/`label` never carry nested markup per ADR
+  0006's content-model test. Resolved this session — see TODO.md's
+  "resolved" writeup for the design)
 - [x] address block — `address` (verbatim like `<screen>`, mapped to
   `code_block`)
 
@@ -213,11 +219,16 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   audit, see TODO.md)
 - [x] footnoteref — `footnoteref` (`<footnoteref linkend="…">`, mapped to the
   standard `footnote_ref` node with `linkend` as the standard `label` property)
-- [ ] co (callout reference) — (missing; `<co>` — left open together with the
-  `programlistingco (callout listing)` block construct below: `co` only has
-  meaning paired with a `<calloutlist>` that references it back, so mapping
-  one without designing the other would be premature; a real design decision,
-  not a lookup, see TODO.md)
+- [x] co (callout reference) — `co-callout-inline` (`<co/>` embedded inline
+  in a verbatim element's mixed content — valid directly inside a bare
+  `<programlisting>`, no `<programlistingco>` wrapper required, per the
+  DocBook 5.2 reference's `%co.class;` content-model inclusion. `<co>` itself
+  is EMPTY (no markup to preserve per ADR 0006), but its *position* in the
+  flat text is real information, so it's captured as a
+  `docbook:callout-markers` list property on the `code_block` — one
+  `{id, offset, label}` map per marker — rather than extending
+  `code_block`'s flat-string `content` contract. Resolved this session — see
+  TODO.md's "resolved" writeup for the design)
 
 ## Properties
 
@@ -319,8 +330,15 @@ namespace. This section covers the DocBook side only.
   bug found while verifying round-trip: `FOOTNOTE_DEF` embedded inline, e.g.
   in a table cell, had no `write_inline` arm and silently lost its
   `<footnote>` wrapper, splicing the note's text straight into the cell)
-- [ ] callout listing + callout list — (missing; left open together with `co`/
-  `programlistingco` above — same design fork, see TODO.md)
+- [x] callout listing + callout list — `co-callout-inline`,
+  `programlistingco-areaspec` (both fixtures pair a `<calloutlist>` with its
+  target: the inline-marker flavor's `<co>` ids and the external-coordinates
+  flavor's `<area>` ids, respectively. `<calloutlist>`/`<callout>` map to
+  `list`/`list_item` tagged `docbook:tag`, matching the existing
+  `procedure`/`step` convention — `<callout>`'s content is ordinary block
+  markup (real prose, per ADR 0006), so it stays real child nodes; `arearefs`
+  is plain IDREFS attribute data, raw-preserved as a `docbook:arearefs`
+  string property. Resolved this session — see TODO.md's "resolved" writeup)
 - [x] article-level metadata (info block) — `e2e-article-metadata` (`<info>`
   with `<title>`, `<author>`, `<pubdate>`)
 

@@ -1770,36 +1770,50 @@ source this session and remain genuinely open):**
   (checking the actual node shapes already in the codebase) once the varlistentry bug was
   out of the way, not a novel IR-design decision.
 
-- **DocBook `programlistingco`/`co`/calloutlist composition** (`fixtures/docbook/
-  COVERAGE.md`, 3 boxes: `programlistingco`, `co`, "callout listing + callout list").
-  Per the DocBook 5.2 reference (tdg.docbook.org/tdg/5.2/programlistingco.html):
-  `<programlistingco>` wraps an `<areaspec>` (a list of `<area>` coordinates identifying
-  positions within the listing) and a `<programlisting>`, with an associated `<calloutlist>`
-  whose `<callout>` elements reference areas by `arearefs`; alternatively, `<co>` markers can
-  be embedded directly inline in the `<programlisting>` text instead of computing external
-  `<area>` coordinates, with each `<callout>` then referencing a `<co>`'s `id` via
-  `arearefs`. Checked Pandoc's convention here too: **`calloutlist` -> `BulletList` (each
-  `<callout>`'s content becomes a list item, structurally reasonable and probably the right
-  general shape), but `co`/`area`/`areaset`/`areaspec` are all explicitly `skip`ped —
-  dropped with an "ignored element" warning, not preserved in any form.** Again, acceptable
-  for Pandoc, not acceptable for rescribe: dropping `co` loses the actual callout-to-code-
-  line linkage, which is the entire point of the construct (a `calloutlist` alone, without
-  knowing which list item annotates which line, is much less useful than the paired
-  original). **What's actually undecided:** rescribe has no existing "numbered marker
-  embedded in verbatim content, cross-referenced by a list elsewhere in the document"
-  concept anywhere in its IR — footnote_ref/footnote_def is the closest existing pattern
-  (an inline marker + a separately-located definition, linked by id) but footnotes aren't
-  positioned *inside* a `code_block`'s literal text, which raises a real question
-  `footnote_ref`'s design never had to answer: does a marker id inside verbatim/preserved
-  text content count as a "real" inline node splicing into `code_block`'s children (breaking
-  the assumption that `code_block` content is a single flat string), or does it need a new
-  raw-content-with-embedded-markers representation? This is a genuine IR-shape question
-  (whether `code_block` content can ever be non-flat) that a lookup cannot answer — it
-  requires deciding whether to extend `code_block`'s contract repo-wide (affecting every
-  writer that currently assumes flat string content) just to serve this one DocBook
-  construct, or accept a `co`-specific raw-preservation escape hatch instead. Left open
-  together as three boxes since designing `co` without also designing where its target
-  `calloutlist` attaches (and vice versa) would be guessing at half a linked structure.
+- **DocBook `programlistingco`/`co`/calloutlist composition — resolved 2026-07-28**
+  (`fixtures/docbook/COVERAGE.md`, 3 boxes: `programlistingco`, `co`, "callout listing +
+  callout list", all now `[x]`). The prior writeup here framed this as a genuine IR-shape
+  question — whether `code_block` content can ever be non-flat, to carry an embedded `<co>`
+  marker — but that framing turned out to be wrong: per ADR 0006's actual test (child node
+  only if the content model permits *nested markup*, not "is this positional"), neither
+  `<co>` (EMPTY, no content of its own) nor `<area>`'s `coords` (plain numeric/positional
+  data) ever need markup-bearing children, so `code_block`'s flat-string `content` contract
+  didn't need to change at all. What actually closed the three boxes:
+  - `<co/>` markers embedded in a verbatim element's mixed content (valid directly inside a
+    bare `<programlisting>`, no `<programlistingco>` wrapper required — confirmed against
+    the DocBook 5.2 reference's `%co.class;` content-model inclusion) are recorded as a
+    `docbook:callout-markers` property on the `code_block`: a list of `{id, offset, label}`
+    maps, `offset` being the marker's character position in the extracted flat text. The
+    writer splices `<co/>` back into the text at those offsets on emit.
+  - `<area>`/`<areaset>` (the external-coordinates alternative, inside `<areaspec>`) fold
+    into a `docbook:areaspec` map property on the `code_block` — `id`/`units`/`otherunits`
+    plus an `areas` list of `{kind, id, coords, units, otherunits, label}` maps (`areaset`
+    entries nest their own `areas` list of plain `area` entries). `<area>`'s optional `<alt>`
+    child (DocBook 5.2: permits text + `inlinemediaobject`) is flattened to plain text — the
+    common case is plain text; an image nested inside an area's `<alt>` would degrade to
+    flattened text rather than a full child-node representation. This one sub-case is an
+    intentionally out-of-scope residual, not a silent drop (the text itself still
+    round-trips), and no fixture exercises it.
+  - `<programlistingco>` (content model `areaspec?, programlisting`) maps to a `div` tagged
+    `docbook:tag = "programlistingco"` wrapping the (possibly `docbook:areaspec`-augmented)
+    `code_block` — no new node kind.
+  - `<calloutlist>`/`<callout>` map to `list`/`list_item` tagged `docbook:tag`, matching the
+    existing `procedure`/`step` convention: `<callout>`'s content is ordinary block markup
+    (real prose, per ADR 0006's other branch — ADR 0006's test cuts both ways in this one
+    construct family, denying child-node status to `coords` while requiring it for
+    `<callout>`'s body), so it stays real child nodes; `arearefs` (IDREFS) is raw-preserved
+    as a `docbook:arearefs` space-joined string property.
+  Implementation: `crates/readers/rescribe-read-docbook/src/lib.rs` (`"co"`/`"area"`/
+  `"areaset"`/`"areaspec"`/`"programlistingco"`/`"calloutlist"`/`"callout"` arms,
+  `extract_verbatim_text`/`build_area_map`); `crates/writers/rescribe-write-docbook/src/
+  lib.rs` (`write_verbatim_children`/`write_areaspec`/`write_area_entry`/`write_area`, plus
+  the `programlistingco` DIV arm and `arearefs` on the `callout`-tagged `LIST_ITEM`).
+  Verified both content-model flavors independently: `fixtures/docbook/co-callout-inline`
+  (inline `<co>` markers, no `<programlistingco>` wrapper) and `fixtures/docbook/
+  programlistingco-areaspec` (external `<area>` coordinates via `<programlistingco>`/
+  `<areaspec>`), each backed by a full `parse(emit(parse(input))) == parse(input)`
+  round-trip unit test in `rescribe-write-docbook`'s test module (both passed on first
+  implementation, no design iteration needed after the ADR 0006 analysis).
 
 - **JATS `<alternatives>`** (`fixtures/jats/COVERAGE.md`, box now closed —
   `math-display-mathml-alternatives`, `math-inline-mathml-alternatives`,
