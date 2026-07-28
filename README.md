@@ -23,6 +23,21 @@ let result = parser.parse(markdown_bytes, &ParseOptions::default())?;
 let output = emitter.emit(&result.value, &EmitOptions::default())?;
 ```
 
+## CLI
+
+```bash
+# Convert between formats
+rescribe convert doc.md -t html -o doc.html
+
+# Run a jq expression against a document's IR
+rescribe query '.metadata' doc.md
+rescribe query '[.. | .kind?] | group_by(.) | map({kind: .[0], count: length})' doc.md
+```
+
+`rescribe query` embeds the [jaq](https://github.com/01mf02/jaq) jq engine, so metadata
+inspection and construct-census tooling are just queries rather than dedicated
+subcommands — see `rescribe query --help`.
+
 ## Why not Pandoc?
 
 | Aspect | Pandoc | rescribe |

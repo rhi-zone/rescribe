@@ -33,6 +33,24 @@ enum Commands {
         #[arg(short, long)]
         to: Option<String>,
     },
+    /// Run a jq expression against a document's IR — metadata, node-kind census,
+    /// resource listing, etc. are all just queries, e.g. `.metadata` or
+    /// `[.. | .kind?] | group_by(.) | map({kind: .[0], count: length})`
+    Query {
+        /// jq filter expression (e.g. `.metadata`, `.. | .kind?`)
+        filter: String,
+        /// Input file (use - for stdin)
+        input: PathBuf,
+        /// Input format (auto-detected from file extension if omitted)
+        #[arg(short, long)]
+        from: Option<String>,
+        /// Print string results unquoted, like `jq -r`
+        #[arg(short, long)]
+        raw_output: bool,
+        /// Print each result as single-line JSON, like `jq -c`
+        #[arg(short, long)]
+        compact: bool,
+    },
     /// List all available formats
     Formats,
 }
@@ -53,6 +71,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             from,
             to,
         } => convert(input, output, from, to),
+        Commands::Query {
+            filter,
+            input,
+            from,
+            raw_output,
+            compact,
+        } => query(&filter, input, from, raw_output, compact),
         Commands::Formats => {
             list_formats();
             Ok(())
@@ -772,6 +797,76 @@ fn convert(
     match output {
         Some(ref p) if p.as_os_str() != "-" => fs::write(p, &out_bytes)?,
         _ => io::stdout().write_all(&out_bytes)?,
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Query entry point
+// ---------------------------------------------------------------------------
+
+fn query(
+    filter: &str,
+    input: PathBuf,
+    from: Option<String>,
+    raw_output: bool,
+    compact: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Determine input format — same detection logic as `convert`.
+    let in_fmt = from
+        .as_deref()
+        .and_then(find_format)
+        .or_else(|| {
+            if input.as_os_str() == "-" {
+                return None;
+            }
+            input
+                .extension()
+                .and_then(|e| e.to_str())
+                .and_then(format_from_extension)
+        })
+        .ok_or_else(|| {
+            if let Some(ref name) = from {
+                format!(
+                    "unknown format {:?}; run `rescribe formats` for a list",
+                    name
+                )
+            } else {
+                "cannot detect input format; use --from".into()
+            }
+        })?;
+
+    if !in_fmt.can_read {
+        return Err(format!("format {:?} has no reader", in_fmt.name).into());
+    }
+
+    // Read input (fidelity warnings from the reader are printed to stderr inside
+    // parse_text/parse_binary, exactly as `convert` does).
+    let doc = if in_fmt.binary_read {
+        let bytes = read_bytes(&input)?;
+        parse_binary(&bytes, in_fmt.name)?
+    } else {
+        let text = read_text(&input)?;
+        parse_text(&text, in_fmt.name)?
+    };
+
+    let results = rescribe::query::query(&doc, filter)?;
+
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    for value in &results {
+        match value {
+            serde_json::Value::String(s) if raw_output => {
+                writeln!(out, "{s}")?;
+            }
+            _ if compact => {
+                writeln!(out, "{}", serde_json::to_string(value)?)?;
+            }
+            _ => {
+                writeln!(out, "{}", serde_json::to_string_pretty(value)?)?;
+            }
+        }
     }
 
     Ok(())
