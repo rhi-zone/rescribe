@@ -3257,6 +3257,8 @@ dependencies = [
  "commonmark-fmt",
  "rescribe-core",
  "rescribe-std",
+ "serde_yaml",
+ "toml",
 ]
 
 [[package]]

@@ -409,7 +409,27 @@ pub fn run_format_fixtures(
     format: &str,
     parse_fn: impl Fn(&[u8]) -> Result<Document, String>,
 ) {
-    let dirs = discover_fixtures(fixtures_root, format);
+    run_format_fixtures_excluding(fixtures_root, format, &[], parse_fn)
+}
+
+/// Like [`run_format_fixtures`], but skips fixture directories whose name
+/// (the final path component, e.g. `"footnote"`) is in `skip`.
+///
+/// Intended for a backend that legitimately does not yet support a construct
+/// another backend for the same format does — the gap must still be tracked
+/// (TODO.md / COVERAGE.md), not silently absent from any test at all; this
+/// only keeps that specific, already-known gap from failing the *other*
+/// fixtures' test run.
+pub fn run_format_fixtures_excluding(
+    fixtures_root: &Path,
+    format: &str,
+    skip: &[&str],
+    parse_fn: impl Fn(&[u8]) -> Result<Document, String>,
+) {
+    let dirs: Vec<_> = discover_fixtures(fixtures_root, format)
+        .into_iter()
+        .filter(|d| !skip.contains(&d.file_name().and_then(|n| n.to_str()).unwrap_or("")))
+        .collect();
     if dirs.is_empty() {
         return; // No fixtures yet — skip gracefully.
     }

@@ -11,8 +11,8 @@
 //! own Ast type (not the IR). Covers the full surface area of what CommonMark
 //! can express, regardless of IR modeling completeness.
 
-use libfuzzer_sys::fuzz_target;
 use commonmark_fmt::ast::{Block, CmDoc, Inline, ListItem, ListKind, OrderedMarker, Span};
+use libfuzzer_sys::fuzz_target;
 
 // ── Helpers to build a well-formed CmDoc from raw bytes ───────────────────────
 
@@ -140,11 +140,17 @@ impl<'a> Gen<'a> {
         let merged = if needs_prefix || needs_suffix {
             let mut out = Vec::new();
             if needs_prefix {
-                out.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
+                out.push(Inline::Text {
+                    content: "x".to_string(),
+                    span: Span::NONE,
+                });
             }
             out.extend(merged);
             if needs_suffix {
-                out.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
+                out.push(Inline::Text {
+                    content: "x".to_string(),
+                    span: Span::NONE,
+                });
             }
             merge_text(out)
         } else {
@@ -185,11 +191,18 @@ impl<'a> Gen<'a> {
                 let raw = self.inlines(0, 1);
                 let stripped = strip_hard_breaks(raw);
                 let inlines = if stripped.is_empty() {
-                    vec![Inline::Text { content: "x".to_string(), span: Span::NONE }]
+                    vec![Inline::Text {
+                        content: "x".to_string(),
+                        span: Span::NONE,
+                    }]
                 } else {
                     stripped
                 };
-                Block::Heading { level, inlines, span: Span::NONE }
+                Block::Heading {
+                    level,
+                    inlines,
+                    span: Span::NONE,
+                }
             }
             2 => {
                 // CodeBlock: safe language tag and content with trailing newline
@@ -200,7 +213,11 @@ impl<'a> Gen<'a> {
                     Some(safe_text(lang_bytes))
                 };
                 let content = format!("{}\n", safe_text(self.bytes(4)));
-                Block::CodeBlock { language, content, span: Span::NONE }
+                Block::CodeBlock {
+                    language,
+                    content,
+                    span: Span::NONE,
+                }
             }
             3 => Block::Blockquote {
                 blocks: self.blocks(depth + 1, 1),
@@ -217,6 +234,7 @@ impl<'a> Gen<'a> {
                     .map(|_| ListItem {
                         blocks: vec![self.block(depth + 1)],
                         span: Span::NONE,
+                        checked: None,
                     })
                     .collect();
                 Block::List {
@@ -234,10 +252,14 @@ impl<'a> Gen<'a> {
                     .map(|_| ListItem {
                         blocks: vec![self.block(depth + 1)],
                         span: Span::NONE,
+                        checked: None,
                     })
                     .collect();
                 Block::List {
-                    kind: ListKind::Ordered { start, marker: OrderedMarker::Period },
+                    kind: ListKind::Ordered {
+                        start,
+                        marker: OrderedMarker::Period,
+                    },
                     items,
                     tight: true,
                     span: Span::NONE,
@@ -267,7 +289,10 @@ impl<'a> Gen<'a> {
         // emit with a blank line separator, which the parser merges into a
         // single loose list, destroying the two-block structure.
         if result.len() == 2 {
-            if matches!((&result[0], &result[1]), (Block::List { .. }, Block::List { .. })) {
+            if matches!(
+                (&result[0], &result[1]),
+                (Block::List { .. }, Block::List { .. })
+            ) {
                 return result.into_iter().take(1).collect();
             }
         }
@@ -300,7 +325,13 @@ fn strip_hard_breaks(inlines: Vec<Inline>) -> Vec<Inline> {
 /// delimiter.  Prepend a Text "x" if necessary.
 fn no_leading_code(mut inlines: Vec<Inline>) -> Vec<Inline> {
     if matches!(inlines.first(), Some(Inline::Code { .. })) {
-        inlines.insert(0, Inline::Text { content: "x".to_string(), span: Span::NONE });
+        inlines.insert(
+            0,
+            Inline::Text {
+                content: "x".to_string(),
+                span: Span::NONE,
+            },
+        );
     }
     inlines
 }
@@ -314,7 +345,10 @@ fn no_leading_code(mut inlines: Vec<Inline>) -> Vec<Inline> {
 /// closing delimiter.  Append a Text "x" if necessary.
 fn no_trailing_code(mut inlines: Vec<Inline>) -> Vec<Inline> {
     if matches!(inlines.last(), Some(Inline::Code { .. })) {
-        inlines.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
+        inlines.push(Inline::Text {
+            content: "x".to_string(),
+            span: Span::NONE,
+        });
     }
     inlines
 }
@@ -347,7 +381,10 @@ fn separate_delimiter_spans(inlines: Vec<Inline>) -> Vec<Inline> {
     let mut out: Vec<Inline> = Vec::new();
     for inline in inlines {
         if is_span(&inline) && out.last().map_or(false, is_span) {
-            out.push(Inline::Text { content: "x".to_string(), span: Span::NONE });
+            out.push(Inline::Text {
+                content: "x".to_string(),
+                span: Span::NONE,
+            });
         }
         out.push(inline);
     }
@@ -362,7 +399,10 @@ fn merge_text(inlines: Vec<Inline>) -> Vec<Inline> {
                 if let Some(Inline::Text { content: prev, .. }) = out.last_mut() {
                     prev.push_str(&content);
                 } else {
-                    out.push(Inline::Text { content, span: Span::NONE });
+                    out.push(Inline::Text {
+                        content,
+                        span: Span::NONE,
+                    });
                 }
             }
             other => out.push(other),
@@ -384,7 +424,11 @@ fuzz_target!(|data: &[u8]| {
     // Use g.blocks() to get the same consecutive-list filter applied to
     // nested block sequences.
     let blocks = g.blocks(0, 1);
-    let doc = CmDoc { blocks, link_defs: vec![] };
+    let doc = CmDoc {
+        blocks,
+        link_defs: vec![],
+        frontmatter: None,
+    };
 
     // Emit — must not panic.
     let emitted = commonmark_fmt::emit(&doc);

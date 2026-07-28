@@ -13,6 +13,103 @@ This file describes milestones, format tiers, and cross-cutting work.
 
 ## Open Threads
 
+- **`commonmark-fmt` construct-feature vertical (2026-07-28): frontmatter/tables/task-lists/
+  strikethrough landed; footnotes/definition-lists/math deferred.** Fixed the headline bug
+  this session existed to chase: `rescribe_read_markdown::parse()` (default path) was
+  silently misparsing YAML front matter as a bogus `horizontal_rule` + setext `heading`
+  in the document body, with `doc.metadata` left empty and zero fidelity warning; TOML
+  front matter merged into a plain paragraph. Both now populate `doc.metadata` correctly.
+  See `docs/adr/0011-commonmark-extension-feature-gating.md` for the feature-gating design
+  (individual `tables`/`task-lists`/`strikethrough`/`frontmatter` Cargo features, off by
+  default, `gfm`/`extensions` umbrella aliases) and rationale for why "autolinks" is not a
+  feature (pulldown-cmark 0.13's `ENABLE_GFM` doesn't gate bare-URL autolinking — angle-
+  bracket autolinks are core CommonMark and already unconditional; verified by reading
+  pulldown-cmark 0.13.1's source directly, not guessed).
+
+  **Fully complete (all API modes — AST/events/batch/emit/writer — both backends verified
+  to agree via the new `markdown_backends_agree` fixture-parity test in
+  `crates/rescribe-fixtures/tests/run.rs`):** YAML + TOML front matter, GFM tables, GFM
+  task lists, GFM strikethrough (refactored from always-on to feature-gated).
+
+  **Explicitly deferred, not silently dropped:** footnotes, definition lists, math. These
+  three remain unimplemented in `commonmark-fmt` (feature names `footnotes`/
+  `definition-lists`/`math` are reserved in `Cargo.toml` — inert today, no `Options` bit,
+  no AST variant — so downstream `Cargo.toml`s can request them now without a future
+  breaking rename). Concretely still open:
+  - `commonmark-fmt`: wire `Options::ENABLE_FOOTNOTES` → `Block`/`Inline`/`Event` variants
+    for `FootnoteReference`/`FootnoteDefinition` (mirror the `tables` implementation shape
+    in `parse.rs`/`events.rs`/`emit.rs`/`writer.rs`); `Options::ENABLE_DEFINITION_LIST` →
+    `DefinitionList`/`DefinitionListTitle`/`DefinitionListDefinition`; `Options::ENABLE_MATH`
+    → `InlineMath`/`DisplayMath` (check whether to model as `math_inline`/`math_display`
+    IR nodes, matching `pulldown.rs`'s existing mapping, or raw-preserve — undecided, a
+    real design fork, not resolved here).
+  - The markdown `footnote` fixture is excluded from the default-backend `markdown` test
+    in `crates/rescribe-fixtures/tests/run.rs` via a new `run_format_fixtures_excluding`
+    helper (and from `markdown_backends_agree`'s comparison) — tracked here, not silently
+    passing. Once footnotes land in `commonmark-fmt` + the adapters, remove both
+    exclusions.
+  - Per CLAUDE.md, a reader that drops a semantic construct without warning is incorrect.
+    The default backend currently has **no fidelity warning at all** for footnote/
+    definition-list/math source syntax — unlike YAML/TOML front matter (which was
+    actively misparsed into wrong nodes, now fixed), these three constructs currently
+    degrade *gracefully* to plain prose (CommonMark has no syntax collision with them, so
+    nothing is corrupted structurally) — but the semantic construct is still silently
+    lost. A heuristic best-effort detector was deliberately NOT added in this session
+    beyond a light source-text scan for footnote-style `[^label]:` and definition-list-
+    style `term\n: definition` lines (in
+    `crates/readers/rescribe-read-markdown/src/commonmark.rs::detect_unsupported_extensions`)
+    — a `$`-based math heuristic was considered and rejected as too false-positive-prone
+    (matches ordinary currency amounts in prose) without further refinement (e.g. requiring
+    a matched pair of `$…$` with no whitespace immediately inside). Revisit before
+    `math` fidelity-warning coverage is claimed complete.
+
+  **Two real, pre-existing bugs found (not introduced) and fixed while building the
+  `markdown_backends_agree` parity test, since that's what parity tests are for:**
+  1. `commonmark-fmt`'s tight-list-item builder (`parse.rs`) only flushed accumulated
+     leading inline text into an implicit paragraph at `End(Item)` — but a sibling nested
+     block (e.g. a sublist) reaches `push_block` *before* `End(Item)` fires, so
+     `- outer\n  - inner\n` produced `list_item → [list, paragraph("outer")]` instead of
+     `[paragraph("outer"), list]`, silently reordering source content. Fixed by flushing
+     tight-inline accumulation at `push_block` time (see `flush_tight_inlines`), using the
+     flushed inlines' own span bounds rather than borrowing the item's start/end.
+  2. `rescribe-read-markdown/src/pulldown.rs` never inserted
+     `Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS`, so `backend_pulldown::parse`
+     (the "legacy, supports everything" backend) silently didn't support TOML front
+     matter at all, despite already having the `Tag::MetadataBlock(PlusesStyle)` handling
+     arm sitting unreachable. One-line fix (add the `Options` bit next to the existing
+     `ENABLE_YAML_STYLE_METADATA_BLOCKS`).
+
+  **Fixture-harness sequencing:** `crates/rescribe-fixtures/tests/run.rs`'s `markdown`
+  test was switched from `rescribe_read_markdown::backend_pulldown::parse` to the default
+  `rescribe_read_markdown::parse` in the same commit as the `commonmark-fmt` construct
+  features + adapter wiring landed (not a separate "flip it red then fix it" commit,
+  since both bugs above were found and fixed before that commit closed) — the fixture
+  suite is green at every commit boundary in this vertical's history, per the
+  pre-commit-hook constraint.
+
+  **Not attempted, explicitly out of scope for this session, pre-existing and already
+  tracked in `docs/format-audit.md` (row 252):** `rescribe-write-commonmark` hand-rolls
+  CommonMark text generation entirely rather than calling `commonmark_fmt::emit()` — a
+  "PARTIAL MIGRATION" architecture violation of CLAUDE.md's "adapter layer must never
+  contain parsing or writing logic" rule that predates this session. This session added
+  front-matter emission and task-list-checkbox emission to that hand-rolled writer
+  (matching its existing style, functionally useful) rather than fixing the underlying
+  architecture violation — that rewrite (route `rescribe-write-commonmark` through
+  `commonmark_fmt::emit()`, including wiring up the new construct features on the writer
+  side: `emit.rs`/`writer.rs` already support tables/task-lists/frontmatter/strikethrough
+  as of this session) is real, separately-scoped work, not done here.
+
+  **Fuzz coverage not extended:** `fuzz/fuzz_targets/commonmark_roundtrip.rs`'s
+  hand-rolled `Gen` (arbitrary-`CmDoc`-first generator) was NOT extended to cover the new
+  `Block::Table`/`ListItem::checked`/`Inline::Strikethrough`/`CmDoc::frontmatter`
+  variants — only updated minimally so it still compiles against the now-larger `CmDoc`/
+  `ListItem` struct shape (feature-unified through `rescribe-read-commonmark`'s
+  `Cargo.toml` dependency, which requests `tables`/`task-lists`/`strikethrough`/
+  `frontmatter`). `fuzz_commonmark_reader` (no-panic gate on arbitrary bytes) already
+  exercises the new code paths for free once features are on, since it doesn't construct
+  a `CmDoc` — only `fuzz_commonmark_roundtrip`'s AST-first generator needs extending.
+
+- **`docbook-fmt` fixture suite closed to 88/94** (checked 2026-07-27, this session) —
 *Open threads from a previous session. Treat as starting context, not instructions — verify relevance before acting.*
 
 - **`docbook-fmt` fixture suite closed to 88/94** (checked 2026-07-27, this session) —

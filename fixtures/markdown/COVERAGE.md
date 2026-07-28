@@ -31,6 +31,7 @@ front matter). This is the broad-compatibility dialect, not CommonMark-strict.
 - [x] raw HTML block — `raw-html-block`
 - [x] footnote definition — `footnote`
 - [x] YAML front matter — `frontmatter-yaml`
+- [x] TOML front matter — `frontmatter-toml`
 - [ ] definition list — (missing)
 - [ ] loose list (blank lines between items) — (missing)
 - [ ] link reference definition — (missing)

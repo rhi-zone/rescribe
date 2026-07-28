@@ -358,6 +358,7 @@ name = "docbook-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml",
+ "xml-entities",
 ]
 
 [[package]]
@@ -664,6 +665,7 @@ name = "jats-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml",
+ "xml-entities",
 ]
 
 [[package]]
@@ -1503,6 +1505,8 @@ dependencies = [
  "commonmark-fmt",
  "rescribe-core",
  "rescribe-std",
+ "serde_yaml",
+ "toml",
 ]
 
 [[package]]
@@ -2510,6 +2514,7 @@ name = "tei-fmt"
 version = "0.1.0"
 dependencies = [
  "quick-xml",
+ "xml-entities",
 ]
 
 [[package]]
