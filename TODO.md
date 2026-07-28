@@ -2054,36 +2054,79 @@ function `build()` uses, on top of that reconstruction. Fixed:
   change** (this was not the dominant cost).
 - [x] `test_writer_roundtrip_nested_lists`, `test_writer_no_subtree_reconstruction_blowup`
   (allocation-growth regression guard) added; all pre-existing tests still pass.
-- [ ] **Wall-clock still ~7-8x slower than `build()`, unchanged by either commit above** —
-  root cause confirmed via allocation-count instrumentation (not guessed): `build()` grows
-  one `String` for the whole document (amortized geometric growth, ~563 allocs for a
-  50-section doc); the rewritten `Writer` gives every frame its own short-lived buffer that's
-  allocated, filled, spliced into its parent, and dropped (~5,060 allocs for the same doc,
-  ~9x — tracks the wall-clock ratio almost exactly). Closing this needs a genuinely separate,
-  larger redesign: write inline content directly into the nearest ancestor's buffer instead of
-  giving every frame its own, reserving an isolated buffer only where a construct's own
-  post-processing needs one in isolation (`Blockquote`/`Admonition` line-reindent, `Heading`
-  underline-length, `Table` column-width calc, list-item continuation indent). Full
-  alloc-count numbers and reasoning: scratchpad perf report referenced in the format-audit.md
-  entry above (not committed to the repo — see that entry for the pointer). Fencing this
-  rather than half-doing it, per CLAUDE.md.
-- [ ] **`events()` confirmed non-zero-copy, and the fix is a large redesign, not a local
-  tweak** — read `EventIter`/`expand_block`/`expand_inline` directly: `events()` calls the
-  *same* per-block parser `parse()` uses to build a fully owned `Block`/`Inline` tree for
-  each top-level block, then flattens that owned tree into events. So it shares the entire
-  per-block parse path (block-level *and* inline-level), not just `parse_inline_content`.
-  `parse_inline_content` itself scans a `Vec<char>` copy of each span (no byte-offset
-  tracking anywhere — and no backslash-escape handling exists in this tokenizer at all, so
-  the "escape detection" framing from earlier investigation doesn't apply; the real blocker
-  is char-indexing vs byte-offset-indexing) and ~15 call sites already join multi-line
-  content into owned `String`s before calling it. A genuine fix needs: (1) a parallel
-  byte-offset-based inline tokenizer yielding `Cow<'a, str>` events directly (following the
-  `djot-fmt` `Frame::InlineText`/`ParseContext::line_offset_at()`/`base_offset` precedent
-  noted below), independent from the owned-`String`-building `parse_inline_content` used by
-  `parse()`/`EventIter`'s current tree-then-flatten approach, and (2) plumbing real byte
-  spans through the ~15 block-extraction call sites so the content handed to that tokenizer
-  is itself a borrow of the original input wherever no line-joining/dedent is required. Not
-  attempted this pass — confirmed large enough to fence rather than half-do.
+- [x] **Buffer-per-frame allocation cost closed — commit `f87b3d62ef`.** The `Frame` stack
+  now holds *marks* (a `usize` offset into one shared `Writer::out` buffer) instead of
+  buffers; children write straight through and a frame post-processes its own `out[mark..]`
+  range in place. Constructs classified three ways: **write-through** (paragraphs, lists,
+  list items — `build_list_item`'s per-child dispatch is decidable when the *child* opens,
+  so continuation indents are emitted then, not reconstructed later — divs, definition
+  lists, footnote defs, every inline span); **write-through + one in-place insert once the
+  content is known** (heading underline width, figure caption lead-in); **deferred per-line
+  transform** (blockquote/admonition/code-block re-indent, via a *pooled and reused* scratch
+  buffer, so the pool costs `O(nesting depth)` allocations per document rather than one per
+  construct). Tables still collect cells — column widths genuinely cannot be known before
+  the last cell — but render straight into the shared buffer and borrow the collected cells
+  for the width pass. Measured (release, best-of-30, same harness both sides, net of the
+  harness's own event clone-and-drop baseline): allocations `3,560 → 425` @50 sections,
+  `35,914 → 4,029` @500, `143,916 → 16,031` @2000 — ~9x fewer, and now **0.73x of
+  `build()`'s**, so allocation count is no longer what separates the two paths.
+- [ ] **Residual wall-clock gap: ~2.6-2.7x vs `build()` (was 5.6-6.0x on the same harness;
+  4.4-4.6x vs 7.5-8.0x if the event clone-and-drop baseline is left in on both sides).**
+  This is *not* an allocation problem any more (see above) — it is per-event `match`
+  dispatch plus frame-stack push/pop, i.e. the intrinsic cost of the event API versus a
+  direct recursive tree walk. Closing it further would mean attacking dispatch itself
+  (e.g. a flattened event decoder, or specialising the hot Text/Start/End arms), which is a
+  different kind of work with a much worse effort/return ratio than the buffer fix was.
+  **Recommend accepting and documenting this as the event-API tax unless a caller
+  demonstrates it matters** — the streaming writer's reason to exist is the
+  `O(largest block + nesting depth)` memory bound, which it delivers.
+- [x] `test_writer_byte_identical_to_builder` added (commit `f87b3d62ef`): the streaming
+  path must produce **byte-identical** output to `build()` across 18 construct-mix inputs.
+  The pre-existing tests only compared re-parsed *block shapes*, which cannot catch
+  formatting drift between the two independent emission paths.
+- [x] **The missing backslash-escape handling turned out to be a real correctness bug, and
+  is fixed — commit `1c430173f4`.** It was found while scoping the zero-copy work but is
+  independent of it: the inline tokenizer had *no* backslash handling at all, so
+  `\*not emphasis\*` — the RST spec's own example — parsed as live `Emphasis`. Silent
+  misparse of valid input, no diagnostic. Reader now resolves escapes in the text scanner
+  (escaped whitespace removed, per the `word\ *markup*` adjacency idiom);
+  `find_closing`/`find_closing_char` refuse to close a span on an escaped delimiter and copy
+  the escape *through* so it resolves exactly once, at the level that emits the text; inline
+  literals pass `escapes: false` per the spec's exemption, and `:math:` content stays
+  verbatim. Writer re-escapes `\`, `*`, `` ` `` on emit (a reader-only fix would break
+  `parse(emit(parse(x))) == parse(x)`), and `collect_text_from_inlines` counts the escaped
+  form so heading underline widths and table column widths match the emitted bytes.
+  Fixtures `escaped-markup` + `escaped-whitespace`, and the two `COVERAGE.md` rows they
+  close — escaping was enumerated nowhere in that checklist before.
+- [ ] **`events()` is still not zero-copy: `Cow::Borrowed` fires for exactly 0 of 50,000
+  text events (re-measured 2026-07-29 post-escape-fix; allocation count is 1.000x
+  `parse()`'s at every size).** Confirmed by reading the code, not inferred:
+  `EventIter::next` calls the *same* per-block parser `parse()` uses, builds a fully owned
+  `Block`/`Inline` tree for that top-level block, then flattens it (`expand_block`/
+  `expand_inline`) into `Event::Text(Cow::Owned(s))`. Three distinct blockers, in
+  increasing order of cost — all three must be cleared, so partial work here buys nothing:
+  1. **The AST owns its text.** `Inline::Text(String)` is public API. Anything that borrows
+     from the input needs `Inline<'a>`/`Block<'a>`/`RstDoc<'a>`, a breaking change across
+     the crate *and* `rescribe-read-rst`/`rescribe-write-rst`. Which is the real signal that
+     `events()` must stop deriving from the tree at all, per CLAUDE.md's "three independent
+     implementations sharing state-transition *functions*".
+  2. **Block extraction destroys contiguity.** `parse_paragraph` joins `line.trim()` per
+     line with `' '` into a fresh `String`, so a multi-line paragraph's text *does not exist
+     as a contiguous slice of the input* — no lifetime plumbing can borrow it. Borrowing
+     multi-line content requires emitting per-line borrowed `Text` + explicit breaks, which
+     is a **change to the event stream's shape**, hence to `test_events_matches_parse_shape`
+     and to every consumer. Single-line spans (most headings, table cells, list items, and
+     one-line paragraphs) *are* contiguous and could borrow — but only after (1).
+     ~15 call sites join or dedent before calling `parse_inline_content`.
+  3. **The tokenizer is char-indexed.** `parse_inline_content` collects a `Vec<char>` per
+     span and `find_closing`/`find_closing_char` build owned `String`s as they scan. A
+     borrowing tokenizer needs byte offsets throughout (the `djot-fmt`
+     `Frame::InlineText`/`ParseContext::line_offset_at()`/`base_offset` precedent noted
+     below is the model). Now that escapes exist, the Owned/Borrowed split has a real
+     meaning: a span borrows unless it contains an escape or a substitution reference.
+  Scoped as its own vertical-sized piece of work: it is a re-architecture of `events()` as a
+  first-class implementation rather than a projection of the tree, not a tokenizer tweak.
+  Fenced rather than half-done, per CLAUDE.md.
 
 ### DEBT: Fake-streaming writer/reader audit across all `crates/formats/` — identified 2026-07-28
 
