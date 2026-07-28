@@ -1493,12 +1493,35 @@ each becoming a general-purpose Rust library, not just an internal rescribe help
 CLAUDE.md's "the -fmt crates are not rescribe internals" principle. Not attempted here since
 it was explicitly out of scope for this task.
 
-**Open design question, not decided (surfaced, not guessed):** RIS's `SN` tag is used for
-both ISBN and ISSN depending on entry type, with no way to tell which from the tag alone.
-`rescribe-read-ris` gives it `field:scheme = "sn"` (naming the scheme after the RIS tag
-itself) rather than guessing isbn vs. issn — this is a deliberate non-guess, but it means
-`field:scheme` now has a value (`"sn"`) outside the `doi`/`isbn`/`issn`/`url` set ADR 0005's
-examples list. Whether that's fine (the property's own doc comment already says "e.g." —
-open-ended) or whether RIS's `SN` should instead be excluded from `field:scheme` entirely
-(kept role `identifier` with no scheme, forcing a consumer needing the distinction to parse
-the entry type itself) is a judgment call for a human, not decided here.
+**Resolved by investigation (2026-07-28): RIS's `SN`/`TY` ambiguity is genuine, not an
+oversight — `field:scheme = "sn"` stays.** The open question above (whether RIS's `TY`
+reference-type tag could be used to resolve `SN` to `isbn` vs. `issn`) was checked against
+the available RIS documentation:
+
+- Wikipedia's "RIS (file format)" tag table — the closest thing to a canonical current RIS
+  reference, since Clarivate/EndNote does not publish a standalone current RIS spec —
+  defines `SN` uniformly as **"ISSN, ISBN, or report/document/patent number"** for every
+  entry type, with no per-`TY` breakdown anywhere in the article's text or type table.
+- The `gris` Python RIS library's spec docs likewise define `SN` only as `"ISBN/ISSN"`,
+  no type dependency.
+- No current, reachable EndNote/Clarivate official RIS documentation stating a `TY`-based
+  `SN` rule was found (the commonly-cited EndNote PDF URL 404s; Clarivate does not appear to
+  maintain a current authoritative RIS spec page at all).
+- Two tools *do* apply a `TY`-based heuristic internally: Zotero's RIS translator
+  (`RIS.js`) defaults `SN` to ISBN and overrides to ISSN only for `journalArticle`/
+  `magazineArticle`/`newspaperArticle` (plus patent/report special cases), and refbase maps
+  `SN`→ISBN for `BOOK`/`CHAP`/`STD`/`THES` and ISSN otherwise. Both are explicitly
+  self-described by their authors as heuristics/workarounds (refbase's author: "some kind of
+  content-sniffing mechanism would be even better"), not citations of a spec.
+
+Conclusion: no authoritative RIS specification defines a `TY`→`SN` disambiguation. The
+splits that exist are tool-specific implementation conventions (and the two found tools
+don't even agree with each other exactly). Implementing a `TY`-based mapping in
+`rescribe-read-ris`/`rescribe-write-ris` would mean adopting one tool's convention (most
+plausibly Zotero's, as the more widely-deployed reference manager) and presenting it as
+RIS's own semantics — exactly the kind of invented-convention-as-settled-fact CLAUDE.md
+prohibits. `field:scheme = "sn"` (naming the scheme after the RIS tag itself, per the
+original non-guess) remains the correct, honest representation. This question is now closed
+as "investigated, genuinely unresolvable from the spec" rather than left dangling; a future
+session should not reopen it without new spec evidence (e.g., a rediscovered current
+EndNote/Clarivate authoritative document that does state a rule).
