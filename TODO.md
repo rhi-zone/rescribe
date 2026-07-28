@@ -1437,3 +1437,68 @@ two different bibliography-entry shapes in the IR depending on which format prod
 or (b) migrate all four onto `bibliography`/`bibliography_entry`/`bibliography_field` for
 consistency across the whole bibliography surface, even though the field-children-as-
 inline-nodes indirection buys nothing for these formats. Flagging rather than deciding.
+
+**Resolved (2026-07-28): option (b), migrated.** The human approved migrating all four.
+`rescribe-read-bibtex`/`rescribe-write-bibtex` (`f41fc7e5`), `rescribe-read-csl-json`/
+`rescribe-write-csl-json` (`a7271632`), `rescribe-read-ris`/`rescribe-write-ris`
+(`f56a8e16`), and `rescribe-read-endnotexml`/`rescribe-write-endnotexml` (`7ecb1d16`) now
+all emit `bibliography`/`bibliography_entry`/`bibliography_field`, closing the two-shapes-
+for-one-concept split — every bibliography-producing reader in the codebase now uses one
+shape. Each format keeps its own field-name property (`bibtex:field`/`csl:field`/
+`ris:field`/`endnote:field`) alongside `field:role`, since several source-format field names
+share one semantic role (e.g. BibTeX's `address`/`location` both -> `publisher_location`) or
+have none at all (e.g. `note`/`abstract`/`keywords` -> `misc`) — the extra property is what
+lets each writer reconstruct the exact original field name/element instead of guessing.
+Writers keep their old flat-shape entry kinds (`bibtex:entry`, `csl:item`, `ris:entry`,
+`endnote:entry`, plus each format's generic `citation_entry`/typed-entry fallbacks) as
+secondary dispatch arms for documents built by other producers — only the primary path
+changed.
+
+The rewrite also closed several previously-undetected silent drops in these four readers,
+found while re-deriving each field mapping from the field-content-model check ADR 0006
+requires (not because CSL-JSON/BibTeX/RIS/EndNote turned out to need child-node fields for
+markup after all — per ADR 0006's own reasoning they're flat/plain-text, matching OOXML's
+`b:` schema case — but writing a *complete* field-role table surfaced dead code the old
+flat-property readers had accumulated): `rescribe-read-csl-json` parsed `collection-title`
+into its struct but never wrote it to the output at all; `rescribe-read-bibtex` only read
+~8 of BibTeX's fields (`abstract`/`keywords`/`organization`/`edition`/`address`/`series`/...
+were silently dropped); `rescribe-read-ris` only read ~8 RIS tags despite the underlying
+`ris` crate already exposing every tag via a generic map; `rescribe-read-endnotexml`
+conflated `isbn`/`issn` into one field (second-parsed one silently overwrote the first),
+never read `keywords` despite collecting them into a `Vec` first, and had no support at all
+for `<style>` markup runs (now real `emphasis`/`strong`/`underline`/`superscript`/
+`subscript` inline nodes — EndNote XML is the one of the four where the field-node shape
+actually earns its keep over a flat string, verified via a concrete parse -> emit -> reparse
+round-trip in `fixtures/endnotexml/rare-style-markup`). None of these were introduced by
+this migration — the rewrite just made them visible while rebuilding each field table from
+scratch, and fixed them as a natural byproduct rather than reproducing them under the new
+shape.
+
+**Pre-existing architectural violations found, not fixed (out of scope for this
+migration):** `rescribe-read-bibtex`/`rescribe-write-bibtex` call the `biblatex` crate's
+parser directly in production code, with no standalone `bibtex-fmt` crate — same for
+`rescribe-read-csl-json`/`rescribe-write-csl-json` (`serde_json` plus the adapter-owned
+`CslItem`/`CslName`/`CslDate` structs, i.e. the CSL-JSON *schema knowledge* itself lives in
+the adapter, not just generic JSON parsing) and `rescribe-read-endnotexml`/
+`rescribe-write-endnotexml` (`quick_xml::Reader`/`Writer` directly, no `endnotexml-fmt`
+crate — the migration replaced one hand-rolled `quick_xml` state machine with a slightly
+more capable one, a small generic-XML-tree walker, to support `<style>` markup correctly,
+but did not move that logic out of the adapter). `rescribe-read-ris`/`rescribe-write-ris`
+is the one exception: RIS already has a proper standalone `ris` crate
+(`crates/formats/ris`) with a generic tag-map AST, so no violation there. Per CLAUDE.md's
+"adapter layer must never contain parsing or writing logic" rule, a future session should
+extract `bibtex-fmt` (wrapping or replacing `biblatex`), a `csl-json-fmt` crate for the
+`CslItem` schema, and an `endnotexml-fmt` crate for the EndNote XML element vocabulary —
+each becoming a general-purpose Rust library, not just an internal rescribe helper, per
+CLAUDE.md's "the -fmt crates are not rescribe internals" principle. Not attempted here since
+it was explicitly out of scope for this task.
+
+**Open design question, not decided (surfaced, not guessed):** RIS's `SN` tag is used for
+both ISBN and ISSN depending on entry type, with no way to tell which from the tag alone.
+`rescribe-read-ris` gives it `field:scheme = "sn"` (naming the scheme after the RIS tag
+itself) rather than guessing isbn vs. issn — this is a deliberate non-guess, but it means
+`field:scheme` now has a value (`"sn"`) outside the `doi`/`isbn`/`issn`/`url` set ADR 0005's
+examples list. Whether that's fine (the property's own doc comment already says "e.g." —
+open-ended) or whether RIS's `SN` should instead be excluded from `field:scheme` entirely
+(kept role `identifier` with no scheme, forcing a consumer needing the distinction to parse
+the entry type itself) is a judgment call for a human, not decided here.

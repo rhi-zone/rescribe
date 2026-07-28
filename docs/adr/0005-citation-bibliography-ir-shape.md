@@ -89,3 +89,21 @@ Plus `field:scheme` (identifier scheme, e.g. `doi`/`isbn`/`issn`/`url`, for fiel
 - **One node per entry with all fields as Properties keyed by name** (no `bibliography_field`
   layer): rejected for the same content-model reason — still can't carry nested markup without
   a child-node layer for the markup-permitting fields.
+
+## Amendment (2026-07-28): four pre-existing readers migrated after the fact
+
+`rescribe-read-bibtex`, `rescribe-read-csl-json`, `rescribe-read-ris`, and
+`rescribe-read-endnotexml` (plus their writers) predated this decision and used an unrelated
+flat `definition_list` + string-properties shape, discovered as a gap while the DocBook/JATS/
+TEI verticals were being wired up (see TODO.md's "Discovered gap: pre-existing bibliography
+readers don't use this IR shape"). Unlike DocBook/JATS/TEI, these four were not designed
+against this shape from the start — they were retrofitted onto it in a follow-up session,
+after human approval to do so. The retrofit did not change the decision above: BibTeX,
+CSL-JSON, RIS, and EndNote XML (except for its `<style>` runs) are flat/plain-text formats,
+consistent with OOXML's `b:` schema being the sole flat outlier in the original survey, not
+new evidence against child-node fields for the markup-permitting formats. Each of the four
+adds its own format-specific field-name property (`bibtex:field`, `csl:field`, `ris:field`,
+`endnote:field`) alongside `field:role`, since multiple source field names can share one role
+(or none at all) and the writer needs the exact original name to round-trip without guessing
+— this pattern is now the expected companion to `field:role` for any future format vertical
+built on this shape, not unique to these four.
