@@ -1295,7 +1295,7 @@ fn init_slide() -> types::Slide {
     types::Slide {
         #[cfg(feature = "pml-masters")]
         show_master_sp: None,
-        #[cfg(feature = "pml-masters")]
+        #[cfg(any(feature = "pml-masters", feature = "pml-animations"))]
         show_master_ph_anim: None,
         show: None,
         common_slide_data,
@@ -3719,9 +3719,13 @@ impl PresentationBuilder {
                 #[cfg(feature = "extra-children")]
                 extra_children: Default::default(),
             }),
-            #[cfg(feature = "pml-notes")]
+            #[cfg(any(feature = "pml-notes", feature = "pml-masters"))]
             show_master_sp: None,
-            #[cfg(feature = "pml-notes")]
+            #[cfg(any(
+                feature = "pml-notes",
+                feature = "pml-masters",
+                feature = "pml-animations"
+            ))]
             show_master_ph_anim: None,
             #[cfg(feature = "pml-styling")]
             clr_map_ovr: None,

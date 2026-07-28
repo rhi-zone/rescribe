@@ -1425,7 +1425,7 @@ pub struct SheetBuilder {
 /// Create a default empty Worksheet, ready to be filled in by SheetBuilder methods.
 fn init_worksheet() -> types::Worksheet {
     types::Worksheet {
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-structure"))]
         sheet_properties: None,
         dimension: None,
         sheet_views: None,
@@ -1485,11 +1485,11 @@ fn init_worksheet() -> types::Worksheet {
         smart_tags: None,
         #[cfg(feature = "sml-drawings")]
         drawing: None,
-        #[cfg(feature = "sml-comments")]
+        #[cfg(any(feature = "sml-comments", feature = "sml-drawings"))]
         legacy_drawing: None,
-        #[cfg(feature = "sml-layout")]
+        #[cfg(any(feature = "sml-layout", feature = "sml-drawings"))]
         legacy_drawing_h_f: None,
-        #[cfg(feature = "sml-drawings")]
+        #[cfg(any(feature = "sml-drawings", feature = "sml-layout"))]
         drawing_h_f: None,
         #[cfg(feature = "sml-drawings")]
         picture: None,
@@ -2060,7 +2060,7 @@ impl SheetBuilder {
                 black_and_white: None,
                 #[cfg(feature = "sml-layout")]
                 draft: None,
-                #[cfg(feature = "sml-layout")]
+                #[cfg(any(feature = "sml-layout", feature = "sml-comments"))]
                 cell_comments: None,
                 #[cfg(feature = "sml-layout")]
                 use_first_page_number: None,
@@ -3603,7 +3603,7 @@ impl WorkbookBuilder {
                 format_id: None,
                 #[cfg(feature = "sml-styling")]
                 quote_prefix: None,
-                #[cfg(feature = "sml-pivot")]
+                #[cfg(any(feature = "sml-pivot", feature = "sml-styling"))]
                 pivot_button: None,
                 #[cfg(feature = "sml-styling")]
                 apply_number_format: None,
@@ -3615,7 +3615,7 @@ impl WorkbookBuilder {
                 apply_border: None,
                 #[cfg(feature = "sml-styling")]
                 apply_alignment: None,
-                #[cfg(feature = "sml-styling")]
+                #[cfg(any(feature = "sml-styling", feature = "sml-protection"))]
                 apply_protection: None,
                 #[cfg(feature = "sml-styling")]
                 alignment: None,
@@ -3648,7 +3648,7 @@ impl WorkbookBuilder {
             format_id: Some(0),
             #[cfg(feature = "sml-styling")]
             quote_prefix: None,
-            #[cfg(feature = "sml-pivot")]
+            #[cfg(any(feature = "sml-pivot", feature = "sml-styling"))]
             pivot_button: None,
             #[cfg(feature = "sml-styling")]
             apply_number_format: None,
@@ -3660,7 +3660,7 @@ impl WorkbookBuilder {
             apply_border: None,
             #[cfg(feature = "sml-styling")]
             apply_alignment: None,
-            #[cfg(feature = "sml-styling")]
+            #[cfg(any(feature = "sml-styling", feature = "sml-protection"))]
             apply_protection: None,
             #[cfg(feature = "sml-styling")]
             alignment: None,
@@ -3743,7 +3743,7 @@ impl WorkbookBuilder {
             cell_styles: Some(cell_styles),
             #[cfg(feature = "sml-styling")]
             dxfs: None,
-            #[cfg(feature = "sml-styling")]
+            #[cfg(any(feature = "sml-styling", feature = "sml-tables"))]
             table_styles: None,
             #[cfg(feature = "sml-styling")]
             colors: None,
@@ -4868,7 +4868,7 @@ fn build_font(font: &FontStyle) -> types::Font {
                 extra_attrs: Default::default(),
             })
         }),
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-i18n"))]
         charset: None,
         #[cfg(feature = "sml-styling")]
         family: None,
@@ -5098,7 +5098,7 @@ fn build_cell_format(xf: &CellFormatRecord) -> types::Format {
         format_id: Some(0),
         #[cfg(feature = "sml-styling")]
         quote_prefix: None,
-        #[cfg(feature = "sml-pivot")]
+        #[cfg(any(feature = "sml-pivot", feature = "sml-styling"))]
         pivot_button: None,
         #[cfg(feature = "sml-styling")]
         apply_number_format: if xf.num_fmt_id > 0 { Some(true) } else { None },
@@ -5110,7 +5110,7 @@ fn build_cell_format(xf: &CellFormatRecord) -> types::Format {
         apply_border: if xf.border_id > 0 { Some(true) } else { None },
         #[cfg(feature = "sml-styling")]
         apply_alignment: if has_alignment { Some(true) } else { None },
-        #[cfg(feature = "sml-styling")]
+        #[cfg(any(feature = "sml-styling", feature = "sml-protection"))]
         apply_protection: None,
         #[cfg(feature = "sml-styling")]
         alignment,
