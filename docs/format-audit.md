@@ -380,6 +380,109 @@ side), and the 11 output-only targets.
 
 ---
 
+## Streaming reader/writer fidelity inventory (audited 2026-07-28)
+
+Full sweep of all 43 crates under `crates/formats/`, triggered by `rst-fmt`'s
+streaming `Writer` measured ~7-8x slower than its builder `emit()` — root cause:
+it reconstructed a full `Block`/`Inline` subtree per top-level block via a frame
+stack and called the same `build_block` the builder uses. That is the writer-side
+"fake streaming" pattern CLAUDE.md explicitly rejects ("A fake streaming API...
+builds the full AST internally then wraps it... 'good enough for conversion' is not
+a valid reason"). This sweep checks every crate for the same shape on both the
+writer side (streaming `Writer`) and the reader side (`StreamingParser`, `events()`).
+Method: read production `lib.rs`/`writer.rs`/`batch.rs`/`events.rs` directly, not
+`Cargo.toml` features or this doc's own prior stage claims. Full findings, code
+quotes, and per-crate detail: `/tmp` audit transcript folded into this section below.
+
+**26 of 43 crates (60%) have a hollow streaming writer** — buffers all events,
+reconstructs a full AST via a frame/`DocBuilder` stack, then calls the builder's own
+`emit`/`build` function, exactly the rst-fmt anti-pattern: `bbcode-fmt`, `creole`,
+`dokuwiki`, `asciidoc`, `djot-fmt`, `commonmark-fmt`, `fountain-fmt`, `haddock-fmt`,
+`jira-fmt`, `man-fmt`, `markua`, `mediawiki-fmt`, `muse-fmt`, `pod-fmt`, `org-fmt`,
+`ooxml-pml`, `ooxml-wml`, `odf-fmt`, `textile-fmt`, `texinfo`, `tikiwiki`, `twiki`,
+`vimwiki-fmt`, `xwiki`, `zimwiki`, `t2t`.
+
+**`StreamingParser` buffers O(full input)** (violates the contract; bounded
+per-token/per-block buffering like docbook-fmt's or rst-fmt's is fine) in:
+`bbcode-fmt`, `creole`, `dokuwiki`, `muse-fmt`, `texinfo`, `textile-fmt`, `xwiki`,
+`ooxml-wml` (documented, "future work"), `pod-fmt` (documented, weak "docs are
+small" rationale), `fb2-fmt` (documented, no formal exemption but a real gap —
+`docbook-fmt` proves bounded XML streaming is achievable with the same underlying
+`quick_xml` library). `html-fmt` also buffers-all but with a structurally honest
+justification (HTML5 tree construction can rearrange already-seen nodes — foster
+parenting/adoption agency — matching html5ever's own architecture), so it is not
+counted as a violation.
+
+**`events()` derived from `parse()`+walk** (the ADR 0003 violation) in: `bbcode-fmt`,
+`dokuwiki`, `tikiwiki` (all three additionally use `unsafe { transmute }` to fake a
+borrowed lifetime over a fully-materialized `Vec` — a soundness smell layered on the
+performance one), `creole`, `fountain-fmt`, `haddock-fmt`, `jira-fmt` (its own
+`EagerEventIter` name self-admits it), `man-fmt` (`Box::leak` — an actual permanent
+memory leak per call, worse than the others), `markua` (doc comment claims "the
+parser IS the iterator" while `EventIter::new` calls `p.parse()` immediately —
+contradicts itself), `mediawiki-fmt`, `muse-fmt`, `pod-fmt` (dead `unreachable!()`
+stub in its own internal `events()` helper), `odf-fmt` (pre-drains into a
+`VecDeque` before returning — O(full event stream), same effective cost as
+materializing the AST despite its module doc's claim otherwise), `texinfo`,
+`textile-fmt`, `t2t`.
+
+**Feature-declared-but-missing modules: none found** — every declared
+`reader-streaming`/`reader-batch`/`writer-streaming` feature has some code behind it
+everywhere. But real feature *gating* is nearly absent: only `commonmark-fmt` and
+`creole` actually gate `mod events`/`batch`/`writer` behind `#[cfg(feature = ...)]`;
+every other crate compiles all modules unconditionally, so the Cargo.toml flags are
+cosmetic elsewhere.
+
+**No streaming API at all (honest gap, not a violation):** `csv-fmt` (no
+`[features]`, no supporting files), `ris`, `tsv-fmt`, `native` (pre-vertical, only
+`parse()`/`build()` exist).
+
+**Clean / model implementations:** `docbook-fmt`, `jats-fmt`, `tei-fmt` (direct
+`quick_xml` passthrough both ways, bounded `StreamingParser`, genuinely independent
+`events()`), `ansi-fmt` (O(1)-state writer, bounded-boundary `StreamingParser`),
+`ooxml-sml` (the one clean writer among the zip/OPC formats — proves incremental
+writers are achievable there too, unlike `ooxml-pml`/`ooxml-wml`/`odf-fmt`),
+`rst-fmt` (confirmed genuinely fixed — writer flushes each completed top-level
+block via `stack: Vec<Frame>`, not a whole-document rebuild; has the only
+`no_orphan_modules.rs` guard against silent `mod` drops from bad merges),
+`html-fmt` (writer clean; `StreamingParser`'s full-buffer behavior is an honestly
+documented, structurally-justified HTML5 limitation).
+
+**Most consequential single finding:** `ooxml-wml` (DOCX) — CLAUDE.md names OOXML
+(DOCX/XLSX/PPTX) as the priority target for the full three-API architecture because
+these routinely exceed RAM on large corpora, yet its writer is hollow (buffers
+`OwnedWmlEvent`s, reconstructs full `Paragraph`/`Run`/`Table`/`TableRow`/
+`TableCell` AST via a `WmlFrame` stack into the same `DocumentBuilder` the
+non-streaming path uses) and its `StreamingParser` also buffers the whole input.
+`ooxml-pml`'s writer is additionally lossy (flattens shape/table-cell text to plain
+strings, discarding geometry for most event types).
+
+**Severity ranking (worst → clean), by how many of the three reader/writer surfaces
+are affected:**
+1. Writer + `events()` + `StreamingParser` all hollow: `texinfo`, `textile-fmt`,
+   `bbcode-fmt`, `dokuwiki`, `tikiwiki`, `pod-fmt`, `man-fmt`, `xwiki`, `muse-fmt`,
+   `ooxml-wml`, `ooxml-pml`.
+2. Writer + `events()` hollow, `StreamingParser` legitimately bounded: `fountain-fmt`,
+   `haddock-fmt`, `jira-fmt`, `markua`, `mediawiki-fmt`, `t2t`, `twiki`,
+   `vimwiki-fmt`, `zimwiki`, `creole`.
+3. Writer hollow only, both reader-side APIs legitimate: `asciidoc`, `djot-fmt`,
+   `odf-fmt`, `commonmark-fmt`, `org-fmt`.
+4. No streaming API claimed, honest gap: `csv-fmt`, `ris`, `tsv-fmt`, `native`.
+5. Clean: `docbook-fmt`, `jats-fmt`, `tei-fmt`, `ansi-fmt`, `ooxml-sml`, `rst-fmt`,
+   `html-fmt` (one documented exception), `fb2-fmt` (one undocumented-but-honest gap
+   on `StreamingParser` only).
+
+Out of scope (shared support libraries / non-format crates, no `events()`/streaming
+API of their own to evaluate): `ooxml-dml`, `ooxml-omml`, `ooxml-opc`, `ooxml-xml`,
+`xml-entities`.
+
+This inventory does not fix anything — it is a map for prioritizing the next
+vertical's streaming-API work, per CLAUDE.md's "work one vertical to completion"
+rule. Given the severity ranking, `ooxml-wml` (DOCX) is the highest-priority fix by
+consequence; the Tier-1 wiki/small-format family is the highest-count fix by breadth.
+
+---
+
 ## Risk areas
 
 ### RTF — production (2026-03-02)
