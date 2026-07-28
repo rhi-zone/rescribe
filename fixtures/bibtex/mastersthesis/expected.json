@@ -1,8 +1,9 @@
 {
-  "description": "BibTeX @mastersthesis entry becomes bibtex:entry with bibtex:type mastersthesis",
+  "description": "BibTeX @mastersthesis entry becomes bibliography_entry with bibtex:entry-type mastersthesis; school has no field:role equivalent so it raw-preserves as a misc field",
   "assertions": [
-    { "path": "/0",     "kind": "definition_list" },
-    { "path": "/0/0",   "kind": "bibtex:entry" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:type": "mastersthesis" } }
+    { "path": "/0",     "kind": "bibliography" },
+    { "path": "/0/0",   "kind": "bibliography_entry", "props": { "bibtex:entry-type": "mastersthesis" } },
+    { "path": "/0/0/1", "kind": "bibliography_field", "props": { "field:role": "misc", "bibtex:field": "school" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Stanford University" } }
   ]
 }

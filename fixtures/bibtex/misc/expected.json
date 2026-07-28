@@ -1,11 +1,10 @@
 {
-  "description": "Misc entry type for websites and other miscellaneous sources",
+  "description": "Misc entry type for websites and other miscellaneous sources; note has no field:role equivalent so it raw-preserves as a misc field",
   "category": "happy",
   "assertions": [
-    { "path": "/0", "kind": "definition_list" },
-    { "path": "/0/0", "kind": "bibtex:entry" },
-    { "path": "/0/0/0", "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "website2023" } },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:key": "website2023", "bibtex:type": "misc" } }
+    { "path": "/0",     "kind": "bibliography" },
+    { "path": "/0/0",   "kind": "bibliography_entry", "props": { "bibtex:key": "website2023", "bibtex:entry-type": "misc", "date": { "year": 2023 } } },
+    { "path": "/0/0/1", "kind": "bibliography_field", "props": { "field:role": "misc", "bibtex:field": "note" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Accessed: 2023-06-01" } }
   ]
 }

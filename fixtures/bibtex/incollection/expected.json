@@ -1,8 +1,12 @@
 {
-  "description": "BibTeX @incollection entry becomes bibtex:entry with bibtex:type incollection",
+  "description": "BibTeX @incollection entry becomes bibliography_entry with bibtex:entry-type incollection; editor is its own sibling field distinct from author",
   "assertions": [
-    { "path": "/0",     "kind": "definition_list" },
-    { "path": "/0/0",   "kind": "bibtex:entry" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:type": "incollection" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "bibtex:entry-type": "incollection" } },
+    { "path": "/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "editor", "bibtex:field": "editor" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Eve" } },
+    { "path": "/0/0/1/1", "kind": "text", "props": { "content": "Wilson" } },
+    { "path": "/0/0/4",   "kind": "bibliography_field", "props": { "field:role": "container_title", "bibtex:field": "booktitle" } }
   ]
 }

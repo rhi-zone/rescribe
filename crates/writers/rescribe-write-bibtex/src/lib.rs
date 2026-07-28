@@ -1,15 +1,20 @@
 //! BibTeX writer for rescribe.
 //!
-//! Emits documents as BibTeX source. This writer expects documents containing
-//! bibliographic entries with specific properties.
+//! Emits `bibliography`/`bibliography_entry`/`bibliography_field` IR nodes
+//! (see `rescribe_std::node` and ADR 0005 in the rescribe repo) as BibTeX
+//! source.
+
+use std::collections::HashMap;
 
 use rescribe_core::{
-    ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, Severity,
+    ConversionResult, Document, EmitError, EmitOptions, FidelityWarning, Node, PropValue, Severity,
     WarningKind,
 };
-use rescribe_std::prop;
+use rescribe_std::{node, prop};
 
-/// BibTeX entry types.
+/// Legacy flat entry kind, still accepted for backwards compatibility with
+/// documents built by hand or by an older reader version (not produced by
+/// `rescribe-read-bibtex` any more, which now emits `bibliography_entry`).
 const BIBTEX_ENTRY: &str = "bibtex:entry";
 
 /// Emit a document as BibTeX.
@@ -61,15 +66,16 @@ fn emit_nodes(nodes: &[Node], ctx: &mut EmitContext) {
 /// Emit a single node.
 fn emit_node(node: &Node, ctx: &mut EmitContext) {
     match node.kind.as_str() {
-        "document" => emit_nodes(&node.children, ctx),
+        "document" | node::BIBLIOGRAPHY => emit_nodes(&node.children, ctx),
 
-        BIBTEX_ENTRY => emit_entry(node, ctx),
+        node::BIBLIOGRAPHY_ENTRY => emit_bibliography_entry(node, ctx),
 
-        // For backwards compatibility, also support generic citation entries
+        // Legacy shape, kept for backwards compatibility (see `BIBTEX_ENTRY`
+        // doc comment above).
+        BIBTEX_ENTRY => emit_legacy_entry(node, ctx),
         "citation_entry" => emit_citation_entry(node, ctx),
 
         _ => {
-            // Check if it might be a bibtex-like entry type
             if is_bibtex_type(node.kind.as_str()) {
                 emit_typed_entry(node, ctx);
             } else {
@@ -108,8 +114,188 @@ fn is_bibtex_type(s: &str) -> bool {
     )
 }
 
-/// Emit a BibTeX entry.
-fn emit_entry(node: &Node, ctx: &mut EmitContext) {
+/// Write a `bibliography_entry` node (see `rescribe-read-bibtex`'s
+/// `convert_entry`) back to a BibTeX `@type{key, ...}` block. `bibtex:field`
+/// on each `bibliography_field` child (set by every field-producing arm of
+/// the reader) names the exact source field; `field:role` is the fallback
+/// for a field built by a non-BibTeX producer (a cross-format conversion
+/// into BibTeX). Repeated `author`/`editor` fields are rejoined with
+/// ` and `; a `page_first`/`page_last` pair recombines into one `pages`
+/// field; `prop::DATE` becomes `year`/`month`/`day` fields (or a single
+/// `date` field with a `?`/`~`/`%` suffix when the source date was
+/// marked uncertain/approximate — the BibLaTeX convention, see
+/// `rescribe-read-bibtex`'s `convert_entry`).
+fn emit_bibliography_entry(node: &Node, ctx: &mut EmitContext) {
+    let entry_type = node
+        .props
+        .get_str("bibtex:entry-type")
+        .unwrap_or("misc")
+        .to_lowercase();
+    let cite_key = node.props.get_str("bibtex:key").unwrap_or("unknown");
+
+    ctx.write("@");
+    ctx.write(&entry_type);
+    ctx.write("{");
+    ctx.write(cite_key);
+    ctx.write(",\n");
+
+    if let Some(PropValue::Map(date)) = node.props.get(prop::DATE) {
+        emit_date_fields(
+            date,
+            node.props
+                .get_bool("bibtex:date-uncertain")
+                .unwrap_or(false),
+            node.props
+                .get_bool("bibtex:date-approximate")
+                .unwrap_or(false),
+            ctx,
+        );
+    }
+
+    let mut authors = Vec::new();
+    let mut editors = Vec::new();
+    let mut iter = node.children.iter().peekable();
+    while let Some(child) = iter.next() {
+        if child.kind.as_str() != node::BIBLIOGRAPHY_FIELD {
+            continue;
+        }
+        let role = child.props.get_str(prop::FIELD_ROLE).unwrap_or("misc");
+        match role {
+            "author" => authors.push(person_field_text(child)),
+            "editor" => editors.push(person_field_text(child)),
+            "page_first"
+                if iter
+                    .peek()
+                    .and_then(|next| next.props.get_str(prop::FIELD_ROLE))
+                    == Some("page_last") =>
+            {
+                let last = iter.next().unwrap();
+                let first_text = flatten_field_text(child);
+                let last_text = flatten_field_text(last);
+                emit_field("pages", &format!("{first_text}--{last_text}"), ctx);
+            }
+            _ => {
+                let field_name = child.props.get_str("bibtex:field").unwrap_or(role);
+                let text = flatten_field_text(child);
+                if !text.is_empty() {
+                    emit_field(field_name, &text, ctx);
+                }
+            }
+        }
+    }
+    if !authors.is_empty() {
+        emit_field("author", &authors.join(" and "), ctx);
+    }
+    if !editors.is_empty() {
+        emit_field("editor", &editors.join(" and "), ctx);
+    }
+
+    ctx.write("}\n\n");
+}
+
+/// Reconstruct `prop::DATE`'s `year`/`month`/`day` map (see the property's
+/// own doc comment) as BibTeX fields. When the date carries no uncertainty
+/// marker, this is the classic `year`/`month`/`day` field trio (month as a
+/// three-letter English abbreviation, the form `biblatex`'s own parser
+/// recognizes — a bare number wouldn't round-trip through it). When the
+/// source date was uncertain or approximate, those flags have no
+/// `year`/`month`/`day`-trio equivalent, so a single BibLaTeX-style `date`
+/// field with a `?`/`~`/`%` suffix is emitted instead (the inverse of
+/// `rescribe-read-bibtex`'s uncertain/approximate handling).
+fn emit_date_fields(
+    map: &HashMap<String, PropValue>,
+    uncertain: bool,
+    approximate: bool,
+    ctx: &mut EmitContext,
+) {
+    let as_int = |key: &str| match map.get(key) {
+        Some(PropValue::Int(i)) => Some(*i),
+        _ => None,
+    };
+    let Some(year) = as_int("year") else {
+        return;
+    };
+    let month = as_int("month");
+    let day = as_int("day");
+
+    if uncertain || approximate {
+        let mut text = format!("{year:04}");
+        if let Some(m) = month {
+            text.push_str(&format!("-{m:02}"));
+            if let Some(d) = day {
+                text.push_str(&format!("-{d:02}"));
+            }
+        }
+        text.push(if uncertain && approximate {
+            '%'
+        } else if uncertain {
+            '?'
+        } else {
+            '~'
+        });
+        emit_field("date", &text, ctx);
+        return;
+    }
+
+    emit_field("year", &year.to_string(), ctx);
+    if let Some(m) = month
+        && let Some(abbr) = month_abbr(m)
+    {
+        emit_field("month", abbr, ctx);
+    }
+    if let Some(d) = day {
+        emit_field("day", &d.to_string(), ctx);
+    }
+}
+
+fn month_abbr(month: i64) -> Option<&'static str> {
+    const ABBR: [&str; 12] = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    ABBR.get(usize::try_from(month - 1).ok()?).copied()
+}
+
+/// Join an `author`/`editor` field's direct `TEXT` children (given name,
+/// prefix, family name, suffix — see `rescribe-read-bibtex`'s
+/// `person_field`, which emits one `TEXT` node per non-empty `Person` part)
+/// with spaces, the inverse of that same split.
+fn person_field_text(node: &Node) -> String {
+    node.children
+        .iter()
+        .filter_map(|c| {
+            (c.kind.as_str() == node::TEXT)
+                .then(|| c.props.get_str(prop::CONTENT))
+                .flatten()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Concatenate a field's descendant `TEXT` node content (depth-first).
+/// `bibliography_field` children are always ordinary inline nodes (see
+/// ADR 0005), but `biblatex` doesn't parse LaTeX markup into structured
+/// chunks in the first place (`rescribe-read-bibtex` only ever produces a
+/// single `TEXT` child per field), so flattening is lossless for BibTeX
+/// specifically even though the IR shape supports richer nesting.
+fn flatten_field_text(node: &Node) -> String {
+    let mut out = String::new();
+    flatten_field_text_into(node, &mut out);
+    out
+}
+
+fn flatten_field_text_into(node: &Node, out: &mut String) {
+    if node.kind.as_str() == node::TEXT
+        && let Some(content) = node.props.get_str(prop::CONTENT)
+    {
+        out.push_str(content);
+    }
+    for child in &node.children {
+        flatten_field_text_into(child, out);
+    }
+}
+
+/// Emit a legacy flat `bibtex:entry` node (see `BIBTEX_ENTRY` doc comment).
+fn emit_legacy_entry(node: &Node, ctx: &mut EmitContext) {
     let entry_type = node
         .props
         .get_str("bibtex:type")
@@ -123,7 +309,6 @@ fn emit_entry(node: &Node, ctx: &mut EmitContext) {
     ctx.write(cite_key);
     ctx.write(",\n");
 
-    // Emit all bibtex: prefixed properties as fields
     emit_bibtex_fields(node, ctx);
 
     ctx.write("}\n\n");
@@ -333,14 +518,18 @@ mod tests {
         String::from_utf8(result.value).unwrap()
     }
 
-    fn make_entry(entry_type: &str, key: &str, fields: Vec<(&str, &str)>) -> Node {
-        let mut node = Node::new(NodeKind::from(BIBTEX_ENTRY))
-            .prop("bibtex:type", entry_type)
-            .prop("bibtex:key", key);
-        for (name, value) in fields {
-            node = node.prop(format!("bibtex:{}", name), value);
-        }
-        node
+    fn make_field(role: &str, field_name: &str, text: &str) -> Node {
+        Node::new(NodeKind::from(node::BIBLIOGRAPHY_FIELD))
+            .prop(prop::FIELD_ROLE, role)
+            .prop("bibtex:field", field_name)
+            .child(Node::new(NodeKind::from(node::TEXT)).prop(prop::CONTENT, text))
+    }
+
+    fn make_entry(entry_type: &str, key: &str, fields: Vec<Node>) -> Node {
+        Node::new(NodeKind::from(node::BIBLIOGRAPHY_ENTRY))
+            .prop("bibtex:entry-type", entry_type)
+            .prop("bibtex:key", key)
+            .children(fields)
     }
 
     #[test]
@@ -349,10 +538,9 @@ mod tests {
             "article",
             "smith2024",
             vec![
-                ("author", "John Smith"),
-                ("title", "A Great Paper"),
-                ("journal", "Nature"),
-                ("year", "2024"),
+                make_field("author", "author", "John Smith"),
+                make_field("title", "title", "A Great Paper"),
+                make_field("container_title", "journal", "Nature"),
             ],
         );
 
@@ -364,28 +552,38 @@ mod tests {
         assert!(output.contains("author = {John Smith},"));
         assert!(output.contains("title = {A Great Paper},"));
         assert!(output.contains("journal = {Nature},"));
-        assert!(output.contains("year = {2024},"));
     }
 
     #[test]
-    fn test_emit_book() {
+    fn test_emit_multi_author() {
         let entry = make_entry(
-            "book",
-            "knuth1997",
+            "article",
+            "smith2021",
             vec![
-                ("author", "Donald Knuth"),
-                ("title", "The Art of Computer Programming"),
-                ("publisher", "Addison-Wesley"),
-                ("year", "1997"),
+                make_field("author", "author", "J. Smith"),
+                make_field("author", "author", "A. Jones"),
             ],
         );
-
         let doc = Document::new()
             .with_content(Node::new(NodeKind::from("document")).children(vec![entry]));
         let output = emit_str(&doc);
+        assert!(output.contains("author = {J. Smith and A. Jones},"));
+    }
 
-        assert!(output.contains("@book{knuth1997,"));
-        assert!(output.contains("author = {Donald Knuth},"));
+    #[test]
+    fn test_emit_date() {
+        let mut map = HashMap::new();
+        map.insert("year".to_string(), PropValue::Int(2020));
+        map.insert("month".to_string(), PropValue::Int(3));
+        let entry = Node::new(NodeKind::from(node::BIBLIOGRAPHY_ENTRY))
+            .prop("bibtex:entry-type", "article")
+            .prop("bibtex:key", "x")
+            .prop(prop::DATE, PropValue::Map(map));
+        let doc = Document::new()
+            .with_content(Node::new(NodeKind::from("document")).children(vec![entry]));
+        let output = emit_str(&doc);
+        assert!(output.contains("year = {2020},"));
+        assert!(output.contains("month = {mar},"));
     }
 
     #[test]
@@ -393,7 +591,11 @@ mod tests {
         let entry = make_entry(
             "misc",
             "test",
-            vec![("title", "100% Pure & Simple: A $10 Solution")],
+            vec![make_field(
+                "title",
+                "title",
+                "100% Pure & Simple: A $10 Solution",
+            )],
         );
 
         let doc = Document::new()
@@ -420,8 +622,16 @@ mod tests {
 
     #[test]
     fn test_emit_multiple_entries() {
-        let entry1 = make_entry("article", "first", vec![("title", "First")]);
-        let entry2 = make_entry("book", "second", vec![("title", "Second")]);
+        let entry1 = make_entry(
+            "article",
+            "first",
+            vec![make_field("title", "title", "First")],
+        );
+        let entry2 = make_entry(
+            "book",
+            "second",
+            vec![make_field("title", "title", "Second")],
+        );
 
         let doc = Document::new()
             .with_content(Node::new(NodeKind::from("document")).children(vec![entry1, entry2]));

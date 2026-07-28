@@ -3,6 +3,13 @@
 A fixture suite is complete when all items below are checked.
 See `fixtures/spec.md` for category definitions.
 
+Entries parse into `bibliography`/`bibliography_entry`/`bibliography_field` IR nodes (see
+ADR 0005 and `rescribe_std::node`), not the legacy flat `definition_list` shape. Each field
+node carries both `field:role` (the semantic vocabulary) and `bibtex:field` (the exact
+BibTeX field name, for round-trip fidelity when a field has no `field:role` of its own, e.g.
+`school`/`institution`/`note`/`chapter` all become `misc` fields distinguished by
+`bibtex:field`).
+
 ## Entry types
 
 BibTeX defines 14 standard entry types. Non-standard types are common in practice.
@@ -40,7 +47,7 @@ BibTeX defines 14 standard entry types. Non-standard types are common in practic
 
 ### Author/editor fields
 - [x] author — `article`
-- [ ] editor — (missing)
+- [x] editor — `incollection`
 - [ ] organization — (missing)
 
 ### Title and container fields

@@ -2,10 +2,14 @@
   "description": "Book entry with cite key, author, title, publisher, year",
   "category": "happy",
   "assertions": [
-    { "path": "/0", "kind": "definition_list" },
-    { "path": "/0/0", "kind": "bibtex:entry" },
-    { "path": "/0/0/0", "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "jones2021" } },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:key": "jones2021", "bibtex:type": "book" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "bibtex:key": "jones2021", "bibtex:entry-type": "book", "date": { "year": 2021 } } },
+    { "path": "/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "author", "bibtex:field": "author" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Alice" } },
+    { "path": "/0/0/0/1", "kind": "text", "props": { "content": "Jones" } },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "publisher", "bibtex:field": "publisher" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Academic Press" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "title", "bibtex:field": "title" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "My Book" } }
   ]
 }

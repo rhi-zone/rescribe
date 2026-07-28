@@ -1,11 +1,10 @@
 {
-  "description": "Entry with doi field produces a DOI hyperlink in description",
+  "description": "Entry with doi field becomes an identifier field with field:scheme doi",
   "category": "rare",
   "assertions": [
-    { "path": "/0", "kind": "definition_list" },
-    { "path": "/0/0", "kind": "bibtex:entry" },
-    { "path": "/0/0/0", "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "garcia2019" } },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:key": "garcia2019", "bibtex:type": "article" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "bibtex:key": "garcia2019", "bibtex:entry-type": "article", "date": { "year": 2019 } } },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "doi", "bibtex:field": "doi" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "10.1234/cell.2019.001" } }
   ]
 }

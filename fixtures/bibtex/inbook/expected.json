@@ -1,8 +1,11 @@
 {
-  "description": "BibTeX @inbook entry becomes bibtex:entry with bibtex:type inbook",
+  "description": "BibTeX @inbook entry becomes bibliography_entry with bibtex:entry-type inbook; chapter has no field:role equivalent so it raw-preserves as a misc field",
   "assertions": [
-    { "path": "/0",     "kind": "definition_list" },
-    { "path": "/0/0",   "kind": "bibtex:entry" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:type": "inbook" } }
+    { "path": "/0",     "kind": "bibliography" },
+    { "path": "/0/0",   "kind": "bibliography_entry", "props": { "bibtex:entry-type": "inbook" } },
+    { "path": "/0/0/1", "kind": "bibliography_field", "props": { "field:role": "page_first", "bibtex:field": "pages" } },
+    { "path": "/0/0/2", "kind": "bibliography_field", "props": { "field:role": "page_last", "bibtex:field": "pages" } },
+    { "path": "/0/0/3", "kind": "bibliography_field", "props": { "field:role": "misc", "bibtex:field": "chapter" } },
+    { "path": "/0/0/3/0", "kind": "text", "props": { "content": "5" } }
   ]
 }

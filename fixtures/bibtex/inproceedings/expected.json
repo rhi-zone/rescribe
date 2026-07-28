@@ -1,11 +1,13 @@
 {
-  "description": "Conference paper with booktitle and pages",
+  "description": "Conference paper with booktitle and a numeric page range",
   "category": "happy",
   "assertions": [
-    { "path": "/0", "kind": "definition_list" },
-    { "path": "/0/0", "kind": "bibtex:entry" },
-    { "path": "/0/0/0", "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "brown2019" } },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:key": "brown2019", "bibtex:type": "inproceedings" } }
+    { "path": "/0",     "kind": "bibliography" },
+    { "path": "/0/0",   "kind": "bibliography_entry", "props": { "bibtex:key": "brown2019", "bibtex:entry-type": "inproceedings", "date": { "year": 2019 } } },
+    { "path": "/0/0/1", "kind": "bibliography_field", "props": { "field:role": "page_first", "bibtex:field": "pages" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "55" } },
+    { "path": "/0/0/2", "kind": "bibliography_field", "props": { "field:role": "page_last", "bibtex:field": "pages" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "62" } },
+    { "path": "/0/0/3", "kind": "bibliography_field", "props": { "field:role": "container_title", "bibtex:field": "booktitle" } }
   ]
 }

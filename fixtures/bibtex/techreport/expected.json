@@ -1,8 +1,10 @@
 {
-  "description": "BibTeX @techreport entry becomes bibtex:entry with bibtex:type techreport",
+  "description": "BibTeX @techreport entry becomes bibliography_entry with bibtex:entry-type techreport; institution raw-preserves as misc, number maps to issue",
   "assertions": [
-    { "path": "/0",     "kind": "definition_list" },
-    { "path": "/0/0",   "kind": "bibtex:entry" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "bibtex:type": "techreport" } }
+    { "path": "/0",     "kind": "bibliography" },
+    { "path": "/0/0",   "kind": "bibliography_entry", "props": { "bibtex:entry-type": "techreport" } },
+    { "path": "/0/0/1", "kind": "bibliography_field", "props": { "field:role": "misc", "bibtex:field": "institution" } },
+    { "path": "/0/0/2", "kind": "bibliography_field", "props": { "field:role": "issue", "bibtex:field": "number" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "TR-42" } }
   ]
 }
