@@ -13,18 +13,24 @@ reader-streaming = []
 reader-batch = []
 writer-streaming = []
 writer-builder = ["reader-ast", "writer-streaming"]
-# Spec-derived construct registry. Opt-in: a consumer that only wants to parse
-# XML should not pay for the catalog.
-registry = ["dep:serde", "dep:serde_yaml"]
+# Spec-derived construct registry: committed generated Rust statics, zero
+# runtime parsing. Opt-in: a consumer that only wants to parse XML should not
+# pay for the catalog. `serde` is kept only so the registry types can derive
+# `Serialize`, for composing with a `rescribe query`/jaq-style consumer; it is
+# not used to parse anything at runtime.
+registry = ["dep:serde"]
 # The registry derivation/verification tool. Needs the published JATS schema
-# fetched locally (`scripts/jats/download-spec.sh`); not part of a normal build.
-registry-derive = ["registry", "reader-ast", "dep:sha2"]
+# fetched locally (`scripts/jats/download-spec.sh`); not part of a normal
+# build. `serde_json` here is a dev/tool-only dependency: it reads/writes the
+# human-readable `registry/*.json` source and is never linked into a normal
+# `registry`-feature build.
+registry-derive = ["registry", "reader-ast", "dep:sha2", "dep:serde_json"]
 
 [dependencies]
 quick-xml = { workspace = true }
 xml-entities = { workspace = true }
 serde = { workspace = true, optional = true }
-serde_yaml = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 
 [[bin]]

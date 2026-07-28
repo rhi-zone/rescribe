@@ -84,7 +84,7 @@ fn jats_elements() -> Vec<&'static jats_fmt::registry::Construct> {
         .filter(|c| {
             !c.normative_slices
                 .iter()
-                .all(|s| FOREIGN_SLICES.contains(&s.as_str()))
+                .all(|s| FOREIGN_SLICES.contains(s))
         })
         .collect()
 }
@@ -113,10 +113,7 @@ fn denominator_is_plausible() {
 fn report_unmentioned_elements() {
     let mentioned = names_mentioned_by_reader();
     let all = jats_elements();
-    let gaps: Vec<_> = all
-        .iter()
-        .filter(|c| !mentioned.contains(&c.name))
-        .collect();
+    let gaps: Vec<_> = all.iter().filter(|c| !mentioned.contains(c.name)).collect();
 
     println!(
         "\nJATS Archiving elements (excluding embedded MathML): {}\n\
@@ -133,12 +130,12 @@ fn report_unmentioned_elements() {
             by_slice
                 .entry(c.primary_normative_slice().unwrap_or("(none)"))
                 .or_default()
-                .push(&c.name);
+                .push(c.name);
         }
         for (slice, names) in by_slice {
             let label = registry()
                 .normative_slice(slice)
-                .map(|s| s.name.as_str())
+                .map(|s| s.name)
                 .unwrap_or(slice);
             println!("  {label} ({slice}): {}", names.join(", "));
         }
@@ -147,7 +144,6 @@ fn report_unmentioned_elements() {
             registry()
                 .citation
                 .element_url_template
-                .as_deref()
                 .unwrap_or("(no citation template)")
         );
     }
@@ -199,7 +195,7 @@ fn normative_slices_partition_the_format() {
         "suspiciously few normative slices"
     );
     for slice in r.normative_slices() {
-        let n = r.in_normative_slice(&slice.id).count();
+        let n = r.in_normative_slice(slice.id).count();
         println!("{:>34}  {:>4}  {}", slice.id, n, slice.name);
     }
     // Every element belongs to at least one declared normative slice.

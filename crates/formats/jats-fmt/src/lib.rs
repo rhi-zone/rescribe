@@ -64,6 +64,8 @@ pub mod events;
 pub mod parse;
 #[cfg(feature = "registry")]
 pub mod registry;
+#[cfg(feature = "registry-derive")]
+pub mod registry_derive;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────

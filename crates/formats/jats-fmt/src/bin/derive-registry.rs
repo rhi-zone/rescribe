@@ -1,51 +1,60 @@
-//! Derive `registry/jats-1.3-archiving.yaml` from the JATS DTD Suite's
-//! published RELAX NG schema.
+//! Derive `registry/jats-1.3-archiving.json` (and, from it,
+//! `src/registry_generated.rs`) from the JATS DTD Suite's published RELAX NG
+//! schema.
 //!
 //! The schema is **not vendored** in this repository, so this tool is not part
 //! of a normal build: a developer fetches the schema first
 //! (`scripts/jats/download-spec.sh`), then runs this to regenerate or verify
-//! the committed registry document. Everyone else — CI, and every downstream
-//! consumer of `jats-fmt` — uses the committed YAML and never needs the
-//! schema at all. That is why the registry is a committed derived artifact
-//! rather than build-time codegen, and why provenance (checksums, dates,
-//! canonical URLs) is load-bearing: it is the only way a reader without the
-//! schema can judge whether the committed copy has gone stale.
+//! the committed registry documents. Everyone else — CI, and every downstream
+//! consumer of `jats-fmt` — uses the committed `src/registry_generated.rs`
+//! directly and never needs the schema, or any JSON/YAML parser, at all.
 //!
 //! ```text
 //! cargo run -p jats-fmt --features registry-derive --bin derive-registry -- \
 //!     --schema-dir <dir> [--check]
+//!
+//! # Regenerate src/registry_generated.rs from the committed JSON alone,
+//! # with no schema involved:
+//! cargo run -p jats-fmt --features registry-derive --bin derive-registry -- \
+//!     --emit-rust-only
 //! ```
 //!
-//! `--check` re-derives and diffs against the committed document instead of
-//! writing, exiting non-zero on drift. This is the verification mode: it is
-//! how the "auditable, re-derivable denominator" promise survives the source
-//! schema being absent for almost everyone.
+//! `--check` re-derives from the schema and diffs against the committed JSON
+//! source, exiting non-zero on drift — the "schema → source" check. The
+//! separate "source → generated" check (does `src/registry_generated.rs`
+//! actually match what regenerating from the committed JSON alone would
+//! produce?) needs no schema at all and is wired in as an ordinary test:
+//! `crate::registry_derive::drift_tests::generated_rust_matches_committed_source`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use jats_fmt::Node;
-use jats_fmt::registry::{
-    Citation, Construct, ConstructKind, ContentModel, FormatInfo, PermittedAttribute,
-    PermittedChild, Provenance, Registry, Slice, SourceDigest, SourceKind,
+use jats_fmt::registry::{ConstructKind, SourceKind};
+use jats_fmt::registry_derive::{
+    Citation, Construct, ContentModel, FormatInfo, PermittedAttribute, PermittedChild, Provenance,
+    Registry, Slice, SourceDigest, emit_rust,
 };
 use sha2::{Digest, Sha256};
 
 const DRIVER: &str = "JATS-archivearticle1-3.rng";
 const BASE_URL: &str = "https://jats.nlm.nih.gov/archiving/1.3/rng/";
-const TOOL: &str = "jats-fmt derive-registry v2";
-const OUT_REL: &str = "registry/jats-1.3-archiving.yaml";
+const TOOL: &str = "jats-fmt derive-registry v3";
+const JSON_OUT_REL: &str = "registry/jats-1.3-archiving.json";
+const RUST_OUT_REL: &str = "src/registry_generated.rs";
 
 fn main() -> ExitCode {
     let mut schema_dir: Option<PathBuf> = None;
     let mut check = false;
+    let mut emit_rust_only = false;
     let mut derived_on: Option<String> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--schema-dir" => schema_dir = args.next().map(PathBuf::from),
             "--check" => check = true,
+            "--emit-rust-only" => emit_rust_only = true,
             "--derived-on" => derived_on = args.next(),
             other => {
                 eprintln!("unknown argument: {other}");
@@ -53,8 +62,41 @@ fn main() -> ExitCode {
             }
         }
     }
+
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let json_out = manifest_dir.join(JSON_OUT_REL);
+    let rust_out = manifest_dir.join(RUST_OUT_REL);
+
+    if emit_rust_only {
+        let committed_json = match std::fs::read_to_string(&json_out) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{json_out:?}: {e}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let model = match Registry::from_json(&committed_json) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("{JSON_OUT_REL} did not parse: {e}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let rust = emit_rust(&model);
+        if let Err(e) = std::fs::write(&rust_out, rust) {
+            eprintln!("write failed: {e}");
+            return ExitCode::FAILURE;
+        }
+        println!(
+            "wrote {RUST_OUT_REL} from {JSON_OUT_REL} ({} constructs)",
+            model.constructs.len()
+        );
+        return ExitCode::SUCCESS;
+    }
+
     let Some(schema_dir) = schema_dir else {
         eprintln!("usage: derive-registry --schema-dir <dir> [--check] [--derived-on YYYY-MM-DD]");
+        eprintln!("   or: derive-registry --emit-rust-only");
         eprintln!("fetch the schema first with scripts/jats/download-spec.sh");
         return ExitCode::FAILURE;
     };
@@ -67,20 +109,11 @@ fn main() -> ExitCode {
         }
     };
 
-    let yaml = match serde_yaml::to_string(&reg) {
-        Ok(y) => format!("{}{y}", header()),
-        Err(e) => {
-            eprintln!("serialization failed: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-
-    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join(OUT_REL);
     if check {
-        let committed = std::fs::read_to_string(&out).unwrap_or_default();
+        let committed = std::fs::read_to_string(&json_out).unwrap_or_default();
         // Compare the parsed documents, not the bytes: reformatting the
         // committed file by hand should not read as spec drift.
-        let a = Registry::from_yaml(&committed).ok();
+        let a = Registry::from_json(&committed).ok();
         if a.as_ref() == Some(&reg) {
             println!(
                 "registry is up to date with {DRIVER} ({} constructs)",
@@ -89,7 +122,7 @@ fn main() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         eprintln!(
-            "REGISTRY DRIFT: committed {OUT_REL} does not match the schema at {schema_dir:?}"
+            "REGISTRY DRIFT: committed {JSON_OUT_REL} does not match the schema at {schema_dir:?}"
         );
         match a {
             None => eprintln!("  committed document is missing or unparseable"),
@@ -99,12 +132,24 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    if let Err(e) = std::fs::write(&out, yaml) {
+    let json = match reg.to_json() {
+        Ok(j) => format!("{}\n", j),
+        Err(e) => {
+            eprintln!("serialization failed: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(e) = std::fs::write(&json_out, &json) {
+        eprintln!("write failed: {e}");
+        return ExitCode::FAILURE;
+    }
+    let rust = emit_rust(&reg);
+    if let Err(e) = std::fs::write(&rust_out, rust) {
         eprintln!("write failed: {e}");
         return ExitCode::FAILURE;
     }
     println!(
-        "wrote {OUT_REL}: {} constructs across {} normative slices",
+        "wrote {JSON_OUT_REL} and {RUST_OUT_REL}: {} constructs across {} normative slices",
         reg.constructs.len(),
         reg.normative_slices.len()
     );
@@ -112,9 +157,8 @@ fn main() -> ExitCode {
 }
 
 fn report_drift(old: &Registry, new: &Registry) {
-    let ids = |r: &Registry| -> std::collections::BTreeSet<String> {
-        r.constructs.iter().map(|c| c.id.clone()).collect()
-    };
+    let ids =
+        |r: &Registry| -> BTreeSet<String> { r.constructs.iter().map(|c| c.id.clone()).collect() };
     let (a, b) = (ids(old), ids(new));
     for x in b.difference(&a) {
         eprintln!("  + {x} (in schema, missing from committed registry)");
@@ -125,23 +169,6 @@ fn report_drift(old: &Registry, new: &Registry) {
     if a == b {
         eprintln!("  construct set matches; metadata or slice assignment differs");
     }
-}
-
-fn header() -> String {
-    format!(
-        "# GENERATED — do not edit by hand.\n\
-         #\n\
-         # Derived from the JATS DTD Suite RELAX NG schema by `{TOOL}`.\n\
-         # Regenerate:\n\
-         #   scripts/jats/download-spec.sh\n\
-         #   cargo run -p jats-fmt --features registry-derive --bin derive-registry -- \\\n\
-         #       --schema-dir spec/jats-1.3-archiving-rng\n\
-         # Verify (fails on drift):  … --schema-dir <dir> --check\n\
-         #\n\
-         # The source schema is NOT vendored here; see the `provenance` block\n\
-         # for the canonical URLs and per-file checksums that make staleness\n\
-         # detectable without it.\n\n"
-    )
 }
 
 fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
@@ -255,8 +282,7 @@ fn derive(dir: &Path, derived_on: Option<String>) -> Result<Registry, String> {
                 // JATS's normative modularization already does the decomposition
                 // job; this derivation tool has no basis for inventing a second,
                 // pragmatic grouping, so it leaves this empty for every
-                // construct rather than guessing one (ADR 0013's 2026-07-28
-                // amendment: an unasked-for pragmatic slice is noise, not value).
+                // construct rather than guessing one.
                 pragmatic_slices: Vec::new(),
                 content_model,
             }

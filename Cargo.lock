@@ -1813,7 +1813,7 @@ version = "0.1.0"
 dependencies = [
  "quick-xml 0.39.0",
  "serde",
- "serde_yaml",
+ "serde_json",
  "sha2",
  "xml-entities",
 ]

@@ -16,11 +16,31 @@
 //! `in_normative_slice` / `elements` iterators — so the registry never churns when
 //! implementation work lands.
 //!
+//! # Runtime representation: committed generated Rust statics, not parsed data
+//!
+//! Every field in this module's types is `&'static str` / `&'static [T]`,
+//! backed by [`generated::REGISTRY`] — a single `static` value compiled
+//! directly into the binary's read-only data, committed as
+//! `src/registry_generated.rs` the same way `ooxml-wml`'s `src/generated.rs`
+//! is committed. [`registry()`] is a plain reference return, not a parse: no
+//! serialization crate, no runtime deserialization step, no heap allocation
+//! for any of this module's data. A consumer who enables the `registry`
+//! feature pays only for the static data itself being linked in — nothing
+//! else.
+//!
+//! The human-readable, language-agnostic **source** this generated file is
+//! derived from lives alongside it, at `registry/jats-1.3-archiving.json`,
+//! and is not read by this crate at runtime at all — it exists for review
+//! diffs, for non-Rust consumers, and as the input `derive-registry`
+//! regenerates `registry_generated.rs` from. See `src/registry_derive.rs`
+//! (behind the `registry-derive` feature) for the derivation/regeneration/
+//! drift-check tooling, and its module docs for why JSON (via `serde_json`)
+//! replaced YAML (via the now-archived `serde_yaml`) as that source format.
+//!
 //! # Slices: normative vs. pragmatic
 //!
 //! Every construct is annotated with the **slice**(s) it belongs to, in two
-//! independent, separately-provenanced collections (per
-//! `docs/adr/0013-per-format-construct-registry.md`'s 2026-07-28 amendment):
+//! independent, separately-provenanced collections:
 //!
 //! - [`Construct::normative_slices`] — a partition the format itself
 //!   publishes. For JATS this is the DTD Suite's own module files
@@ -59,17 +79,14 @@
 //! the full grammar — order, choice exclusivity, interleave). This design
 //! serves the first and explicitly does not attempt the second: a linter or
 //! validator that needs true schema validation should run the source schema
-//! through a RELAX NG validator, not this registry. Recording the full
-//! pattern structure (nested choice/group/interleave trees mirroring the
-//! source grammar) was considered and rejected for the pilot: it would
-//! roughly double the derivation tool's complexity for a question the
-//! flattened form doesn't need to answer, and JATS's `<define>`-based
-//! customization layer means many patterns are shared/reused across dozens
-//! of elements, so a literal per-element grammar tree would also be far more
-//! repetitive on disk than the flattened form. Whether a richer,
-//! validation-capable content-model representation is worth that cost is
-//! left as an open question in `docs/adr/0013-per-format-construct-registry.md`
-//! rather than decided here.
+//! through a RELAX NG validator, not this registry.
+//!
+//! Many elements share an identical content model (e.g. every element built
+//! from the same reusable schema pattern). [`generated::REGISTRY`] stores
+//! each *distinct* content model once, as a named `static`, and every
+//! construct with that model references it by pointer
+//! (`Option<&'static ContentModel>`) — so the committed generated file's size
+//! tracks the number of distinct shapes, not the number of constructs.
 //!
 //! # Citations survive an absent schema
 //!
@@ -77,13 +94,12 @@
 //! identifier), never `file:line` into a vendored schema copy. The schema is
 //! not vendored in this repository, and for some formats (notably OOXML) it
 //! legally cannot be — so a citation form that only resolves when the schema
-//! is present would be useless exactly where it is needed most. See
-//! `docs/adr/0013-per-format-construct-registry.md`.
+//! is present would be useless exactly where it is needed most.
 //!
 //! # Availability
 //!
 //! Behind the `registry` Cargo feature, off by default: a consumer that only
-//! wants to parse XML should not pay for the catalog.
+//! wants to parse XML should not compile, or pay for, the catalog.
 //!
 //! ```no_run
 //! # #[cfg(feature = "registry")] {
@@ -95,21 +111,19 @@
 //! # }
 //! ```
 
+#[path = "registry_generated.rs"]
+pub(crate) mod generated;
+
 use std::collections::BTreeMap;
-use std::sync::OnceLock;
-
-use serde::{Deserialize, Serialize};
-
-/// The committed registry document, verbatim.
-///
-/// Exposed so consumers that already have a YAML or serde pipeline (e.g. a
-/// `rescribe query`-style jaq filter) can feed the raw document straight in
-/// without going through the typed API.
-pub const REGISTRY_YAML: &str = include_str!("../registry/jats-1.3-archiving.yaml");
 
 /// What kind of thing a construct is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
+#[cfg_attr(feature = "registry-derive", derive(serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "registry", feature = "registry-derive"),
+    serde(rename_all = "snake_case")
+)]
 pub enum ConstructKind {
     /// An XML element the format defines.
     Element,
@@ -129,8 +143,13 @@ impl ConstructKind {
 
 /// The form of the authoritative schema (or, for [`SourceKind::ScriptedExtraction`],
 /// the published artifact) a registry was derived from.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
+#[cfg_attr(feature = "registry-derive", derive(serde::Deserialize))]
+#[cfg_attr(
+    any(feature = "registry", feature = "registry-derive"),
+    serde(rename_all = "kebab-case")
+)]
 pub enum SourceKind {
     /// RELAX NG, XML syntax.
     Relaxng,
@@ -145,167 +164,130 @@ pub enum SourceKind {
     /// The format has no machine-readable schema, so the construct list was
     /// produced by a script that mechanically extracts it from a published
     /// prose artifact (e.g. an HTML element index), rather than by parsing a
-    /// grammar.
-    ///
-    /// This is a first-class, fully permitted source kind — not a marked-down
-    /// fallback — because the property this design actually needs is
-    /// *reproducibility*, not "came from a schema." A scripted extraction is
-    /// re-runnable, diffable against a fresh fetch, and auditable by reading
-    /// the script; a hand-typed list is none of those, no matter how careful
-    /// the person typing it was. See
-    /// `docs/adr/0013-per-format-construct-registry.md`'s 2026-07-28
-    /// hand-curation amendment.
-    ///
-    /// A registry with this `source_kind` must still carry everything
-    /// [`Provenance`] requires: `source_base_url` (and, where the extraction
-    /// spans several published pages, a `url` per entry in
-    /// `source_digests`), `derived_on` as the retrieval date, `derived_by`
-    /// naming the extraction script (path and version, e.g.
-    /// `scripts/docbook/extract-element-index.py v1`), and a `sha256` +
-    /// `bytes` digest of every fetched artifact in `source_digests` — the
-    /// same fields a schema-derived registry carries, just describing a
-    /// downloaded page instead of a downloaded schema file. Without those,
-    /// re-running the extraction to check for drift is not actually
-    /// possible, and the reproducibility claim is just asserted, not
-    /// delivered.
+    /// grammar. First-class, fully permitted — not a marked-down fallback —
+    /// because the property this design needs is *reproducibility*, not
+    /// "came from a schema."
     ScriptedExtraction,
 }
 
 /// Which format, version, and profile this registry describes.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
 pub struct FormatInfo {
     /// Short machine id, e.g. `jats`.
-    pub id: String,
+    pub id: &'static str,
     /// Human-readable format name.
-    pub name: String,
+    pub name: &'static str,
     /// Format version the registry describes, e.g. `1.3`.
-    pub version: String,
+    pub version: &'static str,
     /// Sub-profile / tag set id, where the format has several, e.g. `archiving`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile: Option<String>,
+    pub profile: Option<&'static str>,
     /// Human-readable profile name.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_name: Option<String>,
+    pub profile_name: Option<&'static str>,
 }
 
 /// A checksum of one source file (a schema module, or, for
 /// [`SourceKind::ScriptedExtraction`], one fetched prose page) so staleness
 /// is detectable even when the source itself is not present in the checkout.
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
 pub struct SourceDigest {
     /// File name as published, e.g. `JATS-section1-3.ent.rng`.
-    pub file: String,
+    pub file: &'static str,
     /// Size in bytes at derivation time.
     pub bytes: u64,
     /// Lowercase hex SHA-256 of the file's bytes at derivation time.
-    pub sha256: String,
+    pub sha256: &'static str,
     /// The exact URL this entry was fetched from, when it differs per entry
-    /// rather than sharing `Provenance::source_base_url` (e.g. a scripted
-    /// extraction spanning several distinct prose pages). Empty when
-    /// `source_base_url` plus `file` already resolves it, which is the
-    /// common case for schema-module digests.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub url: String,
+    /// rather than sharing `Provenance::source_base_url`. Empty when
+    /// `source_base_url` plus `file` already resolves it.
+    pub url: &'static str,
 }
 
 /// Where the registry came from and how, so a reader can judge staleness
 /// without holding the source schema.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
 pub struct Provenance {
     /// The standard, cited as it names itself, e.g. `ANSI/NISO Z39.96-2021`.
-    pub spec: String,
+    pub spec: &'static str,
     /// Form of the schema the registry was derived from.
     pub source_kind: SourceKind,
     /// Driver/entry-point schema file the derivation started from.
-    pub source_driver: String,
-    /// Canonical base URL the source files are published at. Joined with a
-    /// file name this yields a stable, resolvable citation.
-    pub source_base_url: String,
+    pub source_driver: &'static str,
+    /// Canonical base URL the source files are published at.
+    pub source_base_url: &'static str,
     /// The source schema's license, quoted or named.
-    pub source_license: String,
+    pub source_license: &'static str,
     /// Whether that license permits redistributing the schema verbatim.
     pub source_redistributable: bool,
     /// Whether this repository actually vendors a copy of the schema.
-    ///
-    /// Distinct from `source_redistributable`: a schema may be legally
-    /// vendorable and still not vendored. When false, re-derivation requires
-    /// fetching the source first.
     pub source_vendored: bool,
     /// ISO-8601 date the registry was derived.
-    pub derived_on: String,
+    pub derived_on: &'static str,
     /// Tool and version that performed the derivation.
-    pub derived_by: String,
+    pub derived_by: &'static str,
     /// Per-file checksums of every source consumed.
-    #[serde(default)]
-    pub source_digests: Vec<SourceDigest>,
+    pub source_digests: &'static [SourceDigest],
 }
 
 /// How to build a citation URL for a construct.
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
 pub struct Citation {
     /// URL template for elements; `{name}` is replaced with the local name.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub element_url_template: Option<String>,
+    pub element_url_template: Option<&'static str>,
     /// URL template for attributes; `{name}` is replaced with the local name.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attribute_url_template: Option<String>,
+    pub attribute_url_template: Option<&'static str>,
 }
 
 /// One partition of the format — either the format's own published
 /// modularization, or a hand-curated grouping. Which one a given `Slice`
 /// belongs to is determined by *which list it lives in*
 /// (`Registry::normative_slices` vs. `Registry::pragmatic_slices`), not by a
-/// field on this type — see the module docs and
-/// `docs/adr/0013-per-format-construct-registry.md`'s 2026-07-28 amendment.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// field on this type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
 pub struct Slice {
     /// Stable id. For a normative slice, the format's own module identifier;
     /// for a pragmatic slice, whatever id its curator chose.
-    pub id: String,
+    pub id: &'static str,
     /// Declared name. For a normative slice, taken from the schema file; for
     /// a pragmatic slice, curator-chosen.
-    pub name: String,
+    pub name: &'static str,
     /// Source schema file that declares this slice's constructs. Empty for a
     /// pragmatic slice with no backing schema file.
-    #[serde(default)]
-    pub source_file: String,
+    pub source_file: &'static str,
     /// Resolvable URL for that file, or for whatever explains the pragmatic
     /// grouping's rationale. Empty if none exists.
-    #[serde(default)]
-    pub url: String,
+    pub url: &'static str,
 }
 
 /// One child element a construct's content model permits, flattened out of
 /// whatever ordering/choice/group structure the source schema expressed it
-/// with. See the module docs ("Content models: flattened, not full grammar")
-/// for why this registry records a permitted-children *set* rather than the
-/// full pattern structure.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
 pub struct PermittedChild {
     /// Local element name.
-    pub name: String,
-    /// Whether the schema permits more than one occurrence of this child
-    /// (reachable under a `zeroOrMore`/`oneOrMore` — or DTD `*`/`+` — without
-    /// crossing into another element's own body first). `false` means the
-    /// schema never allows more than one, though it says nothing about
-    /// relative order, since order is exactly what flattening discards.
-    #[serde(default)]
+    pub name: &'static str,
+    /// Whether the schema permits more than one occurrence of this child.
+    /// `false` means the schema never allows more than one, though it says
+    /// nothing about relative order, since order is exactly what flattening
+    /// discards.
     pub repeatable: bool,
 }
 
 /// One attribute a construct's content model permits, with its
-/// required/optional status *for this element* — the same attribute name can
-/// be required on one element and optional on another, so this cannot live
-/// on the global attribute [`Construct`] and is recorded per element instead.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// required/optional status *for this element*.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
 pub struct PermittedAttribute {
     /// Local attribute name.
-    pub name: String,
+    pub name: &'static str,
     /// Whether the schema requires this attribute on every instance of the
-    /// element (reached with no enclosing `optional`/`choice`). `false`
-    /// covers both "optional" and "one of a choice of alternatives" — a
-    /// choice member is never individually required.
-    #[serde(default)]
+    /// element. `false` covers both "optional" and "one of a choice of
+    /// alternatives."
     pub required: bool,
 }
 
@@ -313,49 +295,50 @@ pub struct PermittedAttribute {
 /// attributes, and whether character data may appear directly inside it.
 /// Only populated for [`ConstructKind::Element`] — attributes have a value
 /// type, not a content model, and this registry does not model datatypes.
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+///
+/// Distinct content models are deduplicated in the generated static data:
+/// several constructs with the same shape reference the same `ContentModel`
+/// value, rather than each carrying its own copy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
 pub struct ContentModel {
     /// Every element name permitted as a direct child, in no particular
     /// order (order is not recorded — see the module docs).
-    #[serde(default)]
-    pub children: Vec<PermittedChild>,
+    pub children: &'static [PermittedChild],
     /// Every attribute name this element permits, with required/optional
     /// status.
-    #[serde(default)]
-    pub attributes: Vec<PermittedAttribute>,
+    pub attributes: &'static [PermittedAttribute],
     /// Whether character data (`#PCDATA` / RELAX NG `<text/>`/`<mixed>`) is
     /// permitted directly inside this element, alongside its children.
-    #[serde(default)]
     pub mixed: bool,
 }
 
 /// One construct the format defines.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
 pub struct Construct {
     /// Stable id, `{kind}:{name}`, e.g. `element:sec`.
-    pub id: String,
+    pub id: &'static str,
     /// Local name as it appears in a document.
-    pub name: String,
+    pub name: &'static str,
     /// Element, attribute, …
     pub kind: ConstructKind,
     /// Ids into `Registry::normative_slices` that declare this construct, in
     /// driver `<include>` order. Empty only when the format's normative
     /// schema publishes no modularization at all; JATS's is never empty.
     /// `normative_slices[0]`, when non-empty, is the stable primary.
-    #[serde(default)]
-    pub normative_slices: Vec<String>,
+    pub normative_slices: &'static [&'static str],
     /// Ids into `Registry::pragmatic_slices` this construct has been
     /// hand-assigned to. Always legitimately empty — no format is required
     /// to have a pragmatic partition, and JATS's pilot leaves this empty for
     /// every construct.
-    #[serde(default)]
-    pub pragmatic_slices: Vec<String>,
+    pub pragmatic_slices: &'static [&'static str],
     /// What this construct permits as content. `Some` for every
     /// [`ConstructKind::Element`] the schema actually defines a body for;
     /// `None` for [`ConstructKind::Attribute`] constructs and for any
-    /// element the derivation could not resolve a model for.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub content_model: Option<ContentModel>,
+    /// element the derivation could not resolve a model for. Points at a
+    /// shared, deduplicated `ContentModel` — see the module docs.
+    pub content_model: Option<&'static ContentModel>,
 }
 
 impl Construct {
@@ -363,7 +346,6 @@ impl Construct {
     /// `None` if this construct has no recorded content model at all.
     pub fn permits_child(&self, child: &str) -> Option<bool> {
         self.content_model
-            .as_ref()
             .map(|m| m.children.iter().any(|c| c.name == child))
     }
 
@@ -373,7 +355,6 @@ impl Construct {
     /// has no recorded content model at all.
     pub fn requires_attribute(&self, attr: &str) -> Option<bool> {
         self.content_model
-            .as_ref()
             .map(|m| m.attributes.iter().any(|a| a.name == attr && a.required))
     }
 
@@ -381,102 +362,89 @@ impl Construct {
     /// optional)? `None` if this construct has no recorded content model.
     pub fn permits_attribute(&self, attr: &str) -> Option<bool> {
         self.content_model
-            .as_ref()
             .map(|m| m.attributes.iter().any(|a| a.name == attr))
     }
-}
 
-impl Construct {
     /// The primary normative slice id — the first module to declare this
     /// construct in the driver schema's include order, if the format
     /// publishes a normative modularization at all.
-    pub fn primary_normative_slice(&self) -> Option<&str> {
-        self.normative_slices.first().map(String::as_str)
+    pub fn primary_normative_slice(&self) -> Option<&'static str> {
+        self.normative_slices.first().copied()
     }
 
     /// The primary pragmatic slice id, if this construct has been assigned
     /// to any pragmatic grouping.
-    pub fn primary_pragmatic_slice(&self) -> Option<&str> {
-        self.pragmatic_slices.first().map(String::as_str)
+    pub fn primary_pragmatic_slice(&self) -> Option<&'static str> {
+        self.pragmatic_slices.first().copied()
     }
 }
 
 /// The full spec-derived catalog for one format/version/profile.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "registry", derive(serde::Serialize))]
 pub struct Registry {
     /// Schema version of the *registry document format* itself, so a
     /// consumer can tell v1 from v2 from v3. `3` added
-    /// [`Construct::content_model`] (`docs/adr/0013-...`'s 2026-07-28
-    /// content-model amendment); `2` introduced the normative/pragmatic slice
-    /// split (the same ADR's earlier 2026-07-28 slice amendment); `1` had a
-    /// single `slices` field and no content models.
+    /// [`Construct::content_model`]; `2` introduced the normative/pragmatic
+    /// slice split; `1` had a single `slices` field and no content models.
     pub registry_version: u32,
     /// Which format this describes.
     pub format: FormatInfo,
     /// Where it came from.
     pub provenance: Provenance,
     /// How to cite an individual construct.
-    #[serde(default)]
     pub citation: Citation,
     /// The format's own published modularization. May be empty for a format
     /// whose normative schema publishes no modularization (e.g. DocBook);
     /// when empty, `normative_slices_absent_reason` should say why.
-    #[serde(default)]
-    pub normative_slices: Vec<Slice>,
+    pub normative_slices: &'static [Slice],
     /// Why `normative_slices` is empty, when it is. `None` when
     /// `normative_slices` is non-empty.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub normative_slices_absent_reason: Option<String>,
+    pub normative_slices_absent_reason: Option<&'static str>,
     /// A hand-curated, explicitly non-normative partition. Always
     /// legitimately empty — a format gains nothing from a pragmatic grouping
     /// nobody asked for. JATS's pilot leaves this empty.
-    #[serde(default)]
-    pub pragmatic_slices: Vec<Slice>,
+    pub pragmatic_slices: &'static [Slice],
     /// Every construct, sorted by id.
-    pub constructs: Vec<Construct>,
+    pub constructs: &'static [Construct],
 }
 
 impl Registry {
-    /// Parse a registry document from YAML.
-    pub fn from_yaml(src: &str) -> Result<Registry, serde_yaml::Error> {
-        serde_yaml::from_str(src)
-    }
-
     /// All constructs, sorted by id.
-    pub fn constructs(&self) -> &[Construct] {
-        &self.constructs
+    pub fn constructs(&self) -> &'static [Construct] {
+        self.constructs
     }
 
     /// The format's own published modules.
-    pub fn normative_slices(&self) -> &[Slice] {
-        &self.normative_slices
+    pub fn normative_slices(&self) -> &'static [Slice] {
+        self.normative_slices
     }
 
     /// This registry's hand-curated, explicitly non-normative groupings.
-    pub fn pragmatic_slices(&self) -> &[Slice] {
-        &self.pragmatic_slices
+    pub fn pragmatic_slices(&self) -> &'static [Slice] {
+        self.pragmatic_slices
     }
 
     /// Look up a normative slice by id.
-    pub fn normative_slice(&self, id: &str) -> Option<&Slice> {
+    pub fn normative_slice(&self, id: &str) -> Option<&'static Slice> {
         self.normative_slices.iter().find(|s| s.id == id)
     }
 
     /// Look up a pragmatic slice by id.
-    pub fn pragmatic_slice(&self, id: &str) -> Option<&Slice> {
+    pub fn pragmatic_slice(&self, id: &str) -> Option<&'static Slice> {
         self.pragmatic_slices.iter().find(|s| s.id == id)
     }
 
     /// Look up a construct by its stable id, e.g. `element:sec`.
-    pub fn get(&self, id: &str) -> Option<&Construct> {
+    pub fn get(&self, id: &str) -> Option<&'static Construct> {
         self.constructs
-            .binary_search_by(|c| c.id.as_str().cmp(id))
+            .binary_search_by(|c| c.id.cmp(id))
             .ok()
             .map(|i| &self.constructs[i])
     }
 
     /// Look up a construct by kind and local name.
-    pub fn lookup(&self, kind: ConstructKind, name: &str) -> Option<&Construct> {
+    pub fn lookup(&self, kind: ConstructKind, name: &str) -> Option<&'static Construct> {
         self.get(&format!("{}:{}", kind.id_prefix(), name))
     }
 
@@ -491,47 +459,47 @@ impl Registry {
     }
 
     /// Every element the format defines.
-    pub fn elements(&self) -> impl Iterator<Item = &Construct> {
+    pub fn elements(&self) -> impl Iterator<Item = &'static Construct> {
         self.of_kind(ConstructKind::Element)
     }
 
     /// Every attribute the format defines.
-    pub fn attributes(&self) -> impl Iterator<Item = &Construct> {
+    pub fn attributes(&self) -> impl Iterator<Item = &'static Construct> {
         self.of_kind(ConstructKind::Attribute)
     }
 
     /// Every construct of one kind.
-    pub fn of_kind(&self, kind: ConstructKind) -> impl Iterator<Item = &Construct> {
+    pub fn of_kind(&self, kind: ConstructKind) -> impl Iterator<Item = &'static Construct> {
         self.constructs.iter().filter(move |c| c.kind == kind)
     }
 
     /// Every construct declared by a given normative slice.
     pub fn in_normative_slice<'a>(
-        &'a self,
+        &self,
         slice_id: &'a str,
-    ) -> impl Iterator<Item = &'a Construct> {
+    ) -> impl Iterator<Item = &'static Construct> + 'a {
         self.constructs
             .iter()
-            .filter(move |c| c.normative_slices.iter().any(|s| s == slice_id))
+            .filter(move |c| c.normative_slices.contains(&slice_id))
     }
 
     /// Every construct assigned to a given pragmatic slice.
     pub fn in_pragmatic_slice<'a>(
-        &'a self,
+        &self,
         slice_id: &'a str,
-    ) -> impl Iterator<Item = &'a Construct> {
+    ) -> impl Iterator<Item = &'static Construct> + 'a {
         self.constructs
             .iter()
-            .filter(move |c| c.pragmatic_slices.iter().any(|s| s == slice_id))
+            .filter(move |c| c.pragmatic_slices.contains(&slice_id))
     }
 
     /// A resolvable citation URL for a construct, if a template is defined.
     pub fn citation_url(&self, c: &Construct) -> Option<String> {
         let tpl = match c.kind {
-            ConstructKind::Element => self.citation.element_url_template.as_ref()?,
-            ConstructKind::Attribute => self.citation.attribute_url_template.as_ref()?,
+            ConstructKind::Element => self.citation.element_url_template?,
+            ConstructKind::Attribute => self.citation.attribute_url_template?,
         };
-        Some(tpl.replace("{name}", &c.name))
+        Some(tpl.replace("{name}", c.name))
     }
 
     /// Constructs of `kind` whose names are **not** in `handled` — the
@@ -545,7 +513,7 @@ impl Registry {
         &self,
         kind: ConstructKind,
         handled: I,
-    ) -> impl Iterator<Item = &Construct>
+    ) -> impl Iterator<Item = &'static Construct>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
@@ -555,16 +523,16 @@ impl Registry {
             .map(|s| s.as_ref().to_string())
             .collect();
         self.of_kind(kind)
-            .filter(move |c| !handled.contains(&c.name))
+            .filter(move |c| !handled.contains(c.name))
     }
 
     /// Count of constructs per normative slice, for a coverage-report-style
     /// summary.
-    pub fn counts_by_normative_slice(&self, kind: ConstructKind) -> BTreeMap<&str, usize> {
+    pub fn counts_by_normative_slice(&self, kind: ConstructKind) -> BTreeMap<&'static str, usize> {
         let mut out = BTreeMap::new();
         for c in self.of_kind(kind) {
-            for s in &c.normative_slices {
-                *out.entry(s.as_str()).or_insert(0) += 1;
+            for s in c.normative_slices {
+                *out.entry(*s).or_insert(0) += 1;
             }
         }
         out
@@ -572,31 +540,22 @@ impl Registry {
 
     /// Count of constructs per pragmatic slice, for a coverage-report-style
     /// summary.
-    pub fn counts_by_pragmatic_slice(&self, kind: ConstructKind) -> BTreeMap<&str, usize> {
+    pub fn counts_by_pragmatic_slice(&self, kind: ConstructKind) -> BTreeMap<&'static str, usize> {
         let mut out = BTreeMap::new();
         for c in self.of_kind(kind) {
-            for s in &c.pragmatic_slices {
-                *out.entry(s.as_str()).or_insert(0) += 1;
+            for s in c.pragmatic_slices {
+                *out.entry(*s).or_insert(0) += 1;
             }
         }
         out
     }
 }
 
-static REGISTRY: OnceLock<Registry> = OnceLock::new();
-
-/// The JATS 1.3 Archiving registry.
-///
-/// Parsed once from the committed YAML document on first access.
-///
-/// # Panics
-///
-/// Only if the committed registry document is malformed, which a crate test
-/// rules out at build time.
+/// The JATS 1.3 Archiving registry: a `'static` reference to committed
+/// generated data. No parsing, no allocation, no `OnceLock` — the value is
+/// simply already there, compiled into the binary.
 pub fn registry() -> &'static Registry {
-    REGISTRY.get_or_init(|| {
-        Registry::from_yaml(REGISTRY_YAML).expect("committed registry document must parse")
-    })
+    &generated::REGISTRY
 }
 
 #[cfg(test)]
@@ -604,12 +563,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn committed_document_parses() {
+    fn committed_document_is_well_formed() {
         let r = registry();
         assert_eq!(r.registry_version, 3);
         assert_eq!(r.format.id, "jats");
         assert_eq!(r.format.version, "1.3");
-        assert_eq!(r.format.profile.as_deref(), Some("archiving"));
+        assert_eq!(r.format.profile, Some("archiving"));
     }
 
     #[test]
@@ -624,7 +583,7 @@ mod tests {
     fn every_construct_id_resolves() {
         let r = registry();
         for c in r.constructs() {
-            assert_eq!(r.get(&c.id).map(|x| &x.id), Some(&c.id));
+            assert_eq!(r.get(c.id).map(|x| x.id), Some(c.id));
         }
     }
 
@@ -639,14 +598,14 @@ mod tests {
                 "{} has no normative slice",
                 c.id
             );
-            for s in &c.normative_slices {
+            for s in c.normative_slices {
                 assert!(
                     r.normative_slice(s).is_some(),
                     "{} cites undeclared normative slice {s}",
                     c.id
                 );
             }
-            for s in &c.pragmatic_slices {
+            for s in c.pragmatic_slices {
                 assert!(
                     r.pragmatic_slice(s).is_some(),
                     "{} cites undeclared pragmatic slice {s}",
@@ -689,7 +648,7 @@ mod tests {
         assert!(!p.derived_on.is_empty());
         assert!(!p.derived_by.is_empty());
         assert!(!p.source_digests.is_empty(), "no source checksums recorded");
-        for d in &p.source_digests {
+        for d in p.source_digests {
             assert_eq!(d.sha256.len(), 64, "{} digest is not sha-256", d.file);
         }
     }
@@ -698,7 +657,7 @@ mod tests {
     fn content_models_are_populated_for_elements() {
         let r = registry();
         let sec = r.lookup(ConstructKind::Element, "sec").unwrap();
-        let model = sec.content_model.as_ref().expect("sec has a content model");
+        let model = sec.content_model.expect("sec has a content model");
         assert!(
             model.children.iter().any(|c| c.name == "title"),
             "sec-model permits <title>"
@@ -724,11 +683,34 @@ mod tests {
     }
 
     #[test]
+    fn content_models_are_deduplicated() {
+        // Regression guard for the dedup this registry's generated data
+        // performs: many distinct constructs should point at the *same*
+        // `ContentModel` value (same address) when their shape is identical.
+        let r = registry();
+        let mut seen_addrs: std::collections::BTreeSet<usize> = Default::default();
+        let mut constructs_with_model = 0usize;
+        for c in r.elements() {
+            if let Some(cm) = c.content_model {
+                constructs_with_model += 1;
+                seen_addrs.insert(cm as *const ContentModel as usize);
+            }
+        }
+        assert!(constructs_with_model > 0);
+        assert!(
+            seen_addrs.len() < constructs_with_model,
+            "expected sharing: {} distinct addresses for {} constructs with a model",
+            seen_addrs.len(),
+            constructs_with_model
+        );
+    }
+
+    #[test]
     fn not_handled_is_the_gap_join() {
         let r = registry();
         let gaps: Vec<_> = r
             .not_handled(ConstructKind::Element, ["sec", "p"])
-            .map(|c| c.name.as_str())
+            .map(|c| c.name)
             .collect();
         assert!(!gaps.contains(&"sec"));
         assert!(!gaps.contains(&"p"));
