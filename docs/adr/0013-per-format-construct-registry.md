@@ -2,14 +2,16 @@
 
 ## Status
 
-Accepted (2026-07-28); amended the same day to correct a factual error in decision 3 and
-replace the single-slice rule with a two-field model (normative vs. pragmatic slices).
-Pilot implemented for JATS 1.3 Archiving in `jats-fmt` (`registry` / `registry-derive`
-features); the pilot's schema/types are being updated to the two-field model in the same
-session this amendment lands in — check `TODO.md` for whether that update is committed yet.
-Rollout to DocBook, TEI, and the OOXML migration is planned but not done — see `TODO.md`.
+Accepted (2026-07-28); amended twice the same day. The first amendment corrected a factual
+error in decision 3 and replaced the single-slice rule with a two-field model (normative vs.
+pragmatic slices). The second amendment resolves open questions 2 and 4: it adds content
+models to the registry schema (`registry_version` 2 → 3) and replaces
+`SourceKind::HandCurated` with `SourceKind::ScriptedExtraction`. Both are implemented in the
+JATS pilot (`jats-fmt`'s `registry` / `registry-derive` features) in the same commit range the
+second amendment lands in. Rollout to DocBook, TEI, and the OOXML migration is planned but not
+done — see `TODO.md`.
 
-## Amendment (2026-07-28): decision 3 misstated OOXML's prior art, and the rule it produced was wrong
+## Amendment 1 (2026-07-28): decision 3 misstated OOXML's prior art, and the rule it produced was wrong
 
 **The factual error.** Decision 3, as originally written, claimed OOXML's slices come from
 "namespace/part schemas." They do not. `spec/ooxml-features.yaml` tags every construct with
@@ -151,6 +153,148 @@ call.
 `jats-fmt` schema/type/YAML update has landed yet, and whether it was committed separately
 from this amendment.**
 
+## Amendment 2 (2026-07-28): content models added to the schema; hand-curation replaced by scripted extraction
+
+Two human decisions resolve open questions 4 (content models) and 2 (hand-curated
+registries), respectively. Both are implemented in `jats-fmt`; see `TODO.md`'s registry
+rollout entry for the commit range.
+
+### Decision A: content models are in scope, flattened rather than full-grammar
+
+Open question 4 asked whether the registry should record content models (permitted children
+and attributes per construct), not just construct existence — and, if so, how much of the
+source schema's expressiveness to preserve. Decided: **in scope, flattened.**
+
+**What is recorded**, per element construct, in a new `Construct::content_model: Option<ContentModel>`
+(`None` for attribute constructs, which have a value type, not a content model):
+
+- `children: Vec<{ name, repeatable }>` — every element name permitted as a direct child,
+  each tagged with whether the schema permits more than one occurrence (reachable under a
+  `zeroOrMore`/`oneOrMore` without crossing into another element's own body first).
+- `attributes: Vec<{ name, required }>` — every attribute name the element permits, each
+  tagged required/optional (a member of a RELAX NG `<choice>` is recorded as not required,
+  since no single choice member is individually required).
+- `mixed: bool` — whether character data is permitted directly alongside children
+  (RELAX NG `<text/>`/`<mixed>`).
+
+**What is *not* recorded**: relative order, which children mutually exclude each other
+(`<choice>`), and which must co-occur (`<group>`/`<interleave>`) — the full pattern structure
+RELAX NG (and DTD content models) can express. This is a deliberate flattening, not an
+oversight, and it is the one place this amendment makes a call the original open question
+explicitly said might itself need to come back to a human: **it is not being kicked back**,
+because the two questions a registry consumer actually asks are different in kind, and the
+chosen scope answers the one this design is for. "Can `sec` contain `fig`?" is a
+set-membership question the flattened form answers directly. "Is *this specific* `<sec>`
+element valid?" is a validation question that needs the full grammar (order, choice
+exclusivity, interleave) — and that is not this registry's job; a consumer that needs real
+validation should run the source schema through a RELAX NG validator, which already exists
+and already does this correctly. Recording the full pattern structure was considered and
+rejected for the pilot: it would substantially increase the derivation tool's complexity (a
+tree-shaped content-model type mirroring RELAX NG's own pattern grammar, instead of two flat
+maps) to answer a question this design does not need to answer, and JATS's `<define>`-based
+customization layer means many patterns are shared across dozens of elements, so a literal
+per-element grammar tree would also be far more repetitive on disk than the flattened form.
+
+**Whether a richer, validation-capable representation is worth building is left as a new
+open question (open question 6, below)** rather than decided here — per the instructions
+that produced this amendment, a fork that the flattened-vs-full choice could itself be
+contested is exactly the kind of thing to flag rather than guess past.
+
+**Size impact, measured on the JATS pilot**: the committed registry grew from 4,079 lines /
+90 KB to 39,946 lines / 885 KB — roughly 10×. This is not concentrated in one place: of the
+~12,962 permitted-child entries added, 5,404 belong to the 181 embedded MathML elements
+(foreign to JATS's own vocabulary, raw-preserved wholesale by the reader) and 7,558 belong to
+JATS's own 305 elements — both halves are substantial, so this is an inherent property of the
+flattened design at this vocabulary size (~25-30 permitted children per element on average),
+not a MathML-specific artifact that could be filtered away.
+
+**Decided: no new Cargo sub-feature for content models.** They stay inside the existing
+`registry` feature rather than being split into e.g. a `registry-content-models` feature
+behind a second committed file. Justification: (1) this repo already has a size precedent at
+this order of magnitude — `ooxml-wml`'s committed `generated.rs` is 3.6 MB — so 885 KB of
+opt-in YAML is not disproportionate; (2) `registry` is already the opt-in gate that decides
+whether a consumer pays for the catalog *at all*; a consumer who wants existence/slice
+queries only and never reads `Construct::content_model` pays an unused-field cost, not a
+new capability's cost, and Cargo feature gating exists to scope contracts, not to save bytes
+within one contract (per `CLAUDE.md`: "Feature gating is about contract scoping, not binary
+size"); (3) splitting into two committed artifacts would also fork `--check` drift detection,
+provenance, and the derivation tool's output into two parallel things to keep in sync, for a
+benefit (some consumers skip an 800 KB parse) that is real but modest, since the `registry`
+feature is already off by default and `Registry::from_yaml` is a one-time, lazily-triggered
+cost (`OnceLock`), never a hot path. **This call is per-format, not general**: TEI (614
+elements) and DocBook (414 elements) may produce a different size profile once their
+registries are derived, and that measurement — not this one — should decide whether *those*
+formats need a different answer. Flagged for re-check at rollout time, not assumed to
+generalize.
+
+### Decision B: `SourceKind::HandCurated` is removed; scripted extraction is a first-class alternative to a schema
+
+Open question 2 asked whether hand-curated registries (for a format with no machine-readable
+schema) should be permitted at all, given that a hand-curated construct *list* delivers none
+of this design's guarantee — it is exactly as fallible as the `COVERAGE.md` checklist it
+replaces. The human decision resolves this with a third option neither original alternative
+offered: **the property that matters is not "came from a schema," it is "reproducibly
+derived."** A format with no machine-readable schema does not get an exemption to hand-type
+its list; it gets pointed at its own published prose (an HTML element index, a printed
+reference table, whatever the format publishes) and required to extract that list
+*mechanically* — a script, committed alongside the registry, that fetches the published
+artifact and parses it, the same way `derive-registry`'s RELAX NG walk does for JATS. A
+scripted extraction is re-runnable, diffable against a fresh fetch, and auditable by reading
+the script; a hand-typed list is none of those, regardless of how careful the person typing
+it was.
+
+**Implementation**: `SourceKind::HandCurated` is **removed outright**, not retained as a
+marked-unreliable fallback. `SourceKind::ScriptedExtraction` replaces it as a fully permitted,
+first-class source kind — named for the mechanism (an extraction script), by the same
+convention as its siblings (`Relaxng`, `Rnc`, `Dtd`, `Xsd`, `Odd` each name a schema *form*;
+`ScriptedExtraction` names an extraction *method*, since there is no schema form to name in
+this case — that category difference is documented on the variant, not hidden).
+
+**Why remove rather than retain as a documented fallback**: keeping `HandCurated` around
+"for when even scripted extraction is impossible" preserves exactly the escape hatch this
+whole design exists to close, on the strength of a case that has not actually arisen — no
+format encountered so far (JATS, DocBook, TEI, OOXML, ODF) lacks *some* published,
+script-extractable artifact of its own element vocabulary; even DocBook, the format with the
+worst schema story (a flattened, unmodularized RELAX NG), still has a machine-readable
+schema to derive the construct *list* from — its modularization is what's missing, which
+Amendment 1 already settled does not require an exemption, only an honestly-empty
+`normative_slices`. Per `CLAUDE.md`'s disposition ("no menu of invented options dressed up
+as a choice"), inventing a hand-curation fallback for a hypothetical case not yet in evidence
+would be exactly that: a guess wearing the hat of a design decision. If a genuine
+no-extractable-artifact case is found later, that is new information a future ADR amendment
+can act on — reintroducing the variant then, with the specific format that needed it named as
+the motivating case, costs nothing and is cheaper than carrying an unused escape hatch now.
+
+**Provenance carried by a `ScriptedExtraction` registry**: the existing `Provenance` /
+`SourceDigest` shape already covers what a re-runnable extraction needs, with one small
+addition (`SourceDigest.url`, a per-entry URL for when a scripted extraction spans several
+distinct published pages that don't share one `source_base_url` + relative-file join) —
+
+- source URL(s): `Provenance::source_base_url` (+ `SourceDigest.file`), or `SourceDigest.url`
+  per entry for a multi-page extraction.
+- retrieval date: `Provenance::derived_on` (already existed; no format-specific meaning
+  change — "derived" already meant "fetched and processed on this date").
+- checksum of the fetched artifact: `Provenance::source_digests[].sha256` + `.bytes` (already
+  existed; a downloaded HTML page checksums exactly like a downloaded schema file).
+- reference to the extraction script: `Provenance::derived_by` (already existed as "tool and
+  version"; for a scripted extraction this names the script path and version, e.g.
+  `scripts/docbook/extract-element-index.py v1`, the same slot `jats-fmt derive-registry v2`
+  occupies for JATS).
+
+No new top-level provenance fields were needed — the existing shape generalizes, because it
+was already designed around "what does a reader need to re-derive and check for drift,"
+which turns out to be the same question for a downloaded schema and a downloaded prose page.
+
+**Practical consequence**: this makes DocBook's *construct-list* rollout tractable the same
+way Amendment 1 made its *slice* rollout tractable, without lowering the bar the design
+exists to hold. It also retires a framing this ADR used uncritically until now —
+"schema-derived vs. hand-curated" was a false dichotomy; the real axis was always
+reproducible-vs-not, and a schema was only ever one way to be reproducible.
+
+**Not resolved by this amendment**: which specific published artifact and script DocBook (or
+any other schema-less format) should use — that is rollout work for the format in question,
+tracked in `TODO.md`, not a design decision this ADR needs to make in the abstract.
+
 ## Context
 
 Every format vertical's completion claim rests on a ratio: "101/117 constructs covered."
@@ -190,10 +334,13 @@ any kind** — no spec edition, no checksum, no derivation date.
 
 ## Decision
 
-**Decision 3 below is superseded by the 2026-07-28 amendment above — retained for the
+**Decision 3 below is superseded by Amendment 1 above — retained for the
 historical record of what was originally decided (including its factual error about OOXML),
-not as current guidance.** See the amendment for the corrected two-field model. Decisions 1,
-2, and 4–9 are unaffected by the amendment and remain as originally decided.
+not as current guidance.** See Amendment 1 for the corrected two-field model. Decisions 1,
+2, and 4–9 below are unaffected by either amendment and remain as originally decided. (Open
+questions 2 and 4, a separate numbering from these Decision-section items, are resolved by
+Amendment 2 above — not to be confused with Decision 2/4 here, which are the Cargo-feature
+and runtime-queryable decisions respectively.)
 
 Each `-fmt` crate carries a **construct registry**: a committed, machine-readable catalog
 of every construct its format defines, derived from the format's own published schema.
@@ -354,7 +501,7 @@ never a hot path.
   build source, not the normative artifact, and its license was not verified. Under the
   amended two-field model this no longer blocks rollout: DocBook's registry ships with
   `normative_slices: []` and a recorded reason, and may separately carry an invented, always-
-  permitted `pragmatic_slices` grouping — see the amendment and open question 1.
+  permitted `pragmatic_slices` grouping — see Amendment 1 and open question 1.
 
 - **Why JATS was piloted rather than DocBook.** DocBook has the larger known-failure
   dataset, but piloting it would have forced inventing a slice partition under the
@@ -364,7 +511,7 @@ never a hot path.
   `jats_fmt`'s own parser derives it with no new tooling and no dependency on
   `ooxml-codegen`'s RNC subset), *and* known-failure data. It exercises every part of the
   design at once. (This historical reasoning is why JATS went first, not a claim that
-  DocBook is still blocked the same way — see the amendment.)
+  DocBook is still blocked the same way — see Amendment 1.)
 
 - **`jats-fmt` gained optional `serde`/`serde_yaml`/`sha2` dependencies**, all behind
   `registry`/`registry-derive`. A default build is unchanged. `sha2` is new to the
@@ -381,7 +528,7 @@ never a hot path.
 
 Genuine forks, recorded rather than decided unilaterally:
 
-1. **DocBook's `pragmatic_slices`.** *(Narrowed by the 2026-07-28 amendment — was "ship
+1. **DocBook's `pragmatic_slices`.** *(Narrowed by Amendment 1 — was "ship
    empty or adopt Codeberg," now only about the pragmatic field, since `normative_slices: []`
    with a recorded reason can ship unconditionally.)* Should DocBook's rollout populate
    `pragmatic_slices` at all, and if so, invent a fresh grouping or borrow the shape of the
@@ -392,14 +539,9 @@ Genuine forks, recorded rather than decided unilaterally:
    being the normative artifact? That would need its license resolved first, because it would
    be a citation claim, not an invented grouping.
 
-2. **Hand-curated registries.** *(Unaffected by the amendment — see the amendment's own note
-   on why the two questions are separable.)* `SourceKind::HandCurated` exists for a format
-   with no machine-readable schema, but such a registry does **not** deliver this design's
-   guarantee — it is exactly as fallible as the checklist it replaces. Should such registries
-   be allowed at all (clearly marked), or should a format with no schema keep a COVERAGE.md
-   and not pretend otherwise? This is about the construct *list*, not about slices — a
-   hand-curated `pragmatic_slices` grouping is already settled as fine by the amendment,
-   independent of how this question resolves.
+2. ~~**Hand-curated registries.**~~ **Resolved by Amendment 2**: `SourceKind::HandCurated` is
+   removed; `SourceKind::ScriptedExtraction` is the answer for a format with no
+   machine-readable schema. See Amendment 2, Decision B.
 
 3. **OOXML's license.** No copyright or license statement was found in the ECMA-376 schema
    files or in Parts 1 and 2. Ecma publishes two boilerplate notices and neither is tied to
@@ -411,12 +553,11 @@ Genuine forks, recorded rather than decided unilaterally:
    `pragmatic_slices`, which is our own invented grouping and carries no redistribution claim
    either way.
 
-4. **Attributes.** The pilot registers attributes alongside elements (144 of them). Whether
-   the *content model* (which children/attributes each element permits) also belongs in the
-   registry is unsettled: it is the natural next question a validator or linter consumer
-   would ask, and it is a large increase in derivation complexity and document size.
+4. ~~**Attributes/content models.**~~ **Resolved by Amendment 2**: content models (permitted
+   children and attributes, flattened, no ordering/choice/grouping structure) are now in the
+   registry. See Amendment 2, Decision A.
 
-5. **OOXML's slice/Cargo-feature collapse rule.** *(New, from the 2026-07-28 amendment.)*
+5. **OOXML's slice/Cargo-feature collapse rule.** *(New, from Amendment 1.)*
    Once ooxml's tags become `pragmatic_slices`, a construct can still legitimately belong to
    several of them (`drawingHF: [drawings, layout]`), but a Cargo feature gate is a single
    `#[cfg]` predicate per field. Today `primary_feature` silently keeps only the first tag and
@@ -425,6 +566,17 @@ Genuine forks, recorded rather than decided unilaterally:
    (today's silent behavior), OR-of-all, or a hard requirement that multi-tagged constructs
    name their gate explicitly. This needs a human call before or during the ooxml migration
    (`TODO.md` rollout item 3); it is not decided here.
+
+6. **A full, validation-capable content-model representation.** *(New, from Amendment 2.)*
+   Amendment 2's flattened `children`/`attributes`/`mixed` shape answers "what can this
+   element contain" but not "is this specific document instance valid" — it deliberately
+   drops ordering, choice exclusivity, and group/interleave co-occurrence. Should a future
+   revision add a second, richer representation (a tree mirroring the source pattern
+   structure) alongside the flattened one, for consumers that want real validation without
+   reaching for a RELAX NG validator directly? Not decided: this was flagged rather than
+   guessed past per the instructions that produced Amendment 2, and no consumer has yet asked
+   for validation-grade output — if one does, that request should drive the shape, rather
+   than speculatively building it now.
 
 ## Alternatives considered
 
