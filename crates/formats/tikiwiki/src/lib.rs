@@ -2,6 +2,15 @@
 //!
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-tikiwiki` and `rescribe-write-tikiwiki` as thin adapter layers.
+//!
+//! This crate denies `unsafe` by default (production code must never use it); a prior version of `events::EventIter::new`
+//! used `unsafe { transmute }` to tie already-owned `Event<'static>` data to
+//! the input lifetime `'a`. The transmute was not exploitable UB (widening
+//! `'static` to `'a` is sound), but it was unnecessary lifetime laundering —
+//! `emit_block`/`emit_inlines` now build `Vec<Event<'a>>` directly since
+//! every event they push owns its data. See `src/events.rs`.
+
+#![deny(unsafe_code)]
 
 pub mod ast;
 pub mod batch;

@@ -10,11 +10,15 @@ pub enum Event<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
     StartBlockquote,
     EndBlockquote,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
@@ -25,7 +29,9 @@ pub enum Event<'a> {
     HorizontalRule,
     StartTable,
     EndTable,
-    StartTableRow { is_header: bool },
+    StartTableRow {
+        is_header: bool,
+    },
     EndTableRow,
     StartTableCell,
     EndTableCell,
@@ -47,11 +53,18 @@ pub enum Event<'a> {
     EndSubscript,
     InlineCode(Cow<'a, str>),
     Nowiki(Cow<'a, str>),
-    StartLink { url: String },
+    StartLink {
+        url: String,
+    },
     EndLink,
-    StartWikiLink { page: String },
+    StartWikiLink {
+        page: String,
+    },
     EndWikiLink,
-    InlineImage { url: String, alt: String },
+    InlineImage {
+        url: String,
+        alt: String,
+    },
 }
 
 /// Backwards-compatible alias for batch mode (all text is owned).
@@ -123,18 +136,14 @@ pub struct EventIter<'a> {
 impl<'a> EventIter<'a> {
     pub fn new(input: &'a str) -> Self {
         let (doc, _) = crate::parse::parse(input);
-        let mut events = Vec::new();
+        // `emit_block`/`emit_inlines` are generic over the output lifetime:
+        // every event they push owns its data (`Cow::Owned`, `String`), so
+        // there is no actual borrow of `doc` to launder and no need for
+        // `unsafe { transmute }` — we can build `Vec<Event<'a>>` directly.
+        let mut events: Vec<Event<'a>> = Vec::new();
         for block in &doc.blocks {
             emit_block(block, &mut events);
         }
-        // Safety: all text fields are owned Strings from the parser, so they
-        // have no lifetime dependency on `doc`. We transmute to tie them to
-        // `'a` which is the input lifetime. This is safe because the Strings
-        // are self-contained.
-        let events: Vec<Event<'a>> = events
-            .into_iter()
-            .map(|e| unsafe { std::mem::transmute::<Event<'static>, Event<'a>>(e) })
-            .collect();
         EventIter {
             _input: input,
             events: events.into_iter(),
@@ -150,7 +159,7 @@ impl<'a> Iterator for EventIter<'a> {
     }
 }
 
-fn emit_block(block: &Block, out: &mut Vec<OwnedEvent>) {
+fn emit_block<'a>(block: &Block, out: &mut Vec<Event<'a>>) {
     match block {
         Block::Paragraph { inlines, .. } => {
             out.push(Event::StartParagraph);
@@ -162,7 +171,9 @@ fn emit_block(block: &Block, out: &mut Vec<OwnedEvent>) {
             emit_inlines(inlines, out);
             out.push(Event::EndHeading);
         }
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             out.push(Event::CodeBlock {
                 language: language.clone(),
                 content: Cow::Owned(content.clone()),
@@ -185,7 +196,9 @@ fn emit_block(block: &Block, out: &mut Vec<OwnedEvent>) {
         Block::Table { rows, .. } => {
             out.push(Event::StartTable);
             for row in rows {
-                out.push(Event::StartTableRow { is_header: row.is_header });
+                out.push(Event::StartTableRow {
+                    is_header: row.is_header,
+                });
                 for cell in &row.cells {
                     out.push(Event::StartTableCell);
                     emit_inlines(&cell.inlines, out);
@@ -201,7 +214,7 @@ fn emit_block(block: &Block, out: &mut Vec<OwnedEvent>) {
     }
 }
 
-fn emit_list_item(item: &ListItem, out: &mut Vec<OwnedEvent>) {
+fn emit_list_item<'a>(item: &ListItem, out: &mut Vec<Event<'a>>) {
     out.push(Event::StartListItem);
     emit_inlines(&item.inlines, out);
     for child in &item.children {
@@ -210,13 +223,13 @@ fn emit_list_item(item: &ListItem, out: &mut Vec<OwnedEvent>) {
     out.push(Event::EndListItem);
 }
 
-fn emit_inlines(inlines: &[Inline], out: &mut Vec<OwnedEvent>) {
+fn emit_inlines<'a>(inlines: &[Inline], out: &mut Vec<Event<'a>>) {
     for inline in inlines {
         emit_inline(inline, out);
     }
 }
 
-fn emit_inline(inline: &Inline, out: &mut Vec<OwnedEvent>) {
+fn emit_inline<'a>(inline: &Inline, out: &mut Vec<Event<'a>>) {
     match inline {
         Inline::Text(s, _) => out.push(Event::Text(Cow::Owned(s.clone()))),
         Inline::Bold(children, _) => {
@@ -262,7 +275,10 @@ fn emit_inline(inline: &Inline, out: &mut Vec<OwnedEvent>) {
             out.push(Event::EndWikiLink);
         }
         Inline::Image { url, alt, .. } => {
-            out.push(Event::InlineImage { url: url.clone(), alt: alt.clone() });
+            out.push(Event::InlineImage {
+                url: url.clone(),
+                alt: alt.clone(),
+            });
         }
         Inline::LineBreak { .. } => out.push(Event::LineBreak),
     }
@@ -280,7 +296,10 @@ mod tests {
     #[test]
     fn test_events_heading() {
         let evs: Vec<_> = events("! Hello").collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndHeading)));
     }
 
@@ -304,5 +323,44 @@ mod tests {
         assert!(evs.iter().any(|e| matches!(e, Event::StartTable)));
         assert!(evs.iter().any(|e| matches!(e, Event::EndTable)));
         assert!(evs.iter().any(|e| matches!(e, Event::StartTableCell)));
+    }
+
+    /// Regression guard for the removed `unsafe { transmute::<Event<'static>,
+    /// Event<'a>> }` in `EventIter::new`: that transmute happened to be sound
+    /// (widening `'static` to any `'a` is always valid), but it was
+    /// unnecessary lifetime laundering around data that was already fully
+    /// owned. `emit_block`/`emit_inlines` now build `Vec<Event<'a>>` directly.
+    /// This test exercises many short-lived iterators borrowing from
+    /// temporary owned `String`s, dropped in a different order than they
+    /// were created, to confirm the lifetime relationship is the genuine one
+    /// enforced by the borrow checker rather than one papered over by
+    /// `unsafe`.
+    #[test]
+    fn test_events_iterator_lifetime_is_real() {
+        let inputs: Vec<String> = (0..20)
+            .map(|i| format!("! Section {i}\nParagraph __{i}__ text."))
+            .collect();
+        let mut iters: Vec<_> = inputs.iter().map(|s| events(s)).collect();
+        for (i, it) in iters.iter_mut().enumerate() {
+            match i % 3 {
+                0 => {
+                    let _ = it.next();
+                }
+                1 => {
+                    let drained: Vec<_> = it.collect();
+                    assert!(!drained.is_empty());
+                }
+                _ => {}
+            }
+        }
+        iters.reverse();
+        drop(iters);
+        drop(inputs);
+
+        let evs: Vec<_> = events("! Hi").collect();
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartHeading { level: 1 }))
+        );
     }
 }
