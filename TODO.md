@@ -107,6 +107,54 @@ and not being retracted — only the construct-list-completeness component of it
   landing time (2026-07-28, same day) — read it as history, and see the ADR amendment for
   what actually ships now.
 
+  **2026-07-28, later the same day: a second amendment adds content models and replaces
+  hand-curation with scripted extraction.** Two human decisions resolved ADR 0013's open
+  questions 4 and 2; both are implemented in `jats-fmt` (commits `af657562fd` for the ADR
+  text, `ce5d98b054` for the implementation).
+
+  - **Content models** (open question 4): `Construct::content_model: Option<ContentModel>`
+    now records, per element, the *flattened* set of permitted direct children (each tagged
+    `repeatable`), permitted attributes (each tagged `required`), and whether character data
+    is allowed directly (`mixed`) — deliberately **not** the source schema's ordering, choice,
+    group, or interleave structure (see the registry module docs and the ADR amendment for
+    why flattening was chosen over a full grammar tree, and open question 6 for whether a
+    richer representation is worth building later). `None` for attribute constructs, which
+    have a value type rather than a content model. `registry_version` bumped 2 → 3.
+    `derive-registry` resolves this by building a global `<define name>` table across every
+    parsed RNG module and walking each `<element>`'s body, with a cycle guard on `<ref>`
+    resolution. New `Construct` methods: `permits_child`, `requires_attribute`,
+    `permits_attribute`.
+
+    **Measured size impact**: the committed JATS registry grew from 4,079 lines / 90 KB to
+    39,946 lines / 885 KB (~10×), split roughly evenly between JATS's own 305 elements
+    (7,558 permitted-child entries) and the 181 embedded MathML elements (5,404 entries) — not
+    a MathML-specific artifact, an inherent property of the flattened form at this vocabulary
+    size (~25-30 permitted children per element on average). **Decided: no new Cargo
+    sub-feature for content models** — they stay inside the existing `registry` feature.
+    Justified in the ADR amendment (existing 3.6 MB `ooxml-wml` `generated.rs` precedent;
+    `registry` already gates whether a consumer pays for the catalog at all; splitting would
+    fork `--check`/provenance/derivation into two artifacts for a modest benefit). Flagged as
+    a **per-format**, not general, call — re-check the size before assuming the same answer
+    holds once TEI (614 elements) or DocBook (414 elements) get registries.
+
+  - **Hand-curation replaced by scripted extraction** (open question 2): `SourceKind::HandCurated`
+    is **removed outright** — not kept as a marked-unreliable fallback — and replaced by
+    `SourceKind::ScriptedExtraction`: a format with no machine-readable schema derives its
+    construct list via a committed, re-runnable script that extracts it from a published
+    prose artifact (an HTML element index, etc.), the same reproducibility property a schema
+    derivation has. No new top-level `Provenance` fields were needed — `source_base_url`,
+    `derived_on`, `derived_by`, and `source_digests` already cover "source URL(s), retrieval
+    date, checksum, extraction-script reference"; `SourceDigest` gained one small addition,
+    an optional per-entry `url`, for extractions spanning several distinct published pages
+    that don't share one base URL. **This retires "schema-derived vs. hand-curated" as a
+    framing** — it was a false dichotomy; the real axis was always reproducible-vs-not, and
+    a schema was only ever one way to be reproducible. Practical consequence: DocBook's
+    *construct-list* rollout (not just its slice rollout, already unblocked by the first
+    amendment) is now tractable without lowering the bar, once someone writes the extraction
+    script against DocBook's own published element reference. Not resolved here: which
+    specific artifact/script DocBook (or any other schema-less format) should use — that's
+    rollout work, not a design decision.
+
   **Pilot: JATS 1.3 Archiving, end to end.** `crates/formats/jats-fmt/registry/jats-1.3-archiving.yaml`
   (derived), `crates/formats/jats-fmt/src/registry.rs` (runtime API),
   `crates/formats/jats-fmt/src/bin/derive-registry.rs` (derivation + `--check` drift
@@ -216,15 +264,19 @@ and not being retracted — only the construct-list-completeness component of it
      `lexer`/`parser`/`ast` into an `rnc-parse` crate — it is already used cross-format and
      the `ooxml-codegen` name is the misnomer, not the design.
 
-  5. **Formats with no machine-readable schema.** `SourceKind::HandCurated` exists but a
-     hand-curated registry does *not* deliver this design's guarantee — it is exactly as
-     fallible as the checklist it replaces. ADR 0013 open question 2 leaves undecided
-     whether such registries should be allowed at all (clearly marked) or whether those
-     formats should keep a COVERAGE.md and not pretend otherwise. Decide before the first
-     schema-less format wants one; do not let it happen by default. **Not the same question
-     as a hand-curated *slice*** — the 2026-07-28 amendment already settled that a
-     `pragmatic_slices` grouping is fine when explicitly marked non-normative, regardless
-     of how this question (about the construct *list*) resolves.
+  5. **Formats with no machine-readable schema — resolved (2026-07-28, second amendment).**
+     `SourceKind::HandCurated` is removed; `SourceKind::ScriptedExtraction` is the answer:
+     a format with no machine-readable schema derives its construct list via a committed,
+     re-runnable script against a published prose artifact (an HTML element index, etc.),
+     never by hand-typing. See this file's registry-rollout entry above and ADR 0013
+     Amendment 2, Decision B, for the full reasoning and what `ScriptedExtraction`'s
+     provenance must carry. What's left as rollout work, not a design decision: writing the
+     actual extraction script for the first schema-less format that wants one (DocBook is
+     the leading candidate, since Amendment 1 already unblocked its *slice* rollout, leaving
+     only its construct-list rollout open — which this closes the design gap for). **Not the
+     same question as a hand-curated *slice*** — Amendment 1 already settled that a
+     `pragmatic_slices` grouping is fine when explicitly marked non-normative, independent of
+     this.
 
 - **DocBook's two confirmed code gaps from the 2026-07-28 element-index audit fixed;
   audit re-verified and extended, not just patched (2026-07-28).** Follow-up to the
