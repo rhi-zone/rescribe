@@ -6,6 +6,13 @@ See `fixtures/spec.md` for category definitions.
 CSL-JSON is defined by the Citation Style Language specification.
 Reference: https://citeproc-js.readthedocs.io/en/latest/csl-json/markup.html
 
+Items parse into `bibliography`/`bibliography_entry`/`bibliography_field` IR nodes (see
+ADR 0005 and `rescribe_std::node`), not the legacy flat `definition_list` shape. Each field
+node carries both `field:role` (the semantic vocabulary) and `csl:field` (the exact CSL-JSON
+variable name). Any CSL-JSON variable with no `field:role` equivalent (`genre`, `note`,
+`collection-title`, ...) round-trips as a `misc` field distinguished by `csl:field`, via the
+reader's `#[serde(flatten)]` catch-all — nothing scalar is silently dropped any more.
+
 ## Item types (CSL `type` field)
 
 ### Common types

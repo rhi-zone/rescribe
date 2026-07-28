@@ -1,7 +1,8 @@
 //! CSL JSON reader for rescribe.
 //!
-//! Parses CSL JSON (Citation Style Language JSON) into rescribe's document IR.
-//! Each citation item is converted to a structured bibliography node.
+//! Parses CSL JSON (Citation Style Language JSON) into rescribe's document
+//! IR, using the `bibliography`/`bibliography_entry`/`bibliography_field`
+//! node kinds (see `rescribe_std::node` and ADR 0005 in the rescribe repo).
 //!
 //! # Example
 //!
@@ -20,27 +21,28 @@
 //! let doc = result.value;
 //! ```
 
-use rescribe_core::{ConversionResult, Document, Node, ParseError, Properties};
-use rescribe_std::{node, prop};
+use rescribe_core::{ConversionResult, Document, FidelityWarning, Node, ParseError, Properties};
+use rescribe_std::{PropValue, node, prop};
 use serde::Deserialize;
+use serde_json::Value;
+use std::collections::HashMap;
 
 /// Parse CSL JSON text into a document.
 pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
     let items: Vec<CslItem> = serde_json::from_str(input)
         .map_err(|e| ParseError::Invalid(format!("CSL JSON parse error: {}", e)))?;
 
-    let warnings = Vec::new();
+    let mut warnings = Vec::new();
     let mut entries = Vec::new();
 
     for item in &items {
-        let entry_node = convert_item(item);
-        entries.push(entry_node);
+        entries.push(convert_item(item, &mut warnings));
     }
 
     let content = if entries.is_empty() {
         Node::new(node::DOCUMENT)
     } else {
-        Node::new(node::DOCUMENT).child(Node::new(node::DEFINITION_LIST).children(entries))
+        Node::new(node::DOCUMENT).child(Node::new(node::BIBLIOGRAPHY).children(entries))
     };
 
     let document = Document {
@@ -54,7 +56,6 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 struct CslItem {
     id: String,
     #[serde(rename = "type")]
@@ -65,11 +66,10 @@ struct CslItem {
     issued: Option<CslDate>,
     #[serde(rename = "container-title")]
     container_title: Option<String>,
-    #[serde(rename = "collection-title")]
-    collection_title: Option<String>,
     publisher: Option<String>,
     #[serde(rename = "publisher-place")]
     publisher_place: Option<String>,
+    edition: Option<String>,
     volume: Option<StringOrInt>,
     issue: Option<StringOrInt>,
     page: Option<String>,
@@ -81,8 +81,11 @@ struct CslItem {
     isbn: Option<String>,
     #[serde(rename = "ISSN")]
     issn: Option<String>,
-    #[serde(rename = "abstract")]
-    abstract_text: Option<String>,
+    /// Every other CSL-JSON variable (`abstract`, `note`, `genre`,
+    /// `collection-title`, `language`, ... — the CSL variable list is large
+    /// and growing) lands here instead of being silently dropped.
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,8 +98,9 @@ struct CslName {
 #[derive(Debug, Deserialize)]
 struct CslDate {
     #[serde(rename = "date-parts")]
-    date_parts: Option<Vec<Vec<i32>>>,
+    date_parts: Option<Vec<Vec<Value>>>,
     literal: Option<String>,
+    raw: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,158 +110,256 @@ enum StringOrInt {
     Int(i64),
 }
 
-impl std::fmt::Display for StringOrInt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl StringOrInt {
+    fn as_str_owned(&self) -> String {
         match self {
-            StringOrInt::String(s) => write!(f, "{}", s),
-            StringOrInt::Int(i) => write!(f, "{}", i),
+            StringOrInt::String(s) => s.clone(),
+            StringOrInt::Int(i) => i.to_string(),
         }
     }
 }
 
-fn convert_item(item: &CslItem) -> Node {
-    let key = item.id.clone();
-    let item_type = item
-        .item_type
-        .clone()
-        .unwrap_or_else(|| "unknown".to_string());
+/// CSL-JSON variable names with no `field:role` equivalent, mapped to a
+/// `misc` field tagged with the original variable name via `csl:field` (the
+/// same round-trip mechanism as `rescribe-read-bibtex`'s `bibtex:field`).
+/// Everything not explicitly modeled (author/editor/title/container-
+/// title/publisher/publisher-place/edition/volume/issue/page/DOI/URL/ISBN/
+/// ISSN/issued) goes through this generic path.
+fn convert_item(item: &CslItem, warnings: &mut Vec<FidelityWarning>) -> Node {
+    let mut entry = Node::new(node::BIBLIOGRAPHY_ENTRY).prop("csl:id", item.id.clone());
+    if let Some(item_type) = &item.item_type {
+        entry = entry.prop("csl:type", item_type.clone());
+    }
 
-    // Create the term (citation key)
-    let term = Node::new(node::DEFINITION_TERM)
-        .child(Node::new(node::CODE).prop(prop::CONTENT, key.clone()));
+    let mut fields = Vec::new();
 
-    // Build the description content
-    let mut desc_children = Vec::new();
-
-    // Item type badge
-    let type_text = format!("[{}] ", item_type);
-    desc_children.push(
-        Node::new(node::SPAN)
-            .prop("html:class", "csl-type")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, type_text)),
-    );
-
-    // Authors
     if let Some(authors) = &item.author {
-        let author_text = authors
-            .iter()
-            .map(format_name)
-            .collect::<Vec<_>>()
-            .join("; ");
-        if !author_text.is_empty() {
-            desc_children.push(
-                Node::new(node::STRONG)
-                    .child(Node::new(node::TEXT).prop(prop::CONTENT, author_text)),
-            );
-            desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, ". "));
+        for name in authors {
+            fields.push(name_field("author", name));
+        }
+    }
+    if let Some(editors) = &item.editor {
+        for name in editors {
+            fields.push(name_field("editor", name));
         }
     }
 
-    // Title
     if let Some(title) = &item.title {
-        desc_children.push(
-            Node::new(node::EMPHASIS)
-                .child(Node::new(node::TEXT).prop(prop::CONTENT, title.clone())),
-        );
-        desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, ". "));
+        fields.push(text_field("title", title, "title"));
     }
-
-    // Container title (journal, book, etc.)
-    if let Some(container) = &item.container_title {
-        desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, container.clone()));
-        desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, ". "));
+    if let Some(container_title) = &item.container_title {
+        fields.push(text_field(
+            "container_title",
+            container_title,
+            "container-title",
+        ));
     }
-
-    // Volume/Issue
-    if let Some(volume) = &item.volume {
-        desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, format!("{}", volume)));
-        if let Some(issue) = &item.issue {
-            desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, format!("({})", issue)));
-        }
-        desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, ". "));
-    }
-
-    // Date
-    if let Some(date) = &item.issued {
-        let date_str = format_date(date);
-        if !date_str.is_empty() {
-            desc_children
-                .push(Node::new(node::TEXT).prop(prop::CONTENT, format!(" ({})", date_str)));
-        }
-    }
-
-    // Pages
-    if let Some(page) = &item.page {
-        desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, format!(", pp. {}", page)));
-    }
-
-    // Publisher
     if let Some(publisher) = &item.publisher {
-        desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, format!(". {}", publisher)));
-        if let Some(place) = &item.publisher_place {
-            desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, format!(", {}", place)));
+        fields.push(text_field("publisher", publisher, "publisher"));
+    }
+    if let Some(place) = &item.publisher_place {
+        fields.push(text_field("publisher_location", place, "publisher-place"));
+    }
+    if let Some(edition) = &item.edition {
+        fields.push(text_field("edition", edition, "edition"));
+    }
+    if let Some(volume) = &item.volume {
+        fields.push(text_field("volume", &volume.as_str_owned(), "volume"));
+    }
+    if let Some(issue) = &item.issue {
+        fields.push(text_field("issue", &issue.as_str_owned(), "issue"));
+    }
+    if let Some(page) = &item.page {
+        match split_page_range(page) {
+            PageSplit::Single => fields.push(text_field("misc", page, "page")),
+            PageSplit::Range(first, last) => {
+                fields.push(text_field("page_first", &first, "page"));
+                fields.push(text_field("page_last", &last, "page"));
+            }
+            PageSplit::Ambiguous => fields.push(text_field("misc", page, "page")),
+        }
+    }
+    for (field_name, scheme, value) in [
+        ("DOI", "doi", &item.doi),
+        ("URL", "url", &item.url),
+        ("ISBN", "isbn", &item.isbn),
+        ("ISSN", "issn", &item.issn),
+    ] {
+        if let Some(v) = value {
+            fields.push(identifier_field(scheme, v, field_name));
         }
     }
 
-    // DOI
-    if let Some(doi) = &item.doi {
-        desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, ". "));
-        desc_children.push(
-            Node::new(node::LINK)
-                .prop(prop::URL, format!("https://doi.org/{}", doi))
-                .child(Node::new(node::TEXT).prop(prop::CONTENT, format!("doi:{}", doi))),
-        );
+    if let Some(issued) = &item.issued {
+        match convert_date(issued) {
+            DateResult::Structured(map) => entry = entry.prop(prop::DATE, PropValue::Map(map)),
+            DateResult::Text(text) => fields.push(text_field("misc", &text, "issued")),
+            DateResult::None => {}
+        }
     }
 
-    // URL
-    if let Some(url) = &item.url {
-        desc_children.push(Node::new(node::TEXT).prop(prop::CONTENT, ". "));
-        desc_children.push(
-            Node::new(node::LINK)
-                .prop(prop::URL, url.clone())
-                .child(Node::new(node::TEXT).prop(prop::CONTENT, url.clone())),
-        );
+    // Every remaining CSL-JSON variable, in the (deterministic) order
+    // serde_json's Map preserves — insertion order from the source JSON.
+    for (key, value) in &item.extra {
+        match value {
+            Value::String(s) => fields.push(text_field("misc", s, key)),
+            Value::Number(n) => fields.push(text_field("misc", &n.to_string(), key)),
+            Value::Bool(b) => fields.push(text_field("misc", &b.to_string(), key)),
+            Value::Null => {}
+            // Nested objects/arrays (e.g. a contributor-role variable this
+            // reader doesn't special-case, like `translator`) have no
+            // lossless flat-text representation here — tracked as a
+            // fidelity gap rather than silently dropped or guessed at.
+            Value::Array(_) | Value::Object(_) => {
+                warnings.push(FidelityWarning::new(
+                    rescribe_core::Severity::Minor,
+                    rescribe_core::WarningKind::UnsupportedNode(format!("csl-json:{key}")),
+                    format!(
+                        "CSL-JSON variable '{key}' has a nested array/object value with no \
+                         modeled representation; dropped"
+                    ),
+                ));
+            }
+        }
     }
 
-    let desc = Node::new(node::DEFINITION_DESC)
-        .prop("csl:id", key)
-        .prop("csl:type", item_type)
-        .child(Node::new(node::PARAGRAPH).children(desc_children));
-
-    Node::new("csl:item").children(vec![term, desc])
+    entry.children(fields)
 }
 
-fn format_name(name: &CslName) -> String {
+fn name_field(role: &str, name: &CslName) -> Node {
+    // `csl:name-part` disambiguates which `CslName` field each TEXT child
+    // came from — a bare "one child" case is otherwise ambiguous between
+    // `literal`, a given-only name, and a family-only name, and the writer
+    // must not guess which.
+    let mut children = Vec::new();
     if let Some(literal) = &name.literal {
-        return literal.clone();
+        if !literal.is_empty() {
+            children.push(
+                Node::new(node::TEXT)
+                    .prop(prop::CONTENT, literal.clone())
+                    .prop("csl:name-part", "literal"),
+            );
+        }
+    } else {
+        if let Some(given) = &name.given
+            && !given.is_empty()
+        {
+            children.push(
+                Node::new(node::TEXT)
+                    .prop(prop::CONTENT, given.clone())
+                    .prop("csl:name-part", "given"),
+            );
+        }
+        if let Some(family) = &name.family
+            && !family.is_empty()
+        {
+            children.push(
+                Node::new(node::TEXT)
+                    .prop(prop::CONTENT, family.clone())
+                    .prop("csl:name-part", "family"),
+            );
+        }
     }
-
-    let mut parts = Vec::new();
-    if let Some(given) = &name.given {
-        parts.push(given.clone());
-    }
-    if let Some(family) = &name.family {
-        parts.push(family.clone());
-    }
-    parts.join(" ")
+    Node::new(node::BIBLIOGRAPHY_FIELD)
+        .prop(prop::FIELD_ROLE, role)
+        .prop("csl:field", role)
+        .children(children)
 }
 
-fn format_date(date: &CslDate) -> String {
+fn text_field(role: &str, text: &str, field_name: &str) -> Node {
+    let mut node = Node::new(node::BIBLIOGRAPHY_FIELD)
+        .prop(prop::FIELD_ROLE, role)
+        .prop("csl:field", field_name);
+    if !text.is_empty() {
+        node = node.child(Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()));
+    }
+    node
+}
+
+fn identifier_field(scheme: &str, text: &str, field_name: &str) -> Node {
+    text_field("identifier", text, field_name).prop(prop::FIELD_SCHEME, scheme)
+}
+
+enum DateResult {
+    Structured(HashMap<String, PropValue>),
+    Text(String),
+    None,
+}
+
+/// Convert CSL-JSON's `issued` date object into `prop::DATE`'s structured
+/// map. `date-parts` is `[[year, month, day]]` for a single date (a second
+/// inner array makes it a range, with no single date to extract — kept as
+/// text instead of guessing which end is "the" date, same as
+/// `rescribe-read-bibtex`'s date-range handling); `literal`/`raw` free-text
+/// dates (e.g. `"circa 1850"`) have no structured parse and stay as text.
+fn convert_date(date: &CslDate) -> DateResult {
+    if let Some(parts) = &date.date_parts {
+        if parts.len() == 1
+            && let Some(single) = parts.first()
+        {
+            let as_i64 = |v: &Value| v.as_i64();
+            if let Some(year) = single.first().and_then(as_i64) {
+                let mut map = HashMap::new();
+                map.insert("year".to_string(), PropValue::Int(year));
+                if let Some(month) = single.get(1).and_then(as_i64) {
+                    map.insert("month".to_string(), PropValue::Int(month));
+                }
+                if let Some(day) = single.get(2).and_then(as_i64) {
+                    map.insert("day".to_string(), PropValue::Int(day));
+                }
+                return DateResult::Structured(map);
+            }
+        } else if !parts.is_empty() {
+            let text = parts
+                .iter()
+                .map(|p| {
+                    p.iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join("-")
+                })
+                .collect::<Vec<_>>()
+                .join("/");
+            return DateResult::Text(text);
+        }
+    }
     if let Some(literal) = &date.literal {
-        return literal.clone();
+        return DateResult::Text(literal.clone());
     }
-
-    if let Some(parts) = &date.date_parts
-        && let Some(first) = parts.first()
-    {
-        return first
-            .iter()
-            .map(|n| n.to_string())
-            .collect::<Vec<_>>()
-            .join("-");
+    if let Some(raw) = &date.raw {
+        return DateResult::Text(raw.clone());
     }
+    DateResult::None
+}
 
-    String::new()
+enum PageSplit {
+    Single,
+    Range(String, String),
+    Ambiguous,
+}
+
+fn split_page_range(text: &str) -> PageSplit {
+    let t = text.trim();
+    if t.is_empty() {
+        return PageSplit::Ambiguous;
+    }
+    if t.chars().all(|c| c.is_ascii_digit()) {
+        return PageSplit::Single;
+    }
+    for sep in ["--", "\u{2013}", "\u{2014}", "-"] {
+        if let Some((first, last)) = t.split_once(sep) {
+            let first = first.trim();
+            let last = last.trim();
+            if !first.is_empty()
+                && !last.is_empty()
+                && first.chars().all(|c| c.is_ascii_digit())
+                && last.chars().all(|c| c.is_ascii_digit())
+            {
+                return PageSplit::Range(first.to_string(), last.to_string());
+            }
+        }
+    }
+    PageSplit::Ambiguous
 }
 
 #[cfg(test)]
@@ -278,6 +380,9 @@ mod tests {
         let result = parse(csl).unwrap();
         let doc = result.value;
         assert!(!doc.content.children.is_empty());
+        let entry = &doc.content.children[0].children[0];
+        assert_eq!(entry.props.get_str("csl:id"), Some("smith2020"));
+        assert_eq!(entry.props.get_str("csl:type"), Some("article-journal"));
     }
 
     #[test]
@@ -302,5 +407,43 @@ mod tests {
         let result = parse(csl).unwrap();
         let doc = result.value;
         assert!(doc.content.children.is_empty());
+    }
+
+    #[test]
+    fn test_multi_author_siblings() {
+        let csl = r#"[{
+            "id": "x",
+            "author": [
+                {"family": "Brown", "given": "Carol"},
+                {"family": "Davis", "given": "Eve"}
+            ]
+        }]"#;
+        let result = parse(csl).unwrap();
+        let doc = result.value;
+        let entry = &doc.content.children[0].children[0];
+        let authors: Vec<_> = entry
+            .children
+            .iter()
+            .filter(|c| c.props.get_str(prop::FIELD_ROLE) == Some("author"))
+            .collect();
+        assert_eq!(authors.len(), 2);
+    }
+
+    #[test]
+    fn test_literal_date() {
+        let csl = r#"[{"id": "old1850", "issued": {"literal": "circa 1850"}}]"#;
+        let result = parse(csl).unwrap();
+        let doc = result.value;
+        let entry = &doc.content.children[0].children[0];
+        assert!(entry.props.get(prop::DATE).is_none());
+        let misc = entry
+            .children
+            .iter()
+            .find(|c| c.props.get_str("csl:field") == Some("issued"))
+            .unwrap();
+        assert_eq!(
+            misc.children[0].props.get_str(prop::CONTENT),
+            Some("circa 1850")
+        );
     }
 }

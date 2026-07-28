@@ -1,11 +1,10 @@
 {
-  "description": "Entry with issued.literal date (no date-parts) parses correctly",
+  "description": "issued.literal (no date-parts) has no year/month/day to structure so it demotes to a misc field instead of prop::DATE",
   "category": "rare",
   "assertions": [
-    { "path": "/0",       "kind": "definition_list" },
-    { "path": "/0/0",     "kind": "csl:item" },
-    { "path": "/0/0/0",   "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "old1850" } },
-    { "path": "/0/0/1",   "kind": "definition_desc", "props": { "csl:id": "old1850", "csl:type": "book" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "csl:id": "old1850", "csl:type": "book", "date": null } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "misc", "csl:field": "issued" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "circa 1850" } }
   ]
 }

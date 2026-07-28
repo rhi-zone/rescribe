@@ -1,10 +1,12 @@
 {
-  "description": "Article-journal entry becomes a csl:item inside a definition_list",
+  "description": "Article-journal entry becomes a bibliography_entry with csl:id/csl:type properties",
   "assertions": [
-    { "path": "/0",       "kind": "definition_list" },
-    { "path": "/0/0",     "kind": "csl:item" },
-    { "path": "/0/0/0",   "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "smith2020" } },
-    { "path": "/0/0/1",   "kind": "definition_desc", "props": { "csl:id": "smith2020", "csl:type": "article-journal" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "csl:id": "smith2020", "csl:type": "article-journal", "date": { "year": 2020 } } },
+    { "path": "/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "author", "csl:field": "author" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "John" } },
+    { "path": "/0/0/0/1", "kind": "text", "props": { "content": "Smith" } },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "title", "csl:field": "title" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "A Great Paper" } }
   ]
 }

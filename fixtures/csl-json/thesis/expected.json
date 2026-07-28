@@ -1,8 +1,7 @@
 {
-  "description": "CSL-JSON thesis entry becomes csl:item with csl:type thesis",
+  "description": "CSL-JSON thesis entry becomes bibliography_entry with csl:type thesis",
   "assertions": [
-    { "path": "/0",     "kind": "definition_list" },
-    { "path": "/0/0",   "kind": "csl:item" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "csl:type": "thesis" } }
+    { "path": "/0",     "kind": "bibliography" },
+    { "path": "/0/0",   "kind": "bibliography_entry", "props": { "csl:type": "thesis" } }
   ]
 }

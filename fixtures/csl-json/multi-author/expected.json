@@ -1,10 +1,17 @@
 {
-  "description": "Article with multiple authors produces correct csl:item",
+  "description": "Article with three authors becomes three sibling bibliography_field nodes with field:role=author, in document order",
   "assertions": [
-    { "path": "/0",       "kind": "definition_list" },
-    { "path": "/0/0",     "kind": "csl:item" },
-    { "path": "/0/0/0",   "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "brown2018" } },
-    { "path": "/0/0/1",   "kind": "definition_desc", "props": { "csl:id": "brown2018", "csl:type": "article-journal" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "csl:id": "brown2018", "csl:type": "article-journal" } },
+    { "path": "/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Carol" } },
+    { "path": "/0/0/0/1", "kind": "text", "props": { "content": "Brown" } },
+    { "path": "/0/0/1",   "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "Eve" } },
+    { "path": "/0/0/1/1", "kind": "text", "props": { "content": "Davis" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "George" } },
+    { "path": "/0/0/2/1", "kind": "text", "props": { "content": "Frank" } },
+    { "path": "/0/0/3",   "kind": "bibliography_field", "props": { "field:role": "title" } }
   ]
 }

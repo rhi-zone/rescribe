@@ -1,8 +1,9 @@
 {
-  "description": "CSL-JSON webpage type becomes csl:item with csl:type webpage",
+  "description": "CSL-JSON webpage type becomes bibliography_entry with csl:type webpage; URL becomes an identifier field with field:scheme url",
   "assertions": [
-    { "path": "/0",     "kind": "definition_list" },
-    { "path": "/0/0",   "kind": "csl:item" },
-    { "path": "/0/0/1", "kind": "definition_desc", "props": { "csl:type": "webpage" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "csl:type": "webpage" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "identifier", "field:scheme": "url", "csl:field": "URL" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "https://example.com/page" } }
   ]
 }

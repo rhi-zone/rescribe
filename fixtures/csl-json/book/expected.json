@@ -1,10 +1,12 @@
 {
-  "description": "Book entry becomes a csl:item with type book",
+  "description": "Book entry becomes a bibliography_entry with csl:type book",
   "assertions": [
-    { "path": "/0",       "kind": "definition_list" },
-    { "path": "/0/0",     "kind": "csl:item" },
-    { "path": "/0/0/0",   "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "knuth1984" } },
-    { "path": "/0/0/1",   "kind": "definition_desc", "props": { "csl:id": "knuth1984", "csl:type": "book" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "csl:id": "knuth1984", "csl:type": "book", "date": { "year": 1984 } } },
+    { "path": "/0/0/0",   "kind": "bibliography_field", "props": { "field:role": "author" } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Donald E." } },
+    { "path": "/0/0/0/1", "kind": "text", "props": { "content": "Knuth" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "publisher", "csl:field": "publisher" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "Addison-Wesley" } }
   ]
 }

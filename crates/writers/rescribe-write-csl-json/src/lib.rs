@@ -1,28 +1,13 @@
 //! CSL JSON writer for rescribe.
 //!
-//! Serializes rescribe's document IR to CSL JSON (Citation Style Language JSON).
-//! Extracts bibliography entries from definition lists.
-//!
-//! # Example
-//!
-//! ```
-//! use rescribe_write_csl_json::emit;
-//! use rescribe_core::{Document, Node, Properties};
-//!
-//! let doc = Document {
-//!     content: Node::new("document"),
-//!     resources: Default::default(),
-//!     metadata: Properties::new(),
-//!     source: None,
-//! };
-//!
-//! let result = emit(&doc).unwrap();
-//! let json = String::from_utf8(result.value).unwrap();
-//! ```
+//! Serializes `bibliography`/`bibliography_entry`/`bibliography_field` IR
+//! nodes (see `rescribe_std::node` and ADR 0005 in the rescribe repo) to
+//! CSL JSON (Citation Style Language JSON).
 
 use rescribe_core::{ConversionResult, Document, EmitError, Node};
 use rescribe_std::{node, prop};
 use serde::Serialize;
+use serde_json::Value;
 
 /// Emit a document to CSL JSON.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -38,45 +23,239 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
 }
 
 fn collect_items(node: &Node, items: &mut Vec<CslItem>) {
-    // Check for csl:item nodes
+    if node.kind.as_str() == node::BIBLIOGRAPHY_ENTRY {
+        items.push(extract_from_entry(node));
+        return;
+    }
+
+    // Legacy shapes, kept for backwards compatibility with documents built
+    // by hand or by an older reader version (not produced by
+    // `rescribe-read-csl-json`/`rescribe-read-bibtex` any more).
     if node.kind.as_str() == "csl:item"
         && let Some(item) = extract_csl_item(node)
     {
         items.push(item);
         return;
     }
-
-    // Check for bibtex:entry nodes (convert to CSL)
     if node.kind.as_str() == "bibtex:entry"
         && let Some(item) = extract_bibtex_item(node)
     {
         items.push(item);
         return;
     }
-
-    // Check definition_desc nodes with csl:id property
     if node.kind.as_str() == node::DEFINITION_DESC {
         if let Some(id) = node.props.get_str("csl:id") {
-            let item = extract_from_definition(node, id);
-            items.push(item);
+            items.push(extract_from_definition(node, id));
             return;
         }
-        // Also check for bibtex:key
         if let Some(key) = node.props.get_str("bibtex:key") {
-            let item = extract_from_definition(node, key);
-            items.push(item);
+            items.push(extract_from_definition(node, key));
             return;
         }
     }
 
-    // Recurse into children
     for child in &node.children {
         collect_items(child, items);
     }
 }
 
+/// Extract a `CslItem` from a `bibliography_entry` node (see
+/// `rescribe-read-csl-json`'s `convert_item`). `csl:field` on each
+/// `bibliography_field` child names the exact source CSL-JSON variable;
+/// `field:role` is the fallback for a field built by a non-CSL-JSON
+/// producer (a cross-format conversion into CSL JSON). A `page_first`/
+/// `page_last` pair recombines into one `page` field; `prop::DATE` becomes
+/// `issued.date-parts`; a `misc` field whose `csl:field` is `"issued"` (the
+/// unparsed-literal-date fallback, see `rescribe-read-csl-json`'s
+/// `convert_date`) reconstructs `issued.literal` instead of leaking into
+/// the catch-all `extra` bucket, since `issued` must stay an object per the
+/// CSL-JSON schema. Every other unrecognized field name/value round-trips
+/// through `extra` (a flattened JSON object) exactly as read.
+fn extract_from_entry(node: &Node) -> CslItem {
+    let id = node
+        .props
+        .get_str("csl:id")
+        .unwrap_or("unknown")
+        .to_string();
+    let item_type = node.props.get_str("csl:type").map(String::from);
+
+    let mut title = None;
+    let mut authors = Vec::new();
+    let mut editors = Vec::new();
+    let mut container_title = None;
+    let mut publisher = None;
+    let mut publisher_place = None;
+    let mut edition = None;
+    let mut volume = None;
+    let mut issue = None;
+    let mut page = None;
+    let mut doi = None;
+    let mut url = None;
+    let mut isbn = None;
+    let mut issn = None;
+    let mut issued_literal = None;
+    let mut extra = serde_json::Map::new();
+
+    let mut iter = node.children.iter().peekable();
+    while let Some(child) = iter.next() {
+        if child.kind.as_str() != node::BIBLIOGRAPHY_FIELD {
+            continue;
+        }
+        let role = child.props.get_str(prop::FIELD_ROLE).unwrap_or("misc");
+        let field_name = child.props.get_str("csl:field").unwrap_or(role).to_string();
+        match role {
+            "author" => authors.push(name_from_field(child)),
+            "editor" => editors.push(name_from_field(child)),
+            "title" => title = Some(flatten_field_text(child)),
+            "container_title" => container_title = Some(flatten_field_text(child)),
+            "publisher" => publisher = Some(flatten_field_text(child)),
+            "publisher_location" => publisher_place = Some(flatten_field_text(child)),
+            "edition" => edition = Some(flatten_field_text(child)),
+            "volume" => volume = Some(flatten_field_text(child)),
+            "issue" => issue = Some(flatten_field_text(child)),
+            "page_first"
+                if iter
+                    .peek()
+                    .and_then(|next| next.props.get_str(prop::FIELD_ROLE))
+                    == Some("page_last") =>
+            {
+                let last = iter.next().unwrap();
+                let first_text = flatten_field_text(child);
+                let last_text = flatten_field_text(last);
+                page = Some(format!("{first_text}-{last_text}"));
+            }
+            "identifier" => {
+                let text = flatten_field_text(child);
+                match child.props.get_str(prop::FIELD_SCHEME) {
+                    Some("doi") => doi = Some(text),
+                    Some("isbn") => isbn = Some(text),
+                    Some("issn") => issn = Some(text),
+                    _ => url = Some(text),
+                }
+            }
+            _ if field_name == "issued" => {
+                issued_literal = Some(flatten_field_text(child));
+            }
+            _ => {
+                let text = flatten_field_text(child);
+                if !text.is_empty() {
+                    extra.insert(field_name, Value::String(text));
+                }
+            }
+        }
+    }
+
+    let issued = match node.props.get(prop::DATE) {
+        Some(rescribe_core::PropValue::Map(map)) => Some(CslDate {
+            date_parts: Some(vec![date_parts_from_map(map)]),
+            literal: None,
+        }),
+        _ => issued_literal.map(|literal| CslDate {
+            date_parts: None,
+            literal: Some(literal),
+        }),
+    };
+
+    CslItem {
+        id,
+        item_type,
+        title,
+        author: (!authors.is_empty()).then_some(authors),
+        editor: (!editors.is_empty()).then_some(editors),
+        issued,
+        container_title,
+        publisher,
+        publisher_place,
+        edition,
+        volume,
+        issue,
+        page,
+        doi,
+        url,
+        isbn,
+        issn,
+        extra,
+    }
+}
+
+fn date_parts_from_map(
+    map: &std::collections::HashMap<String, rescribe_core::PropValue>,
+) -> Vec<i64> {
+    let as_int = |key: &str| match map.get(key) {
+        Some(rescribe_core::PropValue::Int(i)) => Some(*i),
+        _ => None,
+    };
+    let mut parts = Vec::new();
+    if let Some(y) = as_int("year") {
+        parts.push(y);
+    }
+    if let Some(m) = as_int("month") {
+        parts.push(m);
+    }
+    if let Some(d) = as_int("day") {
+        parts.push(d);
+    }
+    parts
+}
+
+/// Reconstruct a `CslName` from a `bibliography_field`'s TEXT children,
+/// using `csl:name-part` (set by `rescribe-read-csl-json`'s `name_field`)
+/// to tell `literal`/`given`/`family` apart — a bare child count is
+/// otherwise ambiguous.
+fn name_from_field(node: &Node) -> CslName {
+    let mut given = None;
+    let mut family = None;
+    let mut literal = None;
+    for child in &node.children {
+        if child.kind.as_str() != node::TEXT {
+            continue;
+        }
+        let Some(text) = child.props.get_str(prop::CONTENT) else {
+            continue;
+        };
+        match child.props.get_str("csl:name-part") {
+            Some("given") => given = Some(text.to_string()),
+            Some("family") => family = Some(text.to_string()),
+            Some("literal") => literal = Some(text.to_string()),
+            // No marker — a field built by a non-CSL-JSON producer.
+            // Fall back to positional "given family" like the old writer.
+            _ => match (&given, &family) {
+                (None, _) => given = Some(text.to_string()),
+                (Some(_), None) => family = Some(text.to_string()),
+                _ => {}
+            },
+        }
+    }
+    CslName {
+        family,
+        given,
+        literal,
+    }
+}
+
+/// Concatenate a field's descendant `TEXT` node content (depth-first).
+fn flatten_field_text(node: &Node) -> String {
+    let mut out = String::new();
+    flatten_field_text_into(node, &mut out);
+    out
+}
+
+fn flatten_field_text_into(node: &Node, out: &mut String) {
+    if node.kind.as_str() == node::TEXT
+        && let Some(content) = node.props.get_str(prop::CONTENT)
+    {
+        out.push_str(content);
+    }
+    for child in &node.children {
+        flatten_field_text_into(child, out);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Legacy shapes (backwards compatibility)
+// ---------------------------------------------------------------------------
+
 fn extract_csl_item(node: &Node) -> Option<CslItem> {
-    // Find the definition_desc child with csl:id
     for child in &node.children {
         if child.kind.as_str() == node::DEFINITION_DESC
             && let Some(id) = child.props.get_str("csl:id")
@@ -88,7 +267,6 @@ fn extract_csl_item(node: &Node) -> Option<CslItem> {
 }
 
 fn extract_bibtex_item(node: &Node) -> Option<CslItem> {
-    // Find the definition_desc child with bibtex:key
     for child in &node.children {
         if child.kind.as_str() == node::DEFINITION_DESC
             && let Some(key) = child.props.get_str("bibtex:key")
@@ -107,14 +285,12 @@ fn extract_from_definition(node: &Node, id: &str) -> CslItem {
         .map(map_type_to_csl)
         .unwrap_or_else(|| "article".to_string());
 
-    // Extract text content from the paragraph children
     let mut title = None;
     let mut authors = Vec::new();
     let mut container_title = None;
     let mut doi = None;
     let mut url = None;
 
-    // Walk through looking for specific node types
     extract_content(
         node,
         &mut title,
@@ -136,18 +312,17 @@ fn extract_from_definition(node: &Node, id: &str) -> CslItem {
         container_title,
         doi,
         url,
-        // These would need more sophisticated extraction
         editor: None,
         issued: None,
-        collection_title: None,
         publisher: None,
         publisher_place: None,
+        edition: None,
         volume: None,
         issue: None,
         page: None,
         isbn: None,
         issn: None,
-        abstract_text: None,
+        extra: serde_json::Map::new(),
     }
 }
 
@@ -159,12 +334,10 @@ fn extract_content(
     doi: &mut Option<String>,
     url: &mut Option<String>,
 ) {
-    // Extract title from emphasis nodes
     if node.kind.as_str() == node::EMPHASIS && title.is_none() {
         *title = Some(collect_text(node));
     }
 
-    // Extract authors from strong nodes
     if node.kind.as_str() == node::STRONG {
         let text = collect_text(node);
         for author in text.split(';') {
@@ -175,12 +348,10 @@ fn extract_content(
         }
     }
 
-    // Extract DOI/URL from links
     if node.kind.as_str() == node::LINK
         && let Some(link_url) = node.props.get_str(prop::URL)
     {
         if link_url.contains("doi.org") {
-            // Extract DOI from URL
             if let Some(d) = link_url.strip_prefix("https://doi.org/") {
                 *doi = Some(d.to_string());
             }
@@ -246,12 +417,12 @@ struct CslItem {
     issued: Option<CslDate>,
     #[serde(rename = "container-title", skip_serializing_if = "Option::is_none")]
     container_title: Option<String>,
-    #[serde(rename = "collection-title", skip_serializing_if = "Option::is_none")]
-    collection_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     publisher: Option<String>,
     #[serde(rename = "publisher-place", skip_serializing_if = "Option::is_none")]
     publisher_place: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    edition: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     volume: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -266,8 +437,8 @@ struct CslItem {
     isbn: Option<String>,
     #[serde(rename = "ISSN", skip_serializing_if = "Option::is_none")]
     issn: Option<String>,
-    #[serde(rename = "abstract", skip_serializing_if = "Option::is_none")]
-    abstract_text: Option<String>,
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -284,7 +455,6 @@ impl CslName {
     fn from_string(s: &str) -> Self {
         let parts: Vec<&str> = s.split_whitespace().collect();
         if parts.len() >= 2 {
-            // Assume "Given Family" format
             let (given, family) = parts.split_at(parts.len() - 1);
             CslName {
                 given: Some(given.join(" ")),
@@ -310,7 +480,7 @@ impl CslName {
 #[derive(Debug, Serialize)]
 struct CslDate {
     #[serde(rename = "date-parts", skip_serializing_if = "Option::is_none")]
-    date_parts: Option<Vec<Vec<i32>>>,
+    date_parts: Option<Vec<Vec<i64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     literal: Option<String>,
 }
@@ -318,7 +488,8 @@ struct CslDate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rescribe_core::Properties;
+    use rescribe_core::{PropValue, Properties};
+    use rescribe_std::node as std_node;
 
     #[test]
     fn test_emit_empty() {
@@ -332,5 +503,44 @@ mod tests {
         let result = emit(&doc).unwrap();
         let json = String::from_utf8(result.value).unwrap();
         assert_eq!(json.trim(), "[]");
+    }
+
+    fn name_field(role: &str, given: &str, family: &str) -> Node {
+        Node::new(std_node::BIBLIOGRAPHY_FIELD)
+            .prop(prop::FIELD_ROLE, role)
+            .prop("csl:field", role)
+            .child(
+                Node::new(std_node::TEXT)
+                    .prop(prop::CONTENT, given)
+                    .prop("csl:name-part", "given"),
+            )
+            .child(
+                Node::new(std_node::TEXT)
+                    .prop(prop::CONTENT, family)
+                    .prop("csl:name-part", "family"),
+            )
+    }
+
+    #[test]
+    fn test_emit_entry() {
+        let mut map = std::collections::HashMap::new();
+        map.insert("year".to_string(), PropValue::Int(2020));
+        let entry = Node::new(std_node::BIBLIOGRAPHY_ENTRY)
+            .prop("csl:id", "smith2020")
+            .prop("csl:type", "article-journal")
+            .prop(prop::DATE, PropValue::Map(map))
+            .child(name_field("author", "John", "Smith"));
+        let doc = Document {
+            content: Node::new(node::DOCUMENT).child(entry),
+            resources: Default::default(),
+            metadata: Properties::new(),
+            source: None,
+        };
+        let result = emit(&doc).unwrap();
+        let json = String::from_utf8(result.value).unwrap();
+        assert!(json.contains("\"id\": \"smith2020\""));
+        assert!(json.contains("\"type\": \"article-journal\""));
+        assert!(json.contains("\"family\": \"Smith\""));
+        assert!(json.contains("\"date-parts\""));
     }
 }

@@ -1,10 +1,9 @@
 {
-  "description": "Chapter entry becomes a csl:item with type chapter",
+  "description": "Chapter entry becomes a bibliography_entry with csl:type chapter; container-title maps to field:role container_title",
   "assertions": [
-    { "path": "/0",       "kind": "definition_list" },
-    { "path": "/0/0",     "kind": "csl:item" },
-    { "path": "/0/0/0",   "kind": "definition_term" },
-    { "path": "/0/0/0/0", "kind": "code", "props": { "content": "jones2015ch3" } },
-    { "path": "/0/0/1",   "kind": "definition_desc", "props": { "csl:id": "jones2015ch3", "csl:type": "chapter" } }
+    { "path": "/0",       "kind": "bibliography" },
+    { "path": "/0/0",     "kind": "bibliography_entry", "props": { "csl:id": "jones2015ch3", "csl:type": "chapter" } },
+    { "path": "/0/0/2",   "kind": "bibliography_field", "props": { "field:role": "container_title", "csl:field": "container-title" } },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "Collected Essays" } }
   ]
 }
