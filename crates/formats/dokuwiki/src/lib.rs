@@ -2,6 +2,14 @@
 //!
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-dokuwiki` and `rescribe-write-dokuwiki` as thin adapter layers.
+//!
+//! This crate denies `unsafe` by default (production code must never use it); a prior version of `events::InputEventIter`
+//! used `unsafe { transmute }` to build a self-referential struct around a
+//! locally-parsed `DokuwikiDoc`, and was unsound (the doc was moved into the
+//! struct after the reference was taken). See `src/events.rs` for the sound,
+//! eager-collection replacement and TODO.md for the tracked architecture gap.
+
+#![deny(unsafe_code)]
 
 pub mod ast;
 pub mod batch;
@@ -106,10 +114,7 @@ mod tests {
     fn test_parse_list() {
         let (doc, _) = parse("  * Item 1\n  * Item 2");
         assert_eq!(doc.blocks.len(), 1);
-        let Block::List {
-            ordered, items, ..
-        } = &doc.blocks[0]
-        else {
+        let Block::List { ordered, items, .. } = &doc.blocks[0] else {
             panic!("expected list");
         };
         assert!(!ordered);
@@ -136,9 +141,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::Strikethrough(_, _))));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Strikethrough(_, _)))
+        );
     }
 
     #[test]
@@ -147,9 +154,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::Superscript(_, _))));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Superscript(_, _)))
+        );
     }
 
     #[test]
@@ -158,9 +167,7 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::Subscript(_, _))));
+        assert!(inlines.iter().any(|i| matches!(i, Inline::Subscript(_, _))));
     }
 
     #[test]
@@ -169,9 +176,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::FootnoteRef { .. })));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::FootnoteRef { .. }))
+        );
     }
 
     #[test]
@@ -180,9 +189,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::Nowiki(s, _) if s == "**not bold**")));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Nowiki(s, _) if s == "**not bold**"))
+        );
     }
 
     #[test]
@@ -213,9 +224,7 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::LineBreak(_))));
+        assert!(inlines.iter().any(|i| matches!(i, Inline::LineBreak(_))));
     }
 
     #[test]

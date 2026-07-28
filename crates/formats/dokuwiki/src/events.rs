@@ -10,11 +10,15 @@ pub enum Event<'a> {
     // -- Block events --------------------------------------------------------
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
     StartBlockquote,
     EndBlockquote,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
@@ -30,7 +34,9 @@ pub enum Event<'a> {
     HorizontalRule,
     StartTable,
     EndTable,
-    StartTableRow { is_header: bool },
+    StartTableRow {
+        is_header: bool,
+    },
     EndTableRow,
     StartTableCell,
     EndTableCell,
@@ -40,8 +46,13 @@ pub enum Event<'a> {
     EndDefinitionTerm,
     StartDefinitionDesc,
     EndDefinitionDesc,
-    RawBlock { format: String, content: String },
-    Macro { name: String },
+    RawBlock {
+        format: String,
+        content: String,
+    },
+    Macro {
+        name: String,
+    },
 
     // -- Inline events -------------------------------------------------------
     Text(Cow<'a, str>),
@@ -61,10 +72,17 @@ pub enum Event<'a> {
     EndSubscript,
     InlineCode(Cow<'a, str>),
     Nowiki(Cow<'a, str>),
-    StartLink { url: String },
+    StartLink {
+        url: String,
+    },
     EndLink,
-    InlineImage { url: String, alt: Option<String> },
-    FootnoteRef { content: String },
+    InlineImage {
+        url: String,
+        alt: Option<String>,
+    },
+    FootnoteRef {
+        content: String,
+    },
 }
 
 /// Backwards-compatible alias for batch mode (all text is owned).
@@ -260,18 +278,12 @@ impl<'a> Iterator for EventIter<'a> {
                     match block {
                         Block::Paragraph { inlines, .. } => {
                             self.stack.push(Frame::ParagraphEnd);
-                            self.stack.push(Frame::ParagraphBody {
-                                inlines,
-                                index: 0,
-                            });
+                            self.stack.push(Frame::ParagraphBody { inlines, index: 0 });
                             return Some(Event::StartParagraph);
                         }
                         Block::Heading { level, inlines, .. } => {
                             self.stack.push(Frame::HeadingEnd);
-                            self.stack.push(Frame::HeadingBody {
-                                inlines,
-                                index: 0,
-                            });
+                            self.stack.push(Frame::HeadingBody { inlines, index: 0 });
                             return Some(Event::StartHeading { level: *level });
                         }
                         Block::CodeBlock {
@@ -296,15 +308,11 @@ impl<'a> Iterator for EventIter<'a> {
                         }
                         Block::Blockquote { children, .. } => {
                             self.stack.push(Frame::BlockquoteEnd);
-                            self.stack.push(Frame::BlockquoteBody {
-                                children,
-                                index: 0,
-                            });
+                            self.stack
+                                .push(Frame::BlockquoteBody { children, index: 0 });
                             return Some(Event::StartBlockquote);
                         }
-                        Block::List {
-                            ordered, items, ..
-                        } => {
+                        Block::List { ordered, items, .. } => {
                             self.stack.push(Frame::ListEnd);
                             self.stack.push(Frame::ListBody { items, index: 0 });
                             return Some(Event::StartList { ordered: *ordered });
@@ -676,32 +684,49 @@ fn emit_inline<'a>(inline: &'a Inline, stack: &mut Vec<Frame<'a>>) -> Event<'a> 
 }
 
 /// Parse `input` and return a streaming iterator of events.
+///
+/// **Architecture note:** this is *not* a genuine streaming parser. It parses
+/// `input` into a [`DokuwikiDoc`] up front, walks it with the lazy, O(depth)
+/// [`EventIter`] (which *is* a legitimate incremental walker over an
+/// already-owned tree), and eagerly collects the result into an owned `Vec`
+/// before returning. Memory use is therefore O(full document), not O(depth).
+///
+/// This shape exists because [`EventIter`] borrows from a `&'a DokuwikiDoc`
+/// supplied by the caller, and a free function taking only `&str` has nowhere
+/// to stash a `DokuwikiDoc` that outlives the borrow without either leaking it,
+/// laundering its lifetime through `unsafe`, or building a self-referential
+/// struct — a prior version of this function did the middle one via
+/// `unsafe { transmute }` and was unsound (the referenced `DokuwikiDoc` was
+/// moved into the returned struct *after* the reference was taken, so the
+/// reference could dangle). Callers that need genuine O(depth) streaming
+/// should call [`crate::parse::parse`] themselves and drive [`EventIter::new`]
+/// directly over the resulting `&DokuwikiDoc` — that path has no such gap.
+/// See TODO.md for the tracked architectural gap.
 pub fn events(input: &str) -> InputEventIter<'_> {
     InputEventIter::new(input)
 }
 
-/// Event iterator that parses from a raw input string (owns the parsed doc).
+/// Event iterator that parses from a raw input string.
+///
+/// See the architecture note on [`events()`] — this eagerly materializes all
+/// events into an owned `Vec` during construction; it is not itself streaming.
 pub struct InputEventIter<'a> {
     _input: &'a str,
-    _doc: DokuwikiDoc,
-    inner: Option<EventIter<'static>>,
+    inner: std::vec::IntoIter<OwnedEvent>,
 }
 
 impl<'a> InputEventIter<'a> {
     fn new(input: &'a str) -> Self {
         let (doc, _) = crate::parse::parse(input);
-        // Safety: we store the doc and create a self-referential iterator.
-        // The doc is owned by this struct and lives as long as the iterator.
-        // We use transmute to extend the lifetime.
-        let iter = unsafe {
-            let doc_ref: &DokuwikiDoc = &doc;
-            let iter = EventIter::new(doc_ref);
-            std::mem::transmute::<EventIter<'_>, EventIter<'static>>(iter)
-        };
+        // `doc` is a local value; `EventIter::new(&doc)` borrows it, and the
+        // borrow (and `doc` itself) are both dropped at the end of this
+        // function scope. No reference to `doc` escapes — the events are
+        // converted to fully owned data before the `Vec` is returned, so
+        // there is no self-reference and nothing to launder with `unsafe`.
+        let events: Vec<OwnedEvent> = EventIter::new(&doc).map(Event::into_owned).collect();
         InputEventIter {
             _input: input,
-            _doc: doc,
-            inner: Some(iter),
+            inner: events.into_iter(),
         }
     }
 }
@@ -710,14 +735,13 @@ impl Iterator for InputEventIter<'_> {
     type Item = OwnedEvent;
 
     fn next(&mut self) -> Option<OwnedEvent> {
-        self.inner.as_mut()?.next().map(|e| e.into_owned())
+        self.inner.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
     }
 }
-
-// Safety: InputEventIter borrows doc internally. The doc field must not be
-// moved or dropped while inner is alive. This is guaranteed by struct layout.
-// The inner iterator only borrows from self.doc which is pinned by being in
-// the same struct.
 
 #[cfg(test)]
 mod tests {
@@ -726,22 +750,22 @@ mod tests {
     #[test]
     fn test_events_heading() {
         let evs: Vec<_> = events("====== Hello ======").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndHeading)));
     }
 
     #[test]
     fn test_events_paragraph() {
         let evs: Vec<_> = events("Hello world").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndParagraph)));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
@@ -754,17 +778,20 @@ mod tests {
     #[test]
     fn test_events_code_block() {
         let evs: Vec<_> = events("<code rust>\nfn main() {}\n</code>").collect();
-        assert!(evs.iter().any(
-            |e| matches!(e, OwnedEvent::CodeBlock { language: Some(l), .. } if l == "rust")
-        ));
+        assert!(
+            evs.iter().any(
+                |e| matches!(e, OwnedEvent::CodeBlock { language: Some(l), .. } if l == "rust")
+            )
+        );
     }
 
     #[test]
     fn test_events_list() {
         let evs: Vec<_> = events("  * item 1\n  * item 2").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartList { ordered: false })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartList { ordered: false }))
+        );
         assert_eq!(
             evs.iter()
                 .filter(|e| matches!(e, OwnedEvent::StartListItem))
@@ -778,9 +805,10 @@ mod tests {
     fn test_events_table() {
         let evs: Vec<_> = events("^ Name ^ Age ^\n| Alice | 30 |").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTable)));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartTableRow { is_header: true })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartTableRow { is_header: true }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndTable)));
     }
 
@@ -788,5 +816,46 @@ mod tests {
     fn test_events_horizontal_rule() {
         let evs: Vec<_> = events("----").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::HorizontalRule)));
+    }
+
+    /// Regression guard for the removed self-referential `unsafe { transmute }`
+    /// in `InputEventIter::new`: the old code took a reference to a locally
+    /// parsed `DokuwikiDoc` and then moved that same `doc` into the returned
+    /// struct, leaving the reference potentially dangling. This test builds
+    /// many iterators from short-lived owned `String`s, drains them out of
+    /// order (fully, partially, or not at all) and drops them in a
+    /// different order than they were created, then confirms a fresh call
+    /// still produces correct output. None of this should be able to touch
+    /// freed or relocated memory now that `InputEventIter` is fully owned
+    /// (eagerly collected into `Vec<OwnedEvent>`) rather than borrowing.
+    #[test]
+    fn test_events_iterator_no_dangling_reference() {
+        let inputs: Vec<String> = (0..20)
+            .map(|i| format!("====== Section {i} ======\nParagraph **{i}** text."))
+            .collect();
+        let mut iters: Vec<_> = inputs.iter().map(|s| events(s)).collect();
+        for (i, it) in iters.iter_mut().enumerate() {
+            match i % 3 {
+                0 => {
+                    let _ = it.next();
+                }
+                1 => {
+                    let drained: Vec<_> = it.collect();
+                    assert!(!drained.is_empty());
+                }
+                _ => {}
+            }
+        }
+        // Drop iterators before their source strings, and out of the order
+        // they were created in.
+        iters.reverse();
+        drop(iters);
+        drop(inputs);
+
+        let evs: Vec<_> = events("====== Hi ======").collect();
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
     }
 }
