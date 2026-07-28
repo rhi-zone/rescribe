@@ -81,6 +81,112 @@ and not being retracted — only the construct-list-completeness component of it
   `is_block_element` "re-verified" on the basis of the original `20c27d032e`/`3e3d84bcef`
   passes, which used the insufficient method.
 
+- **Construct registry designed and piloted on JATS; ADR 0013 landed (2026-07-28).**
+  This is the "what closes `CC` out" work the Status-reset entry above points at. The
+  design is recorded in `docs/adr/0013-per-format-construct-registry.md`; read it before
+  extending the registry to another format, and do not re-derive the design.
+
+  **Shape, in one line:** each `-fmt` crate carries a committed, spec-derived,
+  machine-readable catalog of every construct its format defines, behind an opt-in
+  `registry` Cargo feature, runtime-queryable, with constructs annotated by *slice* — the
+  format's own published modularization. The registry is spec-pure: support status is
+  never a field, only a caller-side join (`Registry::not_handled`), so it doesn't churn
+  when reader/writer work lands.
+
+  **Pilot: JATS 1.3 Archiving, end to end.** `crates/formats/jats-fmt/registry/jats-1.3-archiving.yaml`
+  (derived), `crates/formats/jats-fmt/src/registry.rs` (runtime API),
+  `crates/formats/jats-fmt/src/bin/derive-registry.rs` (derivation + `--check` drift
+  verification), `scripts/jats/download-spec.sh` (fetches the schema; `spec/` is
+  gitignored so it is never committed), and one real consumer,
+  `crates/readers/rescribe-read-jats/tests/registry_coverage.rs`.
+
+  **It works.** 305 JATS elements derived against the ~306 the Tag Library's alpha index
+  lists; 176 of them are never mentioned anywhere in `rescribe-read-jats`'s source, grouped
+  by slice in the test output. Every element the 2026-07-28 hand audit found — `hr`,
+  `sub-article`, `response`, `ruby`/`rb`/`rt`/`rp`, `chem-struct`, `array`, `index-term`,
+  `media`, `alt-text` — falls out mechanically, and a regression test pins them.
+
+  **JATS `CC` is not yet `✓`.** The registry exists and the gap list is real, but nothing
+  has been *closed* — 176 unmentioned elements is the starting number, not the ending one.
+  `docs/format-audit.md`'s `CC` column for JATS should move from `U` only once those gaps
+  are triaged (many will be legitimately covered by the catch-all; that triage is the work).
+
+  ### Rollout plan
+
+  1. **TEI next, and it should be easy.** TEI P5 has the best schema story of any format
+     here: `p5subset.xml` (ODD) declares 22 `<moduleSpec>` modules and 614
+     `<elementSpec module="…" xml:id="gi-…">` — module membership is a *literal attribute*,
+     so slices need no inference at all. Dual CC BY 3.0 / BSD-2-Clause, so vendorable if
+     ever wanted. Citation: `xml:id="gi-<element>"` plus the `ref-<element>.html` reference
+     page. Derivation reads XML, so `tei-fmt`'s own parser suffices — same shape as the
+     JATS pilot. Note the ODD declares 22 modules while the Guidelines' ST chapter prose
+     says 23; resolve that discrepancy rather than picking one.
+
+  2. **DocBook is blocked on an open question, not on effort.** DocBook 5.2's *normative*
+     OASIS artifact (`docs.oasis-open.org/docbook/docbook/v5.2/os/rng/docbook.rnc`) is a
+     flattened monolith: 414 distinct elements in 420 **anonymous** `div { }` blocks with
+     no module identity anywhere. So DocBook cannot source slices from its normative
+     schema. The upstream TC source (codeberg.org/docbook/docbook,
+     `schemas/docbook/src/main/docbook/`) *is* modular (~35 named `.rnc`), but it is build
+     source, not normative, and its license was not verified. ADR 0013 open question 1
+     records the fork: ship empty slices with a recorded reason, or adopt the
+     non-normative modules with non-normativity stamped in provenance. **Decide that before
+     implementing.** Separately, DocBook's schema is RNC, not RNG, so derivation needs a
+     compact-syntax reader — see item 4.
+
+  3. **ooxml migration onto the uniform design.** Concretely:
+     - **What stays:** `crates/tools/ooxml-codegen`'s `lexer.rs`/`parser.rs`/`ast.rs` (they
+       are format-agnostic and already run against both ECMA-376 and ODF); the
+       committed-artifact + env-var-gated regeneration pattern; the `"*"` wildcard escape
+       hatch; `analysis.rs`'s skip-list reasoning about `AG_`/`EG_` groups.
+     - **What moves:** `spec/ooxml-features.yaml`, `spec/ooxml-names.yaml` shard into
+       per-crate `crates/formats/ooxml-{wml,sml,pml,dml}/registry/`. This deletes the
+       hard-coded `match module { "sml" => … }` in `NameMappings::for_module` /
+       `FeatureMappings::for_module` — note the latter currently defaults *unknown* modules
+       to `sml`, a latent bug. It also makes `odf-fmt` a first-class citizen; it currently
+       points at `spec/odf-names.yaml` and `spec/odf-features.yaml`, **neither of which
+       exists**, so ODF codegen runs entirely unmapped today.
+     - **What must be added:** provenance (the existing YAMLs have *none* — no ECMA edition,
+       no Strict-vs-Transitional marker even though `build.rs` hard-codes Transitional, no
+       checksums, no derivation date); a declared slice vocabulary as data rather than a
+       header comment (the current comment documents `revisions`, which has 0 uses, while
+       the data uses `track-changes`, which has 70 — already drifted, nothing checks it);
+       and promotion of `analyze_schema` from `OOXML_ANALYZE`-gated stderr to a real test
+       (`has_unmapped()` is already written and is dead code).
+     - **What needs a decision:** ooxml's feature tags conflate two things the new design
+       separates — *slice* (spec modularization) and *Cargo feature gate*. `primary_feature`
+       silently uses only the first tag, so `drawingHF: [drawings, layout]` gates on
+       `sml-drawings` and `layout` is inert. Multi-slice membership is first-class in the
+       new design; multi-*gate* is not, and that mapping must be chosen deliberately.
+       OOXML's slices should be the namespace/part schemas, not the current editorial tags.
+     - **Licensing constrains this more than the others:** no copyright or license statement
+       was found in the ECMA-376 schema files or in Parts 1/2 (ADR 0013 open question 3).
+       Treat as non-redistributable. `spec/` is already gitignored, which is exactly why the
+       committed-artifact + external-citation design was built the way it is.
+     - **Effort shape:** the sharding is mechanical and large-diff/low-risk. The genuinely
+       uncertain part is that the registry must describe constructs `#[cfg]`'d *out* of the
+       current build — get that wrong and the catalog lies about what the binary can parse.
+       Also: 3.6 MB of committed generated code in `ooxml-wml` alone means any generator
+       change produces unreviewable diffs; establish a generate-and-diff checkpoint before
+       starting or a refactor will be indistinguishable from a regression.
+
+  4. **`parse_rnc` needs work before any RNC-schema format (DocBook, ODF) can be derived.**
+     `ooxml-codegen`'s parser is a pragmatic subset: no `grammar`/`div`/`include`, no
+     `|=`/`&=` combine operators, no `notAllowed`, name classes collapsed to a `_any`
+     placeholder, no source spans, and `strip_rnc_annotations` textually deletes the `##`
+     documentation *before lexing* (so `Definition.doc_comment` is always `None` — the field
+     exists and nothing populates it). Recovering annotations is the highest-value single
+     change: it is where a construct's human-readable description lives. Consider splitting
+     `lexer`/`parser`/`ast` into an `rnc-parse` crate — it is already used cross-format and
+     the `ooxml-codegen` name is the misnomer, not the design.
+
+  5. **Formats with no machine-readable schema.** `SourceKind::HandCurated` exists but a
+     hand-curated registry does *not* deliver this design's guarantee — it is exactly as
+     fallible as the checklist it replaces. ADR 0013 open question 2 leaves undecided
+     whether such registries should be allowed at all (clearly marked) or whether those
+     formats should keep a COVERAGE.md and not pretend otherwise. Decide before the first
+     schema-less format wants one; do not let it happen by default.
+
 - **DocBook's two confirmed code gaps from the 2026-07-28 element-index audit fixed;
   audit re-verified and extended, not just patched (2026-07-28).** Follow-up to the
   "DocBook and JATS COVERAGE.md audited against the full format schema element lists"
