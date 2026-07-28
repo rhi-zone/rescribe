@@ -120,8 +120,12 @@ https://jats.nlm.nih.gov/archiving/tag-library/1.3/
 - [x] table cell spanning — `table-cell-spanning`
 - [x] underline style — `underline-style`
 - [x] ext-link type — `ext-link-type`
-- [ ] MathML math — (missing; `<math>` MathML content as alternative to `<tex-math>` —
-  genuine design fork, see TODO.md)
+- [x] MathML math — `math-display-mathml`, `math-inline-mathml` (`<mml:math>` inside
+  `<disp-formula>`/`<inline-formula>`, as an alternative to `<tex-math>` per the JATS
+  1.3 Tag Library's content model — raw-preserved verbatim as `math:source` with
+  `math:format="mathml"`, following the precedent already established for HTML's
+  `<math>` handling; previously mis-classified as a genuine design fork — see TODO.md's
+  "MathML resolved" entry)
 
 ## Composition (integration)
 

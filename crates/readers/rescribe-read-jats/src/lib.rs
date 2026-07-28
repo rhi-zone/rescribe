@@ -149,6 +149,32 @@ fn convert_children(
                     ));
                     continue;
                 }
+                // `<mml:math>` inside `<disp-formula>`/`<inline-formula>` is
+                // real MathML markup (the JATS 1.3 Tag Library documents
+                // both formula elements as containing either `<tex-math>` OR
+                // `<mml:math>`, per
+                // https://jats.nlm.nih.gov/archiving/tag-library/1.3/element/disp-formula.html).
+                // Recursing through the normal pipeline here would flatten
+                // its `<mml:mrow>`/`<mml:mi>`/... structure through the
+                // generic catch-all and then destroy even that via
+                // `extract_text` in the `"disp-formula"`/`"inline-formula"`
+                // arm below — a real, currently-shipping loss bug. Capture
+                // the whole `<mml:math>` subtree verbatim instead (same
+                // `emit_fragment` raw-preservation mechanism used for
+                // unmodeled header children below) as a sentinel `SPAN`
+                // tagged `jats:tag = "mml-math-raw"`, which `split_mathml`
+                // pulls back out in the formula arm.
+                if matches!(parent_name, "disp-formula" | "inline-formula") && name == "mml:math" {
+                    let raw =
+                        String::from_utf8(jats_fmt::emit_fragment(std::slice::from_ref(child)))
+                            .unwrap_or_default();
+                    out.push(
+                        Node::new(node::SPAN)
+                            .prop("jats:tag", "mml-math-raw")
+                            .prop(prop::CONTENT, raw),
+                    );
+                    continue;
+                }
                 let child_in_header =
                     in_header || matches!(name.as_str(), "article-meta" | "journal-meta");
                 // Whether *`name`'s own children* should also be dispatched
@@ -780,7 +806,17 @@ fn convert_element(
         // disp-formula-with-label fixture.
         "disp-formula" => {
             let (label, rest) = split_label(children);
-            let mut node = Node::new("math_display").prop("math:source", extract_text(&rest));
+            let (mathml, rest) = split_mathml(rest);
+            let mut node = match mathml {
+                // No explicit `math:format` for the `<tex-math>` case,
+                // matching the existing convention (rescribe-read-html's
+                // `\(...\)` LaTeX case also leaves `math:format` unset —
+                // only the MathML case sets it, to `"mathml"`).
+                Some(source) => Node::new("math_display")
+                    .prop("math:source", source)
+                    .prop("math:format", "mathml"),
+                None => Node::new("math_display").prop("math:source", extract_text(&rest)),
+            };
             if let Some(label) = label {
                 node = node.prop(prop::LABEL, label);
             }
@@ -788,15 +824,32 @@ fn convert_element(
         }
         "inline-formula" => {
             let (label, rest) = split_label(children);
-            let mut node = Node::new("math_inline").prop("math:source", extract_text(&rest));
+            let (mathml, rest) = split_mathml(rest);
+            let mut node = match mathml {
+                Some(source) => Node::new("math_inline")
+                    .prop("math:source", source)
+                    .prop("math:format", "mathml"),
+                None => Node::new("math_inline").prop("math:source", extract_text(&rest)),
+            };
             if let Some(label) = label {
                 node = node.prop(prop::LABEL, label);
             }
             Some(node)
         }
-        "tex-math" | "mml:math" => {
-            // Already captured by the parent formula element.
+        "tex-math" => {
+            // Already captured by the parent formula element via
+            // `extract_text`.
             None
+        }
+        "mml:math" => {
+            // Normally intercepted and raw-captured by `convert_children`
+            // before it ever reaches here (see the `mml-math-raw` sentinel
+            // above `convert_element`'s call site). This arm only fires for
+            // a stray `<mml:math>` outside a `<disp-formula>`/
+            // `<inline-formula>` parent (malformed input, or a `JatsDoc`
+            // built directly) — fall back to flattening it to text rather
+            // than dropping it silently.
+            Some(generic_span("mml:math", attrs, children))
         }
 
         // Footnotes
@@ -1503,6 +1556,27 @@ fn split_label(children: Vec<Node>) -> (Option<String>, Vec<Node>) {
         }
     }
     (label, rest)
+}
+
+/// Pull the raw-captured `<mml:math>` sentinel (see `convert_children`'s
+/// `mml-math-raw` interception) out of a formula's already-`split_label`ed
+/// children, returning its verbatim MathML source alongside the remaining
+/// children (which, in the MathML case, is normally empty — MathML and
+/// TeX are alternatives, not both present per the JATS 1.3 content model).
+fn split_mathml(children: Vec<Node>) -> (Option<String>, Vec<Node>) {
+    let mut mathml = None;
+    let mut rest = Vec::with_capacity(children.len());
+    for child in children {
+        if mathml.is_none()
+            && child.kind.as_str() == node::SPAN
+            && child.props.get_str("jats:tag") == Some("mml-math-raw")
+        {
+            mathml = child.props.get_str(prop::CONTENT).map(|s| s.to_string());
+        } else {
+            rest.push(child);
+        }
+    }
+    (mathml, rest)
 }
 
 fn extract_text(nodes: &[Node]) -> String {

@@ -1,0 +1,13 @@
+{
+  "description": "disp-formula with embedded <mml:math> MathML markup is raw-preserved verbatim as math:source with math:format=\"mathml\", instead of being destroyed by flattening to plain text",
+  "assertions": [
+    {
+      "path": "/0/0",
+      "kind": "math_display",
+      "props": {
+        "math:format": "mathml",
+        "math:source": "<mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\"><mml:mrow><mml:mi>E</mml:mi><mml:mo>=</mml:mo><mml:mi>m</mml:mi><mml:msup><mml:mi>c</mml:mi><mml:mn>2</mml:mn></mml:msup></mml:mrow></mml:math>"
+      }
+    }
+  ]
+}

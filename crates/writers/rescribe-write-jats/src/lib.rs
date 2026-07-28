@@ -140,6 +140,32 @@ fn jats_text(content: impl Into<String>) -> JNode {
     }
 }
 
+/// Build a `<disp-formula>`/`<inline-formula>`'s children from a
+/// `math_display`/`math_inline` node: an optional `<label>` (see
+/// `rescribe-read-jats`'s `split_label`) followed by either the verbatim
+/// `<mml:math>` subtree (when `math:format == "mathml"`, captured by
+/// `rescribe-read-jats`'s `mml-math-raw` sentinel — re-emitted byte-for-byte
+/// via `JNode::Raw`, the same splicing mechanism used for raw-preserved
+/// `<article-meta>`/`<journal-meta>` header content above) or a `<tex-math>`
+/// wrapping the plain-text source (the pre-existing behavior, unchanged).
+fn formula_children(node: &Node) -> Vec<JNode> {
+    let mut children = Vec::new();
+    if let Some(label) = node.props.get_str(prop::LABEL) {
+        children.push(jats_element("label", vec![], vec![jats_text(label)]));
+    }
+    if let Some(source) = node.props.get_str("math:source") {
+        if node.props.get_str("math:format") == Some("mathml") {
+            children.push(JNode::Raw {
+                content: source.to_string(),
+                span: jats_fmt::Span::NONE,
+            });
+        } else {
+            children.push(jats_element("tex-math", vec![], vec![jats_text(source)]));
+        }
+    }
+    children
+}
+
 /// Build the generic `id`/`xml:lang` attributes for a node, if the IR node
 /// carries the corresponding raw-preserved property (see
 /// `rescribe-read-jats`'s `attach_generic_attrs`, applied to *every*
@@ -463,23 +489,11 @@ fn write_node(node: &Node) -> Vec<JNode> {
             node.children.iter().flat_map(write_node).collect(),
         )],
 
-        "math_display" => {
-            let mut formula_children = Vec::new();
-            // A label (see `rescribe-read-jats`'s `split_label`) must be
-            // emitted as its own `<label>` element *before* `<tex-math>`,
-            // never folded into the math source text.
-            if let Some(label) = node.props.get_str(prop::LABEL) {
-                formula_children.push(jats_element("label", vec![], vec![jats_text(label)]));
-            }
-            if let Some(source) = node.props.get_str("math:source") {
-                formula_children.push(jats_element("tex-math", vec![], vec![jats_text(source)]));
-            }
-            vec![jats_element(
-                "disp-formula",
-                generic_attrs(node),
-                formula_children,
-            )]
-        }
+        "math_display" => vec![jats_element(
+            "disp-formula",
+            generic_attrs(node),
+            formula_children(node),
+        )],
 
         // `figcaption` (a custom node kind — see `rescribe-read-jats`'s
         // `"caption"` arm) round-trips back to `<caption>`. Previously had
@@ -806,16 +820,11 @@ fn write_inline(node: &Node) -> Vec<JNode> {
             vec![],
         )],
 
-        "math_inline" => {
-            let mut formula_children = Vec::new();
-            if let Some(label) = node.props.get_str(prop::LABEL) {
-                formula_children.push(jats_element("label", vec![], vec![jats_text(label)]));
-            }
-            if let Some(source) = node.props.get_str("math:source") {
-                formula_children.push(jats_element("tex-math", vec![], vec![jats_text(source)]));
-            }
-            vec![jats_element("inline-formula", vec![], formula_children)]
-        }
+        "math_inline" => vec![jats_element(
+            "inline-formula",
+            vec![],
+            formula_children(node),
+        )],
 
         // A raw entity reference preserved by the reader: re-emit verbatim.
         node::RAW_INLINE => match node.props.get_str("jats:entity") {
@@ -938,5 +947,55 @@ mod tests {
         let emitted = emit(&parsed.value).unwrap();
         let xml = String::from_utf8(emitted.value).unwrap();
         assert!(xml.contains("<p>Hello <italic>world</italic></p>"));
+    }
+
+    /// A `<disp-formula>` with embedded `<mml:math>` MathML must round-trip
+    /// byte-for-byte through parse -> emit -> reparse: the `mml:math`
+    /// subtree is raw-preserved (see `rescribe-read-jats`'s `mml-math-raw`
+    /// sentinel / `split_mathml`) and re-spliced verbatim on write (see
+    /// `formula_children`'s `JNode::Raw` branch), so a second parse must
+    /// recover the exact same `math:source`.
+    #[test]
+    fn test_roundtrip_mathml_disp_formula() {
+        let jats = r#"<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink"><body><disp-formula><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math></disp-formula></body></article>"#;
+        let parsed = rescribe_read_jats::parse(jats).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains(r#"<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math>"#),
+            "emitted XML missing raw mml:math: {xml}"
+        );
+
+        let reparsed = rescribe_read_jats::parse(&xml).unwrap();
+        let formula = &reparsed.value.content.children[0].children[0];
+        assert_eq!(formula.kind.as_str(), "math_display");
+        assert_eq!(formula.props.get_str("math:format"), Some("mathml"));
+        assert_eq!(
+            formula.props.get_str("math:source"),
+            parsed.value.content.children[0].children[0]
+                .props
+                .get_str("math:source")
+        );
+    }
+
+    /// Same round-trip guarantee for `<inline-formula>`/`math_inline`.
+    #[test]
+    fn test_roundtrip_mathml_inline_formula() {
+        let jats = r#"<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink"><body><p>x is <inline-formula><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math></inline-formula>.</p></body></article>"#;
+        let parsed = rescribe_read_jats::parse(jats).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains(r#"<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi></mml:math>"#),
+            "emitted XML missing raw mml:math: {xml}"
+        );
+
+        let reparsed = rescribe_read_jats::parse(&xml).unwrap();
+        let para = &reparsed.value.content.children[0].children[0];
+        let formula = &para.children[1];
+        assert_eq!(formula.kind.as_str(), "math_inline");
+        assert_eq!(formula.props.get_str("math:format"), Some("mathml"));
     }
 }
