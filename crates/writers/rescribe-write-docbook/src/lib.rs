@@ -190,11 +190,21 @@ fn write_node(node: &Node) -> Vec<DbNode> {
         // the reader unwraps regardless of the writer re-wrapping them)
         // just flattens into its children, same as `DOCUMENT`.
         node::DIV => match node.props.get_str("docbook:tag") {
-            Some(tag) => vec![db_element(
-                tag,
-                generic_attrs(node),
-                node.children.iter().flat_map(write_node).collect(),
-            )],
+            Some(tag) => {
+                let mut attrs = generic_attrs(node);
+                // `docbook:qanda-defaultlabel` (see rescribe-read-docbook's
+                // "qandaset" arm) is only meaningful on `<qandaset>` itself.
+                if tag == "qandaset"
+                    && let Some(label) = node.props.get_str("docbook:qanda-defaultlabel")
+                {
+                    attrs.push(("defaultlabel".to_string(), label.to_string()));
+                }
+                vec![db_element(
+                    tag,
+                    attrs,
+                    node.children.iter().flat_map(write_node).collect(),
+                )]
+            }
             // `html:class == "abstract"` (see rescribe-read-docbook's
             // "abstract" arm, the one dedicated DIV mapping that doesn't
             // use `docbook:tag`) still needs to round-trip back to
@@ -321,19 +331,7 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             node.children.iter().flat_map(write_node).collect(),
         )],
 
-        node::DEFINITION_LIST => {
-            let mut entries = Vec::new();
-            let mut i = 0;
-            while i < node.children.len() {
-                let mut entry_children = write_node(&node.children[i]);
-                if i + 1 < node.children.len() {
-                    entry_children.extend(write_node(&node.children[i + 1]));
-                }
-                entries.push(db_element("varlistentry", vec![], entry_children));
-                i += 2;
-            }
-            vec![db_element("variablelist", vec![], entries)]
-        }
+        node::DEFINITION_LIST => write_definition_list(node),
 
         node::DEFINITION_TERM => vec![db_element(
             "term",
@@ -540,6 +538,92 @@ fn write_node(node: &Node) -> Vec<DbNode> {
             // Unknown block - recurse into children
             node.children.iter().flat_map(write_node).collect()
         }
+    }
+}
+
+/// Write a `definition_list`'s flat, run-grouped children back to their
+/// DocBook shape. Per rescribe-read-docbook's convention (see its
+/// `"variablelist"`/`"varlistentry"`/`"qandaset"`/`"qandaentry"` doc
+/// comments — the same flat shape `rescribe-read-markdown`/
+/// `rescribe-read-html` already use for `definition_list`), a group is
+/// one-or-more consecutive `DEFINITION_TERM` followed by zero-or-more
+/// consecutive `DEFINITION_DESC`, both direct children of `DEFINITION_LIST`
+/// with no wrapper node in between; each group is one logical entry.
+///
+/// Two flavors, selected by `docbook:list-kind` (set by the reader only for
+/// a list synthesized from a `<qandaset>`/`<qandadiv>`'s `<qandaentry>`
+/// children — see `wrap_qanda_entries`):
+/// - Default (from `<variablelist>`): each group becomes one
+///   `<varlistentry>` with N `<term>`s and M `<listitem>`s, all wrapped in
+///   one `<variablelist>`.
+/// - `"qanda"`: each group becomes one `<qandaentry>` with N `<question>`s
+///   and M `<answer>`s (per the content model N is always 1 for a
+///   `qandaentry` this reader produced, but multiple is handled the same
+///   way rather than special-cased), spliced directly into the return value
+///   with no extra wrapper element — `wrap_qanda_entries` only introduces
+///   the `DEFINITION_LIST` as an IR-side convenience; it has no DocBook
+///   element of its own, unlike `<variablelist>`.
+fn write_definition_list(node: &Node) -> Vec<DbNode> {
+    let qanda = node.props.get_str("docbook:list-kind") == Some("qanda");
+    let (term_tag, desc_tag, entry_tag) = if qanda {
+        ("question", "answer", "qandaentry")
+    } else {
+        ("term", "listitem", "varlistentry")
+    };
+    let mut entries = Vec::new();
+    let mut i = 0;
+    let n = node.children.len();
+    while i < n {
+        if node.children[i].kind.as_str() != node::DEFINITION_TERM {
+            // Defensive: a non-term child shouldn't appear directly in a
+            // definition_list per the flat run-grouped convention above,
+            // but don't silently drop it if one somehow does.
+            entries.extend(write_node(&node.children[i]));
+            i += 1;
+            continue;
+        }
+        let mut kids = Vec::new();
+        while i < n && node.children[i].kind.as_str() == node::DEFINITION_TERM {
+            // `<term>` (variablelist) is phrase/inline content, but
+            // `<question>` (qandaset) is block content (DocBook 5.2
+            // reference: `question ::= label?, (block content)+`, the same
+            // shape as `<answer>`) — its `para` children must round-trip as
+            // real `<para>` elements, not be flattened through
+            // `write_inline`, which would silently drop the wrapper.
+            let term_children: Vec<DbNode> = if qanda {
+                node.children[i]
+                    .children
+                    .iter()
+                    .flat_map(write_node)
+                    .collect()
+            } else {
+                node.children[i]
+                    .children
+                    .iter()
+                    .flat_map(write_inline)
+                    .collect()
+            };
+            kids.push(db_element(term_tag, vec![], term_children));
+            i += 1;
+        }
+        while i < n && node.children[i].kind.as_str() == node::DEFINITION_DESC {
+            kids.push(db_element(
+                desc_tag,
+                vec![],
+                node.children[i]
+                    .children
+                    .iter()
+                    .flat_map(write_node)
+                    .collect(),
+            ));
+            i += 1;
+        }
+        entries.push(db_element(entry_tag, vec![], kids));
+    }
+    if qanda {
+        entries
+    } else {
+        vec![db_element("variablelist", vec![], entries)]
     }
 }
 
@@ -1007,5 +1091,155 @@ mod tests {
         let formula = &para.children[1];
         assert_eq!(formula.kind.as_str(), "math_inline");
         assert_eq!(formula.props.get_str("math:format"), Some("mathml"));
+    }
+
+    /// Regression test for a pre-existing bug: `<variablelist>` with more
+    /// than one `<varlistentry>` used to write back corrupted (all entries'
+    /// `<term>`s/`<listitem>`s bled into a single `<varlistentry>`), because
+    /// the old `DEFINITION_LIST` write arm assumed direct children were a
+    /// flat alternating `[term, desc, term, desc, ...]` sequence while the
+    /// reader actually nested each entry inside a `docbook:varlistentry`
+    /// wrapper node the writer had no arm for (silently dropped by the
+    /// generic catch-all). Both sides now agree on the flat, run-grouped
+    /// shape (see `rescribe-read-docbook`'s `"varlistentry"` doc comment and
+    /// `write_definition_list`) — this asserts a full
+    /// parse -> emit -> reparse round trip is lossless for 2+ entries.
+    #[test]
+    fn test_roundtrip_multi_entry_variablelist() {
+        let docbook = r#"<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <variablelist>
+    <varlistentry>
+      <term>Term1</term>
+      <listitem><para>Def1.</para></listitem>
+    </varlistentry>
+    <varlistentry>
+      <term>Term2</term>
+      <listitem><para>Def2.</para></listitem>
+    </varlistentry>
+  </variablelist>
+</article>"#;
+        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains(
+                "<variablelist><varlistentry><term>Term1</term><listitem><para>Def1.</para></listitem></varlistentry><varlistentry><term>Term2</term><listitem><para>Def2.</para></listitem></varlistentry></variablelist>"
+            ),
+            "entries bled together or were dropped: {xml}"
+        );
+        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        assert_eq!(parsed.value.content, reparsed.value.content);
+    }
+
+    /// A `<varlistentry>` with multiple `<term>`s sharing one `<listitem>`
+    /// (DocBook 5.2 reference permits this — multiple terms for one
+    /// definition) must round-trip as one run: 2 `DEFINITION_TERM` siblings
+    /// followed by 1 `DEFINITION_DESC`, grouped back into a single
+    /// `<varlistentry>`.
+    #[test]
+    fn test_roundtrip_variablelist_multiple_terms_one_desc() {
+        let docbook = r#"<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <variablelist>
+    <varlistentry>
+      <term>TermA</term>
+      <term>TermB</term>
+      <listitem><para>Shared definition.</para></listitem>
+    </varlistentry>
+  </variablelist>
+</article>"#;
+        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains(
+                "<variablelist><varlistentry><term>TermA</term><term>TermB</term><listitem><para>Shared definition.</para></listitem></varlistentry></variablelist>"
+            ),
+            "unexpected emitted XML: {xml}"
+        );
+        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        assert_eq!(parsed.value.content, reparsed.value.content);
+    }
+
+    /// `<qandaset defaultlabel="...">` with multiple `<qandaentry>`s —
+    /// including one with two `<answer>`s and one with zero (DocBook 5.2
+    /// reference explicitly permits an unanswered question) — must
+    /// round-trip losslessly: `defaultlabel`, the question/answer pairing,
+    /// and the per-question answer count all survive.
+    #[test]
+    fn test_roundtrip_qandaset_multi_entry() {
+        let docbook = r#"<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <qandaset defaultlabel="qanda">
+    <qandaentry>
+      <question><para>Q1?</para></question>
+      <answer><para>A1.</para></answer>
+      <answer><para>A1b.</para></answer>
+    </qandaentry>
+    <qandaentry>
+      <question><para>Q2, unanswered?</para></question>
+    </qandaentry>
+  </qandaset>
+</article>"#;
+        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains(r#"<qandaset defaultlabel="qanda">"#),
+            "defaultlabel dropped: {xml}"
+        );
+        assert!(
+            xml.contains(
+                "<qandaentry><question><para>Q1?</para></question><answer><para>A1.</para></answer><answer><para>A1b.</para></answer></qandaentry>"
+            ),
+            "multi-answer entry corrupted: {xml}"
+        );
+        assert!(
+            xml.contains(
+                "<qandaentry><question><para>Q2, unanswered?</para></question></qandaentry>"
+            ),
+            "unanswered question not preserved: {xml}"
+        );
+        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        assert_eq!(parsed.value.content, reparsed.value.content);
+    }
+
+    /// `<qandaset>` containing nested `<qandadiv>`s (each with its own
+    /// title and `<qandaentry>`s) must round-trip: `DIV` nests naturally
+    /// (the same pattern `generic_div`/sectioning containers already use),
+    /// so no dedicated node kind is required — see `wrap_qanda_entries`.
+    #[test]
+    fn test_roundtrip_qandaset_nested_qandadiv() {
+        let docbook = r#"<?xml version="1.0"?>
+<article xmlns="http://docbook.org/ns/docbook">
+  <qandaset>
+    <qandadiv>
+      <title>Section One</title>
+      <qandaentry>
+        <question><para>Q1?</para></question>
+        <answer><para>A1.</para></answer>
+      </qandaentry>
+    </qandadiv>
+    <qandadiv>
+      <title>Section Two</title>
+      <qandaentry>
+        <question><para>Q2?</para></question>
+        <answer><para>A2.</para></answer>
+      </qandaentry>
+    </qandadiv>
+  </qandaset>
+</article>"#;
+        let parsed = rescribe_read_docbook::parse(docbook).unwrap();
+        let emitted = emit(&parsed.value).unwrap();
+        let xml = String::from_utf8(emitted.value).unwrap();
+        assert!(
+            xml.contains(
+                "<qandaset><qandadiv><title>Section One</title><qandaentry><question><para>Q1?</para></question><answer><para>A1.</para></answer></qandaentry></qandadiv><qandadiv><title>Section Two</title><qandaentry><question><para>Q2?</para></question><answer><para>A2.</para></answer></qandaentry></qandadiv></qandaset>"
+            ),
+            "unexpected emitted XML: {xml}"
+        );
+        let reparsed = rescribe_read_docbook::parse(&xml).unwrap();
+        assert_eq!(parsed.value.content, reparsed.value.content);
     }
 }

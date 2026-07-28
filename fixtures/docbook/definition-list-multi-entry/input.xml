@@ -1,0 +1,12 @@
+<article xmlns="http://docbook.org/ns/docbook">
+  <variablelist>
+    <varlistentry>
+      <term>Term1</term>
+      <listitem><para>Def1.</para></listitem>
+    </varlistentry>
+    <varlistentry>
+      <term>Term2</term>
+      <listitem><para>Def2.</para></listitem>
+    </varlistentry>
+  </variablelist>
+</article>

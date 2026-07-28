@@ -1733,35 +1733,42 @@ gap (DOCX's own math vertical), not touched by this session.
 these three were re-checked against the DocBook/JATS specs and Pandoc's own DocBook reader
 source this session and remain genuinely open):**
 
-- **DocBook `qandaset`/`qandaentry`** (`fixtures/docbook/COVERAGE.md`, still 1 box).
-  `<qandaset>` (DocBook 5.2 reference, tdg.docbook.org/tdg/5.2/qandaset.html) is "a list
-  consisting of questions and answers," structured as `title?, info?, (block content)*,
-  (qandadiv+ | qandaentry+)`; each `<qandaentry>` requires at least one `<question>` and
-  permits zero or more `<answer>`s (DocBook allows a question with no recorded answer).
-  Checked how Pandoc's DocBook reader (`src/Text/Pandoc/Readers/DocBook.hs`) handles it,
-  since CLAUDE.md asks whether another tool has a convention: **Pandoc's own source marks
-  `qandaset`/`qandaentry` `[o]` (deliberately unimplemented, pass-through) and converts
-  `question`/`answer` each to a plain paragraph-prefix — `strong (str "Q:") <> " "` /
-  `strong (str "A:") <> " "` prepended to the first paragraph of their content, with no
-  list/pairing structure preserved at all.** That's acceptable for Pandoc (which has no
-  fidelity-tracking obligation) but fails rescribe's losslessness bar outright: the Q&A
-  *pairing* (which answer belongs to which question) and the `qandaset`-level
-  `defaultlabel` attribute (`none`/`number`/`qanda` — controls whether entries render
-  unlabeled, numbered, or "Q:"/"A:"-prefixed) would both be silently lost if rescribe copied
-  this convention. So Pandoc's behavior rules out "just do what Pandoc does" as an option
-  rather than resolving the question. **What's actually undecided, precisely:** does
-  `rescribe-std` gain a dedicated node-kind pair (e.g. `qa_list`/`qa_entry` with `question`/
-  `answer` children, modeled after how `definition_list`/`definition_term`/`definition_desc`
-  already pairs term-to-definition) — a real cross-format IR addition, not just a DocBook
-  adapter change, since it would need to be justified as a *general* Q&A-list construct
-  useful beyond DocBook — or does it stay raw-preserved wholesale via `generic_div` (already
-  the current, lossless-but-unstructured fallback: nothing is silently dropped today,
-  `qandaset` just has no dedicated node kind, which is a coverage gap rather than a fidelity
-  bug). This is a genuine IR-design call (add a new cross-format node-kind pair vs. accept
-  format-specific raw preservation for a construct only DocBook currently has) that only a
-  human should make, not something a spec or existing-convention lookup resolves — no other
-  currently-modeled format in this repo has an equivalent Q&A-list construct to generalize
-  from, and Pandoc's own choice was demonstrated above to be unusable as-is.
+- ~~**DocBook `qandaset`/`qandaentry`**~~ — **resolved.** The prior session's open fork
+  (reproduced below in the original session's own words, for the record) assumed the choice
+  was "add a new `qa_list`/`qa_entry` node-kind pair to `rescribe-std`" vs. "stay
+  raw-preserved via `generic_div`," without first checking two things: (1) `DIV` already
+  nests arbitrarily in this IR (the same pattern `generic_div`/sectioning containers already
+  use), so `qandadiv`'s recursive nesting-with-title is not actually a blocker; and (2) the
+  existing `DEFINITION_LIST`/`DEFINITION_TERM`/`DEFINITION_DESC` shape — once fixed to be the
+  flat, run-grouped convention `rescribe-read-markdown`/`rescribe-read-html` already use (a
+  group is 1+ consecutive `DEFINITION_TERM` then 0+ consecutive `DEFINITION_DESC`, direct
+  children, no wrapper node) — already models "N terms, M defs per group," which is exactly
+  `qandaentry ::= question, answer*`'s shape. No new node kind was needed: `qandaset`/
+  `qandadiv` map to `DIV` tagged `docbook:tag`; each `qandaset`/`qandadiv`'s directly-owned
+  `qandaentry` children flatten `question`→`DEFINITION_TERM`/`answer`→`DEFINITION_DESC` into
+  one synthesized `DEFINITION_LIST` tagged `docbook:list-kind = "qanda"` (see
+  `wrap_qanda_entries` in `rescribe-read-docbook`, `write_definition_list` in
+  `rescribe-write-docbook`); `defaultlabel` round-trips via `docbook:qanda-defaultlabel`.
+  Getting there required fixing a live bug first: `rescribe-read-docbook`'s `"variablelist"`
+  reader wrapped each `<varlistentry>` in a `docbook:varlistentry` node containing a
+  `DEFINITION_TERM` + a plain `LIST_ITEM` (not `DEFINITION_DESC`), while
+  `rescribe-write-docbook`'s `DEFINITION_LIST` write arm assumed direct children were a flat
+  `[term, desc, term, desc, ...]` pairing by index and had no write arm for
+  `docbook:varlistentry` at all (silently dropped by the generic catch-all) — independently
+  reproduced: any `<variablelist>` with 2+ `<varlistentry>`s wrote back with entries bled
+  into one merged `<varlistentry>`. Fixed both sides to the flat convention, added
+  `fixtures/docbook/definition-list-multi-entry` and `-multi-term` as regression coverage,
+  and closed both `qandaset` and Q&A-sub-structure boxes in `fixtures/docbook/COVERAGE.md`
+  with `qandaset` and `qandaset-qandadiv` fixtures. Original open-fork text, for context on
+  why it looked harder than it was: *"does `rescribe-std` gain a dedicated node-kind pair
+  (e.g. `qa_list`/`qa_entry`...) — a real cross-format IR addition... or does it stay
+  raw-preserved wholesale via `generic_div`... This is a genuine IR-design call... that only
+  a human should make, not something a spec or existing-convention lookup resolves — no
+  other currently-modeled format in this repo has an equivalent Q&A-list construct to
+  generalize from."* Both premises were wrong on inspection — `DIV`-nesting and
+  run-grouped-`definition_list` generalize just fine, and the fork was a spec-lookup problem
+  (checking the actual node shapes already in the codebase) once the varlistentry bug was
+  out of the way, not a novel IR-design decision.
 
 - **DocBook `programlistingco`/`co`/calloutlist composition** (`fixtures/docbook/
   COVERAGE.md`, 3 boxes: `programlistingco`, `co`, "callout listing + callout list").

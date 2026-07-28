@@ -1,9 +1,11 @@
 {
-  "description": "Definition list via variablelist/varlistentry",
+  "description": "Definition list via variablelist/varlistentry — flat DEFINITION_TERM/DEFINITION_DESC children, no wrapper node (matches the convention rescribe-read-markdown/rescribe-read-html already use for definition_list)",
   "assertions": [
     { "path": "/0", "kind": "div" },
     { "path": "/0/0", "kind": "definition_list" },
-    { "path": "/0/0/0", "kind": "docbook:varlistentry" },
-    { "path": "/0/0/0/0", "kind": "definition_term" }
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Term" } },
+    { "path": "/0/0/1", "kind": "definition_desc" },
+    { "path": "/0/0/1/0", "kind": "paragraph" }
   ]
 }

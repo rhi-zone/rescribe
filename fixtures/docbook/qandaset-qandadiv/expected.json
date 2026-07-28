@@ -1,0 +1,15 @@
+{
+  "description": "qandaset containing nested qandadiv sections, each with its own title and qandaentry — DIV nests naturally (same pattern as generic_div/sectioning containers), so no dedicated node kind is needed for the recursive qandadiv shape",
+  "assertions": [
+    { "path": "/0/0", "kind": "div", "props": { "docbook:tag": "qandaset" } },
+    { "path": "/0/0/0", "kind": "div", "props": { "docbook:tag": "qandadiv" } },
+    { "path": "/0/0/0/0", "kind": "caption" },
+    {
+      "path": "/0/0/0/1",
+      "kind": "definition_list",
+      "props": { "docbook:list-kind": "qanda" }
+    },
+    { "path": "/0/0/1", "kind": "div", "props": { "docbook:tag": "qandadiv" } },
+    { "path": "/0/0/1/0", "kind": "caption" }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "description": "qandaset with defaultlabel, a qandaentry with 2 answers, and a qandaentry with 0 answers (DocBook 5.2 explicitly permits an unanswered question) — mapped to DIV (docbook:tag=qandaset) containing a synthesized DEFINITION_LIST (docbook:list-kind=qanda) of question/answer runs, no dedicated node kind",
+  "assertions": [
+    { "path": "/0", "kind": "div" },
+    {
+      "path": "/0/0",
+      "kind": "div",
+      "props": { "docbook:tag": "qandaset", "docbook:qanda-defaultlabel": "qanda" }
+    },
+    {
+      "path": "/0/0/0",
+      "kind": "definition_list",
+      "props": { "docbook:list-kind": "qanda" },
+      "children_count": 4
+    },
+    { "path": "/0/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0/0", "kind": "paragraph" },
+    { "path": "/0/0/0/1", "kind": "definition_desc" },
+    { "path": "/0/0/0/2", "kind": "definition_desc" },
+    { "path": "/0/0/0/3", "kind": "definition_term" }
+  ]
+}

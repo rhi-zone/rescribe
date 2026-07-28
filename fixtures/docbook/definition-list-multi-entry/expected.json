@@ -1,0 +1,13 @@
+{
+  "description": "variablelist with 2+ varlistentry children — regression test for a pre-existing writer bug where entries bled together on round-trip; reader must keep each entry's term/desc as its own flat run rather than a shared wrapper",
+  "assertions": [
+    { "path": "/0/0", "kind": "definition_list", "children_count": 4 },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Term1" } },
+    { "path": "/0/0/1", "kind": "definition_desc" },
+    { "path": "/0/0/1/0", "kind": "paragraph" },
+    { "path": "/0/0/2", "kind": "definition_term" },
+    { "path": "/0/0/2/0", "kind": "text", "props": { "content": "Term2" } },
+    { "path": "/0/0/3", "kind": "definition_desc" }
+  ]
+}

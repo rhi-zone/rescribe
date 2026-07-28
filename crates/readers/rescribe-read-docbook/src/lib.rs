@@ -451,6 +451,40 @@ fn generic_div(name: &str, _attrs: &[(String, String)], children: Vec<Node>) -> 
         .children(children)
 }
 
+/// Collect a `<qandaset>`/`<qandadiv>`'s already-converted children into
+/// their final shape (see the `"qandaset"`/`"qandadiv"`/`"qandaentry"` arms
+/// in [`convert_element`]): any `DEFINITION_TERM`/`DEFINITION_DESC` nodes —
+/// produced by that element's directly-owned `<qandaentry>` children
+/// flattening their `question`/`answer`s straight into this list, the same
+/// way `<varlistentry>` does for `<variablelist>` — are pulled out (in
+/// order) and wrapped in one synthesized `DEFINITION_LIST` tagged
+/// `docbook:list-kind = "qanda"`, appended after every other child. Returns
+/// `children` unchanged if there are no such nodes (the `qandadiv+` content
+/// model alternative, or a `qandaset`/`qandadiv` with only a title/block
+/// content and no entries yet).
+fn wrap_qanda_entries(children: Vec<Node>) -> Vec<Node> {
+    let mut rest = Vec::with_capacity(children.len());
+    let mut entries = Vec::new();
+    for child in children {
+        if matches!(
+            child.kind.as_str(),
+            node::DEFINITION_TERM | node::DEFINITION_DESC
+        ) {
+            entries.push(child);
+        } else {
+            rest.push(child);
+        }
+    }
+    if !entries.is_empty() {
+        rest.push(
+            Node::new(node::DEFINITION_LIST)
+                .prop("docbook:list-kind", "qanda")
+                .children(entries),
+        );
+    }
+    rest
+}
+
 /// Known DocBook block-level elements — used only by the catch-all fallback
 /// in [`convert_element`] to decide whether an element name this reader
 /// doesn't specifically recognize should become a [`generic_div`] (block
@@ -642,6 +676,17 @@ fn convert_element(
             }
             Some(attach_list_spacing(node, attrs))
         }
+        // A `<listitem>` whose parent is `<varlistentry>` is a definition's
+        // *description*, not an ordinary list item — see the
+        // "variablelist"/"varlistentry"/"term" arms below, which build the
+        // flat, wrapper-free `definition_list` shape (`DEFINITION_TERM`s
+        // followed by `DEFINITION_DESC`s as direct children, matching the
+        // convention `rescribe-read-markdown`/`rescribe-read-html` already
+        // use for the same node kind) that `rescribe-write-docbook`'s
+        // `write_definition_list` groups back into `<varlistentry>` runs.
+        "listitem" if parent == Some("varlistentry") => {
+            Some(Node::new(node::DEFINITION_DESC).children(children))
+        }
         "listitem" => Some(Node::new(node::LIST_ITEM).children(children)),
 
         // A <procedure> (DocBook 5.2 reference: "encapsulates a task
@@ -669,10 +714,68 @@ fn convert_element(
                 .children(children),
         ),
 
-        // Definition lists
+        // Definition lists. `<varlistentry>` is a structural pass-through
+        // wrapper (like `<tgroup>`): its own children (one-or-more `<term>`s
+        // then one `<listitem>`, already converted to `DEFINITION_TERM`/
+        // `DEFINITION_DESC` above) splice directly into `<variablelist>`'s
+        // `DEFINITION_LIST` as a flat run — no `docbook:varlistentry`
+        // wrapper node — matching the flat, run-grouped `definition_list`
+        // convention `rescribe-read-markdown`/`rescribe-read-html` already
+        // use (a group is 1+ consecutive `DEFINITION_TERM` then 0+
+        // consecutive `DEFINITION_DESC`, direct children of
+        // `DEFINITION_LIST`). `rescribe-write-docbook`'s
+        // `write_definition_list` regroups by run to re-emit each
+        // `<varlistentry>`.
         "variablelist" => Some(Node::new(node::DEFINITION_LIST).children(children)),
-        "varlistentry" => Some(Node::new("docbook:varlistentry").children(children)),
+        "varlistentry" => None,
         "term" => Some(Node::new(node::DEFINITION_TERM).children(children)),
+
+        // Q&A lists. DocBook 5.2 reference content model:
+        // `qandaset ::= title?, info?, (block content)*,
+        // (qandadiv+ | qandaentry+)`; `qandadiv` nests the same shape
+        // (recursively, with its own optional title) one level deeper;
+        // `qandaentry ::= question, answer*` (exactly one question, zero or
+        // more answers — an unanswered question is explicitly permitted).
+        // No dedicated node kinds needed: `qandaset`/`qandadiv` map to `DIV`
+        // (which already nests arbitrarily, the same way `generic_div`/
+        // sectioning containers do) tagged `docbook:tag`, and
+        // `qandaentry`/`question`/`answer` reuse the same flat, run-grouped
+        // `definition_list` convention `<varlistentry>`/`<term>`/
+        // `<listitem>` uses above — `qandaentry` is a pass-through wrapper
+        // (like `varlistentry`) whose `question`/`answer` children become
+        // `DEFINITION_TERM`/`DEFINITION_DESC` siblings, and
+        // `wrap_qanda_entries` collects every such sibling produced by a
+        // `qandaset`/`qandadiv`'s directly-owned `qandaentry` children into
+        // one synthesized `DEFINITION_LIST` (tagged
+        // `docbook:list-kind = "qanda"` so `rescribe-write-docbook`'s
+        // `write_definition_list` re-emits `<qandaentry>`/`<question>`/
+        // `<answer>` instead of `<varlistentry>`/`<term>`/`<listitem>`),
+        // appended after any other content — per the content model,
+        // `qandaentry`s always come last and are mutually exclusive with
+        // `qandadiv`s, so appending rather than preserving interleaved
+        // position is lossless for any conforming document. `defaultlabel`
+        // (`none`/`number`/`qanda` — DocBook 5.2 reference: controls
+        // whether entries render unlabeled, numbered, or "Q:"/"A:"-prefixed)
+        // is only meaningful on `qandaset` itself, not `qandadiv`.
+        "qandaset" | "qandadiv" => {
+            let mut node = Node::new(node::DIV)
+                .prop("docbook:tag", name.to_string())
+                .children(wrap_qanda_entries(children));
+            if name == "qandaset"
+                && let Some(label) = get_attr(attrs, "defaultlabel")
+            {
+                node = node.prop("docbook:qanda-defaultlabel", label.to_string());
+            }
+            Some(node)
+        }
+        // Pass-through wrapper: its `question`/`answer` children (already
+        // converted to `DEFINITION_TERM`/`DEFINITION_DESC` by the arms
+        // below) splice directly into the enclosing `qandaset`/`qandadiv`'s
+        // children, exactly like `varlistentry` above; `wrap_qanda_entries`
+        // then collects them into one `DEFINITION_LIST`.
+        "qandaentry" => None,
+        "question" => Some(Node::new(node::DEFINITION_TERM).children(children)),
+        "answer" => Some(Node::new(node::DEFINITION_DESC).children(children)),
 
         // Code / verbatim blocks. `<synopsis>` and `<address>` (DocBook 5.2
         // reference: both "displayed 'verbatim'; whitespace and line breaks

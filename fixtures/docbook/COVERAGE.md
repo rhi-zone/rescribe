@@ -14,7 +14,16 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
 - [x] code block — `code-block` (`<programlisting>` with `language` attribute)
 - [x] ordered list — `list-ordered` (`<orderedlist>`)
 - [x] unordered list — `list-unordered` (`<itemizedlist>`)
-- [x] definition list — `definition-list` (`<variablelist>` / `<varlistentry>`)
+- [x] definition list — `definition-list`, `definition-list-multi-entry`,
+  `definition-list-multi-term` (`<variablelist>` / `<varlistentry>`; flat
+  `DEFINITION_TERM`/`DEFINITION_DESC` runs as direct `definition_list`
+  children — no `docbook:varlistentry` wrapper node — matching the
+  convention `rescribe-read-markdown`/`rescribe-read-html` already use for
+  the same IR shape. Fixed a pre-existing bug this session: the old
+  `docbook:varlistentry`-wrapped shape and the writer's flat-pairs
+  assumption disagreed, so any `<variablelist>` with more than one
+  `<varlistentry>` wrote back corrupted (entries bled together); see
+  `write_definition_list` in `rescribe-write-docbook`)
 - [x] table — `table` (`<informaltable>` with `<thead>` / `<tbody>`)
 - [x] figure — `figure` (`<figure>` with `<caption>` and `<mediaobject>`)
 - [x] note admonition — `note` (`<note>`)
@@ -55,10 +64,18 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   `docbook:tag=bridgehead` so the writer re-emits a bare `<bridgehead
   renderas="sectN">` instead of wrapping it in a spurious `<sectN>` section
   the way a real nested-section heading would be)
-- [ ] qandaset — (missing; `<qandaset>` / `<qandaentry>` — left open: no
-  dedicated mapping attempted this session, still raw-preserved generically
-  via `generic_div`/`generic_span` per the catch-all, but not verified with a
-  fixture; a real Q&A-list IR mapping is a design choice, see TODO.md)
+- [x] qandaset — `qandaset` (`<qandaset defaultlabel="...">` /
+  `<qandaentry>` / `<question>` / `<answer>`; resolved without any new
+  `rescribe-std` node kind — `qandaset`/`qandadiv` map to `DIV` tagged
+  `docbook:tag`, since `DIV` already nests arbitrarily the same way
+  `generic_div`/sectioning containers do, and each `qandaentry`'s
+  `question`/`answer`s flatten into a synthesized `DEFINITION_LIST` tagged
+  `docbook:list-kind = "qanda"`, reusing the same flat run-grouped
+  `definition_list` convention `<varlistentry>` uses — see
+  `wrap_qanda_entries` in `rescribe-read-docbook` and
+  `write_definition_list` in `rescribe-write-docbook`. `defaultlabel`
+  preserved as `docbook:qanda-defaultlabel`; multi-answer and
+  zero-answer entries both covered)
 - [ ] document division elements (book/chapter/part/appendix) — (missing;
   `<book>`, `<chapter>`, `<part>`, `<appendix>` — genuine code gap, not just a
   checklist gap: the reader maps these to a bare `DIV` with no `docbook:tag`,
@@ -95,9 +112,10 @@ DocBook 5 reference: https://tdg.docbook.org/tdg/5.2/
   unhandled: none appear in `rescribe-read-docbook`; `<indexentry>`/
   `<indexdiv>` are block-shaped and misclassified as inline by the catch-all
   the same way as glossentry above. Full-schema audit, see TODO.md)
-- [ ] Q&A sub-structure — (missing; `<qandadiv>`, `<question>`, `<answer>` —
-  handled via the generic-div catch-all like `qandaset` above; same open
-  design question, not a separate gap. Full-schema audit, see TODO.md)
+- [x] Q&A sub-structure — `qandaset-qandadiv` (`<qandadiv>` nests
+  recursively inside `<qandaset>`, each with its own title — `DIV`'s
+  existing arbitrary-nesting support handles this directly, no separate
+  gap from the `qandaset` box above)
 - [ ] entry table (nested table in a cell) — (missing; `<entrytbl>`,
   `<colgroup>`, `<col>`, `<spanspec>` — genuinely unhandled: none appear in
   the reader; absent from `is_block_element`, so `<entrytbl>` — a table

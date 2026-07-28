@@ -1,0 +1,12 @@
+<article xmlns="http://docbook.org/ns/docbook">
+  <qandaset defaultlabel="qanda">
+    <qandaentry>
+      <question><para>What is DocBook?</para></question>
+      <answer><para>An XML vocabulary.</para></answer>
+      <answer><para>Used for technical documentation.</para></answer>
+    </qandaentry>
+    <qandaentry>
+      <question><para>Unanswered question?</para></question>
+    </qandaentry>
+  </qandaset>
+</article>

@@ -1,0 +1,18 @@
+<article xmlns="http://docbook.org/ns/docbook">
+  <qandaset>
+    <qandadiv>
+      <title>Basics</title>
+      <qandaentry>
+        <question><para>Q1?</para></question>
+        <answer><para>A1.</para></answer>
+      </qandaentry>
+    </qandadiv>
+    <qandadiv>
+      <title>Advanced</title>
+      <qandaentry>
+        <question><para>Q2?</para></question>
+        <answer><para>A2.</para></answer>
+      </qandaentry>
+    </qandadiv>
+  </qandaset>
+</article>

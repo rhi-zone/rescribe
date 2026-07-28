@@ -1,0 +1,11 @@
+{
+  "description": "varlistentry with multiple term children sharing one listitem (DocBook 5.2 permits multiple terms per definition) — a run of 2 definition_term followed by 1 definition_desc",
+  "assertions": [
+    { "path": "/0/0", "kind": "definition_list", "children_count": 3 },
+    { "path": "/0/0/0", "kind": "definition_term" },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "TermA" } },
+    { "path": "/0/0/1", "kind": "definition_term" },
+    { "path": "/0/0/1/0", "kind": "text", "props": { "content": "TermB" } },
+    { "path": "/0/0/2", "kind": "definition_desc" }
+  ]
+}
