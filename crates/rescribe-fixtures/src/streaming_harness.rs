@@ -516,6 +516,84 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              buffer-then-emit streaming writer defect applies",
         ),
     },
+    // docbook-fmt, jats-fmt, tei-fmt are byte-identical in implementation
+    // shape (verified via `diff` across batch.rs/writer.rs: only doc
+    // comments and AST/event type names differ), so the same three real bugs
+    // — found by this harness, not present in any prior audit — apply to all
+    // three identically. All three ARE genuinely independent/incremental
+    // implementations (events() pulls tokens straight off quick_xml::Reader
+    // without building an AST; the streaming Writer calls quick_xml::Writer
+    // directly per event with no buffering) — these are logic bugs, not
+    // architectural hollowness.
+    FormatCapabilities {
+        format: "docbook",
+        events: ApiState::KnownFailure(
+            "events()/EventIter emits one Text event per resolved character/predefined entity \
+             (e.g. `&amp;` decodes to its own Text(\"&\") event) instead of merging it into the \
+             surrounding text run the way parse()'s AST does (parse.rs's `current_text` \
+             accumulator, documented in parse.rs's module doc as deliberate coalescing) — found \
+             via this harness's events()-vs-events_from_doc(&parse()) equivalence check \
+             (fixture adv-entity-references, 3/110 docbook fixtures contain entities)",
+        ),
+        streaming_parser: ApiState::KnownFailure(
+            "StreamingParser's drain() (batch.rs) sets check_end_names=false and \
+             allow_unmatched_ends=true on its per-drain-call quick_xml::Reader — an \
+             architecturally necessary consequence of only ever seeing the unconsumed tail, \
+             not the full document, on each call (documented in batch.rs's drain() comment) — \
+             so it silently accepts a mismatched end tag (e.g. an unclosed <para> closed by \
+             </article>) that events()'s single continuous Reader (default \
+             check_end_names=true) correctly rejects as a parse error; the two diverge on \
+             malformed input with zero diagnostics from StreamingParser (fixture \
+             adv-malformed-xml) instead of matching events()'s error-and-stop behavior",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "downstream of the events() gap above: parse() has explicit malformed-XML recovery \
+             (auto-closes unclosed elements with synthetic EndElement nodes, see parse.rs's \
+             'unclosed element' diagnostics) so build() always emits well-formed output, but \
+             events()/EventIter has no such recovery — it just stops at the same parse error \
+             with no synthetic close events — so the streaming Writer (fed by events()) emits \
+             truncated, unclosed XML for the same malformed input build() recovers from \
+             (fixture adv-malformed-xml)",
+        ),
+    },
+    FormatCapabilities {
+        format: "jats",
+        events: ApiState::KnownFailure(
+            "shares docbook-fmt's implementation (byte-identical batch.rs/events.rs shape): \
+             events()/EventIter does not coalesce consecutive resolved-entity Text events into \
+             one Text run the way parse()'s AST does; see the \"docbook\" events KnownFailure \
+             for the root cause",
+        ),
+        streaming_parser: ApiState::KnownFailure(
+            "shares docbook-fmt's implementation: StreamingParser's per-drain-call Reader \
+             disables check_end_names/allow_unmatched_ends and so does not detect mismatched \
+             end tags events() catches; see the \"docbook\" streaming_parser KnownFailure",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "shares docbook-fmt's implementation: the streaming Writer inherits events()'s lack \
+             of parse()'s malformed-XML auto-close recovery; see the \"docbook\" \
+             streaming_writer KnownFailure",
+        ),
+    },
+    FormatCapabilities {
+        format: "tei",
+        events: ApiState::KnownFailure(
+            "shares docbook-fmt's implementation (byte-identical batch.rs/events.rs shape): \
+             events()/EventIter does not coalesce consecutive resolved-entity Text events into \
+             one Text run the way parse()'s AST does; see the \"docbook\" events KnownFailure \
+             for the root cause",
+        ),
+        streaming_parser: ApiState::KnownFailure(
+            "shares docbook-fmt's implementation: StreamingParser's per-drain-call Reader \
+             disables check_end_names/allow_unmatched_ends and so does not detect mismatched \
+             end tags events() catches; see the \"docbook\" streaming_parser KnownFailure",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "shares docbook-fmt's implementation: the streaming Writer inherits events()'s lack \
+             of parse()'s malformed-XML auto-close recovery; see the \"docbook\" \
+             streaming_writer KnownFailure",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -549,7 +627,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "csl-json",
     "native",
     "pandoc-json",
-    "docbook",
     "ipynb",
     "csv",
     "tsv",
@@ -558,9 +635,7 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "bibtex",
     "biblatex",
     "typst",
-    "jats",
     "endnotexml",
-    "tei",
     "odt",
     "epub",
     "pdf",
@@ -743,6 +818,58 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         api: "streaming_writer",
         description: "shares commonmark-fmt's buffer-then-emit streaming Writer defect (see the \
                        \"commonmark\" KnownFailure entry above)",
+    },
+    KnownFailure {
+        format: "docbook",
+        api: "events",
+        description: "events()/EventIter emits one Text event per resolved character/predefined \
+                       entity instead of merging it into the surrounding text run the way \
+                       parse()'s AST does",
+    },
+    KnownFailure {
+        format: "docbook",
+        api: "streaming_parser",
+        description: "StreamingParser's per-drain-call Reader disables \
+                       check_end_names/allow_unmatched_ends (architecturally necessary for only \
+                       seeing the unconsumed tail per call) and so silently accepts mismatched \
+                       end tags that events()'s continuous Reader correctly rejects",
+    },
+    KnownFailure {
+        format: "docbook",
+        api: "streaming_writer",
+        description: "downstream of the events() gap: parse() auto-closes unclosed elements on \
+                       malformed XML but events() has no such recovery, so the streaming Writer \
+                       emits truncated/unclosed output where build() recovers",
+    },
+    KnownFailure {
+        format: "jats",
+        api: "events",
+        description: "shares docbook-fmt's implementation; same entity-Text-coalescing gap",
+    },
+    KnownFailure {
+        format: "jats",
+        api: "streaming_parser",
+        description: "shares docbook-fmt's implementation; same check_end_names-disabled gap",
+    },
+    KnownFailure {
+        format: "jats",
+        api: "streaming_writer",
+        description: "shares docbook-fmt's implementation; same malformed-XML recovery gap",
+    },
+    KnownFailure {
+        format: "tei",
+        api: "events",
+        description: "shares docbook-fmt's implementation; same entity-Text-coalescing gap",
+    },
+    KnownFailure {
+        format: "tei",
+        api: "streaming_parser",
+        description: "shares docbook-fmt's implementation; same check_end_names-disabled gap",
+    },
+    KnownFailure {
+        format: "tei",
+        api: "streaming_writer",
+        description: "shares docbook-fmt's implementation; same malformed-XML recovery gap",
     },
 ];
 
