@@ -554,6 +554,36 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              document-header fixture; see TODO.md",
         ),
     },
+    // pod-fmt's events() is `pod_fmt::events()` (src/lib.rs) — `parse(input)`
+    // then an eager `.collect()` of a lazy frame-stack `EventIter` walk of
+    // the AST parse() already built, not an independently implemented
+    // reader (same pattern as t2t/asciidoc above). See the comment above the
+    // check in tests/streaming_apis.rs.
+    FormatCapabilities {
+        format: "pod",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "pod_fmt::batch::StreamingParser is explicitly self-documented buffer-then-finish \
+             (batch.rs's own module doc: \"POD documents are always small enough to buffer \
+             fully, so this implementation accumulates all input and parses on finish()\"); \
+             feed() only extends an internal Vec<u8>, all parsing and event delivery happen in \
+             finish(). Unlike t2t/org/asciidoc this does NOT diverge from events() under \
+             adversarial chunking (finish() parses the whole buffered input the same way bulk \
+             events() does, no per-block re-parse-in-isolation to disagree with) — the defect is \
+             purely architectural non-incrementality, pinned via the feed()-before-finish() \
+             probe. pod-fmt's own docstring rationale is not a CLAUDE.md-sanctioned exemption \
+             (only commonmark-fmt's pulldown-cmark wrapping is); see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "pod_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit::build() inside finish() (writer.rs's finish(): \
+             events_to_doc(...) then crate::emit::build(&doc)) — the same fake-streaming-writer \
+             pattern as t2t/textile/commonmark/org/texinfo. Content is not lost (PodDoc has no \
+             document-level metadata field pod::Event could be missing, unlike t2t), so the \
+             byte-identical-to-builder check passes; only the incrementality probe fails; see \
+             TODO.md",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -575,7 +605,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "dokuwiki",
     "jira",
     "haddock",
-    "pod",
     "man",
     "xwiki",
     "zimwiki",
@@ -798,6 +827,20 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        emits inside finish() — a fake streaming writer per CLAUDE.md; it also \
                        always drops doc.title/author/date since t2t::Event has no variant \
                        carrying them",
+    },
+    KnownFailure {
+        format: "pod",
+        api: "streaming_parser",
+        description: "pod_fmt::batch::StreamingParser self-documents as buffer-then-finish; \
+                       feed() only extends a Vec<u8>, all parsing and event delivery happen in \
+                       finish() — not incremental despite implementing the feed/finish contract",
+    },
+    KnownFailure {
+        format: "pod",
+        api: "streaming_writer",
+        description: "pod_fmt::writer::Writer buffers all events and only reconstructs the AST \
+                       + calls emit::build() inside finish() — a fake streaming writer per \
+                       CLAUDE.md",
     },
 ];
 
