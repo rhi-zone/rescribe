@@ -38,6 +38,57 @@ and not being retracted — only the construct-list-completeness component of it
   decided here, and not something to guess past. Pick this up as its own task if/when a
   consumer actually needs uniform footnote handling across formats.
 
+- **`ooxml-wml`'s streaming writer is real now; its `StreamingParser` is fenced, not fixed
+  (2026-07-29).** `WmlWriter` no longer buffers `OwnedWmlEvent`s or reconstructs a
+  `Paragraph`/`Run`/`Table` AST — each event goes straight into the open
+  `word/document.xml` ZIP entry through a fixed 64 KiB window. Peak live heap for 100k
+  paragraphs went 160.3 MB → 0.49 MB (85.9x growth → 1.00x), and throughput went from
+  7.74x slower than `DocumentBuilder` to 0.52x (1.9x faster). Numbers, methodology and the
+  construct-by-construct deferred/straight-through split are in `docs/format-audit.md`'s
+  streaming inventory; `tests/streaming_writer_memory.rs` and
+  `examples/streaming_writer_throughput.rs` reproduce them.
+
+  **What is fenced, precisely.** `ooxml-wml`'s chunk-driven *reader* still buffers the
+  whole DOCX (`BatchParser::feed` appends to a `Vec<u8>`; `finish()` calls
+  `Document::from_reader`). Two separate facts, so the fence is not mistaken for a
+  structural impossibility:
+  - **The ZIP container is not the blocker.** The central-directory-at-the-end layout does
+    *not* force reading the tail first: zip 7 ships `zip::read::stream::ZipStreamReader`,
+    which walks local file headers sequentially. So an entry can be located and inflated
+    before the central directory is seen.
+  - **The API shape is the blocker.** `ZipStreamReader::visit` *pulls* from a `Read`, while
+    `feed(chunk)` *pushes*. Bridging them needs either a thread + pipe, or a hand-rolled
+    local-header state machine driving `flate2::Decompress` incrementally. And
+    `BatchParser::finish()` returns a materialised `Document<Cursor<Vec<u8>>>`, so even a
+    bounded feed path could not satisfy the current signature. A genuine bounded reader is
+    a new `StreamingParser<H: Handler>` surface — which `ooxml-wml` does not expose at all
+    today — not a patch to `BatchParser`.
+  - One further wrinkle any such reader must decide, rather than discover late: the main
+    part's path comes from `_rels/.rels`, which is conventionally but not normatively
+    stored before `word/document.xml`. A sequential reader either assumes the
+    `word/document.xml` convention or buffers until the rels part appears.
+
+  Not started, deliberately: `ooxml-sml` and `ooxml-pml` writers (see below).
+
+- **`ooxml-sml`'s writer is not incremental either — the audit entry calling it "the one
+  clean writer among the zip/OPC formats" is wrong (2026-07-29).** It is right that
+  `SmlWriter` avoids event buffering and AST-frame reconstruction, but it holds a
+  `WorkbookBuilder` and calls `sheet.set_cell(...)` per cell, so the whole workbook
+  accumulates and is written only at `finish()` — O(full document). Corrected in
+  `docs/format-audit.md`. It needs the same rework `ooxml-wml` just got; `ooxml-wml` is now
+  the in-repo proof that the zip/OPC container is not the obstacle.
+
+- **`ooxml-pml`'s writer is separately hollow *and* lossy — untouched, still open
+  (2026-07-29).** Flattens shape/paragraph/table-cell text into plain strings and discards
+  shape geometry for most event types (only `StartShape { transform }` carries position),
+  so it is a fidelity regression against the builder path as well as a fake-streaming one.
+  Left alone deliberately while working `ooxml-wml`. The `ooxml-wml` rework does hand it a
+  ready-made template: `PackageWriter::start_part`/`write_part_data` + the `Write` impl on
+  `PackageWriter` (added in `ooxml-opc` for this) make "stream one XML part into the ZIP,
+  accumulate only the relationship table, write rels + content-types at finish" mechanical.
+  The lossiness is a separate problem from the streaming shape and needs fixing on its own
+  terms.
+
 - **`rst-fmt`'s streaming/batch/writer-streaming APIs recovered (2026-07-28) — resolves the
   previous entry.** Root cause pinned exactly: not commit `79ea2ce7af` itself but merge
   commit `383d4e6adf` (`Merge: 395a7ee532 79ea2ce7af`), which took the `79ea2ce7af` topic

@@ -523,6 +523,66 @@ vertical's streaming-API work, per CLAUDE.md's "work one vertical to completion"
 rule. Given the severity ranking, `ooxml-wml` (DOCX) is the highest-priority fix by
 consequence; the Tier-1 wiki/small-format family is the highest-count fix by breadth.
 
+### Update 2026-07-29 — `ooxml-wml` writer fixed and measured
+
+The `ooxml-wml` **writer** finding above is closed. `WmlWriter` now emits each
+event straight into the open `word/document.xml` ZIP entry through a fixed 64 KiB
+window; there is no event buffer and no AST reconstruction. Its severity-ranking
+entry moves from tier 1 to "clean" on the writer axis (its `StreamingParser` gap,
+below, keeps it out of the clean list overall).
+
+Measured, release build, 100k paragraphs, discarding sink, inputs prepared outside
+the timed region (`crates/formats/ooxml-wml/examples/streaming_writer_throughput.rs`
+and `tests/streaming_writer_memory.rs` reproduce both):
+
+| | peak live heap, 1k paras | peak live heap, 100k paras | growth | vs `DocumentBuilder` |
+|---|---|---|---|---|
+| before | 1,865,922 B | 160,263,096 B | 85.9x | 7.74x slower (first incremental cut) |
+| after | 486,474 B | 486,474 B | 1.00x | 0.52x — i.e. 1.9x *faster* |
+
+The residual 486 KB is the deflate window plus the output buffer, both fixed. The
+"7.74x slower" figure is the intermediate state where each tag was handed to the
+deflate encoder individually; the shipped version buffers a 64 KiB window, which is
+O(1) and not a return to document-sized buffering.
+
+Genuinely deferred in the writer, and why (each is a *count*, not a content size):
+`word/_rels/document.xml.rels` (a relationship is only known once the event
+referencing it is seen; written after the body — ZIP entry order is not significant
+to OPC consumers), `[Content_Types].xml` (same shape, written by
+`PackageWriter::finish`), and the ZIP central directory (the container's own
+structure, written by `ZipWriter`). Everything else — paragraphs, runs, text,
+breaks, hyperlinks, tables, rows, cells, images, footnote/endnote references — is
+straight-through. Image bytes registered *after* the first event are held until
+`finish()` because a ZIP archive permits only one open entry at a time; registering
+before the first event (the documented usage) retains nothing.
+
+Three reader bugs surfaced while building the round-trip test and were fixed in the
+same pass — `events()` was never exercised by any test or caller, so the earlier
+audit's "the one clean piece" verdict was structural, not behavioural:
+`<w:document>` was treated as an untracked element and skipped wholesale, so
+`events()` returned three events for any real `word/document.xml`; escaped text came
+back verbatim (`a &lt; b`) because quick-xml 0.39 surfaces entity references as
+separate `GeneralRef` events; and `<w:p></w:p>` pushed a stack frame nothing popped,
+desynchronising every later end event.
+
+**Correction to this inventory's `ooxml-sml` entry.** `ooxml-sml` is listed above as
+"the one clean writer among the zip/OPC formats". That is right about what it
+*avoids* — no event buffer, no AST-frame reconstruction — but wrong about its memory
+class. `SmlWriter` holds a `WorkbookBuilder` and calls `sheet.set_cell(...)` per
+cell, so the entire workbook accumulates in memory and is written only at
+`finish()`: O(full document), not O(nesting depth). It is a *better* shape than
+`ooxml-wml`'s was (no double materialisation) but it is not an incremental writer,
+and it should not be cited as proof that the zip/OPC container is not the obstacle —
+`ooxml-wml` now is that proof. `ooxml-sml`'s writer needs the same rework.
+
+**`ooxml-wml`'s reader-batch gap is unchanged and is fenced, not fixed.** See
+TODO.md for the precise boundary; in short, the zip container is *not* the blocker
+(zip 7's `ZipStreamReader` walks local file headers sequentially without the central
+directory), but `BatchParser::feed`/`finish` is a push API returning a materialised
+`Document<Cursor<Vec<u8>>>`, and a genuine bounded reader is a new
+`StreamingParser<H: Handler>` surface that ooxml-wml does not have at all — a
+separate vertical, not a patch.
+
 ---
 
 ## Risk areas
