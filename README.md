@@ -76,11 +76,15 @@ cd docs && bun dev
 The Rust toolchain (rustc/cargo/rustfmt/clippy) is pinned in `rust-toolchain.toml` and
 built into the dev shell via `flake.nix`, so `cargo fmt` produces identical output for
 everyone using `nix develop`/direnv, and CI (`.github/workflows/ci.yml`) is pinned to
-the same version. Formatting options live in `rustfmt.toml`.
+the same version. Formatting options live in `rustfmt.toml`. Before this pin, a bare
+`cargo fmt` could reformat hundreds of unrelated files depending on which rustfmt
+version happened to be installed; the whole tree was reformatted once under the pinned
+version and that single commit is recorded in `.git-blame-ignore-revs` so it doesn't
+obscure `git blame` history.
 
-One-time local setup so `git blame` ignores the whole-tree reformat commits listed in
-`.git-blame-ignore-revs` (GitHub's blame view already does this automatically, no setup
-needed there):
+To make local `git blame` skip that reformat commit too (GitHub's web blame view
+already does this automatically, no setup needed there), run once per clone — this
+isn't tracked by git, so each contributor sets it individually:
 
 ```bash
 git config blame.ignoreRevsFile .git-blame-ignore-revs
