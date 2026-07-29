@@ -1989,6 +1989,32 @@ cleanly to the original input (no escape processing). Implementation: `Frame::In
 `ParseContext::line_offset_at()`, real base_offset in push_heading/paragraph_frames.
 
 **Remaining (other crates):**
+**Does the rst-fmt pattern generalize? Spot-checked 2026-07-29 (org-fmt, djot-fmt,
+mediawiki-fmt; read, not inferred).** Yes — rst-fmt was the *median* case, not an outlier.
+The forward-declared-but-unwired `Cow<'a, str>` event enum is a house convention (org,
+djot, mediawiki, muse, asciidoc share the enum shape and in three cases the verbatim "so
+that future optimisations can" comment), so the AST-lifetime step is mechanical everywhere
+and the API-compat story validated here carries over. The cost is concentrated in the
+tokenizer rewrite and the line-joining decision, and both are genuinely per-crate:
+- `org-fmt` — closest analogue to pre-change rst-fmt. `Vec<char>` tokenizer; `Span` fields
+  exist but every construction site passes `Span::NONE`. Paragraphs already tokenize
+  per-line (so its borrow ceiling should land near rst-fmt's 93%), but list items and code
+  bodies join. Extra wrinkle: `find_inline_span` returns an owned `String` that is
+  recursively re-parsed, so nested emphasis re-allocates at every level — a rewrite, not an
+  index-type swap.
+- `djot-fmt` — the one good outlier: `EventIter::next` already yields `Cow::Borrowed`
+  slices guarded by a span-validity check. But it still has a `Vec<char>` tokenizer, and
+  `current_byte_offset()` recomputes a prefix sum on every call — O(n²) in inline length,
+  paid *to buy* those borrows. Its paragraph join silently demotes wrapped paragraphs to
+  `Owned` via the equality guard. A djot port likely shows a *larger* throughput delta than
+  rst-fmt's, despite starting further along.
+- `mediawiki-fmt` — the floor. `Inline` has no `Span` field at all, so spans must be added
+  as a prerequisite. `Vec<char>` in both inline and block paths, and block parsers take
+  `&[&str]` and `join("\n")` at ≥6 sites, so nearly every block body is allocated before
+  tokenizing. Expect a materially lower borrow ceiling until those signatures change.
+- Range-setter: `textile-fmt` has no `Cow` anywhere and no lifetime on its event type, so
+  the forward-declared-`Cow` convention is not even universal — the tail is not uniform.
+
 - [ ] `Cow::Borrowed` for org-fmt — inline parser uses `Span::NONE`; needs span tracking in parse_inline_content before base_offset approach works
 - [x] `Cow::Borrowed` for rst-fmt — **DONE (2026-07-29)**, see the dedicated entry below.
 - [ ] `Cow::Borrowed` for asciidoc — same shape as rst-fmt was; the rst-fmt commit is the
