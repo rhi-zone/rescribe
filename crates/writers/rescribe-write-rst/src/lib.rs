@@ -9,6 +9,7 @@ use rescribe_core::{
 };
 use rescribe_std::{node, prop};
 use rst_fmt::{Block, DefinitionItem, Inline, RstDoc, TableRow};
+use std::borrow::Cow;
 
 /// Emit a document as RST.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -29,20 +30,20 @@ pub fn emit_with_options(
     ))
 }
 
-fn doc_to_rst(doc: &Document, warnings: &mut Vec<FidelityWarning>) -> RstDoc {
+fn doc_to_rst<'d>(doc: &'d Document, warnings: &mut Vec<FidelityWarning>) -> RstDoc<'d> {
     RstDoc {
         blocks: nodes_to_blocks(&doc.content.children, warnings),
     }
 }
 
-fn nodes_to_blocks(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<Block> {
+fn nodes_to_blocks<'d>(nodes: &'d [Node], warnings: &mut Vec<FidelityWarning>) -> Vec<Block<'d>> {
     nodes
         .iter()
         .flat_map(|n| node_to_blocks(n, warnings))
         .collect()
 }
 
-fn node_to_blocks(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block> {
+fn node_to_blocks<'d>(node: &'d Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block<'d>> {
     match node.kind.as_str() {
         node::DOCUMENT => nodes_to_blocks(&node.children, warnings),
 
@@ -59,8 +60,8 @@ fn node_to_blocks(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block
         }
 
         node::CODE_BLOCK => {
-            let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            let language = node.props.get_str(prop::LANGUAGE).map(Cow::Borrowed);
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").into();
             vec![Block::CodeBlock { language, content }]
         }
 
@@ -70,7 +71,7 @@ fn node_to_blocks(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block
 
         node::LIST => {
             let ordered = node.props.get_bool(prop::ORDERED).unwrap_or(false);
-            let items: Vec<Vec<Block>> = node
+            let items: Vec<Vec<Block<'d>>> = node
                 .children
                 .iter()
                 .filter(|c| c.kind.as_str() == node::LIST_ITEM)
@@ -92,8 +93,8 @@ fn node_to_blocks(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block
                 .iter()
                 .find(|c| c.kind.as_str() == node::IMAGE);
             if let Some(img_node) = img {
-                let url = img_node.props.get_str(prop::URL).unwrap_or("").to_string();
-                let alt = img_node.props.get_str(prop::ALT).map(|s| s.to_string());
+                let url = img_node.props.get_str(prop::URL).unwrap_or("").into();
+                let alt = img_node.props.get_str(prop::ALT).map(Cow::Borrowed);
                 let caption_node = node
                     .children
                     .iter()
@@ -106,9 +107,9 @@ fn node_to_blocks(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block
         }
 
         node::IMAGE => {
-            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
-            let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
-            let title = node.props.get_str(prop::TITLE).map(|s| s.to_string());
+            let url = node.props.get_str(prop::URL).unwrap_or("").into();
+            let alt = node.props.get_str(prop::ALT).map(Cow::Borrowed);
+            let title = node.props.get_str(prop::TITLE).map(Cow::Borrowed);
             vec![Block::Image { url, alt, title }]
         }
 
@@ -122,8 +123,8 @@ fn node_to_blocks(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block
         node::DIV | node::SPAN => nodes_to_blocks(&node.children, warnings),
 
         node::RAW_BLOCK | node::RAW_INLINE => {
-            let format = node.props.get_str(prop::FORMAT).unwrap_or("").to_string();
-            let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            let format = node.props.get_str(prop::FORMAT).unwrap_or("").into();
+            let content = node.props.get_str(prop::CONTENT).unwrap_or("").into();
             vec![Block::RawBlock { format, content }]
         }
 
@@ -133,13 +134,13 @@ fn node_to_blocks(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block
         }
 
         node::FOOTNOTE_DEF => {
-            let label = node.props.get_str(prop::LABEL).unwrap_or("").to_string();
+            let label = node.props.get_str(prop::LABEL).unwrap_or("").into();
             let inlines = nodes_to_inlines(&node.children, warnings);
             vec![Block::FootnoteDef { label, inlines }]
         }
 
         "math_display" => {
-            let source = node.props.get_str("math:source").unwrap_or("").to_string();
+            let source = node.props.get_str("math:source").unwrap_or("").into();
             vec![Block::MathDisplay { source }]
         }
 
@@ -148,7 +149,8 @@ fn node_to_blocks(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block
                 .props
                 .get_str("admonition_type")
                 .unwrap_or("note")
-                .to_lowercase();
+                .to_lowercase()
+                .into();
             let children = nodes_to_blocks(&node.children, warnings);
             vec![Block::Admonition {
                 admonition_type,
@@ -174,10 +176,10 @@ fn node_to_blocks(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<Block
     }
 }
 
-fn definition_list_to_items(
-    nodes: &[Node],
+fn definition_list_to_items<'d>(
+    nodes: &'d [Node],
     warnings: &mut Vec<FidelityWarning>,
-) -> Vec<DefinitionItem> {
+) -> Vec<DefinitionItem<'d>> {
     let mut items = Vec::new();
     let mut i = 0;
     while i < nodes.len() {
@@ -198,15 +200,18 @@ fn definition_list_to_items(
     items
 }
 
-fn collect_table_rows(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Vec<TableRow> {
+fn collect_table_rows<'d>(
+    node: &'d Node,
+    warnings: &mut Vec<FidelityWarning>,
+) -> Vec<TableRow<'d>> {
     let mut rows = Vec::new();
     collect_table_rows_inner(&node.children, &mut rows, warnings);
     rows
 }
 
-fn collect_table_rows_inner(
-    nodes: &[Node],
-    rows: &mut Vec<TableRow>,
+fn collect_table_rows_inner<'d>(
+    nodes: &'d [Node],
+    rows: &mut Vec<TableRow<'d>>,
     warnings: &mut Vec<FidelityWarning>,
 ) {
     for n in nodes {
@@ -215,7 +220,7 @@ fn collect_table_rows_inner(
                 collect_table_rows_inner(&n.children, rows, warnings);
             }
             node::TABLE_ROW => {
-                let cells: Vec<Vec<Inline>> = n
+                let cells: Vec<Vec<Inline<'d>>> = n
                     .children
                     .iter()
                     .map(|cell| nodes_to_inlines(&cell.children, warnings))
@@ -226,7 +231,7 @@ fn collect_table_rows_inner(
                 });
             }
             node::TABLE_HEADER => {
-                let cells: Vec<Vec<Inline>> = n
+                let cells: Vec<Vec<Inline<'d>>> = n
                     .children
                     .iter()
                     .map(|cell| nodes_to_inlines(&cell.children, warnings))
@@ -241,14 +246,14 @@ fn collect_table_rows_inner(
     }
 }
 
-fn nodes_to_inlines(nodes: &[Node], warnings: &mut Vec<FidelityWarning>) -> Vec<Inline> {
+fn nodes_to_inlines<'d>(nodes: &'d [Node], warnings: &mut Vec<FidelityWarning>) -> Vec<Inline<'d>> {
     nodes.iter().map(|n| node_to_inline(n, warnings)).collect()
 }
 
-fn node_to_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Inline {
+fn node_to_inline<'d>(node: &'d Node, warnings: &mut Vec<FidelityWarning>) -> Inline<'d> {
     match node.kind.as_str() {
         node::TEXT => {
-            let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            let s = node.props.get_str(prop::CONTENT).unwrap_or("").into();
             Inline::Text(s)
         }
 
@@ -265,12 +270,12 @@ fn node_to_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Inline {
         node::SUPERSCRIPT => Inline::Superscript(nodes_to_inlines(&node.children, warnings)),
 
         node::CODE => {
-            let s = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
+            let s = node.props.get_str(prop::CONTENT).unwrap_or("").into();
             Inline::Code(s)
         }
 
         node::LINK => {
-            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
+            let url = node.props.get_str(prop::URL).unwrap_or("").into();
             Inline::Link {
                 url,
                 children: nodes_to_inlines(&node.children, warnings),
@@ -278,8 +283,8 @@ fn node_to_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Inline {
         }
 
         node::IMAGE => {
-            let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
-            let alt = node.props.get_str(prop::ALT).unwrap_or("").to_string();
+            let url = node.props.get_str(prop::URL).unwrap_or("").into();
+            let alt = node.props.get_str(prop::ALT).unwrap_or("").into();
             Inline::Image { url, alt }
         }
 
@@ -288,12 +293,12 @@ fn node_to_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Inline {
         node::SOFT_BREAK => Inline::SoftBreak,
 
         node::FOOTNOTE_REF => {
-            let label = node.props.get_str(prop::LABEL).unwrap_or("").to_string();
+            let label = node.props.get_str(prop::LABEL).unwrap_or("").into();
             Inline::FootnoteRef { label }
         }
 
         node::FOOTNOTE_DEF => {
-            let label = node.props.get_str(prop::LABEL).unwrap_or("").to_string();
+            let label = node.props.get_str(prop::LABEL).unwrap_or("").into();
             Inline::FootnoteDef {
                 label,
                 children: nodes_to_inlines(&node.children, warnings),
@@ -307,7 +312,7 @@ fn node_to_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Inline {
                 .props
                 .get_str(prop::QUOTE_TYPE)
                 .unwrap_or("double")
-                .to_string();
+                .into();
             Inline::Quoted {
                 quote_type,
                 children: nodes_to_inlines(&node.children, warnings),
@@ -315,7 +320,7 @@ fn node_to_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Inline {
         }
 
         node::SPAN => {
-            let role = node.props.get_str("rst:role").unwrap_or("span").to_string();
+            let role = node.props.get_str("rst:role").unwrap_or("span").into();
             Inline::RstSpan {
                 role,
                 children: nodes_to_inlines(&node.children, warnings),
@@ -326,14 +331,14 @@ fn node_to_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Inline {
             let format = node.props.get_str(prop::FORMAT).unwrap_or("");
             let content = node.props.get_str(prop::CONTENT).unwrap_or("");
             if format == "rst" {
-                Inline::Text(content.to_string())
+                Inline::Text(content.into())
             } else {
-                Inline::Text(String::new())
+                Inline::Text(Cow::Borrowed(""))
             }
         }
 
         "math_inline" => {
-            let source = node.props.get_str("math:source").unwrap_or("").to_string();
+            let source = node.props.get_str("math:source").unwrap_or("").into();
             Inline::MathInline { source }
         }
 
@@ -341,7 +346,7 @@ fn node_to_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Inline {
             // Unknown inline: recurse into children
             let children = nodes_to_inlines(&node.children, warnings);
             if children.is_empty() {
-                Inline::Text(String::new())
+                Inline::Text(Cow::Borrowed(""))
             } else if children.len() == 1 {
                 children.into_iter().next().unwrap()
             } else {

@@ -31,126 +31,301 @@ impl std::error::Error for RstError {}
 // ── AST ───────────────────────────────────────────────────────────────────────
 
 /// A parsed RST document.
+///
+/// The `'a` lifetime is the input the document was parsed from. Text payloads
+/// are [`Cow<'a, str>`], borrowed straight from that input wherever the source
+/// span is contiguous and needs no transformation (see the crate-level
+/// "Borrowing" notes). Use [`RstDoc::into_owned`] for a `'static` document.
 #[derive(Debug, Clone, Default)]
-pub struct RstDoc {
-    pub blocks: Vec<Block>,
+pub struct RstDoc<'a> {
+    pub blocks: Vec<Block<'a>>,
 }
 
 /// Block-level element.
 #[derive(Debug, Clone)]
-pub enum Block {
+pub enum Block<'a> {
     Paragraph {
-        inlines: Vec<Inline>,
+        inlines: Vec<Inline<'a>>,
     },
     Heading {
         level: i64,
-        inlines: Vec<Inline>,
+        inlines: Vec<Inline<'a>>,
     },
     CodeBlock {
-        language: Option<String>,
-        content: String,
+        language: Option<Cow<'a, str>>,
+        content: Cow<'a, str>,
     },
     Blockquote {
-        children: Vec<Block>,
+        children: Vec<Block<'a>>,
     },
     List {
         ordered: bool,
-        items: Vec<Vec<Block>>,
+        items: Vec<Vec<Block<'a>>>,
     },
     DefinitionList {
-        items: Vec<DefinitionItem>,
+        items: Vec<DefinitionItem<'a>>,
     },
     Figure {
-        url: String,
-        alt: Option<String>,
-        caption: Option<Vec<Inline>>,
+        url: Cow<'a, str>,
+        alt: Option<Cow<'a, str>>,
+        caption: Option<Vec<Inline<'a>>>,
     },
     Image {
-        url: String,
-        alt: Option<String>,
-        title: Option<String>,
+        url: Cow<'a, str>,
+        alt: Option<Cow<'a, str>>,
+        title: Option<Cow<'a, str>>,
     },
     RawBlock {
-        format: String,
-        content: String,
+        format: Cow<'a, str>,
+        content: Cow<'a, str>,
     },
     Div {
-        class: Option<String>,
-        directive: Option<String>,
-        children: Vec<Block>,
+        class: Option<Cow<'a, str>>,
+        directive: Option<Cow<'a, str>>,
+        children: Vec<Block<'a>>,
     },
     HorizontalRule,
     Table {
-        rows: Vec<TableRow>,
+        rows: Vec<TableRow<'a>>,
     },
     FootnoteDef {
-        label: String,
-        inlines: Vec<Inline>,
+        label: Cow<'a, str>,
+        inlines: Vec<Inline<'a>>,
     },
     MathDisplay {
-        source: String,
+        source: Cow<'a, str>,
     },
     Admonition {
-        admonition_type: String,
-        children: Vec<Block>,
+        admonition_type: Cow<'a, str>,
+        children: Vec<Block<'a>>,
     },
 }
 
 /// A definition list item (term + description pair).
 #[derive(Debug, Clone)]
-pub struct DefinitionItem {
-    pub term: Vec<Inline>,
-    pub desc: Vec<Inline>,
+pub struct DefinitionItem<'a> {
+    pub term: Vec<Inline<'a>>,
+    pub desc: Vec<Inline<'a>>,
 }
 
 /// A table row.
 #[derive(Debug, Clone)]
-pub struct TableRow {
-    pub cells: Vec<Vec<Inline>>,
+pub struct TableRow<'a> {
+    pub cells: Vec<Vec<Inline<'a>>>,
     pub is_header: bool,
 }
 
 /// Inline element.
 #[derive(Debug, Clone)]
-pub enum Inline {
-    Text(String),
-    Emphasis(Vec<Inline>),
-    Strong(Vec<Inline>),
-    Strikeout(Vec<Inline>),
-    Underline(Vec<Inline>),
-    Subscript(Vec<Inline>),
-    Superscript(Vec<Inline>),
-    Code(String),
+pub enum Inline<'a> {
+    Text(Cow<'a, str>),
+    Emphasis(Vec<Inline<'a>>),
+    Strong(Vec<Inline<'a>>),
+    Strikeout(Vec<Inline<'a>>),
+    Underline(Vec<Inline<'a>>),
+    Subscript(Vec<Inline<'a>>),
+    Superscript(Vec<Inline<'a>>),
+    Code(Cow<'a, str>),
     Link {
-        url: String,
-        children: Vec<Inline>,
+        url: Cow<'a, str>,
+        children: Vec<Inline<'a>>,
     },
     Image {
-        url: String,
-        alt: String,
+        url: Cow<'a, str>,
+        alt: Cow<'a, str>,
     },
     LineBreak,
     SoftBreak,
     FootnoteRef {
-        label: String,
+        label: Cow<'a, str>,
     },
     FootnoteDef {
-        label: String,
-        children: Vec<Inline>,
+        label: Cow<'a, str>,
+        children: Vec<Inline<'a>>,
     },
-    SmallCaps(Vec<Inline>),
+    SmallCaps(Vec<Inline<'a>>),
     Quoted {
-        quote_type: String,
-        children: Vec<Inline>,
+        quote_type: Cow<'a, str>,
+        children: Vec<Inline<'a>>,
     },
     MathInline {
-        source: String,
+        source: Cow<'a, str>,
     },
     /// RST role-based span with unknown role
     RstSpan {
-        role: String,
-        children: Vec<Inline>,
+        role: Cow<'a, str>,
+        children: Vec<Inline<'a>>,
     },
+}
+
+// ── into_owned ────────────────────────────────────────────────────────────────
+//
+// Explicit, opt-in conversion to a `'static` tree. Nothing in the parse path
+// calls these on the borrowed happy path — a caller that needs to outlive the
+// input pays for the copy exactly once, here, rather than every document
+// paying for it by default.
+
+fn cow_owned(c: Cow<'_, str>) -> Cow<'static, str> {
+    Cow::Owned(c.into_owned())
+}
+
+fn opt_cow_owned(c: Option<Cow<'_, str>>) -> Option<Cow<'static, str>> {
+    c.map(cow_owned)
+}
+
+fn inlines_owned(v: Vec<Inline<'_>>) -> Vec<Inline<'static>> {
+    v.into_iter().map(Inline::into_owned).collect()
+}
+
+fn blocks_owned(v: Vec<Block<'_>>) -> Vec<Block<'static>> {
+    v.into_iter().map(Block::into_owned).collect()
+}
+
+impl RstDoc<'_> {
+    /// Convert into a document that borrows nothing from the parsed input.
+    pub fn into_owned(self) -> RstDoc<'static> {
+        RstDoc {
+            blocks: blocks_owned(self.blocks),
+        }
+    }
+}
+
+impl DefinitionItem<'_> {
+    /// Convert into an item that borrows nothing from the parsed input.
+    pub fn into_owned(self) -> DefinitionItem<'static> {
+        DefinitionItem {
+            term: inlines_owned(self.term),
+            desc: inlines_owned(self.desc),
+        }
+    }
+}
+
+impl TableRow<'_> {
+    /// Convert into a row that borrows nothing from the parsed input.
+    pub fn into_owned(self) -> TableRow<'static> {
+        TableRow {
+            cells: self.cells.into_iter().map(inlines_owned).collect(),
+            is_header: self.is_header,
+        }
+    }
+}
+
+impl Block<'_> {
+    /// Convert into a block that borrows nothing from the parsed input.
+    pub fn into_owned(self) -> Block<'static> {
+        match self {
+            Block::Paragraph { inlines } => Block::Paragraph {
+                inlines: inlines_owned(inlines),
+            },
+            Block::Heading { level, inlines } => Block::Heading {
+                level,
+                inlines: inlines_owned(inlines),
+            },
+            Block::CodeBlock { language, content } => Block::CodeBlock {
+                language: opt_cow_owned(language),
+                content: cow_owned(content),
+            },
+            Block::Blockquote { children } => Block::Blockquote {
+                children: blocks_owned(children),
+            },
+            Block::List { ordered, items } => Block::List {
+                ordered,
+                items: items.into_iter().map(blocks_owned).collect(),
+            },
+            Block::DefinitionList { items } => Block::DefinitionList {
+                items: items.into_iter().map(DefinitionItem::into_owned).collect(),
+            },
+            Block::Figure { url, alt, caption } => Block::Figure {
+                url: cow_owned(url),
+                alt: opt_cow_owned(alt),
+                caption: caption.map(inlines_owned),
+            },
+            Block::Image { url, alt, title } => Block::Image {
+                url: cow_owned(url),
+                alt: opt_cow_owned(alt),
+                title: opt_cow_owned(title),
+            },
+            Block::RawBlock { format, content } => Block::RawBlock {
+                format: cow_owned(format),
+                content: cow_owned(content),
+            },
+            Block::Div {
+                class,
+                directive,
+                children,
+            } => Block::Div {
+                class: opt_cow_owned(class),
+                directive: opt_cow_owned(directive),
+                children: blocks_owned(children),
+            },
+            Block::HorizontalRule => Block::HorizontalRule,
+            Block::Table { rows } => Block::Table {
+                rows: rows.into_iter().map(TableRow::into_owned).collect(),
+            },
+            Block::FootnoteDef { label, inlines } => Block::FootnoteDef {
+                label: cow_owned(label),
+                inlines: inlines_owned(inlines),
+            },
+            Block::MathDisplay { source } => Block::MathDisplay {
+                source: cow_owned(source),
+            },
+            Block::Admonition {
+                admonition_type,
+                children,
+            } => Block::Admonition {
+                admonition_type: cow_owned(admonition_type),
+                children: blocks_owned(children),
+            },
+        }
+    }
+}
+
+impl Inline<'_> {
+    /// Convert into an inline that borrows nothing from the parsed input.
+    pub fn into_owned(self) -> Inline<'static> {
+        match self {
+            Inline::Text(s) => Inline::Text(cow_owned(s)),
+            Inline::Emphasis(c) => Inline::Emphasis(inlines_owned(c)),
+            Inline::Strong(c) => Inline::Strong(inlines_owned(c)),
+            Inline::Strikeout(c) => Inline::Strikeout(inlines_owned(c)),
+            Inline::Underline(c) => Inline::Underline(inlines_owned(c)),
+            Inline::Subscript(c) => Inline::Subscript(inlines_owned(c)),
+            Inline::Superscript(c) => Inline::Superscript(inlines_owned(c)),
+            Inline::SmallCaps(c) => Inline::SmallCaps(inlines_owned(c)),
+            Inline::Code(s) => Inline::Code(cow_owned(s)),
+            Inline::Link { url, children } => Inline::Link {
+                url: cow_owned(url),
+                children: inlines_owned(children),
+            },
+            Inline::Image { url, alt } => Inline::Image {
+                url: cow_owned(url),
+                alt: cow_owned(alt),
+            },
+            Inline::LineBreak => Inline::LineBreak,
+            Inline::SoftBreak => Inline::SoftBreak,
+            Inline::FootnoteRef { label } => Inline::FootnoteRef {
+                label: cow_owned(label),
+            },
+            Inline::FootnoteDef { label, children } => Inline::FootnoteDef {
+                label: cow_owned(label),
+                children: inlines_owned(children),
+            },
+            Inline::Quoted {
+                quote_type,
+                children,
+            } => Inline::Quoted {
+                quote_type: cow_owned(quote_type),
+                children: inlines_owned(children),
+            },
+            Inline::MathInline { source } => Inline::MathInline {
+                source: cow_owned(source),
+            },
+            Inline::RstSpan { role, children } => Inline::RstSpan {
+                role: cow_owned(role),
+                children: inlines_owned(children),
+            },
+        }
+    }
 }
 
 // ── Parser ────────────────────────────────────────────────────────────────────
@@ -159,11 +334,49 @@ pub enum Inline {
 /// The actual level is determined by order of appearance in the document.
 const HEADING_CHARS: &[char] = &['=', '-', '~', '^', '"', '`', '#', '*', '+', '_'];
 
-/// Parse an RST string into an [`RstDoc`].
-pub fn parse(input: &str) -> Result<RstDoc, RstError> {
+/// Link-target table: normalised (lowercased) name -> URL slice of the input.
+///
+/// Keys are owned because RST reference names are matched case-insensitively,
+/// so a normalised key is not in general a slice of the input. Values always
+/// are, which is what lets a resolved link borrow its URL.
+type LinkTargets<'a> = std::collections::HashMap<String, &'a str>;
+
+/// Parse an RST string into an [`RstDoc`] borrowing from `input`.
+pub fn parse(input: &str) -> Result<RstDoc<'_>, RstError> {
     let mut p = Parser::new(input);
     let blocks = p.parse_document();
     Ok(RstDoc { blocks })
+}
+
+/// Join `parts` with `sep`, borrowing when the result is a single part.
+fn join_cow<'a>(parts: &[&'a str], sep: &str) -> Cow<'a, str> {
+    match parts {
+        [] => Cow::Borrowed(""),
+        [one] => Cow::Borrowed(one),
+        _ => Cow::Owned(parts.join(sep)),
+    }
+}
+
+/// Join the non-empty `parts` with a single space — RST's soft-line-break
+/// semantics inside a paragraph, list item, block quote or definition body.
+/// Borrows when only one part survives (the single-source-line case).
+fn join_words<'a>(parts: &[&'a str]) -> Cow<'a, str> {
+    let mut nonempty = parts.iter().copied().filter(|s| !s.is_empty());
+    let Some(first) = nonempty.next() else {
+        return Cow::Borrowed("");
+    };
+    let Some(second) = nonempty.next() else {
+        return Cow::Borrowed(first);
+    };
+    let mut out = String::with_capacity(first.len() + second.len() + 1);
+    out.push_str(first);
+    out.push(' ');
+    out.push_str(second);
+    for p in nonempty {
+        out.push(' ');
+        out.push_str(p);
+    }
+    Cow::Owned(out)
 }
 
 struct Parser<'a> {
@@ -171,10 +384,10 @@ struct Parser<'a> {
     line_idx: usize,
     /// Maps underline character to heading level (assigned in order of appearance).
     heading_levels: Vec<char>,
-    /// Link targets: name -> url
-    link_targets: std::collections::HashMap<String, String>,
+    /// Link targets: normalised name -> url
+    link_targets: LinkTargets<'a>,
     /// Substitution definitions: |name| -> replacement text
-    substitutions: std::collections::HashMap<String, String>,
+    substitutions: std::collections::HashMap<&'a str, &'a str>,
 }
 
 impl<'a> Parser<'a> {
@@ -225,7 +438,7 @@ impl<'a> Parser<'a> {
             if let Some(rest) = line.strip_prefix(".. _") {
                 if let Some(colon_idx) = rest.find(':') {
                     let name = rest[..colon_idx].trim().to_lowercase();
-                    let url = rest[colon_idx + 1..].trim().to_string();
+                    let url = rest[colon_idx + 1..].trim();
                     self.link_targets.insert(name, url);
                 }
             }
@@ -241,7 +454,7 @@ impl<'a> Parser<'a> {
             let line = self.lines[idx].trim();
             if let Some(url) = line.strip_prefix("__ ") {
                 let key = format!("__anon{}", anon_counter);
-                self.link_targets.insert(key, url.trim().to_string());
+                self.link_targets.insert(key, url.trim());
                 anon_counter += 1;
             }
             idx += 1;
@@ -255,12 +468,11 @@ impl<'a> Parser<'a> {
             let line = self.lines[idx];
             if let Some(rest) = line.strip_prefix(".. |") {
                 if let Some(bar_end) = rest.find('|') {
-                    let name = rest[..bar_end].to_string();
+                    let name = &rest[..bar_end];
                     let after_bar = rest[bar_end + 1..].trim();
                     // Only handle replace:: for now
                     if let Some(value) = after_bar.strip_prefix("replace::") {
-                        let replacement = value.trim().to_string();
-                        self.substitutions.insert(name, replacement);
+                        self.substitutions.insert(name, value.trim());
                     }
                 }
             }
@@ -268,7 +480,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_document(&mut self) -> Vec<Block> {
+    fn parse_document(&mut self) -> Vec<Block<'a>> {
         // First pass: collect link targets, anonymous targets, substitutions
         self.collect_link_targets();
         self.collect_anonymous_targets();
@@ -293,7 +505,7 @@ impl<'a> Parser<'a> {
         blocks
     }
 
-    fn try_parse_block(&mut self) -> Option<Block> {
+    fn try_parse_block(&mut self) -> Option<Block<'a>> {
         // Skip link target definitions (already collected)
         if let Some(line) = self.current_line() {
             if line.starts_with(".. _") && line.contains(':') {
@@ -398,7 +610,7 @@ impl<'a> Parser<'a> {
         self.parse_paragraph()
     }
 
-    fn try_parse_heading(&mut self) -> Option<Block> {
+    fn try_parse_heading(&mut self) -> Option<Block<'a>> {
         let line = self.current_line()?;
 
         // Check if this line is all underline chars (possible overline)
@@ -457,7 +669,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn try_parse_directive(&mut self) -> Option<Block> {
+    fn try_parse_directive(&mut self) -> Option<Block<'a>> {
         let line = self.current_line()?;
 
         if !line.starts_with(".. ") {
@@ -474,11 +686,10 @@ impl<'a> Parser<'a> {
                 let after_bracket = &rest[close_bracket + 1..];
                 // Must be followed by a space (and optional text) — not `[label]_` which is an inline ref
                 if after_bracket.starts_with(' ') || after_bracket.is_empty() {
-                    let first_line_text = after_bracket.trim().to_string();
+                    let mut body_lines: Vec<&'a str> = vec![after_bracket.trim()];
                     self.advance_line();
 
                     // Collect continuation lines indented by ≥ 3 spaces
-                    let mut body = first_line_text;
                     while !self.is_eof() {
                         let cont = self.current_line().unwrap_or("");
                         if cont.trim().is_empty() {
@@ -490,16 +701,14 @@ impl<'a> Parser<'a> {
                         if indent < 3 {
                             break;
                         }
-                        if !body.is_empty() {
-                            body.push(' ');
-                        }
-                        body.push_str(cont.trim());
+                        body_lines.push(cont.trim());
                         self.advance_line();
                     }
 
-                    let inlines = parse_inline_content(&body, &self.link_targets);
+                    let body = join_words(&body_lines);
+                    let inlines = parse_inline_cow(body, &self.link_targets);
                     return Some(Block::FootnoteDef {
-                        label: label.to_string(),
+                        label: Cow::Borrowed(label),
                         inlines,
                     });
                 }
@@ -533,8 +742,9 @@ impl<'a> Parser<'a> {
         self.advance_line();
 
         // Collect directive content (indented lines)
-        let mut content_lines = Vec::new();
-        let mut options = std::collections::HashMap::new();
+        let mut content_lines: Vec<&'a str> = Vec::new();
+        let mut options: std::collections::HashMap<&'a str, &'a str> =
+            std::collections::HashMap::new();
 
         // First, collect field list options (:option: value)
         while !self.is_eof() {
@@ -554,7 +764,7 @@ impl<'a> Parser<'a> {
                 if let Some(end_colon) = trimmed[1..].find(':') {
                     let opt_name = &trimmed[1..end_colon + 1];
                     let opt_value = trimmed[end_colon + 2..].trim();
-                    options.insert(opt_name.to_string(), opt_value.to_string());
+                    options.insert(opt_name, opt_value);
                     self.advance_line();
                     continue;
                 }
@@ -584,80 +794,80 @@ impl<'a> Parser<'a> {
                 let language = if argument.is_empty() {
                     None
                 } else {
-                    Some(argument.to_string())
+                    Some(Cow::Borrowed(argument))
                 };
-                let content = content_lines.join("\n");
+                let content = join_cow(&content_lines, "\n");
                 Block::CodeBlock { language, content }
             }
             "note" | "warning" | "tip" | "important" | "caution" | "danger" | "error" | "hint"
             | "attention" => {
-                let content = content_lines.join("\n");
-                let inlines = parse_inline_content(&content, &self.link_targets);
+                let content = join_cow(&content_lines, "\n");
+                let inlines = parse_inline_cow(content, &self.link_targets);
                 Block::Div {
-                    class: Some(directive_name.to_string()),
+                    class: Some(Cow::Borrowed(directive_name)),
                     directive: None,
                     children: vec![Block::Paragraph { inlines }],
                 }
             }
             "image" => Block::Image {
-                url: argument.to_string(),
-                alt: options.get("alt").cloned(),
-                title: options.get("title").cloned(),
+                url: Cow::Borrowed(argument),
+                alt: options.get("alt").copied().map(Cow::Borrowed),
+                title: options.get("title").copied().map(Cow::Borrowed),
             },
             "figure" => {
                 let caption = if content_lines.is_empty() {
                     None
                 } else {
-                    let caption_text = content_lines.join(" ");
-                    Some(parse_inline_content(&caption_text, &self.link_targets))
+                    let caption_text = join_cow(&content_lines, " ");
+                    Some(parse_inline_cow(caption_text, &self.link_targets))
                 };
                 Block::Figure {
-                    url: argument.to_string(),
-                    alt: options.get("alt").cloned(),
+                    url: Cow::Borrowed(argument),
+                    alt: options.get("alt").copied().map(Cow::Borrowed),
                     caption,
                 }
             }
             "raw" => Block::RawBlock {
-                format: argument.to_string(),
-                content: content_lines.join("\n"),
+                format: Cow::Borrowed(argument),
+                content: join_cow(&content_lines, "\n"),
             },
             "contents" | "toc" => Block::Div {
-                class: Some("toc".to_string()),
+                class: Some(Cow::Borrowed("toc")),
                 directive: None,
                 children: vec![],
             },
             "math" => Block::MathDisplay {
-                source: content_lines.join("\n"),
+                source: join_cow(&content_lines, "\n"),
             },
             "admonition" => {
                 // Custom admonition with a title argument
-                let content = content_lines.join("\n");
+                let content = join_cow(&content_lines, "\n");
                 let children = if content.is_empty() {
                     vec![]
                 } else {
-                    let inlines = parse_inline_content(&content, &self.link_targets);
+                    let inlines = parse_inline_cow(content, &self.link_targets);
                     vec![Block::Paragraph { inlines }]
                 };
                 Block::Admonition {
-                    admonition_type: argument.to_string(),
+                    admonition_type: Cow::Borrowed(argument),
                     children,
                 }
             }
             "container" => {
-                let content = content_lines.join("\n");
+                let content = join_cow(&content_lines, "\n");
                 let children = if content.is_empty() {
                     vec![]
                 } else {
-                    let inlines = parse_inline_content(&content, &self.link_targets);
+                    let inlines = parse_inline_cow(content, &self.link_targets);
                     vec![Block::Paragraph { inlines }]
                 };
                 Block::Div {
                     class: if argument.is_empty() {
                         None
                     } else {
-                        Some(argument.to_string())
+                        Some(Cow::Borrowed(argument))
                     },
-                    directive: Some("container".to_string()),
+                    directive: Some(Cow::Borrowed("container")),
                     children,
                 }
             }
@@ -668,30 +878,30 @@ impl<'a> Parser<'a> {
                     let inlines = parse_inline_content(argument, &self.link_targets);
                     children.push(Block::Paragraph { inlines });
                 } else {
-                    let content = content_lines.join("\n");
+                    let content = join_cow(&content_lines, "\n");
                     if !content.is_empty() {
-                        let inlines = parse_inline_content(&content, &self.link_targets);
+                        let inlines = parse_inline_cow(content, &self.link_targets);
                         children.push(Block::Paragraph { inlines });
                     }
                 }
                 Block::Div {
                     class: None,
-                    directive: Some("rubric".to_string()),
+                    directive: Some(Cow::Borrowed("rubric")),
                     children,
                 }
             }
             _ => {
                 // Unknown directive — create generic div (warnings handled by adapter)
-                let content = content_lines.join("\n");
+                let content = join_cow(&content_lines, "\n");
                 let children = if content.is_empty() {
                     vec![]
                 } else {
-                    let inlines = parse_inline_content(&content, &self.link_targets);
+                    let inlines = parse_inline_cow(content, &self.link_targets);
                     vec![Block::Paragraph { inlines }]
                 };
                 Block::Div {
                     class: None,
-                    directive: Some(directive_name.to_string()),
+                    directive: Some(Cow::Borrowed(directive_name)),
                     children,
                 }
             }
@@ -700,7 +910,7 @@ impl<'a> Parser<'a> {
         Some(block)
     }
 
-    fn try_parse_list(&mut self) -> Option<Block> {
+    fn try_parse_list(&mut self) -> Option<Block<'a>> {
         let line = self.current_line()?;
         let trimmed = line.trim_start();
 
@@ -726,7 +936,7 @@ impl<'a> Parser<'a> {
         None
     }
 
-    fn try_parse_grid_table(&mut self) -> Option<Block> {
+    fn try_parse_grid_table(&mut self) -> Option<Block<'a>> {
         let line = self.current_line()?;
         if !line.starts_with('+') {
             return None;
@@ -736,7 +946,7 @@ impl<'a> Parser<'a> {
             return None;
         }
         // Collect the table
-        let mut rows: Vec<TableRow> = Vec::new();
+        let mut rows: Vec<TableRow<'a>> = Vec::new();
 
         // First border line — skip
         self.advance_line();
@@ -769,7 +979,7 @@ impl<'a> Parser<'a> {
 
             // Data row: | cell | cell |
             if row_line.starts_with('|') {
-                let cells: Vec<Vec<Inline>> = row_line
+                let cells: Vec<Vec<Inline<'a>>> = row_line
                     .split('|')
                     .skip(1) // Skip leading |
                     .filter(|s| !s.is_empty() || row_line.ends_with('|'))
@@ -799,7 +1009,7 @@ impl<'a> Parser<'a> {
         Some(Block::Table { rows })
     }
 
-    fn try_parse_simple_table(&mut self) -> Option<Block> {
+    fn try_parse_simple_table(&mut self) -> Option<Block<'a>> {
         let line = self.current_line()?;
         let trimmed = line.trim();
         // Simple table border: ===  === (multiple === groups separated by spaces)
@@ -878,7 +1088,7 @@ impl<'a> Parser<'a> {
             }
 
             // Data row
-            let cells: Vec<Vec<Inline>> = col_spans
+            let cells: Vec<Vec<Inline<'a>>> = col_spans
                 .iter()
                 .map(|(start, end)| {
                     let cell_text = if *start < row_line.len() {
@@ -905,7 +1115,7 @@ impl<'a> Parser<'a> {
         Some(Block::Table { rows })
     }
 
-    fn parse_bullet_list(&mut self, bullet: char) -> Block {
+    fn parse_bullet_list(&mut self, bullet: char) -> Block<'a> {
         let mut items = Vec::new();
         let indent = self.get_indent();
 
@@ -990,7 +1200,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_numbered_list(&mut self) -> Block {
+    fn parse_numbered_list(&mut self) -> Block<'a> {
         let mut items = Vec::new();
         let indent = self.get_indent();
 
@@ -1033,10 +1243,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_list_item(&mut self, first_line: &str) -> Vec<Inline> {
+    fn parse_list_item(&mut self, first_line: &'a str) -> Vec<Inline<'a>> {
         self.advance_line();
 
-        let mut content = first_line.to_string();
+        let mut content_lines: Vec<&'a str> = vec![first_line];
 
         // Collect continuation lines
         while !self.is_eof() {
@@ -1057,18 +1267,17 @@ impl<'a> Parser<'a> {
             }
             // Check if indented (continuation)
             if line.starts_with(' ') || line.starts_with('\t') {
-                content.push(' ');
-                content.push_str(trimmed);
+                content_lines.push(trimmed);
                 self.advance_line();
             } else {
                 break;
             }
         }
 
-        parse_inline_content(&content, &self.link_targets)
+        parse_inline_cow(join_words(&content_lines), &self.link_targets)
     }
 
-    fn try_parse_definition_list(&mut self) -> Option<Block> {
+    fn try_parse_definition_list(&mut self) -> Option<Block<'a>> {
         let line = self.current_line()?;
 
         // Definition list: term at start of line, definition indented on next line
@@ -1089,7 +1298,7 @@ impl<'a> Parser<'a> {
         None
     }
 
-    fn try_parse_line_block(&mut self) -> Option<Block> {
+    fn try_parse_line_block(&mut self) -> Option<Block<'a>> {
         let line = self.current_line()?;
         if !line.starts_with("| ") && line != "|" {
             return None;
@@ -1098,8 +1307,8 @@ impl<'a> Parser<'a> {
         while !self.is_eof() {
             let l = self.current_line().unwrap_or("");
             if l.starts_with("| ") || l == "|" {
-                let text = l.strip_prefix("| ").unwrap_or("").to_string();
-                let inlines = parse_inline_content(&text, &self.link_targets);
+                let text = l.strip_prefix("| ").unwrap_or("");
+                let inlines = parse_inline_content(text, &self.link_targets);
                 children.push(Block::Paragraph { inlines });
                 self.advance_line();
             } else if l.trim().is_empty() {
@@ -1110,13 +1319,13 @@ impl<'a> Parser<'a> {
             }
         }
         Some(Block::Div {
-            class: Some("line-block".to_string()),
+            class: Some(Cow::Borrowed("line-block")),
             directive: None,
             children,
         })
     }
 
-    fn try_parse_field_list(&mut self) -> Option<Block> {
+    fn try_parse_field_list(&mut self) -> Option<Block<'a>> {
         let line = self.current_line()?;
         // Field list starts with :name: value  (space after closing colon)
         if !line.starts_with(':') {
@@ -1137,7 +1346,7 @@ impl<'a> Parser<'a> {
         Some(self.parse_field_list())
     }
 
-    fn parse_field_list(&mut self) -> Block {
+    fn parse_field_list(&mut self) -> Block<'a> {
         let mut items = Vec::new();
 
         while !self.is_eof() {
@@ -1168,7 +1377,7 @@ impl<'a> Parser<'a> {
         Block::DefinitionList { items }
     }
 
-    fn parse_definition_list(&mut self) -> Block {
+    fn parse_definition_list(&mut self) -> Block<'a> {
         let mut items = Vec::new();
 
         while !self.is_eof() {
@@ -1193,24 +1402,21 @@ impl<'a> Parser<'a> {
                         self.advance_line();
 
                         // Collect definition
-                        let mut def_content = String::new();
+                        let mut def_lines: Vec<&'a str> = Vec::new();
                         while !self.is_eof() {
                             let def_line = self.current_line().unwrap_or("");
                             if def_line.trim().is_empty() {
                                 break;
                             }
                             if def_line.starts_with(' ') || def_line.starts_with('\t') {
-                                if !def_content.is_empty() {
-                                    def_content.push(' ');
-                                }
-                                def_content.push_str(def_line.trim());
+                                def_lines.push(def_line.trim());
                                 self.advance_line();
                             } else {
                                 break;
                             }
                         }
 
-                        let desc = parse_inline_content(&def_content, &self.link_targets);
+                        let desc = parse_inline_cow(join_words(&def_lines), &self.link_targets);
                         items.push(DefinitionItem { term, desc });
                         continue;
                     }
@@ -1223,7 +1429,7 @@ impl<'a> Parser<'a> {
         Block::DefinitionList { items }
     }
 
-    fn try_parse_literal_block(&mut self) -> Option<Block> {
+    fn try_parse_literal_block(&mut self) -> Option<Block<'a>> {
         let line = self.current_line()?;
 
         // Check for :: at end of line (paragraph ending with ::)
@@ -1232,7 +1438,7 @@ impl<'a> Parser<'a> {
             self.skip_blank_lines();
 
             // Collect indented content
-            let mut content_lines: Vec<&str> = Vec::new();
+            let mut content_lines: Vec<&'a str> = Vec::new();
             let base_indent = self.get_indent();
 
             while !self.is_eof() {
@@ -1259,7 +1465,7 @@ impl<'a> Parser<'a> {
                 content_lines.pop();
             }
 
-            let content = content_lines.join("\n");
+            let content = join_cow(&content_lines, "\n");
             return Some(Block::CodeBlock {
                 language: None,
                 content,
@@ -1271,7 +1477,7 @@ impl<'a> Parser<'a> {
             self.advance_line();
             self.skip_blank_lines();
 
-            let mut content_lines: Vec<&str> = Vec::new();
+            let mut content_lines: Vec<&'a str> = Vec::new();
             let base_indent = self.get_indent();
 
             while !self.is_eof() {
@@ -1296,7 +1502,7 @@ impl<'a> Parser<'a> {
                 content_lines.pop();
             }
 
-            let content = content_lines.join("\n");
+            let content = join_cow(&content_lines, "\n");
             return Some(Block::CodeBlock {
                 language: None,
                 content,
@@ -1306,7 +1512,7 @@ impl<'a> Parser<'a> {
         None
     }
 
-    fn try_parse_blockquote(&mut self) -> Option<Block> {
+    fn try_parse_blockquote(&mut self) -> Option<Block<'a>> {
         let line = self.current_line()?;
 
         // Block quote: indented text that's not a list or literal block
@@ -1324,24 +1530,21 @@ impl<'a> Parser<'a> {
             }
 
             // Collect block quote content
-            let mut content = String::new();
+            let mut content_lines: Vec<&'a str> = Vec::new();
             while !self.is_eof() {
                 let bq_line = self.current_line().unwrap_or("");
                 if bq_line.trim().is_empty() {
                     break;
                 }
                 if bq_line.starts_with(' ') || bq_line.starts_with('\t') {
-                    if !content.is_empty() {
-                        content.push(' ');
-                    }
-                    content.push_str(bq_line.trim());
+                    content_lines.push(bq_line.trim());
                     self.advance_line();
                 } else {
                     break;
                 }
             }
 
-            let inlines = parse_inline_content(&content, &self.link_targets);
+            let inlines = parse_inline_cow(join_words(&content_lines), &self.link_targets);
             return Some(Block::Blockquote {
                 children: vec![Block::Paragraph { inlines }],
             });
@@ -1350,8 +1553,13 @@ impl<'a> Parser<'a> {
         None
     }
 
-    fn parse_paragraph(&mut self) -> Option<Block> {
-        let mut content = String::new();
+    fn parse_paragraph(&mut self) -> Option<Block<'a>> {
+        // Source lines are collected as borrowed slices and only joined if
+        // there is more than one — a single-line paragraph (the common case in
+        // hand-written RST and the universal case in generated RST) reaches
+        // the tokenizer as a slice of the input and stays borrowed all the way
+        // into `Inline::Text`.
+        let mut content_lines: Vec<&'a str> = Vec::new();
 
         while !self.is_eof() {
             let line = self.current_line().unwrap_or("");
@@ -1372,27 +1580,38 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            if !content.is_empty() {
-                content.push(' ');
-            }
-            content.push_str(line.trim());
+            content_lines.push(line.trim());
             self.advance_line();
         }
 
+        let content = join_words(&content_lines);
         if content.is_empty() {
             return None;
         }
 
         // Check for trailing :: (literal block indicator)
         let content = if content.ends_with("::") && content.len() > 2 {
-            content[..content.len() - 1].trim_end().to_string()
+            match content {
+                Cow::Borrowed(s) => Cow::Borrowed(s[..s.len() - 1].trim_end()),
+                Cow::Owned(s) => Cow::Owned(s[..s.len() - 1].trim_end().to_string()),
+            }
         } else {
             content
         };
 
-        let expanded = self.expand_substitutions(&content);
-        let inlines = parse_inline_content(&expanded, &self.link_targets);
+        let expanded = self.expand_substitutions_cow(content);
+        let inlines = parse_inline_cow(expanded, &self.link_targets);
         Some(Block::Paragraph { inlines })
+    }
+
+    /// [`expand_substitutions`](Self::expand_substitutions) over a `Cow`,
+    /// preserving borrowedness when the text was borrowed and no substitution
+    /// reference fired.
+    fn expand_substitutions_cow(&self, text: Cow<'a, str>) -> Cow<'a, str> {
+        match text {
+            Cow::Borrowed(s) => self.expand_substitutions(s),
+            Cow::Owned(s) => Cow::Owned(self.expand_substitutions(&s).into_owned()),
+        }
     }
 
     /// Expand substitution references |name| in a string.
@@ -1457,16 +1676,16 @@ impl<'a> Parser<'a> {
 
 /// Lazy-traversal frame for the event iterator.
 /// Frames are pushed in reverse-emission order, so `pop()` yields the next event.
-enum Frame {
-    Event(OwnedEvent),
-    Blocks(std::vec::IntoIter<Block>),
-    Inlines(std::vec::IntoIter<Inline>),
+enum Frame<'a> {
+    Event(Event<'a>),
+    Blocks(std::vec::IntoIter<Block<'a>>),
+    Inlines(std::vec::IntoIter<Inline<'a>>),
     /// List items are `Vec<Block>`.
-    ListItems(std::vec::IntoIter<Vec<Block>>),
-    TableRows(std::vec::IntoIter<TableRow>),
+    ListItems(std::vec::IntoIter<Vec<Block<'a>>>),
+    TableRows(std::vec::IntoIter<TableRow<'a>>),
     /// Table cells are `Vec<Inline>`.
-    TableCells(std::vec::IntoIter<Vec<Inline>>),
-    DefinitionItems(std::vec::IntoIter<DefinitionItem>),
+    TableCells(std::vec::IntoIter<Vec<Inline<'a>>>),
+    DefinitionItems(std::vec::IntoIter<DefinitionItem<'a>>),
 }
 
 /// Streaming pull iterator over an RST document.
@@ -1476,17 +1695,17 @@ enum Frame {
 /// the same grammar `parse()` uses — not a re-implementation — so `events()`
 /// and `parse()` can never disagree on what constitutes a block.
 ///
-/// Text fields on [`Event`] use `Cow<'a, str>` in the public API so a future
-/// zero-copy inline tokenizer can slice directly from the input without an
-/// API break. Today's implementation always yields `Cow::Owned`, because the
-/// shared inline parser (`parse_inline_content`) already builds owned
-/// `String`s — the same one `parse()` relies on. This is a documented,
-/// narrow limitation (like `commonmark-fmt`'s `StreamingParser` buffering
-/// exemption), not a "fake streaming" API: block-at-a-time traversal and
-/// `O(nesting depth)` expansion are both genuinely lazy today.
+/// Text fields on [`Event`] are `Cow<'a, str>` slices of `input` wherever the
+/// span is contiguous in the source and needs no transformation — the shared
+/// inline tokenizer (`parse_inline_content`) is byte-indexed over the input
+/// precisely so both `parse()` and `events()` can borrow. `Cow::Owned` appears
+/// only where the format forces it: text runs containing backslash escapes
+/// (which must be resolved), content joined from non-contiguous source lines
+/// (multi-line paragraphs, list items, block quotes, definition bodies), and
+/// synthesised `:ref:`/`:doc:` URLs.
 pub struct EventIter<'a> {
     parser: Parser<'a>,
-    frame_stack: Vec<Frame>,
+    frame_stack: Vec<Frame<'a>>,
     iter_done: bool,
 }
 
@@ -1507,7 +1726,7 @@ impl<'a> EventIter<'a> {
         }
     }
 
-    fn expand_block(&mut self, block: Block) {
+    fn expand_block(&mut self, block: Block<'a>) {
         match block {
             Block::Paragraph { inlines } => {
                 self.frame_stack.push(Frame::Event(Event::EndParagraph));
@@ -1527,7 +1746,7 @@ impl<'a> EventIter<'a> {
             Block::CodeBlock { language, content } => {
                 self.frame_stack.push(Frame::Event(Event::EndCodeBlock));
                 self.frame_stack
-                    .push(Frame::Event(Event::CodeBlockContent(Cow::Owned(content))));
+                    .push(Frame::Event(Event::CodeBlockContent(content)));
                 self.frame_stack
                     .push(Frame::Event(Event::StartCodeBlock { language }));
             }
@@ -1623,11 +1842,10 @@ impl<'a> EventIter<'a> {
         }
     }
 
-    fn expand_inline(&mut self, inline: Inline) {
+    fn expand_inline(&mut self, inline: Inline<'a>) {
         match inline {
             Inline::Text(s) => {
-                self.frame_stack
-                    .push(Frame::Event(Event::Text(Cow::Owned(s))));
+                self.frame_stack.push(Frame::Event(Event::Text(s)));
             }
             Inline::SoftBreak => {
                 self.frame_stack.push(Frame::Event(Event::SoftBreak));
@@ -1685,8 +1903,7 @@ impl<'a> EventIter<'a> {
                 self.frame_stack.push(Frame::Event(Event::StartSmallCaps));
             }
             Inline::Code(s) => {
-                self.frame_stack
-                    .push(Frame::Event(Event::Code(Cow::Owned(s))));
+                self.frame_stack.push(Frame::Event(Event::Code(s)));
             }
             Inline::Link { url, children } => {
                 self.frame_stack.push(Frame::Event(Event::EndLink));
@@ -1847,19 +2064,140 @@ pub fn events(input: &str) -> EventIter<'_> {
 
 // ── Inline parser (free function) ─────────────────────────────────────────────
 
-fn parse_inline_content(
-    content: &str,
-    link_targets: &std::collections::HashMap<String, String>,
-) -> Vec<Inline> {
-    let mut nodes = Vec::new();
-    let mut pos = 0;
-    let chars: Vec<char> = content.chars().collect();
+/// Byte length of the character starting at byte offset `i`.
+///
+/// `i` is always a character boundary: every advance in the tokenizer moves by
+/// a whole character, and every delimiter it indexes past is ASCII.
+fn char_len_at(s: &str, i: usize) -> usize {
+    s[i..].chars().next().map_or(1, char::len_utf8)
+}
 
-    while pos < chars.len() {
+/// End (byte offset) of the RST reference-name run starting at `from`.
+fn ref_name_end(s: &str, from: usize) -> usize {
+    let mut end = from;
+    for c in s[from..].chars() {
+        if c.is_alphanumeric() || c == '_' || c == '-' {
+            end += c.len_utf8();
+        } else {
+            break;
+        }
+    }
+    end
+}
+
+/// Whether lowercasing `s` would leave it unchanged — the check that lets a
+/// reference-name lookup skip `to_lowercase`'s allocation for the (dominant)
+/// already-lowercase case without ever disagreeing with it.
+fn is_already_lowercase(s: &str) -> bool {
+    s.chars().all(|c| {
+        let mut lower = c.to_lowercase();
+        lower.next() == Some(c) && lower.next().is_none()
+    })
+}
+
+/// Case-insensitive link-target lookup, allocating a normalised key only when
+/// the name is not already normalised.
+fn lookup_target<'m, 'a>(targets: &'m LinkTargets<'a>, name: &str) -> Option<&'m &'a str> {
+    if is_already_lowercase(name) {
+        targets.get(name)
+    } else {
+        targets.get(&name.to_lowercase())
+    }
+}
+
+/// Tokenize inline content that may or may not be a slice of the original
+/// input.
+///
+/// A `Cow::Borrowed` span (single-source-line paragraph, heading title, table
+/// cell, line-block line, …) tokenizes straight into borrowed `Inline`s. A
+/// `Cow::Owned` span (a multi-line paragraph, whose source lines are not
+/// contiguous in the input, or a substitution-expanded one) is tokenized the
+/// same way and then deep-copied — the same cost the all-owned implementation
+/// paid unconditionally, now confined to the case that genuinely needs it.
+fn parse_inline_cow<'a>(content: Cow<'a, str>, link_targets: &LinkTargets<'a>) -> Vec<Inline<'a>> {
+    match content {
+        Cow::Borrowed(s) => parse_inline_content(s, link_targets),
+        Cow::Owned(s) => inlines_owned(parse_inline_content(&s, link_targets)),
+    }
+}
+
+/// Byte range of the `Inline::Text` node currently at the end of `nodes`, if
+/// any, plus whether that node is still exactly `content[start..end]` (and so
+/// can absorb a following adjacent run by widening the borrowed slice rather
+/// than by copying).
+struct TextRun {
+    start: usize,
+    end: usize,
+    exact_slice: bool,
+}
+
+/// Append a resolved text run covering `content[start..end]`, merging it into
+/// the immediately preceding text node when there is one — the job the old
+/// `merge_text_nodes` post-pass did, done here so that two adjacent borrowed
+/// runs merge into one *borrowed* slice instead of an owned concatenation.
+fn push_text<'a>(
+    nodes: &mut Vec<Inline<'a>>,
+    last: &mut Option<TextRun>,
+    content: &'a str,
+    start: usize,
+    end: usize,
+    resolved: Cow<'a, str>,
+) {
+    if let Some(run) = last.as_mut() {
+        if run.end == start {
+            if resolved.is_empty() {
+                // Escaped whitespace: contributes no text but does consume
+                // source, so the previous node is no longer an exact slice of
+                // `content[run.start..run.end]`.
+                run.end = end;
+                run.exact_slice = false;
+                return;
+            }
+            if let Some(Inline::Text(prev)) = nodes.last_mut() {
+                if run.exact_slice && matches!(resolved, Cow::Borrowed(_)) {
+                    *prev = Cow::Borrowed(&content[run.start..end]);
+                } else {
+                    prev.to_mut().push_str(&resolved);
+                    run.exact_slice = false;
+                }
+                run.end = end;
+                return;
+            }
+        }
+    }
+    if resolved.is_empty() {
+        *last = None;
+        return;
+    }
+    let exact_slice = matches!(resolved, Cow::Borrowed(_));
+    nodes.push(Inline::Text(resolved));
+    *last = Some(TextRun {
+        start,
+        end,
+        exact_slice,
+    });
+}
+
+/// The RST inline tokenizer, shared by `parse()` and `events()`.
+///
+/// Indexes `content` by byte offset so every span it recognises can be handed
+/// back as a `Cow::Borrowed` slice of the input. Only two things force an
+/// owned payload: a text run containing a backslash escape (which must be
+/// resolved, so the emitted text is not a slice of the source) and a
+/// `:ref:`/`:doc:` URL (synthesised as `#` + text).
+#[allow(clippy::too_many_lines)]
+fn parse_inline_content<'a>(content: &'a str, link_targets: &LinkTargets<'a>) -> Vec<Inline<'a>> {
+    let mut nodes: Vec<Inline<'a>> = Vec::new();
+    let mut last: Option<TextRun> = None;
+    let b = content.as_bytes();
+    let mut pos = 0usize;
+
+    while pos < b.len() {
         // Strong: **text**
-        if pos + 1 < chars.len() && chars[pos] == '*' && chars[pos + 1] == '*' {
-            if let Some((end, text)) = find_closing(&chars, pos + 2, "**", true) {
-                let children = parse_inline_content(&text, link_targets);
+        if pos + 1 < b.len() && b[pos] == b'*' && b[pos + 1] == b'*' {
+            if let Some(end) = find_closing(content, pos + 2, "**", true) {
+                let children = parse_inline_content(&content[pos + 2..end], link_targets);
+                last = None;
                 nodes.push(Inline::Strong(children));
                 pos = end + 2;
                 continue;
@@ -1867,10 +2205,12 @@ fn parse_inline_content(
         }
 
         // Emphasis: *text*
-        if chars[pos] == '*' {
-            if let Some((end, text)) = find_closing_char(&chars, pos + 1, '*') {
+        if b[pos] == b'*' {
+            if let Some(end) = find_closing_char(content, pos + 1, b'*') {
+                let text = &content[pos + 1..end];
                 if !text.is_empty() && !text.starts_with('*') {
-                    let children = parse_inline_content(&text, link_targets);
+                    let children = parse_inline_content(text, link_targets);
+                    last = None;
                     nodes.push(Inline::Emphasis(children));
                     pos = end + 1;
                     continue;
@@ -1879,54 +2219,53 @@ fn parse_inline_content(
         }
 
         // Inline literal: ``text``
-        if pos + 1 < chars.len() && chars[pos] == '`' && chars[pos + 1] == '`' {
+        if pos + 1 < b.len() && b[pos] == b'`' && b[pos + 1] == b'`' {
             // Inline literals are the one span the RST spec exempts from
             // escape processing: a backslash inside ``…`` is a literal
             // backslash, and cannot hide the closing delimiter.
-            if let Some((end, text)) = find_closing(&chars, pos + 2, "``", false) {
-                nodes.push(Inline::Code(text));
+            if let Some(end) = find_closing(content, pos + 2, "``", false) {
+                last = None;
+                nodes.push(Inline::Code(Cow::Borrowed(&content[pos + 2..end])));
                 pos = end + 2;
                 continue;
             }
         }
 
         // Interpreted text with role: :role:`text`
-        if chars[pos] == ':' {
-            if let Some((role_end, role)) = find_closing_char(&chars, pos + 1, ':') {
-                if role_end + 1 < chars.len() && chars[role_end + 1] == '`' {
-                    if let Some((text_end, text)) = find_closing_char(&chars, role_end + 2, '`') {
-                        let inline = match role.as_str() {
+        if b[pos] == b':' {
+            if let Some(role_end) = find_closing_char(content, pos + 1, b':') {
+                if role_end + 1 < b.len() && b[role_end + 1] == b'`' {
+                    if let Some(text_end) = find_closing_char(content, role_end + 2, b'`') {
+                        let role = &content[pos + 1..role_end];
+                        let text = &content[role_end + 2..text_end];
+                        let inline = match role {
                             "emphasis" | "em" => {
-                                let ch = parse_inline_content(&text, link_targets);
-                                Inline::Emphasis(ch)
+                                Inline::Emphasis(parse_inline_content(text, link_targets))
                             }
-                            "strong" => {
-                                let ch = parse_inline_content(&text, link_targets);
-                                Inline::Strong(ch)
-                            }
-                            "code" | "literal" => Inline::Code(text),
+                            "strong" => Inline::Strong(parse_inline_content(text, link_targets)),
+                            "code" | "literal" => Inline::Code(Cow::Borrowed(text)),
                             "subscript" | "sub" => {
-                                let ch = parse_inline_content(&text, link_targets);
-                                Inline::Subscript(ch)
+                                Inline::Subscript(parse_inline_content(text, link_targets))
                             }
                             "superscript" | "sup" => {
-                                let ch = parse_inline_content(&text, link_targets);
-                                Inline::Superscript(ch)
+                                Inline::Superscript(parse_inline_content(text, link_targets))
                             }
                             "title-reference" | "title" | "t" => {
-                                let ch = parse_inline_content(&text, link_targets);
-                                Inline::Emphasis(ch)
+                                Inline::Emphasis(parse_inline_content(text, link_targets))
                             }
                             "ref" | "doc" => Inline::Link {
-                                url: format!("#{}", text),
-                                children: vec![Inline::Text(text.clone())],
+                                url: Cow::Owned(format!("#{}", text)),
+                                children: vec![Inline::Text(Cow::Borrowed(text))],
                             },
-                            "math" => Inline::MathInline { source: text },
-                            _ => {
-                                let ch = parse_inline_content(&text, link_targets);
-                                Inline::RstSpan { role, children: ch }
-                            }
+                            "math" => Inline::MathInline {
+                                source: Cow::Borrowed(text),
+                            },
+                            _ => Inline::RstSpan {
+                                role: Cow::Borrowed(role),
+                                children: parse_inline_content(text, link_targets),
+                            },
                         };
+                        last = None;
                         nodes.push(inline);
                         pos = text_end + 1;
                         continue;
@@ -1936,10 +2275,11 @@ fn parse_inline_content(
         }
 
         // Inline link: `text <url>`_  or  `text`__  (anonymous)
-        if chars[pos] == '`' {
-            if let Some((end, text)) = find_closing_char(&chars, pos + 1, '`') {
+        if b[pos] == b'`' {
+            if let Some(end) = find_closing_char(content, pos + 1, b'`') {
+                let text = &content[pos + 1..end];
                 // Check for trailing __ (anonymous reference)
-                if end + 2 < chars.len() && chars[end + 1] == '_' && chars[end + 2] == '_' {
+                if end + 2 < b.len() && b[end + 1] == b'_' && b[end + 2] == b'_' {
                     // Anonymous link — look up next anon target
                     let counter_key = "__anon_counter";
                     let counter: usize = link_targets
@@ -1947,12 +2287,13 @@ fn parse_inline_content(
                         .and_then(|s| s.parse().ok())
                         .unwrap_or(0);
                     let anon_key = format!("__anon{}", counter);
-                    if let Some(url) = link_targets.get(&anon_key).cloned() {
+                    if let Some(url) = link_targets.get(&anon_key).copied() {
                         // We need a mutable reference to increment counter, but link_targets is &
                         // For now: don't increment (single-use anonymous links work correctly)
+                        last = None;
                         nodes.push(Inline::Link {
-                            url,
-                            children: vec![Inline::Text(text.to_string())],
+                            url: Cow::Borrowed(url),
+                            children: vec![Inline::Text(Cow::Borrowed(text))],
                         });
                         pos = end + 3;
                         continue;
@@ -1960,15 +2301,16 @@ fn parse_inline_content(
                 }
 
                 // Check for trailing _
-                if end + 1 < chars.len() && chars[end + 1] == '_' {
+                if end + 1 < b.len() && b[end + 1] == b'_' {
                     // Check if it's an inline link with URL
                     if let Some(angle_start) = text.rfind('<') {
                         if text.ends_with('>') {
                             let link_text = text[..angle_start].trim();
                             let url = &text[angle_start + 1..text.len() - 1];
+                            last = None;
                             nodes.push(Inline::Link {
-                                url: url.to_string(),
-                                children: vec![Inline::Text(link_text.to_string())],
+                                url: Cow::Borrowed(url),
+                                children: vec![Inline::Text(Cow::Borrowed(link_text))],
                             });
                             pos = end + 2;
                             continue;
@@ -1976,11 +2318,11 @@ fn parse_inline_content(
                     }
 
                     // Reference link - look up in link_targets
-                    let ref_name = text.to_lowercase();
-                    if let Some(url) = link_targets.get(&ref_name) {
+                    if let Some(url) = lookup_target(link_targets, text).copied() {
+                        last = None;
                         nodes.push(Inline::Link {
-                            url: url.clone(),
-                            children: vec![Inline::Text(text.to_string())],
+                            url: Cow::Borrowed(url),
+                            children: vec![Inline::Text(Cow::Borrowed(text))],
                         });
                         pos = end + 2;
                         continue;
@@ -1988,31 +2330,29 @@ fn parse_inline_content(
                 }
 
                 // Plain interpreted text (default role, usually emphasis)
-                nodes.push(Inline::Emphasis(vec![Inline::Text(text.to_string())]));
+                last = None;
+                nodes.push(Inline::Emphasis(vec![Inline::Text(Cow::Borrowed(text))]));
                 pos = end + 1;
                 continue;
             }
         }
 
         // Simple reference link: word_
-        if chars[pos].is_alphanumeric() {
-            let mut word_end = pos;
-            while word_end < chars.len()
-                && (chars[word_end].is_alphanumeric()
-                    || chars[word_end] == '_'
-                    || chars[word_end] == '-')
-            {
-                word_end += 1;
-            }
-            if word_end < chars.len() && chars[word_end] == '_' {
+        if content[pos..]
+            .chars()
+            .next()
+            .is_some_and(char::is_alphanumeric)
+        {
+            let word_end = ref_name_end(content, pos);
+            if word_end < b.len() && b[word_end] == b'_' {
                 // Check it's not __ (anonymous reference)
-                if word_end + 1 >= chars.len() || chars[word_end + 1] != '_' {
-                    let word: String = chars[pos..word_end].iter().collect();
-                    let ref_name = word.to_lowercase();
-                    if let Some(url) = link_targets.get(&ref_name) {
+                if word_end + 1 >= b.len() || b[word_end + 1] != b'_' {
+                    let word = &content[pos..word_end];
+                    if let Some(url) = lookup_target(link_targets, word).copied() {
+                        last = None;
                         nodes.push(Inline::Link {
-                            url: url.clone(),
-                            children: vec![Inline::Text(word)],
+                            url: Cow::Borrowed(url),
+                            children: vec![Inline::Text(Cow::Borrowed(word))],
                         });
                         pos = word_end + 1;
                         continue;
@@ -2022,173 +2362,148 @@ fn parse_inline_content(
         }
 
         // Footnote reference: [label]_
-        if chars[pos] == '[' {
-            if let Some(close) = chars[pos + 1..].iter().position(|&c| c == ']') {
+        if b[pos] == b'[' {
+            if let Some(close) = content[pos + 1..].find(']') {
                 let close_abs = pos + 1 + close;
                 // Check for trailing _
-                if close_abs + 1 < chars.len() && chars[close_abs + 1] == '_' {
-                    let label: String = chars[pos + 1..close_abs].iter().collect();
-                    nodes.push(Inline::FootnoteRef { label });
+                if close_abs + 1 < b.len() && b[close_abs + 1] == b'_' {
+                    last = None;
+                    nodes.push(Inline::FootnoteRef {
+                        label: Cow::Borrowed(&content[pos + 1..close_abs]),
+                    });
                     pos = close_abs + 2;
                     continue;
                 }
             }
         }
 
-        // Regular text
-        let pos_before = pos;
-        let mut text = String::new();
-        while pos < chars.len() {
-            let c = chars[pos];
+        // Regular text. Scanned as one contiguous run; an owned buffer is
+        // materialized lazily, only if the run actually contains an escape.
+        let run_start = pos;
+        let mut owned: Option<String> = None;
+        while pos < b.len() {
+            let c = content[pos..].chars().next().unwrap();
             // RST escaping mechanism: a backslash strips the special meaning
             // of the character that follows, so the escaped character is
             // emitted as literal text and never inspected as markup. Escaped
             // whitespace disappears entirely (it exists only to make markup
             // adjacent to a word). This is the one place escapes are
-            // resolved — `find_closing`/`find_closing_char` deliberately copy
+            // resolved — `find_closing`/`find_closing_char` deliberately pass
             // them through so a nested span's content resolves them here too.
             if c == '\\' {
-                if let Some(&next) = chars.get(pos + 1) {
-                    if !next.is_whitespace() {
-                        text.push(next);
+                let buf = owned.get_or_insert_with(|| content[run_start..pos].to_string());
+                match content[pos + 1..].chars().next() {
+                    Some(next) => {
+                        if !next.is_whitespace() {
+                            buf.push(next);
+                        }
+                        pos += 1 + next.len_utf8();
                     }
-                    pos += 2;
-                } else {
-                    text.push('\\');
-                    pos += 1;
+                    None => {
+                        buf.push('\\');
+                        pos += 1;
+                    }
                 }
                 continue;
             }
             // Stop at potential inline markup starts
-            if c == '*' || c == '`' || c == ':' || c == '[' {
+            if matches!(c, '*' | '`' | ':' | '[') {
                 break;
             }
             // Stop at potential reference (word followed by _)
             if c.is_alphanumeric() {
-                let mut word_end = pos;
-                while word_end < chars.len()
-                    && (chars[word_end].is_alphanumeric()
-                        || chars[word_end] == '_'
-                        || chars[word_end] == '-')
+                let word_end = ref_name_end(content, pos);
+                if word_end < b.len()
+                    && b[word_end] == b'_'
+                    && (word_end + 1 >= b.len() || b[word_end + 1] != b'_')
+                    && lookup_target(link_targets, &content[pos..word_end]).is_some()
                 {
-                    word_end += 1;
-                }
-                if word_end < chars.len()
-                    && chars[word_end] == '_'
-                    && (word_end + 1 >= chars.len() || chars[word_end + 1] != '_')
-                {
-                    let word: String = chars[pos..word_end].iter().collect();
-                    if link_targets.contains_key(&word.to_lowercase()) {
-                        break;
-                    }
+                    break;
                 }
             }
-            text.push(c);
-            pos += 1;
+            if let Some(buf) = owned.as_mut() {
+                buf.push(c);
+            }
+            pos += c.len_utf8();
         }
 
-        if !text.is_empty() {
-            nodes.push(Inline::Text(text));
-        } else if pos == pos_before {
+        if pos == run_start {
             // No markup matched and the text loop didn't advance — consume
-            // current character literally to guarantee forward progress.
-            nodes.push(Inline::Text(chars[pos].to_string()));
-            pos += 1;
+            // the current character literally to guarantee forward progress.
+            let clen = char_len_at(content, pos);
+            push_text(
+                &mut nodes,
+                &mut last,
+                content,
+                pos,
+                pos + clen,
+                Cow::Borrowed(&content[pos..pos + clen]),
+            );
+            pos += clen;
+        } else {
+            let resolved = match owned {
+                Some(s) => Cow::Owned(s),
+                None => Cow::Borrowed(&content[run_start..pos]),
+            };
+            push_text(&mut nodes, &mut last, content, run_start, pos, resolved);
         }
     }
-
-    // Merge adjacent text nodes
-    merge_text_nodes(&mut nodes);
 
     nodes
 }
 
-/// Find `pattern`'s next occurrence, returning its position and the text
-/// before it.
+/// Byte offset of `pattern`'s next occurrence at or after `start`, or `None`.
 ///
-/// When `escapes` is set, a backslash-escaped character cannot close the span
-/// (RST's escaping mechanism): the escape is *copied through* into `text`
-/// rather than resolved here, because the span's content is re-parsed by
-/// `parse_inline_content`, which resolves escapes exactly once, at the level
-/// that actually emits the text. Inline literals pass `false` — the spec
-/// exempts them from escape processing entirely.
-fn find_closing(
-    chars: &[char],
-    start: usize,
-    pattern: &str,
-    escapes: bool,
-) -> Option<(usize, String)> {
-    let pat_chars: Vec<char> = pattern.chars().collect();
+/// The span's text is exactly `content[start..offset]` — when `escapes` is
+/// set, a backslash-escaped character cannot close the span (RST's escaping
+/// mechanism) but the escape is *passed through* rather than resolved, because
+/// the span's content is re-parsed by `parse_inline_content`, which resolves
+/// escapes exactly once, at the level that actually emits the text. Inline
+/// literals pass `false` — the spec exempts them from escape processing
+/// entirely. Returning an offset rather than a rebuilt `String` is what lets
+/// nested spans keep borrowing from the input.
+fn find_closing(content: &str, start: usize, pattern: &str, escapes: bool) -> Option<usize> {
+    let b = content.as_bytes();
+    let pat = pattern.as_bytes();
     let mut pos = start;
-    let mut text = String::new();
 
-    while pos + pat_chars.len() <= chars.len() {
-        if escapes && chars[pos] == '\\' && pos + 1 < chars.len() {
-            text.push(chars[pos]);
-            text.push(chars[pos + 1]);
-            pos += 2;
+    while pos + pat.len() <= b.len() {
+        if escapes && b[pos] == b'\\' && pos + 1 < b.len() {
+            pos += 1;
+            pos += char_len_at(content, pos);
             continue;
         }
-        let mut matches = true;
-        for (i, pc) in pat_chars.iter().enumerate() {
-            if chars[pos + i] != *pc {
-                matches = false;
-                break;
-            }
+        if b[pos..pos + pat.len()] == *pat {
+            return Some(pos);
         }
-        if matches {
-            return Some((pos, text));
-        }
-        text.push(chars[pos]);
-        pos += 1;
+        pos += char_len_at(content, pos);
     }
 
     None
 }
 
-/// Find the next unescaped `close`, returning its position and the text
-/// before it. As in [`find_closing`], escapes are copied through rather than
+/// Byte offset of the next unescaped `close` (an ASCII delimiter) at or after
+/// `start`. As in [`find_closing`], escapes are passed through rather than
 /// resolved — every span this is used for (emphasis, interpreted text, roles)
 /// has its content re-parsed, and resolving here would let `\*` re-enter the
 /// tokenizer as live markup.
-fn find_closing_char(chars: &[char], start: usize, close: char) -> Option<(usize, String)> {
+fn find_closing_char(content: &str, start: usize, close: u8) -> Option<usize> {
+    let b = content.as_bytes();
     let mut pos = start;
-    let mut text = String::new();
 
-    while pos < chars.len() {
-        if chars[pos] == '\\' && pos + 1 < chars.len() {
-            text.push(chars[pos]);
-            text.push(chars[pos + 1]);
-            pos += 2;
+    while pos < b.len() {
+        if b[pos] == b'\\' && pos + 1 < b.len() {
+            pos += 1;
+            pos += char_len_at(content, pos);
             continue;
         }
-        if chars[pos] == close {
-            return Some((pos, text));
+        if b[pos] == close {
+            return Some(pos);
         }
-        text.push(chars[pos]);
-        pos += 1;
+        pos += char_len_at(content, pos);
     }
 
     None
-}
-
-fn merge_text_nodes(nodes: &mut Vec<Inline>) {
-    let mut i = 0;
-    while i + 1 < nodes.len() {
-        let both_text =
-            matches!(&nodes[i], Inline::Text(_)) && matches!(&nodes[i + 1], Inline::Text(_));
-        if both_text {
-            let next_text = match nodes.remove(i + 1) {
-                Inline::Text(s) => s,
-                _ => unreachable!(),
-            };
-            if let Inline::Text(current) = &mut nodes[i] {
-                current.push_str(&next_text);
-            }
-        } else {
-            i += 1;
-        }
-    }
 }
 
 // ── Builder ───────────────────────────────────────────────────────────────────

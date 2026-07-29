@@ -47,9 +47,9 @@ fn block_to_node(block: &Block, warnings: &mut Vec<FidelityWarning>) -> Node {
             .children(inlines_to_nodes(inlines, warnings)),
 
         Block::CodeBlock { language, content } => {
-            let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
+            let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.to_string());
             if let Some(lang) = language {
-                n = n.prop(prop::LANGUAGE, lang.clone());
+                n = n.prop(prop::LANGUAGE, lang.to_string());
             }
             n
         }
@@ -84,9 +84,9 @@ fn block_to_node(block: &Block, warnings: &mut Vec<FidelityWarning>) -> Node {
         }
 
         Block::Figure { url, alt, caption } => {
-            let mut img = Node::new(node::IMAGE).prop(prop::URL, url.clone());
+            let mut img = Node::new(node::IMAGE).prop(prop::URL, url.to_string());
             if let Some(alt_text) = alt {
-                img = img.prop(prop::ALT, alt_text.clone());
+                img = img.prop(prop::ALT, alt_text.to_string());
             }
             let mut figure_children = vec![img];
             if let Some(cap_inlines) = caption {
@@ -97,19 +97,19 @@ fn block_to_node(block: &Block, warnings: &mut Vec<FidelityWarning>) -> Node {
         }
 
         Block::Image { url, alt, title } => {
-            let mut n = Node::new(node::IMAGE).prop(prop::URL, url.clone());
+            let mut n = Node::new(node::IMAGE).prop(prop::URL, url.to_string());
             if let Some(alt_text) = alt {
-                n = n.prop(prop::ALT, alt_text.clone());
+                n = n.prop(prop::ALT, alt_text.to_string());
             }
             if let Some(title_text) = title {
-                n = n.prop(prop::TITLE, title_text.clone());
+                n = n.prop(prop::TITLE, title_text.to_string());
             }
             n
         }
 
         Block::RawBlock { format, content } => Node::new(node::RAW_BLOCK)
-            .prop(prop::CONTENT, content.clone())
-            .prop("format", format.clone()),
+            .prop(prop::CONTENT, content.to_string())
+            .prop("format", format.to_string()),
 
         Block::Div {
             class,
@@ -129,10 +129,10 @@ fn block_to_node(block: &Block, warnings: &mut Vec<FidelityWarning>) -> Node {
                 .collect();
             let mut n = Node::new(node::DIV).children(child_nodes);
             if let Some(cls) = class {
-                n = n.prop("class", cls.clone());
+                n = n.prop("class", cls.to_string());
             }
             if let Some(dir_name) = directive {
-                n = n.prop("rst:directive", dir_name.clone());
+                n = n.prop("rst:directive", dir_name.to_string());
             }
             n
         }
@@ -150,12 +150,12 @@ fn block_to_node(block: &Block, warnings: &mut Vec<FidelityWarning>) -> Node {
         Block::FootnoteDef { label, inlines } => {
             let child_nodes = inlines_to_nodes(inlines, warnings);
             Node::new(node::FOOTNOTE_DEF)
-                .prop(prop::LABEL, label.clone())
+                .prop(prop::LABEL, label.to_string())
                 .children(child_nodes)
         }
 
         Block::MathDisplay { source } => {
-            Node::new("math_display").prop("math:source", source.clone())
+            Node::new("math_display").prop("math:source", source.to_string())
         }
 
         Block::Admonition {
@@ -167,10 +167,9 @@ fn block_to_node(block: &Block, warnings: &mut Vec<FidelityWarning>) -> Node {
                 .map(|b| block_to_node(b, warnings))
                 .collect();
             Node::new("admonition")
-                .prop("admonition_type", admonition_type.clone())
+                .prop("admonition_type", admonition_type.to_string())
                 .children(child_nodes)
         }
-
     }
 }
 
@@ -191,7 +190,11 @@ fn table_row_to_node(row: &TableRow, warnings: &mut Vec<FidelityWarning>) -> Nod
         .iter()
         .map(|cell| Node::new(node::TABLE_CELL).children(inlines_to_nodes(cell, warnings)))
         .collect();
-    let row_kind = if row.is_header { node::TABLE_HEADER } else { node::TABLE_ROW };
+    let row_kind = if row.is_header {
+        node::TABLE_HEADER
+    } else {
+        node::TABLE_ROW
+    };
     Node::new(row_kind).children(cells)
 }
 
@@ -204,7 +207,7 @@ fn inlines_to_nodes(inlines: &[Inline], warnings: &mut Vec<FidelityWarning>) -> 
 
 fn inline_to_node(inline: &Inline, warnings: &mut Vec<FidelityWarning>) -> Node {
     match inline {
-        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
+        Inline::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.to_string()),
 
         Inline::Emphasis(children) => {
             Node::new(node::EMPHASIS).children(inlines_to_nodes(children, warnings))
@@ -230,26 +233,26 @@ fn inline_to_node(inline: &Inline, warnings: &mut Vec<FidelityWarning>) -> Node 
             Node::new(node::SUPERSCRIPT).children(inlines_to_nodes(children, warnings))
         }
 
-        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
+        Inline::Code(s) => Node::new(node::CODE).prop(prop::CONTENT, s.to_string()),
 
         Inline::Link { url, children } => Node::new(node::LINK)
-            .prop(prop::URL, url.clone())
+            .prop(prop::URL, url.to_string())
             .children(inlines_to_nodes(children, warnings)),
 
         Inline::Image { url, alt } => Node::new(node::IMAGE)
-            .prop(prop::URL, url.clone())
-            .prop(prop::ALT, alt.clone()),
+            .prop(prop::URL, url.to_string())
+            .prop(prop::ALT, alt.to_string()),
 
         Inline::LineBreak => Node::new(node::LINE_BREAK),
 
         Inline::SoftBreak => Node::new(node::SOFT_BREAK),
 
         Inline::FootnoteRef { label } => {
-            Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, label.clone())
+            Node::new(node::FOOTNOTE_REF).prop(prop::LABEL, label.to_string())
         }
 
         Inline::FootnoteDef { label, children } => Node::new(node::FOOTNOTE_DEF)
-            .prop(prop::LABEL, label.clone())
+            .prop(prop::LABEL, label.to_string())
             .children(inlines_to_nodes(children, warnings)),
 
         Inline::SmallCaps(children) => {
@@ -260,21 +263,21 @@ fn inline_to_node(inline: &Inline, warnings: &mut Vec<FidelityWarning>) -> Node 
             quote_type,
             children,
         } => Node::new(node::QUOTED)
-            .prop(prop::QUOTE_TYPE, quote_type.clone())
+            .prop(prop::QUOTE_TYPE, quote_type.to_string())
             .children(inlines_to_nodes(children, warnings)),
 
         Inline::MathInline { source } => {
-            Node::new("math_inline").prop("math:source", source.clone())
+            Node::new("math_inline").prop("math:source", source.to_string())
         }
 
         Inline::RstSpan { role, children } => {
             let child_nodes = inlines_to_nodes(children, warnings);
-            match role.as_str() {
+            match role.as_ref() {
                 "small-caps" | "sc" => Node::new(node::SMALL_CAPS).children(child_nodes),
                 "strike" | "del" | "s" => Node::new(node::STRIKEOUT).children(child_nodes),
                 "underline" | "u" => Node::new(node::UNDERLINE).children(child_nodes),
                 _ => Node::new(node::SPAN)
-                    .prop("rst:role", role.clone())
+                    .prop("rst:role", role.to_string())
                     .children(child_nodes),
             }
         }

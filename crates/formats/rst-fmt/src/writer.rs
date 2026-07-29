@@ -61,7 +61,7 @@
 //! let bytes = w.finish();
 //! ```
 
-use crate::events::OwnedEvent;
+use crate::events::Event;
 use crate::{calculate_column_widths, emit_table_border};
 use std::io::Write;
 
@@ -138,7 +138,7 @@ impl<W: Write> Writer<W> {
 
     /// Feed one event to the writer. May write bytes to the sink immediately
     /// if this event completes a top-level block.
-    pub fn write_event(&mut self, event: OwnedEvent) {
+    pub fn write_event(&mut self, event: Event<'_>) {
         self.process(event);
     }
 
@@ -341,14 +341,14 @@ impl<W: Write> Writer<W> {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn process(&mut self, event: OwnedEvent) {
+    fn process(&mut self, event: Event<'_>) {
         match event {
             // ── Block open/close ───────────────────────────────────────────────
-            OwnedEvent::StartParagraph => {
+            Event::StartParagraph => {
                 let mark = self.block_start(BlockKind::Paragraph);
                 self.stack.push(Frame::Paragraph { mark });
             }
-            OwnedEvent::EndParagraph => {
+            Event::EndParagraph => {
                 if let Some(Frame::Paragraph { mark }) = self.stack.pop() {
                     // `build_list_item` overrides paragraph formatting for
                     // list-item children (single "\n", no blank line);
@@ -361,7 +361,7 @@ impl<W: Write> Writer<W> {
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::StartHeading { level } => {
+            Event::StartHeading { level } => {
                 let mark = self.block_start(BlockKind::Other);
                 let content = self.out.len();
                 let plain_mark = self.plain.len();
@@ -373,7 +373,7 @@ impl<W: Write> Writer<W> {
                     plain_mark,
                 });
             }
-            OwnedEvent::EndHeading => {
+            Event::EndHeading => {
                 if let Some(Frame::Heading {
                     level,
                     mark,
@@ -416,31 +416,31 @@ impl<W: Write> Writer<W> {
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::StartBlockquote => {
+            Event::StartBlockquote => {
                 let mark = self.block_start(BlockKind::Other);
                 let content = self.out.len();
                 self.stack.push(Frame::Blockquote { mark, content });
             }
-            OwnedEvent::EndBlockquote => {
+            Event::EndBlockquote => {
                 if let Some(Frame::Blockquote { mark, content }) = self.stack.pop() {
                     self.reindent(content);
                     self.push_out("\n");
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::StartList { ordered } => {
+            Event::StartList { ordered } => {
                 let mark = self.block_start(BlockKind::List);
                 self.list_depth += 1;
                 self.stack.push(Frame::List { ordered, mark });
             }
-            OwnedEvent::EndList => {
+            Event::EndList => {
                 if let Some(Frame::List { mark, .. }) = self.stack.pop() {
                     self.list_depth -= 1;
                     self.push_out("\n");
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::StartListItem => {
+            Event::StartListItem => {
                 let ordered = matches!(self.stack.last(), Some(Frame::List { ordered: true, .. }));
                 let mark = self.out.len();
                 if matches!(self.stack.last(), Some(Frame::List { .. })) {
@@ -448,14 +448,14 @@ impl<W: Write> Writer<W> {
                 }
                 self.stack.push(Frame::ListItem { first: true, mark });
             }
-            OwnedEvent::EndListItem => {
+            Event::EndListItem => {
                 if let Some(Frame::ListItem { mark, .. }) = self.stack.pop() {
                     if !matches!(self.stack.last(), Some(Frame::List { .. })) {
                         self.out.truncate(mark);
                     }
                 }
             }
-            OwnedEvent::StartCodeBlock { language } => {
+            Event::StartCodeBlock { language } => {
                 let mark = self.block_start(BlockKind::Other);
                 if let Some(lang) = &language {
                     self.push_out(".. code-block:: ");
@@ -467,44 +467,44 @@ impl<W: Write> Writer<W> {
                 let content = self.out.len();
                 self.stack.push(Frame::CodeBlock { mark, content });
             }
-            OwnedEvent::CodeBlockContent(content) => {
+            Event::CodeBlockContent(content) => {
                 if matches!(self.stack.last(), Some(Frame::CodeBlock { .. })) {
                     self.push_out(&content);
                 }
             }
-            OwnedEvent::EndCodeBlock => {
+            Event::EndCodeBlock => {
                 if let Some(Frame::CodeBlock { mark, content }) = self.stack.pop() {
                     self.reindent(content);
                     self.push_out("\n");
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::RawBlock { format, content } => {
+            Event::RawBlock { format, content } => {
                 let mark = self.block_start(BlockKind::Other);
                 if format == "rst" {
                     self.push_out(&content);
                 }
                 self.block_end(mark);
             }
-            OwnedEvent::StartDiv { .. } => {
+            Event::StartDiv { .. } => {
                 let mark = self.block_start(BlockKind::Other);
                 self.stack.push(Frame::Div { mark });
             }
-            OwnedEvent::EndDiv => {
+            Event::EndDiv => {
                 if let Some(Frame::Div { mark }) = self.stack.pop() {
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::HorizontalRule => {
+            Event::HorizontalRule => {
                 let mark = self.block_start(BlockKind::Other);
                 self.push_out("----\n\n");
                 self.block_end(mark);
             }
-            OwnedEvent::StartTable => {
+            Event::StartTable => {
                 let mark = self.block_start(BlockKind::Other);
                 self.stack.push(Frame::Table { mark, rows: vec![] });
             }
-            OwnedEvent::EndTable => {
+            Event::EndTable => {
                 if let Some(Frame::Table { mark, rows }) = self.stack.pop() {
                     if self.table_cell_depth == 0 {
                         render_table(&rows, &mut self.out);
@@ -512,25 +512,25 @@ impl<W: Write> Writer<W> {
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::StartTableRow { is_header } => {
+            Event::StartTableRow { is_header } => {
                 self.stack.push(Frame::TableRow {
                     cells: vec![],
                     is_header,
                 });
             }
-            OwnedEvent::EndTableRow => {
+            Event::EndTableRow => {
                 if let Some(Frame::TableRow { cells, is_header }) = self.stack.pop() {
                     if let Some(Frame::Table { rows, .. }) = self.stack.last_mut() {
                         rows.push((cells, is_header));
                     }
                 }
             }
-            OwnedEvent::StartTableCell => {
+            Event::StartTableCell => {
                 self.table_cell_depth += 1;
                 let plain_mark = self.plain.len();
                 self.stack.push(Frame::TableCell { plain_mark });
             }
-            OwnedEvent::EndTableCell => {
+            Event::EndTableCell => {
                 if let Some(Frame::TableCell { plain_mark }) = self.stack.pop() {
                     self.table_cell_depth -= 1;
                     let cell = self.plain[plain_mark..].to_string();
@@ -540,20 +540,20 @@ impl<W: Write> Writer<W> {
                     }
                 }
             }
-            OwnedEvent::StartDefinitionList => {
+            Event::StartDefinitionList => {
                 let mark = self.block_start(BlockKind::Other);
                 self.stack.push(Frame::DefinitionList { mark });
             }
-            OwnedEvent::EndDefinitionList => {
+            Event::EndDefinitionList => {
                 if let Some(Frame::DefinitionList { mark }) = self.stack.pop() {
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::StartDefinitionTerm => {
+            Event::StartDefinitionTerm => {
                 let mark = self.out.len();
                 self.stack.push(Frame::DefinitionTerm { mark });
             }
-            OwnedEvent::EndDefinitionTerm => {
+            Event::EndDefinitionTerm => {
                 if let Some(Frame::DefinitionTerm { mark }) = self.stack.pop() {
                     if matches!(self.stack.last(), Some(Frame::DefinitionList { .. })) {
                         self.push_out("\n");
@@ -562,14 +562,14 @@ impl<W: Write> Writer<W> {
                     }
                 }
             }
-            OwnedEvent::StartDefinitionDesc => {
+            Event::StartDefinitionDesc => {
                 let mark = self.out.len();
                 if matches!(self.stack.last(), Some(Frame::DefinitionList { .. })) {
                     self.push_out("   ");
                 }
                 self.stack.push(Frame::DefinitionDesc { mark });
             }
-            OwnedEvent::EndDefinitionDesc => {
+            Event::EndDefinitionDesc => {
                 if let Some(Frame::DefinitionDesc { mark }) = self.stack.pop() {
                     if matches!(self.stack.last(), Some(Frame::DefinitionList { .. })) {
                         self.push_out("\n\n");
@@ -578,27 +578,27 @@ impl<W: Write> Writer<W> {
                     }
                 }
             }
-            OwnedEvent::StartFootnoteDef { label } => {
+            Event::StartFootnoteDef { label } => {
                 let mark = self.block_start(BlockKind::Other);
                 self.push_out(".. [");
                 self.push_out(&label);
                 self.push_out("] ");
                 self.stack.push(Frame::FootnoteDef { mark });
             }
-            OwnedEvent::EndFootnoteDef => {
+            Event::EndFootnoteDef => {
                 if let Some(Frame::FootnoteDef { mark }) = self.stack.pop() {
                     self.push_out("\n");
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::MathDisplay { source } => {
+            Event::MathDisplay { source } => {
                 let mark = self.block_start(BlockKind::Other);
                 self.push_out(".. math::\n\n   ");
                 self.push_out(&source.replace('\n', "\n   "));
                 self.push_out("\n\n");
                 self.block_end(mark);
             }
-            OwnedEvent::StartAdmonition { admonition_type } => {
+            Event::StartAdmonition { admonition_type } => {
                 let mark = self.block_start(BlockKind::Other);
                 self.push_out(".. ");
                 self.push_out(&admonition_type);
@@ -606,14 +606,14 @@ impl<W: Write> Writer<W> {
                 let content = self.out.len();
                 self.stack.push(Frame::Admonition { mark, content });
             }
-            OwnedEvent::EndAdmonition => {
+            Event::EndAdmonition => {
                 if let Some(Frame::Admonition { mark, content }) = self.stack.pop() {
                     self.reindent(content);
                     self.push_out("\n");
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::StartFigure { url, alt } => {
+            Event::StartFigure { url, alt } => {
                 let mark = self.block_start(BlockKind::Other);
                 self.push_out(".. figure:: ");
                 self.push_out(&url);
@@ -626,7 +626,7 @@ impl<W: Write> Writer<W> {
                 let caption = self.out.len();
                 self.stack.push(Frame::Figure { mark, caption });
             }
-            OwnedEvent::EndFigure => {
+            Event::EndFigure => {
                 if let Some(Frame::Figure { mark, caption }) = self.stack.pop() {
                     // The caption lead-in is only emitted if caption content
                     // actually arrived — `build_figure` distinguishes "no
@@ -641,7 +641,7 @@ impl<W: Write> Writer<W> {
                     self.block_end(mark);
                 }
             }
-            OwnedEvent::ImageBlock { url, alt, .. } => {
+            Event::ImageBlock { url, alt, .. } => {
                 let mark = self.block_start(BlockKind::Other);
                 self.push_out(".. image:: ");
                 self.push_out(&url);
@@ -656,7 +656,7 @@ impl<W: Write> Writer<W> {
             }
 
             // ── Inline events ──────────────────────────────────────────────────
-            OwnedEvent::Text(cow) => {
+            Event::Text(cow) => {
                 // Same re-escaping `build_inline` applies (see
                 // `crate::escape_text`): literal `*`/`` ` ``/`\` in text must
                 // go back out escaped or they re-parse as markup. Borrows
@@ -664,39 +664,39 @@ impl<W: Write> Writer<W> {
                 let escaped = crate::escape_text(&cow);
                 self.push_inline(&escaped, &escaped);
             }
-            OwnedEvent::SoftBreak | OwnedEvent::LineBreak => {
+            Event::SoftBreak | Event::LineBreak => {
                 self.push_inline("\n", " ");
             }
-            OwnedEvent::StartEmphasis => self.open_span("*", "*"),
-            OwnedEvent::EndEmphasis => self.close_span(),
-            OwnedEvent::StartStrong => self.open_span("**", "**"),
-            OwnedEvent::EndStrong => self.close_span(),
-            OwnedEvent::StartStrikeout => self.open_span(":strike:`", "`"),
-            OwnedEvent::EndStrikeout => self.close_span(),
-            OwnedEvent::StartUnderline => self.open_span(":underline:`", "`"),
-            OwnedEvent::EndUnderline => self.close_span(),
-            OwnedEvent::StartSubscript => self.open_span(":sub:`", "`"),
-            OwnedEvent::EndSubscript => self.close_span(),
-            OwnedEvent::StartSuperscript => self.open_span(":sup:`", "`"),
-            OwnedEvent::EndSuperscript => self.close_span(),
-            OwnedEvent::StartSmallCaps => self.open_span(":sc:`", "`"),
-            OwnedEvent::EndSmallCaps => self.close_span(),
-            OwnedEvent::Code(cow) => {
+            Event::StartEmphasis => self.open_span("*", "*"),
+            Event::EndEmphasis => self.close_span(),
+            Event::StartStrong => self.open_span("**", "**"),
+            Event::EndStrong => self.close_span(),
+            Event::StartStrikeout => self.open_span(":strike:`", "`"),
+            Event::EndStrikeout => self.close_span(),
+            Event::StartUnderline => self.open_span(":underline:`", "`"),
+            Event::EndUnderline => self.close_span(),
+            Event::StartSubscript => self.open_span(":sub:`", "`"),
+            Event::EndSubscript => self.close_span(),
+            Event::StartSuperscript => self.open_span(":sup:`", "`"),
+            Event::EndSuperscript => self.close_span(),
+            Event::StartSmallCaps => self.open_span(":sc:`", "`"),
+            Event::EndSmallCaps => self.close_span(),
+            Event::Code(cow) => {
                 self.push_wrapped("``", &cow, "``", &cow);
             }
-            OwnedEvent::StartLink { url } => {
+            Event::StartLink { url } => {
                 let mark = self.out.len();
                 let plain_mark = self.plain.len();
                 if self.accepts_inline() {
                     self.push_out("`");
                 }
                 self.stack.push(Frame::Link {
-                    url,
+                    url: url.into_owned(),
                     mark,
                     plain_mark,
                 });
             }
-            OwnedEvent::EndLink => {
+            Event::EndLink => {
                 if let Some(Frame::Link {
                     url,
                     mark,
@@ -709,17 +709,17 @@ impl<W: Write> Writer<W> {
                     self.inline_end(mark, plain_mark);
                 }
             }
-            OwnedEvent::InlineImage { url, alt } => {
+            Event::InlineImage { url, alt } => {
                 if alt.is_empty() {
                     self.push_multi(&[".. image:: ", &url, "\n"], &alt);
                 } else {
                     self.push_multi(&[".. image:: ", &url, "\n   :alt: ", &alt, "\n"], &alt);
                 }
             }
-            OwnedEvent::FootnoteRef { label } => {
+            Event::FootnoteRef { label } => {
                 self.push_wrapped("[", &label, "]_", &label);
             }
-            OwnedEvent::StartFootnoteDefInline { label } => {
+            Event::StartFootnoteDefInline { label } => {
                 let mark = self.out.len();
                 let plain_mark = self.plain.len();
                 if self.accepts_inline() {
@@ -733,16 +733,16 @@ impl<W: Write> Writer<W> {
                     plain_mark,
                 });
             }
-            OwnedEvent::EndFootnoteDefInline => self.close_span(),
-            OwnedEvent::StartQuoted { quote_type } => {
+            Event::EndFootnoteDefInline => self.close_span(),
+            Event::StartQuoted { quote_type } => {
                 let quote = if quote_type == "single" { "'" } else { "\"" };
                 self.open_span(quote, quote);
             }
-            OwnedEvent::EndQuoted => self.close_span(),
-            OwnedEvent::MathInline { source } => {
+            Event::EndQuoted => self.close_span(),
+            Event::MathInline { source } => {
                 self.push_wrapped(":math:`", &source, "`", &source);
             }
-            OwnedEvent::StartRstSpan { role } => {
+            Event::StartRstSpan { role } => {
                 let mark = self.out.len();
                 let plain_mark = self.plain.len();
                 if self.accepts_inline() {
@@ -756,7 +756,7 @@ impl<W: Write> Writer<W> {
                     plain_mark,
                 });
             }
-            OwnedEvent::EndRstSpan => self.close_span(),
+            Event::EndRstSpan => self.close_span(),
         }
     }
 }
@@ -894,6 +894,7 @@ enum Frame {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::OwnedEvent;
 
     #[test]
     fn test_writer_heading() {

@@ -48,9 +48,14 @@ impl BatchParser {
     }
 
     /// Finish parsing and return the AST.
-    pub fn finish(self) -> Result<RstDoc, RstError> {
+    ///
+    /// The AST is `'static`: chunked input lives in the parser's own buffer,
+    /// which is dropped here, so the tree is converted with
+    /// [`RstDoc::into_owned`]. Callers holding the whole input in memory
+    /// already should call [`crate::parse`] directly and keep the borrows.
+    pub fn finish(self) -> Result<RstDoc<'static>, RstError> {
         let s = String::from_utf8_lossy(&self.buf);
-        crate::parse(&s)
+        crate::parse(&s).map(RstDoc::into_owned)
     }
 }
 
