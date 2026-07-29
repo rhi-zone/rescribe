@@ -124,14 +124,21 @@ fn generate_format_module(format: &str, entries: &[FixtureEntry]) -> String {
         }
     }
 
-    // Emit `all_fixtures()`.
+    // Emit `all_fixtures()`. Written directly in the collapsed/expanded form
+    // rustfmt would choose (empty `vec![]` on one line vs. one call per line),
+    // so the generated file is already rustfmt-clean and `cargo build` doesn't
+    // perpetually dirty it relative to what a prior `cargo fmt` produced.
     out.push_str("/// Return all generated fixtures.\n");
     out.push_str("pub fn all_fixtures() -> Vec<crate::Fixture> {\n");
-    out.push_str("    vec![\n");
-    for name in &fn_names {
-        writeln!(out, "        {}(),", name).unwrap();
+    if fn_names.is_empty() {
+        out.push_str("    vec![]\n");
+    } else {
+        out.push_str("    vec![\n");
+        for name in &fn_names {
+            writeln!(out, "        {}(),", name).unwrap();
+        }
+        out.push_str("    ]\n");
     }
-    out.push_str("    ]\n");
     out.push_str("}\n");
 
     out
