@@ -68,9 +68,17 @@ rescribe-read-epub = { workspace = true }
 rescribe-read-pptx = { workspace = true }
 rescribe-read-xlsx = { workspace = true }
 ooxml-sml = { workspace = true }
+ooxml-wml = { workspace = true }
+ooxml-pml = { workspace = true }
 rescribe-read-pdf = { workspace = true }
 rescribe-read-rtf = { workspace = true }
 rescribe-read-multimarkdown = { workspace = true }
+
+# Cross-API harness (tests/streaming_apis.rs): drives events()/StreamingParser/
+# streaming-writer directly against the standalone -fmt crates, not just the
+# rescribe adapter's parse()/emit().
+rst-fmt = { workspace = true }
+zip = { workspace = true }
 
 # Bidirectional format writer harness tests
 rescribe-write-djot = { workspace = true }
