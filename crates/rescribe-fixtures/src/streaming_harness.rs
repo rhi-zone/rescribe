@@ -600,6 +600,39 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              see TODO.md",
         ),
     },
+    // fountain-fmt's events() is `parse(input)` then a lazy AST walk via
+    // events::OwnedEventIter — not an independently implemented reader
+    // (same pattern as t2t/pod/haddock/asciidoc above). See the comment
+    // above the check in tests/streaming_apis.rs, which also notes a
+    // separate, out-of-scope bug in the crate's un-exported borrowed
+    // `EventIter<'a>` type (not what `events()` returns).
+    FormatCapabilities {
+        format: "fountain",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "fountain_fmt::batch::StreamingParser's emit_block() re-parses each accumulated \
+             block via crate::events::events(&text) and forwards every event it yields — \
+             including that call's own StartDocument/EndDocument pair — straight to the handler \
+             with no filtering (batch.rs's emit_block(): \"for event in \
+             crate::events::events(&text) { self.handler.handle(event); }\"). Bulk events() over \
+             the whole input emits exactly one StartDocument/EndDocument pair; StreamingParser \
+             emits one pair PER accumulated block, diverging on every fixture with more than one \
+             blank-line-separated block — not an edge case, the dominant failure mode. A second, \
+             narrower defect shares the same re-parse-in-isolation root cause: \
+             parse_title_page() (parse.rs:81) runs unconditionally at the start of every parse() \
+             call with no \"is this really the first block\" guard, so a body block matching \
+             `key: value` for one of the 9 recognized title-page field names is misread as \
+             metadata when re-parsed in isolation — the same class already tracked for t2t's \
+             try_parse_header(); see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "fountain_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
+             \"This implementation buffers all events, reconstructs the AST, then emits\") — the \
+             same fake-streaming-writer pattern as t2t/pod/haddock/textile/commonmark/org/\
+             texinfo; see TODO.md",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -625,7 +658,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "zimwiki",
     "bbcode",
     "markua",
-    "fountain",
     "ansi",
     "csl-json",
     "native",
@@ -862,6 +894,23 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         api: "streaming_writer",
         description: "haddock_fmt::writer::Writer buffers all events and only reconstructs the \
                        AST + calls emit::build() inside finish() — a fake streaming writer per \
+                       CLAUDE.md",
+    },
+    KnownFailure {
+        format: "fountain",
+        api: "streaming_parser",
+        description: "fountain_fmt::batch::StreamingParser's emit_block() forwards every event \
+                       from its own re-parse of each block, including that call's \
+                       StartDocument/EndDocument pair, so it emits one such pair per block \
+                       instead of one for the whole document; also parse_title_page() has no \
+                       document-position guard, so a body line matching a title-page field name \
+                       is misread as metadata when re-parsed in isolation",
+    },
+    KnownFailure {
+        format: "fountain",
+        api: "streaming_writer",
+        description: "fountain_fmt::writer::Writer buffers all events and only reconstructs the \
+                       AST + calls emit() inside finish() — a fake streaming writer per \
                        CLAUDE.md",
     },
 ];
