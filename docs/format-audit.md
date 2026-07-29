@@ -260,10 +260,24 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 |-------|-----|--------|-------|----------|---------|
 | rtf-fmt | ✓ | ~ | | | ✓ |
 | rst-fmt | ✓ | ✓ | ✓‡ | ✓ | ✓ |
-| asciidoc | ✓ | | | ~ | ✓ |
-| org-fmt | ✓ | | | | ✓ |
-| djot-fmt | | | | | |
-| textile-fmt | ✓ | | | | ✓ |
+| asciidoc | ✓ | ✓ | ✓§ | ✓ | ✓ |
+| org-fmt | ✓ | ✓ | ✓§ | ✓§ | ✓ |
+| djot-fmt | ✓ | ✓ | ✓§ | ✓§ | ✓ |
+| textile-fmt | ✓ | ✓ | ~§ | ~§ | ✓ |
+| texinfo | ✓ | ✓ | ~§ | ~§ | ✓ |
+| fb2-fmt | ✓ | ✓§ | ~§ | ✓§ | ✓ |
+| commonmark-fmt (commonmark/gfm/markdown) | ✓ | ✓§ | N/A¶ | ~§ | ✓ |
+| html-fmt | ✓ | N/A¶ | N/A¶ | ✓ | ✓ |
+
+`✓§` = the API is a real, independently-implemented code path (not a `parse()`-then-wrap
+stub), fixture-driven-checked by `crates/rescribe-fixtures/tests/streaming_apis.rs`, and
+**currently diverges from its reference on a specific, root-caused, tracked bug** — see the
+"Cross-API harness inventory" subsection below for the one-line defect per cell and
+`streaming_harness::KNOWN_FAILURES` for the full description. `~§` = same, except the
+implementation itself is architecturally hollow (buffers all input/events and only does real
+work in `finish()` — a fake streaming API per CLAUDE.md), not just producing wrong output on
+some fixtures. `N/A¶` = the crate structurally does not have an independent implementation of
+this API, for a documented reason (see below) — not a gap to close.
 
 ‡ rst-fmt's `batch` (`StreamingParser`) has one known construct gap found 2026-07-29 by the
 new `crates/rescribe-fixtures/tests/streaming_apis.rs` adversarial-chunking check run across
@@ -271,6 +285,39 @@ the full `fixtures/rst/` suite (previously only 6 hand-picked cases were covered
 multi-item definition list is split into one `StartDefinitionList`/`EndDefinitionList` pair
 per item instead of one list spanning all items. Tracked as a `KnownFailure` in
 `streaming_harness.rs` and in TODO.md; not fixed here.
+
+### Cross-API harness inventory (2026-07-30)
+
+Full per-format, per-API status as declared in `crates/rescribe-fixtures/src/streaming_harness.rs::CAPABILITIES`
+(the executable, tested source of truth — this table is a snapshot of it, not the other way
+around; if the two ever disagree, the source file is correct). Every row below has a real,
+fixture-driven check exercising the format crate's own `events()`/`StreamingParser`/streaming
+writer directly, not just the rescribe adapter's `parse()`/`emit()`. Formats not listed here
+are still in `streaming_harness::NOT_YET_AUDITED` — an honest "nobody has individually
+audited this format's cross-API status yet" placeholder, not a claim of absence or health.
+
+| Format | `events()` | `StreamingParser` | streaming writer |
+|--------|------------|--------------------|--------------------|
+| rst | Wired | KnownFailure: multi-item `DefinitionList` split into one list per item | Wired |
+| djot | Wired (independent recursive-descent vs. frame-stack impls) | KnownFailure: 6/79 fixtures, 4 distinct bugs (nested-div flag-not-counter, cross-block link-ref resolution, block-attr flushed before fence, def-list split) | KnownFailure: drops `LinkDef`s entirely (`Event` has no variant for them); also architecturally buffer-then-emit, not incremental |
+| asciidoc | Wired (validates the AST→event expansion layer; `parse()` and `events()` share the same `try_parse_block()` loop) | KnownFailure: 8/85 fixtures, 3 distinct bugs (attribute/title lines flushed before delimited blocks, `\|===` table marker unrecognized, empty input emits no Start/EndDocument) | Wired |
+| org | Wired (independent of `parse()`; dependency runs the other way) | KnownFailure: 3/89 fixtures, 3 distinct bugs (nested `#+BEGIN_QUOTE` has no depth counter, `#+NAME:` flushed before its block, indented list code-block misread as top-level) | KnownFailure: `Event` has no document-metadata variant at all, so `#+TITLE:`/`#+AUTHOR:`/keyword lines are unconditionally dropped; also buffer-then-emit, not incremental |
+| html | NotApplicable: `events()` is literally a walk over the html5ever-built tree (`events_from_doc(&parse(input).0)`) — HTML5 tree construction (foster parenting, adoption agency) makes true incremental delivery impossible per the crate's own docs and CLAUDE.md's html5ever out-of-scope carve-out | NotApplicable: `feed()` is a bare buffer append; all parsing happens in `finish()`, for the same HTML5-tree-construction reason (chunk-boundary/UTF-8-split integrity is separately checked and passes, but that is not the same claim as incremental delivery) | Wired |
+| texinfo | Wired | KnownFailure: architecturally hollow — `feed()` buffers into a `Vec<u8>`, all parsing happens in `finish()` (crate's own module doc says `O(full input)`) | KnownFailure: same hollow buffer-then-emit pattern, plus `Event` has no variant carrying `TexinfoDoc::title` — `@settitle` is silently dropped on round-trip |
+| fb2 | KnownFailure: `events()` silently drops the `Metadata` event whenever input lacks a literal `<description>` element — affects the majority (34/58) of fb2 fixtures | KnownFailure: architecturally hollow, same buffer-until-`finish()` pattern, despite `events()` itself being a genuine incremental quick_xml pull parser | KnownFailure: the writer itself is genuinely incremental, but it's fed by `events()`, so it inherits the `Metadata`-drop bug downstream |
+| textile | Wired | KnownFailure: architecturally hollow, buffers all input, only parses in `finish()` | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()` |
+| commonmark / gfm / markdown (shared `commonmark-fmt`) | KnownFailure: (1) image alt-text `Text` event is emitted before `StartImage` instead of between `StartImage`/`EndImage`, duplicating alt text in the output; (2) consecutive `Text` events from pulldown-cmark aren't coalesced the way `parse()`'s AST deliberately does | NotApplicable: buffering all input before parsing with pulldown-cmark is the sole documented CLAUDE.md-sanctioned exemption (pulldown-cmark requires the full `&str`) | KnownFailure: architecturally hollow (crate's own doc: "buffer-then-emit for correctness"), plus a downstream consequence of the `events()` image-ordering bug for the `image` fixture specifically |
+| docx | KnownFailure: `events()` drops the `Text` event and reverses `EndRun`/`EndParagraph` order for the common `<w:p><w:r><w:t>` shape (no `<w:pPr>`) — a `read_props()`/`queue()` clobber bug | NotYetWired | NotYetWired |
+| pptx | KnownFailure: `events()` cannot reach slide text at all (`<p:txBody>` unhandled in `dispatch_start`); shares docx's Text-drop/reversal bug once that's fixed | NotYetWired | NotYetWired |
+| xlsx | Wired | NotYetWired | Wired |
+
+**Session tally (2026-07-30):** 11 formats moved from `NOT_YET_AUDITED` to a real, audited
+`CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark, gfm,
+markdown), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the harness's
+initial wiring. 49 formats remain in `NOT_YET_AUDITED`. `streaming_harness::KNOWN_FAILURES`
+now has 21 entries total; 18 are new from this session (the other 3 — docx/events,
+pptx/events, rst/streaming_parser — predate it). None were weakened or hidden to make a
+check pass; every divergence found a real, root-caused, tracked `KnownFailure` entry instead.
 
 ### Remaining hand-written formats (crate exists, API not started)
 
