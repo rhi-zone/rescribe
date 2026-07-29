@@ -146,6 +146,21 @@ pub struct Writer<W: Write> {
     /// Empty at top level — a block closing with an empty stack is flushed to
     /// the sink immediately.
     stack: Vec<Frame>,
+    /// Side stack for `Table`/`TableRow`/`Link` payloads (their state is 32-40
+    /// bytes wide — collected rows/cells, or a URL — versus every other
+    /// `Frame` variant's 8-24 bytes of scalars). A `Frame::Wide` marker on
+    /// `stack` stands in for the real entry here. This works *without*
+    /// storing an index in `Frame::Wide` because `Start*`/`End*` events are
+    /// well-nested: the subsequence of Wide-frame opens/closes is itself a
+    /// valid push/pop order, so `side.pop()` always returns the payload that
+    /// matches whichever `Frame::Wide` is currently on top of `stack` — see
+    /// `rst-fmt-writer-profile.md`'s 2026-07-29 follow-up for the two
+    /// alternatives this was measured against (`Box`ing the wide variants
+    /// together shrank `Frame` the same amount but added a heap allocation
+    /// on every `Table`/`TableRow`/`Link` push with no wall-clock benefit —
+    /// rejected; this side-stack keeps the same amortized `Vec::push` growth
+    /// those variants already had inline).
+    side: Vec<WideFrame>,
     /// Mirrors `BuildContext::list_depth`: incremented when a `List` frame is
     /// pushed (`StartList`), decremented when it is popped (`EndList`) — the
     /// same bracketing `build_list` uses around its item loop.
@@ -162,15 +177,39 @@ pub struct Writer<W: Write> {
     table_cell_depth: usize,
 }
 
+/// Default capacity reserved for `Writer::out` by [`Writer::new`]. A fresh
+/// `Writer` starts with an empty `out` and grows it geometrically up to
+/// whatever its largest top-level block turns out to be — every construct
+/// (a Writer per document, not per block) pays that growth's `memmove` cost
+/// once, from zero, regardless of how large the document eventually is
+/// (capacity is retained across blocks; see `Writer::out`'s doc comment).
+/// Reserving a small amount up front skips the first several doublings
+/// (which are pure overhead below any realistic block size) without
+/// committing to a document-specific guess. Callers who know a better
+/// estimate (or want zero speculative allocation) should use
+/// [`Writer::with_capacity`] instead.
+const DEFAULT_OUT_CAPACITY: usize = 4096;
+
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
+        Self::with_capacity(sink, DEFAULT_OUT_CAPACITY)
+    }
+
+    /// Like [`Writer::new`], but reserves `out_capacity` bytes for the shared
+    /// output buffer up front instead of [`DEFAULT_OUT_CAPACITY`]. Use this
+    /// when the caller has a size estimate for the largest top-level block
+    /// (e.g. from a prior conversion of similar documents) to skip more of
+    /// the geometric-growth `memmove`s than the default reserve covers, or
+    /// pass `0` for the old zero-speculation behaviour.
+    pub fn with_capacity(sink: W, out_capacity: usize) -> Self {
         Writer {
             sink,
-            out: String::new(),
+            out: String::with_capacity(out_capacity),
             plain: String::new(),
             rule: String::new(),
             scratch: Vec::new(),
             stack: Vec::new(),
+            side: Vec::new(),
             list_depth: 0,
             heading_depth: 0,
             table_cell_depth: 0,
@@ -226,22 +265,25 @@ impl<W: Write> Writer<W> {
         )
     }
 
-    /// Whether the top-of-stack frame accepts inline children.
+    /// Whether the top-of-stack frame accepts inline children. `Link` is the
+    /// one `Frame::Wide` payload that does (it's an inline span); `Table`/
+    /// `TableRow` never are, so the wide payload on `side` must be inspected
+    /// once the main-stack tag says `Wide`.
     fn accepts_inline(&self) -> bool {
-        matches!(
-            self.stack.last(),
+        match self.stack.last() {
             Some(
                 Frame::Paragraph { .. }
-                    | Frame::Heading { .. }
-                    | Frame::DefinitionTerm { .. }
-                    | Frame::DefinitionDesc { .. }
-                    | Frame::FootnoteDef { .. }
-                    | Frame::Figure { .. }
-                    | Frame::TableCell { .. }
-                    | Frame::Inline { .. }
-                    | Frame::Link { .. }
-            )
-        )
+                | Frame::Heading { .. }
+                | Frame::DefinitionTerm { .. }
+                | Frame::DefinitionDesc { .. }
+                | Frame::FootnoteDef { .. }
+                | Frame::Figure { .. }
+                | Frame::TableCell { .. }
+                | Frame::Inline { .. },
+            ) => true,
+            Some(Frame::Wide) => matches!(self.side.last(), Some(WideFrame::Link { .. })),
+            _ => false,
+        }
     }
 
     /// Only `Heading` and `TableCell` ever read `plain` back out.
@@ -549,26 +591,32 @@ impl<W: Write> Writer<W> {
             }
             Event::StartTable => {
                 let mark = self.block_start(BlockKind::Other);
-                self.stack.push(Frame::Table { mark, rows: vec![] });
+                self.stack.push(Frame::Wide);
+                self.side.push(WideFrame::Table { mark, rows: vec![] });
             }
             Event::EndTable => {
-                if let Some(Frame::Table { mark, rows }) = self.stack.pop() {
-                    if self.table_cell_depth == 0 {
-                        render_table(&rows, &mut self.out);
+                if let Some(Frame::Wide) = self.stack.pop() {
+                    if let Some(WideFrame::Table { mark, rows }) = self.side.pop() {
+                        if self.table_cell_depth == 0 {
+                            render_table(&rows, &mut self.out);
+                        }
+                        self.block_end(mark);
                     }
-                    self.block_end(mark);
                 }
             }
             Event::StartTableRow { is_header } => {
-                self.stack.push(Frame::TableRow {
+                self.stack.push(Frame::Wide);
+                self.side.push(WideFrame::TableRow {
                     cells: vec![],
                     is_header,
                 });
             }
             Event::EndTableRow => {
-                if let Some(Frame::TableRow { cells, is_header }) = self.stack.pop() {
-                    if let Some(Frame::Table { rows, .. }) = self.stack.last_mut() {
-                        rows.push((cells, is_header));
+                if let Some(Frame::Wide) = self.stack.pop() {
+                    if let Some(WideFrame::TableRow { cells, is_header }) = self.side.pop() {
+                        if let Some(WideFrame::Table { rows, .. }) = self.side.last_mut() {
+                            rows.push((cells, is_header));
+                        }
                     }
                 }
             }
@@ -582,7 +630,7 @@ impl<W: Write> Writer<W> {
                     self.table_cell_depth -= 1;
                     let cell = self.plain[plain_mark..].to_string();
                     self.plain.truncate(plain_mark);
-                    if let Some(Frame::TableRow { cells, .. }) = self.stack.last_mut() {
+                    if let Some(WideFrame::TableRow { cells, .. }) = self.side.last_mut() {
                         cells.push(cell);
                     }
                 }
@@ -737,23 +785,26 @@ impl<W: Write> Writer<W> {
                 if self.accepts_inline() {
                     self.push_out("`");
                 }
-                self.stack.push(Frame::Link {
+                self.stack.push(Frame::Wide);
+                self.side.push(WideFrame::Link {
                     url: url.into_owned(),
                     mark,
                     plain_mark,
                 });
             }
             Event::EndLink => {
-                if let Some(Frame::Link {
-                    url,
-                    mark,
-                    plain_mark,
-                }) = self.stack.pop()
-                {
-                    self.push_out(" <");
-                    self.push_out(&url);
-                    self.push_out(">`_");
-                    self.inline_end(mark, plain_mark);
+                if let Some(Frame::Wide) = self.stack.pop() {
+                    if let Some(WideFrame::Link {
+                        url,
+                        mark,
+                        plain_mark,
+                    }) = self.side.pop()
+                    {
+                        self.push_out(" <");
+                        self.push_out(&url);
+                        self.push_out(">`_");
+                        self.inline_end(mark, plain_mark);
+                    }
                 }
             }
             Event::InlineImage { url, alt } => {
@@ -892,14 +943,14 @@ enum Frame {
     Div {
         mark: usize,
     },
-    Table {
-        mark: usize,
-        rows: Vec<(Vec<String>, bool)>,
-    },
-    TableRow {
-        cells: Vec<String>,
-        is_header: bool,
-    },
+    /// Marker for a `Table`/`TableRow`/`Link` frame — the real payload lives
+    /// on `Writer::side` instead of inline here. Those three constructs'
+    /// state (collected rows/cells, or a URL) is 32-40 bytes, well above
+    /// every other variant's 8-24 bytes; keeping it inline would set
+    /// `Frame`'s size for every push, including the far more frequent
+    /// `Paragraph`/`Inline` ones. See `Writer::side`'s doc comment for why a
+    /// stored index isn't needed to find the matching payload.
+    Wide,
     TableCell {
         plain_mark: usize,
     },
@@ -933,6 +984,19 @@ enum Frame {
         close: CloseDelim,
         mark: usize,
         plain_mark: usize,
+    },
+}
+
+/// Payload for a `Frame::Wide` marker, held on `Writer::side` instead of
+/// inline on `Frame` — see `Frame::Wide`'s doc comment for why.
+enum WideFrame {
+    Table {
+        mark: usize,
+        rows: Vec<(Vec<String>, bool)>,
+    },
+    TableRow {
+        cells: Vec<String>,
+        is_header: bool,
     },
     /// Links are the one inline span whose closing text depends on data
     /// carried by the frame (the URL, moved out of the opening event — not a

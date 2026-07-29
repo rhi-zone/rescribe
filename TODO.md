@@ -2204,6 +2204,67 @@ function `build()` uses, on top of that reconstruction. Fixed:
   and `rescribe-write-rst` now builds an RST AST that *borrows from the `Document`* instead
   of copying every string out of it.
 
+### `rst-fmt` — streaming Writer `Frame` shrunk via side-stack, `out` pre-reserved, benchmark-clone-artifact found (2026-07-29)
+
+Follow-up to the profiling entry above (full numbers: `docs/format-audit.md`'s 2026-07-29
+entry of the same name; methodology writeup:
+`/tmp/claude-1000/-home-me-git-rhizone-rescribe/7cb7fb03-d716-4725-8ce3-b1417c88f03e/scratchpad/rst-fmt-writer-profile.md`).
+Tried both avenues that entry left open.
+
+- [x] **`Frame` shrunk 40→32 bytes, allocation-neutral, real ~6-10% wall-clock win.**
+  `Table`/`TableRow`/`Link` (32-40 bytes each) were tied for `Frame`'s size ceiling.
+  First tried boxing them together behind one `Frame::Wide(Box<WideFrame>)` — this DID
+  shrink `size_of::<Frame>()` to 32, but wall-clock was measurably unchanged (two A/B'd
+  builds, ~1300µs/iter either way at 2000 sections) while allocations on a table/link-heavy
+  synthetic rose 4,518→6,518 (+44%, `Box::new` allocates eagerly per push where the old
+  inline `Vec::new()` didn't). **Reverted** — a real, measured regression for zero benefit.
+  Replaced with a side-stack design: `Frame::Wide` is now a zero-payload marker; the real
+  `Table`/`TableRow`/`Link` payloads live on a new `Writer::side: Vec<WideFrame>`. No index
+  needs to be stored in `Frame::Wide` — events are well-nested, so the subsequence of
+  wide-frame opens/closes is itself a valid push/pop order, and `side.pop()` always returns
+  the payload matching whichever `Frame::Wide` is on top of the main stack. `side` grows via
+  ordinary amortized `Vec::push`, so no per-push allocation is added. Measured:
+  `size_of::<Frame>() = 32` (was 40), allocation count on the table/link-heavy synthetic
+  4,519 (baseline 4,518 — no regression), isolated writer-only wall-clock (git-stash A/B,
+  4 trials each, 4000 sections) dropped from a ~2,571-2,917µs/iter baseline to
+  ~2,373-2,735µs/iter (**~6-10%** across repeated trials under varying machine noise —
+  the ratio, not the absolute numbers, is what's stable). `perf` confirms the mechanism:
+  `Vec<Frame>::push`'s share of self-time fell from ~29-36% (prior entry) to ~12%.
+- [x] **`Writer::out` pre-reserved — small additional win, also allocation-neutral-to-fewer.**
+  Added `Writer::with_capacity(sink, out_capacity)` and a `DEFAULT_OUT_CAPACITY = 4096`
+  used by `Writer::new` (previously `String::new()`, matching `BuildContext::output`, which
+  also doesn't pre-reserve). ~1-3% further wall-clock reduction on top of the side-stack
+  change, and fewer allocations on the table-heavy synthetic (4,515 vs 4,519) since fewer of
+  `out`'s early doublings are needed.
+- [ ] **Tried and rejected**: pre-sizing the *sink* `Vec<u8>` (not `out`) to `input.len()`
+  made the writer-only loop ~20% **slower**, not faster — a single large upfront allocation
+  plausibly crosses into a different allocator path (mmap + lazy page faults) that a series
+  of smaller incremental reallocs avoids. Not pursued; not part of what was kept.
+- [x] **Benchmark-methodology finding, reported because it changes how every absolute
+  ratio in this file and `docs/format-audit.md` should be read.** Profiling the final
+  (side-stack + pre-reserve) build showed `<Event as Clone>::clone` — the harness's own
+  per-iteration clone of pre-materialized events, used to replay one parsed stream across
+  many timed iterations in every `Writer`-vs-`build()` measurement to date — consuming
+  **~40% of measured "Writer" self-time**. Isolated directly (a `clone_only` harness mode
+  cloning just the event `Vec`): ~1,095-1,135µs/iter out of a ~2,664-2,710µs/iter total at
+  4000 sections. This clone never happens in real `Writer` usage (a live event stream is
+  consumed once). It was present uniformly across every configuration A/B'd here, so the
+  *relative* improvements above are unaffected, but it inflates every *absolute* ratio
+  reported in both files. Subtracting it from the raw measurements gives an adjusted ratio
+  of roughly **0.90-1.39x** at 500/2000/4000 sections (occasionally faster than `build()`)
+  instead of the previously reported 1.5-2.6x — noisy, not a precise number, but strong
+  enough to say the real zero-clone production gap is materially smaller than every prior
+  absolute figure suggested. **Not fixed here** (the harness was temporary and deleted, not
+  committed, per convention) — flagged for whoever next benchmarks a streaming writer
+  against a tree builder with a similar "clone pre-materialized events per iteration"
+  harness shape: measure the clone cost in isolation and subtract it, or avoid cloning
+  altogether, before trusting the ratio.
+- [x] All tests (including `test_writer_byte_identical_to_builder`,
+  `test_writer_no_subtree_reconstruction_blowup`, the events()≡parse() equivalence test,
+  and the chunked `StreamingParser` tests) still pass; `cargo clippy --all-targets
+  --all-features -D warnings` and `cargo fmt --check` clean. Stage numbers unchanged
+  (R:4/W:4) — this is a perf-only pass, no construct or API-mode change.
+
 ### DEBT: Fake-streaming writer/reader audit across all `crates/formats/` — identified 2026-07-28
 
 The rst-fmt writer bug above (buffer-all → reconstruct AST via frame stack → delegate
