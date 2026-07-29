@@ -89,6 +89,8 @@ commonmark-fmt = { workspace = true, features = ["extensions"] }
 docbook-fmt = { workspace = true }
 jats-fmt = { workspace = true }
 tei-fmt = { workspace = true }
+odf-fmt = { workspace = true }
+ansi-fmt = { workspace = true }
 zip = { workspace = true }
 
 # Bidirectional format writer harness tests
