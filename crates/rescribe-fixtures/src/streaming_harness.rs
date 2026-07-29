@@ -84,6 +84,36 @@ fn mid_utf8_char_split_point(input: &[u8]) -> Option<usize> {
 }
 
 // ---------------------------------------------------------------------------
+// 1b. Observable sink — probing streaming-writer incrementality
+// ---------------------------------------------------------------------------
+
+/// A `Write` sink that exposes the bytes written so far via a shared handle.
+///
+/// Byte-identical-to-builder comparisons (the primary streaming-writer
+/// equivalence check; see [`adversarial_chunkings`]'s sibling checks in
+/// `tests/streaming_apis.rs`) only prove the *final* output is correct — a
+/// writer that buffers every event internally and does all real work inside
+/// `finish()` can still pass that check while being architecturally a fake
+/// streaming writer per CLAUDE.md ("a wrapper that funnels everything
+/// through the tree builder is a fake streaming API"). `ObservableSink` lets
+/// a test additionally check *when* bytes reach the sink: write several
+/// events, inspect `pre_finish` bytes before calling `finish()`, and compare
+/// to the post-finish length. A genuine incremental writer emits some bytes
+/// before `finish()`; a buffer-then-emit wrapper emits zero.
+pub struct ObservableSink(pub std::rc::Rc<std::cell::RefCell<Vec<u8>>>);
+
+impl std::io::Write for ObservableSink {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        self.0.borrow_mut().extend_from_slice(data);
+        Ok(data.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 2. Capability declaration
 // ---------------------------------------------------------------------------
 
@@ -149,6 +179,45 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              definition list); see TODO.md",
         ),
         streaming_writer: ApiState::Wired,
+    },
+    // org-fmt's events() is genuinely independent of parse() — the dependency
+    // runs the other way (`parse()` drives `EventIter::parse_next_block()`), so
+    // the events-vs-AST-projection check compares two real code paths.
+    FormatCapabilities {
+        format: "org",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "org-fmt StreamingParser diverges from events() on 3 of 89 org fixtures, via three \
+             distinct previously-unknown bugs in batch.rs's feed_line/BlockState machine — none \
+             covered by the two exceptions batch.rs's module docs sanction (loose lists, drawers \
+             containing blank lines), as none of the three fixtures has a loose list or a \
+             drawer. (a) blockquote-nested: BlockState::InSpecialBlock stores only a single \
+             expected end keyword with no nesting depth, so a nested #+BEGIN_QUOTE's #+END_QUOTE \
+             closes the outer block early — parse.rs:521 tracks begin_marker depth for exactly \
+             this reason and the streaming path simply lacks it. (b) code-block-name: feed_line \
+             calls emit_block() unconditionally before entering a #+BEGIN_ block, so a preceding \
+             affiliated #+NAME: line is re-parsed alone (setting pending_name with no following \
+             block) and the code block emits name: None. (c) integration-list-code: feed_line \
+             trims the line before its #+BEGIN_ test, so an indented code block inside a list \
+             item reads as a top-level block start and the item is split from its child. All \
+             three are downstream of emit_block() (batch.rs:190) re-parsing each accumulated \
+             block in isolation; see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "org-fmt's Writer loses content vs build() on 3 of 89 org fixtures. The dominant \
+             cause is an expressiveness gap in the Event enum, not a logic error: Event \
+             (events.rs:14-133) has no document-metadata variant at all — metadata is delivered \
+             out-of-band via EventIter::take_metadata() (parse.rs:87) — so events() cannot carry \
+             #+TITLE:/#+AUTHOR:/#+CUSTOM_KEY: lines and writer.rs's DocBuilder::finish \
+             (writer.rs:616) has no choice but to hardcode `metadata: vec![]`, dropping every \
+             leading keyword line (fixtures metadata, keyword-line). The third fixture, \
+             dynamic-block, stacks on a separate pre-existing parse/emit bug: parse.rs has no \
+             #+BEGIN:/#+END: support, so parse_metadata_line absorbs a bare #+END: as document \
+             metadata key `end`, which build() re-emits as a stray leading `#+END: ` before all \
+             blocks and DocBuilder::finish then discards. Note Writer is also not incrementally \
+             streaming — writer.rs's module docs state it buffers all events, reconstructs the \
+             AST, then calls emit::build; see TODO.md",
+        ),
     },
     // html-fmt is html5ever-backed. CLAUDE.md puts third-party-library-backed
     // formats (pulldown-cmark, html5ever) out of scope for the "three
@@ -234,6 +303,115 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         ),
         streaming_writer: ApiState::Wired,
     },
+    FormatCapabilities {
+        format: "texinfo",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "texinfo::batch::StreamingParser buffers all fed bytes into a Vec<u8> and only \
+             parses + delivers events inside finish() (see crates/formats/texinfo/src/batch.rs's \
+             own module doc, \"Memory usage is O(full input)\"); feed() never advances real \
+             parser state, so no events reach the handler until finish() is called — not \
+             incremental streaming despite implementing the feed/finish contract; found while \
+             wiring this harness's incrementality probe",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "texinfo::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit() inside finish() (see crates/formats/texinfo/src/\
+             writer.rs's own module doc, \"buffers all events, reconstructs the AST, then \
+             emits\"); additionally, texinfo::events::Event has no variant carrying \
+             TexinfoDoc::title, so events_to_doc() always reconstructs title: None, silently \
+             dropping @settitle (see fixtures/texinfo/settitle-header) when content round-trips \
+             through the streaming writer",
+        ),
+    },
+    FormatCapabilities {
+        format: "fb2",
+        events: ApiState::KnownFailure(
+            "fb2_fmt events()/EventIter silently drops the Event::Metadata event entirely \
+             whenever the input has no literal <description> element — finalize_description() \
+             (crates/formats/fb2-fmt/src/events.rs) only fires on a </description> close tag, \
+             while parse()'s AST always carries a (possibly-default) FictionBook.description; \
+             affects the majority of single-construct fb2 fixtures, which omit <description> \
+             for brevity — found via this harness's ast_to_events projection check",
+        ),
+        streaming_parser: ApiState::KnownFailure(
+            "fb2_fmt::StreamingParser buffers all fed bytes into a Vec<u8> and only parses + \
+             delivers events inside finish() (see crates/formats/fb2-fmt/src/events.rs's \
+             StreamingParser::finish, which calls events(&self.buf) — feed() itself just \
+             extends the buffer); despite the crate's own events()/EventIter being a genuine \
+             incremental quick_xml pull parser, StreamingParser does not reuse that \
+             incrementality — feed() delivers zero events to the handler before finish()",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "the streaming Writer itself is genuinely incremental (write_event() writes \
+             straight to the underlying quick_xml::Writer<W>), but it is fed by events(), which \
+             (see the events KnownFailure above) never delivers Metadata for input lacking a \
+             literal <description>; the Writer then never emits a <description> element, while \
+             the AST builder path (emit()) always writes one — a downstream consequence of the \
+             events() gap, not an independent Writer defect",
+        ),
+    },
+    FormatCapabilities {
+        format: "textile",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "textile_fmt::batch::StreamingParser buffers all fed bytes into a Vec<u8> and only \
+             parses + delivers events inside finish() (see crates/formats/textile-fmt/src/\
+             batch.rs's own module doc, \"It also buffers all input ... so memory is likewise \
+             O(full input)\"); feed() never advances real parser state, so no events reach the \
+             handler until finish() is called",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "textile_fmt::writer::Writer buffers all fed events into a Vec<TextileEvent> and \
+             only reconstructs the AST + calls emit() inside finish() (see \
+             crates/formats/textile-fmt/src/writer.rs's own module doc, \"buffers all events, \
+             reconstructs the AST, then emits\") — a fake streaming writer per CLAUDE.md, not an \
+             independent incremental implementation",
+        ),
+    },
+    FormatCapabilities {
+        format: "commonmark",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::NotApplicable(
+            "commonmark-fmt's StreamingParser buffering all input before parsing with \
+             pulldown-cmark is the sole documented CLAUDE.md exemption (pulldown-cmark requires \
+             the full input as &str); see crates/formats/commonmark-fmt/src/lib.rs's \
+             \"Limitations\" doc comment and src/batch.rs's own \"# Limitation\" section",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "commonmark_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and \
+             only reconstructs the AST + calls emit() inside finish() — explicitly self-admitted \
+             in crates/formats/commonmark-fmt/src/writer.rs's own module doc: \"the internal \
+             implementation is buffer-then-emit for correctness (reuses the proven emit() \
+             path)\". This is unrelated to the sanctioned pulldown-cmark StreamingParser \
+             exemption (the writer never touches pulldown-cmark) and is a fake streaming writer \
+             per CLAUDE.md",
+        ),
+    },
+    FormatCapabilities {
+        format: "gfm",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::NotApplicable(
+            "shares commonmark-fmt with the \"commonmark\" format entry above; same sanctioned \
+             pulldown-cmark StreamingParser exemption applies",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "shares commonmark-fmt with the \"commonmark\" format entry above; same \
+             buffer-then-emit streaming writer defect applies",
+        ),
+    },
+    FormatCapabilities {
+        format: "markdown",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::NotApplicable(
+            "shares commonmark-fmt with the \"commonmark\" format entry above; same sanctioned \
+             pulldown-cmark StreamingParser exemption applies",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "shares commonmark-fmt with the \"commonmark\" format entry above; same \
+             buffer-then-emit streaming writer defect applies",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -245,16 +423,11 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
 /// absence from the table. See the task report / TODO.md for the plan to
 /// retire entries from this list into real `CAPABILITIES` rows.
 pub const NOT_YET_AUDITED: &[&str] = &[
-    "markdown",
-    "commonmark",
-    "gfm",
     "asciidoc",
     "mediawiki",
     "latex",
-    "org",
     "creole",
     "djot",
-    "textile",
     "muse",
     "t2t",
     "tikiwiki",
@@ -268,7 +441,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "xwiki",
     "zimwiki",
     "bbcode",
-    "texinfo",
     "markua",
     "fountain",
     "ansi",
@@ -276,7 +448,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "native",
     "pandoc-json",
     "docbook",
-    "fb2",
     "ipynb",
     "csv",
     "tsv",
@@ -337,11 +508,94 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        + shares the wml Text-drop/reversal bug",
     },
     KnownFailure {
+        format: "org",
+        api: "streaming_parser",
+        description: "org-fmt StreamingParser: three distinct feed_line/BlockState bugs — no \
+                       nesting depth in InSpecialBlock, emit_block() flushing an affiliated \
+                       #+NAME: line away from its block, and the #+BEGIN_ test trimming so an \
+                       indented list-item code block reads as top-level",
+    },
+    KnownFailure {
+        format: "org",
+        api: "streaming_writer",
+        description: "org-fmt Event enum has no document-metadata variant, so events() cannot \
+                       carry #+KEY: lines and writer.rs's DocBuilder::finish hardcodes \
+                       metadata: vec![], dropping every leading keyword line",
+    },
+    KnownFailure {
         format: "rst",
         api: "streaming_parser",
         description: "rst-fmt StreamingParser splits a multi-item DefinitionList into one \
                        StartDefinitionList/EndDefinitionList pair per item instead of one list \
                        spanning all items",
+    },
+    KnownFailure {
+        format: "texinfo",
+        api: "streaming_parser",
+        description: "texinfo::batch::StreamingParser buffers all fed bytes and only parses + \
+                       delivers events inside finish(); feed() delivers zero events before \
+                       finish() is called",
+    },
+    KnownFailure {
+        format: "texinfo",
+        api: "streaming_writer",
+        description: "texinfo::writer::Writer buffers all events and only emits inside finish(); \
+                       also, Event has no variant for TexinfoDoc::title, so @settitle is always \
+                       dropped when round-tripped through the streaming writer",
+    },
+    KnownFailure {
+        format: "fb2",
+        api: "events",
+        description: "fb2_fmt events()/EventIter silently drops Event::Metadata for input \
+                       lacking a literal <description> element, unlike parse()'s AST which \
+                       always carries a (possibly-default) description",
+    },
+    KnownFailure {
+        format: "fb2",
+        api: "streaming_parser",
+        description: "fb2_fmt::StreamingParser buffers all fed bytes and only parses + delivers \
+                       events inside finish(), even though the crate's own events()/EventIter is \
+                       a genuine incremental quick_xml pull parser — StreamingParser does not \
+                       reuse that incrementality",
+    },
+    KnownFailure {
+        format: "fb2",
+        api: "streaming_writer",
+        description: "downstream of the fb2/events KnownFailure: the streaming Writer never \
+                       receives Metadata for input lacking <description>, so it never emits a \
+                       <description> element, while the AST builder path always writes one",
+    },
+    KnownFailure {
+        format: "textile",
+        api: "streaming_parser",
+        description: "textile_fmt::batch::StreamingParser buffers all fed bytes and only parses \
+                       + delivers events inside finish(); feed() delivers zero events before \
+                       finish() is called",
+    },
+    KnownFailure {
+        format: "textile",
+        api: "streaming_writer",
+        description: "textile_fmt::writer::Writer buffers all events and only reconstructs the \
+                       AST + emits inside finish() — a fake streaming writer per CLAUDE.md",
+    },
+    KnownFailure {
+        format: "commonmark",
+        api: "streaming_writer",
+        description: "commonmark_fmt::writer::Writer buffers all events and only reconstructs \
+                       the AST + emits inside finish(), self-admitted in its own module doc; \
+                       unrelated to the sanctioned pulldown-cmark StreamingParser exemption",
+    },
+    KnownFailure {
+        format: "gfm",
+        api: "streaming_writer",
+        description: "shares commonmark-fmt's buffer-then-emit streaming Writer defect (see the \
+                       \"commonmark\" KnownFailure entry above)",
+    },
+    KnownFailure {
+        format: "markdown",
+        api: "streaming_writer",
+        description: "shares commonmark-fmt's buffer-then-emit streaming Writer defect (see the \
+                       \"commonmark\" KnownFailure entry above)",
     },
 ];
 
