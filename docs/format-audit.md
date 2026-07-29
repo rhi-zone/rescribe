@@ -310,29 +310,35 @@ audited this format's cross-API status yet" placeholder, not a claim of absence 
 | docx | KnownFailure: `events()` drops the `Text` event and reverses `EndRun`/`EndParagraph` order for the common `<w:p><w:r><w:t>` shape (no `<w:pPr>`) — a `read_props()`/`queue()` clobber bug | NotYetWired | NotYetWired |
 | pptx | KnownFailure: `events()` cannot reach slide text at all (`<p:txBody>` unhandled in `dispatch_start`); shares docx's Text-drop/reversal bug once that's fixed | NotYetWired | NotYetWired |
 | xlsx | Wired | NotYetWired | Wired |
+| xwiki | Wired (`EventIter::next()` is a genuine lazy pull-iterator over `&XwikiDoc`, events.rs:168-385 — not eager materialization like zimwiki/markua/muse below) | KnownFailure: architecturally hollow — `feed()` buffers into a `Vec<u8>`, all parsing happens in `finish()` | KnownFailure: architecturally hollow — `write_event()` buffers into a `Vec<OwnedEvent>`, all emission happens in `finish()` |
+| zimwiki | Wired (validates the AST→event expansion layer; `events()` is parse()+eager-materialize-then-walk) | KnownFailure: `parse_list()` merges a blank-line-separated unordered list immediately followed by an ordered list into one `Block::List` tagged with the first item's `ordered` value (a whole-document `parse()`-level bug, not a streaming-specific one) — `StreamingParser`'s blank-line block splitter hard-splits at that boundary first and does not reproduce the merge | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()` |
+| markua | Wired (validates the AST→event expansion layer; `events()` is parse()+eager-tree-build-then-walk) | KnownFailure: `parse_list()` has the identical structural bug as zimwiki's — merges a blank-line-separated unordered+ordered list pair into one mislabeled list at the whole-document `parse()` level | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()`; separately, `Writer`'s `Figure`/`Caption` reconstruction has a real code bug (wrong child taken as body, caption dropped) but it is unreachable via any fixture since `parse()` never constructs `Block::Figure` |
+| muse | Wired (eagerly materializes a `VecDeque` in `EventIter::new`, but a real independently-checkable walk over `&MuseDoc`) | KnownFailure: architecturally hollow, same buffer-until-`finish()` pattern; crate's own module docs admit it outright | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()`; also a genuine expressiveness gap — `MuseEvent` has no variant for document metadata, so `#title`/`#author`/`#date`/`#desc`/`#keywords` are always dropped on round-trip (reachable via the `document-header` fixture, since unlike markua's dead `title`/`author`/`description` fields, muse-fmt's `parse()` genuinely populates them) |
 
-**Session tally (2026-07-30):** 11 formats moved from `NOT_YET_AUDITED` to a real, audited
+**Session tally (2026-07-30):** 15 formats moved from `NOT_YET_AUDITED` to a real, audited
 `CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark, gfm,
-markdown), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the harness's
-initial wiring. 49 formats remain in `NOT_YET_AUDITED`. `streaming_harness::KNOWN_FAILURES`
-now has 21 entries total; 18 are new from this session (the other 3 — docx/events,
-pptx/events, rst/streaming_parser — predate it). None were weakened or hidden to make a
-check pass; every divergence found a real, root-caused, tracked `KnownFailure` entry instead.
+markdown, xwiki, zimwiki, markua, muse), on top of the 4 pre-existing entries (rst, docx,
+pptx, xlsx) from the harness's initial wiring. 45 formats remain in `NOT_YET_AUDITED`.
+`streaming_harness::KNOWN_FAILURES` now has 29 entries total; 26 are new from this session
+(the other 3 — docx/events, pptx/events, rst/streaming_parser — predate it). None were
+weakened or hidden to make a check pass; every divergence found a real, root-caused, tracked
+`KnownFailure` entry instead. The xwiki/zimwiki/markua/muse pass specifically found two new
+bug classes not previously seen in this table: (1) an architecturally-hollow `StreamingParser`
+that is nonetheless a distinct crate-level pattern from the `~§`-marked ones above, verified
+via `ObservableSink`/handler incrementality probes rather than only content divergence; (2) a
+`parse()`-level (not streaming-specific) block-merging bug shared verbatim between zimwiki and
+markua's independently-written `parse_list()` functions.
 
 ### Remaining hand-written formats (crate exists, API not started)
 
 | Crate | ast | stream | batch | w-stream | w-build |
 |-------|-----|--------|-------|----------|---------|
-| muse-fmt | ✓ | | | | ✓ |
 | t2t | ✓ | | ✓ | | ✓ |
-| markua | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_markua_reader (559K runs) fuzz_markua_roundtrip (759K runs) | – | – |
 | fountain-fmt | ✓ | | ✓ | | ✓ |
 | mediawiki-fmt | | | | | |
 | creole | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_creole_reader (842K runs) fuzz_creole_roundtrip (403K runs) | – | – |
 | dokuwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_dokuwiki_reader (628K runs) fuzz_dokuwiki_roundtrip (378K runs) | – | – |
 | vimwiki-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_vimwiki_reader (610K runs) fuzz_vimwiki_roundtrip (361K runs) | – | – |
-| zimwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_zimwiki_reader (416K runs) fuzz_zimwiki_roundtrip (390K runs) | – | – |
-| xwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_xwiki_reader (489K runs) fuzz_xwiki_roundtrip (427K runs) | – | – |
 | twiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_twiki_reader (1017K runs) fuzz_twiki_roundtrip (442K runs) | – | – |
 | tikiwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_tikiwiki_reader (429K runs) fuzz_tikiwiki_roundtrip (425K runs) | – | – |
 | jira-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_jira_reader (416K runs) fuzz_jira_roundtrip (333K runs) | – | – |

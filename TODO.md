@@ -20,6 +20,70 @@ and not being retracted — only the construct-list-completeness component of it
 
 ---
 
+**2026-07-30 (second pass): cross-API harness wired for 4 more formats (xwiki, zimwiki,
+markua, muse); 8 new tracked defects found, including a `parse()`-level bug shared verbatim
+between two crates.** Follow-up to the first 2026-07-30 entry below, which left xwiki,
+zimwiki, markua, and muse in `streaming_harness::NOT_YET_AUDITED`. This pass moved all four
+into real, fixture-driven `CAPABILITIES` entries. Full per-format, per-API breakdown is in
+`docs/format-audit.md`'s "Cross-API harness inventory" subsection; the executable source of
+truth is `crates/rescribe-fixtures/src/streaming_harness.rs::CAPABILITIES` and
+`KNOWN_FAILURES` (29 entries total, 8 new this pass).
+
+Headline findings:
+- **A `parse()`-level bug, not a streaming-specific one, found identically in two
+  independently-written crates**: `zimwiki::parse::Parser::parse_list` and
+  `markua::parse::Parser::parse_list` both accept either a bullet or a numbered marker in
+  the same loop with no check for a marker-type transition, and both skip blank lines with
+  `continue` instead of breaking on them. The result: a blank-line-separated unordered list
+  immediately followed by an ordered list (`fixtures/zimwiki/oracle`, `fixtures/markua/oracle`)
+  gets merged by the *whole-document* `parse()` into ONE `Block::List`, tagged with the first
+  item's `ordered` value — silently mislabeling the later numbered items as unordered. This
+  is not a `StreamingParser` regression: `StreamingParser`'s blank-line block splitter
+  hard-splits at that same blank line *before* re-parsing each half in isolation, so it
+  actually produces the more correct two-list output — the adversarial-chunking equivalence
+  check catches this as a *divergence from `events()`*, but the underlying defect is in
+  `parse()`. Needs a fix in both crates' `parse_list` (track the active marker type and break
+  on a transition, and break rather than skip on a blank line unless immediately followed by
+  a continuation at the same indent).
+- **xwiki's `events()` is the first genuinely lazy pull-iterator found in this format
+  family**: `EventIter::next()` walks a frame stack on demand (events.rs:168-385), unlike
+  zimwiki/markua/muse's eager materialize-then-walk. Confirmed by reading the source, not
+  assumed from the crate's docs.
+- **Two more architecturally-hollow `StreamingParser`s**, confirmed by reading `feed()`/
+  `finish()` directly (not inferred from doc comments alone): xwiki's and muse's both do a
+  bare `buf.extend_from_slice()` in `feed()` with all parsing deferred to `finish()`. Verified
+  via this harness's `ObservableSink`/handler incrementality probe (feed half the input,
+  assert the handler received at least one event before `finish()` — it received zero for
+  both). zimwiki's and markua's `StreamingParser`s are, by contrast, genuinely incremental
+  (real per-line block-boundary state machines) — confirmed by reading `feed_line()`.
+- **Four architecturally-hollow streaming `Writer`s** (xwiki, zimwiki, markua, muse), all
+  confirmed via the same incrementality probe: `write_event()` only pushes to a `Vec`, all
+  reconstruction + emission happens in `finish()`.
+- **muse-fmt's streaming writer has a genuine `Event`-expressiveness gap**, the same bug
+  class already tracked for org-fmt/texinfo: `MuseEvent` has no variant carrying document
+  metadata, so `DocBuilder::finish` always reconstructs with `..Default::default()`,
+  permanently dropping `#title`/`#author`/`#date`/`#desc`/`#keywords`. Unlike markua's
+  superficially similar `title`/`author`/`description` fields (which `parse()` never
+  populates from any syntax at all, so the analogous drop in markua's writer is unreachable
+  via any fixture), muse-fmt's `parse()` genuinely parses these directives
+  (`parse.rs:240-249`), so this is reachable via the `document-header` fixture and was
+  confirmed failing before being added to `KNOWN_FAILURES`.
+- **markua's `Writer` has a real `Figure`/`Caption` reconstruction bug** (`EndFigure` takes
+  the wrong buffered child as the figure body and always resets `caption: vec![]`), found by
+  reading `writer.rs:315-330` — but it is *not* reachable via any fixture, because
+  `markua::parse()` never constructs `Block::Figure` from any Markua syntax (confirmed by
+  grepping `parse.rs`/`emit.rs` for the only two call sites, both non-parsing). Documented in
+  the `KnownFailure` description for the record; not pinned by a fixture, since no valid
+  `input.markua` can reach it.
+
+Not fixed here (by design — this was a wiring/audit pass, not a fix pass): none of the 8 new
+`KnownFailure`s were fixed; each needs its own fix pass in its `-fmt` crate. The
+`parse_list()` block-merging bug (zimwiki + markua) is the highest-value fix candidate since
+it's a real parser correctness bug independent of streaming, not just an architectural
+streaming-API gap. 45 formats remain in `NOT_YET_AUDITED`.
+
+---
+
 **2026-07-30: cross-API harness wired for 11 more formats (org, html, asciidoc, djot,
 texinfo, fb2, textile, commonmark, gfm, markdown); 18 new tracked defects found.** Follow-up
 to the 2026-07-29 entry below — that session left ~55 formats in
