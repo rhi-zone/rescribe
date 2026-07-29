@@ -26,11 +26,15 @@ use std::io::{BufWriter, Seek, Write};
 use std::path::Path;
 
 // Content types
-const CT_WORKBOOK: &str =
+//
+// `pub(crate)` on the constants below: the streaming writer (`streaming.rs`)
+// needs the same content-type and relationship-type strings as the builder
+// path, so they are shared rather than duplicated.
+pub(crate) const CT_WORKBOOK: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
-const CT_WORKSHEET: &str =
+pub(crate) const CT_WORKSHEET: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
-const CT_SHARED_STRINGS: &str =
+pub(crate) const CT_SHARED_STRINGS: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml";
 const CT_STYLES: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml";
 const CT_COMMENTS: &str =
@@ -52,11 +56,11 @@ const CT_PIVOT_CACHE_REC: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml";
 
 // Relationship types
-const REL_OFFICE_DOCUMENT: &str =
+pub(crate) const REL_OFFICE_DOCUMENT: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
-const REL_WORKSHEET: &str =
+pub(crate) const REL_WORKSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
-const REL_SHARED_STRINGS: &str =
+pub(crate) const REL_SHARED_STRINGS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings";
 const REL_STYLES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
@@ -80,7 +84,7 @@ const REL_PIVOT_CACHE_REC: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords";
 
 // Namespaces
-const NS_SPREADSHEET: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+pub(crate) const NS_SPREADSHEET: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const NS_RELATIONSHIPS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
@@ -4236,29 +4240,7 @@ impl WorkbookBuilder {
 
     /// Serialize shared strings table to XML using generated types.
     fn serialize_shared_strings(&self) -> Result<Vec<u8>> {
-        let count = self.shared_strings.len() as u32;
-        let sst = types::SharedStrings {
-            count: Some(count),
-            unique_count: Some(count),
-            si: self
-                .shared_strings
-                .iter()
-                .map(|s| types::RichString {
-                    cell_type: Some(s.clone()),
-                    reference: Vec::new(),
-                    r_ph: Vec::new(),
-                    phonetic_pr: None,
-                    #[cfg(feature = "extra-children")]
-                    extra_children: Vec::new(),
-                })
-                .collect(),
-            extension_list: None,
-            #[cfg(feature = "extra-attrs")]
-            extra_attrs: Default::default(),
-            #[cfg(feature = "extra-children")]
-            extra_children: Vec::new(),
-        };
-        serialize_with_namespaces(&sst, "sst")
+        serialize_shared_strings_list(&self.shared_strings)
     }
 }
 
@@ -4810,13 +4792,110 @@ const NS_WORKBOOK_DECLS: &[(&str, &str)] =
     &[("xmlns", NS_SPREADSHEET), ("xmlns:r", NS_RELATIONSHIPS)];
 
 /// Serialize a ToXml value with namespace declarations and XML declaration.
-fn serialize_with_namespaces(value: &impl ToXml, tag: &str) -> Result<Vec<u8>> {
+pub(crate) fn serialize_with_namespaces(value: &impl ToXml, tag: &str) -> Result<Vec<u8>> {
     serialize_with_ns_decls(value, tag, NS_DECLS)
 }
 
 /// Serialize a workbook with both spreadsheet and relationship namespaces.
-fn serialize_workbook(value: &impl ToXml) -> Result<Vec<u8>> {
+pub(crate) fn serialize_workbook(value: &impl ToXml) -> Result<Vec<u8>> {
     serialize_with_ns_decls(value, "workbook", NS_WORKBOOK_DECLS)
+}
+
+/// Build a minimal `types::Workbook` naming only sheets.
+///
+/// Used by the streaming writer ([`crate::streaming::SmlWriter`]), which does not
+/// support defined names, workbook protection, or other workbook-level features
+/// exposed by [`WorkbookBuilder`] — its event surface (`SmlEvent`) only carries
+/// sheet/row/cell structure. This mirrors [`WorkbookBuilder::build_workbook`]'s
+/// sheet-list construction so both writers produce identically-shaped
+/// `xl/workbook.xml` output for the part they both support.
+pub(crate) fn build_minimal_workbook(sheet_names: &[String]) -> types::Workbook {
+    let sheets: Vec<types::Sheet> = sheet_names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| types::Sheet {
+            name: name.clone(),
+            sheet_id: (i + 1) as u32,
+            #[cfg(feature = "sml-structure")]
+            state: None,
+            id: format!("rId{}", i + 1),
+            #[cfg(feature = "extra-attrs")]
+            extra_attrs: Default::default(),
+        })
+        .collect();
+
+    types::Workbook {
+        conformance: None,
+        file_version: None,
+        #[cfg(feature = "sml-protection")]
+        file_sharing: None,
+        workbook_pr: None,
+        #[cfg(feature = "sml-protection")]
+        workbook_protection: None,
+        book_views: None,
+        sheets: Box::new(types::Sheets {
+            sheet: sheets,
+            #[cfg(feature = "extra-children")]
+            extra_children: Vec::new(),
+        }),
+        #[cfg(feature = "sml-formulas-advanced")]
+        function_groups: None,
+        #[cfg(feature = "sml-external")]
+        external_references: None,
+        defined_names: None,
+        #[cfg(feature = "sml-formulas")]
+        calc_pr: None,
+        #[cfg(feature = "sml-external")]
+        ole_size: None,
+        #[cfg(feature = "sml-structure")]
+        custom_workbook_views: None,
+        #[cfg(feature = "sml-pivot")]
+        pivot_caches: None,
+        #[cfg(feature = "sml-metadata")]
+        smart_tag_pr: None,
+        #[cfg(feature = "sml-metadata")]
+        smart_tag_types: None,
+        #[cfg(feature = "sml-external")]
+        web_publishing: None,
+        file_recovery_pr: Vec::new(),
+        #[cfg(feature = "sml-external")]
+        web_publish_objects: None,
+        #[cfg(feature = "sml-extensions")]
+        extension_list: None,
+        #[cfg(feature = "extra-attrs")]
+        extra_attrs: Default::default(),
+        #[cfg(feature = "extra-children")]
+        extra_children: Vec::new(),
+    }
+}
+
+/// Serialize a shared-string table (`xl/sharedStrings.xml`) from a plain string list.
+///
+/// Used by both [`WorkbookBuilder::serialize_shared_strings`] and the streaming
+/// writer, which builds its table incrementally as distinct strings arrive.
+pub(crate) fn serialize_shared_strings_list(strings: &[String]) -> Result<Vec<u8>> {
+    let count = strings.len() as u32;
+    let sst = types::SharedStrings {
+        count: Some(count),
+        unique_count: Some(count),
+        si: strings
+            .iter()
+            .map(|s| types::RichString {
+                cell_type: Some(s.clone()),
+                reference: Vec::new(),
+                r_ph: Vec::new(),
+                phonetic_pr: None,
+                #[cfg(feature = "extra-children")]
+                extra_children: Vec::new(),
+            })
+            .collect(),
+        extension_list: None,
+        #[cfg(feature = "extra-attrs")]
+        extra_attrs: Default::default(),
+        #[cfg(feature = "extra-children")]
+        extra_children: Vec::new(),
+    };
+    serialize_with_namespaces(&sst, "sst")
 }
 
 /// Serialize a ToXml value with custom namespace declarations and XML declaration.
