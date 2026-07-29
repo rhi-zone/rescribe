@@ -2090,16 +2090,49 @@ function `build()` uses, on top of that reconstruction. Fixed:
   harness's own event clone-and-drop baseline): allocations `3,560 → 425` @50 sections,
   `35,914 → 4,029` @500, `143,916 → 16,031` @2000 — ~9x fewer, and now **0.73x of
   `build()`'s**, so allocation count is no longer what separates the two paths.
-- [ ] **Residual wall-clock gap: ~2.6-2.7x vs `build()` (was 5.6-6.0x on the same harness;
-  4.4-4.6x vs 7.5-8.0x if the event clone-and-drop baseline is left in on both sides).**
-  This is *not* an allocation problem any more (see above) — it is per-event `match`
-  dispatch plus frame-stack push/pop, i.e. the intrinsic cost of the event API versus a
-  direct recursive tree walk. Closing it further would mean attacking dispatch itself
-  (e.g. a flattened event decoder, or specialising the hot Text/Start/End arms), which is a
-  different kind of work with a much worse effort/return ratio than the buffer fix was.
-  **Recommend accepting and documenting this as the event-API tax unless a caller
-  demonstrates it matters** — the streaming writer's reason to exist is the
-  `O(largest block + nesting depth)` memory bound, which it delivers.
+- [x] **Residual wall-clock gap — profiled for real, 2026-07-29 (was asserted, not
+  measured).** Used `perf record`/`perf report` (`nix-shell -p linuxPackages.perf`; not in
+  the project flake) with `--call-graph fp` (dwarf unwinding produced corrupted stacks in
+  this sandbox) against a temporary release build with `CARGO_PROFILE_RELEASE_STRIP=none`
+  (the workspace `.cargo/config.toml` sets `strip = "symbols"` for release, which silently
+  makes `perf report` useless otherwise — worth remembering for the next crate profiled).
+  Re-measured ratio on this harness/machine: **~1.5-2.0x, not 2.6-2.7x** (different harness,
+  construct mix and machine than the original figure; not a claim the original number was
+  wrong, just what this investigation's own harness produces). Breakdown: ~29-36% of
+  `Writer`-loop self-time in `Vec<Frame>::push`, ~18-22% in buffer-growth/reindent memmove,
+  everything else (dispatch, `escape_text`, table border emission) under 3% each — i.e.
+  `Vec<Frame>::push` (writing the `Frame` enum's bytes once per event that opens a
+  construct) is the one real, measured hotspot, not "dispatch" broadly. **Attempted fix**
+  (shrink `Frame`'s widest variants — `CloseDelim` enum replacing `Inline.close: &'static
+  str`, dead `content` field removed from `Heading`/`Blockquote` since it's provably always
+  `== mark`): `size_of::<Frame>()` measured 40 bytes **before and after every combination
+  tried**, because `Table`/`TableRow`/`Link` are tied (or nearly tied) for the size
+  ceiling, so shrinking any one variant doesn't lower the enum's total size — confirmed via
+  a temporary `size_of` test, removed before commit. Two other attempted shrinks
+  (`Link.url: String → Box<str>`; `Table.rows`/`TableRow.cells` boxed) were reverted:
+  `into_boxed_str()` forces a shrink-realloc when `cap != len` (net allocation regression
+  for zero measured benefit), and `Box::new(vec![])` allocates immediately even for an
+  empty `Vec` (a real allocation-count regression, caught by the existing
+  `test_writer_no_subtree_reconstruction_blowup` guard + a manual size check before commit,
+  not by inspection). Kept: `CloseDelim` (a real representational improvement — 6-valued
+  field no longer stored as a 16-byte fat pointer — regardless of the null perf result) and
+  the dead-field removal (pure hygiene, not a behavior change). **Re-measured wall-clock
+  after the kept changes: no change**, consistent with `size_of::<Frame>()` being
+  byte-identical — a validated null result, not a manufactured improvement. **Conclusion,
+  reported honestly: the residual gap is structural to the event-driven writer shape, not
+  a contained rst-fmt bug** — a direct tree walk gets "what construct am I in" for free
+  from the CPU call stack; an event-driven writer surviving across separate
+  `write_event()` calls must reify that as an explicit `Vec<Frame>` stack with its own
+  push/pop and discriminant tag, which a recursive walker never pays. Actually lowering
+  `Frame`'s size floor would need `Link`/`Table` to stop storing their payload inline (e.g.
+  index into a side arena) — real architectural work, correctly out of scope here, not
+  attempted. Full writeup with the perf methodology (including the two sandbox-specific
+  obstacles — stripped binary, dwarf-unwind corruption — and their fixes, useful for
+  profiling any of the other ~25 crates next) at
+  `/tmp/claude-1000/-home-me-git-rhizone-rescribe/7cb7fb03-d716-4725-8ce3-b1417c88f03e/scratchpad/rst-fmt-writer-profile.md`.
+  **Recommend accepting this as the event-API tax** — the streaming writer's reason to
+  exist is the `O(largest block + nesting depth)` memory bound, which it delivers, and the
+  allocation-count discriminator (the thing that *was* fixable) is already fixed.
 - [x] `test_writer_byte_identical_to_builder` added (commit `f87b3d62ef`): the streaming
   path must produce **byte-identical** output to `build()` across 18 construct-mix inputs.
   The pre-existing tests only compared re-parsed *block shapes*, which cannot catch

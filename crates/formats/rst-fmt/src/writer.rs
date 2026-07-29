@@ -75,6 +75,47 @@ enum BlockKind {
     Other,
 }
 
+/// The closing delimiter for a `Frame::Inline` span. Only six distinct
+/// closing strings ever occur (emphasis/strong/roles/quotes/inline footnote
+/// defs), so this stores the discriminant instead of a `&'static str` (a
+/// 16-byte fat pointer for what is really a 6-way choice). This shrinks the
+/// `Inline` variant's own payload — `Inline` is the hottest, most
+/// frequently-pushed `Frame` variant (one push per open/close of any inline
+/// markup span), and profiling attributed a large share of `Writer::process`
+/// time to `Vec<Frame>::push`'s write of the enum's bytes.
+///
+/// **Measured, not assumed:** this alone does not shrink `size_of::<Frame>()`
+/// (still 40 bytes; `Table`/`TableRow`/`Link` independently tie for the
+/// payload ceiling, and Rust's enum layout adds a full discriminant word
+/// rather than niche-packing across 19 variants), so re-measured wall-clock
+/// showed no change either. Kept anyway because it is a strictly more
+/// accurate representation of a genuinely 6-valued field with no downside —
+/// not claimed as a performance fix. See `docs/format-audit.md` /
+/// `rst-fmt-writer-profile.md` for the full investigation and why closing
+/// the remaining gap needs an architectural change, not a variant shrink.
+#[derive(Clone, Copy)]
+enum CloseDelim {
+    Star,
+    DoubleStar,
+    Backtick,
+    SingleQuote,
+    DoubleQuote,
+    Empty,
+}
+
+impl CloseDelim {
+    fn as_str(self) -> &'static str {
+        match self {
+            CloseDelim::Star => "*",
+            CloseDelim::DoubleStar => "**",
+            CloseDelim::Backtick => "`",
+            CloseDelim::SingleQuote => "'",
+            CloseDelim::DoubleQuote => "\"",
+            CloseDelim::Empty => "",
+        }
+    }
+}
+
 /// Streaming RST writer.
 ///
 /// Feed events with [`write_event`](Writer::write_event); each top-level
@@ -315,7 +356,7 @@ impl<W: Write> Writer<W> {
     /// Open an inline span whose opening delimiter is already known: write it
     /// straight through and record the marks needed to undo it if the span
     /// turns out to have no valid enclosing context.
-    fn open_span(&mut self, open: &str, close: &'static str) {
+    fn open_span(&mut self, open: &str, close: CloseDelim) {
         let mark = self.out.len();
         let plain_mark = self.plain.len();
         if self.accepts_inline() {
@@ -335,7 +376,7 @@ impl<W: Write> Writer<W> {
             plain_mark,
         }) = self.stack.pop()
         {
-            self.push_out(close);
+            self.push_out(close.as_str());
             self.inline_end(mark, plain_mark);
         }
     }
@@ -362,14 +403,19 @@ impl<W: Write> Writer<W> {
                 }
             }
             Event::StartHeading { level } => {
+                // `block_start(BlockKind::Other)` never writes anything (see
+                // its `BlockKind::Other => {}` arm), so the content start is
+                // always exactly `mark` — no separate field needed. Pure dead-
+                // field removal (see `Frame::Heading`'s doc comment): it does
+                // not lower `size_of::<Frame>()`, since other variants tie
+                // for the size ceiling — kept for correctness hygiene, not a
+                // measured perf win.
                 let mark = self.block_start(BlockKind::Other);
-                let content = self.out.len();
                 let plain_mark = self.plain.len();
                 self.heading_depth += 1;
                 self.stack.push(Frame::Heading {
                     level,
                     mark,
-                    content,
                     plain_mark,
                 });
             }
@@ -377,10 +423,10 @@ impl<W: Write> Writer<W> {
                 if let Some(Frame::Heading {
                     level,
                     mark,
-                    content,
                     plain_mark,
                 }) = self.stack.pop()
                 {
+                    let content = mark;
                     self.heading_depth -= 1;
                     // Underline width comes from the *plain* text's byte
                     // length (matching `collect_text_from_inlines`), never the
@@ -417,13 +463,14 @@ impl<W: Write> Writer<W> {
                 }
             }
             Event::StartBlockquote => {
+                // Same redundancy as `Heading` above: `BlockKind::Other`
+                // writes nothing at `block_start`, so content start == mark.
                 let mark = self.block_start(BlockKind::Other);
-                let content = self.out.len();
-                self.stack.push(Frame::Blockquote { mark, content });
+                self.stack.push(Frame::Blockquote { mark });
             }
             Event::EndBlockquote => {
-                if let Some(Frame::Blockquote { mark, content }) = self.stack.pop() {
-                    self.reindent(content);
+                if let Some(Frame::Blockquote { mark }) = self.stack.pop() {
+                    self.reindent(mark);
                     self.push_out("\n");
                     self.block_end(mark);
                 }
@@ -667,19 +714,19 @@ impl<W: Write> Writer<W> {
             Event::SoftBreak | Event::LineBreak => {
                 self.push_inline("\n", " ");
             }
-            Event::StartEmphasis => self.open_span("*", "*"),
+            Event::StartEmphasis => self.open_span("*", CloseDelim::Star),
             Event::EndEmphasis => self.close_span(),
-            Event::StartStrong => self.open_span("**", "**"),
+            Event::StartStrong => self.open_span("**", CloseDelim::DoubleStar),
             Event::EndStrong => self.close_span(),
-            Event::StartStrikeout => self.open_span(":strike:`", "`"),
+            Event::StartStrikeout => self.open_span(":strike:`", CloseDelim::Backtick),
             Event::EndStrikeout => self.close_span(),
-            Event::StartUnderline => self.open_span(":underline:`", "`"),
+            Event::StartUnderline => self.open_span(":underline:`", CloseDelim::Backtick),
             Event::EndUnderline => self.close_span(),
-            Event::StartSubscript => self.open_span(":sub:`", "`"),
+            Event::StartSubscript => self.open_span(":sub:`", CloseDelim::Backtick),
             Event::EndSubscript => self.close_span(),
-            Event::StartSuperscript => self.open_span(":sup:`", "`"),
+            Event::StartSuperscript => self.open_span(":sup:`", CloseDelim::Backtick),
             Event::EndSuperscript => self.close_span(),
-            Event::StartSmallCaps => self.open_span(":sc:`", "`"),
+            Event::StartSmallCaps => self.open_span(":sc:`", CloseDelim::Backtick),
             Event::EndSmallCaps => self.close_span(),
             Event::Code(cow) => {
                 self.push_wrapped("``", &cow, "``", &cow);
@@ -728,15 +775,18 @@ impl<W: Write> Writer<W> {
                     self.push_out("] ");
                 }
                 self.stack.push(Frame::Inline {
-                    close: "",
+                    close: CloseDelim::Empty,
                     mark,
                     plain_mark,
                 });
             }
             Event::EndFootnoteDefInline => self.close_span(),
             Event::StartQuoted { quote_type } => {
-                let quote = if quote_type == "single" { "'" } else { "\"" };
-                self.open_span(quote, quote);
+                if quote_type == "single" {
+                    self.open_span("'", CloseDelim::SingleQuote);
+                } else {
+                    self.open_span("\"", CloseDelim::DoubleQuote);
+                }
             }
             Event::EndQuoted => self.close_span(),
             Event::MathInline { source } => {
@@ -751,7 +801,7 @@ impl<W: Write> Writer<W> {
                     self.push_out(":`");
                 }
                 self.stack.push(Frame::Inline {
-                    close: "`",
+                    close: CloseDelim::Backtick,
                     mark,
                     plain_mark,
                 });
@@ -814,15 +864,16 @@ enum Frame {
     Paragraph {
         mark: usize,
     },
+    /// `content` is not stored: `block_start(BlockKind::Other)` never writes
+    /// anything, so the content start always equals `mark`.
     Heading {
         level: i64,
         mark: usize,
-        content: usize,
         plain_mark: usize,
     },
+    /// See `Heading` above: content start == mark, so only `mark` is kept.
     Blockquote {
         mark: usize,
-        content: usize,
     },
     List {
         ordered: bool,
@@ -875,9 +926,11 @@ enum Frame {
         content: usize,
     },
     /// Any inline span whose closing delimiter is a fixed string known when
-    /// the span opens (emphasis, strong, roles, quotes, inline footnote defs).
+    /// the span opens (emphasis, strong, roles, quotes, inline footnote
+    /// defs) — see [`CloseDelim`]'s doc comment for why `close` is that
+    /// small enum rather than `&'static str`.
     Inline {
-        close: &'static str,
+        close: CloseDelim,
         mark: usize,
         plain_mark: usize,
     },
