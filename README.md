@@ -73,6 +73,19 @@ cargo test
 cd docs && bun dev
 ```
 
+The Rust toolchain (rustc/cargo/rustfmt/clippy) is pinned in `rust-toolchain.toml` and
+built into the dev shell via `flake.nix`, so `cargo fmt` produces identical output for
+everyone using `nix develop`/direnv, and CI (`.github/workflows/ci.yml`) is pinned to
+the same version. Formatting options live in `rustfmt.toml`.
+
+One-time local setup so `git blame` ignores the whole-tree reformat commits listed in
+`.git-blame-ignore-revs` (GitHub's blame view already does this automatically, no setup
+needed there):
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ## Part of rhi ecosystem
 
 rescribe is part of the [rhi ecosystem](https://rhi.zone) - a collection of tools for data transformation and content processing.

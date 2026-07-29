@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
-# No rustfmt.toml in this repo: pass --edition explicitly (bare rustfmt defaults to 2015).
+# Edition comes from rustfmt.toml now; rustfmt version comes from rust-toolchain.toml
+# via the flake's dev shell (see flake.nix). Both must be used through `nix develop`
+# (or direnv) so this matches what CI and other contributors produce.
 STAGED_RS="$(git diff --cached --name-only --diff-filter=ACMR -- '*.rs')"
 if [ -n "$STAGED_RS" ]; then
   echo "Formatting staged Rust files..."
-  echo "$STAGED_RS" | xargs -r rustfmt --edition 2024
+  echo "$STAGED_RS" | xargs -r rustfmt
   echo "$STAGED_RS" | xargs -r git add --
 else
   echo "No staged Rust files — skipping rustfmt."

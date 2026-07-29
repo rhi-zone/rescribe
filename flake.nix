@@ -15,6 +15,18 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         fenixPkgs = fenix.packages.${system};
+        # Pinned stable toolchain, driven by rust-toolchain.toml. This is the single
+        # source of truth for the Rust/rustfmt/clippy version: nixpkgs' own rustc
+        # tracks nixpkgs-unstable and silently drifts whenever `flake.lock` is
+        # updated, which previously caused a bare `cargo fmt` to reformat the whole
+        # tree. Building the toolchain from the toml file via fenix instead means
+        # the version only changes when someone deliberately bumps
+        # rust-toolchain.toml (and CI is pinned to the same version — see
+        # .github/workflows/ci.yml).
+        rustToolchain = fenixPkgs.fromToolchainFile {
+          file = ./rust-toolchain.toml;
+          sha256 = "sha256-SDu4snEWjuZU475PERvu+iO50Mi39KVjqCeJeNvpguU=";
+        };
         # Nightly toolchain for fuzzing
         nightlyToolchain = fenixPkgs.latest.withComponents [
           "cargo"
@@ -27,12 +39,9 @@
         devShells.default = pkgs.mkShell rec {
           buildInputs = with pkgs; [
             stdenv.cc.cc
-            # Rust toolchain
-            rustc
-            cargo
+            # Rust toolchain (pinned — see rust-toolchain.toml)
+            rustToolchain
             rust-analyzer
-            clippy
-            rustfmt
             # Fast linker for incremental builds
             mold
             clang

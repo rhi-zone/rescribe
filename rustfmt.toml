@@ -1,0 +1,6 @@
+# Pins the edition rustfmt formats against. Without this, bare `rustfmt`/`cargo fmt`
+# defaults to edition 2015 formatting rules, which disagrees with this workspace
+# (edition 2024, see Cargo.toml [workspace.package]). The pre-commit hook used to
+# pass `--edition 2024` explicitly on every invocation to work around this; this file
+# makes that unnecessary and makes `cargo fmt` (no flags) do the right thing too.
+edition = "2024"
