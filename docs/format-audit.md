@@ -310,23 +310,33 @@ audited this format's cross-API status yet" placeholder, not a claim of absence 
 | docx | KnownFailure: `events()` drops the `Text` event and reverses `EndRun`/`EndParagraph` order for the common `<w:p><w:r><w:t>` shape (no `<w:pPr>`) — a `read_props()`/`queue()` clobber bug | NotYetWired | NotYetWired |
 | pptx | KnownFailure: `events()` cannot reach slide text at all (`<p:txBody>` unhandled in `dispatch_start`); shares docx's Text-drop/reversal bug once that's fixed | NotYetWired | NotYetWired |
 | xlsx | Wired | NotYetWired | Wired |
+| t2t | Wired (validates the AST→event expansion layer; `events()` is `parse()`+lazy-frame-stack-walk) | KnownFailure: `emit_block()` re-parses each block in isolation — splits a multi-item `DefinitionList` into one list per item, and spuriously re-triggers `try_parse_header()` on any 3+ line block that looks like a header out of context | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()`; also always drops `title`/`author`/`date` since `Event` has no variant carrying them |
+| pod | Wired (validates the AST→event expansion layer) | KnownFailure: explicitly self-documented buffer-then-finish (`batch.rs`: "POD documents are always small enough to buffer fully"); does NOT diverge from `events()` under adversarial chunking (finish() parses the whole buffered input the same way, no per-block re-parse) — only the incrementality probe fails | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()`; content round-trips correctly, only the incrementality probe fails |
+| haddock | Wired (validates the AST→event expansion layer) | Wired — genuinely incremental with no divergence found: every block-termination rule in `parse.rs` depends only on the block's own content, never cross-block state, so isolated re-parse recovers the same boundaries | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()` |
+| fountain | Wired (validates the AST→event expansion layer; `events()` returns `OwnedEventIter`) | KnownFailure: `emit_block()` forwards every event from its own re-parse of each block, including that call's own `StartDocument`/`EndDocument` pair, so it emits one such pair per block instead of one for the whole document — diverges on the majority of fixtures; also `parse_title_page()` has no document-position guard, so a body line matching a title-page field name is misread as metadata when re-parsed in isolation | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()` |
 
-**Session tally (2026-07-30):** 11 formats moved from `NOT_YET_AUDITED` to a real, audited
-`CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark, gfm,
-markdown), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the harness's
-initial wiring. 49 formats remain in `NOT_YET_AUDITED`. `streaming_harness::KNOWN_FAILURES`
-now has 21 entries total; 18 are new from this session (the other 3 — docx/events,
-pptx/events, rst/streaming_parser — predate it). None were weakened or hidden to make a
-check pass; every divergence found a real, root-caused, tracked `KnownFailure` entry instead.
+**Session tally (2026-07-30):** 14 formats moved from `NOT_YET_AUDITED` to a real, audited
+`CAPABILITIES` entry across two passes this session — org, html, asciidoc, djot, texinfo,
+fb2, textile, commonmark, gfm, markdown in the first pass, then t2t, pod, haddock, fountain
+in a follow-up pass — on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the
+harness's initial wiring; 18 formats now have a `CAPABILITIES` row and 45 remain in
+`NOT_YET_AUDITED`. `streaming_harness::KNOWN_FAILURES` now has 28 entries total: 3 predate
+this session (docx/events, pptx/events, rst/streaming_parser), 18 came from the first pass,
+and 7 came from the t2t/pod/haddock/fountain follow-up pass (t2t streaming_parser +
+streaming_writer, pod streaming_parser + streaming_writer, haddock streaming_writer,
+fountain streaming_parser + streaming_writer). None were weakened or hidden to make a check
+pass; every divergence found a real, root-caused, tracked `KnownFailure` entry instead.
+haddock's `streaming_parser` is the one fully `Wired` (no `KnownFailure`) result found in the
+follow-up pass — unlike t2t/org/asciidoc/fountain, every haddock block-termination rule
+depends only on the block's own content, never cross-block state, so its per-block isolated
+re-parse recovers the same boundaries `events()` finds inline.
 
 ### Remaining hand-written formats (crate exists, API not started)
 
 | Crate | ast | stream | batch | w-stream | w-build |
 |-------|-----|--------|-------|----------|---------|
 | muse-fmt | ✓ | | | | ✓ |
-| t2t | ✓ | | ✓ | | ✓ |
 | markua | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_markua_reader (559K runs) fuzz_markua_roundtrip (759K runs) | – | – |
-| fountain-fmt | ✓ | | ✓ | | ✓ |
 | mediawiki-fmt | | | | | |
 | creole | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_creole_reader (842K runs) fuzz_creole_roundtrip (403K runs) | – | – |
 | dokuwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_dokuwiki_reader (628K runs) fuzz_dokuwiki_roundtrip (378K runs) | – | – |
@@ -339,8 +349,6 @@ check pass; every divergence found a real, root-caused, tracked `KnownFailure` e
 | typst (TBD) | | | | | |
 | texinfo | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed unterminated-command panic + unknown-directive infinite loop | fuzz_texinfo_reader (1.5M runs) fuzz_texinfo_roundtrip (592K runs) | – | – |
 | bbcode-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_bbcode_reader (1.3M runs) fuzz_bbcode_roundtrip (348K runs) | – | – |
-| pod-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_pod_reader (863K runs) fuzz_pod_roundtrip (375K runs) | – | – |
-| haddock-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_haddock_reader (1.1M runs) fuzz_haddock_roundtrip (415K runs) | – | – |
 | ansi-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_ansi_reader + fuzz_ansi_roundtrip | – | – |
 | man-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse | fuzz_man_reader (2M runs) fuzz_man_roundtrip (855K runs) | – | – |
 | mediawiki-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated | fuzz_mediawiki_reader (1.5M runs) fuzz_mediawiki_roundtrip (850K runs) | – | – |

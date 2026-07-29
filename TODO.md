@@ -20,6 +20,57 @@ and not being retracted — only the construct-list-completeness component of it
 
 ---
 
+**2026-07-30 (follow-up pass): cross-API harness wired for t2t, pod, haddock, fountain;
+7 new tracked defects found.** Follow-up to the entry directly below, picking 4 more names
+off `streaming_harness::NOT_YET_AUDITED`. Full per-format, per-API breakdown is in
+`docs/format-audit.md`'s "Cross-API harness inventory" table; the executable source of truth
+is `crates/rescribe-fixtures/src/streaming_harness.rs::CAPABILITIES` and `KNOWN_FAILURES`
+(28 entries total now, 7 new this pass).
+
+Headline findings:
+- **t2t-fmt StreamingParser**: `emit_block()` re-parses each accumulated block in isolation
+  (same root cause as org/asciidoc's `StreamingParser` bugs from the prior pass) — splits a
+  multi-item `DefinitionList` into one list per item (definition-list fixture), and
+  spuriously re-triggers `try_parse_header()`'s 3-line lookahead on any 3+ line block that
+  happens to look like a document header out of context (document-header fixture), producing
+  an extra spurious `StartDocument`/`EndDocument` pair.
+- **fountain-fmt StreamingParser**: the dominant bug of this pass, not an edge case — its
+  `emit_block()` forwards every event from its own per-block re-parse *verbatim*, including
+  that call's own `StartDocument`/`EndDocument` pair, with no filtering. Bulk `events()`
+  emits exactly one such pair for the whole document; `StreamingParser` emits one pair *per
+  block*, diverging on the majority of multi-block fixtures. A second, narrower defect
+  shares the re-parse-in-isolation root cause: `parse_title_page()` has no
+  document-position guard, so a body line matching a title-page field name is misread as
+  metadata when re-parsed in isolation.
+- **pod-fmt StreamingParser** is explicitly self-documented buffer-then-finish in its own
+  module doc — a different shape from t2t/fountain's per-block-reparse bug: `feed()` only
+  extends a `Vec<u8>`, all parsing happens in `finish()`, so it does NOT diverge from
+  `events()` under adversarial chunking (no per-block reparse to disagree with events()) —
+  only the incrementality probe (feed-before-finish delivery) fails.
+- **Four more architecturally hollow streaming writers** (buffer-all-events-then-emit-in-
+  `finish()`, a fake streaming API per CLAUDE.md): t2t, pod, haddock, fountain. t2t's writer
+  additionally always drops `title`/`author`/`date` since `t2t::Event` has no variant
+  carrying document-level metadata (an expressiveness gap, same class as org/texinfo/djot
+  from the prior pass) — pod/haddock/fountain's writers don't have this compounding gap.
+- **haddock-fmt StreamingParser is the one fully clean result this pass**: no `KnownFailure`
+  needed. Unlike t2t/fountain, every haddock block-termination rule in `parse.rs` depends
+  only on the content of lines within the block being scanned, never on cross-block state or
+  document position, so its per-block isolated re-parse recovers exactly the same boundaries
+  `events()` finds inline — verified empirically via the adversarial-chunking check, not
+  assumed from reading the code alone.
+- **Also noted, out of scope for this pass**: fountain-fmt's `events.rs` defines a second,
+  un-exported *borrowed* `EventIter<'a>` (distinct from the `OwnedEventIter` that
+  `fountain_fmt::events()` actually returns) that a direct reading of its `Blocks`-phase
+  match arms suggests double-emits `Event::PageBreak` and never emits a `Text` event for any
+  non-Character/Dialogue/Parenthetical block. Not wired into `CAPABILITIES` since it isn't
+  the API this harness's "events" state tracks — flagged here for a future look.
+
+Not fixed here (by design — this was a wiring/audit pass, not a fix pass): none of the 7 new
+`KnownFailure`s were fixed; each needs its own fix pass in its `-fmt` crate. 45 formats
+remain in `NOT_YET_AUDITED`.
+
+---
+
 **2026-07-30: cross-API harness wired for 11 more formats (org, html, asciidoc, djot,
 texinfo, fb2, textile, commonmark, gfm, markdown); 18 new tracked defects found.** Follow-up
 to the 2026-07-29 entry below — that session left ~55 formats in
