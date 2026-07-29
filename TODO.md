@@ -70,13 +70,50 @@ and not being retracted — only the construct-list-completeness component of it
 
   Not started, deliberately: `ooxml-sml` and `ooxml-pml` writers (see below).
 
-- **`ooxml-sml`'s writer is not incremental either — the audit entry calling it "the one
-  clean writer among the zip/OPC formats" is wrong (2026-07-29).** It is right that
-  `SmlWriter` avoids event buffering and AST-frame reconstruction, but it holds a
-  `WorkbookBuilder` and calls `sheet.set_cell(...)` per cell, so the whole workbook
-  accumulates and is written only at `finish()` — O(full document). Corrected in
-  `docs/format-audit.md`. It needs the same rework `ooxml-wml` just got; `ooxml-wml` is now
-  the in-repo proof that the zip/OPC container is not the obstacle.
+- [x] **`ooxml-sml`'s writer made genuinely incremental (2026-07-29) — resolves the previous
+  entry.** `SmlWriter` no longer holds a `WorkbookBuilder`; each `SmlEvent` is written
+  straight into the open `xl/worksheets/sheetN.xml` ZIP entry through the same fixed 64 KiB
+  output window `ooxml-wml` uses, reusing `Row`/`Cell`'s own generated
+  `ToXml::write_attrs` to open tags rather than reconstructing an AST. Measured, release
+  build, 100k rows x 3 cells (20 distinct strings), inputs prepared outside the timed
+  region:
+
+  | | peak live heap | wall time |
+  |---|---|---|
+  | before (streaming, via `WorkbookBuilder`) | 233,578,753 B (222.76 MB) | 456.9 ms |
+  | after (streaming, incremental) | 484,831 B (0.46 MB) | 137.3 ms |
+  | `WorkbookBuilder` path itself (reference) | 296,247,374 B (282.5 MB) | 390.9 ms |
+
+  481.8x less peak memory, 3.3x faster than the old streaming writer, 2.9x faster than the
+  `WorkbookBuilder` path it used to wrap. No per-tag throughput regression was hit (unlike
+  `ooxml-wml`'s intermediate attempt) — the fixed output window was applied from the start.
+
+  Genuinely deferred, O(bounded) not O(cells): `xl/workbook.xml` + `.rels` (O(sheet count) —
+  sheet list only complete once every `StartWorksheet` is seen); `xl/sharedStrings.xml`
+  (string *values* are interned incrementally with stable indices the moment each is first
+  seen — O(distinct strings) — but the part listing every distinct string can only be
+  written once streaming ends, the same bound SST dedup always costs). `<dimension>` and
+  `<row spans="...">` are omitted outright (optional per ECMA-376 §18.3.1.35, would require
+  buffering a whole sheet's cell references before the first `<row>`). Styles, charts,
+  comments, pivot tables, and merged cells have no `SmlEvent` representation at all
+  (`WorkbookBuilder`-only), so they are out of scope for this writer, not deferred by it.
+
+  Two pre-existing fidelity gaps fixed as a side effect: row attributes (including the row
+  number) and cell `style_index` were previously dropped entirely by the event-driven writer
+  (it only ever read `props.reference`/`props.cell_type`, with `StartRow { .. }` grouped
+  into a no-op match arm); both now pass through, since the incremental writer has the full
+  `Row`/`Cell` props in hand at exactly the point it needs to emit them.
+
+  Tests added: `tests/streaming_writer.rs` (round trip + attribute pass-through + SST
+  dedup), `tests/streaming_writer_memory.rs` (permanent memory-guard test, test-local
+  `#[global_allocator]`, fails if buffer-everything behavior returns),
+  `tests/bench_streaming.rs` (`#[ignore]`-gated manual throughput/memory comparison vs
+  `WorkbookBuilder`, inputs pre-built outside the timed region per
+  `docs/format-library-design.md`'s benchmarking convention).
+
+  Out of scope, separately filed: `ooxml-sml`'s reader side (`StreamingParser<H>` surface
+  does not exist yet — same boundary as `ooxml-wml`'s reader-batch gap above). `ooxml-pml`
+  untouched (see below).
 
 - **`ooxml-pml`'s writer is separately hollow *and* lossy — untouched, still open
   (2026-07-29).** Flattens shape/paragraph/table-cell text into plain strings and discards
