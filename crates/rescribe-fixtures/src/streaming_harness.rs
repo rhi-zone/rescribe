@@ -516,6 +516,44 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              buffer-then-emit streaming writer defect applies",
         ),
     },
+    // t2t's events() is `EventIter::new(parse(input).0)` (src/events.rs) — a
+    // lazy frame-stack walk of the AST parse() already built, not an
+    // independently implemented reader. Per the asciidoc precedent above,
+    // the ast_to_events-vs-events() check validates the AST->event expansion
+    // layer, not two independent parsers. See the comment above the check in
+    // tests/streaming_apis.rs.
+    FormatCapabilities {
+        format: "t2t",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "t2t::batch::StreamingParser genuinely flushes events per accumulated block as fed \
+             (not only at finish()), but emit_block() re-parses each block's text in isolation \
+             via crate::events::events(&text) — the same \"re-parse each block alone, lose \
+             cross-block context\" root cause already tracked for org-fmt/asciidoc. Two \
+             distinct fixtures expose it: definition-list, where the blank line between items \
+             (batch.rs's feed_line blank-line branch, batch.rs:143-150) ends the accumulated \
+             block, splitting one multi-item DefinitionList into two DefinitionList event pairs \
+             (the same bug class already tracked for rst/org); and document-header, where the \
+             isolated re-parse of the 3-line header block re-triggers try_parse_header() \
+             (parse.rs:70, requires >=3 lines and a non-heading/list/table/comment first line), \
+             which any 3+ line block satisfies purely by looking like a header out of context, \
+             producing a spurious extra StartDocument/EndDocument pair (Event has no metadata \
+             variant to carry the consumed header text) that events() over the whole document \
+             never produces; see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "t2t::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
+             \"This implementation buffers all events, reconstructs the AST, then emits\") — the \
+             same fake-streaming-writer pattern as textile/commonmark/org/texinfo. It also drops \
+             doc.title/author/date on every fixture with a document header: emit::emit() always \
+             writes the 3-line header verbatim from T2tDoc.title/author/date (emit.rs:9-16), but \
+             t2t::Event has no variant carrying those fields, so writer.rs's DocBuilder::finish \
+             (writer.rs:400-404) always reconstructs title: None/author: None/date: None — an \
+             Event-enum expressiveness gap, not a one-line logic bug, exposed by the \
+             document-header fixture; see TODO.md",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -531,7 +569,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "latex",
     "creole",
     "muse",
-    "t2t",
     "tikiwiki",
     "twiki",
     "vimwiki",
@@ -743,6 +780,24 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         api: "streaming_writer",
         description: "shares commonmark-fmt's buffer-then-emit streaming Writer defect (see the \
                        \"commonmark\" KnownFailure entry above)",
+    },
+    KnownFailure {
+        format: "t2t",
+        api: "streaming_parser",
+        description: "t2t::batch::StreamingParser's emit_block() re-parses each accumulated \
+                       block in isolation: a blank line splits a multi-item DefinitionList into \
+                       one StartDefinitionList/EndDefinitionList pair per item, and an isolated \
+                       3+ line block that looks like a document header re-triggers \
+                       try_parse_header(), producing a spurious extra StartDocument/EndDocument \
+                       pair events() over the whole document never produces",
+    },
+    KnownFailure {
+        format: "t2t",
+        api: "streaming_writer",
+        description: "t2t::writer::Writer buffers all events and only reconstructs the AST + \
+                       emits inside finish() — a fake streaming writer per CLAUDE.md; it also \
+                       always drops doc.title/author/date since t2t::Event has no variant \
+                       carrying them",
     },
 ];
 

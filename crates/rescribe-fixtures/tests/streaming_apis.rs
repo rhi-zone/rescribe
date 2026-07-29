@@ -3753,3 +3753,340 @@ fn commonmark_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     }
     assert_or_known_failure("commonmark", "streaming_writer", result);
 }
+
+// ---------------------------------------------------------------------------
+// t2t: events() is `EventIter::new(parse(input).0)` (src/events.rs's public
+// `events()` fn) — a lazy frame-stack walk of the AST `parse()` already
+// built, not an independently-implemented reader. Per the asciidoc precedent
+// above, the ast_to_events-vs-events() check below is real and passes, but
+// it validates the AST->event expansion layer (push_block/push_inline's
+// frame-stack walk), not two independent parsers — the check would pass by
+// construction even if `events()`'s only bug were "doesn't match its own
+// AST", since both sides start from the same `T2tDoc`.
+//
+// StreamingParser is a genuine per-block incremental parser (batch.rs's
+// feed_line/BlockState machine flushes each accumulated block via
+// emit_block() as soon as a blank line or fence boundary is seen, not only
+// at finish()) but emit_block() re-parses each block's text in isolation via
+// crate::events::events(&text) — the same "re-parse each block alone, lose
+// cross-block context" root cause already documented for org-fmt/asciidoc's
+// StreamingParsers. Two distinct fixtures expose it here: the definition-list
+// fixture, where the blank line between items ends the accumulated block
+// (see feed_line's blank-line branch, batch.rs:143-150), splitting one
+// multi-item DefinitionList into two DefinitionList event pairs (the same bug
+// class already tracked for rst/org); and document-header, where the
+// isolated re-parse of the header's own three lines re-triggers
+// `try_parse_header()` (parse.rs:70), which requires >=3 lines and a
+// non-heading/list/table/comment first line — a condition any 3+ line
+// document-header-shaped block satisfies purely by looking like one out of
+// context, producing a spurious extra StartDocument/EndDocument pair (since
+// Event has no metadata variant to carry the consumed header text) that
+// events() over the whole document never produces.
+//
+// Writer buffers all events into a Vec<OwnedEvent> and only reconstructs the
+// AST + calls emit() inside finish() (writer.rs's own module doc: "This
+// implementation buffers all events, reconstructs the AST, then emits") —
+// the same fake-streaming-writer pattern as textile/commonmark/org/texinfo.
+// It also drops doc.title/author/date on every fixture with a document
+// header: emit::emit() always writes the 3-line header verbatim from
+// T2tDoc.title/author/date (emit.rs:9-16), but t2t::Event has no variant
+// carrying those fields, so writer.rs's DocBuilder::finish (T2tDoc {
+// blocks, ..Default::default() }, writer.rs:400-404) always reconstructs
+// title: None/author: None/date: None — an Event-enum expressiveness gap,
+// not a one-line logic bug, exposed by the document-header fixture.
+// ---------------------------------------------------------------------------
+
+fn t2t_ast_to_events(doc: &t2t::T2tDoc) -> Vec<t2t::Event<'static>> {
+    let mut out = vec![t2t::Event::StartDocument];
+    for b in &doc.blocks {
+        t2t_block_events(b, &mut out);
+    }
+    out.push(t2t::Event::EndDocument);
+    out
+}
+
+fn t2t_block_events(b: &t2t::Block, out: &mut Vec<t2t::Event<'static>>) {
+    use std::borrow::Cow;
+    use t2t::{Block, Event};
+    match b {
+        Block::Paragraph { inlines, .. } => {
+            out.push(Event::StartParagraph);
+            for i in inlines {
+                t2t_inline_events(i, out);
+            }
+            out.push(Event::EndParagraph);
+        }
+        Block::Heading {
+            level,
+            numbered,
+            inlines,
+            ..
+        } => {
+            out.push(Event::StartHeading {
+                level: *level,
+                numbered: *numbered,
+            });
+            for i in inlines {
+                t2t_inline_events(i, out);
+            }
+            out.push(Event::EndHeading);
+        }
+        Block::CodeBlock { content, .. } => out.push(Event::CodeBlock {
+            content: Cow::Owned(content.clone()),
+        }),
+        Block::RawBlock { content, .. } => out.push(Event::RawBlock {
+            content: Cow::Owned(content.clone()),
+        }),
+        Block::Blockquote { children, .. } => {
+            out.push(Event::StartBlockquote);
+            for c in children {
+                t2t_block_events(c, out);
+            }
+            out.push(Event::EndBlockquote);
+        }
+        Block::List { ordered, items, .. } => {
+            out.push(Event::StartList { ordered: *ordered });
+            for item_blocks in items {
+                out.push(Event::StartListItem);
+                for b in item_blocks {
+                    t2t_block_events(b, out);
+                }
+                out.push(Event::EndListItem);
+            }
+            out.push(Event::EndList);
+        }
+        Block::Table { rows, .. } => {
+            out.push(Event::StartTable);
+            for row in rows {
+                out.push(Event::StartTableRow {
+                    header: row.is_header,
+                });
+                for cell in &row.cells {
+                    out.push(Event::StartTableCell);
+                    for i in cell {
+                        t2t_inline_events(i, out);
+                    }
+                    out.push(Event::EndTableCell);
+                }
+                out.push(Event::EndTableRow);
+            }
+            out.push(Event::EndTable);
+        }
+        Block::HorizontalRule { .. } => out.push(Event::HorizontalRule),
+        Block::DefinitionList { items, .. } => {
+            out.push(Event::StartDefinitionList);
+            for (term, desc) in items {
+                out.push(Event::StartDefinitionTerm);
+                for i in term {
+                    t2t_inline_events(i, out);
+                }
+                out.push(Event::EndDefinitionTerm);
+                out.push(Event::StartDefinitionDesc);
+                for b in desc {
+                    t2t_block_events(b, out);
+                }
+                out.push(Event::EndDefinitionDesc);
+            }
+            out.push(Event::EndDefinitionList);
+        }
+    }
+}
+
+fn t2t_inline_events(i: &t2t::Inline, out: &mut Vec<t2t::Event<'static>>) {
+    use std::borrow::Cow;
+    use t2t::{Event, Inline};
+    match i {
+        Inline::Text(s, _) => out.push(Event::Text(Cow::Owned(s.clone()))),
+        Inline::Bold(children, _) => {
+            out.push(Event::StartBold);
+            for c in children {
+                t2t_inline_events(c, out);
+            }
+            out.push(Event::EndBold);
+        }
+        Inline::Italic(children, _) => {
+            out.push(Event::StartItalic);
+            for c in children {
+                t2t_inline_events(c, out);
+            }
+            out.push(Event::EndItalic);
+        }
+        Inline::Underline(children, _) => {
+            out.push(Event::StartUnderline);
+            for c in children {
+                t2t_inline_events(c, out);
+            }
+            out.push(Event::EndUnderline);
+        }
+        Inline::Strikethrough(children, _) => {
+            out.push(Event::StartStrikethrough);
+            for c in children {
+                t2t_inline_events(c, out);
+            }
+            out.push(Event::EndStrikethrough);
+        }
+        Inline::Code(s, _) => out.push(Event::Code(Cow::Owned(s.clone()))),
+        Inline::Link { url, children, .. } => {
+            out.push(Event::StartLink {
+                url: Cow::Owned(url.clone()),
+            });
+            for c in children {
+                t2t_inline_events(c, out);
+            }
+            out.push(Event::EndLink);
+        }
+        Inline::Image { url, .. } => out.push(Event::Image {
+            src: Cow::Owned(url.clone()),
+        }),
+        Inline::LineBreak(_) => out.push(Event::LineBreak),
+        Inline::SoftBreak(_) => out.push(Event::SoftBreak),
+        Inline::Verbatim(s, _) => out.push(Event::Verbatim(Cow::Owned(s.clone()))),
+        Inline::Tagged(s, _) => out.push(Event::Tagged(Cow::Owned(s.clone()))),
+    }
+}
+
+#[test]
+fn t2t_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("t2t");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&root).expect("fixtures/t2t dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = t2t::parse::parse(&input);
+        let expected = t2t_ast_to_events(&doc);
+        let actual: Vec<_> = t2t::events(&input).collect();
+        assert_eq!(
+            expected,
+            actual,
+            "events() diverged from the AST projection for fixture {}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of t2t fixtures, got {checked}"
+    );
+}
+
+/// `StreamingParser` genuinely flushes events per accumulated block as it's
+/// fed (not only at `finish()`) but re-parses each block's text in isolation
+/// via `crate::events::events()`, losing cross-block context. Checked via
+/// adversarial-chunking equivalence against `events()` over the whole input.
+#[test]
+fn t2t_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("t2t");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/t2t dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<t2t::OwnedEvent> = t2t::events(input_str).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser = t2t::batch::StreamingParser::new(|e: t2t::OwnedEvent| {
+                streamed.push(e);
+            });
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of t2t fixtures, got {checked}"
+    );
+    assert_or_known_failure("t2t", "streaming_parser", result);
+}
+
+/// `Writer` buffers all fed events into a `Vec<OwnedEvent>` and only
+/// reconstructs the AST + calls `emit()` inside `finish()` (see
+/// `crates/formats/t2t/src/writer.rs`'s own module doc). Checked via
+/// byte-identical comparison against the builder path, plus an
+/// incrementality probe.
+#[test]
+fn t2t_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("t2t");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/t2t dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = t2t::parse::parse(&input);
+        let built = t2t::emit::emit(&doc);
+
+        let mut w = t2t::writer::Writer::new(Vec::<u8>::new());
+        for e in t2t::events(&input) {
+            w.write_event(e);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of t2t fixtures, got {checked}"
+    );
+
+    // Incrementality probe: byte-identical final content (checked above)
+    // only proves correctness, not genuine streaming.
+    if result.is_ok() {
+        use t2t::Event;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = t2t::writer::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(Event::StartParagraph);
+        w.write_event(Event::Text("Hello world".to_string().into()));
+        w.write_event(Event::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after a full StartParagraph/Text/\
+                 EndParagraph sequence and before finish() — t2t::writer::Writer buffers all \
+                 events into a Vec<OwnedEvent> and only reconstructs the AST + calls emit() \
+                 inside finish() (crates/formats/t2t/src/writer.rs), so it is not a genuine \
+                 incremental streaming writer despite content round-tripping correctly"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("t2t", "streaming_writer", result);
+}

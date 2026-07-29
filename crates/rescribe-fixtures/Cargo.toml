@@ -86,6 +86,10 @@ texinfo = { workspace = true }
 fb2-fmt = { workspace = true }
 textile-fmt = { workspace = true }
 commonmark-fmt = { workspace = true, features = ["extensions"] }
+t2t = { workspace = true }
+pod-fmt = { workspace = true }
+haddock-fmt = { workspace = true }
+fountain-fmt = { workspace = true }
 zip = { workspace = true }
 
 # Bidirectional format writer harness tests
