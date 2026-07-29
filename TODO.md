@@ -1990,15 +1990,9 @@ cleanly to the original input (no escape processing). Implementation: `Frame::In
 
 **Remaining (other crates):**
 - [ ] `Cow::Borrowed` for org-fmt — inline parser uses `Span::NONE`; needs span tracking in parse_inline_content before base_offset approach works
-- [ ] `Cow::Borrowed` for rst-fmt — confirmed (2026-07-29) larger than "add span tracking to
-  parse_inline_content": `events()` shares the *entire* per-block parse path with `parse()`
-  (builds an owned `Block`/`Inline` tree, then flattens it — see the dedicated rst-fmt entry
-  above), `parse_inline_content` scans `Vec<char>` with no byte offsets at all (and no
-  escape handling, so span exclusion isn't the blocker — char-vs-byte indexing is), and ~15
-  call sites already join multi-line content into owned `String`s before it runs. Needs a
-  parallel byte-offset tokenizer (per the djot-fmt precedent below) plus span-plumbing
-  through those call sites, not a local tweak.
-- [ ] `Cow::Borrowed` for asciidoc — same as rst-fmt
+- [x] `Cow::Borrowed` for rst-fmt — **DONE (2026-07-29)**, see the dedicated entry below.
+- [ ] `Cow::Borrowed` for asciidoc — same shape as rst-fmt was; the rst-fmt commit is the
+  worked reference for the lifetime-generic-AST + byte-indexed-tokenizer pattern.
 - [ ] `Cow::Borrowed` for djot-fmt Verbatim/Math — Verbatim trimming means span ≠ content slice; would need a content-only span separate from the full backtick-construct span
 
 ### `rst-fmt` — API modes: **complete and tested, 2026-07-28 (fuzz coverage still open)**
@@ -2098,35 +2092,58 @@ function `build()` uses, on top of that reconstruction. Fixed:
   form so heading underline widths and table column widths match the emitted bytes.
   Fixtures `escaped-markup` + `escaped-whitespace`, and the two `COVERAGE.md` rows they
   close — escaping was enumerated nowhere in that checklist before.
-- [ ] **`events()` is still not zero-copy: `Cow::Borrowed` fires for exactly 0 of 50,000
-  text events (re-measured 2026-07-29 post-escape-fix; allocation count is 1.000x
-  `parse()`'s at every size).** Confirmed by reading the code, not inferred:
-  `EventIter::next` calls the *same* per-block parser `parse()` uses, builds a fully owned
-  `Block`/`Inline` tree for that top-level block, then flattens it (`expand_block`/
-  `expand_inline`) into `Event::Text(Cow::Owned(s))`. Three distinct blockers, in
-  increasing order of cost — all three must be cleared, so partial work here buys nothing:
-  1. **The AST owns its text.** `Inline::Text(String)` is public API. Anything that borrows
-     from the input needs `Inline<'a>`/`Block<'a>`/`RstDoc<'a>`, a breaking change across
-     the crate *and* `rescribe-read-rst`/`rescribe-write-rst`. Which is the real signal that
-     `events()` must stop deriving from the tree at all, per CLAUDE.md's "three independent
-     implementations sharing state-transition *functions*".
-  2. **Block extraction destroys contiguity.** `parse_paragraph` joins `line.trim()` per
-     line with `' '` into a fresh `String`, so a multi-line paragraph's text *does not exist
-     as a contiguous slice of the input* — no lifetime plumbing can borrow it. Borrowing
-     multi-line content requires emitting per-line borrowed `Text` + explicit breaks, which
-     is a **change to the event stream's shape**, hence to `test_events_matches_parse_shape`
-     and to every consumer. Single-line spans (most headings, table cells, list items, and
-     one-line paragraphs) *are* contiguous and could borrow — but only after (1).
-     ~15 call sites join or dedent before calling `parse_inline_content`.
-  3. **The tokenizer is char-indexed.** `parse_inline_content` collects a `Vec<char>` per
-     span and `find_closing`/`find_closing_char` build owned `String`s as they scan. A
-     borrowing tokenizer needs byte offsets throughout (the `djot-fmt`
-     `Frame::InlineText`/`ParseContext::line_offset_at()`/`base_offset` precedent noted
-     below is the model). Now that escapes exist, the Owned/Borrowed split has a real
-     meaning: a span borrows unless it contains an escape or a substitution reference.
-  Scoped as its own vertical-sized piece of work: it is a re-architecture of `events()` as a
-  first-class implementation rather than a projection of the tree, not a tokenizer tweak.
-  Fenced rather than half-done, per CLAUDE.md.
+- [x] **`events()` is now zero-copy where the format allows — DONE 2026-07-29.** Previously
+  `Cow::Borrowed` fired for exactly 0 of 50,000 text events; the AST used owned `String`
+  everywhere, so nothing downstream could borrow even in principle. Resolved by making the
+  AST lifetime-generic (`RstDoc<'a>`/`Block<'a>`/`Inline<'a>`/`DefinitionItem<'a>`/
+  `TableRow<'a>`/`Event<'a>` with `Cow<'a, str>` payloads) and rewriting the shared inline
+  tokenizer to be byte-indexed over the input. The three blockers scoped here resolved as:
+  1. **AST ownership** — fixed head-on by the breaking `<'a>` change (`rst-fmt` is
+     unpublished, so the cost was paid now rather than later). Note the earlier inference
+     that this "means `events()` must stop deriving from the tree" was **wrong**: once the
+     tree can borrow, deriving events from it costs nothing extra, and the two paths keep
+     sharing exactly one grammar.
+  2. **Line-joining contiguity** — kept the joined-string representation (`join_cow` /
+     `join_words` return `Cow::Borrowed` when exactly one source line survives). The
+     per-line-spans alternative was rejected on correctness, not effort: RST inline markup
+     may span a soft line break, so tokenizing per line changes what parses. Consequence:
+     single-line paragraphs/headings/table cells/list items/line-block lines/definition
+     terms borrow; genuinely multi-line ones are owned. Event-stream shape is unchanged, so
+     `test_events_matches_parse_shape` and every consumer are unaffected.
+  3. **Char-indexed tokenizer** — rewritten byte-indexed. `find_closing`/`find_closing_char`
+     now return a byte offset rather than a rebuilt `String` (they already passed escapes
+     through verbatim, so the span text was always exactly `content[start..end]` and the
+     buffer was pure waste), and `merge_text_nodes`'s post-pass became merge-on-push that
+     widens the borrowed slice for adjacent borrowed runs.
+
+  **Measured** (synthetic construct-mix doc, release, temporary global-allocator harness,
+  deleted after measuring; 200 and 2000 sections = 99KB / 1.0MB):
+
+  | | allocs before | allocs after | MB/s before | MB/s after |
+  |---|---|---|---|---|
+  | `parse()` @200 | 25,826 | 8,925 | 109.4 | 144.2 |
+  | `events()` @200 | 25,818 | 8,917 | 93.8 | 115.2 |
+  | `parse()` @2000 | 252,633 | 88,132 | 108.9 | 137.0 |
+  | `events()` @2000 | 252,621 | 88,120 | 96.6 | 118.0 |
+
+  −65% allocations and +22-32% throughput on both paths, and **93.0% of emitted spans are
+  `Cow::Borrowed`**. `parse()` and `events()` still have near-identical allocation counts —
+  expected and correct: the remaining allocations are the `Vec<Inline>`/`Vec<Block>` nodes
+  themselves, which both paths build, not per-span `String`s.
+
+  The 7% that stay owned, by construct: the multi-line wrapped paragraph (one `Text` per
+  section) and `CodeBlockContent` (the directive content collector keeps a trailing blank
+  line inside the body, so the content is joined from two collected lines). Escape-bearing
+  text runs and synthesised `:ref:`/`:doc:` URLs are the other two owned cases, absent from
+  this corpus. Pinned by `test_events_are_zero_copy_where_the_format_allows` and
+  `test_events_own_only_where_the_format_forces_it`, which assert on the `Cow` **variant**
+  (a value-only comparison would pass unchanged against a fully-owned implementation).
+
+  Side effects worth knowing: `Event::into_owned` is now an exhaustive match rather than an
+  unsafe lifetime transmute; `Writer::write_event` takes `Event<'_>` instead of requiring
+  `'static`; `BatchParser::finish` returns `RstDoc<'static>` via the new `into_owned()`;
+  and `rescribe-write-rst` now builds an RST AST that *borrows from the `Document`* instead
+  of copying every string out of it.
 
 ### DEBT: Fake-streaming writer/reader audit across all `crates/formats/` — identified 2026-07-28
 
