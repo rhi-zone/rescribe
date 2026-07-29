@@ -584,6 +584,22 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              TODO.md",
         ),
     },
+    // haddock-fmt's events() is `parse(input)` then a lazy frame-stack
+    // EventIter walk of the AST — not an independently implemented reader
+    // (same pattern as t2t/pod/asciidoc above). See the comment above the
+    // check in tests/streaming_apis.rs.
+    FormatCapabilities {
+        format: "haddock",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "haddock_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit::build() inside finish() (writer.rs's own module \
+             doc: \"This implementation buffers all events, reconstructs the AST, then emits\") \
+             — the same fake-streaming-writer pattern as t2t/pod/textile/commonmark/org/texinfo; \
+             see TODO.md",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -604,7 +620,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "vimwiki",
     "dokuwiki",
     "jira",
-    "haddock",
     "man",
     "xwiki",
     "zimwiki",
@@ -840,6 +855,13 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         api: "streaming_writer",
         description: "pod_fmt::writer::Writer buffers all events and only reconstructs the AST \
                        + calls emit::build() inside finish() — a fake streaming writer per \
+                       CLAUDE.md",
+    },
+    KnownFailure {
+        format: "haddock",
+        api: "streaming_writer",
+        description: "haddock_fmt::writer::Writer buffers all events and only reconstructs the \
+                       AST + calls emit::build() inside finish() — a fake streaming writer per \
                        CLAUDE.md",
     },
 ];
