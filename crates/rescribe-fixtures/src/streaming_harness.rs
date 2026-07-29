@@ -516,6 +516,35 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              buffer-then-emit streaming writer defect applies",
         ),
     },
+    // bbcode-fmt: events() is `parse::parse(input)` followed by a tree walk
+    // (events.rs's `events()` literally calls `crate::parse::parse(input)`
+    // then walks the resulting `BbcodeDoc`) — the same non-independent shape
+    // as html-fmt's `events_from_doc`, but with no format-spec reason
+    // forcing it, so (per the asciidoc precedent) it's still wired rather
+    // than NotApplicable. StreamingParser (batch.rs) is a genuine
+    // incremental line-buffered state machine — real Wired, confirmed by an
+    // incrementality probe and an adversarial-chunking equivalence check
+    // that holds over all 53 bbcode fixtures plus several hand-built
+    // adversarial cases (nested same-tag quotes, a same-line-closed block
+    // tag immediately followed by more text, a blank line inside an
+    // InBlock quote) tried while auditing it. The streaming Writer is the
+    // one real gap: hollow buffer-then-finish() (writer.rs's own module
+    // doc), so content matches build() but the incrementality probe fails.
+    FormatCapabilities {
+        format: "bbcode",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "bbcode_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST (events_to_doc) + calls emit() inside finish() (see \
+             crates/formats/bbcode-fmt/src/writer.rs's own module doc, \"This implementation \
+             buffers all events, reconstructs the AST, then emits\" — write_event() at \
+             writer.rs:42-44 only pushes onto self.events); content is still byte-identical to \
+             build() over all fixtures since finish() ultimately drives the same emit() path, \
+             but zero bytes reach the sink before finish() is called — not a genuine \
+             incremental streaming writer",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -542,7 +571,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "man",
     "xwiki",
     "zimwiki",
-    "bbcode",
     "markua",
     "fountain",
     "ansi",
@@ -743,6 +771,14 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         api: "streaming_writer",
         description: "shares commonmark-fmt's buffer-then-emit streaming Writer defect (see the \
                        \"commonmark\" KnownFailure entry above)",
+    },
+    KnownFailure {
+        format: "bbcode",
+        api: "streaming_writer",
+        description: "bbcode_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and \
+                       only reconstructs the AST + calls emit() inside finish() (self-admitted \
+                       in its own module doc); content matches build() exactly but the writer \
+                       is not incrementally streaming",
     },
 ];
 

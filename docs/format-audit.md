@@ -310,14 +310,17 @@ audited this format's cross-API status yet" placeholder, not a claim of absence 
 | docx | KnownFailure: `events()` drops the `Text` event and reverses `EndRun`/`EndParagraph` order for the common `<w:p><w:r><w:t>` shape (no `<w:pPr>`) — a `read_props()`/`queue()` clobber bug | NotYetWired | NotYetWired |
 | pptx | KnownFailure: `events()` cannot reach slide text at all (`<p:txBody>` unhandled in `dispatch_start`); shares docx's Text-drop/reversal bug once that's fixed | NotYetWired | NotYetWired |
 | xlsx | Wired | NotYetWired | Wired |
+| bbcode | Wired (`events()` is literally `parse::parse(input)` + a tree walk — same non-independent shape as html's, scoped honestly per the asciidoc precedent rather than declared NotApplicable, since nothing format-structural forces it) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over all 53 bbcode fixtures plus several hand-built adversarial cases | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
 
-**Session tally (2026-07-30):** 11 formats moved from `NOT_YET_AUDITED` to a real, audited
+**Session tally (2026-07-30):** 12 formats moved from `NOT_YET_AUDITED` to a real, audited
 `CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark, gfm,
-markdown), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the harness's
-initial wiring. 49 formats remain in `NOT_YET_AUDITED`. `streaming_harness::KNOWN_FAILURES`
-now has 21 entries total; 18 are new from this session (the other 3 — docx/events,
-pptx/events, rst/streaming_parser — predate it). None were weakened or hidden to make a
-check pass; every divergence found a real, root-caused, tracked `KnownFailure` entry instead.
+markdown, bbcode), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the
+harness's initial wiring. 48 formats remain in `NOT_YET_AUDITED`.
+`streaming_harness::KNOWN_FAILURES` now has 22 entries total; 19 are new from this session
+(the other 3 — docx/events, pptx/events, rst/streaming_parser — predate it). None were
+weakened or hidden to make a check pass; every divergence found a real, root-caused, tracked
+`KnownFailure` entry instead. bbcode-fmt is notable as the first format in this table whose
+`StreamingParser` was audited and found to be genuinely, not just nominally, Wired.
 
 ### Remaining hand-written formats (crate exists, API not started)
 
@@ -338,7 +341,6 @@ check pass; every divergence found a real, root-caused, tracked `KnownFailure` e
 | jira-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_jira_reader (416K runs) fuzz_jira_roundtrip (333K runs) | – | – |
 | typst (TBD) | | | | | |
 | texinfo | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed unterminated-command panic + unknown-directive infinite loop | fuzz_texinfo_reader (1.5M runs) fuzz_texinfo_roundtrip (592K runs) | – | – |
-| bbcode-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_bbcode_reader (1.3M runs) fuzz_bbcode_roundtrip (348K runs) | – | – |
 | pod-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_pod_reader (863K runs) fuzz_pod_roundtrip (375K runs) | – | – |
 | haddock-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_haddock_reader (1.1M runs) fuzz_haddock_roundtrip (415K runs) | – | – |
 | ansi-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_ansi_reader + fuzz_ansi_roundtrip | – | – |

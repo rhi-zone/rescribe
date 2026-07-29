@@ -69,6 +69,56 @@ Not fixed here (by design — this was a wiring/audit pass, not a fix pass): non
 new `KnownFailure`s were fixed; each needs its own fix pass in its `-fmt` crate. 49 formats
 remain in `NOT_YET_AUDITED`; wiring the rest is tracked, unstarted follow-up work.
 
+**2026-07-30: cross-API harness wired for bbcode-fmt — the first format audited whose
+`StreamingParser` turned out to be genuinely, not just nominally, Wired.** Follow-up to the
+entry above, picking one more format out of `NOT_YET_AUDITED`. Full breakdown in
+`docs/format-audit.md`'s "Cross-API harness inventory" table; source of truth is
+`streaming_harness::CAPABILITIES`'s new `"bbcode"` entry.
+
+- **`events()` — Wired, but honestly scoped like asciidoc's entry, not an independent
+  parser.** `bbcode_fmt::events()` (`events.rs`) literally calls `crate::parse::parse(input)`
+  and then walks the resulting `BbcodeDoc` — the same shape as html-fmt's
+  `events_from_doc(&parse(input).0)`. Unlike html-fmt there is no format-spec reason forcing
+  this (no foster-parenting/adoption-agency equivalent for BBCode), so it's a real
+  `CLAUDE.md` "three independent implementations" violation, not a documented structural
+  absence — `NotApplicable` would have been the wrong call. Wired anyway per this task's
+  brief: the check still pins the AST↔`Event` correspondence and would catch a field
+  silently dropped by the tree walk.
+- **`StreamingParser` — Wired, for real, no `KnownFailure` needed.** `batch.rs`'s
+  `StreamingParser` is a genuine incremental line-buffered state machine: `feed_line`
+  advances real state and `emit_block()` flushes events to the handler as soon as a blank
+  line or a recognized block tag's close line is seen, not only inside `finish()`. Verified
+  two ways: (1) an incrementality probe (feed a complete `[b]Hello[/b]` paragraph + blank
+  line + unterminated trailing text, confirm events arrive before `finish()`) passes; (2) the
+  adversarial-chunking equivalence check against `events()` passes over all 53 bbcode
+  fixtures. Also hand-checked several adversarial cases the fixture suite doesn't happen to
+  cover, since `detect_block_tag` (batch.rs:200-224) is visibly coarser than `parse.rs`'s
+  `is_block_start` (missing heading/`[hr]` tags; returns `None` — no boundary — when a block
+  tag's close is on the same line as its open, batch.rs:217-219): a same-line-closed
+  `[code]...[/code]` immediately followed by more text with no blank line, a blank line
+  inside an `InBlock` quote, and nested same-tag quotes (`[quote=A][quote=B]...[/quote]
+  [/quote]`) all converge with `events()`. They converge because `StreamingParser`'s
+  boundary detection is only ever coarser-or-equal to `parse()`'s, never finer — whatever
+  text it accumulates into one flushed chunk gets handed to the same `parse::parse()` call `events()`
+  itself would run on that span, re-deriving identical fine-grained structure. (The nested-
+  quote case actually converges for a less happy reason: `parse_quote`/`detect_block_tag`
+  both close on the *first* line containing `[/quote]` regardless of nesting depth, so both
+  sides independently mishandle nested quotes the same way — a real pre-existing `parse()`-
+  level bug, but out of scope for this task, which only compares `StreamingParser` against
+  `events()`, not either against a spec.)
+- **streaming `Writer` — `KnownFailure`, architecturally hollow.** `writer.rs`'s own module
+  doc says outright: "this implementation buffers all events, reconstructs the AST, then
+  emits." `write_event()` (writer.rs:42-44) only pushes onto a `Vec<OwnedEvent>`; all real
+  work (`events_to_doc` + `emit::emit`) happens inside `finish()`. Content still matches
+  `build()` byte-for-byte over all 53 fixtures (same reason as texinfo/commonmark: `finish()`
+  ultimately drives the same `emit()` path), but the incrementality probe (write a complete
+  paragraph, check for any bytes reaching the sink before `finish()`) gets zero bytes. Same
+  fix shape as `ooxml-wml`/`ooxml-sml`'s writers: rewrite `write_event()` to push into a fixed
+  output window instead of a `Vec`, driven directly off `crate::emit`'s per-node string logic.
+
+Not fixed here (by design): the streaming-writer `KnownFailure` above was found, not fixed;
+it needs its own fix pass in `bbcode-fmt`. 48 formats remain in `NOT_YET_AUDITED`.
+
 ---
 
 **2026-07-29: fixture harness extended to exercise `events()`/`StreamingParser`/streaming

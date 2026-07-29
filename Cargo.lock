@@ -3123,6 +3123,7 @@ name = "rescribe-fixtures"
 version = "0.1.0"
 dependencies = [
  "asciidoc",
+ "bbcode-fmt",
  "commonmark-fmt",
  "djot-fmt",
  "fb2-fmt",
