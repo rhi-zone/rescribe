@@ -310,14 +310,34 @@ audited this format's cross-API status yet" placeholder, not a claim of absence 
 | docx | KnownFailure: `events()` drops the `Text` event and reverses `EndRun`/`EndParagraph` order for the common `<w:p><w:r><w:t>` shape (no `<w:pPr>`) — a `read_props()`/`queue()` clobber bug | NotYetWired | NotYetWired |
 | pptx | KnownFailure: `events()` cannot reach slide text at all (`<p:txBody>` unhandled in `dispatch_start`); shares docx's Text-drop/reversal bug once that's fixed | NotYetWired | NotYetWired |
 | xlsx | Wired | NotYetWired | Wired |
+| mediawiki | Wired (validates the AST→event walk layer; `events()` is architecturally `parse()`-then-walk, like html, but unlike html's generic tree walk it makes real per-`Block`/`Inline`-variant mapping decisions, so the check has teeth) | Wired | KnownFailure: architecturally hollow — `Writer` buffers all events into a `Vec` and only reconstructs the AST + calls `emit()` in `finish()`; zero bytes reach the sink before `finish()` |
+| tikiwiki | Wired (same narrower claim as mediawiki) | Wired | KnownFailure: same hollow buffer-then-emit pattern as mediawiki |
+| twiki | Wired (same narrower claim; `events()` also has a non-standard signature — it takes `&TwikiDoc`, not raw input, an existing deviation from the vertical-completion contract, tracked in TODO.md) | Wired | KnownFailure: same hollow buffer-then-emit pattern as mediawiki |
+| vimwiki | Wired (same narrower claim) | KnownFailure: diverges from events() even under whole-input (non-adversarial) chunking — parse()/events() merge an unordered list, ordered list, and checklist separated only by blank lines into one `Block::List` with a single `ordered` flag, losing the type distinction for later groups, while `StreamingParser` hard-splits on every blank line and emits three correctly-typed lists | KnownFailure: same hollow buffer-then-emit pattern as mediawiki |
 
 **Session tally (2026-07-30):** 11 formats moved from `NOT_YET_AUDITED` to a real, audited
 `CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark, gfm,
 markdown), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the harness's
-initial wiring. 49 formats remain in `NOT_YET_AUDITED`. `streaming_harness::KNOWN_FAILURES`
-now has 21 entries total; 18 are new from this session (the other 3 — docx/events,
-pptx/events, rst/streaming_parser — predate it). None were weakened or hidden to make a
-check pass; every divergence found a real, root-caused, tracked `KnownFailure` entry instead.
+initial wiring. `streaming_harness::KNOWN_FAILURES` had 21 entries total after that session;
+18 were new then (the other 3 — docx/events, pptx/events, rst/streaming_parser — predate it).
+None were weakened or hidden to make a check pass; every divergence found a real, root-caused,
+tracked `KnownFailure` entry instead.
+
+**Follow-up session (2026-07-30, wiki verticals):** mediawiki, tikiwiki, twiki, and vimwiki
+moved from `NOT_YET_AUDITED` to real, audited `CAPABILITIES` entries. 45 formats remain in
+`NOT_YET_AUDITED`. `streaming_harness::KNOWN_FAILURES` now has 26 entries; 5 are new from this
+session: `mediawiki`/`tikiwiki`/`twiki`/`vimwiki` streaming_writer (all architecturally hollow
+buffer-then-emit, confirmed via the `ObservableSink` incrementality probe rather than assumed
+from module docs) and `vimwiki`/streaming_parser (a genuine, previously-unknown list-boundary
+disagreement between `parse()`/`events()` and `StreamingParser`, not a chunk-boundary bug —
+reproduces even feeding the whole input in one `feed()` call). `events()` and `StreamingParser`
+were Wired for mediawiki, tikiwiki, and twiki with no divergence found on any fixture. All four
+crates' `events()` are architecturally `parse()`-then-walk like html-fmt's, but unlike html's
+generic tree walk they make real per-variant semantic decisions, so the equivalence check is
+not circular by construction (mirrors asciidoc's narrower-Wired-claim precedent). twiki's
+`events()` additionally has a non-standard signature (`&TwikiDoc` instead of raw input); noted
+in the table above and tracked as a follow-up in TODO.md. None were weakened or hidden to make
+a check pass.
 
 ### Remaining hand-written formats (crate exists, API not started)
 
@@ -327,14 +347,10 @@ check pass; every divergence found a real, root-caused, tracked `KnownFailure` e
 | t2t | ✓ | | ✓ | | ✓ |
 | markua | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_markua_reader (559K runs) fuzz_markua_roundtrip (759K runs) | – | – |
 | fountain-fmt | ✓ | | ✓ | | ✓ |
-| mediawiki-fmt | | | | | |
 | creole | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_creole_reader (842K runs) fuzz_creole_roundtrip (403K runs) | – | – |
 | dokuwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_dokuwiki_reader (628K runs) fuzz_dokuwiki_roundtrip (378K runs) | – | – |
-| vimwiki-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_vimwiki_reader (610K runs) fuzz_vimwiki_roundtrip (361K runs) | – | – |
 | zimwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_zimwiki_reader (416K runs) fuzz_zimwiki_roundtrip (390K runs) | – | – |
 | xwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_xwiki_reader (489K runs) fuzz_xwiki_roundtrip (427K runs) | – | – |
-| twiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_twiki_reader (1017K runs) fuzz_twiki_roundtrip (442K runs) | – | – |
-| tikiwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_tikiwiki_reader (429K runs) fuzz_tikiwiki_roundtrip (425K runs) | – | – |
 | jira-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_jira_reader (416K runs) fuzz_jira_roundtrip (333K runs) | – | – |
 | typst (TBD) | | | | | |
 | texinfo | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed unterminated-command panic + unknown-directive infinite loop | fuzz_texinfo_reader (1.5M runs) fuzz_texinfo_roundtrip (592K runs) | – | – |
@@ -343,7 +359,6 @@ check pass; every divergence found a real, root-caused, tracked `KnownFailure` e
 | haddock-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_haddock_reader (1.1M runs) fuzz_haddock_roundtrip (415K runs) | – | – |
 | ansi-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_ansi_reader + fuzz_ansi_roundtrip | – | – |
 | man-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse | fuzz_man_reader (2M runs) fuzz_man_roundtrip (855K runs) | – | – |
-| mediawiki-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated | fuzz_mediawiki_reader (1.5M runs) fuzz_mediawiki_roundtrip (850K runs) | – | – |
 | csv-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated | fuzz_csv_reader (807K runs) fuzz_csv_roundtrip (clean) | – | – |
 | tsv-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated; fixed whitespace-only row filter | fuzz_tsv_reader (1.1M runs) fuzz_tsv_roundtrip (670K runs) | – | – |
 | ris | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed char-boundary panic on multi-byte tag chars | fuzz_ris_reader (1.1M runs) fuzz_ris_roundtrip (241K runs) | – | – |
