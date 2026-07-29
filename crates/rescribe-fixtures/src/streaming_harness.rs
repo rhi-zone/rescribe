@@ -150,6 +150,40 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         ),
         streaming_writer: ApiState::Wired,
     },
+    // html-fmt is html5ever-backed. CLAUDE.md puts third-party-library-backed
+    // formats (pulldown-cmark, html5ever) out of scope for the "three
+    // independently optimal reader APIs" mandate, and html-fmt does not fail
+    // that mandate silently — it documents the reason in `batch.rs`'s module
+    // docs and `lib.rs`'s crate docs (quoted in tests/streaming_apis.rs above
+    // the html checks): the HTML5 spec mandates tree construction (foster
+    // parenting, implied elements, adoption agency), so incremental event
+    // delivery during `feed()` is not possible. The streaming writer is
+    // independent code and is fully checked.
+    FormatCapabilities {
+        format: "html",
+        events: ApiState::NotApplicable(
+            "html-fmt's events() is `events_from_doc(&parse(input).0)` — a depth-first walk of \
+             the html5ever-built tree into a Vec<OwnedEvent> (lib.rs:55, events.rs:92). An \
+             events()-vs-AST-projection equivalence check would compare that walk against \
+             itself and pass by construction, so wiring one would misrepresent html-fmt as \
+             having an independent streaming reader. The derivation is documented, not \
+             accidental: lib.rs's crate docs state \"All three reader APIs build the full parse \
+             tree internally... This is a fundamental limitation of the HTML5 spec, not a \
+             library choice\", and CLAUDE.md puts html5ever-backed formats out of scope",
+        ),
+        streaming_parser: ApiState::NotApplicable(
+            "html-fmt's StreamingParser::feed() is a bare `buf.extend_from_slice(chunk)`; all \
+             parsing and handler dispatch happen in finish() (batch.rs:100-110). batch.rs's \
+             module docs state incremental event delivery \"is not possible without building \
+             the full tree first\" because the HTML5 algorithm can rearrange previously-seen \
+             nodes. The one property buffering can still get wrong — chunk-boundary integrity, \
+             including mid-UTF-8-character splits — IS checked over every html fixture by \
+             html_streaming_parser_buffering_survives_adversarial_chunking; that check is \
+             deliberately not claimed as a Wired streaming_parser capability, because it \
+             verifies buffering, not the incremental delivery html-fmt documents it cannot do",
+        ),
+        streaming_writer: ApiState::Wired,
+    },
     FormatCapabilities {
         format: "docx",
         events: ApiState::KnownFailure(
@@ -214,7 +248,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "markdown",
     "commonmark",
     "gfm",
-    "html",
     "asciidoc",
     "mediawiki",
     "latex",

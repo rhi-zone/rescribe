@@ -78,6 +78,14 @@ rescribe-read-multimarkdown = { workspace = true }
 # streaming-writer directly against the standalone -fmt crates, not just the
 # rescribe adapter's parse()/emit().
 rst-fmt = { workspace = true }
+org-fmt = { workspace = true }
+html-fmt = { workspace = true }
+asciidoc = { workspace = true }
+djot-fmt = { workspace = true }
+texinfo = { workspace = true }
+fb2-fmt = { workspace = true }
+textile-fmt = { workspace = true }
+commonmark-fmt = { workspace = true, features = ["extensions"] }
 zip = { workspace = true }
 
 # Bidirectional format writer harness tests
