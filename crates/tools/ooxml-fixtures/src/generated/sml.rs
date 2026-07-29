@@ -7,6 +7,5 @@
 
 /// Return all generated fixtures.
 pub fn all_fixtures() -> Vec<crate::Fixture> {
-    vec![
-    ]
+    vec![]
 }
