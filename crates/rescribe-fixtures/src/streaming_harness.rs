@@ -180,6 +180,39 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         ),
         streaming_writer: ApiState::Wired,
     },
+    // asciidoc's `events = Wired` is a narrower claim than rst's: `parse()`
+    // (parse.rs:15) drives the same `try_parse_block()` loop `events()` does, so
+    // the equivalence check validates the AST->event *expansion* layer
+    // (expand_block/expand_inline/Frame unwinding), not two independent parsers.
+    // See the comment above the check in tests/streaming_apis.rs.
+    FormatCapabilities {
+        format: "asciidoc",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "asciidoc StreamingParser diverges from events() on 8 of 85 fixtures, via three \
+             distinct bugs in batch.rs — none sanctioned by any doc comment (batch.rs and lib.rs \
+             make only an O(largest block) memory claim, and the crate's own \
+             test_streaming_matches_bulk asserts exact parity with events(), so parity is the \
+             crate's own stated contract). (a) feed_line treats a delimited-block marker as a \
+             hard block boundary and flushes accumulated lines first, so a preceding \
+             [source,...]/[verse]/[stem]/[EXAMPLE] attribute line or .Block Title line is \
+             re-parsed by emit_block() as an isolated chunk; parse_block_with_attributes then \
+             hits EOF and falls back to an empty collect_paragraph_content() (emitting \
+             CodeBlockContent(\"\"), MathBlock{content:\"\"} or an empty paragraph), while \
+             parse_block_title returns None so the title is dropped and the following block gets \
+             title: None — 6 fixtures. Note the delimited-block open/close detection itself is \
+             correct; this is not a delimiter-matching bug. (b) is_delimited_block_marker \
+             (batch.rs:204) only matches runs of identical characters, so the table delimiter \
+             |=== is unrecognized, StreamingParser never enters InDelimitedBlock for a table, \
+             and the blank line between header and body splits it — parse_table sees one row \
+             group and emits is_header: false while the rest degrades to a paragraph \
+             (table-header). (c) StartDocument is only emitted from inside emit_block(), which \
+             early-returns on empty block_lines, and finish() gates EndDocument on `started`, so \
+             empty input yields zero events instead of the StartDocument/EndDocument pair \
+             events(\"\") produces (adv-empty). See TODO.md",
+        ),
+        streaming_writer: ApiState::Wired,
+    },
     // org-fmt's events() is genuinely independent of parse() — the dependency
     // runs the other way (`parse()` drives `EventIter::parse_next_block()`), so
     // the events-vs-AST-projection check compares two real code paths.
@@ -371,7 +404,15 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "commonmark",
-        events: ApiState::Wired,
+        events: ApiState::KnownFailure(
+            "commonmark_fmt events()/EventIter forwards pulldown-cmark's raw Text events \
+             unmerged, while parse() deliberately coalesces consecutive Inline::Text nodes \
+             (crates/formats/commonmark-fmt/src/parse.rs's push_inline, comment \"pulldown-cmark \
+             can split a single logical text run into multiple Text events\"); e.g. a broken \
+             link like \"[text\" parses to one Text node but events() yields three separate \
+             Text events for the same run — found via this harness's ast_to_events projection \
+             check",
+        ),
         streaming_parser: ApiState::NotApplicable(
             "commonmark-fmt's StreamingParser buffering all input before parsing with \
              pulldown-cmark is the sole documented CLAUDE.md exemption (pulldown-cmark requires \
@@ -390,7 +431,10 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "gfm",
-        events: ApiState::Wired,
+        events: ApiState::KnownFailure(
+            "shares commonmark-fmt with the \"commonmark\" format entry above; same \
+             unmerged-Text-events-vs-coalesced-AST defect applies",
+        ),
         streaming_parser: ApiState::NotApplicable(
             "shares commonmark-fmt with the \"commonmark\" format entry above; same sanctioned \
              pulldown-cmark StreamingParser exemption applies",
@@ -402,7 +446,10 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "markdown",
-        events: ApiState::Wired,
+        events: ApiState::KnownFailure(
+            "shares commonmark-fmt with the \"commonmark\" format entry above; same \
+             unmerged-Text-events-vs-coalesced-AST defect applies",
+        ),
         streaming_parser: ApiState::NotApplicable(
             "shares commonmark-fmt with the \"commonmark\" format entry above; same sanctioned \
              pulldown-cmark StreamingParser exemption applies",
@@ -423,7 +470,6 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
 /// absence from the table. See the task report / TODO.md for the plan to
 /// retire entries from this list into real `CAPABILITIES` rows.
 pub const NOT_YET_AUDITED: &[&str] = &[
-    "asciidoc",
     "mediawiki",
     "latex",
     "creole",
@@ -506,6 +552,14 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         api: "events",
         description: "ooxml-pml events() cannot reach slide text (no txBody in dispatch_start) \
                        + shares the wml Text-drop/reversal bug",
+    },
+    KnownFailure {
+        format: "asciidoc",
+        api: "streaming_parser",
+        description: "asciidoc StreamingParser: three distinct batch.rs bugs — feed_line \
+                       flushing an attribute/.title line away from the delimited block it \
+                       modifies, is_delimited_block_marker not recognizing the |=== table \
+                       delimiter, and empty input producing no StartDocument/EndDocument pair",
     },
     KnownFailure {
         format: "org",
