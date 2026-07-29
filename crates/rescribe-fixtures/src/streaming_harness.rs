@@ -180,6 +180,50 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         ),
         streaming_writer: ApiState::Wired,
     },
+    // djot-fmt's events() and parse() are genuinely independent implementations
+    // (direct recursive descent vs a line-driven frame-stack state machine), so
+    // the equivalence check compares two real code paths.
+    FormatCapabilities {
+        format: "djot",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "djot-fmt StreamingParser diverges from events() on 6 of 79 fixtures, via four \
+             distinct bugs in batch.rs, none sanctioned by any doc comment. (a) BlockState::InDiv \
+             is a flag, not a counter: the InDiv arm tests `trimmed == \":::\"` for the close, so \
+             a nested `::: level2` opener is accumulated as content while the first bare `:::` \
+             ends the whole block — and because the Between arm's opener test is \
+             `starts_with(\":::\")`, every leftover closer is then misread as a NEW div opener, \
+             so emit_block() re-parses `\":::\\n:::\"` as a spurious empty div. adv-nested-divs \
+             (20 openers/closers) gains exactly 20 events, path-deep-divs (100/100) exactly 100. \
+             This also falsifies the StreamingParser doc comment at batch.rs:80-84 claiming div \
+             blocks are buffered until their closing marker. (b) link-reference: emit_block() \
+             re-parses each block in isolation via crate::events(), so EventIter::new's \
+             pre_scan() (parse.rs:1048) never sees a [label]: url definition living in a \
+             different block and the reference resolves to url: \"\". (c) block-attr-on-code: the \
+             fence-open branch of feed_line flushes a pending `{.python}` block-attribute line as \
+             its own block before starting InFencedCode, so it becomes a pending_attr dropped at \
+             EOF and the fence gets classes: []. The same flush exists in the `:::` branch. \
+             (d) definition-list, e2e-rich: the blank-line arm of feed_line unconditionally calls \
+             emit_block(), splitting a multi-item definition list into one \
+             StartDefinitionList/EndDefinitionList pair per item — the same bug class already \
+             tracked for rst-fmt, though here only the top-level blank-line boundary is at fault \
+             (parse_definition_list_direct itself is fine). See TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "djot-fmt's Writer drops link-reference definitions (fixture link-reference). Two \
+             confirmed halves: the Event enum has no variant corresponding to LinkDef — \
+             events()/EventIter keeps link defs in iter.link_defs and only surfaces them via \
+             collect_doc_from_iter (events.rs:268), reaching into the iterator's field, a channel \
+             Writer does not have since write_event only receives Event values — and in \
+             writer.rs DocBuilder.link_defs is declared (line 180), initialized to vec![] (188) \
+             and moved into the reconstructed DjotDoc (781) but never pushed to anywhere in the \
+             file, so events_to_doc always returns link_defs: []. Footnotes do NOT have this \
+             problem: StartFootnoteDef/EndFootnoteDef exist and DocBuilder::process handles them \
+             at writer.rs:477-491. Note Writer is also not incrementally streaming — writer.rs's \
+             module docs admit it buffers all events, reconstructs the AST, then emits. See \
+             TODO.md",
+        ),
+    },
     // asciidoc's `events = Wired` is a narrower claim than rst's: `parse()`
     // (parse.rs:15) drives the same `try_parse_block()` loop `events()` does, so
     // the equivalence check validates the AST->event *expansion* layer
@@ -405,13 +449,21 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "commonmark",
         events: ApiState::KnownFailure(
-            "commonmark_fmt events()/EventIter forwards pulldown-cmark's raw Text events \
-             unmerged, while parse() deliberately coalesces consecutive Inline::Text nodes \
-             (crates/formats/commonmark-fmt/src/parse.rs's push_inline, comment \"pulldown-cmark \
-             can split a single logical text run into multiple Text events\"); e.g. a broken \
-             link like \"[text\" parses to one Text node but events() yields three separate \
-             Text events for the same run — found via this harness's ast_to_events projection \
-             check",
+            "commonmark_fmt events()/EventIter has two distinct, real divergences from \
+             parse()'s AST, both found via this harness's ast_to_events projection check: (1) \
+             for images, EventIter's \"drain pending first\" loop structure \
+             (crates/formats/commonmark-fmt/src/events.rs's Iterator::next) returns the \
+             buffered alt Text event on the very next next() call issued while still inside the \
+             PdEvent::Text match arm — i.e. before the matching TagEnd::Image is even reached — \
+             so the real event order is Text(alt), StartImage, EndImage instead of the \
+             documented StartImage, Text(alt), EndImage (reproduced with \
+             fixtures/commonmark/image: real output is \"Alt text![Alt text](photo.jpg)\", \
+             duplicating the alt text outside the image markup); (2) events() forwards \
+             pulldown-cmark's raw Text events unmerged, while parse() deliberately coalesces \
+             consecutive Inline::Text nodes (src/parse.rs's push_inline, comment \"pulldown-cmark \
+             can split a single logical text run into multiple Text events\") — e.g. a broken \
+             link like \"[text\" parses to one Text node but events() yields three separate Text \
+             events for the same run (fixtures/commonmark/adv-broken-link)",
         ),
         streaming_parser: ApiState::NotApplicable(
             "commonmark-fmt's StreamingParser buffering all input before parsing with \
@@ -420,13 +472,18 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              \"Limitations\" doc comment and src/batch.rs's own \"# Limitation\" section",
         ),
         streaming_writer: ApiState::KnownFailure(
-            "commonmark_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and \
-             only reconstructs the AST + calls emit() inside finish() — explicitly self-admitted \
-             in crates/formats/commonmark-fmt/src/writer.rs's own module doc: \"the internal \
-             implementation is buffer-then-emit for correctness (reuses the proven emit() \
-             path)\". This is unrelated to the sanctioned pulldown-cmark StreamingParser \
-             exemption (the writer never touches pulldown-cmark) and is a fake streaming writer \
-             per CLAUDE.md",
+            "two independent findings: (1) commonmark_fmt::writer::Writer buffers all fed events \
+             into a Vec<OwnedEvent> and only reconstructs the AST + calls emit() inside finish() \
+             — explicitly self-admitted in crates/formats/commonmark-fmt/src/writer.rs's own \
+             module doc: \"the internal implementation is buffer-then-emit for correctness \
+             (reuses the proven emit() path)\" — unrelated to the sanctioned pulldown-cmark \
+             StreamingParser exemption (the writer never touches pulldown-cmark) and a fake \
+             streaming writer per CLAUDE.md; (2) for fixtures/commonmark/image specifically, the \
+             byte-identical-to-builder check fails as a downstream consequence of the events() \
+             Text/StartImage ordering bug (see the commonmark/events KnownFailure) — the leaked \
+             Text(alt) arrives before Frame::Image is pushed, so the Writer's discard-inside-\
+             image logic never sees it and it is emitted as ordinary paragraph text, producing \
+             \"Alt text![Alt text](photo.jpg)\" instead of \"![Alt text](photo.jpg)\"",
         ),
     },
     FormatCapabilities {
@@ -473,7 +530,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "mediawiki",
     "latex",
     "creole",
-    "djot",
     "muse",
     "t2t",
     "tikiwiki",
@@ -554,6 +610,23 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        + shares the wml Text-drop/reversal bug",
     },
     KnownFailure {
+        format: "djot",
+        api: "streaming_parser",
+        description: "djot-fmt StreamingParser: four distinct batch.rs bugs — BlockState::InDiv \
+                       is a flag not a counter (nested ::: divs unbalance and leftover closers \
+                       are misread as new openers), out-of-block link-reference definitions are \
+                       invisible to the per-block pre_scan, a pending {.attr} line is flushed \
+                       away from the fence it decorates, and the blank-line boundary splits a \
+                       multi-item definition list",
+    },
+    KnownFailure {
+        format: "djot",
+        api: "streaming_writer",
+        description: "djot-fmt Event enum has no LinkDef variant and writer.rs's \
+                       DocBuilder.link_defs is never pushed to, so events_to_doc always returns \
+                       link_defs: [] and Writer drops link-reference definitions",
+    },
+    KnownFailure {
         format: "asciidoc",
         api: "streaming_parser",
         description: "asciidoc StreamingParser: three distinct batch.rs bugs — feed_line \
@@ -631,6 +704,26 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         api: "streaming_writer",
         description: "textile_fmt::writer::Writer buffers all events and only reconstructs the \
                        AST + emits inside finish() — a fake streaming writer per CLAUDE.md",
+    },
+    KnownFailure {
+        format: "commonmark",
+        api: "events",
+        description: "commonmark_fmt events() has two real bugs: (1) for images, Text(alt) is \
+                       delivered before StartImage instead of between StartImage/EndImage as \
+                       documented (an EventIter::next() loop-ordering bug); (2) consecutive Text \
+                       runs are not coalesced the way parse()'s AST does",
+    },
+    KnownFailure {
+        format: "gfm",
+        api: "events",
+        description: "shares commonmark-fmt's unmerged-Text-events defect (see the \
+                       \"commonmark\" KnownFailure entry above)",
+    },
+    KnownFailure {
+        format: "markdown",
+        api: "events",
+        description: "shares commonmark-fmt's unmerged-Text-events defect (see the \
+                       \"commonmark\" KnownFailure entry above)",
     },
     KnownFailure {
         format: "commonmark",
