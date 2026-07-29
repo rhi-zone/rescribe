@@ -20,6 +20,57 @@ and not being retracted — only the construct-list-completeness component of it
 
 ---
 
+**2026-07-30: cross-API harness wired for 11 more formats (org, html, asciidoc, djot,
+texinfo, fb2, textile, commonmark, gfm, markdown); 18 new tracked defects found.** Follow-up
+to the 2026-07-29 entry below — that session left ~55 formats in
+`streaming_harness::NOT_YET_AUDITED` as an honest "nobody has looked yet" placeholder. This
+session moved 11 of them into real, fixture-driven `CAPABILITIES` entries, prioritizing the
+formats with the largest fixture suites. Full per-format, per-API breakdown (Wired /
+KnownFailure with root cause / NotApplicable with citation) is in `docs/format-audit.md`'s
+new "Cross-API harness inventory (2026-07-30)" subsection; the executable source of truth is
+`crates/rescribe-fixtures/src/streaming_harness.rs::CAPABILITIES` and `KNOWN_FAILURES`
+(21 entries total, 18 new this session — 3 predate it: docx/events, pptx/events,
+rst/streaming_parser).
+
+Headline findings (see `KNOWN_FAILURES` for full descriptions of all 18):
+- **Architecturally hollow ("buffer-then-`finish()`/buffer-then-emit") implementations**,
+  not just wrong output: texinfo's `StreamingParser` and streaming writer, fb2's
+  `StreamingParser`, textile's `StreamingParser` and streaming writer, org's streaming
+  writer, djot's streaming writer, commonmark-fmt's streaming writer. These pass the
+  feed/finish contract but deliver zero incremental output before `finish()` — a fake
+  streaming API per CLAUDE.md.
+- **`Event` enum expressiveness gaps** that make round-tripping through `events()`/the
+  streaming writer lossy even when both are otherwise correct: org's `Event` has no
+  document-metadata variant at all (drops `#+TITLE:`/`#+AUTHOR:`/keyword lines);
+  texinfo's `Event` has no variant for `TexinfoDoc::title` (drops `@settitle`); djot's
+  `Event` has no `LinkDef` variant (drops link-reference definitions).
+- **fb2's `events()` silently drops the `Metadata` event** whenever input lacks a literal
+  `<description>` element — affects the majority (34/58) of fb2 fixtures, not an edge case.
+- **commonmark-fmt's `events()`** (shared by commonmark/gfm/markdown) has two real bugs:
+  image alt-text `Text` events fire before `StartImage` instead of between
+  `StartImage`/`EndImage` (duplicates alt text in output), and consecutive `Text` events
+  aren't coalesced the way `parse()`'s AST deliberately does.
+- **`StreamingParser` divergences from `events()` under adversarial chunking**, each with
+  multiple distinct root causes, on: org (3/89 fixtures), asciidoc (8/85), djot (6/79) — see
+  `KNOWN_FAILURES` for the per-bug breakdown of each.
+- **html-fmt's `events()`/`StreamingParser` are genuinely, documentedly `NotApplicable`**,
+  not just unaudited: HTML5 tree construction (foster parenting, adoption agency) makes true
+  incremental delivery impossible per the crate's own docs and CLAUDE.md's html5ever
+  out-of-scope carve-out. The streaming writer is independent and passes cleanly.
+- Also fixed in this session (not a new defect, a harness bug): the rst-fmt
+  `StreamingParser` equivalence check's `checked > N` sanity floor was
+  `read_dir`-iteration-order-dependent — it incremented `checked` only on the non-divergent
+  path and hard-broke the whole loop on first divergence, so whether the floor was ever
+  reached depended on filesystem directory order rather than test content. Fixed in
+  `crates/rescribe-fixtures/tests/streaming_apis.rs` to count fixtures as checked as soon as
+  their `events()` baseline is computed and to keep iterating past a single divergence.
+
+Not fixed here (by design — this was a wiring/audit pass, not a fix pass): none of the 18
+new `KnownFailure`s were fixed; each needs its own fix pass in its `-fmt` crate. 49 formats
+remain in `NOT_YET_AUDITED`; wiring the rest is tracked, unstarted follow-up work.
+
+---
+
 **2026-07-29: fixture harness extended to exercise `events()`/`StreamingParser`/streaming
 writer directly, not just the rescribe adapter's `parse()`/`emit()`.** Previously
 `crates/rescribe-fixtures/tests/run.rs` only ever drove the rescribe adapter's `parse()`
