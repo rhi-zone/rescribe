@@ -1,4 +1,4 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
 
 fn build_sample() -> Vec<u8> {
     let mut buf = Vec::new();
@@ -76,14 +76,29 @@ fn bench_writer(c: &mut Criterion) {
     let sample = build_sample();
     let evs: Vec<_> = ansi_fmt::events(&sample).map(|e| e.into_owned()).collect();
     c.bench_function("ansi_writer", |b| {
-        b.iter(|| {
-            let mut w = ansi_fmt::Writer::new(Vec::<u8>::with_capacity(sample.len()));
-            for ev in &evs {
-                w.write_event(ev.clone());
-            }
-            let out = w.finish();
-            black_box(out);
-        });
+        // `write_event` takes `OwnedEvent` by value (`Cow<'static, str>` payloads on
+        // several variants, e.g. `Hyperlink`), so replaying the same pre-parsed event
+        // stream across many timed iterations needs a fresh owned copy each time.
+        // Cloning that copy *inside* the measured closure — the pattern this bench used
+        // before — bills the clone (a real allocation for `Cow::Owned` fields, not just a
+        // fat-pointer copy) to `Writer`, inflating the measured time with a cost that
+        // doesn't exist in real usage (a live event stream is consumed once, never
+        // cloned). `iter_batched` does the clone in the untimed setup closure instead, so
+        // only `Writer::write_event` itself is measured. See
+        // `docs/format-audit.md`'s rst-fmt streaming-writer entries for the same defect
+        // found (and fixed) via `perf`, where it accounted for ~40% of measured time.
+        b.iter_batched(
+            || evs.clone(),
+            |evs| {
+                let mut w = ansi_fmt::Writer::new(Vec::<u8>::with_capacity(sample.len()));
+                for ev in evs {
+                    w.write_event(ev);
+                }
+                let out = w.finish();
+                black_box(out);
+            },
+            BatchSize::SmallInput,
+        );
     });
 }
 

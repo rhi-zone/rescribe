@@ -278,6 +278,45 @@ Two targets per format:
 
 ---
 
+## Benchmarking convention
+
+A real defect class cost three rounds of optimization work on `rst-fmt`'s streaming
+`Writer` (2026-07-29, see `TODO.md`/`docs/format-audit.md`'s dated entries): a
+benchmark harness cloned each pre-materialized event once per timed iteration to
+replay one parsed stream across many `b.iter()` calls. The clone never happens in
+real usage (a live event stream is consumed once), but it wasn't free — for a large
+enum with owned string payloads, ~40% of measured "Writer" time turned out to be the
+clone, not the writer. The reported 1.5–2.6x slower-than-`build()` ratio was mostly
+measurement error; the real gap was closer to parity (0.9–1.4x). The same shape was
+found and fixed in `ansi-fmt/benches/ansi_bench.rs`'s `bench_writer`.
+
+Before trusting a benchmark comparison (especially a streaming-vs-builder or
+library-A-vs-library-B A/B), check for:
+
+- **Setup work inside the timed closure.** Parsing, allocation, string building, and
+  — the specific trap above — `.clone()`'ing a pre-built input so it can be consumed
+  again next iteration. Move it outside `b.iter()`, or into criterion's
+  `iter_batched(setup, routine, BatchSize)` if the routine must consume its input by
+  value (setup cost is excluded from the timing in that API).
+- **Unequal setup cost across the two sides of a comparison.** If one path gets a
+  pre-built AST for free and the other re-derives its input every iteration (or vice
+  versa), the ratio measures the setup asymmetry, not the two implementations.
+- **Missing `black_box` on inputs.** `Bencher::iter`'s closure return value is
+  wrapped automatically, but a `&'static` constant or a value built once outside the
+  closure can in principle let the optimizer prove the call is loop-invariant and
+  hoist it — the inverse error, making something look faster than it is. Wrap
+  arguments passed into the routine with `criterion::black_box` (or
+  `std::hint::black_box`), matching the convention already used by the other
+  `benches/*.rs` files in this workspace.
+
+When a ratio looks surprising (much bigger or smaller than the code shape would
+suggest), isolate the suspected artifact directly — a `clone_only` variant of the
+benchmark, a `perf`/`--call-graph fp` profile of the actual hot symbols — before
+recording the ratio anywhere. See the rst-fmt entries above for a worked example of
+isolating and subtracting a clone cost from a reported ratio.
+
+---
+
 ## Feature flags
 
 All on by default. Gating is about contract scoping, not binary size:

@@ -1,4 +1,4 @@
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use xwiki::{build, parse};
 
 const SMALL: &str = r#"
@@ -90,27 +90,27 @@ This is a warning message.
 
 fn bench_parse_small(c: &mut Criterion) {
     c.bench_function("xwiki_parse_small", |b| {
-        b.iter(|| parse(SMALL));
+        b.iter(|| parse(black_box(SMALL)));
     });
 }
 
 fn bench_parse_medium(c: &mut Criterion) {
     c.bench_function("xwiki_parse_medium", |b| {
-        b.iter(|| parse(MEDIUM));
+        b.iter(|| parse(black_box(MEDIUM)));
     });
 }
 
 fn bench_build_small(c: &mut Criterion) {
     let (doc, _) = parse(SMALL);
     c.bench_function("xwiki_build_small", |b| {
-        b.iter(|| build(&doc));
+        b.iter(|| build(black_box(&doc)));
     });
 }
 
 fn bench_build_medium(c: &mut Criterion) {
     let (doc, _) = parse(MEDIUM);
     c.bench_function("xwiki_build_medium", |b| {
-        b.iter(|| build(&doc));
+        b.iter(|| build(black_box(&doc)));
     });
 }
 
@@ -118,7 +118,7 @@ fn bench_events_medium(c: &mut Criterion) {
     let (doc, _) = parse(MEDIUM);
     c.bench_function("xwiki_events_medium", |b| {
         b.iter(|| {
-            let _: Vec<_> = xwiki::events::events(&doc).collect();
+            let _: Vec<_> = xwiki::events::events(black_box(&doc)).collect();
         });
     });
 }
@@ -126,10 +126,10 @@ fn bench_events_medium(c: &mut Criterion) {
 fn bench_roundtrip_medium(c: &mut Criterion) {
     c.bench_function("xwiki_roundtrip_medium", |b| {
         b.iter(|| {
-            let (doc, _) = parse(MEDIUM);
-            let text = build(&doc);
-            let (doc2, _) = parse(&text);
-            let _ = build(&doc2);
+            let (doc, _) = parse(black_box(MEDIUM));
+            let text = build(black_box(&doc));
+            let (doc2, _) = parse(black_box(&text));
+            let _ = build(black_box(&doc2));
         });
     });
 }

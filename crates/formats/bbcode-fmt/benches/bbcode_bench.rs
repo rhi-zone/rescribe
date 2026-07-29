@@ -1,5 +1,5 @@
 use bbcode_fmt::{emit, events, parse};
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 const SMALL: &str = r#"
 [h1]Hello World[/h1]
@@ -75,26 +75,26 @@ This is hidden content.
 "#;
 
 fn bench_parse(c: &mut Criterion) {
-    c.bench_function("parse_small", |b| b.iter(|| parse(SMALL)));
-    c.bench_function("parse_medium", |b| b.iter(|| parse(MEDIUM)));
+    c.bench_function("parse_small", |b| b.iter(|| parse(black_box(SMALL))));
+    c.bench_function("parse_medium", |b| b.iter(|| parse(black_box(MEDIUM))));
 }
 
 fn bench_emit(c: &mut Criterion) {
     let (small_doc, _) = parse(SMALL);
     let (medium_doc, _) = parse(MEDIUM);
-    c.bench_function("emit_small", |b| b.iter(|| emit(&small_doc)));
-    c.bench_function("emit_medium", |b| b.iter(|| emit(&medium_doc)));
+    c.bench_function("emit_small", |b| b.iter(|| emit(black_box(&small_doc))));
+    c.bench_function("emit_medium", |b| b.iter(|| emit(black_box(&medium_doc))));
 }
 
 fn bench_events(c: &mut Criterion) {
     c.bench_function("events_small", |b| {
         b.iter(|| {
-            let _: Vec<_> = events(SMALL).collect();
+            let _: Vec<_> = events(black_box(SMALL)).collect();
         })
     });
     c.bench_function("events_medium", |b| {
         b.iter(|| {
-            let _: Vec<_> = events(MEDIUM).collect();
+            let _: Vec<_> = events(black_box(MEDIUM)).collect();
         })
     });
 }
@@ -102,10 +102,10 @@ fn bench_events(c: &mut Criterion) {
 fn bench_roundtrip(c: &mut Criterion) {
     c.bench_function("roundtrip_medium", |b| {
         b.iter(|| {
-            let (doc, _) = parse(MEDIUM);
-            let text = emit(&doc);
-            let (doc2, _) = parse(&text);
-            let _ = emit(&doc2);
+            let (doc, _) = parse(black_box(MEDIUM));
+            let text = emit(black_box(&doc));
+            let (doc2, _) = parse(black_box(&text));
+            let _ = emit(black_box(&doc2));
         })
     });
 }

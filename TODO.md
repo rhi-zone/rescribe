@@ -2265,6 +2265,77 @@ Tried both avenues that entry left open.
   --all-features -D warnings` and `cargo fmt --check` clean. Stage numbers unchanged
   (R:4/W:4) — this is a perf-only pass, no construct or API-mode change.
 
+### Workspace-wide benchmark-artifact sweep — 2026-07-29
+
+Follow-up to the clone-artifact finding above: does the same defect class (setup work
+inside the timed region, unequal setup cost between two compared paths, missing
+`black_box`) appear in any *committed* benchmark, and does any recorded conclusion rest
+on one? The rst-fmt harness that produced the 1.5–2.6x figures was a temporary, deleted
+`examples/perf_writer.rs`, never committed — so nothing in the repo needed fixing for
+that specific number; TODO.md/`docs/format-audit.md` already carry the honest
+correction inline (adjusted ratio ~0.90–1.39x), by design not rewritten to a clean
+retraction since the surrounding entries are a legitimate investigation log.
+
+- [x] **Inventoried every benchmark in the workspace**: 24 `criterion` `benches/*.rs`
+  files (one per `crates/formats/*` crate, plus `rescribe-read-djot` and
+  `ooxml-sml/benches/parse_benchmark.rs`), one non-criterion timed-throughput example
+  (`ooxml-sml/examples/bench_throughput.rs`), one corpus-analysis tool with wall-clock
+  totals (`crates/tools/ooxml-corpus/src/main.rs`), and one test-with-a-timing-guard
+  (`bbcode-fmt`'s `test_timeout_case`, a 100ms panic-avoidance smoke test, not a
+  performance benchmark). The quick-xml-vs-`xml-rs`-vs-`roxmltree` numbers cited in
+  `docs/adr/0007-dtd-entity-resolution-build-vs-buy.md` (884–1088 MB/s vs 46–51 MB/s,
+  19–21x) come from an out-of-repo, one-off benchmark with no harness committed here —
+  not auditable directly, but cross-checked against quick-xml's own published README
+  benchmark (~50x on its own input, same order of magnitude) and it's a same-input
+  cross-*library* comparison rather than a shared-harness A/B replaying a cloned event
+  stream, so the specific clone-in-loop defect class doesn't apply to its shape. Left
+  as uncertain-but-low-risk, not re-measured (no harness to fix).
+- [x] **Found one real instance of the same defect, committed**:
+  `crates/formats/ansi-fmt/benches/ansi_bench.rs`'s `bench_writer` cloned each
+  pre-materialized `OwnedEvent` (`Event<'static>`, `Cow::Owned` string payloads on
+  `Text`/`Hyperlink`) once per timed iteration to replay one parsed stream — same shape
+  as the rst-fmt harness, actually worse (an owned `Cow` clone allocates and copies,
+  where rst-fmt's borrowed-`Cow` clone was allocation-free). **Fixed**: switched to
+  `criterion::Bencher::iter_batched` — the per-iteration `evs.clone()` now happens in
+  the untimed setup closure, and the routine consumes the batch's owned copy directly
+  (no clone in the timed region at all). Re-measured (release,
+  `CARGO_PROFILE_RELEASE_STRIP=none`, same machine): `ansi_writer` **27.4µs → 28.7µs**
+  (within criterion's own noise threshold, not a real change) — at this bench's scale
+  (~264 events, mostly short strings like `"Color text "`), the clone's absolute cost
+  turned out to be below the noise floor, unlike rst-fmt's ~50,000-event/iteration
+  corpus where it was ~40% of measured time. **No recorded conclusion anywhere in
+  TODO.md/`docs/format-audit.md` cited `ansi_writer`'s numbers** (grepped for
+  `ansi_bench`/`ansi_writer`/`ansi.fmt.*writer` — the only hits are unrelated
+  "streaming-writer audit: clean" checklist entries, not throughput claims), so there
+  is nothing to retract — this was a hygiene fix, not a record correction. Still fixed,
+  since the defect would resurface at a larger corpus size and the fix is free.
+- [x] **Two benches (`bbcode-fmt`, `xwiki`) had zero `black_box` calls** — every other
+  bench file in the workspace wraps routine inputs (`black_box(SMALL)`,
+  `black_box(&doc)`, etc.); these two passed bare `&'static str` constants and
+  once-built `Doc` values straight into `parse`/`build`/`events`, the "missing
+  `black_box`, dead-code-elimination risk" class named as a concern. Checked whether
+  this was live: re-measured both crates' `parse_small`/`parse_medium` before touching
+  them — non-zero, input-size-scaled numbers (bbcode: 2.7µs/15.5µs; xwiki:
+  1.3µs/10.6µs), not the near-zero result loop-invariant hoisting would produce across
+  an opaque cross-crate function call, so no live defect, but no recorded conclusion
+  depended on it either way. **Fixed for defense-in-depth and workspace consistency**:
+  added `black_box` around every routine input in both files, matching the other 22.
+  Re-measured after: bbcode `parse_small` 2.74µs (unchanged, "no change in performance
+  detected"), `parse_medium` 15.24µs (-2%, within measurement noise) — confirms the fix
+  was precautionary, not a correction.
+- [x] **Guard added**: `docs/format-library-design.md` gained a "Benchmarking
+  convention" section (after "Fuzz harness") naming the three failure shapes (setup
+  inside the timed closure, unequal setup cost across an A/B comparison, missing
+  `black_box`) with the rst-fmt/ansi-fmt cases as worked examples, plus the
+  `iter_batched` fix pattern for routines that must consume owned input.
+- [x] All three touched crates (`ansi-fmt`, `bbcode-fmt`, `xwiki`): `cargo clippy
+  --all-targets --all-features -D warnings`, `cargo test -q`, `cargo fmt --check` all
+  clean.
+- [ ] **Not done**: no attempt to re-verify the out-of-repo quick-xml/xml-rs/roxmltree
+  numbers in ADR 0007 with an in-repo harness — flagged as uncertain above, not fixed,
+  since there is no committed benchmark to correct and reproducing it was out of scope
+  for this pass.
+
 ### DEBT: Fake-streaming writer/reader audit across all `crates/formats/` — identified 2026-07-28
 
 The rst-fmt writer bug above (buffer-all → reconstruct AST via frame stack → delegate
