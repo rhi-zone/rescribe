@@ -42,7 +42,7 @@
 use std::io::{Seek, Write};
 
 use crate::Result;
-use crate::generated_events::{OwnedPmlEvent, PmlEvent, ShapeTransform};
+use crate::generated_events::{OwnedPmlEvent, PmlEvent, ShapeGeometry, ShapeTransform};
 use crate::writer::PresentationBuilder;
 
 // Default slide dimensions: 10 in × 7.5 in in EMU (914400 EMU/in).
@@ -95,28 +95,34 @@ impl<W: Write + Seek> PmlWriter<W> {
 }
 
 fn process_slide(events: &[OwnedPmlEvent], builder: &mut PresentationBuilder) {
-    let mut shapes: Vec<(String, Option<ShapeTransform>)> = Vec::new();
+    let mut shapes: Vec<(String, Option<ShapeTransform>, Option<ShapeGeometry>)> = Vec::new();
     let mut current_paragraphs: Vec<String> = Vec::new();
     let mut current_para = String::new();
     let mut in_shape = false;
     let mut in_para = false;
     let mut in_table_cell = false;
     let mut current_transform: Option<ShapeTransform> = None;
+    let mut current_geometry: Option<ShapeGeometry> = None;
 
     for event in events {
         match event {
             PmlEvent::StartPresentation | PmlEvent::EndPresentation => {}
 
-            PmlEvent::StartShape { transform } => {
+            PmlEvent::StartShape {
+                transform,
+                geometry,
+            } => {
                 in_shape = true;
                 current_paragraphs.clear();
                 current_transform = *transform;
+                current_geometry = geometry.clone();
             }
 
             PmlEvent::StartGraphicFrame => {
                 in_shape = true;
                 current_paragraphs.clear();
                 current_transform = None;
+                current_geometry = None;
             }
 
             PmlEvent::EndShape | PmlEvent::EndGraphicFrame => {
@@ -129,11 +135,16 @@ fn process_slide(events: &[OwnedPmlEvent], builder: &mut PresentationBuilder) {
                 current_para.clear();
 
                 if !current_paragraphs.is_empty() {
-                    shapes.push((current_paragraphs.join("\n"), current_transform));
+                    shapes.push((
+                        current_paragraphs.join("\n"),
+                        current_transform,
+                        current_geometry.take(),
+                    ));
                     current_paragraphs.clear();
                 }
                 in_shape = false;
                 current_transform = None;
+                current_geometry = None;
             }
 
             PmlEvent::StartParagraph { .. } => {
@@ -191,12 +202,51 @@ fn process_slide(events: &[OwnedPmlEvent], builder: &mut PresentationBuilder) {
 
     if !shapes.is_empty() {
         let slide = builder.add_slide();
-        for (i, (text, transform)) in shapes.iter().enumerate() {
-            if let Some(t) = transform {
-                slide.add_text_at(text.as_str(), t.x, t.y, t.cx, t.cy);
-            } else {
-                let y = MARGIN + i as i64 * (SHAPE_H + SHAPE_GAP);
-                slide.add_text_at(text.as_str(), MARGIN, y, SHAPE_W, SHAPE_H);
+        for (i, (text, transform, geometry)) in shapes.into_iter().enumerate() {
+            let (x, y, cx, cy) = match &transform {
+                Some(t) => (t.x, t.y, t.cx, t.cy),
+                None => (
+                    MARGIN,
+                    MARGIN + i as i64 * (SHAPE_H + SHAPE_GAP),
+                    SHAPE_W,
+                    SHAPE_H,
+                ),
+            };
+            match geometry {
+                None => {
+                    slide.add_text_at(text.as_str(), x, y, cx, cy);
+                }
+                Some(ShapeGeometry::Preset {
+                    preset,
+                    adjustments,
+                }) => {
+                    slide
+                        .shape(vec![crate::writer::TextRun::text(text)], x, y, cx, cy)
+                        .set_geometry(crate::writer::PresetGeometry::Custom(preset))
+                        .set_geometry_adjustments(adjustments)
+                        .add();
+                }
+                Some(ShapeGeometry::Custom(raw)) => {
+                    match raw.parse_as::<ooxml_dml::types::CTCustomGeometry2D>() {
+                        Ok(cust_geom) => {
+                            slide
+                                .shape(vec![crate::writer::TextRun::text(text)], x, y, cx, cy)
+                                .set_custom_geometry(Box::new(cust_geom))
+                                .add();
+                        }
+                        Err(_) => {
+                            // The captured <a:custGeom> subtree failed to parse
+                            // back into the typed struct (should not happen for
+                            // well-formed OOXML). There is no fidelity-warning
+                            // channel on this hand-rolled events()/PmlWriter
+                            // pair (unlike rescribe's ConversionResult), so this
+                            // is a documented gap: falls back to the default
+                            // rect rather than silently emitting a wrong shape
+                            // and dropping text. See TODO.md.
+                            slide.add_text_at(text.as_str(), x, y, cx, cy);
+                        }
+                    }
+                }
             }
         }
     }

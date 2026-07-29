@@ -531,10 +531,38 @@ fn make_rect_geom() -> Box<dml::EGGeometry> {
 
 /// Construct a preset geometry from a given `STShapeType`.
 fn make_preset_geom(preset: dml::STShapeType) -> Box<dml::EGGeometry> {
+    make_preset_geom_with_adjustments(preset, &[])
+}
+
+/// Construct a preset geometry with `<a:avLst>` adjustment-value overrides.
+///
+/// `adjustments` are `(name, fmla)` pairs, e.g. `("adj", "val 16667")`,
+/// as they appear on `<a:gd name="adj" fmla="val 16667"/>`.
+fn make_preset_geom_with_adjustments(
+    preset: dml::STShapeType,
+    adjustments: &[(String, String)],
+) -> Box<dml::EGGeometry> {
+    let av_lst = if adjustments.is_empty() {
+        None
+    } else {
+        Some(Box::new(dml::CTGeomGuideList {
+            gd: adjustments
+                .iter()
+                .map(|(name, fmla)| dml::CTGeomGuide {
+                    name: name.clone(),
+                    fmla: fmla.clone(),
+                    #[cfg(feature = "extra-attrs")]
+                    extra_attrs: Default::default(),
+                })
+                .collect(),
+            #[cfg(feature = "extra-children")]
+            extra_children: Default::default(),
+        }))
+    };
     Box::new(dml::EGGeometry::PrstGeom(Box::new(
         dml::CTPresetGeometry2D {
             preset,
-            av_lst: None,
+            av_lst,
             extra_attrs: Default::default(),
             extra_children: Default::default(),
         },
@@ -834,6 +862,12 @@ pub struct ShapeBuilder<'a> {
     line_width: Option<i64>,
     /// Preset shape geometry (defaults to `Rect` if not set).
     geometry: Option<PresetGeometry>,
+    /// `<a:avLst>` adjustment-value overrides for `geometry`, as `(name, fmla)`
+    /// pairs (e.g. `("adj", "val 16667")`). Ignored if `custom_geometry` is set.
+    adjustments: Vec<(String, String)>,
+    /// Custom path geometry (`<a:custGeom>`). Takes priority over `geometry`
+    /// when set.
+    custom_geometry: Option<Box<dml::CTCustomGeometry2D>>,
     /// Alignment for the initial paragraph (the one built from `runs`).
     align: Option<TextAlign>,
 }
@@ -888,6 +922,28 @@ impl<'a> ShapeBuilder<'a> {
         self
     }
 
+    /// Set `<a:avLst>` adjustment-value overrides for the preset geometry set
+    /// via [`set_geometry`](Self::set_geometry) (e.g. the corner radius of a
+    /// `RoundRect`). Pairs are `(name, fmla)`, matching `<a:gd name="adj"
+    /// fmla="val 16667"/>`. Ignored if [`set_custom_geometry`](Self::set_custom_geometry)
+    /// is also called.
+    ///
+    /// ECMA-376 Part 1, Section 20.1.9.6 (avLst) / 20.1.9.11 (gd).
+    pub fn set_geometry_adjustments(mut self, adjustments: Vec<(String, String)>) -> Self {
+        self.adjustments = adjustments;
+        self
+    }
+
+    /// Set a custom path geometry (`<a:custGeom>`), overriding any preset
+    /// geometry. Use this to re-emit geometry captured verbatim from a
+    /// source document (see `ooxml_pml::ShapeGeometry::Custom`).
+    ///
+    /// ECMA-376 Part 1, Section 20.1.9.8 (custGeom).
+    pub fn set_custom_geometry(mut self, geom: Box<dml::CTCustomGeometry2D>) -> Self {
+        self.custom_geometry = Some(geom);
+        self
+    }
+
     /// Set paragraph-level text alignment for the initial paragraph.
     ///
     /// Sets `<a:pPr algn="..."/>` on the first paragraph of the text body.
@@ -921,6 +977,8 @@ impl<'a> ShapeBuilder<'a> {
             line_color,
             line_width,
             geometry,
+            adjustments,
+            custom_geometry,
             align,
         } = self;
 
@@ -940,6 +998,8 @@ impl<'a> ShapeBuilder<'a> {
             line_color,
             line_width,
             geometry,
+            adjustments,
+            custom_geometry,
         };
         slide.push_text_element(element);
     }
@@ -963,6 +1023,10 @@ struct TextElement {
     line_width: Option<i64>,
     /// Optional preset shape geometry. Defaults to `Rect` if `None`.
     geometry: Option<PresetGeometry>,
+    /// `<a:avLst>` adjustment-value overrides for `geometry`.
+    adjustments: Vec<(String, String)>,
+    /// Custom path geometry (`<a:custGeom>`); takes priority over `geometry`.
+    custom_geometry: Option<Box<dml::CTCustomGeometry2D>>,
 }
 
 impl TextElement {
@@ -990,6 +1054,8 @@ impl TextElement {
             line_color: None,
             line_width: None,
             geometry: None,
+            adjustments: Vec::new(),
+            custom_geometry: None,
         }
     }
 
@@ -1435,10 +1501,15 @@ fn build_shape_impl(
         }
     };
 
-    // Shape geometry: use explicit override or default to Rect.
-    let geom = match &element.geometry {
-        Some(g) => make_preset_geom(g.to_shape_type()),
-        None => make_rect_geom(),
+    // Shape geometry: custom path geometry takes priority, then preset
+    // (with any adjustment-value overrides), else default to Rect.
+    let geom = if let Some(custom) = &element.custom_geometry {
+        Box::new(dml::EGGeometry::CustGeom(custom.clone()))
+    } else {
+        match &element.geometry {
+            Some(g) => make_preset_geom_with_adjustments(g.to_shape_type(), &element.adjustments),
+            None => make_rect_geom(),
+        }
     };
 
     let sp_pr = dml::CTShapeProperties {
@@ -2356,6 +2427,8 @@ impl SlideBuilder {
             line_color: None,
             line_width: None,
             geometry: None,
+            adjustments: Vec::new(),
+            custom_geometry: None,
         };
         self.hyperlink_elements.push(element);
         self
@@ -2402,6 +2475,8 @@ impl SlideBuilder {
             line_color: None,
             line_width: None,
             geometry: None,
+            adjustments: Vec::new(),
+            custom_geometry: None,
         };
         self.push_text_element(element);
         self
@@ -2445,6 +2520,8 @@ impl SlideBuilder {
             line_color: None,
             line_width: None,
             geometry: None,
+            adjustments: Vec::new(),
+            custom_geometry: None,
             align: None,
         }
     }

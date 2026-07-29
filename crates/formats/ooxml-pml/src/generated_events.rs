@@ -23,6 +23,32 @@ pub struct ShapeTransform {
     pub cy: i64,
 }
 
+/// Shape geometry extracted from `<p:spPr>`'s `<a:prstGeom>` / `<a:custGeom>`
+/// child (the `EG_Geometry` choice group, ECMA-376 Part 1 §20.1.9.18 / §20.1.9.8).
+///
+/// This is distinct from [`ShapeTransform`], which only carries the bounding
+/// box (`<a:xfrm>`). Without this, every shape read via [`crate::events`] and
+/// re-emitted by `PmlWriter` loses its actual outline (ellipse, star, custom
+/// path, ...) and silently becomes a plain rectangle — a semantic drop
+/// forbidden by the project's losslessness rule.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ShapeGeometry {
+    /// `<a:prstGeom prst="...">`, optionally with `<a:avLst>` adjustment-value
+    /// overrides (`<a:gd name="adj1" fmla="val 16667"/>` pairs).
+    Preset {
+        /// The `prst` attribute value (e.g. `"ellipse"`, `"roundRect"`).
+        preset: String,
+        /// `(name, fmla)` pairs from `<a:avLst>/<a:gd>`, in document order.
+        adjustments: Vec<(String, String)>,
+    },
+    /// `<a:custGeom>` (arbitrary path geometry), captured verbatim.
+    ///
+    /// Custom geometry has no natural cross-format equivalent, so per the
+    /// raw-preservation pattern it is stored as-is rather than modeled, and
+    /// the writer re-emits it unchanged.
+    Custom(ooxml_xml::RawXmlElement),
+}
+
 /// Streaming events emitted by the DOCX SAX iterator.
 /// Each container element produces a `Start…` / `End…` pair;
 /// leaf elements produce a single variant.
@@ -30,25 +56,40 @@ pub struct ShapeTransform {
 pub enum PmlEvent<'a> {
     StartPresentation,
     EndPresentation,
-    StartShape { transform: Option<ShapeTransform> },
+    StartShape {
+        transform: Option<ShapeTransform>,
+        geometry: Option<ShapeGeometry>,
+    },
     EndShape,
     StartGraphicFrame,
     EndGraphicFrame,
-    StartTable { props: Box<CTTableProperties> },
+    StartTable {
+        props: Box<CTTableProperties>,
+    },
     EndTable,
     StartTableRow,
     EndTableRow,
-    StartTableCell { props: Box<CTTableCellProperties> },
+    StartTableCell {
+        props: Box<CTTableCellProperties>,
+    },
     EndTableCell,
-    StartParagraph { props: Box<TextParagraphProperties> },
+    StartParagraph {
+        props: Box<TextParagraphProperties>,
+    },
     EndParagraph,
-    StartRun { props: Box<TextCharacterProperties> },
+    StartRun {
+        props: Box<TextCharacterProperties>,
+    },
     EndRun,
-    StartHyperlink { rel_id: Option<Cow<'a, str>> },
+    StartHyperlink {
+        rel_id: Option<Cow<'a, str>>,
+    },
     EndHyperlink,
     Text(Cow<'a, str>),
     LineBreak,
-    FieldId { field_type: Option<Cow<'a, str>> },
+    FieldId {
+        field_type: Option<Cow<'a, str>>,
+    },
 }
 
 /// Owned variant of [`PmlEvent`] with `'static` lifetime.
@@ -60,7 +101,13 @@ impl<'a> PmlEvent<'a> {
         match self {
             PmlEvent::StartPresentation => PmlEvent::StartPresentation,
             PmlEvent::EndPresentation => PmlEvent::EndPresentation,
-            PmlEvent::StartShape { transform } => PmlEvent::StartShape { transform },
+            PmlEvent::StartShape {
+                transform,
+                geometry,
+            } => PmlEvent::StartShape {
+                transform,
+                geometry,
+            },
             PmlEvent::EndShape => PmlEvent::EndShape,
             PmlEvent::StartGraphicFrame => PmlEvent::StartGraphicFrame,
             PmlEvent::EndGraphicFrame => PmlEvent::EndGraphicFrame,

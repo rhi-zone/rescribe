@@ -65,7 +65,8 @@ pub mod events;
 pub use events::{PmlEventIter, events as pml_events};
 #[cfg(feature = "reader-streaming")]
 pub use generated_events::{
-    OwnedPmlEvent, PmlEvent, PmlStartKind, dispatch_start, is_text_element,
+    OwnedPmlEvent, PmlEvent, PmlStartKind, ShapeGeometry, ShapeTransform, dispatch_start,
+    is_text_element,
 };
 
 /// Generated types from the ECMA-376 PresentationML schema.

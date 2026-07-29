@@ -28,7 +28,7 @@ use quick_xml::Reader;
 use quick_xml::events::Event as XmlEvent;
 
 use super::generated_events::{
-    PmlEvent, PmlStartKind, ShapeTransform, dispatch_start, is_text_element,
+    PmlEvent, PmlStartKind, ShapeGeometry, ShapeTransform, dispatch_start, is_text_element,
 };
 use ooxml_dml::types::{
     CTTableCellProperties, CTTableProperties, TextCharacterProperties, TextParagraphProperties,
@@ -300,8 +300,11 @@ impl<'input> PmlEventIter<'input> {
                 }
             }
             PmlStartKind::Shape => {
-                let transform = self.read_shape_transform();
-                PmlEvent::StartShape { transform }
+                let (transform, geometry) = self.read_shape_transform();
+                PmlEvent::StartShape {
+                    transform,
+                    geometry,
+                }
             }
             PmlStartKind::GraphicFrame => PmlEvent::StartGraphicFrame,
             PmlStartKind::TableRow => PmlEvent::StartTableRow,
@@ -309,13 +312,14 @@ impl<'input> PmlEventIter<'input> {
         }
     }
 
-    /// Scan children of `<p:sp>` for `<p:spPr>` and extract `<a:xfrm>` geometry.
+    /// Scan children of `<p:sp>` for `<p:spPr>` and extract `<a:xfrm>` geometry
+    /// plus the shape's outline (`<a:prstGeom>` or `<a:custGeom>`).
     ///
     /// Consumes children up to and including `<p:spPr>`. Remaining children
     /// (`<p:style>`, `<p:txBody>`, etc.) are left for the normal SAX loop.
     /// On malformed input where `</p:sp>` is consumed before `<p:spPr>` is found,
     /// sets `self.shape_ended_during_scan` so the caller skips the frame push.
-    fn read_shape_transform(&mut self) -> Option<ShapeTransform> {
+    fn read_shape_transform(&mut self) -> (Option<ShapeTransform>, Option<ShapeGeometry>) {
         let mut buf = Vec::new();
         loop {
             buf.clear();
@@ -340,22 +344,46 @@ impl<'input> PmlEventIter<'input> {
                 _ => {}
             }
         }
-        None
+        (None, None)
     }
 
     /// Read the contents of an already-opened `<p:spPr>` element and extract
-    /// the `<a:off>` and `<a:ext>` attributes from `<a:xfrm>`.
-    fn extract_xfrm_from_sppr(&mut self) -> Option<ShapeTransform> {
+    /// the `<a:off>`/`<a:ext>` attributes from `<a:xfrm>`, plus the
+    /// `<a:prstGeom>`/`<a:custGeom>` outline.
+    fn extract_xfrm_from_sppr(&mut self) -> (Option<ShapeTransform>, Option<ShapeGeometry>) {
         let mut x: Option<i64> = None;
         let mut y: Option<i64> = None;
         let mut cx: Option<i64> = None;
         let mut cy: Option<i64> = None;
+        let mut geometry: Option<ShapeGeometry> = None;
         let mut depth = 1u32;
         let mut buf = Vec::new();
         loop {
             buf.clear();
             match self.reader.read_event_into(&mut buf) {
-                Ok(XmlEvent::Start(_)) => depth += 1,
+                Ok(XmlEvent::Start(ref e)) => {
+                    let local = local_name_owned(e.local_name().as_ref());
+                    if local == b"prstGeom" {
+                        // `attr_string` only needs `e`; its borrow ends here,
+                        // freeing `self.reader`/`self.buf` for the recursive scan.
+                        let preset = attr_string(e, b"prst").unwrap_or_default();
+                        let adjustments = self.read_av_lst_to_end();
+                        geometry = Some(ShapeGeometry::Preset {
+                            preset,
+                            adjustments,
+                        });
+                    } else if local == b"custGeom" {
+                        match ooxml_xml::RawXmlElement::from_reader(&mut self.reader, e) {
+                            Ok(elem) => geometry = Some(ShapeGeometry::Custom(elem)),
+                            Err(_) => {
+                                self.done = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        depth += 1;
+                    }
+                }
                 Ok(XmlEvent::Empty(ref e)) => {
                     let local = local_name_owned(e.local_name().as_ref());
                     if local == b"off" {
@@ -364,6 +392,13 @@ impl<'input> PmlEventIter<'input> {
                     } else if local == b"ext" {
                         cx = attr_string(e, b"cx").and_then(|s| s.parse().ok());
                         cy = attr_string(e, b"cy").and_then(|s| s.parse().ok());
+                    } else if local == b"prstGeom" {
+                        // Self-closing prstGeom — no <a:avLst> children.
+                        let preset = attr_string(e, b"prst").unwrap_or_default();
+                        geometry = Some(ShapeGeometry::Preset {
+                            preset,
+                            adjustments: Vec::new(),
+                        });
                     }
                 }
                 Ok(XmlEvent::End(_)) => {
@@ -379,10 +414,47 @@ impl<'input> PmlEventIter<'input> {
                 _ => {}
             }
         }
-        match (x, y, cx, cy) {
+        let transform = match (x, y, cx, cy) {
             (Some(x), Some(y), Some(cx), Some(cy)) => Some(ShapeTransform { x, y, cx, cy }),
             _ => None,
+        };
+        (transform, geometry)
+    }
+
+    /// Read `<a:avLst>/<a:gd>` adjustment pairs through the matching
+    /// `</a:prstGeom>` end tag. Called with the reader positioned just after
+    /// `<a:prstGeom ...>` was consumed as a `Start` event (so depth 1 = still
+    /// inside `prstGeom`).
+    fn read_av_lst_to_end(&mut self) -> Vec<(String, String)> {
+        let mut adjustments = Vec::new();
+        let mut depth = 1u32;
+        let mut buf = Vec::new();
+        loop {
+            buf.clear();
+            match self.reader.read_event_into(&mut buf) {
+                Ok(XmlEvent::Start(_)) => depth += 1,
+                Ok(XmlEvent::Empty(ref e)) => {
+                    let local = local_name_owned(e.local_name().as_ref());
+                    if local == b"gd" {
+                        let name = attr_string(e, b"name").unwrap_or_default();
+                        let fmla = attr_string(e, b"fmla").unwrap_or_default();
+                        adjustments.push((name, fmla));
+                    }
+                }
+                Ok(XmlEvent::End(_)) => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                Ok(XmlEvent::Eof) | Err(_) => {
+                    self.done = true;
+                    break;
+                }
+                _ => {}
+            }
         }
+        adjustments
     }
 
     fn read_props<T: FromXml + Default>(&mut self, expected_local: &[u8]) -> T {
