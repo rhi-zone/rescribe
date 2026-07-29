@@ -7,6 +7,7 @@
 //! See `fixtures/spec.md` for the full cross-language specification.
 
 pub mod pandoc_harness;
+pub mod streaming_harness;
 
 use rescribe_core::{Document, Node, PropValue, Properties};
 use serde::Deserialize;

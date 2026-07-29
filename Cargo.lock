@@ -3122,7 +3122,9 @@ dependencies = [
 name = "rescribe-fixtures"
 version = "0.1.0"
 dependencies = [
+ "ooxml-pml",
  "ooxml-sml",
+ "ooxml-wml",
  "rescribe-core",
  "rescribe-read-ansi",
  "rescribe-read-asciidoc",
@@ -3197,8 +3199,10 @@ dependencies = [
  "rescribe-write-s5",
  "rescribe-write-slideous",
  "rescribe-write-slidy",
+ "rst-fmt",
  "serde",
  "serde_json",
+ "zip 7.2.0",
 ]
 
 [[package]]

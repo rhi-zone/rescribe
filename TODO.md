@@ -20,6 +20,88 @@ and not being retracted — only the construct-list-completeness component of it
 
 ---
 
+**2026-07-29: fixture harness extended to exercise `events()`/`StreamingParser`/streaming
+writer directly, not just the rescribe adapter's `parse()`/`emit()`.** Previously
+`crates/rescribe-fixtures/tests/run.rs` only ever drove the rescribe adapter's `parse()`
+(reader) / `emit()` (writer) — never any format crate's `events()`, `StreamingParser<H>`, or
+streaming writer. New infrastructure: `crates/rescribe-fixtures/src/streaming_harness.rs`
+(adversarial chunking helper, `FormatCapabilities`/`ApiState` declaration table,
+`KnownFailure`/`KNOWN_FAILURES` tracked-failure mechanism) and
+`crates/rescribe-fixtures/tests/streaming_apis.rs` (the fixture-driven checks). Full reader
+verticals wired: rst-fmt (`events()` vs. AST projection, `StreamingParser` vs. `events()`
+under adversarial chunking, streaming `Writer` vs. `build()` byte-identical — all over the
+whole `fixtures/rst/` suite) and `events()` checks for `ooxml-wml`/`ooxml-pml`/`ooxml-sml`,
+plus a streaming-writer fidelity check for `ooxml-sml`. See `fixtures/spec.md`'s new
+"Cross-API harness" section for the equivalence definitions. Every other format tested in
+`tests/run.rs` got an explicit capability declaration (`NotYetWired`, an honest "nobody has
+individually audited this format's events()/StreamingParser/streaming-writer status yet"
+placeholder) rather than silent absence from the harness — auditing and wiring real checks
+for those is tracked, unstarted follow-up work.
+
+Confirmed status of the four bugs this work was tasked with verifying (three were already
+fixed by prior sessions; verify against source, not this summary, before relying on it):
+1. **rst-fmt's `events()`/`StreamingParser`/`Writer` modules orphaned by a bad merge**:
+   already fixed (`bbf1d7ffc6`, `3bb80ac74e`) with a permanent regression guard
+   (`crates/formats/rst-fmt/tests/no_orphan_modules.rs`). Confirmed still fixed: all three
+   modules compile, are `pub use`-re-exported from `lib.rs`, and the new harness exercises
+   all three directly against the full `fixtures/rst/` suite.
+2. **`ooxml-wml` `events()` treating `<w:document>` as unknown and swallowing the body**:
+   this specific description is false today — `is_transparent_wrapper`
+   (`crates/formats/ooxml-wml/src/events.rs:80-98`) explicitly descends into
+   `document`/`body`. However, a real, previously-undocumented bug was found while wiring
+   the new `wml_events_reaches_and_correctly_orders_paragraph_text` check: for the most
+   common real-DOCX paragraph shape (`<w:p><w:r><w:t>…</w:t></w:r></w:p>`, no `<w:pPr>`
+   before the run), `events()` drops the `Text` event entirely and emits `EndParagraph`
+   before `EndRun` (violating well-nestedness). Root cause traced to `read_props`
+   (`events.rs:386-463`)'s lookahead recursing into `self.open(child_kind)` when it meets a
+   nested container before finding the expected props element, and that recursive `open()`
+   call's `self.queue(...)` (`events.rs:146-149`) unconditionally overwriting
+   `pending[0]`/`pending[1]` set by the outer call — plus the child's `ContextFrame` getting
+   pushed onto `stack` before the parent's own, inverting end-tag pop order. **`ooxml-pml`'s
+   `events.rs` shares the identical `queue()`/`read_props` pattern
+   (`events.rs:99-118,480-495`) and reproduces the same Text-drop/reversal bug.** Tracked as
+   `KnownFailure { format: "docx"/"pptx", api: "events" }` in the new harness — not fixed
+   here (out of scope for the harness-wiring task; needs its own fix pass in `ooxml-wml`'s
+   `read_props`/`queue`, then porting the fix to `ooxml-pml`, which is presumably
+   copy-derived from the same codegen template).
+3. **`ooxml-pml` rewriting every non-rectangular shape as a rectangle**: already fixed
+   (documented at `TODO.md` "ooxml-pml geometry threading" entry, dated 2026-07-29);
+   confirmed by the harness's `pml_events_reaches_slide_text` groundwork (blocked by finding
+   #4 below before it can independently re-verify the geometry fix through `events()`
+   end-to-end from real slide XML).
+4. **`ooxml-pml` `events.rs` cannot reach slide text at all** (`<p:txBody>` not in
+   `dispatch_start`, falls to `skip_element`): confirmed still open, already documented at
+   `TODO.md:160-175` (untouched here per the task's explicit instruction not to fix it).
+   `pml_events_reaches_slide_text` in the new harness reproduces this directly: feeding a
+   `<p:sld>`-wrapped fragment through `ooxml_pml::events::events` yields
+   `[StartPresentation, Text("\n"), EndPresentation]` — the shape/text never appears.
+   Tracked as `KnownFailure { format: "pptx", api: "events" }` (the same entry as #2, since
+   once txBody-reachability is fixed the shared queue-clobber bug would still corrupt the
+   result).
+5. **New finding, not in the original bug list**: wiring
+   `rst_streaming_parser_matches_events_under_adversarial_chunking` across the *entire*
+   `fixtures/rst/` suite (rst-fmt's own pre-existing streaming tests covered only 6
+   hand-picked chunk-splitting cases, none a multi-item definition list) found that
+   `StreamingParser` closes and reopens a multi-item RST definition list as one
+   `StartDefinitionList`/`EndDefinitionList` pair *per item*, instead of one list spanning
+   all items the way `events()` produces. Tracked as `KnownFailure { format: "rst", api:
+   "streaming_parser" }`; not fixed here.
+6. **`ooxml-sml` streaming writer dropping row properties and cell `style_index`**: already
+   fixed and pinned by `crates/formats/ooxml-sml/tests/streaming_writer.rs`'s
+   `row_and_cell_attributes_pass_through`; the new harness reproduces the same property
+   independently in `sml_streaming_writer_preserves_row_and_cell_attributes` (writes a row
+   with `height`/reference `7` and a cell with `style_index: 3` through `SmlWriter`, unzips
+   the resulting XLSX package, and asserts `xl/worksheets/sheet1.xml` contains both
+   attributes) — passes.
+
+**`docs/format-audit.md`'s docx/pptx/xlsx `5†`/`5†` Office-table entries do not currently
+carry a footnote or caveat naming findings #2 and #5 above** (the `†` there is defined for
+Pandoc-oracle-harness limitations, unrelated). Not changed in this pass — the "5-Production"
+claim concerns whole-document `parse()`/`emit()` fidelity via the adapter, which these
+`events()`/`StreamingParser`-specific bugs don't directly contradict, but a reviewer auditing
+those rows should be aware `events()` is not yet at parity for `docx`/`pptx`, and rst-fmt's
+`StreamingParser` has one open construct gap.
+
 ## Open Threads
 
 - **Footnote IR shape: embedded-content vs. linked-by-label are both live, unreconciled

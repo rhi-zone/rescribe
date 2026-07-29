@@ -264,6 +264,95 @@ A validator can:
 
 ---
 
+## Cross-API harness
+
+Everything above exercises exactly two APIs per format: the rescribe adapter's `parse()`
+(reader) and `emit()` (writer). Per CLAUDE.md's "-fmt crates are not rescribe internals"
+architecture, every `{format}-fmt` crate is supposed to expose **five** independently
+implemented APIs — reader `parse()`, `events()`, `StreamingParser<H>`; writer builder
+`emit()`, streaming writer — and for a long time only the first and fourth were ever driven
+by the fixture suite. That blind spot let real bugs ship silently (orphaned modules that
+never compiled, an `events()` that silently drops content or reorders events, a streaming
+writer that drops attributes), caught only when someone hand-wrote the first-ever test for
+that specific API.
+
+`crates/rescribe-fixtures/src/streaming_harness.rs` and
+`crates/rescribe-fixtures/tests/streaming_apis.rs` extend the harness to cover `events()`,
+`StreamingParser<H>`, and the streaming writer directly against the `{format}-fmt` crates
+(not just the rescribe adapter). This section documents that contract; see those two files
+for the current implementation and the honest, per-format accounting of what's actually
+wired vs. declared-but-not-yet-checked.
+
+### Equivalence definitions
+
+**`events()` vs. `parse()`.** There is no single generic "AST → events projection" type,
+because every format's AST and `Event` types are independent Rust types with independent
+shapes (per CLAUDE.md, this is deliberate — they are not derived from one another). Instead
+each format's fixture test hand-writes an `ast_to_events(&Ast) -> Vec<Event>` function next
+to its test, reconstructing the exact `Event` sequence `events()` is expected to produce
+from the AST `parse()` returned, and compares it against the real `events()` output using
+the format crate's own `PartialEq` on `Event`. This is **exact** sequence equality (order and
+every attribute), not a lossy shape-only comparison — possible because a well-designed
+`Event` type already carries every attribute the AST does. `crates/rescribe-fixtures/tests/streaming_apis.rs`'s
+`ast_to_events` for rst-fmt is the reference instantiation.
+
+**`StreamingParser<H>` vs. `events()`.** Feed the same input to `StreamingParser` under
+several adversarial chunkings (whole input, one byte at a time, fixed-size chunks, and — for
+non-ASCII input — a split that lands inside a multi-byte UTF-8 character) via
+`streaming_harness::adversarial_chunkings`, and assert the resulting event sequence equals
+`events()`'s sequence over the whole input at once. Any *documented* difference in contract
+(e.g. rst-fmt's `StreamingParser` not resolving forward-declared link targets, which its own
+module docs call out) is a sanctioned exclusion for the affected fixtures, not something this
+check should flag as a bug.
+
+**Streaming writer vs. builder `emit()`.** Where the streaming writer's output is comparable
+byte-for-byte to the builder's (e.g. rst-fmt's `Writer` emits the same RST text `build()`
+does), assert byte-identical output. Where the streaming writer produces a structurally
+different artifact than a bare comparison allows (e.g. `ooxml-sml`'s `SmlWriter` always
+produces a complete XLSX zip package — content types, rels, workbook part, worksheet part —
+not a raw XML fragment), extract the relevant part and assert the specific attributes that
+were previously found to be dropped are present.
+
+### Capability declaration
+
+`streaming_harness::CAPABILITIES` is a table of `FormatCapabilities { format, events,
+streaming_parser, streaming_writer }`, one entry per format, where each of the three fields is
+an `ApiState`:
+
+- `Wired` — a real, passing, fixture-driven check exists for this API.
+- `KnownFailure(&str)` — the API is checked, wired, and currently fails against a specific
+  tracked bug (see Known failures below).
+- `NotApplicable(&str)` — the `{format}-fmt` crate structurally does not have this API, for a
+  reason documented in `docs/format-audit.md` (e.g. csv-fmt/tsv-fmt/ris/native have no
+  meaningful streaming writer; commonmark-fmt's `StreamingParser` buffering is a sanctioned,
+  documented pulldown-cmark exemption per CLAUDE.md). This variant may only be used to cite a
+  *documented* structural absence, never to dodge writing a check that should exist.
+- `NotYetWired(&str)` — the API likely exists but this harness does not check it yet; an
+  honest placeholder distinct from `NotApplicable`, tracked as follow-up work.
+
+Every format tested in `tests/run.rs` must appear either in `CAPABILITIES` or in the
+`NOT_YET_AUDITED` list (an even more honest "nobody has individually verified this format's
+API status yet" placeholder) — `tests/streaming_apis.rs::every_run_rs_format_has_a_capability_entry`
+enforces this. The design intent: "not checked" must always be a line of code someone wrote
+and can review in a diff, never silent absence from the harness.
+
+### Known failures
+
+`streaming_harness::KNOWN_FAILURES` is a table of `KnownFailure { format, api, description }`.
+`assert_or_known_failure(format, api, result)` is how a wired check reports its outcome:
+
+- No matching entry, `Ok`: passes silently, nothing to report.
+- No matching entry, `Err`: an untracked failure — panics. Every failure must be fixed or
+  explicitly acknowledged here; a failing check may never be silently ignored.
+- Matching entry, `Err`: an acknowledged, tracked failure — prints an
+  `ACKNOWLEDGED KNOWN FAILURE` line via `eprintln!` and returns without panicking, so the
+  overall test still passes. Since the test passes, `cargo test`'s default output capture
+  hides that line; run with `cargo test -- --nocapture` to see the acknowledgements.
+- Matching entry, `Ok`: the bug no longer reproduces — panics, telling the maintainer to
+  delete the now-stale entry. This is the anti-regression property: the list can only shrink
+  by someone confirming a fix, never grow silently, and a fixed bug can never keep quietly
+  masking a future regression under the same table entry.
+
 ## Example
 
 Input (`markdown/bold/input.md`):

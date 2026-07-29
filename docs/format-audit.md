@@ -147,17 +147,27 @@ currently unverified, not that the claim is false.
 
 | Format | R | W | CC | Library | R-next | W-next |
 |--------|---|---|----|---------|--------|--------|
-| docx | 5† | 5† | U | ooxml-wml | – | – |
+| docx | 5†‡ | 5† | U | ooxml-wml | – | – |
 | odt | 5 | 5 | U | odf-fmt (standalone) | – | – |
 | epub | 5† | 5† | U | epub / epub-builder | – | – |
 | fb2 | 5† | 5† | U | fb2-fmt | – | – |
-| pptx | 5† | 5† | U | ooxml-pml | – | – |
+| pptx | 5†‡ | 5† | U | ooxml-pml | – | – |
 | xlsx | 5† | 5† | U | ooxml-sml | – | – |
 | pdf | 4† | – | U | pdf-extract | production | – |
 | rtf | 5 | 5 | U | rtf-fmt (standalone) | – | – |
 | mobi | – | – | – | – (planned) | – | – |
 | azw3 | – | – | – | – (planned) | – | – |
 | kfx | – | – | – | – (planned) | – | – |
+
+‡ `events()` (the standalone SAX-style reader API, not the whole-document `parse()` this R
+score is about) has a known Text-drop / end-tag-reordering bug for the common
+`<w:p><w:r><w:t>` paragraph shape (`ooxml-wml`), shared by `ooxml-pml`'s `events()`, which
+additionally cannot reach slide text at all (`<p:txBody>` unhandled in `dispatch_start`).
+Found/confirmed 2026-07-29 while wiring `crates/rescribe-fixtures/tests/streaming_apis.rs`;
+tracked as `KnownFailure` entries in `crates/rescribe-fixtures/src/streaming_harness.rs` and
+in TODO.md. Does not change the R score here (that's about `parse()`, which is unaffected
+and independently implemented), but the API-mode matrix below should not be read as claiming
+`events()` parity for these two formats.
 
 ### HTML and structured XML
 
@@ -249,11 +259,18 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 | Crate | ast | stream | batch | w-stream | w-build |
 |-------|-----|--------|-------|----------|---------|
 | rtf-fmt | ✓ | ~ | | | ✓ |
-| rst-fmt | ✓ | ✓ | ✓ | ✓ | ✓ |
+| rst-fmt | ✓ | ✓ | ✓‡ | ✓ | ✓ |
 | asciidoc | ✓ | | | ~ | ✓ |
 | org-fmt | ✓ | | | | ✓ |
 | djot-fmt | | | | | |
 | textile-fmt | ✓ | | | | ✓ |
+
+‡ rst-fmt's `batch` (`StreamingParser`) has one known construct gap found 2026-07-29 by the
+new `crates/rescribe-fixtures/tests/streaming_apis.rs` adversarial-chunking check run across
+the full `fixtures/rst/` suite (previously only 6 hand-picked cases were covered): a
+multi-item definition list is split into one `StartDefinitionList`/`EndDefinitionList` pair
+per item instead of one list spanning all items. Tracked as a `KnownFailure` in
+`streaming_harness.rs` and in TODO.md; not fixed here.
 
 ### Remaining hand-written formats (crate exists, API not started)
 
