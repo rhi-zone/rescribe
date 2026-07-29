@@ -583,6 +583,38 @@ directory), but `BatchParser::feed`/`finish` is a push API returning a materiali
 `StreamingParser<H: Handler>` surface that ooxml-wml does not have at all — a
 separate vertical, not a patch.
 
+### Update 2026-07-29 — `ooxml-pml` geometry loss fixed; writer hollowness still open
+
+`ooxml-pml`'s **lossiness** finding above (shape/table-cell text flattened, geometry
+discarded for most event types) is narrowed and the geometry half is closed.
+Verified directly (not assumed) that the loss was confined to the events()/
+`PmlWriter` pair: the AST/`parse()` path (`Presentation`/`Slide`) wraps the
+generated `types::Shape` and already round-trips full `spPr` geometry fidelity
+through the generated FromXml/ToXml. `PmlEvent::StartShape` now carries a
+`ShapeGeometry` (preset name + `<a:avLst>` adjustment values, modeled; `<a:custGeom>`
+raw-preserved verbatim via `ooxml_xml::RawXmlElement`) alongside the pre-existing
+`ShapeTransform`; `events.rs` populates it, `PmlWriter` emits it via the full
+`ShapeBuilder` instead of hardcoding `Rect`. 8 tests in
+`ooxml-pml/tests/streaming_writer_geometry.rs`. Two further, cross-cutting bugs
+surfaced while writing those tests and are fenced (not fixed) in TODO.md: (1)
+`ooxml-dml`'s generated `CTPath2D` parser/serializer put point coordinates directly
+on `<a:moveTo>`/`<a:lnTo>` rather than a nested `<a:pt>`, so real-PowerPoint-shaped
+custGeom fails to round-trip through the typed `CTCustomGeometry2D` on the writer
+path (raw capture on the reader side is unaffected); the writer falls back to `Rect`
+in that case rather than corrupting output. (2) `events.rs`'s true SAX reader was
+never exercised by any test before now and does not treat `<p:txBody>` (or the
+`p:sld`/`p:cSld`/`p:spTree` wrapper elements needed to drive it from a real slide
+part) as transparent containers, so real slide text is currently unreachable
+through `events()` — a `<p:sld>`-wrapped fixture through `pml_events()` produces
+zero shapes.
+
+`ooxml-pml`'s **writer-hollowness** finding (buffers every `OwnedPmlEvent` into a
+`Vec`, replays it through a hand-rolled little state machine to reconstruct calls
+against `PresentationBuilder`, which does the actual `write()` at `finish()`) is
+unchanged — still O(full input), still delegates to the builder's emit path. Not
+started this pass, deliberately fenced: see TODO.md for the classification-so-far
+and the `ooxml-wml` commits (`849480a98c`, `c966059d32`) to use as a template.
+
 ---
 
 ## Risk areas

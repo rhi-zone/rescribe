@@ -78,16 +78,85 @@ and not being retracted — only the construct-list-completeness component of it
   `docs/format-audit.md`. It needs the same rework `ooxml-wml` just got; `ooxml-wml` is now
   the in-repo proof that the zip/OPC container is not the obstacle.
 
-- **`ooxml-pml`'s writer is separately hollow *and* lossy — untouched, still open
-  (2026-07-29).** Flattens shape/paragraph/table-cell text into plain strings and discards
-  shape geometry for most event types (only `StartShape { transform }` carries position),
-  so it is a fidelity regression against the builder path as well as a fake-streaming one.
-  Left alone deliberately while working `ooxml-wml`. The `ooxml-wml` rework does hand it a
-  ready-made template: `PackageWriter::start_part`/`write_part_data` + the `Write` impl on
-  `PackageWriter` (added in `ooxml-opc` for this) make "stream one XML part into the ZIP,
-  accumulate only the relationship table, write rels + content-types at finish" mechanical.
-  The lossiness is a separate problem from the streaming shape and needs fixing on its own
-  terms.
+- **`ooxml-pml`'s geometry loss is fixed (2026-07-29); the writer is still hollow
+  (buffer-then-delegate-to-builder), fenced below.** `PmlEvent::StartShape` previously
+  carried only `ShapeTransform` (bounding box); `<a:prstGeom>`/`<a:custGeom>` were never
+  read by `events.rs` and `PmlWriter` always emitted `PresetGeometry::Rect` regardless of
+  the source shape. Confirmed via direct read (not guessed) that this loss was confined to
+  the events()/`PmlWriter` pair: `Presentation`/`Slide` (the AST/`parse()` path) wrap the
+  generated `types::Shape` directly and round-trip full `spPr` fidelity through the
+  generated FromXml/ToXml — `CTPresetGeometry2D.av_lst` and `CTCustomGeometry2D` are both
+  modeled there already. The builder path (`ShapeBuilder`) had a related but smaller gap:
+  `set_geometry` could set a preset name but hardcoded `av_lst: None` and had no custGeom
+  support at all — fixed in the same commit.
+
+  Added `ShapeGeometry` (`generated_events.rs`): `Preset { preset, adjustments }` for
+  `<a:prstGeom>`/`<a:avLst>` (modeled — this is a small, well-defined attribute list, not
+  format-specific enough to warrant raw-only treatment), and `Custom(RawXmlElement)` for
+  `<a:custGeom>` (raw-preserved verbatim — no cross-format equivalent, per CLAUDE.md's
+  raw-preservation pattern). `events.rs`'s `extract_xfrm_from_sppr` now reads both;
+  `ShapeBuilder` gained `set_geometry_adjustments`/`set_custom_geometry`; `PmlWriter`'s
+  `process_slide` threads `ShapeGeometry` through and calls the full `ShapeBuilder` (not
+  `add_text_at`) whenever geometry is present. 8 new tests in
+  `ooxml-pml/tests/streaming_writer_geometry.rs` cover reader extraction and writer
+  emission for ellipse, roundRect+avLst, and custGeom.
+
+  **Two further bugs found while writing the round-trip tests, left fenced rather than
+  fixed here — both are cross-cutting, not specific to the geometry fix:**
+
+  1. **ooxml-dml's generated `CTPath2D` parser/serializer put `x`/`y` directly on
+     `<a:moveTo>`/`<a:lnTo>`, not on a nested `<a:pt>`.** Real ECMA-376 (and every
+     PowerPoint-authored PPTX) writes `<a:moveTo><a:pt x=".." y=".."/></a:moveTo>`; the
+     codegen output (`ooxml_dml::generated_parsers::CTPath2D::from_xml`,
+     `generated_serializers.rs`'s matching `ToXml` impl) instead reads/writes those
+     attributes on `moveTo`/`lnTo` themselves. This is internally self-consistent for
+     ooxml-dml's own `parse(emit(x)) == x`, so existing ooxml-dml/ooxml-wml/ooxml-sml
+     tests don't catch it, but it means `RawXmlElement::parse_as::<CTCustomGeometry2D>()`
+     fails on any real-shaped custGeom fed through `PmlWriter`'s custGeom write path
+     (`streaming.rs`). Verified with `MissingAttribute("x")` from a real-shaped fixture in
+     a scratch test. Landed as designed-for gracefully: `PmlWriter` falls back to the
+     default `Rect` (keeping the shape's text) rather than corrupting output when this
+     happens, locked in by `pml_writer_falls_back_gracefully_on_unparseable_cust_geom`.
+     Root-causing and fixing this belongs in `ooxml-codegen`'s handling of the
+     `EG_Path2DMoveTo`-style group-to-type mapping — cross-cutting across every consumer
+     of `CTPath2D`, not an `ooxml-pml`-scoped fix.
+  2. **`events.rs`'s true SAX reader was never exercised by any test until now, and does
+     not treat `<p:txBody>` as a transparent container.** `dispatch_start` only recognizes
+     `sp`/`graphicFrame`/`tbl`/`tr`/`tc`/`p`/`r`/`hyperlink`; any other `Start` element
+     (including `<p:txBody>`, `<p:nvSpPr>`, `<p:style>`) falls through to
+     `skip_element`, which skips the *entire* subtree. Since a shape's paragraphs/runs
+     live inside `<p:txBody>`, real slide XML fed through `events()` never reaches its own
+     text — `PmlWriter`'s shape-filtering-by-nonempty-text (`process_slide`) means such
+     shapes are silently dropped from output entirely. Confirmed directly: an end-to-end
+     `<p:sld>`-wrapped fixture through `pml_events()` produced zero shapes. Worked around
+     for the new geometry tests by driving `events()` with `<p:sp>` fragments directly
+     (bypassing the txBody descent this exposes) rather than full slide parts. Fixing this
+     requires `events.rs` to either add `txBody` (and the wrapper elements
+     `p:sld`/`p:cSld`/`p:spTree`/`p:nvGrpSpPr`/`p:grpSpPr` needed to drive it from a real
+     slide part at all) as transparent pass-through containers, or restructure
+     `dispatch_start`'s container model — general `events.rs` rework, explicitly out of
+     scope for the geometry fix per the task that produced it.
+
+  **What remains unfenced from the earlier writer-hollowness finding, still open:**
+  `PmlWriter::finish()` still buffers every `OwnedPmlEvent` into a `Vec` and replays it
+  through `process_pml_events`/`process_slide`'s hand-rolled little state machine to
+  reconstruct calls against `PresentationBuilder`, which then does the actual `write()` —
+  O(full input) memory, not O(nesting depth), and delegates to the builder's emit path
+  exactly as CLAUDE.md forbids. Not started, deliberately — the `ooxml-wml` rework
+  (`849480a98c`) is the ready-made template: `PackageWriter::start_part`/`write_part_data`
+  + the `Write` impl on `PackageWriter` (added in `ooxml-opc` for `ooxml-wml`) make
+  "stream one XML part into the ZIP, accumulate only the relationship table, write rels +
+  content-types at finish" mechanical. PPTX-specific complications the next agent should
+  work out before starting (not yet analyzed): slide/layout/master relationship IDs and
+  `[Content_Types].xml` entries, `presentation.xml`'s `sldIdLst` (needs relationship IDs
+  assigned as slides are created — mirrors the WML rework's rels-table-accumulated-until-
+  finish pattern), and whether `PmlWriter`'s current "flatten paragraphs into a `String`
+  and only add a shape once its container closes with non-empty text" model can survive
+  becoming truly incremental (it currently must buffer at least one shape's worth of
+  events to know if a shape ends up with any text — that's fine, O(nesting depth), but the
+  per-slide `Vec<(String, Option<ShapeTransform>, Option<ShapeGeometry>)>` buffering
+  across *all* shapes on a slide before calling `add_slide()` should collapse to
+  streaming each shape into the open slide part as its `EndShape` arrives).
 
 - **`rst-fmt`'s streaming/batch/writer-streaming APIs recovered (2026-07-28) — resolves the
   previous entry.** Root cause pinned exactly: not commit `79ea2ce7af` itself but merge
