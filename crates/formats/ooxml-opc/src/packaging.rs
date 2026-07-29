@@ -181,6 +181,32 @@ impl<W: Write + Seek> PackageWriter<W> {
         Ok(())
     }
 
+    /// Begin a part whose bytes are streamed directly into the package.
+    ///
+    /// Registers the content-type override and opens the ZIP entry. Bytes are
+    /// then appended with [`write_part_data`](Self::write_part_data) (or via the
+    /// [`Write`] impl on this type). At most one part is open at a time: starting
+    /// another part — with either `start_part` or [`add_part`](Self::add_part) —
+    /// or calling [`finish`](Self::finish) closes the current one.
+    ///
+    /// This is the O(1)-memory counterpart to `add_part`, which requires the
+    /// whole part in memory. Deflate compression is applied incrementally by the
+    /// underlying ZIP writer, so a multi-gigabyte part costs only the compressor's
+    /// window, never the part's own size.
+    pub fn start_part(&mut self, path: &str, content_type: &str) -> Result<()> {
+        self.content_types.add_override(path, content_type);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        self.writer.start_file(path, options)?;
+        Ok(())
+    }
+
+    /// Append bytes to the part opened by [`start_part`](Self::start_part).
+    pub fn write_part_data(&mut self, data: &[u8]) -> Result<()> {
+        self.writer.write_all(data)?;
+        Ok(())
+    }
+
     /// Add a default content type mapping for a file extension.
     pub fn add_default_content_type(&mut self, extension: &str, content_type: &str) {
         self.content_types.add_default(extension, content_type);
@@ -196,6 +222,19 @@ impl<W: Write + Seek> PackageWriter<W> {
         self.writer.write_all(content_types_xml.as_bytes())?;
 
         Ok(self.writer.finish()?)
+    }
+}
+
+/// Writes into the part most recently opened by
+/// [`PackageWriter::start_part`], so a `PackageWriter` can be handed to any
+/// `impl Write` consumer (e.g. `quick_xml::Writer`) for incremental emission.
+impl<W: Write + Seek> Write for PackageWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.writer.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.writer.flush()
     }
 }
 
