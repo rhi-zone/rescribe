@@ -159,9 +159,7 @@ fn inline_to_node(inline: &Inline) -> Node {
             Node::new(node::STRIKEOUT).children(nodes)
         }
 
-        Inline::Code(content, _) => {
-            Node::new(node::CODE).prop(prop::CONTENT, content.clone())
-        }
+        Inline::Code(content, _) => Node::new(node::CODE).prop(prop::CONTENT, content.clone()),
 
         Inline::Link { url, children, .. } => {
             let nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
@@ -180,11 +178,9 @@ fn inline_to_node(inline: &Inline) -> Node {
             Node::new(node::RAW_INLINE).prop(prop::CONTENT, content.clone())
         }
 
-        Inline::Tagged(content, _) => {
-            Node::new(node::RAW_INLINE)
-                .prop(prop::CONTENT, content.clone())
-                .prop("t2t:tagged", true)
-        }
+        Inline::Tagged(content, _) => Node::new(node::RAW_INLINE)
+            .prop(prop::CONTENT, content.clone())
+            .prop("t2t:tagged", true),
     }
 }
 

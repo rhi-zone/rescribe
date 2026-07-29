@@ -43,7 +43,9 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines))
         }
 
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             let mut node = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 node = node.prop(prop::LANGUAGE, lang.clone());
@@ -93,20 +95,21 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::BLOCKQUOTE).children(child_nodes)
         }
 
-        Block::MacroBlock { name, params, content, .. } => {
-            Node::new(node::RAW_BLOCK)
-                .prop(prop::FORMAT, "xwiki")
-                .prop("xwiki:macro-name", name.clone())
-                .prop("xwiki:macro-params", params.clone())
-                .prop(prop::CONTENT, content.clone())
-        }
+        Block::MacroBlock {
+            name,
+            params,
+            content,
+            ..
+        } => Node::new(node::RAW_BLOCK)
+            .prop(prop::FORMAT, "xwiki")
+            .prop("xwiki:macro-name", name.clone())
+            .prop("xwiki:macro-params", params.clone())
+            .prop(prop::CONTENT, content.clone()),
 
-        Block::MacroInline { name, params, .. } => {
-            Node::new(node::RAW_INLINE)
-                .prop(prop::FORMAT, "xwiki")
-                .prop("xwiki:macro-name", name.clone())
-                .prop("xwiki:macro-params", params.clone())
-        }
+        Block::MacroInline { name, params, .. } => Node::new(node::RAW_INLINE)
+            .prop(prop::FORMAT, "xwiki")
+            .prop("xwiki:macro-name", name.clone())
+            .prop("xwiki:macro-params", params.clone()),
     }
 }
 
@@ -120,7 +123,9 @@ fn inline_to_node(inline: &Inline) -> Node {
 
         Inline::Bold(children, _) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
 
-        Inline::Italic(children, _) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
+        Inline::Italic(children, _) => {
+            Node::new(node::EMPHASIS).children(inlines_to_nodes(children))
+        }
 
         Inline::Underline(children, _) => {
             Node::new(node::UNDERLINE).children(inlines_to_nodes(children))

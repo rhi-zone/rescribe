@@ -5,7 +5,13 @@ pub fn parse(input: &str) -> (PodDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.parse_blocks();
     let diagnostics = std::mem::take(&mut p.diagnostics);
-    (PodDoc { blocks, span: Span::NONE }, diagnostics)
+    (
+        PodDoc {
+            blocks,
+            span: Span::NONE,
+        },
+        diagnostics,
+    )
 }
 
 struct Parser<'a> {
@@ -17,7 +23,12 @@ struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     fn new(input: &'a str) -> Self {
-        Self { lines: input.lines().collect(), pos: 0, in_pod: false, diagnostics: Vec::new() }
+        Self {
+            lines: input.lines().collect(),
+            pos: 0,
+            in_pod: false,
+            diagnostics: Vec::new(),
+        }
     }
 
     fn parse_blocks(&mut self) -> Vec<Block> {
@@ -88,7 +99,11 @@ impl<'a> Parser<'a> {
             let title = rest.get(1..)?.trim();
             let inlines = parse_inline(title);
             self.pos += 1;
-            return Some(Block::Heading { level, inlines, span: Span::NONE });
+            return Some(Block::Heading {
+                level,
+                inlines,
+                span: Span::NONE,
+            });
         }
 
         // =over / =item / =back
@@ -109,7 +124,10 @@ impl<'a> Parser<'a> {
 
         // =end without matching =begin
         if line.starts_with("=end") {
-            self.diagnostics.push(Diagnostic::warning("=end without matching =begin", Span::NONE));
+            self.diagnostics.push(Diagnostic::warning(
+                "=end without matching =begin",
+                Span::NONE,
+            ));
             self.pos += 1;
             return None;
         }
@@ -123,19 +141,26 @@ impl<'a> Parser<'a> {
         if let Some(rest) = line.strip_prefix("=encoding") {
             let encoding = rest.trim().to_string();
             self.pos += 1;
-            return Some(Block::Encoding { encoding, span: Span::NONE });
+            return Some(Block::Encoding {
+                encoding,
+                span: Span::NONE,
+            });
         }
 
         // =back without matching =over
         if line.starts_with("=back") {
-            self.diagnostics.push(Diagnostic::warning("=back without matching =over", Span::NONE));
+            self.diagnostics.push(Diagnostic::warning(
+                "=back without matching =over",
+                Span::NONE,
+            ));
             self.pos += 1;
             return None;
         }
 
         // =item outside =over
         if line.starts_with("=item") {
-            self.diagnostics.push(Diagnostic::warning("=item outside =over", Span::NONE));
+            self.diagnostics
+                .push(Diagnostic::warning("=item outside =over", Span::NONE));
             self.pos += 1;
             return None;
         }
@@ -168,7 +193,11 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
 
-        Block::RawBlock { format, content, span: Span::NONE }
+        Block::RawBlock {
+            format,
+            content,
+            span: Span::NONE,
+        }
     }
 
     fn parse_for(&mut self) -> Block {
@@ -176,12 +205,19 @@ impl<'a> Parser<'a> {
         let rest = first_line.strip_prefix("=for").unwrap_or("").trim();
         // First word is format, rest is content
         let (format, content) = if let Some(space_pos) = rest.find(char::is_whitespace) {
-            (rest[..space_pos].to_string(), rest[space_pos..].trim().to_string())
+            (
+                rest[..space_pos].to_string(),
+                rest[space_pos..].trim().to_string(),
+            )
         } else {
             (rest.to_string(), String::new())
         };
         self.pos += 1;
-        Block::ForBlock { format, content, span: Span::NONE }
+        Block::ForBlock {
+            format,
+            content,
+            span: Span::NONE,
+        }
     }
 
     fn parse_list(&mut self) -> Block {
@@ -252,7 +288,10 @@ impl<'a> Parser<'a> {
 
                 if !marker_text.is_empty() {
                     let inlines = parse_inline(marker_text);
-                    item_blocks.push(Block::Paragraph { inlines, span: Span::NONE });
+                    item_blocks.push(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
 
                 // Collect following paragraphs until next =item or =back
@@ -297,7 +336,11 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Block::List { ordered: is_ordered, items, span: Span::NONE }
+        Block::List {
+            ordered: is_ordered,
+            items,
+            span: Span::NONE,
+        }
     }
 
     fn parse_definition_list(&mut self) -> Block {
@@ -355,13 +398,19 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                items.push(DefinitionItem { term, desc: desc_blocks });
+                items.push(DefinitionItem {
+                    term,
+                    desc: desc_blocks,
+                });
             } else {
                 self.pos += 1;
             }
         }
 
-        Block::DefinitionList { items, span: Span::NONE }
+        Block::DefinitionList {
+            items,
+            span: Span::NONE,
+        }
     }
 
     fn parse_verbatim(&mut self) -> Block {
@@ -389,7 +438,10 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
 
-        Block::CodeBlock { content: content.trim_end().to_string(), span: Span::NONE }
+        Block::CodeBlock {
+            content: content.trim_end().to_string(),
+            span: Span::NONE,
+        }
     }
 
     fn parse_paragraph(&mut self) -> Block {
@@ -415,7 +467,10 @@ impl<'a> Parser<'a> {
         }
 
         let inlines = parse_inline(&text);
-        Block::Paragraph { inlines, span: Span::NONE }
+        Block::Paragraph {
+            inlines,
+            span: Span::NONE,
+        }
     }
 }
 
@@ -430,7 +485,10 @@ pub fn parse_inline(text: &str) -> Vec<Inline> {
         // Check for formatting codes: X<...>
         if i + 1 < chars.len() && chars[i + 1] == '<' {
             let code = chars[i];
-            if matches!(code, 'B' | 'I' | 'C' | 'L' | 'F' | 'S' | 'U' | 'E' | 'X' | 'Z') {
+            if matches!(
+                code,
+                'B' | 'I' | 'C' | 'L' | 'F' | 'S' | 'U' | 'E' | 'X' | 'Z'
+            ) {
                 // Check for double angle brackets C<< ... >>
                 let (content, end_pos) = if i + 2 < chars.len() && chars[i + 2] == '<' {
                     // Double angle brackets with space padding - start from first <
@@ -442,9 +500,7 @@ pub fn parse_inline(text: &str) -> Vec<Inline> {
 
                 if let Some((content, end)) = content.zip(end_pos) {
                     // Flush text buffer before structured inlines
-                    if !current.is_empty()
-                        && !matches!(code, 'E')
-                    {
+                    if !current.is_empty() && !matches!(code, 'E') {
                         inlines.push(Inline::Text(current.clone(), Span::NONE));
                         current.clear();
                     }
@@ -479,7 +535,11 @@ pub fn parse_inline(text: &str) -> Vec<Inline> {
                             } else {
                                 (content.clone(), content)
                             };
-                            inlines.push(Inline::Link { url, label, span: Span::NONE });
+                            inlines.push(Inline::Link {
+                                url,
+                                label,
+                                span: Span::NONE,
+                            });
                         }
                         'S' => {
                             let inner = parse_inline(&content);
@@ -613,7 +673,10 @@ fn find_double_bracket_content(chars: &[char], start: usize) -> (Option<String>,
                 j += 1;
             }
             if closing_count >= bracket_count {
-                return (Some(content.trim_end().to_string()), Some(i + bracket_count));
+                return (
+                    Some(content.trim_end().to_string()),
+                    Some(i + bracket_count),
+                );
             }
         }
 

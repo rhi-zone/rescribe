@@ -121,7 +121,10 @@ ER  -"#;
     fn test_strip_spans() {
         let mut entry = RisEntry::new("JOUR");
         entry.add_field("TI", "Test");
-        let mut doc = RisDoc { entries: vec![entry], span: Span::NONE };
+        let mut doc = RisDoc {
+            entries: vec![entry],
+            span: Span::NONE,
+        };
         doc.strip_spans();
         assert_eq!(doc.span, Span::NONE);
         assert_eq!(doc.entries[0].span, Span::NONE);

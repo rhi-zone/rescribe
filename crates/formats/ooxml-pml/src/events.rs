@@ -24,12 +24,15 @@
 
 use std::borrow::Cow;
 
-use quick_xml::events::Event as XmlEvent;
 use quick_xml::Reader;
+use quick_xml::events::Event as XmlEvent;
 
-use ooxml_dml::types::{CTTableCellProperties, CTTableProperties, TextCharacterProperties,
-    TextParagraphProperties};
-use super::generated_events::{PmlEvent, PmlStartKind, ShapeTransform, dispatch_start, is_text_element};
+use super::generated_events::{
+    PmlEvent, PmlStartKind, ShapeTransform, dispatch_start, is_text_element,
+};
+use ooxml_dml::types::{
+    CTTableCellProperties, CTTableProperties, TextCharacterProperties, TextParagraphProperties,
+};
 use ooxml_xml::FromXml;
 
 /// Return a streaming iterator over the PML events in the given slide XML bytes.
@@ -46,9 +49,7 @@ pub fn events(bytes: &[u8]) -> PmlEventIter<'_> {
 
 enum XmlInfo {
     ContainerStart(PmlStartKind),
-    HyperlinkStart {
-        rel_id: Option<String>,
-    },
+    HyperlinkStart { rel_id: Option<String> },
     Leaf(PmlEvent<'static>),
     End,
     Text(String),
@@ -141,7 +142,9 @@ impl<'input> Iterator for PmlEventIter<'input> {
                     return Some(start_event);
                 }
                 XmlInfo::HyperlinkStart { rel_id } => {
-                    self.stack.push(ContextFrame { kind: PmlStartKind::Hyperlink });
+                    self.stack.push(ContextFrame {
+                        kind: PmlStartKind::Hyperlink,
+                    });
                     return Some(PmlEvent::StartHyperlink {
                         rel_id: rel_id.map(Cow::Owned),
                     });
@@ -274,19 +277,27 @@ impl<'input> PmlEventIter<'input> {
         match kind {
             PmlStartKind::Paragraph => {
                 let props = self.read_props::<TextParagraphProperties>(b"pPr");
-                PmlEvent::StartParagraph { props: Box::new(props) }
+                PmlEvent::StartParagraph {
+                    props: Box::new(props),
+                }
             }
             PmlStartKind::Run => {
                 let props = self.read_props::<TextCharacterProperties>(b"rPr");
-                PmlEvent::StartRun { props: Box::new(props) }
+                PmlEvent::StartRun {
+                    props: Box::new(props),
+                }
             }
             PmlStartKind::Table => {
                 let props = self.read_props::<CTTableProperties>(b"tblPr");
-                PmlEvent::StartTable { props: Box::new(props) }
+                PmlEvent::StartTable {
+                    props: Box::new(props),
+                }
             }
             PmlStartKind::TableCell => {
                 let props = self.read_props::<CTTableCellProperties>(b"tcPr");
-                PmlEvent::StartTableCell { props: Box::new(props) }
+                PmlEvent::StartTableCell {
+                    props: Box::new(props),
+                }
             }
             PmlStartKind::Shape => {
                 let transform = self.read_shape_transform();
@@ -380,8 +391,14 @@ impl<'input> PmlEventIter<'input> {
                 PropsOrInfo::IsProps { is_empty } => {
                     let tag_bytes = self.buf.clone();
                     let tag_str = std::str::from_utf8(&tag_bytes).unwrap_or("");
-                    let content = tag_str.trim_start_matches('<').trim_end_matches('>').trim_end_matches('/');
-                    let name_len = content.bytes().position(|b| b == b' ').unwrap_or(content.len());
+                    let content = tag_str
+                        .trim_start_matches('<')
+                        .trim_end_matches('>')
+                        .trim_end_matches('/');
+                    let name_len = content
+                        .bytes()
+                        .position(|b| b == b' ')
+                        .unwrap_or(content.len());
                     let start = quick_xml::events::BytesStart::from_content(content, name_len);
                     return T::from_xml(&mut self.reader, &start, is_empty).unwrap_or_default();
                 }
@@ -392,8 +409,12 @@ impl<'input> PmlEventIter<'input> {
                     return T::default();
                 }
                 PropsOrInfo::Info(XmlInfo::HyperlinkStart { rel_id }) => {
-                    let ev = PmlEvent::StartHyperlink { rel_id: rel_id.map(Cow::Owned) };
-                    self.stack.push(ContextFrame { kind: PmlStartKind::Hyperlink });
+                    let ev = PmlEvent::StartHyperlink {
+                        rel_id: rel_id.map(Cow::Owned),
+                    };
+                    self.stack.push(ContextFrame {
+                        kind: PmlStartKind::Hyperlink,
+                    });
                     self.queue(ev, None);
                     return T::default();
                 }

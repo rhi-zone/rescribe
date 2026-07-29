@@ -15,7 +15,10 @@ pub struct Writer<W: Write> {
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
-        Writer { sink, events: Vec::new() }
+        Writer {
+            sink,
+            events: Vec::new(),
+        }
     }
 
     /// Feed one event to the writer.
@@ -43,21 +46,53 @@ fn events_to_doc(events: Vec<OwnedEvent>) -> PodDoc {
 }
 
 enum Frame {
-    Document { blocks: Vec<Block> },
-    Paragraph { inlines: Vec<Inline> },
-    Heading { level: u32, inlines: Vec<Inline> },
-    List { ordered: bool, items: Vec<Vec<Block>> },
-    ListItem { blocks: Vec<Block> },
-    DefinitionList { items: Vec<DefinitionItem> },
-    DefinitionTerm { inlines: Vec<Inline> },
-    DefinitionDesc { blocks: Vec<Block> },
+    Document {
+        blocks: Vec<Block>,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+    },
+    Heading {
+        level: u32,
+        inlines: Vec<Inline>,
+    },
+    List {
+        ordered: bool,
+        items: Vec<Vec<Block>>,
+    },
+    ListItem {
+        blocks: Vec<Block>,
+    },
+    DefinitionList {
+        items: Vec<DefinitionItem>,
+    },
+    DefinitionTerm {
+        inlines: Vec<Inline>,
+    },
+    DefinitionDesc {
+        blocks: Vec<Block>,
+    },
     // Inline spans
-    Bold { inlines: Vec<Inline> },
-    Italic { inlines: Vec<Inline> },
-    Underline { inlines: Vec<Inline> },
-    Filename { inlines: Vec<Inline> },
-    NonBreaking { inlines: Vec<Inline> },
-    Link { url: String, label: String, inlines: Vec<Inline> },
+    Bold {
+        inlines: Vec<Inline>,
+    },
+    Italic {
+        inlines: Vec<Inline>,
+    },
+    Underline {
+        inlines: Vec<Inline>,
+    },
+    Filename {
+        inlines: Vec<Inline>,
+    },
+    NonBreaking {
+        inlines: Vec<Inline>,
+    },
+    Link {
+        url: String,
+        label: String,
+        inlines: Vec<Inline>,
+    },
 }
 
 struct DocBuilder {
@@ -66,7 +101,9 @@ struct DocBuilder {
 
 impl DocBuilder {
     fn new() -> Self {
-        DocBuilder { stack: vec![Frame::Document { blocks: vec![] }] }
+        DocBuilder {
+            stack: vec![Frame::Document { blocks: vec![] }],
+        }
     }
 
     fn process(&mut self, event: OwnedEvent) {
@@ -76,23 +113,40 @@ impl DocBuilder {
             }
             OwnedEvent::EndParagraph => {
                 if let Some(Frame::Paragraph { inlines }) = self.stack.pop() {
-                    self.push_block(Block::Paragraph { inlines, span: Span::NONE });
+                    self.push_block(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartHeading { level } => {
-                self.stack.push(Frame::Heading { level, inlines: vec![] });
+                self.stack.push(Frame::Heading {
+                    level,
+                    inlines: vec![],
+                });
             }
             OwnedEvent::EndHeading => {
                 if let Some(Frame::Heading { level, inlines }) = self.stack.pop() {
-                    self.push_block(Block::Heading { level, inlines, span: Span::NONE });
+                    self.push_block(Block::Heading {
+                        level,
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartList { ordered } => {
-                self.stack.push(Frame::List { ordered, items: vec![] });
+                self.stack.push(Frame::List {
+                    ordered,
+                    items: vec![],
+                });
             }
             OwnedEvent::EndList => {
                 if let Some(Frame::List { ordered, items }) = self.stack.pop() {
-                    self.push_block(Block::List { ordered, items, span: Span::NONE });
+                    self.push_block(Block::List {
+                        ordered,
+                        items,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartListItem => {
@@ -110,7 +164,10 @@ impl DocBuilder {
             }
             OwnedEvent::EndDefinitionList => {
                 if let Some(Frame::DefinitionList { items }) = self.stack.pop() {
-                    self.push_block(Block::DefinitionList { items, span: Span::NONE });
+                    self.push_block(Block::DefinitionList {
+                        items,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartDefinitionTerm => {
@@ -120,7 +177,10 @@ impl DocBuilder {
                 if let Some(Frame::DefinitionTerm { inlines }) = self.stack.pop()
                     && let Some(Frame::DefinitionList { items }) = self.stack.last_mut()
                 {
-                    items.push(DefinitionItem { term: inlines, desc: vec![] });
+                    items.push(DefinitionItem {
+                        term: inlines,
+                        desc: vec![],
+                    });
                 }
             }
             OwnedEvent::StartDefinitionDesc => {
@@ -141,13 +201,24 @@ impl DocBuilder {
                 });
             }
             OwnedEvent::RawBlock { format, content } => {
-                self.push_block(Block::RawBlock { format, content, span: Span::NONE });
+                self.push_block(Block::RawBlock {
+                    format,
+                    content,
+                    span: Span::NONE,
+                });
             }
             OwnedEvent::ForBlock { format, content } => {
-                self.push_block(Block::ForBlock { format, content, span: Span::NONE });
+                self.push_block(Block::ForBlock {
+                    format,
+                    content,
+                    span: Span::NONE,
+                });
             }
             OwnedEvent::Encoding { encoding } => {
-                self.push_block(Block::Encoding { encoding, span: Span::NONE });
+                self.push_block(Block::Encoding {
+                    encoding,
+                    span: Span::NONE,
+                });
             }
 
             // Inline events
@@ -198,11 +269,19 @@ impl DocBuilder {
                 self.push_inline(Inline::Code(cow.into_owned(), Span::NONE));
             }
             OwnedEvent::StartLink { url, label } => {
-                self.stack.push(Frame::Link { url, label, inlines: vec![] });
+                self.stack.push(Frame::Link {
+                    url,
+                    label,
+                    inlines: vec![],
+                });
             }
             OwnedEvent::EndLink => {
                 if let Some(Frame::Link { url, label, .. }) = self.stack.pop() {
-                    self.push_inline(Inline::Link { url, label, span: Span::NONE });
+                    self.push_inline(Inline::Link {
+                        url,
+                        label,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::IndexEntry(s) => {
@@ -246,7 +325,10 @@ impl DocBuilder {
             Some(Frame::Document { blocks }) => blocks,
             _ => vec![],
         };
-        PodDoc { blocks, span: Span::NONE }
+        PodDoc {
+            blocks,
+            span: Span::NONE,
+        }
     }
 }
 

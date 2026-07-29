@@ -6,7 +6,13 @@ use crate::ast::*;
 pub fn parse(input: &str) -> (JiraDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.parse().unwrap_or_default();
-    (JiraDoc { blocks, span: Span::NONE }, vec![])
+    (
+        JiraDoc {
+            blocks,
+            span: Span::NONE,
+        },
+        vec![],
+    )
 }
 
 struct Parser<'a> {
@@ -151,7 +157,11 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        Ok(Block::CodeBlock { content, language, span: Span::NONE })
+        Ok(Block::CodeBlock {
+            content,
+            language,
+            span: Span::NONE,
+        })
     }
 
     fn parse_noformat_block(&mut self) -> Result<Block, String> {
@@ -168,7 +178,10 @@ impl<'a> Parser<'a> {
             content.push_str(line);
             self.advance();
         }
-        Ok(Block::Noformat { content, span: Span::NONE })
+        Ok(Block::Noformat {
+            content,
+            span: Span::NONE,
+        })
     }
 
     fn parse_quote_block(&mut self) -> Result<Block, String> {
@@ -191,7 +204,10 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        Ok(Block::Blockquote { children, span: Span::NONE })
+        Ok(Block::Blockquote {
+            children,
+            span: Span::NONE,
+        })
     }
 
     fn parse_panel_block(&mut self) -> Result<Block, String> {
@@ -228,7 +244,11 @@ impl<'a> Parser<'a> {
             self.advance();
         }
 
-        Ok(Block::Panel { title, children, span: Span::NONE })
+        Ok(Block::Panel {
+            title,
+            children,
+            span: Span::NONE,
+        })
     }
 
     fn parse_list(&mut self) -> Result<Block, String> {
@@ -271,26 +291,30 @@ impl<'a> Parser<'a> {
                     if next_marker != '*' && next_marker != '#' {
                         break;
                     }
-                    let next_depth =
-                        next_line.chars().take_while(|&c| c == next_marker).count();
+                    let next_depth = next_line.chars().take_while(|&c| c == next_marker).count();
                     if next_depth <= depth {
                         break;
                     }
                     // Nested list
                     let sub_ordered = next_marker == '#';
-                    let sublist =
-                        self.parse_list_at_depth(next_marker, next_depth, sub_ordered)?;
+                    let sublist = self.parse_list_at_depth(next_marker, next_depth, sub_ordered)?;
                     item_children.push(ListItemContent::NestedList(sublist));
                 }
 
-                items.push(ListItem { children: item_children });
+                items.push(ListItem {
+                    children: item_children,
+                });
             } else {
                 // Different marker at same depth or deeper — break out
                 break;
             }
         }
 
-        Ok(Block::List { ordered, items, span: Span::NONE })
+        Ok(Block::List {
+            ordered,
+            items,
+            span: Span::NONE,
+        })
     }
 
     fn parse_table(&mut self) -> Result<Block, String> {
@@ -323,11 +347,17 @@ impl<'a> Parser<'a> {
                     .collect()
             };
 
-            rows.push(TableRow { cells, span: Span::NONE });
+            rows.push(TableRow {
+                cells,
+                span: Span::NONE,
+            });
             self.advance();
         }
 
-        Ok(Block::Table { rows, span: Span::NONE })
+        Ok(Block::Table {
+            rows,
+            span: Span::NONE,
+        })
     }
 
     fn parse_paragraph(&mut self) -> Result<Block, String> {
@@ -557,7 +587,12 @@ impl<'a> Parser<'a> {
                 }
                 let mut name = String::new();
                 let mut j = i + 1;
-                while j < chars.len() && (chars[j].is_alphanumeric() || chars[j] == '_' || chars[j] == '-' || chars[j] == '.') {
+                while j < chars.len()
+                    && (chars[j].is_alphanumeric()
+                        || chars[j] == '_'
+                        || chars[j] == '-'
+                        || chars[j] == '.')
+                {
                     name.push(chars[j]);
                     j += 1;
                 }

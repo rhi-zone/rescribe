@@ -67,7 +67,12 @@ impl EmitContext {
 
 fn emit_block(block: &Block, ctx: &mut EmitContext) {
     match block {
-        Block::Heading { level, kind, inlines, .. } => {
+        Block::Heading {
+            level,
+            kind,
+            inlines,
+            ..
+        } => {
             let command = match (level, kind) {
                 (1, HeadingKind::Numbered) => "@chapter",
                 (1, HeadingKind::Unnumbered) => "@unnumbered",
@@ -95,7 +100,9 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             ctx.write("\n\n");
         }
 
-        Block::CodeBlock { variant, content, .. } => {
+        Block::CodeBlock {
+            variant, content, ..
+        } => {
             let (start, end) = match variant {
                 CodeBlockVariant::Example => ("@example", "@end example"),
                 CodeBlockVariant::SmallExample => ("@smallexample", "@end smallexample"),
@@ -206,7 +213,11 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             ctx.write("\n@sp 1\n@noindent\n@center * * *\n@sp 1\n\n");
         }
 
-        Block::RawBlock { environment, content, .. } => {
+        Block::RawBlock {
+            environment,
+            content,
+            ..
+        } => {
             ctx.write("@");
             ctx.write(environment);
             ctx.write("\n");
@@ -219,7 +230,12 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             ctx.write("\n\n");
         }
 
-        Block::Float { float_type, label, children, .. } => {
+        Block::Float {
+            float_type,
+            label,
+            children,
+            ..
+        } => {
             ctx.write("@float");
             if let Some(ft) = float_type {
                 ctx.write(" ");
@@ -330,7 +346,9 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write("}");
         }
 
-        Inline::Acronym { abbrev, expansion, .. } => {
+        Inline::Acronym {
+            abbrev, expansion, ..
+        } => {
             ctx.write("@acronym{");
             ctx.write(abbrev);
             if let Some(exp) = expansion {
@@ -340,7 +358,9 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write("}");
         }
 
-        Inline::Abbr { abbrev, expansion, .. } => {
+        Inline::Abbr {
+            abbrev, expansion, ..
+        } => {
             ctx.write("@abbr{");
             ctx.write(abbrev);
             if let Some(exp) = expansion {
@@ -390,7 +410,14 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write("}");
         }
 
-        Inline::Image { file, width, height, alt, extension, .. } => {
+        Inline::Image {
+            file,
+            width,
+            height,
+            alt,
+            extension,
+            ..
+        } => {
             ctx.write("@image{");
             ctx.write(file);
             // Always emit all five comma-separated fields (even if empty)
@@ -442,7 +469,9 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write("}");
         }
 
-        Inline::CrossRef { kind, node, text, .. } => {
+        Inline::CrossRef {
+            kind, node, text, ..
+        } => {
             let cmd = match kind {
                 CrossRefKind::Xref => "@xref",
                 CrossRefKind::Ref => "@ref",

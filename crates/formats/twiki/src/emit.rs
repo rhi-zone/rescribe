@@ -131,7 +131,12 @@ fn build_list_items(items: &[ListItem], ordered: bool, depth: usize, output: &mu
         build_inlines(&item.inlines, output);
         output.push('\n');
         for child in &item.children {
-            if let Block::List { ordered: child_ordered, items: child_items, .. } = child {
+            if let Block::List {
+                ordered: child_ordered,
+                items: child_items,
+                ..
+            } = child
+            {
                 build_list_items(child_items, *child_ordered, depth + 1, output);
             }
         }

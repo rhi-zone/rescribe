@@ -39,34 +39,49 @@ fn convert_node_to_block(node: &Node) -> Block {
         rescribe_std::node::DOCUMENT => {
             // Flatten document, just process children
             // This shouldn't normally happen at top level
-            let children: Vec<Block> =
-                node.children.iter().map(convert_node_to_block).collect();
+            let children: Vec<Block> = node.children.iter().map(convert_node_to_block).collect();
             // Return first block or empty paragraph
             children
                 .into_iter()
                 .next()
-                .unwrap_or_else(|| Block::Paragraph { inlines: vec![], span: Span::NONE })
+                .unwrap_or_else(|| Block::Paragraph {
+                    inlines: vec![],
+                    span: Span::NONE,
+                })
         }
 
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1).min(5) as u8;
             let inlines = convert_nodes_to_inlines(&node.children);
-            Block::Heading { level, inlines, span: Span::NONE }
+            Block::Heading {
+                level,
+                inlines,
+                span: Span::NONE,
+            }
         }
 
         node::PARAGRAPH => {
             let inlines = convert_nodes_to_inlines(&node.children);
-            Block::Paragraph { inlines, span: Span::NONE }
+            Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            }
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Block::CodeBlock { content, span: Span::NONE }
+            Block::CodeBlock {
+                content,
+                span: Span::NONE,
+            }
         }
 
         node::BLOCKQUOTE => {
             let children = convert_nodes_to_blocks(&node.children);
-            Block::Blockquote { children, span: Span::NONE }
+            Block::Blockquote {
+                children,
+                span: Span::NONE,
+            }
         }
 
         node::LIST => {
@@ -77,7 +92,11 @@ fn convert_node_to_block(node: &Node) -> Block {
                 .filter(|n| n.kind.as_str() == node::LIST_ITEM)
                 .map(|n| convert_nodes_to_blocks(&n.children))
                 .collect();
-            Block::List { ordered, items, span: Span::NONE }
+            Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            }
         }
 
         node::DEFINITION_LIST => {
@@ -97,7 +116,10 @@ fn convert_node_to_block(node: &Node) -> Block {
                 }
                 i += 1;
             }
-            Block::DefinitionList { items, span: Span::NONE }
+            Block::DefinitionList {
+                items,
+                span: Span::NONE,
+            }
         }
 
         node::HORIZONTAL_RULE => Block::HorizontalRule { span: Span::NONE },
@@ -109,13 +131,19 @@ fn convert_node_to_block(node: &Node) -> Block {
             children
                 .into_iter()
                 .next()
-                .unwrap_or_else(|| Block::Paragraph { inlines: vec![], span: Span::NONE })
+                .unwrap_or_else(|| Block::Paragraph {
+                    inlines: vec![],
+                    span: Span::NONE,
+                })
         }
 
         // Inline nodes at block level (shouldn't happen, but handle them)
         node::TEXT | node::STRONG | node::EMPHASIS | node::CODE | node::LINK => {
             let inlines = vec![convert_node_to_inline(node)];
-            Block::Paragraph { inlines, span: Span::NONE }
+            Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            }
         }
 
         _ => {
@@ -124,7 +152,10 @@ fn convert_node_to_block(node: &Node) -> Block {
             children
                 .into_iter()
                 .next()
-                .unwrap_or_else(|| Block::Paragraph { inlines: vec![], span: Span::NONE })
+                .unwrap_or_else(|| Block::Paragraph {
+                    inlines: vec![],
+                    span: Span::NONE,
+                })
         }
     }
 }
@@ -158,7 +189,11 @@ fn convert_node_to_inline(node: &Node) -> Inline {
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = convert_nodes_to_inlines(&node.children);
-            Inline::Link { url, children, span: Span::NONE }
+            Inline::Link {
+                url,
+                children,
+                span: Span::NONE,
+            }
         }
 
         node::STRIKEOUT => {

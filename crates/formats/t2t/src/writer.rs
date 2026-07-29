@@ -61,24 +61,63 @@ fn events_to_doc(events: Vec<OwnedEvent>) -> T2tDoc {
 }
 
 enum Frame {
-    Document { blocks: Vec<Block> },
-    Paragraph { inlines: Vec<Inline> },
-    Heading { level: u8, numbered: bool, inlines: Vec<Inline> },
-    Blockquote { blocks: Vec<Block> },
-    List { ordered: bool, items: Vec<Vec<Block>> },
-    ListItem { blocks: Vec<Block> },
-    Table { rows: Vec<TableRow> },
-    TableRow { cells: Vec<Vec<Inline>>, header: bool },
-    TableCell { inlines: Vec<Inline> },
-    DefinitionList { items: Vec<(Vec<Inline>, Vec<Block>)> },
-    DefinitionTerm { inlines: Vec<Inline> },
-    DefinitionDesc { blocks: Vec<Block> },
+    Document {
+        blocks: Vec<Block>,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+    },
+    Heading {
+        level: u8,
+        numbered: bool,
+        inlines: Vec<Inline>,
+    },
+    Blockquote {
+        blocks: Vec<Block>,
+    },
+    List {
+        ordered: bool,
+        items: Vec<Vec<Block>>,
+    },
+    ListItem {
+        blocks: Vec<Block>,
+    },
+    Table {
+        rows: Vec<TableRow>,
+    },
+    TableRow {
+        cells: Vec<Vec<Inline>>,
+        header: bool,
+    },
+    TableCell {
+        inlines: Vec<Inline>,
+    },
+    DefinitionList {
+        items: Vec<(Vec<Inline>, Vec<Block>)>,
+    },
+    DefinitionTerm {
+        inlines: Vec<Inline>,
+    },
+    DefinitionDesc {
+        blocks: Vec<Block>,
+    },
     // Inline spans
-    Bold { inlines: Vec<Inline> },
-    Italic { inlines: Vec<Inline> },
-    Underline { inlines: Vec<Inline> },
-    Strikethrough { inlines: Vec<Inline> },
-    Link { url: String, inlines: Vec<Inline> },
+    Bold {
+        inlines: Vec<Inline>,
+    },
+    Italic {
+        inlines: Vec<Inline>,
+    },
+    Underline {
+        inlines: Vec<Inline>,
+    },
+    Strikethrough {
+        inlines: Vec<Inline>,
+    },
+    Link {
+        url: String,
+        inlines: Vec<Inline>,
+    },
 }
 
 struct DocBuilder {
@@ -220,8 +259,7 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartDefinitionList => {
-                self.stack
-                    .push(Frame::DefinitionList { items: vec![] });
+                self.stack.push(Frame::DefinitionList { items: vec![] });
             }
             OwnedEvent::EndDefinitionList => {
                 if let Some(Frame::DefinitionList { items }) = self.stack.pop() {
@@ -232,8 +270,7 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartDefinitionTerm => {
-                self.stack
-                    .push(Frame::DefinitionTerm { inlines: vec![] });
+                self.stack.push(Frame::DefinitionTerm { inlines: vec![] });
             }
             OwnedEvent::EndDefinitionTerm => {
                 if let Some(Frame::DefinitionTerm { inlines }) = self.stack.pop() {
@@ -243,8 +280,7 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartDefinitionDesc => {
-                self.stack
-                    .push(Frame::DefinitionDesc { blocks: vec![] });
+                self.stack.push(Frame::DefinitionDesc { blocks: vec![] });
             }
             OwnedEvent::EndDefinitionDesc => {
                 if let Some(Frame::DefinitionDesc { blocks }) = self.stack.pop() {
@@ -291,8 +327,7 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartStrikethrough => {
-                self.stack
-                    .push(Frame::Strikethrough { inlines: vec![] });
+                self.stack.push(Frame::Strikethrough { inlines: vec![] });
             }
             OwnedEvent::EndStrikethrough => {
                 if let Some(Frame::Strikethrough { inlines }) = self.stack.pop() {

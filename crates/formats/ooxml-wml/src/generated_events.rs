@@ -3,8 +3,8 @@
 
 #![allow(unused_imports)]
 
-use std::borrow::Cow;
 use super::generated::*;
+use std::borrow::Cow;
 
 /// Streaming events emitted by the DOCX SAX iterator.
 /// Each container element produces a `Start…` / `End…` pair;
@@ -60,25 +60,15 @@ impl<'a> WmlEvent<'a> {
         match self {
             WmlEvent::StartDocument => WmlEvent::StartDocument,
             WmlEvent::EndDocument => WmlEvent::EndDocument,
-            WmlEvent::StartParagraph { props } => WmlEvent::StartParagraph {
-                props,
-            },
+            WmlEvent::StartParagraph { props } => WmlEvent::StartParagraph { props },
             WmlEvent::EndParagraph => WmlEvent::EndParagraph,
-            WmlEvent::StartRun { props } => WmlEvent::StartRun {
-                props,
-            },
+            WmlEvent::StartRun { props } => WmlEvent::StartRun { props },
             WmlEvent::EndRun => WmlEvent::EndRun,
-            WmlEvent::StartTable { props } => WmlEvent::StartTable {
-                props,
-            },
+            WmlEvent::StartTable { props } => WmlEvent::StartTable { props },
             WmlEvent::EndTable => WmlEvent::EndTable,
-            WmlEvent::StartTableRow { props } => WmlEvent::StartTableRow {
-                props,
-            },
+            WmlEvent::StartTableRow { props } => WmlEvent::StartTableRow { props },
             WmlEvent::EndTableRow => WmlEvent::EndTableRow,
-            WmlEvent::StartTableCell { props } => WmlEvent::StartTableCell {
-                props,
-            },
+            WmlEvent::StartTableCell { props } => WmlEvent::StartTableCell { props },
             WmlEvent::EndTableCell => WmlEvent::EndTableCell,
             WmlEvent::StartHyperlink { rel_id, anchor } => WmlEvent::StartHyperlink {
                 rel_id: rel_id.map(|v| Cow::Owned(v.into_owned())),
@@ -87,12 +77,8 @@ impl<'a> WmlEvent<'a> {
             WmlEvent::EndHyperlink => WmlEvent::EndHyperlink,
             WmlEvent::Text(t) => WmlEvent::Text(Cow::Owned(t.into_owned())),
             WmlEvent::LineBreak => WmlEvent::LineBreak,
-            WmlEvent::FootnoteRef { id } => WmlEvent::FootnoteRef {
-                id,
-            },
-            WmlEvent::EndnoteRef { id } => WmlEvent::EndnoteRef {
-                id,
-            },
+            WmlEvent::FootnoteRef { id } => WmlEvent::FootnoteRef { id },
+            WmlEvent::EndnoteRef { id } => WmlEvent::EndnoteRef { id },
             WmlEvent::Image { rel_id } => WmlEvent::Image {
                 rel_id: Cow::Owned(rel_id.into_owned()),
             },
@@ -160,8 +146,5 @@ pub fn props_strategy(kind: WmlStartKind) -> PropsStrategy {
 /// Return true if this XML local element name is a text-content leaf.
 /// The SAX iterator reads the element's text content and emits a text event.
 pub fn is_text_element(local: &[u8]) -> bool {
-    matches!(local,
-        b"t"
-    )
+    matches!(local, b"t")
 }
-

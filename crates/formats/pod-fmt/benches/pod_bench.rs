@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use pod_fmt::{parse, build};
+use pod_fmt::{build, parse};
 
 const SMALL: &str = r#"=head1 NAME
 

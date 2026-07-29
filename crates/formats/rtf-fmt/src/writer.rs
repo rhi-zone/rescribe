@@ -37,7 +37,10 @@ pub struct Writer<W: Write> {
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
-        Writer { sink, last_was_control: false }
+        Writer {
+            sink,
+            last_was_control: false,
+        }
     }
 
     /// Write one RTF token event to the sink.
@@ -127,7 +130,11 @@ mod tests {
     #[test]
     fn test_writer_control_word_with_param() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(TokenEvent::ControlWord { name: "rtf".into(), param: Some(1), span: span() });
+        w.write_event(TokenEvent::ControlWord {
+            name: "rtf".into(),
+            param: Some(1),
+            span: span(),
+        });
         let bytes = w.finish();
         assert_eq!(bytes, b"\\rtf1");
     }
@@ -135,7 +142,11 @@ mod tests {
     #[test]
     fn test_writer_control_word_no_param() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(TokenEvent::ControlWord { name: "par".into(), param: None, span: span() });
+        w.write_event(TokenEvent::ControlWord {
+            name: "par".into(),
+            param: None,
+            span: span(),
+        });
         let bytes = w.finish();
         assert_eq!(bytes, b"\\par ");
     }
@@ -143,7 +154,11 @@ mod tests {
     #[test]
     fn test_writer_hex_symbol() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(TokenEvent::ControlSymbol { ch: '\'', hex_byte: Some(0xe9), span: span() });
+        w.write_event(TokenEvent::ControlSymbol {
+            ch: '\'',
+            hex_byte: Some(0xe9),
+            span: span(),
+        });
         let bytes = w.finish();
         assert_eq!(bytes, b"\\'e9");
     }
@@ -151,7 +166,10 @@ mod tests {
     #[test]
     fn test_writer_text_escaping() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(TokenEvent::Text { text: "a{b}c\\d".into(), span: span() });
+        w.write_event(TokenEvent::Text {
+            text: "a{b}c\\d".into(),
+            span: span(),
+        });
         let bytes = w.finish();
         assert_eq!(bytes, b"a\\{b\\}c\\\\d");
     }
@@ -173,20 +191,36 @@ mod tests {
         // Strip spans for comparison (positions differ after re-serialization)
         fn strip(ev: TokenEvent) -> TokenEvent {
             match ev {
-                TokenEvent::GroupStart { .. } => TokenEvent::GroupStart { span: Span::new(0, 0) },
-                TokenEvent::GroupEnd { .. } => TokenEvent::GroupEnd { span: Span::new(0, 0) },
-                TokenEvent::ControlWord { name, param, .. } => {
-                    TokenEvent::ControlWord { name, param, span: Span::new(0, 0) }
-                }
-                TokenEvent::ControlSymbol { ch, hex_byte, .. } => {
-                    TokenEvent::ControlSymbol { ch, hex_byte, span: Span::new(0, 0) }
-                }
-                TokenEvent::Text { text, .. } => TokenEvent::Text { text, span: Span::new(0, 0) },
+                TokenEvent::GroupStart { .. } => TokenEvent::GroupStart {
+                    span: Span::new(0, 0),
+                },
+                TokenEvent::GroupEnd { .. } => TokenEvent::GroupEnd {
+                    span: Span::new(0, 0),
+                },
+                TokenEvent::ControlWord { name, param, .. } => TokenEvent::ControlWord {
+                    name,
+                    param,
+                    span: Span::new(0, 0),
+                },
+                TokenEvent::ControlSymbol { ch, hex_byte, .. } => TokenEvent::ControlSymbol {
+                    ch,
+                    hex_byte,
+                    span: Span::new(0, 0),
+                },
+                TokenEvent::Text { text, .. } => TokenEvent::Text {
+                    text,
+                    span: Span::new(0, 0),
+                },
             }
         }
 
         let t1: Vec<_> = tokens.into_iter().map(strip).collect();
         let t2: Vec<_> = tokens2.into_iter().map(strip).collect();
-        assert_eq!(t1, t2, "token roundtrip mismatch\n  output: {:?}", String::from_utf8_lossy(&output));
+        assert_eq!(
+            t1,
+            t2,
+            "token roundtrip mismatch\n  output: {:?}",
+            String::from_utf8_lossy(&output)
+        );
     }
 }

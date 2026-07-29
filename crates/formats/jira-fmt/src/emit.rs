@@ -67,7 +67,9 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n\n");
         }
 
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             if let Some(lang) = language {
                 ctx.write(&format!("{{code:{}}}\n", lang));
             } else {
@@ -97,7 +99,9 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("{quote}\n\n");
         }
 
-        Block::Panel { title, children, .. } => {
+        Block::Panel {
+            title, children, ..
+        } => {
             if let Some(t) = title {
                 ctx.write(&format!("{{panel:title={}}}\n", t));
             } else {
@@ -138,8 +142,7 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
 
         Block::Table { rows, .. } => {
             for row in rows {
-                let row_is_header =
-                    row.cells.first().map(|c| c.is_header).unwrap_or(false);
+                let row_is_header = row.cells.first().map(|c| c.is_header).unwrap_or(false);
                 for cell in &row.cells {
                     if cell.is_header {
                         ctx.write("||");
@@ -233,7 +236,9 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("~");
         }
 
-        Inline::ColorSpan { color, children, .. } => {
+        Inline::ColorSpan {
+            color, children, ..
+        } => {
             ctx.write(&format!("{{color:{}}}", color));
             build_inlines(children, ctx);
             ctx.write("{color}");

@@ -12,7 +12,9 @@ pub mod writer;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 
-pub use ast::{Block, BlockAttrs, Diagnostic, Inline, Severity, Span, TableCell, TableRow, TextileDoc};
+pub use ast::{
+    Block, BlockAttrs, Diagnostic, Inline, Severity, Span, TableCell, TableRow, TextileDoc,
+};
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::emit;
 pub use events::{EventIter, TextileEvent, events};

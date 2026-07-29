@@ -248,7 +248,10 @@ fn clone_event(e: &OwnedEvent) -> OwnedEvent {
             description: description.clone(),
         },
         Event::HorizontalRule => Event::HorizontalRule,
-        Event::RawBlock { environment, content } => Event::RawBlock {
+        Event::RawBlock {
+            environment,
+            content,
+        } => Event::RawBlock {
             environment: environment.clone(),
             content: content.clone(),
         },
@@ -292,12 +295,16 @@ fn clone_event(e: &OwnedEvent) -> OwnedEvent {
         Event::EndDirectItalic => Event::EndDirectItalic,
         Event::StartDirectBold => Event::StartDirectBold,
         Event::EndDirectBold => Event::EndDirectBold,
-        Event::DirectTypewriter(s) => {
-            Event::DirectTypewriter(Cow::Owned(s.clone().into_owned()))
-        }
+        Event::DirectTypewriter(s) => Event::DirectTypewriter(Cow::Owned(s.clone().into_owned())),
         Event::StartLink { url } => Event::StartLink { url: url.clone() },
         Event::EndLink => Event::EndLink,
-        Event::Image { file, width, height, alt, extension } => Event::Image {
+        Event::Image {
+            file,
+            width,
+            height,
+            alt,
+            extension,
+        } => Event::Image {
             file: file.clone(),
             width: width.clone(),
             height: height.clone(),
@@ -335,7 +342,12 @@ fn emit_doc_events(doc: &TexinfoDoc, out: &mut Vec<OwnedEvent>) {
 
 fn emit_block_events(block: &Block, out: &mut Vec<OwnedEvent>) {
     match block {
-        Block::Heading { level, kind, inlines, .. } => {
+        Block::Heading {
+            level,
+            kind,
+            inlines,
+            ..
+        } => {
             out.push(Event::StartHeading {
                 level: *level,
                 kind: kind.clone(),
@@ -352,7 +364,9 @@ fn emit_block_events(block: &Block, out: &mut Vec<OwnedEvent>) {
             }
             out.push(Event::EndParagraph);
         }
-        Block::CodeBlock { variant, content, .. } => {
+        Block::CodeBlock {
+            variant, content, ..
+        } => {
             out.push(Event::CodeBlock {
                 variant: variant.clone(),
                 content: Cow::Owned(content.clone()),
@@ -422,13 +436,22 @@ fn emit_block_events(block: &Block, out: &mut Vec<OwnedEvent>) {
         Block::HorizontalRule { .. } => {
             out.push(Event::HorizontalRule);
         }
-        Block::RawBlock { environment, content, .. } => {
+        Block::RawBlock {
+            environment,
+            content,
+            ..
+        } => {
             out.push(Event::RawBlock {
                 environment: environment.clone(),
                 content: content.clone(),
             });
         }
-        Block::Float { float_type, label, children, .. } => {
+        Block::Float {
+            float_type,
+            label,
+            children,
+            ..
+        } => {
             out.push(Event::StartFloat {
                 float_type: float_type.clone(),
                 label: label.clone(),
@@ -484,13 +507,17 @@ fn emit_inline_events(inline: &Inline, out: &mut Vec<OwnedEvent>) {
             out.push(Event::EndDfn);
         }
         Inline::Cite(s, _) => out.push(Event::Cite(Cow::Owned(s.clone()))),
-        Inline::Acronym { abbrev, expansion, .. } => {
+        Inline::Acronym {
+            abbrev, expansion, ..
+        } => {
             out.push(Event::Acronym {
                 abbrev: abbrev.clone(),
                 expansion: expansion.clone(),
             });
         }
-        Inline::Abbr { abbrev, expansion, .. } => {
+        Inline::Abbr {
+            abbrev, expansion, ..
+        } => {
             out.push(Event::Abbr {
                 abbrev: abbrev.clone(),
                 expansion: expansion.clone(),
@@ -522,7 +549,14 @@ fn emit_inline_events(inline: &Inline, out: &mut Vec<OwnedEvent>) {
             }
             out.push(Event::EndLink);
         }
-        Inline::Image { file, width, height, alt, extension, .. } => {
+        Inline::Image {
+            file,
+            width,
+            height,
+            alt,
+            extension,
+            ..
+        } => {
             out.push(Event::Image {
                 file: file.clone(),
                 width: width.clone(),
@@ -554,7 +588,9 @@ fn emit_inline_events(inline: &Inline, out: &mut Vec<OwnedEvent>) {
             }
             out.push(Event::EndFootnoteDef);
         }
-        Inline::CrossRef { kind, node, text, .. } => {
+        Inline::CrossRef {
+            kind, node, text, ..
+        } => {
             out.push(Event::CrossRef {
                 kind: kind.clone(),
                 node: node.clone(),
@@ -582,9 +618,10 @@ mod tests {
     #[test]
     fn test_events_heading() {
         let evs: Vec<_> = events("@chapter Hello").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1, .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1, .. }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndHeading)));
     }
 
@@ -593,26 +630,28 @@ mod tests {
         let evs: Vec<_> = events("Hello world").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndParagraph)));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
     fn test_events_code_block() {
         let evs: Vec<_> = events("@example\nfn main() {}\n@end example").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::CodeBlock { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::CodeBlock { .. }))
+        );
     }
 
     #[test]
     fn test_events_list() {
-        let evs: Vec<_> =
-            events("@itemize\n@item one\n@item two\n@end itemize").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartList { ordered: false })));
+        let evs: Vec<_> = events("@itemize\n@item one\n@item two\n@end itemize").collect();
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartList { ordered: false }))
+        );
         assert_eq!(
             evs.iter()
                 .filter(|e| matches!(e, OwnedEvent::StartListItem))

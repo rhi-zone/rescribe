@@ -113,7 +113,12 @@ impl Block {
                 attr: attr.clone(),
                 span: Span::NONE,
             },
-            Block::Heading { level, inlines, attr, .. } => Block::Heading {
+            Block::Heading {
+                level,
+                inlines,
+                attr,
+                ..
+            } => Block::Heading {
                 level: *level,
                 inlines: inlines.iter().map(|i| i.strip_spans()).collect(),
                 attr: attr.clone(),
@@ -124,26 +129,47 @@ impl Block {
                 attr: attr.clone(),
                 span: Span::NONE,
             },
-            Block::List { kind, items, tight, attr, .. } => Block::List {
+            Block::List {
+                kind,
+                items,
+                tight,
+                attr,
+                ..
+            } => Block::List {
                 kind: kind.clone(),
                 items: items.iter().map(|item| item.strip_spans()).collect(),
                 tight: *tight,
                 attr: attr.clone(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { language, content, attr, .. } => Block::CodeBlock {
+            Block::CodeBlock {
+                language,
+                content,
+                attr,
+                ..
+            } => Block::CodeBlock {
                 language: language.clone(),
                 content: content.clone(),
                 attr: attr.clone(),
                 span: Span::NONE,
             },
-            Block::RawBlock { format, content, attr, .. } => Block::RawBlock {
+            Block::RawBlock {
+                format,
+                content,
+                attr,
+                ..
+            } => Block::RawBlock {
                 format: format.clone(),
                 content: content.clone(),
                 attr: attr.clone(),
                 span: Span::NONE,
             },
-            Block::Div { class, blocks, attr, .. } => Block::Div {
+            Block::Div {
+                class,
+                blocks,
+                attr,
+                ..
+            } => Block::Div {
                 class: class.clone(),
                 blocks: blocks.iter().map(|b| b.strip_spans()).collect(),
                 attr: attr.clone(),
@@ -435,19 +461,33 @@ impl Inline {
                 content: content.clone(),
                 span: Span::NONE,
             },
-            Inline::RawInline { format, content, .. } => Inline::RawInline {
+            Inline::RawInline {
+                format, content, ..
+            } => Inline::RawInline {
                 format: format.clone(),
                 content: content.clone(),
                 span: Span::NONE,
             },
-            Inline::Link { inlines, url, title, attr, .. } => Inline::Link {
+            Inline::Link {
+                inlines,
+                url,
+                title,
+                attr,
+                ..
+            } => Inline::Link {
                 inlines: inlines.iter().map(|i| i.strip_spans()).collect(),
                 url: url.clone(),
                 title: title.clone(),
                 attr: attr.clone(),
                 span: Span::NONE,
             },
-            Inline::Image { inlines, url, title, attr, .. } => Inline::Image {
+            Inline::Image {
+                inlines,
+                url,
+                title,
+                attr,
+                ..
+            } => Inline::Image {
                 inlines: inlines.iter().map(|i| i.strip_spans()).collect(),
                 url: url.clone(),
                 title: title.clone(),

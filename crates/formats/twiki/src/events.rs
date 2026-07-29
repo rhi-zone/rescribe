@@ -10,9 +10,13 @@ pub enum Event<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
@@ -20,7 +24,9 @@ pub enum Event<'a> {
     EndTable,
     StartTableRow,
     EndTableRow,
-    StartTableCell { is_header: bool },
+    StartTableCell {
+        is_header: bool,
+    },
     EndTableCell,
     StartDefinitionList,
     EndDefinitionList,
@@ -31,11 +37,15 @@ pub enum Event<'a> {
     StartBlockquote,
     EndBlockquote,
     /// Leaf: a verbatim/code block.
-    CodeBlock { content: Cow<'a, str> },
+    CodeBlock {
+        content: Cow<'a, str>,
+    },
     /// Leaf: a horizontal rule.
     HorizontalRule,
     /// Leaf: a raw block (macro, etc.).
-    RawBlock { content: Cow<'a, str> },
+    RawBlock {
+        content: Cow<'a, str>,
+    },
 
     // ── Inline events ─────────────────────────────────────────────────────────
     Text(Cow<'a, str>),
@@ -56,16 +66,25 @@ pub enum Event<'a> {
     EndUnderline,
     StartBoldCode,
     EndBoldCode,
-    StartLink { url: String },
+    StartLink {
+        url: String,
+    },
     EndLink,
     /// Leaf: inline code.
     InlineCode(Cow<'a, str>),
     /// Leaf: image reference.
-    Image { url: String, alt: String },
+    Image {
+        url: String,
+        alt: String,
+    },
     /// Leaf: raw inline (macros, control tags).
-    RawInline { content: String },
+    RawInline {
+        content: String,
+    },
     /// Leaf: WikiWord auto-link.
-    WikiWord { word: String },
+    WikiWord {
+        word: String,
+    },
 }
 
 /// Backwards-compatible alias for batch mode (all text is owned).
@@ -133,7 +152,9 @@ fn emit_block(evs: &mut Vec<OwnedEvent>, block: &Block) {
             evs.push(Event::EndHeading);
         }
         Block::CodeBlock { content, .. } => {
-            evs.push(Event::CodeBlock { content: Cow::Owned(content.clone()) });
+            evs.push(Event::CodeBlock {
+                content: Cow::Owned(content.clone()),
+            });
         }
         Block::List { ordered, items, .. } => {
             evs.push(Event::StartList { ordered: *ordered });
@@ -152,7 +173,9 @@ fn emit_block(evs: &mut Vec<OwnedEvent>, block: &Block) {
             for row in rows {
                 evs.push(Event::StartTableRow);
                 for cell in &row.cells {
-                    evs.push(Event::StartTableCell { is_header: cell.is_header });
+                    evs.push(Event::StartTableCell {
+                        is_header: cell.is_header,
+                    });
                     emit_inlines(evs, &cell.inlines);
                     evs.push(Event::EndTableCell);
                 }
@@ -164,7 +187,9 @@ fn emit_block(evs: &mut Vec<OwnedEvent>, block: &Block) {
             evs.push(Event::HorizontalRule);
         }
         Block::RawBlock { content, .. } => {
-            evs.push(Event::RawBlock { content: Cow::Owned(content.clone()) });
+            evs.push(Event::RawBlock {
+                content: Cow::Owned(content.clone()),
+            });
         }
         Block::DefinitionList { items, .. } => {
             evs.push(Event::StartDefinitionList);
@@ -251,10 +276,15 @@ fn emit_inline(evs: &mut Vec<OwnedEvent>, inline: &Inline) {
             evs.push(Event::EndUnderline);
         }
         Inline::Image { url, alt, .. } => {
-            evs.push(Event::Image { url: url.clone(), alt: alt.clone() });
+            evs.push(Event::Image {
+                url: url.clone(),
+                alt: alt.clone(),
+            });
         }
         Inline::RawInline { content, .. } => {
-            evs.push(Event::RawInline { content: content.clone() });
+            evs.push(Event::RawInline {
+                content: content.clone(),
+            });
         }
         Inline::WikiWord { word, .. } => {
             evs.push(Event::WikiWord { word: word.clone() });
@@ -277,7 +307,10 @@ mod tests {
     fn test_events_heading() {
         let (doc, _) = crate::parse::parse("---+ Hello");
         let evs: Vec<_> = events(&doc).collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndHeading)));
     }
 
@@ -287,7 +320,10 @@ mod tests {
         let evs: Vec<_> = events(&doc).collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndParagraph)));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
@@ -310,7 +346,10 @@ mod tests {
     fn test_events_list() {
         let (doc, _) = crate::parse::parse("   * one\n   * two");
         let evs: Vec<_> = events(&doc).collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartList { ordered: false })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartList { ordered: false }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndList)));
     }
 }

@@ -17,7 +17,10 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let blocks: Vec<Block> = doc.content.children.iter().map(node_to_block).collect();
-    let xwiki_doc = xwiki::XwikiDoc { blocks, span: Span::NONE };
+    let xwiki_doc = xwiki::XwikiDoc {
+        blocks,
+        span: Span::NONE,
+    };
     let output = xwiki::build(&xwiki_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
@@ -41,7 +44,11 @@ fn node_to_block(node: &Node) -> Block {
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            Block::CodeBlock { content, language, span: Span::NONE }
+            Block::CodeBlock {
+                content,
+                language,
+                span: Span::NONE,
+            }
         }
 
         node::TABLE => {
@@ -62,10 +69,16 @@ fn node_to_block(node: &Node) -> Block {
                             }
                         })
                         .collect();
-                    xwiki::TableRow { cells, span: Span::NONE }
+                    xwiki::TableRow {
+                        cells,
+                        span: Span::NONE,
+                    }
                 })
                 .collect();
-            Block::Table { rows, span: Span::NONE }
+            Block::Table {
+                rows,
+                span: Span::NONE,
+            }
         }
 
         node::LIST => {
@@ -76,7 +89,11 @@ fn node_to_block(node: &Node) -> Block {
                 .filter(|child| child.kind.as_str() == node::LIST_ITEM)
                 .map(|item| item.children.iter().map(node_to_block).collect())
                 .collect();
-            Block::List { ordered, items, span: Span::NONE }
+            Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            }
         }
 
         node::HORIZONTAL_RULE => Block::HorizontalRule { span: Span::NONE },
@@ -89,7 +106,10 @@ fn node_to_block(node: &Node) -> Block {
             } else if !blocks.is_empty() {
                 blocks[0].clone()
             } else {
-                Block::Paragraph { inlines: vec![], span: Span::NONE }
+                Block::Paragraph {
+                    inlines: vec![],
+                    span: Span::NONE,
+                }
             }
         }
     }
@@ -133,13 +153,22 @@ fn node_to_inline(node: &Node) -> Inline {
                     .collect::<Vec<_>>()
                     .join("")
             };
-            Inline::Link { url, label, span: Span::NONE }
+            Inline::Link {
+                url,
+                label,
+                span: Span::NONE,
+            }
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
-            Inline::Image { url, alt, params: vec![], span: Span::NONE }
+            Inline::Image {
+                url,
+                alt,
+                params: vec![],
+                span: Span::NONE,
+            }
         }
 
         node::LINE_BREAK => Inline::LineBreak { span: Span::NONE },

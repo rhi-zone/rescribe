@@ -30,7 +30,9 @@ fn doc_to_nodes(ast: &AsciiDoc) -> Vec<Node> {
 
 fn block_to_node(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines, id, role, .. } => {
+        Block::Paragraph {
+            inlines, id, role, ..
+        } => {
             let mut n = Node::new(node::PARAGRAPH).children(inlines_to_nodes(inlines));
             if let Some(id) = id {
                 n = n.prop("id", id.clone());
@@ -91,10 +93,13 @@ fn block_to_node(block: &Block) -> Node {
             let list_items: Vec<Node> = items
                 .iter()
                 .map(|item_blocks| {
-                    let mut li = Node::new(node::LIST_ITEM)
-                        .children(item_blocks.iter().map(block_to_node));
+                    let mut li =
+                        Node::new(node::LIST_ITEM).children(item_blocks.iter().map(block_to_node));
                     // Propagate checklist state from first paragraph to the list_item
-                    if let Some(Block::Paragraph { checked: Some(c), .. }) = item_blocks.first() {
+                    if let Some(Block::Paragraph {
+                        checked: Some(c), ..
+                    }) = item_blocks.first()
+                    {
                         li = li.prop("asciidoc:checked", *c);
                     }
                     li
@@ -123,7 +128,12 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::FIGURE).children(vec![img])
         }
 
-        Block::Div { class, title, children, .. } => {
+        Block::Div {
+            class,
+            title,
+            children,
+            ..
+        } => {
             let mut n = Node::new(node::DIV).children(children.iter().map(block_to_node));
             if let Some(cls) = class {
                 n = n.prop("class", cls.clone());
@@ -134,11 +144,15 @@ fn block_to_node(block: &Block) -> Node {
             n
         }
 
-        Block::RawBlock { format, content, .. } => Node::new(node::RAW_BLOCK)
+        Block::RawBlock {
+            format, content, ..
+        } => Node::new(node::RAW_BLOCK)
             .prop(prop::CONTENT, content.clone())
             .prop("format", format.clone()),
 
-        Block::MathBlock { content, flavor, .. } => {
+        Block::MathBlock {
+            content, flavor, ..
+        } => {
             let mut n = Node::new("math_block").prop("math:source", content.clone());
             if let Some(f) = flavor {
                 n = n.prop("math:flavor", f.clone());
@@ -195,9 +209,7 @@ fn inline_to_node(inline: &Inline) -> Node {
     match inline {
         Inline::Text { text: s, .. } => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        Inline::Strong(children, _) => {
-            Node::new(node::STRONG).children(inlines_to_nodes(children))
-        }
+        Inline::Strong(children, _) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
 
         Inline::Emphasis(children, _) => {
             Node::new(node::EMPHASIS).children(inlines_to_nodes(children))
@@ -244,7 +256,10 @@ fn inline_to_node(inline: &Inline) -> Node {
         }
 
         Inline::Link {
-            url, children, target, ..
+            url,
+            children,
+            target,
+            ..
         } => {
             let mut n = Node::new(node::LINK)
                 .prop(prop::URL, url.clone())
@@ -271,7 +286,9 @@ fn inline_to_node(inline: &Inline) -> Node {
             .prop(prop::LABEL, label.clone())
             .children(inlines_to_nodes(children)),
 
-        Inline::MathInline { content, flavor, .. } => {
+        Inline::MathInline {
+            content, flavor, ..
+        } => {
             let mut n = Node::new("math_inline").prop("math:source", content.clone());
             if let Some(f) = flavor {
                 n = n.prop("math:flavor", f.clone());

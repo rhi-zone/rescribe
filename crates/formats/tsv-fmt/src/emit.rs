@@ -7,8 +7,11 @@ pub fn emit(doc: &TsvDoc) -> String {
     let mut output = String::new();
 
     for row in &doc.rows {
-        let fields: Vec<String> =
-            row.cells.iter().map(|cell| escape_tsv_field(&cell.value)).collect();
+        let fields: Vec<String> = row
+            .cells
+            .iter()
+            .map(|cell| escape_tsv_field(&cell.value))
+            .collect();
         output.push_str(&fields.join("\t"));
         output.push('\n');
     }

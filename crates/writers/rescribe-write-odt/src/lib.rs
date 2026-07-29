@@ -4,9 +4,8 @@
 //! `odf-fmt` for all ZIP building and XML serialisation.
 
 use odf_fmt::ast::{
-    Heading, Hyperlink, Inline, List, ListItem, OdfBody, OdfDocument, OdfMeta,
-    Paragraph, Span, StyleEntry, Table, TableCell, TableRow, TextBlock, TextProperties,
-    ParagraphProperties,
+    Heading, Hyperlink, Inline, List, ListItem, OdfBody, OdfDocument, OdfMeta, Paragraph,
+    ParagraphProperties, Span, StyleEntry, Table, TableCell, TableRow, TextBlock, TextProperties,
 };
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
@@ -22,7 +21,8 @@ pub fn emit_with_options(
     _options: &EmitOptions,
 ) -> Result<ConversionResult<Vec<u8>>, EmitError> {
     let odf = convert_document(doc);
-    let bytes = odf_fmt::emit(&odf).map_err(|e| EmitError::Io(std::io::Error::other(e.to_string())))?;
+    let bytes =
+        odf_fmt::emit(&odf).map_err(|e| EmitError::Io(std::io::Error::other(e.to_string())))?;
     Ok(ConversionResult::ok(bytes))
 }
 
@@ -63,21 +63,70 @@ fn build_named_styles() -> Vec<StyleEntry> {
     }
 
     vec![
-        text_entry("Bold", "text", TextProperties { bold: true, ..TextProperties::default() }),
-        text_entry("Italic", "text", TextProperties { italic: true, ..TextProperties::default() }),
-        text_entry("Underline", "text", TextProperties { underline: true, ..TextProperties::default() }),
-        text_entry("Strikethrough", "text", TextProperties { strikethrough: true, ..TextProperties::default() }),
-        text_entry("Code", "text", TextProperties {
-            font_name: Some("Courier New".to_owned()),
-            ..TextProperties::default()
-        }),
-        text_entry("Subscript", "text", TextProperties { subscript: true, ..TextProperties::default() }),
-        text_entry("Superscript", "text", TextProperties { superscript: true, ..TextProperties::default() }),
+        text_entry(
+            "Bold",
+            "text",
+            TextProperties {
+                bold: true,
+                ..TextProperties::default()
+            },
+        ),
+        text_entry(
+            "Italic",
+            "text",
+            TextProperties {
+                italic: true,
+                ..TextProperties::default()
+            },
+        ),
+        text_entry(
+            "Underline",
+            "text",
+            TextProperties {
+                underline: true,
+                ..TextProperties::default()
+            },
+        ),
+        text_entry(
+            "Strikethrough",
+            "text",
+            TextProperties {
+                strikethrough: true,
+                ..TextProperties::default()
+            },
+        ),
+        text_entry(
+            "Code",
+            "text",
+            TextProperties {
+                font_name: Some("Courier New".to_owned()),
+                ..TextProperties::default()
+            },
+        ),
+        text_entry(
+            "Subscript",
+            "text",
+            TextProperties {
+                subscript: true,
+                ..TextProperties::default()
+            },
+        ),
+        text_entry(
+            "Superscript",
+            "text",
+            TextProperties {
+                superscript: true,
+                ..TextProperties::default()
+            },
+        ),
         para_entry("Preformatted", ParagraphProperties::default()),
-        para_entry("Quotation", ParagraphProperties {
-            margin_left: Some("0.5in".to_owned()),
-            ..ParagraphProperties::default()
-        }),
+        para_entry(
+            "Quotation",
+            ParagraphProperties {
+                margin_left: Some("0.5in".to_owned()),
+                ..ParagraphProperties::default()
+            },
+        ),
     ]
 }
 
@@ -99,7 +148,11 @@ fn convert_nodes(nodes: &[Node]) -> Vec<TextBlock> {
                 flush_blockquote(&mut blockquote_buf, &mut blocks);
                 let style = n.props.get_str("odt:style-name").map(str::to_owned);
                 let content = collect_inlines(&n.children);
-                blocks.push(TextBlock::Paragraph(Paragraph { style_name: style, content, ..Paragraph::default() }));
+                blocks.push(TextBlock::Paragraph(Paragraph {
+                    style_name: style,
+                    content,
+                    ..Paragraph::default()
+                }));
             }
 
             node::HEADING => {
@@ -119,8 +172,12 @@ fn convert_nodes(nodes: &[Node]) -> Vec<TextBlock> {
                 // Emit as a preformatted paragraph with line breaks for embedded newlines
                 let mut inlines: Vec<Inline> = Vec::new();
                 for (i, line) in text.lines().enumerate() {
-                    if i > 0 { inlines.push(Inline::LineBreak); }
-                    if !line.is_empty() { inlines.push(Inline::Text(line.to_owned())); }
+                    if i > 0 {
+                        inlines.push(Inline::LineBreak);
+                    }
+                    if !line.is_empty() {
+                        inlines.push(Inline::Text(line.to_owned()));
+                    }
                 }
                 blocks.push(TextBlock::Paragraph(Paragraph {
                     style_name: Some("Preformatted".to_owned()),
@@ -145,34 +202,62 @@ fn convert_nodes(nodes: &[Node]) -> Vec<TextBlock> {
             node::LIST => {
                 flush_blockquote(&mut blockquote_buf, &mut blocks);
                 let ordered = n.props.get_bool("ordered").unwrap_or(false);
-                let style_name = if ordered { Some("List Number".to_owned()) } else { Some("List Bullet".to_owned()) };
-                let items = n.children.iter()
+                let style_name = if ordered {
+                    Some("List Number".to_owned())
+                } else {
+                    Some("List Bullet".to_owned())
+                };
+                let items = n
+                    .children
+                    .iter()
                     .filter(|c| c.kind.as_str() == node::LIST_ITEM)
                     .map(|c| {
                         let content = convert_nodes(&c.children);
-                        ListItem { content, ..ListItem::default() }
+                        ListItem {
+                            content,
+                            ..ListItem::default()
+                        }
                     })
                     .collect();
-                blocks.push(TextBlock::List(List { style_name, items, ..List::default() }));
+                blocks.push(TextBlock::List(List {
+                    style_name,
+                    items,
+                    ..List::default()
+                }));
             }
 
             node::TABLE => {
                 flush_blockquote(&mut blockquote_buf, &mut blocks);
-                let rows = n.children.iter()
+                let rows = n
+                    .children
+                    .iter()
                     .filter(|r| r.kind.as_str() == node::TABLE_ROW)
                     .map(|r| {
-                        let cells = r.children.iter()
+                        let cells = r
+                            .children
+                            .iter()
                             .map(|c| {
                                 let colspan = c.props.get_int(prop::COLSPAN).map(|v| v as u32);
                                 let rowspan = c.props.get_int(prop::ROWSPAN).map(|v| v as u32);
                                 let content = convert_nodes(&c.children);
-                                TableCell { col_span: colspan, row_span: rowspan, content, ..TableCell::default() }
+                                TableCell {
+                                    col_span: colspan,
+                                    row_span: rowspan,
+                                    content,
+                                    ..TableCell::default()
+                                }
                             })
                             .collect();
-                        TableRow { cells, ..TableRow::default() }
+                        TableRow {
+                            cells,
+                            ..TableRow::default()
+                        }
                     })
                     .collect();
-                blocks.push(TextBlock::Table(Table { rows, ..Table::default() }));
+                blocks.push(TextBlock::Table(Table {
+                    rows,
+                    ..Table::default()
+                }));
             }
 
             node::HORIZONTAL_RULE => {
@@ -222,7 +307,9 @@ fn convert_inline_node(n: &Node) -> Vec<Inline> {
     match n.kind.as_str() {
         node::TEXT => {
             let content = n.props.get_str(prop::CONTENT).unwrap_or("");
-            if content.is_empty() { return Vec::new(); }
+            if content.is_empty() {
+                return Vec::new();
+            }
             // Expand \t and handle spaces
             if content == "\t" {
                 vec![Inline::Tab]
@@ -340,32 +427,23 @@ mod tests {
 
     #[test]
     fn test_emit_roundtrip_para_with_bold() {
-        let document = doc(|d| {
-            d.para(|p| p.text("plain ").strong(|s| s.text("bold")).text(" end"))
-        });
+        let document =
+            doc(|d| d.para(|p| p.text("plain ").strong(|s| s.text("bold")).text(" end")));
         let result = emit(&document).unwrap();
         assert_eq!(&result.value[0..2], b"PK");
     }
 
     #[test]
     fn test_emit_list() {
-        let document = doc(|d| {
-            d.bullet_list(|l| {
-                l.item(|i| i.text("first"))
-                    .item(|i| i.text("second"))
-            })
-        });
+        let document =
+            doc(|d| d.bullet_list(|l| l.item(|i| i.text("first")).item(|i| i.text("second"))));
         let result = emit(&document).unwrap();
         assert_eq!(&result.value[0..2], b"PK");
     }
 
     #[test]
     fn test_emit_table() {
-        let document = doc(|d| {
-            d.table(|t| {
-                t.row(|r| r.cell(|c| c.text("cell")))
-            })
-        });
+        let document = doc(|d| d.table(|t| t.row(|r| r.cell(|c| c.text("cell")))));
         let result = emit(&document).unwrap();
         assert_eq!(&result.value[0..2], b"PK");
     }

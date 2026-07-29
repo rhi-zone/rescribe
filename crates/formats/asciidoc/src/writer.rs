@@ -33,7 +33,10 @@ pub struct Writer<W: Write> {
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
-        Writer { sink, events: Vec::new() }
+        Writer {
+            sink,
+            events: Vec::new(),
+        }
     }
 
     /// Feed one event to the writer.
@@ -61,32 +64,99 @@ fn events_to_doc(events: Vec<OwnedEvent>) -> AsciiDoc {
 }
 
 enum Frame {
-    Document { blocks: Vec<Block> },
-    Paragraph { inlines: Vec<Inline>, id: Option<String>, role: Option<String>, checked: Option<bool> },
-    Heading { level: usize, inlines: Vec<Inline>, id: Option<String>, role: Option<String> },
-    CodeBlock { language: Option<String>, content: String },
-    Blockquote { children: Vec<Block>, attribution: Option<String> },
-    List { ordered: bool, items: Vec<Vec<Block>>, style: Option<String> },
-    ListItem { blocks: Vec<Block> },
-    DefinitionList { items: Vec<DefinitionItem> },
-    DefinitionTerm { inlines: Vec<Inline> },
-    DefinitionDesc { inlines: Vec<Inline> },
-    Div { class: Option<String>, title: Option<String>, children: Vec<Block> },
-    Table { rows: Vec<TableRow> },
-    TableRow { cells: Vec<Vec<Inline>>, is_header: bool },
-    TableCell { inlines: Vec<Inline> },
+    Document {
+        blocks: Vec<Block>,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+        id: Option<String>,
+        role: Option<String>,
+        checked: Option<bool>,
+    },
+    Heading {
+        level: usize,
+        inlines: Vec<Inline>,
+        id: Option<String>,
+        role: Option<String>,
+    },
+    CodeBlock {
+        language: Option<String>,
+        content: String,
+    },
+    Blockquote {
+        children: Vec<Block>,
+        attribution: Option<String>,
+    },
+    List {
+        ordered: bool,
+        items: Vec<Vec<Block>>,
+        style: Option<String>,
+    },
+    ListItem {
+        blocks: Vec<Block>,
+    },
+    DefinitionList {
+        items: Vec<DefinitionItem>,
+    },
+    DefinitionTerm {
+        inlines: Vec<Inline>,
+    },
+    DefinitionDesc {
+        inlines: Vec<Inline>,
+    },
+    Div {
+        class: Option<String>,
+        title: Option<String>,
+        children: Vec<Block>,
+    },
+    Table {
+        rows: Vec<TableRow>,
+    },
+    TableRow {
+        cells: Vec<Vec<Inline>>,
+        is_header: bool,
+    },
+    TableCell {
+        inlines: Vec<Inline>,
+    },
     // Inline spans
-    Strong { inlines: Vec<Inline> },
-    Emphasis { inlines: Vec<Inline> },
-    Superscript { inlines: Vec<Inline> },
-    Subscript { inlines: Vec<Inline> },
-    Highlight { inlines: Vec<Inline> },
-    Strikeout { inlines: Vec<Inline> },
-    Underline { inlines: Vec<Inline> },
-    SmallCaps { inlines: Vec<Inline> },
-    Quoted { quote_type: QuoteType, inlines: Vec<Inline> },
-    Link { url: String, inlines: Vec<Inline>, target: Option<String> },
-    FootnoteDef { label: String, inlines: Vec<Inline> },
+    Strong {
+        inlines: Vec<Inline>,
+    },
+    Emphasis {
+        inlines: Vec<Inline>,
+    },
+    Superscript {
+        inlines: Vec<Inline>,
+    },
+    Subscript {
+        inlines: Vec<Inline>,
+    },
+    Highlight {
+        inlines: Vec<Inline>,
+    },
+    Strikeout {
+        inlines: Vec<Inline>,
+    },
+    Underline {
+        inlines: Vec<Inline>,
+    },
+    SmallCaps {
+        inlines: Vec<Inline>,
+    },
+    Quoted {
+        quote_type: QuoteType,
+        inlines: Vec<Inline>,
+    },
+    Link {
+        url: String,
+        inlines: Vec<Inline>,
+        target: Option<String>,
+    },
+    FootnoteDef {
+        label: String,
+        inlines: Vec<Inline>,
+    },
 }
 
 struct DocBuilder {
@@ -95,7 +165,9 @@ struct DocBuilder {
 
 impl DocBuilder {
     fn new() -> Self {
-        DocBuilder { stack: vec![Frame::Document { blocks: vec![] }] }
+        DocBuilder {
+            stack: vec![Frame::Document { blocks: vec![] }],
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -109,10 +181,21 @@ impl DocBuilder {
 
             // ── Block open/close ──────────────────────────────────────────────
             OwnedEvent::StartParagraph { id, role, checked } => {
-                self.stack.push(Frame::Paragraph { inlines: vec![], id, role, checked });
+                self.stack.push(Frame::Paragraph {
+                    inlines: vec![],
+                    id,
+                    role,
+                    checked,
+                });
             }
             OwnedEvent::EndParagraph => {
-                if let Some(Frame::Paragraph { inlines, id, role, checked }) = self.stack.pop() {
+                if let Some(Frame::Paragraph {
+                    inlines,
+                    id,
+                    role,
+                    checked,
+                }) = self.stack.pop()
+                {
                     self.push_block(Block::Paragraph {
                         inlines,
                         id,
@@ -123,10 +206,21 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartHeading { level, id, role } => {
-                self.stack.push(Frame::Heading { level, inlines: vec![], id, role });
+                self.stack.push(Frame::Heading {
+                    level,
+                    inlines: vec![],
+                    id,
+                    role,
+                });
             }
             OwnedEvent::EndHeading => {
-                if let Some(Frame::Heading { level, inlines, id, role }) = self.stack.pop() {
+                if let Some(Frame::Heading {
+                    level,
+                    inlines,
+                    id,
+                    role,
+                }) = self.stack.pop()
+                {
                     self.push_block(Block::Heading {
                         level,
                         inlines,
@@ -137,7 +231,10 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartCodeBlock { language } => {
-                self.stack.push(Frame::CodeBlock { language, content: String::new() });
+                self.stack.push(Frame::CodeBlock {
+                    language,
+                    content: String::new(),
+                });
             }
             OwnedEvent::CodeBlockContent(content) => {
                 if let Some(Frame::CodeBlock { content: buf, .. }) = self.stack.last_mut() {
@@ -146,23 +243,52 @@ impl DocBuilder {
             }
             OwnedEvent::EndCodeBlock => {
                 if let Some(Frame::CodeBlock { language, content }) = self.stack.pop() {
-                    self.push_block(Block::CodeBlock { language, content, span: Span::NONE });
+                    self.push_block(Block::CodeBlock {
+                        language,
+                        content,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartBlockquote { attribution } => {
-                self.stack.push(Frame::Blockquote { children: vec![], attribution });
+                self.stack.push(Frame::Blockquote {
+                    children: vec![],
+                    attribution,
+                });
             }
             OwnedEvent::EndBlockquote => {
-                if let Some(Frame::Blockquote { children, attribution }) = self.stack.pop() {
-                    self.push_block(Block::Blockquote { children, attribution, span: Span::NONE });
+                if let Some(Frame::Blockquote {
+                    children,
+                    attribution,
+                }) = self.stack.pop()
+                {
+                    self.push_block(Block::Blockquote {
+                        children,
+                        attribution,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartList { ordered, style } => {
-                self.stack.push(Frame::List { ordered, items: vec![], style });
+                self.stack.push(Frame::List {
+                    ordered,
+                    items: vec![],
+                    style,
+                });
             }
             OwnedEvent::EndList => {
-                if let Some(Frame::List { ordered, items, style }) = self.stack.pop() {
-                    self.push_block(Block::List { ordered, items, style, span: Span::NONE });
+                if let Some(Frame::List {
+                    ordered,
+                    items,
+                    style,
+                }) = self.stack.pop()
+                {
+                    self.push_block(Block::List {
+                        ordered,
+                        items,
+                        style,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartListItem => {
@@ -180,7 +306,10 @@ impl DocBuilder {
             }
             OwnedEvent::EndDefinitionList => {
                 if let Some(Frame::DefinitionList { items }) = self.stack.pop() {
-                    self.push_block(Block::DefinitionList { items, span: Span::NONE });
+                    self.push_block(Block::DefinitionList {
+                        items,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartDefinitionTerm => {
@@ -190,7 +319,10 @@ impl DocBuilder {
                 if let Some(Frame::DefinitionTerm { inlines }) = self.stack.pop() {
                     // Append an incomplete DefinitionItem; desc will be filled in later.
                     if let Some(Frame::DefinitionList { items, .. }) = self.stack.last_mut() {
-                        items.push(DefinitionItem { term: inlines, desc: vec![] });
+                        items.push(DefinitionItem {
+                            term: inlines,
+                            desc: vec![],
+                        });
                     }
                 }
             }
@@ -214,31 +346,60 @@ impl DocBuilder {
             }
             OwnedEvent::Figure { url, alt, title: _ } => {
                 self.push_block(Block::Figure {
-                    image: ImageData { url, alt, width: None, height: None },
+                    image: ImageData {
+                        url,
+                        alt,
+                        width: None,
+                        height: None,
+                    },
                     span: Span::NONE,
                 });
             }
             OwnedEvent::StartDiv { class, title } => {
-                self.stack.push(Frame::Div { class, title, children: vec![] });
+                self.stack.push(Frame::Div {
+                    class,
+                    title,
+                    children: vec![],
+                });
             }
             OwnedEvent::EndDiv => {
-                if let Some(Frame::Div { class, title, children }) = self.stack.pop() {
-                    self.push_block(Block::Div { class, title, children, span: Span::NONE });
+                if let Some(Frame::Div {
+                    class,
+                    title,
+                    children,
+                }) = self.stack.pop()
+                {
+                    self.push_block(Block::Div {
+                        class,
+                        title,
+                        children,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::RawBlock { format, content } => {
-                self.push_block(Block::RawBlock { format, content, span: Span::NONE });
+                self.push_block(Block::RawBlock {
+                    format,
+                    content,
+                    span: Span::NONE,
+                });
             }
             OwnedEvent::StartTable => {
                 self.stack.push(Frame::Table { rows: vec![] });
             }
             OwnedEvent::EndTable => {
                 if let Some(Frame::Table { rows }) = self.stack.pop() {
-                    self.push_block(Block::Table { rows, span: Span::NONE });
+                    self.push_block(Block::Table {
+                        rows,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartTableRow { is_header } => {
-                self.stack.push(Frame::TableRow { cells: vec![], is_header });
+                self.stack.push(Frame::TableRow {
+                    cells: vec![],
+                    is_header,
+                });
             }
             OwnedEvent::EndTableRow => {
                 if let Some(Frame::TableRow { cells, is_header }) = self.stack.pop() {
@@ -260,7 +421,10 @@ impl DocBuilder {
 
             // ── Inline events ─────────────────────────────────────────────────
             OwnedEvent::Text(cow) => {
-                self.push_inline(Inline::Text { text: cow.into_owned(), span: Span::NONE });
+                self.push_inline(Inline::Text {
+                    text: cow.into_owned(),
+                    span: Span::NONE,
+                });
             }
             OwnedEvent::SoftBreak => {
                 self.push_inline(Inline::SoftBreak { span: Span::NONE });
@@ -341,10 +505,17 @@ impl DocBuilder {
                 } else {
                     QuoteType::Double
                 };
-                self.stack.push(Frame::Quoted { quote_type: qt, inlines: vec![] });
+                self.stack.push(Frame::Quoted {
+                    quote_type: qt,
+                    inlines: vec![],
+                });
             }
             OwnedEvent::EndQuoted => {
-                if let Some(Frame::Quoted { quote_type, inlines }) = self.stack.pop() {
+                if let Some(Frame::Quoted {
+                    quote_type,
+                    inlines,
+                }) = self.stack.pop()
+                {
                     self.push_inline(Inline::Quoted {
                         quote_type,
                         children: inlines,
@@ -353,10 +524,19 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartLink { url, target } => {
-                self.stack.push(Frame::Link { url, inlines: vec![], target });
+                self.stack.push(Frame::Link {
+                    url,
+                    inlines: vec![],
+                    target,
+                });
             }
             OwnedEvent::EndLink => {
-                if let Some(Frame::Link { url, inlines, target }) = self.stack.pop() {
+                if let Some(Frame::Link {
+                    url,
+                    inlines,
+                    target,
+                }) = self.stack.pop()
+                {
                     self.push_inline(Inline::Link {
                         url,
                         children: inlines,
@@ -367,15 +547,26 @@ impl DocBuilder {
             }
             OwnedEvent::InlineImage { url, alt, title: _ } => {
                 self.push_inline(Inline::Image(
-                    ImageData { url, alt, width: None, height: None },
+                    ImageData {
+                        url,
+                        alt,
+                        width: None,
+                        height: None,
+                    },
                     Span::NONE,
                 ));
             }
             OwnedEvent::FootnoteRef { label } => {
-                self.push_inline(Inline::FootnoteRef { label, span: Span::NONE });
+                self.push_inline(Inline::FootnoteRef {
+                    label,
+                    span: Span::NONE,
+                });
             }
             OwnedEvent::StartFootnoteDef { label } => {
-                self.stack.push(Frame::FootnoteDef { label, inlines: vec![] });
+                self.stack.push(Frame::FootnoteDef {
+                    label,
+                    inlines: vec![],
+                });
             }
             OwnedEvent::EndFootnoteDef => {
                 if let Some(Frame::FootnoteDef { label, inlines }) = self.stack.pop() {
@@ -387,16 +578,31 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::MathBlock { content, flavor } => {
-                self.push_block(Block::MathBlock { content, flavor, span: Span::NONE });
+                self.push_block(Block::MathBlock {
+                    content,
+                    flavor,
+                    span: Span::NONE,
+                });
             }
             OwnedEvent::MathInline { content, flavor } => {
-                self.push_inline(Inline::MathInline { content, flavor, span: Span::NONE });
+                self.push_inline(Inline::MathInline {
+                    content,
+                    flavor,
+                    span: Span::NONE,
+                });
             }
             OwnedEvent::RawInline { format, content } => {
-                self.push_inline(Inline::RawInline { format, content, span: Span::NONE });
+                self.push_inline(Inline::RawInline {
+                    format,
+                    content,
+                    span: Span::NONE,
+                });
             }
             OwnedEvent::Anchor { id } => {
-                self.push_inline(Inline::Anchor { id, span: Span::NONE });
+                self.push_inline(Inline::Anchor {
+                    id,
+                    span: Span::NONE,
+                });
             }
         }
     }
@@ -438,7 +644,11 @@ impl DocBuilder {
             Some(Frame::Document { blocks }) => blocks,
             _ => vec![],
         };
-        AsciiDoc { blocks, attributes: Default::default(), span: Span::NONE }
+        AsciiDoc {
+            blocks,
+            attributes: Default::default(),
+            span: Span::NONE,
+        }
     }
 }
 
@@ -449,8 +659,14 @@ mod tests {
     #[test]
     fn test_writer_heading() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(OwnedEvent::StartHeading { level: 1, id: None, role: None });
-        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("Hello".to_string())));
+        w.write_event(OwnedEvent::StartHeading {
+            level: 1,
+            id: None,
+            role: None,
+        });
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned(
+            "Hello".to_string(),
+        )));
         w.write_event(OwnedEvent::EndHeading);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();
@@ -460,8 +676,14 @@ mod tests {
     #[test]
     fn test_writer_paragraph() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(OwnedEvent::StartParagraph { id: None, role: None, checked: None });
-        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("World".to_string())));
+        w.write_event(OwnedEvent::StartParagraph {
+            id: None,
+            role: None,
+            checked: None,
+        });
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned(
+            "World".to_string(),
+        )));
         w.write_event(OwnedEvent::EndParagraph);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();

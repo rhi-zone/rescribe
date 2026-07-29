@@ -113,9 +113,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::ColorSpan { color, .. } if color == "red")));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::ColorSpan { color, .. } if color == "red"))
+        );
     }
 
     #[test]
@@ -124,9 +126,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::Mention(name, _) if name == "alice")));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Mention(name, _) if name == "alice"))
+        );
     }
 
     #[test]

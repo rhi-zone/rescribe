@@ -53,7 +53,9 @@ fn build_block(block: &Block, output: &mut String) {
             output.push_str("\n\n");
         }
 
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             if let Some(lang) = language {
                 output.push_str(&format!("{{{{code language=\"{}\"}}}}\n", lang));
             } else {
@@ -111,7 +113,12 @@ fn build_block(block: &Block, output: &mut String) {
             output.push_str("{{/quote}}\n\n");
         }
 
-        Block::MacroBlock { name, params, content, .. } => {
+        Block::MacroBlock {
+            name,
+            params,
+            content,
+            ..
+        } => {
             output.push_str("{{");
             output.push_str(name);
             if !params.is_empty() {
@@ -198,7 +205,9 @@ fn build_inline(inline: &Inline, output: &mut String) {
             output.push_str("]]");
         }
 
-        Inline::Image { url, alt, params, .. } => {
+        Inline::Image {
+            url, alt, params, ..
+        } => {
             output.push_str("[[image:");
             output.push_str(url);
             let has_alt = alt.is_some();

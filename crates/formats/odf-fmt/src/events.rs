@@ -26,27 +26,39 @@ pub enum OdfEvent<'a> {
     EndText,
 
     /// `<text:p>` opened.
-    StartParagraph { style_name: Option<Cow<'a, str>> },
+    StartParagraph {
+        style_name: Option<Cow<'a, str>>,
+    },
     /// `</text:p>` closed.
     EndParagraph,
 
     /// `<text:h>` opened.
-    StartHeading { style_name: Option<Cow<'a, str>>, outline_level: Option<u32> },
+    StartHeading {
+        style_name: Option<Cow<'a, str>>,
+        outline_level: Option<u32>,
+    },
     /// `</text:h>` closed.
     EndHeading,
 
     /// `<text:span>` opened.
-    StartSpan { style_name: Option<Cow<'a, str>> },
+    StartSpan {
+        style_name: Option<Cow<'a, str>>,
+    },
     /// `</text:span>` closed.
     EndSpan,
 
     /// `<text:a>` opened.
-    StartHyperlink { href: Option<Cow<'a, str>>, title: Option<Cow<'a, str>> },
+    StartHyperlink {
+        href: Option<Cow<'a, str>>,
+        title: Option<Cow<'a, str>>,
+    },
     /// `</text:a>` closed.
     EndHyperlink,
 
     /// `<text:list>` opened.
-    StartList { style_name: Option<Cow<'a, str>> },
+    StartList {
+        style_name: Option<Cow<'a, str>>,
+    },
     /// `</text:list>` closed.
     EndList,
 
@@ -56,30 +68,47 @@ pub enum OdfEvent<'a> {
     EndListItem,
 
     /// `<table:table>` opened.
-    StartTable { name: Option<Cow<'a, str>>, style_name: Option<Cow<'a, str>> },
+    StartTable {
+        name: Option<Cow<'a, str>>,
+        style_name: Option<Cow<'a, str>>,
+    },
     /// `</table:table>` closed.
     EndTable,
 
     /// `<table:table-row>` opened.
-    StartRow { style_name: Option<Cow<'a, str>> },
+    StartRow {
+        style_name: Option<Cow<'a, str>>,
+    },
     /// `</table:table-row>` closed.
     EndRow,
 
     /// `<table:table-cell>` or `<table:covered-table-cell>` opened.
-    StartCell { style_name: Option<Cow<'a, str>>, value_type: Option<Cow<'a, str>>, covered: bool },
+    StartCell {
+        style_name: Option<Cow<'a, str>>,
+        value_type: Option<Cow<'a, str>>,
+        covered: bool,
+    },
     /// `</table:table-cell>` closed.
     EndCell,
 
     /// `<text:note>` (footnote / endnote).
-    StartNote { note_class: Cow<'a, str>, id: Option<Cow<'a, str>> },
+    StartNote {
+        note_class: Cow<'a, str>,
+        id: Option<Cow<'a, str>>,
+    },
     EndNote,
 
     /// `<draw:frame>` opened.
-    StartFrame { name: Option<Cow<'a, str>>, anchor_type: Option<Cow<'a, str>> },
+    StartFrame {
+        name: Option<Cow<'a, str>>,
+        anchor_type: Option<Cow<'a, str>>,
+    },
     EndFrame,
 
     /// `<draw:image>` inside a frame.
-    Image { href: Cow<'a, str> },
+    Image {
+        href: Cow<'a, str>,
+    },
 
     /// A run of text.
     Text(Cow<'a, str>),
@@ -89,22 +118,29 @@ pub enum OdfEvent<'a> {
     /// `<text:tab/>`.
     Tab,
     /// `<text:s/>` — one or more spaces.
-    Space { count: u32 },
+    Space {
+        count: u32,
+    },
 
     // ── ODS spreadsheet events ─────────────────────────────────────────────
-
     /// `<office:spreadsheet>` opened.
     StartSpreadsheet,
     /// `</office:spreadsheet>` closed.
     EndSpreadsheet,
 
     /// `<table:table>` opened (spreadsheet sheet).
-    StartSheet { name: Option<Cow<'a, str>>, style_name: Option<Cow<'a, str>> },
+    StartSheet {
+        name: Option<Cow<'a, str>>,
+        style_name: Option<Cow<'a, str>>,
+    },
     /// `</table:table>` closed (spreadsheet sheet).
     EndSheet,
 
     /// `<table:table-row>` opened (spreadsheet row).
-    StartSheetRow { style_name: Option<Cow<'a, str>>, repeated: Option<u32> },
+    StartSheetRow {
+        style_name: Option<Cow<'a, str>>,
+        repeated: Option<u32>,
+    },
     /// `</table:table-row>` closed.
     EndSheetRow,
 
@@ -120,7 +156,6 @@ pub enum OdfEvent<'a> {
     EndSheetCell,
 
     // ── ODP presentation events ────────────────────────────────────────────
-
     /// `<office:presentation>` opened.
     StartPresentation,
     /// `</office:presentation>` closed.
@@ -153,12 +188,16 @@ pub enum OdfEvent<'a> {
     EndTextBox,
 
     /// `<presentation:notes>` opened.
-    StartNotes { style_name: Option<Cow<'a, str>> },
+    StartNotes {
+        style_name: Option<Cow<'a, str>>,
+    },
     /// `</presentation:notes>` closed.
     EndNotes,
 
     /// An element not otherwise handled.
-    Unknown { name: Cow<'a, str> },
+    Unknown {
+        name: Cow<'a, str>,
+    },
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -226,7 +265,12 @@ fn extract_events(input: &[u8]) -> VecDeque<OdfEvent<'static>> {
 
 /// Which body section we are currently inside.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BodyKind { None, Text, Spreadsheet, Presentation }
+enum BodyKind {
+    None,
+    Text,
+    Spreadsheet,
+    Presentation,
+}
 
 fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
     use quick_xml::Reader;
@@ -243,7 +287,9 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
             Ok(Event::Start(ref e)) => {
                 let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
                 match name.as_str() {
-                    "office:body" => { in_body = true; }
+                    "office:body" => {
+                        in_body = true;
+                    }
                     "office:text" if in_body => {
                         body_kind = BodyKind::Text;
                         events.push_back(OdfEvent::StartText);
@@ -269,7 +315,9 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
                         "text:line-break" => events.push_back(OdfEvent::LineBreak),
                         "text:tab" => events.push_back(OdfEvent::Tab),
                         "text:s" => {
-                            let count = e.attributes().flatten()
+                            let count = e
+                                .attributes()
+                                .flatten()
                                 .find(|a| a.key.as_ref() == b"text:c")
                                 .and_then(|a| String::from_utf8_lossy(&a.value).parse::<u32>().ok())
                                 .unwrap_or(1);
@@ -313,7 +361,9 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
                         body_kind = BodyKind::None;
                         events.push_back(OdfEvent::EndPresentation);
                     }
-                    "office:body" => { in_body = false; }
+                    "office:body" => {
+                        in_body = false;
+                    }
                     _ if body_kind != BodyKind::None => {
                         push_end_event(events, &name, body_kind);
                     }
@@ -359,9 +409,12 @@ fn push_text_start_event(
         }
         "text:h" => {
             let style_name = get_attr(e, b"text:style-name").map(Cow::Owned);
-            let outline_level = get_attr(e, b"text:outline-level")
-                .and_then(|s| s.parse::<u32>().ok());
-            events.push_back(OdfEvent::StartHeading { style_name, outline_level });
+            let outline_level =
+                get_attr(e, b"text:outline-level").and_then(|s| s.parse::<u32>().ok());
+            events.push_back(OdfEvent::StartHeading {
+                style_name,
+                outline_level,
+            });
         }
         "text:span" => {
             let style_name = get_attr(e, b"text:style-name").map(Cow::Owned);
@@ -382,7 +435,10 @@ fn push_text_start_event(
         "table:table" => {
             let name_attr = get_attr(e, b"table:name").map(Cow::Owned);
             let style_name = get_attr(e, b"table:style-name").map(Cow::Owned);
-            events.push_back(OdfEvent::StartTable { name: name_attr, style_name });
+            events.push_back(OdfEvent::StartTable {
+                name: name_attr,
+                style_name,
+            });
         }
         "table:table-row" => {
             let style_name = get_attr(e, b"table:style-name").map(Cow::Owned);
@@ -392,7 +448,11 @@ fn push_text_start_event(
             let style_name = get_attr(e, b"table:style-name").map(Cow::Owned);
             let value_type = get_attr(e, b"office:value-type").map(Cow::Owned);
             let covered = name == "table:covered-table-cell";
-            events.push_back(OdfEvent::StartCell { style_name, value_type, covered });
+            events.push_back(OdfEvent::StartCell {
+                style_name,
+                value_type,
+                covered,
+            });
         }
         "text:note" => {
             let note_class = get_attr(e, b"text:note-class")
@@ -404,7 +464,10 @@ fn push_text_start_event(
         "draw:frame" => {
             let frame_name = get_attr(e, b"draw:name").map(Cow::Owned);
             let anchor_type = get_attr(e, b"text:anchor-type").map(Cow::Owned);
-            events.push_back(OdfEvent::StartFrame { name: frame_name, anchor_type });
+            events.push_back(OdfEvent::StartFrame {
+                name: frame_name,
+                anchor_type,
+            });
         }
         "draw:image" => {
             let href = get_attr(e, b"xlink:href")
@@ -413,7 +476,9 @@ fn push_text_start_event(
             events.push_back(OdfEvent::Image { href });
         }
         _ => {
-            events.push_back(OdfEvent::Unknown { name: Cow::Owned(name.to_owned()) });
+            events.push_back(OdfEvent::Unknown {
+                name: Cow::Owned(name.to_owned()),
+            });
         }
     }
 }
@@ -427,13 +492,19 @@ fn push_spreadsheet_start_event(
         "table:table" => {
             let name_attr = get_attr(e, b"table:name").map(Cow::Owned);
             let style_name = get_attr(e, b"table:style-name").map(Cow::Owned);
-            events.push_back(OdfEvent::StartSheet { name: name_attr, style_name });
+            events.push_back(OdfEvent::StartSheet {
+                name: name_attr,
+                style_name,
+            });
         }
         "table:table-row" => {
             let style_name = get_attr(e, b"table:style-name").map(Cow::Owned);
-            let repeated = get_attr(e, b"table:number-rows-repeated")
-                .and_then(|s| s.parse::<u32>().ok());
-            events.push_back(OdfEvent::StartSheetRow { style_name, repeated });
+            let repeated =
+                get_attr(e, b"table:number-rows-repeated").and_then(|s| s.parse::<u32>().ok());
+            events.push_back(OdfEvent::StartSheetRow {
+                style_name,
+                repeated,
+            });
         }
         "table:table-cell" | "table:covered-table-cell" => {
             let style_name = get_attr(e, b"table:style-name").map(Cow::Owned);
@@ -441,7 +512,13 @@ fn push_spreadsheet_start_event(
             let value = get_spreadsheet_value(e, value_type.as_deref()).map(Cow::Owned);
             let formula = get_attr(e, b"table:formula").map(Cow::Owned);
             let covered = name == "table:covered-table-cell";
-            events.push_back(OdfEvent::StartSheetCell { style_name, value_type, value, formula, covered });
+            events.push_back(OdfEvent::StartSheetCell {
+                style_name,
+                value_type,
+                value,
+                formula,
+                covered,
+            });
         }
         "text:p" => {
             let style_name = get_attr(e, b"text:style-name").map(Cow::Owned);
@@ -464,8 +541,13 @@ fn push_presentation_start_event(
         "draw:page" => {
             let name_attr = get_attr(e, b"draw:name").map(Cow::Owned);
             let master_page_name = get_attr(e, b"draw:master-page-name").map(Cow::Owned);
-            let layout_name = get_attr(e, b"presentation:presentation-page-layout-name").map(Cow::Owned);
-            events.push_back(OdfEvent::StartSlide { name: name_attr, master_page_name, layout_name });
+            let layout_name =
+                get_attr(e, b"presentation:presentation-page-layout-name").map(Cow::Owned);
+            events.push_back(OdfEvent::StartSlide {
+                name: name_attr,
+                master_page_name,
+                layout_name,
+            });
         }
         "draw:frame" | "draw:custom-shape" => {
             let frame_name = get_attr(e, b"draw:name").map(Cow::Owned);
@@ -474,7 +556,14 @@ fn push_presentation_start_event(
             let y = get_attr(e, b"svg:y").map(Cow::Owned);
             let width = get_attr(e, b"svg:width").map(Cow::Owned);
             let height = get_attr(e, b"svg:height").map(Cow::Owned);
-            events.push_back(OdfEvent::StartShape { name: frame_name, presentation_class, x, y, width, height });
+            events.push_back(OdfEvent::StartShape {
+                name: frame_name,
+                presentation_class,
+                x,
+                y,
+                width,
+                height,
+            });
         }
         "draw:text-box" => {
             events.push_back(OdfEvent::StartTextBox);
@@ -484,7 +573,9 @@ fn push_presentation_start_event(
             events.push_back(OdfEvent::StartNotes { style_name });
         }
         "draw:image" => {
-            let href = get_attr(e, b"xlink:href").map(Cow::Owned).unwrap_or(Cow::Borrowed(""));
+            let href = get_attr(e, b"xlink:href")
+                .map(Cow::Owned)
+                .unwrap_or(Cow::Borrowed(""));
             events.push_back(OdfEvent::Image { href });
         }
         "text:p" => {
@@ -559,12 +650,12 @@ fn get_spreadsheet_value(
         Some("currency") => b"office:value",
         _ => b"office:value",
     };
-    get_attr(e, attr_name)
-        .or_else(|| get_attr(e, b"office:string-value"))
+    get_attr(e, attr_name).or_else(|| get_attr(e, b"office:string-value"))
 }
 
 fn get_attr(e: &quick_xml::events::BytesStart<'_>, key: &[u8]) -> Option<String> {
-    e.attributes().flatten()
+    e.attributes()
+        .flatten()
         .find(|a| a.key.as_ref() == key)
         .map(|a| String::from_utf8_lossy(&a.value).to_string())
 }

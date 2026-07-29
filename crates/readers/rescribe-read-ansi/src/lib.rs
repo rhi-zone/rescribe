@@ -94,7 +94,9 @@ fn build_document_nodes(doc: &AnsiDoc) -> Vec<Node> {
 /// Convert a control-sequence AnsiNode to a top-level raw_block with ansi: props.
 fn ansi_node_to_raw_block(n: &AnsiNode) -> Node {
     match n {
-        AnsiNode::CursorMove { direction, count, .. } => {
+        AnsiNode::CursorMove {
+            direction, count, ..
+        } => {
             use ansi_fmt::CursorDirection;
             let type_str = match direction {
                 CursorDirection::Up => "cursor-up",
@@ -137,13 +139,15 @@ fn ansi_node_to_raw_block(n: &AnsiNode) -> Node {
         }
 
         AnsiNode::CursorVisibility { visible, .. } => {
-            let type_str = if *visible { "cursor-show" } else { "cursor-hide" };
+            let type_str = if *visible {
+                "cursor-show"
+            } else {
+                "cursor-hide"
+            };
             Node::new(node::RAW_BLOCK).prop("ansi:type", type_str)
         }
 
-        AnsiNode::SaveCursor { .. } => {
-            Node::new(node::RAW_BLOCK).prop("ansi:type", "save-cursor")
-        }
+        AnsiNode::SaveCursor { .. } => Node::new(node::RAW_BLOCK).prop("ansi:type", "save-cursor"),
 
         AnsiNode::RestoreCursor { .. } => {
             Node::new(node::RAW_BLOCK).prop("ansi:type", "restore-cursor")
@@ -262,7 +266,11 @@ fn color_to_string(color: &Color) -> String {
                 "ansi-cyan",
                 "ansi-white",
             ];
-            names.get(*n as usize).copied().unwrap_or("ansi-unknown").to_string()
+            names
+                .get(*n as usize)
+                .copied()
+                .unwrap_or("ansi-unknown")
+                .to_string()
         }
         Color::Bright(n) => {
             let names = [
@@ -275,7 +283,11 @@ fn color_to_string(color: &Color) -> String {
                 "ansi-bright-cyan",
                 "ansi-bright-white",
             ];
-            names.get(*n as usize).copied().unwrap_or("ansi-bright-unknown").to_string()
+            names
+                .get(*n as usize)
+                .copied()
+                .unwrap_or("ansi-bright-unknown")
+                .to_string()
         }
         Color::Palette(n) => format!("ansi-palette-{}", n),
         Color::Rgb(r, g, b) => format!("#{:02x}{:02x}{:02x}", r, g, b),

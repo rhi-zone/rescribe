@@ -27,11 +27,19 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Warning, message: message.into(), span }
+        Self {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
     }
 
     pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Error, message: message.into(), span }
+        Self {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -111,9 +119,13 @@ impl Block {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { language, content, .. } => {
-                Block::CodeBlock { language, content, span: Span::NONE }
-            }
+            Block::CodeBlock {
+                language, content, ..
+            } => Block::CodeBlock {
+                language,
+                content,
+                span: Span::NONE,
+            },
             Block::List { ordered, items, .. } => Block::List {
                 ordered,
                 items: items
@@ -129,20 +141,21 @@ impl Block {
             Block::HorizontalRule => Block::HorizontalRule,
             Block::Table { rows, caption, .. } => Block::Table {
                 rows: rows.into_iter().map(TableRow::strip_spans).collect(),
-                caption: caption
-                    .map(|c| c.into_iter().map(Inline::strip_spans).collect()),
+                caption: caption.map(|c| c.into_iter().map(Inline::strip_spans).collect()),
                 span: Span::NONE,
             },
             Block::Blockquote { children, .. } => Block::Blockquote {
                 children: children.into_iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::PreBlock { content, .. } => {
-                Block::PreBlock { content, span: Span::NONE }
-            }
-            Block::RawBlock { content, .. } => {
-                Block::RawBlock { content, span: Span::NONE }
-            }
+            Block::PreBlock { content, .. } => Block::PreBlock {
+                content,
+                span: Span::NONE,
+            },
+            Block::RawBlock { content, .. } => Block::RawBlock {
+                content,
+                span: Span::NONE,
+            },
         }
     }
 }
@@ -204,17 +217,32 @@ pub enum Inline {
     Bold(Vec<Inline>),
     Italic(Vec<Inline>),
     Code(String),
-    Link { url: String, text: String },
-    Image { url: String, alt: String },
+    Link {
+        url: String,
+        text: String,
+    },
+    Image {
+        url: String,
+        alt: String,
+    },
     LineBreak,
     Strikeout(Vec<Inline>),
     Underline(Vec<Inline>),
     Subscript(Vec<Inline>),
     Superscript(Vec<Inline>),
-    FootnoteRef { label: String, content: Option<String> },
-    MathInline { source: String },
-    Template { content: String },
-    Nowiki { content: String },
+    FootnoteRef {
+        label: String,
+        content: Option<String>,
+    },
+    MathInline {
+        source: String,
+    },
+    Template {
+        content: String,
+    },
+    Nowiki {
+        content: String,
+    },
 }
 
 impl Inline {

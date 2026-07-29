@@ -24,7 +24,10 @@ pub fn emit_with_options(
         }
     }
 
-    let zimwiki_doc = ZimwikiDoc { blocks, span: zimwiki::Span::NONE };
+    let zimwiki_doc = ZimwikiDoc {
+        blocks,
+        span: zimwiki::Span::NONE,
+    };
     let output = build_zimwiki(&zimwiki_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
@@ -44,22 +47,35 @@ fn convert_node(node: &Node) -> Option<Block> {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
             let inlines: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Block::Heading { level, inlines, span: Span::NONE })
+            Some(Block::Heading {
+                level,
+                inlines,
+                span: Span::NONE,
+            })
         }
 
         node::PARAGRAPH => {
             let inlines: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Block::Paragraph { inlines, span: Span::NONE })
+            Some(Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            })
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Some(Block::CodeBlock { content, span: Span::NONE })
+            Some(Block::CodeBlock {
+                content,
+                span: Span::NONE,
+            })
         }
 
         node::BLOCKQUOTE => {
             let children: Vec<Block> = node.children.iter().filter_map(convert_node).collect();
-            Some(Block::Blockquote { children, span: Span::NONE })
+            Some(Block::Blockquote {
+                children,
+                span: Span::NONE,
+            })
         }
 
         node::LIST => {
@@ -71,10 +87,18 @@ fn convert_node(node: &Node) -> Option<Block> {
                 .map(|n| {
                     let children: Vec<Block> = n.children.iter().filter_map(convert_node).collect();
                     let checked = n.props.get_bool("checked");
-                    ListItem { checked, children, span: Span::NONE }
+                    ListItem {
+                        checked,
+                        children,
+                        span: Span::NONE,
+                    }
                 })
                 .collect();
-            Some(Block::List { ordered, items, span: Span::NONE })
+            Some(Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            })
         }
 
         node::TABLE => {
@@ -88,10 +112,16 @@ fn convert_node(node: &Node) -> Option<Block> {
                         .iter()
                         .map(|cell| cell.children.iter().filter_map(convert_inline).collect())
                         .collect();
-                    TableRow { cells, span: Span::NONE }
+                    TableRow {
+                        cells,
+                        span: Span::NONE,
+                    }
                 })
                 .collect();
-            Some(Block::Table { rows, span: Span::NONE })
+            Some(Block::Table {
+                rows,
+                span: Span::NONE,
+            })
         }
 
         node::HORIZONTAL_RULE => Some(Block::HorizontalRule { span: Span::NONE }),
@@ -154,12 +184,19 @@ fn convert_inline(node: &Node) -> Option<Inline> {
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children: Vec<Inline> = node.children.iter().filter_map(convert_inline).collect();
-            Some(Inline::Link { url, children, span: Span::NONE })
+            Some(Inline::Link {
+                url,
+                children,
+                span: Span::NONE,
+            })
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
-            Some(Inline::Image { url, span: Span::NONE })
+            Some(Inline::Image {
+                url,
+                span: Span::NONE,
+            })
         }
 
         node::LINE_BREAK => Some(Inline::LineBreak { span: Span::NONE }),

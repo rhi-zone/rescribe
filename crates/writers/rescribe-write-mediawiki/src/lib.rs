@@ -13,7 +13,9 @@
 //! let wiki = String::from_utf8(result.value).unwrap();
 //! ```
 
-use mediawiki_fmt::{Block, Inline, MediawikiDoc, Span, TableCell, TableRow, emit as emit_mediawiki};
+use mediawiki_fmt::{
+    Block, Inline, MediawikiDoc, Span, TableCell, TableRow, emit as emit_mediawiki,
+};
 use rescribe_core::{ConversionResult, Document, EmitError, Node};
 use rescribe_std::{node, prop};
 
@@ -26,7 +28,10 @@ pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
         .flat_map(node_to_block)
         .collect();
 
-    let fmt_doc = MediawikiDoc { blocks, span: Span::NONE };
+    let fmt_doc = MediawikiDoc {
+        blocks,
+        span: Span::NONE,
+    };
     let output = emit_mediawiki(&fmt_doc);
 
     Ok(ConversionResult::with_warnings(output.into_bytes(), vec![]))
@@ -36,19 +41,30 @@ fn node_to_block(node: &Node) -> Vec<Block> {
     match node.kind.as_str() {
         node::PARAGRAPH => {
             let inlines = node.children.iter().flat_map(node_to_inline).collect();
-            vec![Block::Paragraph { inlines, span: Span::NONE }]
+            vec![Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            }]
         }
 
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
             let inlines = node.children.iter().flat_map(node_to_inline).collect();
-            vec![Block::Heading { level, inlines, span: Span::NONE }]
+            vec![Block::Heading {
+                level,
+                inlines,
+                span: Span::NONE,
+            }]
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            vec![Block::CodeBlock { language, content, span: Span::NONE }]
+            vec![Block::CodeBlock {
+                language,
+                content,
+                span: Span::NONE,
+            }]
         }
 
         node::LIST => {
@@ -59,7 +75,11 @@ fn node_to_block(node: &Node) -> Vec<Block> {
                 .filter(|child| child.kind.as_str() == node::LIST_ITEM)
                 .map(|item_node| item_node.children.iter().flat_map(node_to_block).collect())
                 .collect();
-            vec![Block::List { ordered, items, span: Span::NONE }]
+            vec![Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            }]
         }
 
         node::BLOCKQUOTE => {
@@ -87,13 +107,24 @@ fn node_to_block(node: &Node) -> Vec<Block> {
                             let is_header = cell_node.kind.as_str() == node::TABLE_HEADER;
                             let inlines =
                                 cell_node.children.iter().flat_map(node_to_inline).collect();
-                            TableCell { is_header, inlines, span: Span::NONE }
+                            TableCell {
+                                is_header,
+                                inlines,
+                                span: Span::NONE,
+                            }
                         })
                         .collect();
-                    TableRow { cells, span: Span::NONE }
+                    TableRow {
+                        cells,
+                        span: Span::NONE,
+                    }
                 })
                 .collect();
-            vec![Block::Table { rows, caption: None, span: Span::NONE }]
+            vec![Block::Table {
+                rows,
+                caption: None,
+                span: Span::NONE,
+            }]
         }
 
         _ => {

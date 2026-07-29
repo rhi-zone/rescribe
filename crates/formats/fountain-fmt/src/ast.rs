@@ -71,7 +71,11 @@ pub enum Block {
     /// Action/narrative text
     Action { text: String, span: Span },
     /// Character name (possibly with dual dialogue marker)
-    Character { name: String, dual: bool, span: Span },
+    Character {
+        name: String,
+        dual: bool,
+        span: Span,
+    },
     /// Dialogue line
     Dialogue { text: String, span: Span },
     /// Parenthetical direction
@@ -87,7 +91,11 @@ pub enum Block {
     /// Synopsis =text
     Synopsis { text: String, span: Span },
     /// Section heading (#, ##, etc.)
-    Section { level: usize, text: String, span: Span },
+    Section {
+        level: usize,
+        text: String,
+        span: Span,
+    },
     /// Page break (===)
     PageBreak { span: Span },
     /// Boneyard / block comment (/* ... */)

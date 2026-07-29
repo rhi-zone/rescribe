@@ -88,7 +88,10 @@ mod tests {
     #[test]
     fn test_parse_code_block() {
         let doc = parse_ok("#+BEGIN_SRC rust\nfn main() {}\n#+END_SRC");
-        let Block::CodeBlock { language, content, .. } = &doc.blocks[0] else {
+        let Block::CodeBlock {
+            language, content, ..
+        } = &doc.blocks[0]
+        else {
             panic!("expected code block");
         };
         assert_eq!(language.as_deref(), Some("rust"));
@@ -129,7 +132,11 @@ mod tests {
         assert!(matches!(children[1], Block::Blockquote { .. }));
         assert!(matches!(children[2], Block::Paragraph { .. }));
         // Verify inner blockquote contains a paragraph
-        let Block::Blockquote { children: ref inner, .. } = children[1] else {
+        let Block::Blockquote {
+            children: ref inner,
+            ..
+        } = children[1]
+        else {
             panic!("expected inner blockquote");
         };
         assert!(matches!(inner[0], Block::Paragraph { .. }));
@@ -441,9 +448,11 @@ mod tests {
     fn test_parse_footnote_ref() {
         let doc = parse_ok("See note [fn:1].");
         if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
-            assert!(inlines
-                .iter()
-                .any(|n| matches!(n, Inline::FootnoteRef { label, .. } if label == "1")));
+            assert!(
+                inlines
+                    .iter()
+                    .any(|n| matches!(n, Inline::FootnoteRef { label, .. } if label == "1"))
+            );
         } else {
             panic!("expected paragraph");
         }
@@ -453,7 +462,11 @@ mod tests {
     fn test_parse_math_inline() {
         let doc = parse_ok("Solve $x^2 + y^2 = r^2$.");
         if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
-            assert!(inlines.iter().any(|n| matches!(n, Inline::MathInline { .. })));
+            assert!(
+                inlines
+                    .iter()
+                    .any(|n| matches!(n, Inline::MathInline { .. }))
+            );
         } else {
             panic!("expected paragraph");
         }
@@ -463,9 +476,18 @@ mod tests {
     fn test_parse_block_footnote_def() {
         let doc = parse_ok("[fn:1] This is the footnote text.");
         assert_eq!(doc.blocks.len(), 1);
-        if let Block::FootnoteDef { ref label, ref content, .. } = doc.blocks[0] {
+        if let Block::FootnoteDef {
+            ref label,
+            ref content,
+            ..
+        } = doc.blocks[0]
+        {
             assert_eq!(label, "1");
-            assert!(content.iter().any(|n| matches!(n, Inline::Text { text, .. } if text.contains("footnote text"))));
+            assert!(
+                content.iter().any(
+                    |n| matches!(n, Inline::Text { text, .. } if text.contains("footnote text"))
+                )
+            );
         } else {
             panic!("expected FootnoteDef block, got {:?}", doc.blocks[0]);
         }
@@ -483,7 +505,10 @@ mod tests {
         });
         let out = build_str(&doc);
         assert!(out.contains("[fn:1]"), "expected [fn:1] in: {out}");
-        assert!(out.contains("Footnote content here."), "expected content in: {out}");
+        assert!(
+            out.contains("Footnote content here."),
+            "expected content in: {out}"
+        );
     }
 
     #[test]
@@ -549,7 +574,10 @@ mod tests {
             name: Some("tbl:example".into()),
             children: vec![
                 Block::Caption {
-                    inlines: vec![Inline::Text { text: "My caption".into(), span: Span::NONE }],
+                    inlines: vec![Inline::Text {
+                        text: "My caption".into(),
+                        span: Span::NONE,
+                    }],
                     span: Span::NONE,
                 },
                 Block::Table {
@@ -578,7 +606,8 @@ mod tests {
 
     #[test]
     fn test_roundtrip_figure_table_with_name() {
-        let input = "#+CAPTION: Named table\n#+NAME: tbl:data\n| Col A | Col B |\n| r1c1  | r1c2  |\n";
+        let input =
+            "#+CAPTION: Named table\n#+NAME: tbl:data\n| Col A | Col B |\n| r1c1  | r1c2  |\n";
         let (doc, _) = parse(input);
         assert_eq!(doc.blocks.len(), 1);
         let Block::Figure { name, .. } = &doc.blocks[0] else {
@@ -596,7 +625,10 @@ mod tests {
     fn test_events_figure() {
         use crate::events::OwnedEvent;
         let evs: Vec<_> = events("#+CAPTION: A photo\n[[file:photo.png]]").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartFigure { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartFigure { .. }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartCaption)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndCaption)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndFigure)));
@@ -611,8 +643,14 @@ mod tests {
         assert_eq!(doc.blocks.len(), 1);
         assert_eq!(doc2.blocks.len(), 1);
         // strip_spans equality
-        assert!(matches!(doc.blocks[0].strip_spans(), Block::FootnoteDef { .. }));
-        assert!(matches!(doc2.blocks[0].strip_spans(), Block::FootnoteDef { .. }));
+        assert!(matches!(
+            doc.blocks[0].strip_spans(),
+            Block::FootnoteDef { .. }
+        ));
+        assert!(matches!(
+            doc2.blocks[0].strip_spans(),
+            Block::FootnoteDef { .. }
+        ));
         if let (Block::FootnoteDef { label: l1, .. }, Block::FootnoteDef { label: l2, .. }) =
             (&doc.blocks[0], &doc2.blocks[0])
         {

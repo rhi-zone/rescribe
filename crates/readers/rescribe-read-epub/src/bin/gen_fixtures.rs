@@ -23,9 +23,7 @@ fn opf_extended(
     let manifest_items: String = spine_items
         .iter()
         .map(|(id, href)| {
-            format!(
-                r#"    <item id="{id}" href="{href}" media-type="application/xhtml+xml"/>"#
-            )
+            format!(r#"    <item id="{id}" href="{href}" media-type="application/xhtml+xml"/>"#)
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -69,9 +67,7 @@ fn opf(title: &str, author: &str, lang: &str, spine_items: &[(&str, &str)]) -> S
     let manifest_items: String = spine_items
         .iter()
         .map(|(id, href)| {
-            format!(
-                r#"    <item id="{id}" href="{href}" media-type="application/xhtml+xml"/>"#
-            )
+            format!(r#"    <item id="{id}" href="{href}" media-type="application/xhtml+xml"/>"#)
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -121,8 +117,7 @@ fn make_epub_chapters(
     let buf = std::io::Cursor::new(Vec::new());
     let mut zip = ZipWriter::new(buf);
     // mimetype must be first and uncompressed
-    let stored = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored);
+    let stored = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     zip.start_file("mimetype", stored).unwrap();
     zip.write_all(b"application/epub+zip").unwrap();
 
@@ -195,14 +190,29 @@ fn node_to_assertions(node: &Node, path: &str, out: &mut Vec<serde_json::Value>)
     });
 
     // Add important props
-    let props_to_include = ["content", "level", "url", "title", "alt",
-                            "ordered", "language", "style:bold", "style:italic",
-                            "style:underline", "style:strikeout",
-                            "style:subscript", "style:superscript", "style:code"];
+    let props_to_include = [
+        "content",
+        "level",
+        "url",
+        "title",
+        "alt",
+        "ordered",
+        "language",
+        "style:bold",
+        "style:italic",
+        "style:underline",
+        "style:strikeout",
+        "style:subscript",
+        "style:superscript",
+        "style:code",
+    ];
     let mut props_map = serde_json::Map::new();
     for key in &props_to_include {
         if let Some(val) = node.props.get(key) {
-            props_map.insert(key.to_string(), serde_json::Value::String(format!("{val:?}")));
+            props_map.insert(
+                key.to_string(),
+                serde_json::Value::String(format!("{val:?}")),
+            );
         }
     }
     // Use raw string for string props (override the debug-format values above)
@@ -234,8 +244,7 @@ fn node_to_assertions(node: &Node, path: &str, out: &mut Vec<serde_json::Value>)
 }
 
 fn generate_expected_json(desc: &str, epub_bytes: &[u8]) -> String {
-    let result = rescribe_read_epub::parse_bytes(epub_bytes)
-        .expect("parse failed");
+    let result = rescribe_read_epub::parse_bytes(epub_bytes).expect("parse failed");
     let doc = result.value;
 
     let mut assertions: Vec<serde_json::Value> = Vec::new();
@@ -246,10 +255,19 @@ fn generate_expected_json(desc: &str, epub_bytes: &[u8]) -> String {
         "kind": "document",
     });
     // Include non-empty metadata
-    let important_meta = ["title", "author", "language", "publisher", "date", "identifier"];
+    let important_meta = [
+        "title",
+        "author",
+        "language",
+        "publisher",
+        "date",
+        "identifier",
+    ];
     let mut meta_map = serde_json::Map::new();
     for key in &important_meta {
-        if let Some(val) = doc.metadata.get_str(key) && !val.is_empty() {
+        if let Some(val) = doc.metadata.get_str(key)
+            && !val.is_empty()
+        {
             meta_map.insert(key.to_string(), serde_json::Value::String(val.to_string()));
         }
     }
@@ -294,9 +312,7 @@ fn main() {
 
     write_fixture(
         "heading-levels",
-        make_epub(
-            "<h1>H1</h1><h2>H2</h2><h3>H3</h3><h4>H4</h4><h5>H5</h5><h6>H6</h6>",
-        ),
+        make_epub("<h1>H1</h1><h2>H2</h2><h3>H3</h3><h4>H4</h4><h5>H5</h5><h6>H6</h6>"),
         "EPUB headings h1-h6 mapped to heading nodes with levels 1-6",
     );
 
@@ -340,9 +356,7 @@ fn main() {
 
     write_fixture(
         "table",
-        make_epub(
-            "<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>",
-        ),
+        make_epub("<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>"),
         "EPUB table mapped to table/table_row/table_cell nodes",
     );
 
@@ -370,7 +384,9 @@ fn main() {
 
     write_fixture(
         "underline",
-        make_epub(r#"<p>This is <span style="text-decoration:underline">underlined</span> text.</p>"#),
+        make_epub(
+            r#"<p>This is <span style="text-decoration:underline">underlined</span> text.</p>"#,
+        ),
         "EPUB underline via CSS style mapped to underline node",
     );
 
@@ -525,9 +541,7 @@ fn main() {
 
     write_fixture(
         "section-div",
-        make_epub(
-            r#"<section><p>Inside a section.</p></section><div><p>Inside a div.</p></div>"#,
-        ),
+        make_epub(r#"<section><p>Inside a section.</p></section><div><p>Inside a div.</p></div>"#),
         "EPUB section and div elements produce their contained block content",
     );
 
@@ -550,12 +564,18 @@ fn main() {
                 "en",
                 &[("ch1", "chapter1.xhtml"), ("ch2", "chapter2.xhtml")],
             );
-            let ch1 = xhtml("Chapter 1", "<h1>Chapter 1</h1><p>First chapter content.</p>");
+            let ch1 = xhtml(
+                "Chapter 1",
+                "<h1>Chapter 1</h1><p>First chapter content.</p>",
+            );
             let ch2 = xhtml(
                 "Chapter 2",
                 r#"<h1>Chapter 2</h1><p>See also <a href="chapter1.xhtml">Chapter 1</a>.</p>"#,
             );
-            make_epub_chapters(&opf_str, &[("chapter1.xhtml", &ch1), ("chapter2.xhtml", &ch2)])
+            make_epub_chapters(
+                &opf_str,
+                &[("chapter1.xhtml", &ch1), ("chapter2.xhtml", &ch2)],
+            )
         },
         "EPUB cross-document link (href to another spine item) parsed as link node",
     );
@@ -626,12 +646,17 @@ fn main() {
             let chapters: Vec<(String, String)> = (1..=num)
                 .map(|i| {
                     let href = format!("chapter{i}.xhtml");
-                    let content = xhtml(&format!("Chapter {i}"), &format!("<p>Content of chapter {i}.</p>"));
+                    let content = xhtml(
+                        &format!("Chapter {i}"),
+                        &format!("<p>Content of chapter {i}.</p>"),
+                    );
                     (href, content)
                 })
                 .collect();
-            let chapter_refs: Vec<(&str, &str)> =
-                chapters.iter().map(|(h, c)| (h.as_str(), c.as_str())).collect();
+            let chapter_refs: Vec<(&str, &str)> = chapters
+                .iter()
+                .map(|(h, c)| (h.as_str(), c.as_str()))
+                .collect();
             make_epub_chapters(&opf_str, &chapter_refs)
         },
         "EPUB with 20 chapters all parsed without panic",

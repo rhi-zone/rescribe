@@ -166,12 +166,11 @@ mod tests {
         p.feed(b"@chapter Hello\n\n");
         p.feed(b"A paragraph.\n");
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1, .. })));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1, .. }))
+        );
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 
     #[test]
@@ -182,12 +181,11 @@ mod tests {
             p.feed(std::slice::from_ref(b));
         }
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartHeading { .. })));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { .. }))
+        );
+        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 
     #[test]
@@ -196,9 +194,7 @@ mod tests {
 
         let bulk: Vec<OwnedEvent> = {
             let s = String::from_utf8_lossy(input);
-            crate::events::events(&s)
-                .map(|e| e.into_owned())
-                .collect()
+            crate::events::events(&s).map(|e| e.into_owned()).collect()
         };
 
         let mut streamed: Vec<OwnedEvent> = Vec::new();
@@ -218,11 +214,15 @@ mod tests {
         sink.feed(b"@chapter Hello\n\n");
         sink.feed(b"A paragraph.\n");
         sink.finish();
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1, .. })));
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1, .. }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartParagraph))
+        );
     }
 }

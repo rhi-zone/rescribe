@@ -40,21 +40,28 @@ pub struct Writer<W: Write> {
 impl<W: Write> Writer<W> {
     /// Create a new writer wrapping the given sink.
     pub fn new(sink: W) -> Self {
-        Writer { inner: XmlWriter::new(sink) }
+        Writer {
+            inner: XmlWriter::new(sink),
+        }
     }
 
     /// Write one FB2 semantic event to the sink.
     pub fn write_event(&mut self, event: Event) -> std::io::Result<()> {
         match event {
             Event::StartFictionBook => {
-                self.inner.write_event(XmlEvent::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
+                self.inner.write_event(XmlEvent::Decl(BytesDecl::new(
+                    "1.0",
+                    Some("UTF-8"),
+                    None,
+                )))?;
                 let mut root = BytesStart::new("FictionBook");
                 root.push_attribute(("xmlns", "http://www.gribuser.ru/xml/fictionbook/2.0"));
                 root.push_attribute(("xmlns:l", "http://www.w3.org/1999/xlink"));
                 self.inner.write_event(XmlEvent::Start(root))?;
             }
             Event::EndFictionBook => {
-                self.inner.write_event(XmlEvent::End(BytesEnd::new("FictionBook")))?;
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("FictionBook")))?;
             }
             Event::Metadata(desc) => {
                 write_description(&mut self.inner, &desc)?;
@@ -70,7 +77,8 @@ impl<W: Write> Writer<W> {
                 self.inner.write_event(XmlEvent::Start(e))?;
             }
             Event::EndBody => {
-                self.inner.write_event(XmlEvent::End(BytesEnd::new("body")))?;
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("body")))?;
             }
             Event::StartSection { id, lang } => {
                 let mut e = BytesStart::new("section");
@@ -83,19 +91,23 @@ impl<W: Write> Writer<W> {
                 self.inner.write_event(XmlEvent::Start(e))?;
             }
             Event::EndSection => {
-                self.inner.write_event(XmlEvent::End(BytesEnd::new("section")))?;
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("section")))?;
             }
             Event::StartTitle => {
-                self.inner.write_event(XmlEvent::Start(BytesStart::new("title")))?;
+                self.inner
+                    .write_event(XmlEvent::Start(BytesStart::new("title")))?;
             }
             Event::EndTitle => {
-                self.inner.write_event(XmlEvent::End(BytesEnd::new("title")))?;
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("title")))?;
             }
             Event::TitleParagraph(inlines) => {
                 write_para(&mut self.inner, &inlines)?;
             }
             Event::StartParagraph => {
-                self.inner.write_event(XmlEvent::Start(BytesStart::new("p")))?;
+                self.inner
+                    .write_event(XmlEvent::Start(BytesStart::new("p")))?;
             }
             Event::EndParagraph => {
                 self.inner.write_event(XmlEvent::End(BytesEnd::new("p")))?;
@@ -104,27 +116,35 @@ impl<W: Write> Writer<W> {
                 write_inlines(&mut self.inner, &inlines)?;
             }
             Event::EmptyLine => {
-                self.inner.write_event(XmlEvent::Empty(BytesStart::new("empty-line")))?;
+                self.inner
+                    .write_event(XmlEvent::Empty(BytesStart::new("empty-line")))?;
             }
             Event::Subtitle(inlines) => {
-                self.inner.write_event(XmlEvent::Start(BytesStart::new("subtitle")))?;
+                self.inner
+                    .write_event(XmlEvent::Start(BytesStart::new("subtitle")))?;
                 write_inlines(&mut self.inner, &inlines)?;
-                self.inner.write_event(XmlEvent::End(BytesEnd::new("subtitle")))?;
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("subtitle")))?;
             }
             Event::StartPoem => {
-                self.inner.write_event(XmlEvent::Start(BytesStart::new("poem")))?;
+                self.inner
+                    .write_event(XmlEvent::Start(BytesStart::new("poem")))?;
             }
             Event::EndPoem => {
-                self.inner.write_event(XmlEvent::End(BytesEnd::new("poem")))?;
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("poem")))?;
             }
             Event::StartStanza => {
-                self.inner.write_event(XmlEvent::Start(BytesStart::new("stanza")))?;
+                self.inner
+                    .write_event(XmlEvent::Start(BytesStart::new("stanza")))?;
             }
             Event::EndStanza => {
-                self.inner.write_event(XmlEvent::End(BytesEnd::new("stanza")))?;
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("stanza")))?;
             }
             Event::VerseLine(inlines) => {
-                self.inner.write_event(XmlEvent::Start(BytesStart::new("v")))?;
+                self.inner
+                    .write_event(XmlEvent::Start(BytesStart::new("v")))?;
                 write_inlines(&mut self.inner, &inlines)?;
                 self.inner.write_event(XmlEvent::End(BytesEnd::new("v")))?;
             }
@@ -136,7 +156,8 @@ impl<W: Write> Writer<W> {
                 self.inner.write_event(XmlEvent::Start(e))?;
             }
             Event::EndCite => {
-                self.inner.write_event(XmlEvent::End(BytesEnd::new("cite")))?;
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("cite")))?;
             }
             Event::StartEpigraph { id } => {
                 let mut e = BytesStart::new("epigraph");
@@ -146,12 +167,15 @@ impl<W: Write> Writer<W> {
                 self.inner.write_event(XmlEvent::Start(e))?;
             }
             Event::EndEpigraph => {
-                self.inner.write_event(XmlEvent::End(BytesEnd::new("epigraph")))?;
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("epigraph")))?;
             }
             Event::TextAuthor(inlines) => {
-                self.inner.write_event(XmlEvent::Start(BytesStart::new("text-author")))?;
+                self.inner
+                    .write_event(XmlEvent::Start(BytesStart::new("text-author")))?;
                 write_inlines(&mut self.inner, &inlines)?;
-                self.inner.write_event(XmlEvent::End(BytesEnd::new("text-author")))?;
+                self.inner
+                    .write_event(XmlEvent::End(BytesEnd::new("text-author")))?;
             }
             Event::Table(table) => {
                 write_table(&mut self.inner, &table)?;
@@ -249,11 +273,7 @@ fn write_title_info(w: &mut XmlWriter<impl Write>, ti: &TitleInfo) -> std::io::R
     xw_end(w, "title-info")
 }
 
-fn write_author(
-    w: &mut XmlWriter<impl Write>,
-    a: &Author,
-    tag: &str,
-) -> std::io::Result<()> {
+fn write_author(w: &mut XmlWriter<impl Write>, a: &Author, tag: &str) -> std::io::Result<()> {
     xw_start(w, tag)?;
     xw_text_elem_opt(w, "first-name", a.first_name.as_deref())?;
     xw_text_elem_opt(w, "middle-name", a.middle_name.as_deref())?;

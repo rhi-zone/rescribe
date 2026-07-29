@@ -12,10 +12,19 @@ pub fn parse(input: &str) -> (CsvDoc, Vec<Diagnostic>) {
         }
 
         let cells = parse_csv_line(line);
-        rows.push(Row { cells, span: Span::NONE });
+        rows.push(Row {
+            cells,
+            span: Span::NONE,
+        });
     }
 
-    (CsvDoc { rows, span: Span::NONE }, Vec::new())
+    (
+        CsvDoc {
+            rows,
+            span: Span::NONE,
+        },
+        Vec::new(),
+    )
 }
 
 fn parse_csv_line(line: &str) -> Vec<Cell> {
@@ -39,7 +48,10 @@ fn parse_csv_line(line: &str) -> Vec<Cell> {
                 in_quotes = true;
             }
             ',' if !in_quotes => {
-                cells.push(Cell { value: current.trim().to_string(), span: Span::NONE });
+                cells.push(Cell {
+                    value: current.trim().to_string(),
+                    span: Span::NONE,
+                });
                 current.clear();
             }
             _ => {
@@ -48,6 +60,9 @@ fn parse_csv_line(line: &str) -> Vec<Cell> {
         }
     }
 
-    cells.push(Cell { value: current.trim().to_string(), span: Span::NONE });
+    cells.push(Cell {
+        value: current.trim().to_string(),
+        span: Span::NONE,
+    });
     cells
 }

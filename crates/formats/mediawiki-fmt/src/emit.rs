@@ -19,7 +19,11 @@ struct BuildContext {
 
 impl BuildContext {
     fn new() -> Self {
-        Self { output: String::new(), list_depth: 0, list_markers: Vec::new() }
+        Self {
+            output: String::new(),
+            list_depth: 0,
+            list_markers: Vec::new(),
+        }
     }
 
     fn write(&mut self, s: &str) {
@@ -54,7 +58,9 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.newline();
         }
 
-        Block::CodeBlock { language, content, .. } => {
+        Block::CodeBlock {
+            language, content, ..
+        } => {
             if let Some(lang) = language {
                 ctx.writeln(&format!("<syntaxhighlight lang=\"{}\">", lang));
             } else {

@@ -211,8 +211,14 @@ mod tests {
     #[test]
     fn test_events_simple() {
         let evts: Vec<_> = token_events(br"{\rtf1 Hello\par}").collect();
-        assert!(evts.iter().any(|e| matches!(e, TokenEvent::GroupStart { .. })));
-        assert!(evts.iter().any(|e| matches!(e, TokenEvent::GroupEnd { .. })));
+        assert!(
+            evts.iter()
+                .any(|e| matches!(e, TokenEvent::GroupStart { .. }))
+        );
+        assert!(
+            evts.iter()
+                .any(|e| matches!(e, TokenEvent::GroupEnd { .. }))
+        );
         assert!(
             evts.iter()
                 .any(|e| matches!(e, TokenEvent::ControlWord { name, .. } if name == "rtf"))

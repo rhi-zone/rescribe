@@ -189,7 +189,10 @@ pub struct BatchSink<F: FnMut(OwnedMarkuaEvent)> {
 
 impl<F: FnMut(OwnedMarkuaEvent)> BatchSink<F> {
     pub fn new(callback: F) -> Self {
-        BatchSink { buf: Vec::new(), callback }
+        BatchSink {
+            buf: Vec::new(),
+            callback,
+        }
     }
 
     /// Feed a chunk of input bytes.
@@ -238,8 +241,14 @@ mod tests {
         p.feed(b"# Hello\n\n");
         p.feed(b"A paragraph.\n");
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedMarkuaEvent::StartHeading { level: 1 })));
-        assert!(evs.iter().any(|e| matches!(e, OwnedMarkuaEvent::StartParagraph)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedMarkuaEvent::StartHeading { level: 1 }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedMarkuaEvent::StartParagraph))
+        );
     }
 
     #[test]
@@ -250,8 +259,14 @@ mod tests {
             p.feed(std::slice::from_ref(b));
         }
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedMarkuaEvent::StartHeading { .. })));
-        assert!(evs.iter().any(|e| matches!(e, OwnedMarkuaEvent::StartParagraph)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedMarkuaEvent::StartHeading { .. }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedMarkuaEvent::StartParagraph))
+        );
     }
 
     #[test]
@@ -260,7 +275,10 @@ mod tests {
         let mut p = StreamingParser::new(|ev| evs.push(ev));
         p.feed(b"```rust\nlet x = 1;\n```\n");
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedMarkuaEvent::CodeBlock { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedMarkuaEvent::CodeBlock { .. }))
+        );
     }
 
     #[test]
@@ -273,7 +291,11 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, OwnedMarkuaEvent::CodeBlock { .. }))
             .collect();
-        assert_eq!(code_blocks.len(), 1, "should be exactly one code block event");
+        assert_eq!(
+            code_blocks.len(),
+            1,
+            "should be exactly one code block event"
+        );
     }
 
     #[test]
@@ -302,7 +324,15 @@ mod tests {
         sink.feed(b"# Hello\n\n");
         sink.feed(b"A paragraph.\n");
         sink.finish();
-        assert!(events.iter().any(|e| matches!(e, OwnedMarkuaEvent::StartHeading { level: 1 })));
-        assert!(events.iter().any(|e| matches!(e, OwnedMarkuaEvent::StartParagraph)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedMarkuaEvent::StartHeading { level: 1 }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedMarkuaEvent::StartParagraph))
+        );
     }
 }

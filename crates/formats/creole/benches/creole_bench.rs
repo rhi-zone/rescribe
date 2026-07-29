@@ -1,5 +1,5 @@
+use creole::{build, parse};
 use criterion::{Criterion, criterion_group, criterion_main};
-use creole::{parse, build};
 
 const SMALL: &str = r#"
 = Hello World

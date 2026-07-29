@@ -39,10 +39,10 @@
 
 use std::io::{Seek, Write};
 
-use crate::writer::{WorkbookBuilder, WriteCellValue};
+use crate::Result;
 use crate::generated::CellType;
 use crate::generated_events::SmlEvent;
-use crate::Result;
+use crate::writer::{WorkbookBuilder, WriteCellValue};
 
 /// Event-driven XLSX writer.
 ///

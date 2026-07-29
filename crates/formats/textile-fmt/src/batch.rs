@@ -86,7 +86,10 @@ pub struct StreamingParser<H: Handler> {
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
-        StreamingParser { buf: Vec::new(), handler }
+        StreamingParser {
+            buf: Vec::new(),
+            handler,
+        }
     }
 
     /// Feed a chunk of bytes.
@@ -114,7 +117,10 @@ pub struct BatchSink<F: FnMut(TextileEvent)> {
 
 impl<F: FnMut(TextileEvent)> BatchSink<F> {
     pub fn new(callback: F) -> Self {
-        BatchSink { buf: Vec::new(), callback }
+        BatchSink {
+            buf: Vec::new(),
+            callback,
+        }
     }
 
     /// Feed a chunk of input bytes.
@@ -174,8 +180,14 @@ mod tests {
         p.feed(b"h1. Hello\n\n");
         p.feed(b"A paragraph.\n");
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::StartHeading { level: 1, .. })));
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::StartParagraph { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::StartHeading { level: 1, .. }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::StartParagraph { .. }))
+        );
     }
 
     #[test]
@@ -186,8 +198,14 @@ mod tests {
             p.feed(std::slice::from_ref(b));
         }
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::StartHeading { .. })));
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::StartParagraph { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::StartHeading { .. }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::StartParagraph { .. }))
+        );
     }
 
     #[test]
@@ -216,7 +234,15 @@ mod tests {
         sink.feed(b"h1. Hello\n\n");
         sink.feed(b"A paragraph.\n");
         sink.finish();
-        assert!(events.iter().any(|e| matches!(e, TextileEvent::StartHeading { level: 1, .. })));
-        assert!(events.iter().any(|e| matches!(e, TextileEvent::StartParagraph { .. })));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, TextileEvent::StartHeading { level: 1, .. }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, TextileEvent::StartParagraph { .. }))
+        );
     }
 }

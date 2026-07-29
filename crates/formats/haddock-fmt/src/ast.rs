@@ -154,7 +154,9 @@ impl Block {
                     .collect(),
                 span: Span::NONE,
             },
-            Block::DocTest { expression, result, .. } => Block::DocTest {
+            Block::DocTest {
+                expression, result, ..
+            } => Block::DocTest {
                 expression,
                 result,
                 span: Span::NONE,
@@ -163,7 +165,12 @@ impl Block {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::Property { key, name, description, .. } => Block::Property {
+            Block::Property {
+                key,
+                name,
+                description,
+                ..
+            } => Block::Property {
                 key,
                 name,
                 description: description.into_iter().map(Inline::strip_spans).collect(),

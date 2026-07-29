@@ -56,7 +56,10 @@ pub struct StreamingParser<H: Handler> {
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
-        StreamingParser { handler, buf: Vec::new() }
+        StreamingParser {
+            handler,
+            buf: Vec::new(),
+        }
     }
 
     /// Feed a chunk of bytes.
@@ -82,7 +85,10 @@ pub struct BatchSink<F: FnMut(OwnedEvent)> {
 
 impl<F: FnMut(OwnedEvent)> BatchSink<F> {
     pub fn new(callback: F) -> Self {
-        BatchSink { buf: Vec::new(), callback }
+        BatchSink {
+            buf: Vec::new(),
+            callback,
+        }
     }
 
     /// Feed a chunk of input bytes.
@@ -122,7 +128,10 @@ mod tests {
         p.feed(b"=head1 Hello\n\n");
         p.feed(b"A paragraph.\n");
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 
@@ -133,7 +142,15 @@ mod tests {
         sink.feed(b"=head1 Hello\n\n");
         sink.feed(b"A paragraph.\n");
         sink.finish();
-        assert!(events.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
-        assert!(events.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartParagraph))
+        );
     }
 }

@@ -41,7 +41,9 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::PARAGRAPH).children(children)
         }
 
-        Block::CodeBlock { language, content, .. } => {
+        Block::CodeBlock {
+            language, content, ..
+        } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -49,7 +51,9 @@ fn block_to_node(block: &Block) -> Node {
             n
         }
 
-        Block::Blockquote { author, children, .. } => {
+        Block::Blockquote {
+            author, children, ..
+        } => {
             let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
             let mut n = Node::new(node::BLOCKQUOTE);
             if let Some(a) = author {
@@ -96,7 +100,9 @@ fn block_to_node(block: &Block) -> Node {
 
         Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
 
-        Block::Heading { level, children, .. } => {
+        Block::Heading {
+            level, children, ..
+        } => {
             let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
             Node::new(node::HEADING)
                 .prop(prop::LEVEL, *level as i64)
@@ -166,7 +172,9 @@ fn inline_to_node(inline: &Inline) -> Node {
                 .children(child_nodes)
         }
 
-        Inline::Image { url, width, height, .. } => {
+        Inline::Image {
+            url, width, height, ..
+        } => {
             let mut n = Node::new(node::IMAGE).prop(prop::URL, url.clone());
             if let Some(w) = width {
                 n = n.prop("bbcode:width", *w as i64);
@@ -187,14 +195,18 @@ fn inline_to_node(inline: &Inline) -> Node {
             Node::new(node::SUPERSCRIPT).children(child_nodes)
         }
 
-        Inline::Color { value, children, .. } => {
+        Inline::Color {
+            value, children, ..
+        } => {
             let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
             Node::new(node::SPAN)
                 .prop("style:color", value.clone())
                 .children(child_nodes)
         }
 
-        Inline::Size { value, children, .. } => {
+        Inline::Size {
+            value, children, ..
+        } => {
             let child_nodes: Vec<Node> = children.iter().map(inline_to_node).collect();
             Node::new(node::SPAN)
                 .prop("style:size", value.clone())

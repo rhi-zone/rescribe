@@ -27,11 +27,19 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Warning, message: message.into(), span }
+        Self {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
     }
 
     pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Error, message: message.into(), span }
+        Self {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -56,15 +64,43 @@ impl TwikiDoc {
 /// Block-level element.
 #[derive(Debug, Clone)]
 pub enum Block {
-    Paragraph { inlines: Vec<Inline>, span: Span },
-    Heading { level: u8, inlines: Vec<Inline>, span: Span },
-    CodeBlock { content: String, span: Span },
-    List { ordered: bool, items: Vec<ListItem>, span: Span },
-    Table { rows: Vec<TableRow>, span: Span },
-    HorizontalRule { span: Span },
-    RawBlock { content: String, span: Span },
-    DefinitionList { items: Vec<DefinitionItem>, span: Span },
-    Blockquote { children: Vec<Block>, span: Span },
+    Paragraph {
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    CodeBlock {
+        content: String,
+        span: Span,
+    },
+    List {
+        ordered: bool,
+        items: Vec<ListItem>,
+        span: Span,
+    },
+    Table {
+        rows: Vec<TableRow>,
+        span: Span,
+    },
+    HorizontalRule {
+        span: Span,
+    },
+    RawBlock {
+        content: String,
+        span: Span,
+    },
+    DefinitionList {
+        items: Vec<DefinitionItem>,
+        span: Span,
+    },
+    Blockquote {
+        children: Vec<Block>,
+        span: Span,
+    },
 }
 
 impl Block {
@@ -79,7 +115,10 @@ impl Block {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { content, .. } => Block::CodeBlock { content, span: Span::NONE },
+            Block::CodeBlock { content, .. } => Block::CodeBlock {
+                content,
+                span: Span::NONE,
+            },
             Block::List { ordered, items, .. } => Block::List {
                 ordered,
                 items: items.into_iter().map(ListItem::strip_spans).collect(),
@@ -90,7 +129,10 @@ impl Block {
                 span: Span::NONE,
             },
             Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
-            Block::RawBlock { content, .. } => Block::RawBlock { content, span: Span::NONE },
+            Block::RawBlock { content, .. } => Block::RawBlock {
+                content,
+                span: Span::NONE,
+            },
             Block::DefinitionList { items, .. } => Block::DefinitionList {
                 items: items.into_iter().map(DefinitionItem::strip_spans).collect(),
                 span: Span::NONE,
@@ -182,15 +224,31 @@ pub enum Inline {
     BoldItalic(Vec<Inline>, Span),
     Code(String, Span),
     BoldCode(Vec<Inline>, Span),
-    Link { url: String, label: String, span: Span },
-    LineBreak { span: Span },
+    Link {
+        url: String,
+        label: String,
+        span: Span,
+    },
+    LineBreak {
+        span: Span,
+    },
     Strikethrough(Vec<Inline>, Span),
     Superscript(Vec<Inline>, Span),
     Subscript(Vec<Inline>, Span),
     Underline(Vec<Inline>, Span),
-    Image { url: String, alt: String, span: Span },
-    RawInline { content: String, span: Span },
-    WikiWord { word: String, span: Span },
+    Image {
+        url: String,
+        alt: String,
+        span: Span,
+    },
+    RawInline {
+        content: String,
+        span: Span,
+    },
+    WikiWord {
+        word: String,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -210,7 +268,11 @@ impl Inline {
             Inline::BoldCode(c, _) => {
                 Inline::BoldCode(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
-            Inline::Link { url, label, .. } => Inline::Link { url, label, span: Span::NONE },
+            Inline::Link { url, label, .. } => Inline::Link {
+                url,
+                label,
+                span: Span::NONE,
+            },
             Inline::LineBreak { .. } => Inline::LineBreak { span: Span::NONE },
             Inline::Strikethrough(c, _) => {
                 Inline::Strikethrough(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
@@ -224,9 +286,19 @@ impl Inline {
             Inline::Underline(c, _) => {
                 Inline::Underline(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
-            Inline::Image { url, alt, .. } => Inline::Image { url, alt, span: Span::NONE },
-            Inline::RawInline { content, .. } => Inline::RawInline { content, span: Span::NONE },
-            Inline::WikiWord { word, .. } => Inline::WikiWord { word, span: Span::NONE },
+            Inline::Image { url, alt, .. } => Inline::Image {
+                url,
+                alt,
+                span: Span::NONE,
+            },
+            Inline::RawInline { content, .. } => Inline::RawInline {
+                content,
+                span: Span::NONE,
+            },
+            Inline::WikiWord { word, .. } => Inline::WikiWord {
+                word,
+                span: Span::NONE,
+            },
         }
     }
 }

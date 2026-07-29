@@ -29,7 +29,8 @@ pub fn emit(fb: &FictionBook) -> Vec<u8> {
         write_binary(&mut w, binary);
     }
 
-    w.write_event(Event::End(BytesEnd::new("FictionBook"))).unwrap();
+    w.write_event(Event::End(BytesEnd::new("FictionBook")))
+        .unwrap();
 
     w.into_inner().into_inner()
 }
@@ -67,7 +68,8 @@ fn write_description(w: &mut Writer<Cursor<Vec<u8>>>, desc: &Description) {
         let mut e = BytesStart::new("custom-info");
         e.push_attribute(("info-type", ci.info_type.as_str()));
         w.write_event(Event::Start(e)).unwrap();
-        w.write_event(Event::Text(BytesText::new(&ci.content))).unwrap();
+        w.write_event(Event::Text(BytesText::new(&ci.content)))
+            .unwrap();
         end(w, "custom-info");
     }
     end(w, "description");
@@ -218,7 +220,8 @@ fn write_title(w: &mut Writer<Cursor<Vec<u8>>>, title: &Title) {
                 end(w, "p");
             }
             TitlePara::EmptyLine => {
-                w.write_event(Event::Empty(BytesStart::new("empty-line"))).unwrap();
+                w.write_event(Event::Empty(BytesStart::new("empty-line")))
+                    .unwrap();
             }
         }
     }
@@ -237,7 +240,8 @@ fn write_epigraph(w: &mut Writer<Cursor<Vec<u8>>>, epigraph: &Epigraph) {
             EpigraphContent::Poem(p) => write_poem(w, p),
             EpigraphContent::Cite(c) => write_cite(w, c),
             EpigraphContent::EmptyLine => {
-                w.write_event(Event::Empty(BytesStart::new("empty-line"))).unwrap();
+                w.write_event(Event::Empty(BytesStart::new("empty-line")))
+                    .unwrap();
             }
         }
     }
@@ -269,7 +273,8 @@ fn write_annotation(w: &mut Writer<Cursor<Vec<u8>>>, ann: &Annotation) {
                 end(w, "subtitle");
             }
             AnnotationContent::EmptyLine => {
-                w.write_event(Event::Empty(BytesStart::new("empty-line"))).unwrap();
+                w.write_event(Event::Empty(BytesStart::new("empty-line")))
+                    .unwrap();
             }
             AnnotationContent::Table(t) => write_table(w, t),
         }
@@ -289,7 +294,8 @@ fn write_section_content(w: &mut Writer<Cursor<Vec<u8>>>, content: &SectionConte
         }
         SectionContent::Cite(c) => write_cite(w, c),
         SectionContent::EmptyLine => {
-            w.write_event(Event::Empty(BytesStart::new("empty-line"))).unwrap();
+            w.write_event(Event::Empty(BytesStart::new("empty-line")))
+                .unwrap();
         }
         SectionContent::Table(t) => write_table(w, t),
     }
@@ -356,7 +362,8 @@ fn write_cite(w: &mut Writer<Cursor<Vec<u8>>>, cite: &Cite) {
             CiteContent::Para(il) => write_para(w, il),
             CiteContent::Poem(p) => write_poem(w, p),
             CiteContent::EmptyLine => {
-                w.write_event(Event::Empty(BytesStart::new("empty-line"))).unwrap();
+                w.write_event(Event::Empty(BytesStart::new("empty-line")))
+                    .unwrap();
             }
             CiteContent::Table(t) => write_table(w, t),
         }
@@ -497,6 +504,7 @@ fn write_binary(w: &mut Writer<Cursor<Vec<u8>>>, binary: &Binary) {
     e.push_attribute(("content-type", binary.content_type.as_str()));
     w.write_event(Event::Start(e)).unwrap();
     let encoded = base64::engine::general_purpose::STANDARD.encode(&binary.data);
-    w.write_event(Event::Text(BytesText::new(&encoded))).unwrap();
+    w.write_event(Event::Text(BytesText::new(&encoded)))
+        .unwrap();
     end(w, "binary");
 }

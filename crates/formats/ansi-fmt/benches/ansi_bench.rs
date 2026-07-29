@@ -74,9 +74,7 @@ fn bench_streaming_parser(c: &mut Criterion) {
 
 fn bench_writer(c: &mut Criterion) {
     let sample = build_sample();
-    let evs: Vec<_> = ansi_fmt::events(&sample)
-        .map(|e| e.into_owned())
-        .collect();
+    let evs: Vec<_> = ansi_fmt::events(&sample).map(|e| e.into_owned()).collect();
     c.bench_function("ansi_writer", |b| {
         b.iter(|| {
             let mut w = ansi_fmt::Writer::new(Vec::<u8>::with_capacity(sample.len()));

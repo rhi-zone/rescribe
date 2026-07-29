@@ -10,11 +10,17 @@ pub enum Event<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u32 },
+    StartHeading {
+        level: u32,
+    },
     EndHeading,
     /// Leaf: a verbatim / code block.
-    CodeBlock { content: Cow<'a, str> },
-    StartList { ordered: bool },
+    CodeBlock {
+        content: Cow<'a, str>,
+    },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
@@ -25,11 +31,19 @@ pub enum Event<'a> {
     StartDefinitionDesc,
     EndDefinitionDesc,
     /// Leaf: `=begin`/`=end` raw region.
-    RawBlock { format: String, content: String },
+    RawBlock {
+        format: String,
+        content: String,
+    },
     /// Leaf: `=for` format-specific paragraph.
-    ForBlock { format: String, content: String },
+    ForBlock {
+        format: String,
+        content: String,
+    },
     /// Leaf: `=encoding` declaration.
-    Encoding { encoding: String },
+    Encoding {
+        encoding: String,
+    },
 
     // ── Inline events ─────────────────────────────────────────────────────────
     Text(Cow<'a, str>),
@@ -45,7 +59,10 @@ pub enum Event<'a> {
     EndNonBreaking,
     /// Leaf: inline code span.
     InlineCode(Cow<'a, str>),
-    StartLink { url: String, label: String },
+    StartLink {
+        url: String,
+        label: String,
+    },
     EndLink,
     /// Leaf: index entry (invisible).
     IndexEntry(String),
@@ -64,9 +81,9 @@ impl<'a> Event<'a> {
         match self {
             Event::Text(cow) => Event::Text(Cow::Owned(cow.into_owned())),
             Event::InlineCode(cow) => Event::InlineCode(Cow::Owned(cow.into_owned())),
-            Event::CodeBlock { content } => {
-                Event::CodeBlock { content: Cow::Owned(content.into_owned()) }
-            }
+            Event::CodeBlock { content } => Event::CodeBlock {
+                content: Cow::Owned(content.into_owned()),
+            },
             Event::StartParagraph => Event::StartParagraph,
             Event::EndParagraph => Event::EndParagraph,
             Event::StartHeading { level } => Event::StartHeading { level },
@@ -114,38 +131,69 @@ pub struct EventIter<'a> {
 
 enum Frame<'a> {
     // Block frames — each carries a slice of children still to emit.
-    DocBlocks { blocks: std::slice::Iter<'a, Block> },
-    HeadingOpen { level: u32, inlines: std::slice::Iter<'a, Inline> },
+    DocBlocks {
+        blocks: std::slice::Iter<'a, Block>,
+    },
+    HeadingOpen {
+        level: u32,
+        inlines: std::slice::Iter<'a, Inline>,
+    },
     HeadingClose,
-    ParagraphOpen { inlines: std::slice::Iter<'a, Inline> },
+    ParagraphOpen {
+        inlines: std::slice::Iter<'a, Inline>,
+    },
     ParagraphClose,
-    ListOpen { ordered: bool, items: std::slice::Iter<'a, Vec<Block>> },
+    ListOpen {
+        ordered: bool,
+        items: std::slice::Iter<'a, Vec<Block>>,
+    },
     ListClose,
-    ListItemOpen { blocks: std::slice::Iter<'a, Block> },
+    ListItemOpen {
+        blocks: std::slice::Iter<'a, Block>,
+    },
     ListItemClose,
-    DefListOpen { items: std::slice::Iter<'a, DefinitionItem> },
+    DefListOpen {
+        items: std::slice::Iter<'a, DefinitionItem>,
+    },
     DefListClose,
-    DefTermOpen { inlines: std::slice::Iter<'a, Inline> },
+    DefTermOpen {
+        inlines: std::slice::Iter<'a, Inline>,
+    },
     DefTermClose,
-    DefDescOpen { blocks: std::slice::Iter<'a, Block> },
+    DefDescOpen {
+        blocks: std::slice::Iter<'a, Block>,
+    },
     DefDescClose,
 
     // Inline frames
-    InlineBoldOpen { children: std::slice::Iter<'a, Inline> },
+    InlineBoldOpen {
+        children: std::slice::Iter<'a, Inline>,
+    },
     InlineBoldClose,
-    InlineItalicOpen { children: std::slice::Iter<'a, Inline> },
+    InlineItalicOpen {
+        children: std::slice::Iter<'a, Inline>,
+    },
     InlineItalicClose,
-    InlineUnderlineOpen { children: std::slice::Iter<'a, Inline> },
+    InlineUnderlineOpen {
+        children: std::slice::Iter<'a, Inline>,
+    },
     InlineUnderlineClose,
-    InlineFilenameOpen { children: std::slice::Iter<'a, Inline> },
+    InlineFilenameOpen {
+        children: std::slice::Iter<'a, Inline>,
+    },
     InlineFilenameClose,
-    InlineNonBreakingOpen { children: std::slice::Iter<'a, Inline> },
+    InlineNonBreakingOpen {
+        children: std::slice::Iter<'a, Inline>,
+    },
     InlineNonBreakingClose,
 
     // Leaf inlines
     LeafText(&'a str),
     LeafCode(&'a str),
-    LeafLinkOpen { url: &'a str, label: &'a str },
+    LeafLinkOpen {
+        url: &'a str,
+        label: &'a str,
+    },
     LeafLinkClose,
     LeafIndexEntry(&'a str),
     LeafNull,
@@ -153,15 +201,23 @@ enum Frame<'a> {
 
     // Leaf blocks
     LeafCodeBlock(&'a str),
-    LeafRawBlock { format: &'a str, content: &'a str },
-    LeafForBlock { format: &'a str, content: &'a str },
+    LeafRawBlock {
+        format: &'a str,
+        content: &'a str,
+    },
+    LeafForBlock {
+        format: &'a str,
+        content: &'a str,
+    },
     LeafEncoding(&'a str),
 }
 
 impl<'a> EventIter<'a> {
     pub fn new(doc: &'a PodDoc) -> Self {
         EventIter {
-            stack: vec![Frame::DocBlocks { blocks: doc.blocks.iter() }],
+            stack: vec![Frame::DocBlocks {
+                blocks: doc.blocks.iter(),
+            }],
         }
     }
 }
@@ -219,7 +275,9 @@ impl<'a> Iterator for EventIter<'a> {
                     let remaining: Vec<&'a Vec<Block>> = items.collect();
                     *self.stack.last_mut().unwrap() = Frame::ListClose;
                     for item in remaining.into_iter().rev() {
-                        self.stack.push(Frame::ListItemOpen { blocks: item.iter() });
+                        self.stack.push(Frame::ListItemOpen {
+                            blocks: item.iter(),
+                        });
                     }
                     return Some(Event::StartList { ordered });
                 }
@@ -245,8 +303,12 @@ impl<'a> Iterator for EventIter<'a> {
                     let remaining: Vec<&'a DefinitionItem> = items.collect();
                     *self.stack.last_mut().unwrap() = Frame::DefListClose;
                     for item in remaining.into_iter().rev() {
-                        self.stack.push(Frame::DefDescOpen { blocks: item.desc.iter() });
-                        self.stack.push(Frame::DefTermOpen { inlines: item.term.iter() });
+                        self.stack.push(Frame::DefDescOpen {
+                            blocks: item.desc.iter(),
+                        });
+                        self.stack.push(Frame::DefTermOpen {
+                            inlines: item.term.iter(),
+                        });
                     }
                     return Some(Event::StartDefinitionList);
                 }
@@ -389,7 +451,9 @@ impl<'a> Iterator for EventIter<'a> {
                 Frame::LeafCodeBlock(content) => {
                     let content = *content;
                     self.stack.pop();
-                    return Some(Event::CodeBlock { content: Cow::Borrowed(content) });
+                    return Some(Event::CodeBlock {
+                        content: Cow::Borrowed(content),
+                    });
                 }
                 Frame::LeafRawBlock { format, content } => {
                     let format = format.to_string();
@@ -416,24 +480,38 @@ impl<'a> Iterator for EventIter<'a> {
 fn push_block_frames<'a>(stack: &mut Vec<Frame<'a>>, block: &'a Block) {
     match block {
         Block::Heading { level, inlines, .. } => {
-            stack.push(Frame::HeadingOpen { level: *level, inlines: inlines.iter() });
+            stack.push(Frame::HeadingOpen {
+                level: *level,
+                inlines: inlines.iter(),
+            });
         }
         Block::Paragraph { inlines, .. } => {
-            stack.push(Frame::ParagraphOpen { inlines: inlines.iter() });
+            stack.push(Frame::ParagraphOpen {
+                inlines: inlines.iter(),
+            });
         }
         Block::CodeBlock { content, .. } => {
             stack.push(Frame::LeafCodeBlock(content));
         }
         Block::List { ordered, items, .. } => {
-            stack.push(Frame::ListOpen { ordered: *ordered, items: items.iter() });
+            stack.push(Frame::ListOpen {
+                ordered: *ordered,
+                items: items.iter(),
+            });
         }
         Block::DefinitionList { items, .. } => {
-            stack.push(Frame::DefListOpen { items: items.iter() });
+            stack.push(Frame::DefListOpen {
+                items: items.iter(),
+            });
         }
-        Block::RawBlock { format, content, .. } => {
+        Block::RawBlock {
+            format, content, ..
+        } => {
             stack.push(Frame::LeafRawBlock { format, content });
         }
-        Block::ForBlock { format, content, .. } => {
+        Block::ForBlock {
+            format, content, ..
+        } => {
             stack.push(Frame::LeafForBlock { format, content });
         }
         Block::Encoding { encoding, .. } => {
@@ -448,13 +526,19 @@ fn push_inline_frames<'a>(stack: &mut Vec<Frame<'a>>, inline: &'a Inline) {
             stack.push(Frame::LeafText(s));
         }
         Inline::Bold(children, _) => {
-            stack.push(Frame::InlineBoldOpen { children: children.iter() });
+            stack.push(Frame::InlineBoldOpen {
+                children: children.iter(),
+            });
         }
         Inline::Italic(children, _) => {
-            stack.push(Frame::InlineItalicOpen { children: children.iter() });
+            stack.push(Frame::InlineItalicOpen {
+                children: children.iter(),
+            });
         }
         Inline::Underline(children, _) => {
-            stack.push(Frame::InlineUnderlineOpen { children: children.iter() });
+            stack.push(Frame::InlineUnderlineOpen {
+                children: children.iter(),
+            });
         }
         Inline::Code(s, _) => {
             stack.push(Frame::LeafCode(s));
@@ -463,10 +547,14 @@ fn push_inline_frames<'a>(stack: &mut Vec<Frame<'a>>, inline: &'a Inline) {
             stack.push(Frame::LeafLinkOpen { url, label });
         }
         Inline::Filename(children, _) => {
-            stack.push(Frame::InlineFilenameOpen { children: children.iter() });
+            stack.push(Frame::InlineFilenameOpen {
+                children: children.iter(),
+            });
         }
         Inline::NonBreaking(children, _) => {
-            stack.push(Frame::InlineNonBreakingOpen { children: children.iter() });
+            stack.push(Frame::InlineNonBreakingOpen {
+                children: children.iter(),
+            });
         }
         Inline::IndexEntry(s, _) => {
             stack.push(Frame::LeafIndexEntry(s));
@@ -498,7 +586,10 @@ mod tests {
     fn test_events_heading() {
         let (doc, _) = crate::parse::parse("=head1 Hello");
         let evs: Vec<_> = EventIter::new(&doc).collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndHeading)));
     }
 
@@ -508,15 +599,26 @@ mod tests {
         let evs: Vec<_> = EventIter::new(&doc).collect();
         assert!(evs.iter().any(|e| matches!(e, Event::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, Event::EndParagraph)));
-        assert!(evs.iter().any(|e| matches!(e, Event::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
     fn test_events_list() {
         let (doc, _) = crate::parse::parse("=over\n\n=item * One\n\n=item * Two\n\n=back\n");
         let evs: Vec<_> = EventIter::new(&doc).collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::StartList { ordered: false })));
-        assert_eq!(evs.iter().filter(|e| matches!(e, Event::StartListItem)).count(), 2);
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartList { ordered: false }))
+        );
+        assert_eq!(
+            evs.iter()
+                .filter(|e| matches!(e, Event::StartListItem))
+                .count(),
+            2
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndList)));
     }
 

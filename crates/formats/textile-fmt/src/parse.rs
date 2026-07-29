@@ -98,7 +98,10 @@ impl<'a> Parser<'a> {
                 let le = self.line_end(self.pos);
                 let content = rest.trim().to_string();
                 self.pos += 1;
-                nodes.push(Block::Raw { content, span: Span::new(ls, le) });
+                nodes.push(Block::Raw {
+                    content,
+                    span: Span::new(ls, le),
+                });
                 continue;
             }
 
@@ -130,7 +133,9 @@ impl<'a> Parser<'a> {
                 let ls = self.line_start(self.pos);
                 let le = self.line_end(self.pos);
                 self.pos += 1;
-                nodes.push(Block::HorizontalRule { span: Span::new(ls, le) });
+                nodes.push(Block::HorizontalRule {
+                    span: Span::new(ls, le),
+                });
                 continue;
             }
 
@@ -361,7 +366,11 @@ impl<'a> Parser<'a> {
             let (is_header, after_header) = if let Some(rest) = part_trimmed.strip_prefix('_') {
                 if let Some(after_dot) = rest.strip_prefix('.') {
                     (true, after_dot.trim_start())
-                } else if rest.starts_with("<>.") || rest.starts_with(">.") || rest.starts_with("<.") || rest.starts_with("=.") {
+                } else if rest.starts_with("<>.")
+                    || rest.starts_with(">.")
+                    || rest.starts_with("<.")
+                    || rest.starts_with("=.")
+                {
                     (true, rest) // leave alignment chars for parse_cell_align below
                 } else {
                     (false, part_trimmed)
@@ -456,8 +465,7 @@ impl<'a> Parser<'a> {
                     }
                     let cont_marker_count = cont.chars().take_while(|&c| c == marker).count();
                     let other_marker = if ordered { '*' } else { '#' };
-                    let cont_other_count =
-                        cont.chars().take_while(|&c| c == other_marker).count();
+                    let cont_other_count = cont.chars().take_while(|&c| c == other_marker).count();
                     if cont_marker_count > 0 || cont_other_count > 0 {
                         break;
                     }
@@ -493,7 +501,10 @@ impl<'a> Parser<'a> {
                         item_children.push(Block::List {
                             ordered,
                             items: nested_items,
-                            span: Span::new(nested_start, self.line_end(self.pos.saturating_sub(1))),
+                            span: Span::new(
+                                nested_start,
+                                self.line_end(self.pos.saturating_sub(1)),
+                            ),
                         });
                     } else if next_other_count > level {
                         let (nested_items, _) =
@@ -502,7 +513,10 @@ impl<'a> Parser<'a> {
                         item_children.push(Block::List {
                             ordered: !ordered,
                             items: nested_items,
-                            span: Span::new(nested_start, self.line_end(self.pos.saturating_sub(1))),
+                            span: Span::new(
+                                nested_start,
+                                self.line_end(self.pos.saturating_sub(1)),
+                            ),
                         });
                     }
                 }
@@ -809,10 +823,8 @@ fn parse_inline_span_attrs(s: &str) -> (BlockAttrs, usize) {
                 if let Some(close) = s[i + 1..].find(')') {
                     let inner = &s[i + 1..i + 1 + close];
                     if let Some(hash) = inner.find('#') {
-                        attrs.class =
-                            Some(inner[..hash].to_string()).filter(|s| !s.is_empty());
-                        attrs.id =
-                            Some(inner[hash + 1..].to_string()).filter(|s| !s.is_empty());
+                        attrs.class = Some(inner[..hash].to_string()).filter(|s| !s.is_empty());
+                        attrs.id = Some(inner[hash + 1..].to_string()).filter(|s| !s.is_empty());
                     } else {
                         attrs.class = Some(inner.to_string()).filter(|s| !s.is_empty());
                     }
@@ -851,7 +863,10 @@ fn parse_row_attrs(line: &str) -> (BlockAttrs, &str) {
         return (attrs, after_dot.trim_start());
     }
     if let Some(after_dot) = rest.strip_prefix(".|") {
-        return (attrs, after_dot.trim_start_matches('|').trim_end_matches('|'));
+        return (
+            attrs,
+            after_dot.trim_start_matches('|').trim_end_matches('|'),
+        );
     }
     (BlockAttrs::default(), line)
 }
@@ -882,7 +897,18 @@ fn is_explicit_block_start(line: &str) -> bool {
         }
     }
     // common block prefixes
-    for prefix in &["p.", "p(", "p{", "p[", "bq.", "bc.", "pre.", "notextile.", "fn", "---"] {
+    for prefix in &[
+        "p.",
+        "p(",
+        "p{",
+        "p[",
+        "bq.",
+        "bc.",
+        "pre.",
+        "notextile.",
+        "fn",
+        "---",
+    ] {
         if t.starts_with(prefix) {
             return true;
         }
@@ -1003,13 +1029,23 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
             }
             let cite_end = char_abs(i);
             let cite_children = parse_inline(&cite_text, cite_start + 2);
-            nodes.push(Inline::Citation(cite_children, Span::new(cite_start, cite_end)));
+            nodes.push(Inline::Citation(
+                cite_children,
+                Span::new(cite_start, cite_end),
+            ));
             text_start = char_abs(i);
             continue;
         }
 
         // Try to parse formatting markers (includes % for GenericSpan)
-        if let Some((new_i, node)) = try_parse_formatting(&chars, i, &mut current, &mut nodes, &char_offsets, base_offset) {
+        if let Some((new_i, node)) = try_parse_formatting(
+            &chars,
+            i,
+            &mut current,
+            &mut nodes,
+            &char_offsets,
+            base_offset,
+        ) {
             text_start = char_abs(new_i);
             i = new_i;
             nodes.push(node);
@@ -1076,7 +1112,10 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
                 current.clear();
             }
             let ref_span = Span::new(char_abs(i), char_abs(ref_end));
-            nodes.push(Inline::FootnoteRef { label, span: ref_span });
+            nodes.push(Inline::FootnoteRef {
+                label,
+                span: ref_span,
+            });
             i = ref_end;
             text_start = char_abs(i);
             continue;
@@ -1174,9 +1213,11 @@ fn try_parse_formatting(
     base_offset: usize,
 ) -> Option<(usize, Inline)> {
     let char_abs = |idx: usize| {
-        base_offset + char_offsets.get(idx).copied().unwrap_or_else(|| {
-            char_offsets.last().copied().unwrap_or(0)
-        })
+        base_offset
+            + char_offsets
+                .get(idx)
+                .copied()
+                .unwrap_or_else(|| char_offsets.last().copied().unwrap_or(0))
     };
 
     // (opening_marker, doubled_skip_char, check_prev_alphanumeric)
@@ -1188,7 +1229,7 @@ fn try_parse_formatting(
         ('+', '+', true),
         ('^', ' ', false),
         ('~', ' ', false),
-        ('%', ' ', false),  // GenericSpan
+        ('%', ' ', false), // GenericSpan
     ];
 
     for &(marker, doubled, check_prev) in markers {
@@ -1266,7 +1307,10 @@ fn find_closing_marker(chars: &[char], start: usize, marker: char) -> Option<(us
 
 /// Parse a link: `"text":url` or `"text(title)":url`.
 /// Returns (end_pos, text, title, url).
-fn parse_textile_link(chars: &[char], start: usize) -> Option<(usize, String, Option<String>, String)> {
+fn parse_textile_link(
+    chars: &[char],
+    start: usize,
+) -> Option<(usize, String, Option<String>, String)> {
     if chars[start] != '"' {
         return None;
     }

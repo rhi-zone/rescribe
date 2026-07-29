@@ -29,16 +29,23 @@ use crate::ast::{Align, Block, Inline, TableRow};
 #[derive(Debug)]
 pub enum Event<'a> {
     // ── Block events ─────────────────────────────────────────────────────────
-    StartParagraph { align: Align, para_props: Cow<'a, str> },
+    StartParagraph {
+        align: Align,
+        para_props: Cow<'a, str>,
+    },
     EndParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
     StartCodeBlock,
     EndCodeBlock,
     CodeBlockContent(Cow<'a, str>),
     StartBlockquote,
     EndBlockquote,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
@@ -63,16 +70,27 @@ pub enum Event<'a> {
     StartStrikethrough,
     EndStrikethrough,
     Code(Cow<'a, str>),
-    StartLink { url: String },
+    StartLink {
+        url: String,
+    },
     EndLink,
-    Image { url: String, alt: String },
+    Image {
+        url: String,
+        alt: String,
+    },
     StartSuperscript,
     EndSuperscript,
     StartSubscript,
     EndSubscript,
-    StartFontSize { size: u16 },
+    StartFontSize {
+        size: u16,
+    },
     EndFontSize,
-    StartColor { r: u8, g: u8, b: u8 },
+    StartColor {
+        r: u8,
+        g: u8,
+        b: u8,
+    },
     EndColor,
     StartAllCaps,
     EndAllCaps,
@@ -80,13 +98,23 @@ pub enum Event<'a> {
     EndSmallCaps,
     StartHidden,
     EndHidden,
-    StartCharSpan { char_props: String },
+    StartCharSpan {
+        char_props: String,
+    },
     EndCharSpan,
-    StartFont { name: String },
+    StartFont {
+        name: String,
+    },
     EndFont,
-    StartBgColor { r: u8, g: u8, b: u8 },
+    StartBgColor {
+        r: u8,
+        g: u8,
+        b: u8,
+    },
     EndBgColor,
-    StartLang { lcid: u16 },
+    StartLang {
+        lcid: u16,
+    },
     EndLang,
     StartFootnote,
     EndFootnote,
@@ -125,7 +153,9 @@ pub struct SemanticEventIter {
 
 impl SemanticEventIter {
     fn new(doc: crate::ast::RtfDoc) -> Self {
-        let mut iter = SemanticEventIter { frame_stack: Vec::new() };
+        let mut iter = SemanticEventIter {
+            frame_stack: Vec::new(),
+        };
         iter.frame_stack.push(Frame::Blocks(doc.blocks.into_iter()));
         iter
     }
@@ -134,7 +164,12 @@ impl SemanticEventIter {
     /// emission order (so the first thing to emit is on top of the stack).
     fn expand_block(frame_stack: &mut Vec<Frame>, block: Block) {
         match block {
-            Block::Paragraph { inlines, align, para_props, .. } => {
+            Block::Paragraph {
+                inlines,
+                align,
+                para_props,
+                ..
+            } => {
                 // Emission order: StartParagraph, [inlines], EndParagraph
                 frame_stack.push(Frame::Emit(Event::EndParagraph));
                 frame_stack.push(Frame::Inlines(inlines.into_iter()));
@@ -232,7 +267,9 @@ impl SemanticEventIter {
                 frame_stack.push(Frame::Inlines(children.into_iter()));
                 frame_stack.push(Frame::Emit(Event::StartFontSize { size }));
             }
-            Inline::Color { r, g, b, children, .. } => {
+            Inline::Color {
+                r, g, b, children, ..
+            } => {
                 frame_stack.push(Frame::Emit(Event::EndColor));
                 frame_stack.push(Frame::Inlines(children.into_iter()));
                 frame_stack.push(Frame::Emit(Event::StartColor { r, g, b }));
@@ -252,7 +289,11 @@ impl SemanticEventIter {
                 frame_stack.push(Frame::Inlines(children.into_iter()));
                 frame_stack.push(Frame::Emit(Event::StartHidden));
             }
-            Inline::CharSpan { char_props, children, .. } => {
+            Inline::CharSpan {
+                char_props,
+                children,
+                ..
+            } => {
                 frame_stack.push(Frame::Emit(Event::EndCharSpan));
                 frame_stack.push(Frame::Inlines(children.into_iter()));
                 frame_stack.push(Frame::Emit(Event::StartCharSpan { char_props }));
@@ -262,7 +303,9 @@ impl SemanticEventIter {
                 frame_stack.push(Frame::Inlines(children.into_iter()));
                 frame_stack.push(Frame::Emit(Event::StartFont { name }));
             }
-            Inline::BgColor { r, g, b, children, .. } => {
+            Inline::BgColor {
+                r, g, b, children, ..
+            } => {
                 frame_stack.push(Frame::Emit(Event::EndBgColor));
                 frame_stack.push(Frame::Inlines(children.into_iter()));
                 frame_stack.push(Frame::Emit(Event::StartBgColor { r, g, b }));
@@ -321,7 +364,8 @@ impl Iterator for SemanticEventIter {
                     if let Some(item_blocks) = iter.next() {
                         // Push EndListItem, then the item's blocks, then StartListItem.
                         self.frame_stack.push(Frame::Emit(Event::EndListItem));
-                        self.frame_stack.push(Frame::Blocks(item_blocks.into_iter()));
+                        self.frame_stack
+                            .push(Frame::Blocks(item_blocks.into_iter()));
                         self.frame_stack.push(Frame::Emit(Event::StartListItem));
                     } else {
                         self.frame_stack.pop();
@@ -385,9 +429,15 @@ mod tests {
     #[test]
     fn test_semantic_events_paragraph() {
         let evs: Vec<_> = events(br"{\rtf1 Hello world\par}").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartParagraph { .. }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndParagraph)));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
@@ -428,7 +478,10 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, OwnedEvent::StartParagraph { .. }))
             .count();
-        let end_count = evs.iter().filter(|e| matches!(e, OwnedEvent::EndParagraph)).count();
+        let end_count = evs
+            .iter()
+            .filter(|e| matches!(e, OwnedEvent::EndParagraph))
+            .count();
         assert_eq!(start_count, end_count);
         assert!(start_count >= 1);
     }
@@ -452,9 +505,9 @@ mod tests {
                 OwnedEvent::StartBold
                 | OwnedEvent::StartItalic
                 | OwnedEvent::StartParagraph { .. } => depth += 1,
-                OwnedEvent::EndBold
-                | OwnedEvent::EndItalic
-                | OwnedEvent::EndParagraph => depth -= 1,
+                OwnedEvent::EndBold | OwnedEvent::EndItalic | OwnedEvent::EndParagraph => {
+                    depth -= 1
+                }
                 _ => {}
             }
         }

@@ -33,10 +33,10 @@
 //! equal `parse(input).0.strip_spans()`. Verified by the roundtrip fuzz harness.
 
 mod ast;
+pub mod batch;
 mod emit;
 mod events;
 mod parse;
-pub mod batch;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────
@@ -45,11 +45,11 @@ pub use ast::{
     Alignment, Attr, Block, BulletStyle, DefItem, Diagnostic, DjotDoc, FootnoteDef, Inline,
     LinkDef, ListItem, ListKind, OrderedDelimiter, OrderedStyle, Span, TableCell, TableRow,
 };
+pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::emit;
 pub use events::{Event, EventIter, EventOwned, OwnedEvent};
 pub use parse::parse;
 pub use writer::Writer;
-pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 
 /// Return a streaming event iterator over the parsed document.
 ///
@@ -67,7 +67,11 @@ mod smoke {
         let input = "# Hello *World*\n\nHere's a paragraph with _emphasis_, *strong*, and `code`.\n\n- Item one\n- Item two\n\n1. First\n2. Second\n\n> A blockquote\n\n```rust\nfn main() {}\n```\n\nHere is a footnote.[^fn1]\n\n[^fn1]: The footnote content.\n\n[link]: https://example.com\n";
         let (doc, diags) = parse(input);
         assert!(diags.is_empty(), "diagnostics: {diags:?}");
-        assert!(doc.blocks.len() >= 6, "expected >=6 blocks, got {}", doc.blocks.len());
+        assert!(
+            doc.blocks.len() >= 6,
+            "expected >=6 blocks, got {}",
+            doc.blocks.len()
+        );
         assert_eq!(doc.footnotes.len(), 1);
         assert_eq!(doc.link_defs.len(), 1);
         let emitted = emit(&doc);
@@ -81,7 +85,6 @@ mod smoke {
         assert!(!evts.is_empty());
     }
 }
-
 
 #[cfg(test)]
 mod debug_e2e {

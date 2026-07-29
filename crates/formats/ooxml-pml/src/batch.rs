@@ -20,9 +20,9 @@
 //! let presentation = parser.finish()?;
 //! ```
 
-use std::io::Cursor;
 use crate::Result;
 use crate::presentation::Presentation;
+use std::io::Cursor;
 
 /// Chunk-driven PPTX parser.
 #[derive(Default)]

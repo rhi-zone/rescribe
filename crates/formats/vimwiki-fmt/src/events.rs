@@ -10,13 +10,19 @@ pub enum Event<'a> {
     // -- Block events ---------------------------------------------------------
     StartParagraph,
     EndParagraph,
-    StartHeading { level: usize },
+    StartHeading {
+        level: usize,
+    },
     EndHeading,
     StartBlockquote,
     EndBlockquote,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
-    StartListItem { checked: Option<bool> },
+    StartListItem {
+        checked: Option<bool>,
+    },
     EndListItem,
     CodeBlock {
         language: Option<String>,
@@ -49,7 +55,9 @@ pub enum Event<'a> {
     StartSubscript,
     EndSubscript,
     InlineCode(Cow<'a, str>),
-    StartLink { url: String },
+    StartLink {
+        url: String,
+    },
     EndLink,
     InlineImage {
         url: String,
@@ -168,7 +176,9 @@ fn emit_block_events(block: &Block, out: &mut Vec<Event<'_>>) {
             emit_inline_events(inlines, out);
             out.push(Event::EndHeading);
         }
-        Block::CodeBlock { language, content, .. } => {
+        Block::CodeBlock {
+            language, content, ..
+        } => {
             out.push(Event::CodeBlock {
                 language: language.clone(),
                 content: Cow::Owned(content.clone()),
@@ -184,7 +194,9 @@ fn emit_block_events(block: &Block, out: &mut Vec<Event<'_>>) {
         Block::List { ordered, items, .. } => {
             out.push(Event::StartList { ordered: *ordered });
             for item in items {
-                out.push(Event::StartListItem { checked: item.checked });
+                out.push(Event::StartListItem {
+                    checked: item.checked,
+                });
                 emit_inline_events(&item.inlines, out);
                 out.push(Event::EndListItem);
             }
@@ -260,7 +272,9 @@ fn emit_inline_events<'a>(inlines: &[Inline], out: &mut Vec<Event<'a>>) {
                 out.push(Event::Text(Cow::Owned(label.clone())));
                 out.push(Event::EndLink);
             }
-            Inline::Image { url, alt, style, .. } => {
+            Inline::Image {
+                url, alt, style, ..
+            } => {
                 out.push(Event::InlineImage {
                     url: url.clone(),
                     alt: alt.clone(),
@@ -292,22 +306,52 @@ pub fn collect_doc_from_events(events_list: Vec<OwnedEvent>) -> VimwikiDoc {
         _ => Vec::new(),
     };
 
-    VimwikiDoc { blocks, span: Span::NONE }
+    VimwikiDoc {
+        blocks,
+        span: Span::NONE,
+    }
 }
 
 enum BlockFrame {
-    Document { blocks: Vec<Block> },
-    Paragraph { inlines: Vec<Inline> },
-    Heading { level: usize, inlines: Vec<Inline> },
-    Blockquote { blocks: Vec<Block> },
-    List { ordered: bool, items: Vec<ListItem> },
-    ListItem { checked: Option<bool>, inlines: Vec<Inline> },
-    Table { rows: Vec<TableRow> },
-    TableRow { cells: Vec<Vec<Inline>> },
-    TableCell { inlines: Vec<Inline> },
-    DefinitionList { items: Vec<DefinitionItem> },
-    DefinitionTerm { inlines: Vec<Inline> },
-    DefinitionDesc { inlines: Vec<Inline> },
+    Document {
+        blocks: Vec<Block>,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+    },
+    Heading {
+        level: usize,
+        inlines: Vec<Inline>,
+    },
+    Blockquote {
+        blocks: Vec<Block>,
+    },
+    List {
+        ordered: bool,
+        items: Vec<ListItem>,
+    },
+    ListItem {
+        checked: Option<bool>,
+        inlines: Vec<Inline>,
+    },
+    Table {
+        rows: Vec<TableRow>,
+    },
+    TableRow {
+        cells: Vec<Vec<Inline>>,
+    },
+    TableCell {
+        inlines: Vec<Inline>,
+    },
+    DefinitionList {
+        items: Vec<DefinitionItem>,
+    },
+    DefinitionTerm {
+        inlines: Vec<Inline>,
+    },
+    DefinitionDesc {
+        inlines: Vec<Inline>,
+    },
 }
 
 enum InlineFrame {
@@ -362,19 +406,30 @@ fn handle_event(
     match event {
         // -- Block start events -----------------------------------------------
         Event::StartParagraph => {
-            block_stack.push(BlockFrame::Paragraph { inlines: Vec::new() });
+            block_stack.push(BlockFrame::Paragraph {
+                inlines: Vec::new(),
+            });
         }
         Event::StartHeading { level } => {
-            block_stack.push(BlockFrame::Heading { level, inlines: Vec::new() });
+            block_stack.push(BlockFrame::Heading {
+                level,
+                inlines: Vec::new(),
+            });
         }
         Event::StartBlockquote => {
             block_stack.push(BlockFrame::Blockquote { blocks: Vec::new() });
         }
         Event::StartList { ordered } => {
-            block_stack.push(BlockFrame::List { ordered, items: Vec::new() });
+            block_stack.push(BlockFrame::List {
+                ordered,
+                items: Vec::new(),
+            });
         }
         Event::StartListItem { checked } => {
-            block_stack.push(BlockFrame::ListItem { checked, inlines: Vec::new() });
+            block_stack.push(BlockFrame::ListItem {
+                checked,
+                inlines: Vec::new(),
+            });
         }
         Event::StartTable => {
             block_stack.push(BlockFrame::Table { rows: Vec::new() });
@@ -383,27 +438,46 @@ fn handle_event(
             block_stack.push(BlockFrame::TableRow { cells: Vec::new() });
         }
         Event::StartTableCell => {
-            block_stack.push(BlockFrame::TableCell { inlines: Vec::new() });
+            block_stack.push(BlockFrame::TableCell {
+                inlines: Vec::new(),
+            });
         }
         Event::StartDefinitionList => {
             block_stack.push(BlockFrame::DefinitionList { items: Vec::new() });
         }
         Event::StartDefinitionTerm => {
-            block_stack.push(BlockFrame::DefinitionTerm { inlines: Vec::new() });
+            block_stack.push(BlockFrame::DefinitionTerm {
+                inlines: Vec::new(),
+            });
         }
         Event::StartDefinitionDesc => {
-            block_stack.push(BlockFrame::DefinitionDesc { inlines: Vec::new() });
+            block_stack.push(BlockFrame::DefinitionDesc {
+                inlines: Vec::new(),
+            });
         }
 
         // -- Block end events -------------------------------------------------
         Event::EndParagraph => {
             if let Some(BlockFrame::Paragraph { inlines }) = block_stack.pop() {
-                push_block(block_stack, Block::Paragraph { inlines, span: Span::NONE });
+                push_block(
+                    block_stack,
+                    Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    },
+                );
             }
         }
         Event::EndHeading => {
             if let Some(BlockFrame::Heading { level, inlines }) = block_stack.pop() {
-                push_block(block_stack, Block::Heading { level, inlines, span: Span::NONE });
+                push_block(
+                    block_stack,
+                    Block::Heading {
+                        level,
+                        inlines,
+                        span: Span::NONE,
+                    },
+                );
             }
         }
         Event::EndBlockquote => {
@@ -418,32 +492,55 @@ fn handle_event(
                 }
                 push_block(
                     block_stack,
-                    Block::Blockquote { inlines: all_inlines, span: Span::NONE },
+                    Block::Blockquote {
+                        inlines: all_inlines,
+                        span: Span::NONE,
+                    },
                 );
             }
         }
         Event::EndList => {
             if let Some(BlockFrame::List { ordered, items }) = block_stack.pop() {
-                push_block(block_stack, Block::List { ordered, items, span: Span::NONE });
+                push_block(
+                    block_stack,
+                    Block::List {
+                        ordered,
+                        items,
+                        span: Span::NONE,
+                    },
+                );
             }
         }
         Event::EndListItem => {
             if let Some(BlockFrame::ListItem { checked, inlines }) = block_stack.pop()
                 && let Some(BlockFrame::List { items, .. }) = block_stack.last_mut()
             {
-                items.push(ListItem { checked, inlines, span: Span::NONE });
+                items.push(ListItem {
+                    checked,
+                    inlines,
+                    span: Span::NONE,
+                });
             }
         }
         Event::EndTable => {
             if let Some(BlockFrame::Table { rows }) = block_stack.pop() {
-                push_block(block_stack, Block::Table { rows, span: Span::NONE });
+                push_block(
+                    block_stack,
+                    Block::Table {
+                        rows,
+                        span: Span::NONE,
+                    },
+                );
             }
         }
         Event::EndTableRow => {
             if let Some(BlockFrame::TableRow { cells }) = block_stack.pop()
                 && let Some(BlockFrame::Table { rows }) = block_stack.last_mut()
             {
-                rows.push(TableRow { cells, span: Span::NONE });
+                rows.push(TableRow {
+                    cells,
+                    span: Span::NONE,
+                });
             }
         }
         Event::EndTableCell => {
@@ -457,7 +554,10 @@ fn handle_event(
             if let Some(BlockFrame::DefinitionList { items }) = block_stack.pop() {
                 push_block(
                     block_stack,
-                    Block::DefinitionList { items, span: Span::NONE },
+                    Block::DefinitionList {
+                        items,
+                        span: Span::NONE,
+                    },
                 );
             }
         }
@@ -515,28 +615,46 @@ fn handle_event(
             push_inline(
                 block_stack,
                 inline_ctx,
-                Inline::Image { url, alt, style, span: Span::NONE },
+                Inline::Image {
+                    url,
+                    alt,
+                    style,
+                    span: Span::NONE,
+                },
             );
         }
 
         // -- Inline container start events ------------------------------------
         Event::StartBold => {
-            inline_ctx.push(InlineFrame::Bold { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Bold {
+                inlines: Vec::new(),
+            });
         }
         Event::StartItalic => {
-            inline_ctx.push(InlineFrame::Italic { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Italic {
+                inlines: Vec::new(),
+            });
         }
         Event::StartStrikethrough => {
-            inline_ctx.push(InlineFrame::Strikethrough { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Strikethrough {
+                inlines: Vec::new(),
+            });
         }
         Event::StartSuperscript => {
-            inline_ctx.push(InlineFrame::Superscript { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Superscript {
+                inlines: Vec::new(),
+            });
         }
         Event::StartSubscript => {
-            inline_ctx.push(InlineFrame::Subscript { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Subscript {
+                inlines: Vec::new(),
+            });
         }
         Event::StartLink { url } => {
-            inline_ctx.push(InlineFrame::Link { url, inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Link {
+                url,
+                inlines: Vec::new(),
+            });
         }
 
         // -- Inline container end events --------------------------------------
@@ -584,7 +702,11 @@ fn handle_event(
                 push_inline(
                     block_stack,
                     inline_ctx,
-                    Inline::Link { url, label, span: Span::NONE },
+                    Inline::Link {
+                        url,
+                        label,
+                        span: Span::NONE,
+                    },
                 );
             }
         }
@@ -598,7 +720,10 @@ mod tests {
     #[test]
     fn test_events_heading() {
         let evs: Vec<_> = events("= Hello =").collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndHeading)));
     }
 
@@ -607,7 +732,10 @@ mod tests {
         let evs: Vec<_> = events("Hello world").collect();
         assert!(evs.iter().any(|e| matches!(e, Event::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, Event::EndParagraph)));
-        assert!(evs.iter().any(|e| matches!(e, Event::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
@@ -619,7 +747,10 @@ mod tests {
     #[test]
     fn test_events_list() {
         let evs: Vec<_> = events("* item 1\n* item 2").collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::StartList { ordered: false })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartList { ordered: false }))
+        );
         assert_eq!(
             evs.iter()
                 .filter(|e| matches!(e, Event::StartListItem { .. }))
@@ -654,18 +785,20 @@ mod tests {
     #[test]
     fn test_events_link() {
         let evs: Vec<_> = events("[[https://example.com|click here]]").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::StartLink { url } if url == "https://example.com")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartLink { url } if url == "https://example.com"))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndLink)));
     }
 
     #[test]
     fn test_events_inline_code() {
         let evs: Vec<_> = events("`verbatim`").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::InlineCode(s) if s == "verbatim")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::InlineCode(s) if s == "verbatim"))
+        );
     }
 
     #[test]

@@ -43,7 +43,9 @@ fn convert_block(block: &FmtBlock) -> Node {
                 .children(children)
         }
 
-        FmtBlock::CodeBlock { language, content, .. } => {
+        FmtBlock::CodeBlock {
+            language, content, ..
+        } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -73,7 +75,12 @@ fn convert_block(block: &FmtBlock) -> Node {
 
         FmtBlock::HorizontalRule(_) => Node::new(node::HORIZONTAL_RULE),
 
-        FmtBlock::FileBlock { language, filename, content, .. } => {
+        FmtBlock::FileBlock {
+            language,
+            filename,
+            content,
+            ..
+        } => {
             let mut n = Node::new("file_block").prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -97,8 +104,7 @@ fn convert_block(block: &FmtBlock) -> Node {
                             } else {
                                 node::TABLE_CELL
                             };
-                            Node::new(kind)
-                                .children(cell.inlines.iter().map(convert_inline))
+                            Node::new(kind).children(cell.inlines.iter().map(convert_inline))
                         })
                         .collect();
                     Node::new(node::TABLE_ROW).children(cells)
@@ -111,18 +117,18 @@ fn convert_block(block: &FmtBlock) -> Node {
             let mut def_nodes = Vec::new();
             for item in items {
                 def_nodes.push(
-                    Node::new(node::DEFINITION_TERM)
-                        .children(item.term.iter().map(convert_inline)),
+                    Node::new(node::DEFINITION_TERM).children(item.term.iter().map(convert_inline)),
                 );
                 def_nodes.push(
-                    Node::new(node::DEFINITION_DESC)
-                        .children(item.desc.iter().map(convert_inline)),
+                    Node::new(node::DEFINITION_DESC).children(item.desc.iter().map(convert_inline)),
                 );
             }
             Node::new(node::DEFINITION_LIST).children(def_nodes)
         }
 
-        FmtBlock::RawBlock { format, content, .. } => Node::new(node::RAW_BLOCK)
+        FmtBlock::RawBlock {
+            format, content, ..
+        } => Node::new(node::RAW_BLOCK)
             .prop(prop::FORMAT, format.clone())
             .prop(prop::CONTENT, content.clone()),
 

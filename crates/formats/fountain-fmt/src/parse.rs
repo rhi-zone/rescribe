@@ -498,7 +498,10 @@ impl<'a> Parser<'a> {
 
         // First line: strip /* prefix
         let first_line = self.lines[self.pos];
-        let after_open = first_line.trim_start().strip_prefix("/*").unwrap_or(first_line);
+        let after_open = first_line
+            .trim_start()
+            .strip_prefix("/*")
+            .unwrap_or(first_line);
 
         // Check if single-line: /* ... */
         if let Some(before_close) = after_open.strip_suffix("*/") {

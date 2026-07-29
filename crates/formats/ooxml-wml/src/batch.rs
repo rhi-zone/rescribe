@@ -21,9 +21,9 @@
 //! let doc = parser.finish()?;
 //! ```
 
-use std::io::Cursor;
 use crate::Result;
 use crate::document::Document;
+use std::io::Cursor;
 
 /// Chunk-driven DOCX parser.
 ///

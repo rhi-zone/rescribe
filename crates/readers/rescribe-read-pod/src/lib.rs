@@ -55,25 +55,29 @@ fn convert_block(block: pod_fmt::Block) -> Node {
         pod_fmt::Block::DefinitionList { items, .. } => {
             let mut def_nodes = Vec::new();
             for item in items {
-                def_nodes.push(
-                    Node::new(node::DEFINITION_TERM).children(convert_inlines(item.term)),
-                );
+                def_nodes
+                    .push(Node::new(node::DEFINITION_TERM).children(convert_inlines(item.term)));
                 let desc_children: Vec<Node> = item.desc.into_iter().map(convert_block).collect();
                 def_nodes.push(Node::new(node::DEFINITION_DESC).children(desc_children));
             }
             Node::new(node::DEFINITION_LIST).children(def_nodes)
         }
 
-        pod_fmt::Block::RawBlock { format, content, .. } => Node::new(node::RAW_BLOCK)
+        pod_fmt::Block::RawBlock {
+            format, content, ..
+        } => Node::new(node::RAW_BLOCK)
             .prop(prop::FORMAT, format)
             .prop(prop::CONTENT, content),
 
-        pod_fmt::Block::ForBlock { format, content, .. } => Node::new("for_block")
+        pod_fmt::Block::ForBlock {
+            format, content, ..
+        } => Node::new("for_block")
             .prop(prop::FORMAT, format)
             .prop(prop::CONTENT, content),
 
-        pod_fmt::Block::Encoding { encoding, .. } => Node::new("encoding")
-            .prop("encoding", encoding),
+        pod_fmt::Block::Encoding { encoding, .. } => {
+            Node::new("encoding").prop("encoding", encoding)
+        }
     }
 }
 
@@ -110,14 +114,13 @@ fn convert_inline(inline: pod_fmt::Inline) -> Node {
             Node::new(node::EMPHASIS).children(convert_inlines(children))
         }
 
-        pod_fmt::Inline::NonBreaking(children, _) => {
-            Node::new(node::SPAN)
-                .prop("pod:format", "nonbreaking")
-                .children(convert_inlines(children))
-        }
+        pod_fmt::Inline::NonBreaking(children, _) => Node::new(node::SPAN)
+            .prop("pod:format", "nonbreaking")
+            .children(convert_inlines(children)),
 
-        pod_fmt::Inline::IndexEntry(entry, _) => Node::new(node::RAW_INLINE)
-            .prop(prop::CONTENT, entry),
+        pod_fmt::Inline::IndexEntry(entry, _) => {
+            Node::new(node::RAW_INLINE).prop(prop::CONTENT, entry)
+        }
 
         pod_fmt::Inline::Null(_) => Node::new(node::RAW_INLINE)
             .prop(prop::FORMAT, "pod")

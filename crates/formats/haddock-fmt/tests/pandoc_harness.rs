@@ -39,7 +39,9 @@ fn pandoc_oracle_heading() {
         .expect("failed to spawn pandoc");
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(b"= Heading\n").expect("failed to write stdin");
+        stdin
+            .write_all(b"= Heading\n")
+            .expect("failed to write stdin");
     }
 
     let output = child.wait_with_output().expect("pandoc failed");

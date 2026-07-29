@@ -41,7 +41,11 @@ pub use writer::Writer;
 #[cfg(feature = "reader-streaming")]
 pub fn events(input: &str) -> OwnedEventIter {
     let (doc, _) = parse::parse(input);
-    OwnedEventIter { doc, pos: 0, events: None }
+    OwnedEventIter {
+        doc,
+        pos: 0,
+        events: None,
+    }
 }
 
 /// An owned event iterator that holds the parsed doc and yields events.
@@ -60,8 +64,9 @@ impl Iterator for OwnedEventIter {
         if self.events.is_none() {
             // Collect all events eagerly (we own the doc, can't borrow from it
             // while also being an iterator over ourselves).
-            let evts: Vec<OwnedEvent> =
-                events::EventIter::new(&self.doc).map(|e| e.into_owned()).collect();
+            let evts: Vec<OwnedEvent> = events::EventIter::new(&self.doc)
+                .map(|e| e.into_owned())
+                .collect();
             self.events = Some(evts);
         }
         let evts = self.events.as_ref().unwrap();
@@ -85,9 +90,9 @@ impl Clone for OwnedEvent {
             Event::EndParagraph => Event::EndParagraph,
             Event::StartHeading { level } => Event::StartHeading { level: *level },
             Event::EndHeading => Event::EndHeading,
-            Event::CodeBlock { content } => {
-                Event::CodeBlock { content: content.clone() }
-            }
+            Event::CodeBlock { content } => Event::CodeBlock {
+                content: content.clone(),
+            },
             Event::StartList { ordered } => Event::StartList { ordered: *ordered },
             Event::EndList => Event::EndList,
             Event::StartListItem => Event::StartListItem,
@@ -98,13 +103,17 @@ impl Clone for OwnedEvent {
             Event::EndDefinitionTerm => Event::EndDefinitionTerm,
             Event::StartDefinitionDesc => Event::StartDefinitionDesc,
             Event::EndDefinitionDesc => Event::EndDefinitionDesc,
-            Event::RawBlock { format, content } => {
-                Event::RawBlock { format: format.clone(), content: content.clone() }
-            }
-            Event::ForBlock { format, content } => {
-                Event::ForBlock { format: format.clone(), content: content.clone() }
-            }
-            Event::Encoding { encoding } => Event::Encoding { encoding: encoding.clone() },
+            Event::RawBlock { format, content } => Event::RawBlock {
+                format: format.clone(),
+                content: content.clone(),
+            },
+            Event::ForBlock { format, content } => Event::ForBlock {
+                format: format.clone(),
+                content: content.clone(),
+            },
+            Event::Encoding { encoding } => Event::Encoding {
+                encoding: encoding.clone(),
+            },
             Event::Text(cow) => Event::Text(cow.clone()),
             Event::StartBold => Event::StartBold,
             Event::EndBold => Event::EndBold,
@@ -117,9 +126,10 @@ impl Clone for OwnedEvent {
             Event::StartNonBreaking => Event::StartNonBreaking,
             Event::EndNonBreaking => Event::EndNonBreaking,
             Event::InlineCode(cow) => Event::InlineCode(cow.clone()),
-            Event::StartLink { url, label } => {
-                Event::StartLink { url: url.clone(), label: label.clone() }
-            }
+            Event::StartLink { url, label } => Event::StartLink {
+                url: url.clone(),
+                label: label.clone(),
+            },
             Event::EndLink => Event::EndLink,
             Event::IndexEntry(s) => Event::IndexEntry(s.clone()),
             Event::Null => Event::Null,
@@ -320,9 +330,8 @@ mod tests {
 
     #[test]
     fn test_parse_nested_list() {
-        let (doc, _) = parse(
-            "=over\n\n=item * Outer\n\n=over\n\n=item * Inner\n\n=back\n\n=back\n",
-        );
+        let (doc, _) =
+            parse("=over\n\n=item * Outer\n\n=over\n\n=item * Inner\n\n=back\n\n=back\n");
         if let Block::List { items, .. } = &doc.blocks[0] {
             assert_eq!(items.len(), 1);
             assert!(items[0].iter().any(|b| matches!(b, Block::List { .. })));

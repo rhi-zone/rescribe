@@ -69,7 +69,9 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n\n");
         }
 
-        Block::CodeBlock { language, content, .. } => {
+        Block::CodeBlock {
+            language, content, ..
+        } => {
             ctx.write("{{{");
             if let Some(lang) = language {
                 ctx.write(lang);
@@ -200,7 +202,9 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("]]");
         }
 
-        Inline::Image { url, alt, style, .. } => {
+        Inline::Image {
+            url, alt, style, ..
+        } => {
             ctx.write("{{");
             ctx.write(url);
             if let Some(a) = alt {

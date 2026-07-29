@@ -154,7 +154,11 @@ pub fn missing_words(reference: &[String], ours: &[String]) -> Vec<(String, usiz
         .iter()
         .filter_map(|(w, &rc)| {
             let oc = *our_counts.get(*w).unwrap_or(&0);
-            if oc < rc { Some((w.to_string(), rc - oc)) } else { None }
+            if oc < rc {
+                Some((w.to_string(), rc - oc))
+            } else {
+                None
+            }
         })
         .collect();
     missing.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
@@ -332,31 +336,131 @@ pub const CORPUS: &[CorpusEntry] = &[
         pandoc_from: "odt",
         filename: "odt/odt/listBlocks.odt",
     },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/bold.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/italic.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/footnote.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/blockquote.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/blockquote2.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/endnote.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/externalLink.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/horizontalRule.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/image.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/imageWithCaption.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/inlinedCode.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/orderedListSimple.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/orderedListMixed.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/orderedListRoman.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/orderedListHeader.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/simpleTable.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/simpleTableWithHeader.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/simpleTableWithCaption.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/strikeout.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/tab.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/textMixedStyles.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/underlined.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/unicode.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/unorderedList.odt" },
-    CorpusEntry { format: "odt", pandoc_from: "odt", filename: "odt/odt/unorderedListHeader.odt" },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/bold.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/italic.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/footnote.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/blockquote.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/blockquote2.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/endnote.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/externalLink.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/horizontalRule.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/image.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/imageWithCaption.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/inlinedCode.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/orderedListSimple.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/orderedListMixed.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/orderedListRoman.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/orderedListHeader.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/simpleTable.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/simpleTableWithHeader.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/simpleTableWithCaption.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/strikeout.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/tab.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/textMixedStyles.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/underlined.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/unicode.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/unorderedList.odt",
+    },
+    CorpusEntry {
+        format: "odt",
+        pandoc_from: "odt",
+        filename: "odt/odt/unorderedListHeader.odt",
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -510,7 +614,13 @@ pub fn print_report(results: &[RunResult], pandoc_available: bool) {
             let missing_str: Vec<String> = r
                 .missing
                 .iter()
-                .map(|(w, n)| if *n > 1 { format!("{w}(×{n})") } else { w.clone() })
+                .map(|(w, n)| {
+                    if *n > 1 {
+                        format!("{w}(×{n})")
+                    } else {
+                        w.clone()
+                    }
+                })
                 .collect();
             eprintln!("             missing: {}", missing_str.join(", "));
         }

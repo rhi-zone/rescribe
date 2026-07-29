@@ -57,7 +57,10 @@ fn convert_node(node: &Node) -> creole::Block {
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            creole::Block::CodeBlock { content, span: creole::Span::NONE }
+            creole::Block::CodeBlock {
+                content,
+                span: creole::Span::NONE,
+            }
         }
 
         node::BLOCKQUOTE => creole::Block::Blockquote {
@@ -73,7 +76,11 @@ fn convert_node(node: &Node) -> creole::Block {
                 .filter(|child| child.kind.as_str() == node::LIST_ITEM)
                 .map(|item| convert_nodes(&item.children))
                 .collect();
-            creole::Block::List { ordered, items, span: creole::Span::NONE }
+            creole::Block::List {
+                ordered,
+                items,
+                span: creole::Span::NONE,
+            }
         }
 
         node::TABLE => {
@@ -94,7 +101,10 @@ fn convert_node(node: &Node) -> creole::Block {
                     span: creole::Span::NONE,
                 })
                 .collect();
-            creole::Block::Table { rows, span: creole::Span::NONE }
+            creole::Block::Table {
+                rows,
+                span: creole::Span::NONE,
+            }
         }
 
         node::HORIZONTAL_RULE => creole::Block::HorizontalRule(creole::Span::NONE),
@@ -132,13 +142,21 @@ fn convert_inline(node: &Node) -> creole::Inline {
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = convert_inlines(&node.children);
-            creole::Inline::Link { url, children, span: creole::Span::NONE }
+            creole::Inline::Link {
+                url,
+                children,
+                span: creole::Span::NONE,
+            }
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
-            creole::Inline::Image { url, alt, span: creole::Span::NONE }
+            creole::Inline::Image {
+                url,
+                alt,
+                span: creole::Span::NONE,
+            }
         }
 
         node::LINE_BREAK => creole::Inline::LineBreak(creole::Span::NONE),

@@ -249,9 +249,10 @@ mod tests {
         p.feed(b"INT. OFFICE - DAY\n\n");
         p.feed(b"John sits down.\n");
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartSceneHeading)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartSceneHeading))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartAction)));
     }
 
@@ -263,9 +264,10 @@ mod tests {
             p.feed(std::slice::from_ref(b));
         }
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartSceneHeading)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartSceneHeading))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartAction)));
     }
 
@@ -275,8 +277,10 @@ mod tests {
         let mut sink = BatchSink::new(|ev| events.push(ev));
         sink.feed(b"CUT TO:\n");
         sink.finish();
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartTransition)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartTransition))
+        );
     }
 }

@@ -79,12 +79,18 @@ pub enum DiagLevel {
 impl Diagnostic {
     /// Create a warning-level diagnostic.
     pub fn warn(message: impl Into<String>) -> Self {
-        Self { message: message.into(), level: DiagLevel::Warning }
+        Self {
+            message: message.into(),
+            level: DiagLevel::Warning,
+        }
     }
 
     /// Create an info-level diagnostic.
     pub fn info(message: impl Into<String>) -> Self {
-        Self { message: message.into(), level: DiagLevel::Info }
+        Self {
+            message: message.into(),
+            level: DiagLevel::Info,
+        }
     }
 }
 
@@ -106,7 +112,10 @@ pub struct ParseResult<T> {
 
 impl<T> ParseResult<T> {
     pub fn ok(value: T) -> Self {
-        Self { value, diagnostics: Vec::new() }
+        Self {
+            value,
+            diagnostics: Vec::new(),
+        }
     }
 
     pub fn with_diagnostics(value: T, diagnostics: Vec<Diagnostic>) -> Self {

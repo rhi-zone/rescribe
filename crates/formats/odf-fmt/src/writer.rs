@@ -13,10 +13,9 @@ pub fn emit(doc: &OdfDocument) -> Result<Vec<u8>, Error> {
     let buf = Cursor::new(Vec::new());
     let mut zip = ZipWriter::new(buf);
 
-    let stored = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored);
-    let deflated = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+    let stored = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    let deflated =
+        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     // mimetype must be the first entry, stored (uncompressed), no extra fields
     zip.start_file("mimetype", stored)?;
@@ -85,7 +84,10 @@ fn build_meta_xml(meta: &OdfMeta) -> String {
     s.push_str("<office:meta>\n");
 
     if let Some(v) = &meta.generator {
-        s.push_str(&format!("<meta:generator>{}</meta:generator>\n", xml_escape(v)));
+        s.push_str(&format!(
+            "<meta:generator>{}</meta:generator>\n",
+            xml_escape(v)
+        ));
     }
     if let Some(v) = &meta.title {
         s.push_str(&format!("<dc:title>{}</dc:title>\n", xml_escape(v)));
@@ -94,7 +96,10 @@ fn build_meta_xml(meta: &OdfMeta) -> String {
         s.push_str(&format!("<dc:creator>{}</dc:creator>\n", xml_escape(v)));
     }
     if let Some(v) = &meta.description {
-        s.push_str(&format!("<dc:description>{}</dc:description>\n", xml_escape(v)));
+        s.push_str(&format!(
+            "<dc:description>{}</dc:description>\n",
+            xml_escape(v)
+        ));
     }
     if let Some(v) = &meta.subject {
         s.push_str(&format!("<dc:subject>{}</dc:subject>\n", xml_escape(v)));
@@ -103,26 +108,49 @@ fn build_meta_xml(meta: &OdfMeta) -> String {
         s.push_str(&format!("<dc:language>{}</dc:language>\n", xml_escape(v)));
     }
     if let Some(v) = &meta.creation_date {
-        s.push_str(&format!("<meta:creation-date>{}</meta:creation-date>\n", xml_escape(v)));
+        s.push_str(&format!(
+            "<meta:creation-date>{}</meta:creation-date>\n",
+            xml_escape(v)
+        ));
     }
     if let Some(v) = &meta.modification_date {
         s.push_str(&format!("<dc:date>{}</dc:date>\n", xml_escape(v)));
     }
     if let Some(v) = &meta.editing_duration {
-        s.push_str(&format!("<meta:editing-duration>{}</meta:editing-duration>\n", xml_escape(v)));
+        s.push_str(&format!(
+            "<meta:editing-duration>{}</meta:editing-duration>\n",
+            xml_escape(v)
+        ));
     }
     for kw in &meta.keywords {
-        s.push_str(&format!("<meta:keyword>{}</meta:keyword>\n", xml_escape(kw)));
+        s.push_str(&format!(
+            "<meta:keyword>{}</meta:keyword>\n",
+            xml_escape(kw)
+        ));
     }
     if let Some(stats) = &meta.document_statistics {
         s.push_str("<meta:document-statistic");
-        if let Some(v) = stats.page_count { s.push_str(&format!(" meta:page-count=\"{v}\"")); }
-        if let Some(v) = stats.paragraph_count { s.push_str(&format!(" meta:paragraph-count=\"{v}\"")); }
-        if let Some(v) = stats.word_count { s.push_str(&format!(" meta:word-count=\"{v}\"")); }
-        if let Some(v) = stats.character_count { s.push_str(&format!(" meta:character-count=\"{v}\"")); }
-        if let Some(v) = stats.table_count { s.push_str(&format!(" meta:table-count=\"{v}\"")); }
-        if let Some(v) = stats.image_count { s.push_str(&format!(" meta:image-count=\"{v}\"")); }
-        if let Some(v) = stats.object_count { s.push_str(&format!(" meta:object-count=\"{v}\"")); }
+        if let Some(v) = stats.page_count {
+            s.push_str(&format!(" meta:page-count=\"{v}\""));
+        }
+        if let Some(v) = stats.paragraph_count {
+            s.push_str(&format!(" meta:paragraph-count=\"{v}\""));
+        }
+        if let Some(v) = stats.word_count {
+            s.push_str(&format!(" meta:word-count=\"{v}\""));
+        }
+        if let Some(v) = stats.character_count {
+            s.push_str(&format!(" meta:character-count=\"{v}\""));
+        }
+        if let Some(v) = stats.table_count {
+            s.push_str(&format!(" meta:table-count=\"{v}\""));
+        }
+        if let Some(v) = stats.image_count {
+            s.push_str(&format!(" meta:image-count=\"{v}\""));
+        }
+        if let Some(v) = stats.object_count {
+            s.push_str(&format!(" meta:object-count=\"{v}\""));
+        }
         s.push_str("/>\n");
     }
     s.push_str("</office:meta>\n");
@@ -173,46 +201,106 @@ fn write_style_entry(s: &mut String, style: &StyleEntry) {
 
     // text-properties
     let tp = &style.text_props;
-    let has_text = tp.bold || tp.italic || tp.underline || tp.strikethrough
-        || tp.subscript || tp.superscript
-        || tp.color.is_some() || tp.background_color.is_some()
-        || tp.font_size.is_some() || tp.font_name.is_some();
+    let has_text = tp.bold
+        || tp.italic
+        || tp.underline
+        || tp.strikethrough
+        || tp.subscript
+        || tp.superscript
+        || tp.color.is_some()
+        || tp.background_color.is_some()
+        || tp.font_size.is_some()
+        || tp.font_name.is_some();
     if has_text {
         s.push_str("<style:text-properties");
-        if tp.bold { s.push_str(" fo:font-weight=\"bold\""); }
-        if tp.italic { s.push_str(" fo:font-style=\"italic\""); }
-        if tp.underline { s.push_str(" style:text-underline-style=\"solid\" style:text-underline-width=\"auto\" style:text-underline-color=\"font-color\""); }
-        if tp.strikethrough { s.push_str(" style:text-line-through-style=\"solid\""); }
-        if tp.subscript { s.push_str(" style:text-position=\"sub 58%\""); }
-        else if tp.superscript { s.push_str(" style:text-position=\"super 58%\""); }
-        if let Some(c) = &tp.color { s.push_str(&format!(" fo:color=\"{}\"", xml_escape(c))); }
-        if let Some(c) = &tp.background_color { s.push_str(&format!(" fo:background-color=\"{}\"", xml_escape(c))); }
-        if let Some(sz) = &tp.font_size { s.push_str(&format!(" fo:font-size=\"{}\"", xml_escape(sz))); }
-        if let Some(f) = &tp.font_name { s.push_str(&format!(" style:font-name=\"{}\"", xml_escape(f))); }
+        if tp.bold {
+            s.push_str(" fo:font-weight=\"bold\"");
+        }
+        if tp.italic {
+            s.push_str(" fo:font-style=\"italic\"");
+        }
+        if tp.underline {
+            s.push_str(" style:text-underline-style=\"solid\" style:text-underline-width=\"auto\" style:text-underline-color=\"font-color\"");
+        }
+        if tp.strikethrough {
+            s.push_str(" style:text-line-through-style=\"solid\"");
+        }
+        if tp.subscript {
+            s.push_str(" style:text-position=\"sub 58%\"");
+        } else if tp.superscript {
+            s.push_str(" style:text-position=\"super 58%\"");
+        }
+        if let Some(c) = &tp.color {
+            s.push_str(&format!(" fo:color=\"{}\"", xml_escape(c)));
+        }
+        if let Some(c) = &tp.background_color {
+            s.push_str(&format!(" fo:background-color=\"{}\"", xml_escape(c)));
+        }
+        if let Some(sz) = &tp.font_size {
+            s.push_str(&format!(" fo:font-size=\"{}\"", xml_escape(sz)));
+        }
+        if let Some(f) = &tp.font_name {
+            s.push_str(&format!(" style:font-name=\"{}\"", xml_escape(f)));
+        }
         s.push_str("/>\n");
     }
 
     // paragraph-properties
     let pp = &style.para_props;
-    let has_para = pp.align.is_some() || pp.margin_left.is_some() || pp.margin_right.is_some()
-        || pp.margin_top.is_some() || pp.margin_bottom.is_some() || pp.text_indent.is_some()
-        || pp.line_height.is_some() || pp.border.is_some() || pp.background_color.is_some()
-        || pp.keep_together || pp.keep_with_next || pp.page_break_before || pp.page_break_after;
+    let has_para = pp.align.is_some()
+        || pp.margin_left.is_some()
+        || pp.margin_right.is_some()
+        || pp.margin_top.is_some()
+        || pp.margin_bottom.is_some()
+        || pp.text_indent.is_some()
+        || pp.line_height.is_some()
+        || pp.border.is_some()
+        || pp.background_color.is_some()
+        || pp.keep_together
+        || pp.keep_with_next
+        || pp.page_break_before
+        || pp.page_break_after;
     if has_para {
         s.push_str("<style:paragraph-properties");
-        if let Some(a) = &pp.align { s.push_str(&format!(" fo:text-align=\"{}\"", xml_escape(a))); }
-        if let Some(v) = &pp.margin_left { s.push_str(&format!(" fo:margin-left=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &pp.margin_right { s.push_str(&format!(" fo:margin-right=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &pp.margin_top { s.push_str(&format!(" fo:margin-top=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &pp.margin_bottom { s.push_str(&format!(" fo:margin-bottom=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &pp.text_indent { s.push_str(&format!(" fo:text-indent=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &pp.line_height { s.push_str(&format!(" fo:line-height=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &pp.border { s.push_str(&format!(" fo:border=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &pp.background_color { s.push_str(&format!(" fo:background-color=\"{}\"", xml_escape(v))); }
-        if pp.keep_together { s.push_str(" fo:keep-together=\"always\""); }
-        if pp.keep_with_next { s.push_str(" fo:keep-with-next=\"always\""); }
-        if pp.page_break_before { s.push_str(" fo:break-before=\"page\""); }
-        if pp.page_break_after { s.push_str(" fo:break-after=\"page\""); }
+        if let Some(a) = &pp.align {
+            s.push_str(&format!(" fo:text-align=\"{}\"", xml_escape(a)));
+        }
+        if let Some(v) = &pp.margin_left {
+            s.push_str(&format!(" fo:margin-left=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &pp.margin_right {
+            s.push_str(&format!(" fo:margin-right=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &pp.margin_top {
+            s.push_str(&format!(" fo:margin-top=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &pp.margin_bottom {
+            s.push_str(&format!(" fo:margin-bottom=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &pp.text_indent {
+            s.push_str(&format!(" fo:text-indent=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &pp.line_height {
+            s.push_str(&format!(" fo:line-height=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &pp.border {
+            s.push_str(&format!(" fo:border=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &pp.background_color {
+            s.push_str(&format!(" fo:background-color=\"{}\"", xml_escape(v)));
+        }
+        if pp.keep_together {
+            s.push_str(" fo:keep-together=\"always\"");
+        }
+        if pp.keep_with_next {
+            s.push_str(" fo:keep-with-next=\"always\"");
+        }
+        if pp.page_break_before {
+            s.push_str(" fo:break-before=\"page\"");
+        }
+        if pp.page_break_after {
+            s.push_str(" fo:break-after=\"page\"");
+        }
         s.push_str("/>\n");
     }
 
@@ -220,18 +308,37 @@ fn write_style_entry(s: &mut String, style: &StyleEntry) {
 }
 
 fn write_page_layout(s: &mut String, layout: &PageLayout) {
-    s.push_str(&format!("<style:page-layout style:name=\"{}\">\n", xml_escape(&layout.name)));
-    let has_props = layout.page_width.is_some() || layout.page_height.is_some()
-        || layout.margin_top.is_some() || layout.print_orientation.is_some();
+    s.push_str(&format!(
+        "<style:page-layout style:name=\"{}\">\n",
+        xml_escape(&layout.name)
+    ));
+    let has_props = layout.page_width.is_some()
+        || layout.page_height.is_some()
+        || layout.margin_top.is_some()
+        || layout.print_orientation.is_some();
     if has_props {
         s.push_str("<style:page-layout-properties");
-        if let Some(v) = &layout.page_width { s.push_str(&format!(" fo:page-width=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &layout.page_height { s.push_str(&format!(" fo:page-height=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &layout.margin_top { s.push_str(&format!(" fo:margin-top=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &layout.margin_bottom { s.push_str(&format!(" fo:margin-bottom=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &layout.margin_left { s.push_str(&format!(" fo:margin-left=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &layout.margin_right { s.push_str(&format!(" fo:margin-right=\"{}\"", xml_escape(v))); }
-        if let Some(v) = &layout.print_orientation { s.push_str(&format!(" style:print-orientation=\"{}\"", xml_escape(v))); }
+        if let Some(v) = &layout.page_width {
+            s.push_str(&format!(" fo:page-width=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &layout.page_height {
+            s.push_str(&format!(" fo:page-height=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &layout.margin_top {
+            s.push_str(&format!(" fo:margin-top=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &layout.margin_bottom {
+            s.push_str(&format!(" fo:margin-bottom=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &layout.margin_left {
+            s.push_str(&format!(" fo:margin-left=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &layout.margin_right {
+            s.push_str(&format!(" fo:margin-right=\"{}\"", xml_escape(v)));
+        }
+        if let Some(v) = &layout.print_orientation {
+            s.push_str(&format!(" style:print-orientation=\"{}\"", xml_escape(v)));
+        }
         s.push_str("/>\n");
     }
     s.push_str("</style:page-layout>\n");
@@ -385,7 +492,11 @@ fn write_table(s: &mut String, t: &Table) {
         }
         s.push_str(">\n");
         for cell in &row.cells {
-            let tag = if cell.covered { "table:covered-table-cell" } else { "table:table-cell" };
+            let tag = if cell.covered {
+                "table:covered-table-cell"
+            } else {
+                "table:table-cell"
+            };
             s.push_str(&format!("<{tag}"));
             if let Some(sn) = &cell.style_name {
                 s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn)));
@@ -476,7 +587,9 @@ fn write_frame(s: &mut String, f: &Frame) {
             }
             s.push_str("</draw:text-box>\n");
         }
-        FrameContent::Other(raw) => { s.push_str(raw); }
+        FrameContent::Other(raw) => {
+            s.push_str(raw);
+        }
         FrameContent::Empty => {}
     }
     s.push_str("</draw:frame>\n");
@@ -499,7 +612,10 @@ fn write_inline(s: &mut String, inline: &Inline) {
         Inline::Hyperlink(link) => {
             s.push_str("<text:a");
             if let Some(href) = &link.href {
-                s.push_str(&format!(" xlink:href=\"{}\" xlink:type=\"simple\"", xml_escape(href)));
+                s.push_str(&format!(
+                    " xlink:href=\"{}\" xlink:type=\"simple\"",
+                    xml_escape(href)
+                ));
             }
             if let Some(title) = &link.title {
                 s.push_str(&format!(" xlink:title=\"{}\"", xml_escape(title)));
@@ -536,7 +652,10 @@ fn write_inline(s: &mut String, inline: &Inline) {
             }
             s.push_str(">\n");
             if let Some(cit) = &note.citation {
-                s.push_str(&format!("<text:note-citation>{}</text:note-citation>\n", xml_escape(cit)));
+                s.push_str(&format!(
+                    "<text:note-citation>{}</text:note-citation>\n",
+                    xml_escape(cit)
+                ));
             }
             s.push_str("<text:note-body>\n");
             for block in &note.body {
@@ -550,7 +669,10 @@ fn write_inline(s: &mut String, inline: &Inline) {
             s.push_str(&format!("<{name}>{}</{name}>", xml_escape(value)));
         }
         Inline::Bookmark { name } => {
-            s.push_str(&format!("<text:bookmark text:name=\"{}\"/>", xml_escape(name)));
+            s.push_str(&format!(
+                "<text:bookmark text:name=\"{}\"/>",
+                xml_escape(name)
+            ));
         }
         Inline::Annotation { content } => {
             s.push_str("<office:annotation><text:p>");
@@ -570,7 +692,10 @@ fn write_spreadsheet_body(s: &mut String, body: &SpreadsheetBody) {
     if !body.named_ranges.is_empty() {
         s.push_str("<table:named-expressions>\n");
         for nr in &body.named_ranges {
-            s.push_str(&format!("<table:named-range table:name=\"{}\"", xml_escape(&nr.name)));
+            s.push_str(&format!(
+                "<table:named-range table:name=\"{}\"",
+                xml_escape(&nr.name)
+            ));
             if let Some(v) = &nr.cell_range_address {
                 s.push_str(&format!(" table:cell-range-address=\"{}\"", xml_escape(v)));
             }
@@ -585,31 +710,63 @@ fn write_spreadsheet_body(s: &mut String, body: &SpreadsheetBody) {
 
 fn write_sheet(s: &mut String, sheet: &Sheet) {
     s.push_str("<table:table");
-    if let Some(n) = &sheet.name { s.push_str(&format!(" table:name=\"{}\"", xml_escape(n))); }
-    if let Some(sn) = &sheet.style_name { s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn))); }
-    if !sheet.print { s.push_str(" table:print=\"false\""); }
+    if let Some(n) = &sheet.name {
+        s.push_str(&format!(" table:name=\"{}\"", xml_escape(n)));
+    }
+    if let Some(sn) = &sheet.style_name {
+        s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn)));
+    }
+    if !sheet.print {
+        s.push_str(" table:print=\"false\"");
+    }
     s.push_str(">\n");
 
     for col in &sheet.columns {
         s.push_str("<table:table-column");
-        if let Some(sn) = &col.style_name { s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn))); }
-        if let Some(ds) = &col.default_cell_style_name { s.push_str(&format!(" table:default-cell-style-name=\"{}\"", xml_escape(ds))); }
-        if let Some(r) = col.repeated { s.push_str(&format!(" table:number-columns-repeated=\"{r}\"")); }
-        if let Some(v) = &col.visibility { s.push_str(&format!(" table:visibility=\"{}\"", xml_escape(v))); }
+        if let Some(sn) = &col.style_name {
+            s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn)));
+        }
+        if let Some(ds) = &col.default_cell_style_name {
+            s.push_str(&format!(
+                " table:default-cell-style-name=\"{}\"",
+                xml_escape(ds)
+            ));
+        }
+        if let Some(r) = col.repeated {
+            s.push_str(&format!(" table:number-columns-repeated=\"{r}\""));
+        }
+        if let Some(v) = &col.visibility {
+            s.push_str(&format!(" table:visibility=\"{}\"", xml_escape(v)));
+        }
         s.push_str("/>\n");
     }
 
     for row in &sheet.rows {
         s.push_str("<table:table-row");
-        if let Some(sn) = &row.style_name { s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn))); }
-        if let Some(ds) = &row.default_cell_style_name { s.push_str(&format!(" table:default-cell-style-name=\"{}\"", xml_escape(ds))); }
-        if let Some(r) = row.repeated { s.push_str(&format!(" table:number-rows-repeated=\"{r}\"")); }
+        if let Some(sn) = &row.style_name {
+            s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn)));
+        }
+        if let Some(ds) = &row.default_cell_style_name {
+            s.push_str(&format!(
+                " table:default-cell-style-name=\"{}\"",
+                xml_escape(ds)
+            ));
+        }
+        if let Some(r) = row.repeated {
+            s.push_str(&format!(" table:number-rows-repeated=\"{r}\""));
+        }
         s.push_str(">\n");
 
         for cell in &row.cells {
-            let tag = if cell.covered { "table:covered-table-cell" } else { "table:table-cell" };
+            let tag = if cell.covered {
+                "table:covered-table-cell"
+            } else {
+                "table:table-cell"
+            };
             s.push_str(&format!("<{tag}"));
-            if let Some(sn) = &cell.style_name { s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn))); }
+            if let Some(sn) = &cell.style_name {
+                s.push_str(&format!(" table:style-name=\"{}\"", xml_escape(sn)));
+            }
             if let Some(vt) = &cell.value_type {
                 s.push_str(&format!(" office:value-type=\"{}\"", xml_escape(vt)));
                 if let Some(v) = &cell.value {
@@ -623,10 +780,18 @@ fn write_sheet(s: &mut String, sheet: &Sheet) {
                     s.push_str(&format!(" {attr}=\"{}\"", xml_escape(v)));
                 }
             }
-            if let Some(f) = &cell.formula { s.push_str(&format!(" table:formula=\"{}\"", xml_escape(f))); }
-            if let Some(cs) = cell.col_span { s.push_str(&format!(" table:number-columns-spanned=\"{cs}\"")); }
-            if let Some(rs) = cell.row_span { s.push_str(&format!(" table:number-rows-spanned=\"{rs}\"")); }
-            if let Some(r) = cell.repeated { s.push_str(&format!(" table:number-columns-repeated=\"{r}\"")); }
+            if let Some(f) = &cell.formula {
+                s.push_str(&format!(" table:formula=\"{}\"", xml_escape(f)));
+            }
+            if let Some(cs) = cell.col_span {
+                s.push_str(&format!(" table:number-columns-spanned=\"{cs}\""));
+            }
+            if let Some(rs) = cell.row_span {
+                s.push_str(&format!(" table:number-rows-spanned=\"{rs}\""));
+            }
+            if let Some(r) = cell.repeated {
+                s.push_str(&format!(" table:number-columns-repeated=\"{r}\""));
+            }
             if cell.content.is_empty() {
                 s.push_str("/>\n");
             } else {
@@ -652,17 +817,34 @@ fn write_presentation_body(s: &mut String, body: &PresentationBody) {
 
 fn write_draw_page(s: &mut String, page: &DrawPage) {
     s.push_str("<draw:page");
-    if let Some(n) = &page.name { s.push_str(&format!(" draw:name=\"{}\"", xml_escape(n))); }
-    if let Some(sn) = &page.style_name { s.push_str(&format!(" draw:style-name=\"{}\"", xml_escape(sn))); }
-    if let Some(mp) = &page.master_page_name { s.push_str(&format!(" draw:master-page-name=\"{}\"", xml_escape(mp))); }
-    if let Some(l) = &page.layout_name { s.push_str(&format!(" presentation:presentation-page-layout-name=\"{}\"", xml_escape(l))); }
+    if let Some(n) = &page.name {
+        s.push_str(&format!(" draw:name=\"{}\"", xml_escape(n)));
+    }
+    if let Some(sn) = &page.style_name {
+        s.push_str(&format!(" draw:style-name=\"{}\"", xml_escape(sn)));
+    }
+    if let Some(mp) = &page.master_page_name {
+        s.push_str(&format!(" draw:master-page-name=\"{}\"", xml_escape(mp)));
+    }
+    if let Some(l) = &page.layout_name {
+        s.push_str(&format!(
+            " presentation:presentation-page-layout-name=\"{}\"",
+            xml_escape(l)
+        ));
+    }
     s.push_str(">\n");
-    for shape in &page.shapes { write_draw_shape(s, shape); }
+    for shape in &page.shapes {
+        write_draw_shape(s, shape);
+    }
     if let Some(notes) = &page.notes {
         s.push_str("<presentation:notes");
-        if let Some(sn) = &notes.style_name { s.push_str(&format!(" draw:style-name=\"{}\"", xml_escape(sn))); }
+        if let Some(sn) = &notes.style_name {
+            s.push_str(&format!(" draw:style-name=\"{}\"", xml_escape(sn)));
+        }
         s.push_str(">\n");
-        for shape in &notes.shapes { write_draw_shape(s, shape); }
+        for shape in &notes.shapes {
+            write_draw_shape(s, shape);
+        }
         s.push_str("</presentation:notes>\n");
     }
     s.push_str("</draw:page>\n");
@@ -670,28 +852,51 @@ fn write_draw_page(s: &mut String, page: &DrawPage) {
 
 fn write_draw_shape(s: &mut String, shape: &DrawShape) {
     s.push_str("<draw:frame");
-    if let Some(sn) = &shape.style_name { s.push_str(&format!(" draw:style-name=\"{}\"", xml_escape(sn))); }
-    if let Some(ts) = &shape.text_style_name { s.push_str(&format!(" draw:text-style-name=\"{}\"", xml_escape(ts))); }
-    if let Some(n) = &shape.name { s.push_str(&format!(" draw:name=\"{}\"", xml_escape(n))); }
-    if let Some(pc) = &shape.presentation_class { s.push_str(&format!(" presentation:class=\"{}\"", xml_escape(pc))); }
-    if let Some(x) = &shape.x { s.push_str(&format!(" svg:x=\"{}\"", xml_escape(x))); }
-    if let Some(y) = &shape.y { s.push_str(&format!(" svg:y=\"{}\"", xml_escape(y))); }
-    if let Some(w) = &shape.width { s.push_str(&format!(" svg:width=\"{}\"", xml_escape(w))); }
-    if let Some(h) = &shape.height { s.push_str(&format!(" svg:height=\"{}\"", xml_escape(h))); }
+    if let Some(sn) = &shape.style_name {
+        s.push_str(&format!(" draw:style-name=\"{}\"", xml_escape(sn)));
+    }
+    if let Some(ts) = &shape.text_style_name {
+        s.push_str(&format!(" draw:text-style-name=\"{}\"", xml_escape(ts)));
+    }
+    if let Some(n) = &shape.name {
+        s.push_str(&format!(" draw:name=\"{}\"", xml_escape(n)));
+    }
+    if let Some(pc) = &shape.presentation_class {
+        s.push_str(&format!(" presentation:class=\"{}\"", xml_escape(pc)));
+    }
+    if let Some(x) = &shape.x {
+        s.push_str(&format!(" svg:x=\"{}\"", xml_escape(x)));
+    }
+    if let Some(y) = &shape.y {
+        s.push_str(&format!(" svg:y=\"{}\"", xml_escape(y)));
+    }
+    if let Some(w) = &shape.width {
+        s.push_str(&format!(" svg:width=\"{}\"", xml_escape(w)));
+    }
+    if let Some(h) = &shape.height {
+        s.push_str(&format!(" svg:height=\"{}\"", xml_escape(h)));
+    }
     s.push_str(">\n");
     match &shape.content {
         DrawShapeContent::TextBox(blocks) => {
             s.push_str("<draw:text-box>\n");
-            for block in blocks { write_block(s, block); }
+            for block in blocks {
+                write_block(s, block);
+            }
             s.push_str("</draw:text-box>\n");
         }
         DrawShapeContent::Image { href, mime_type } => {
             s.push_str(&format!("<draw:image xlink:href=\"{}\" xlink:type=\"simple\" xlink:show=\"embed\" xlink:actuate=\"onLoad\"",
                 xml_escape(href)));
-            if let Some(mt) = mime_type { s.push_str(&format!(" draw:mime-type=\"{}\"", xml_escape(mt))); }
+            if let Some(mt) = mime_type {
+                s.push_str(&format!(" draw:mime-type=\"{}\"", xml_escape(mt)));
+            }
             s.push_str("/>\n");
         }
-        DrawShapeContent::Other(raw) => { s.push_str(raw); s.push('\n'); }
+        DrawShapeContent::Other(raw) => {
+            s.push_str(raw);
+            s.push('\n');
+        }
         DrawShapeContent::Empty => {}
     }
     s.push_str("</draw:frame>\n");
@@ -717,12 +922,21 @@ pub fn xml_escape(s: &str) -> String {
 
 /// Guess a MIME type from a file path extension.
 fn mime_from_path(path: &str) -> &'static str {
-    if path.ends_with(".png") { "image/png" }
-    else if path.ends_with(".jpg") || path.ends_with(".jpeg") { "image/jpeg" }
-    else if path.ends_with(".gif") { "image/gif" }
-    else if path.ends_with(".svg") { "image/svg+xml" }
-    else if path.ends_with(".tiff") || path.ends_with(".tif") { "image/tiff" }
-    else if path.ends_with(".bmp") { "image/bmp" }
-    else if path.ends_with(".webp") { "image/webp" }
-    else { "application/octet-stream" }
+    if path.ends_with(".png") {
+        "image/png"
+    } else if path.ends_with(".jpg") || path.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if path.ends_with(".gif") {
+        "image/gif"
+    } else if path.ends_with(".svg") {
+        "image/svg+xml"
+    } else if path.ends_with(".tiff") || path.ends_with(".tif") {
+        "image/tiff"
+    } else if path.ends_with(".bmp") {
+        "image/bmp"
+    } else if path.ends_with(".webp") {
+        "image/webp"
+    } else {
+        "application/octet-stream"
+    }
 }

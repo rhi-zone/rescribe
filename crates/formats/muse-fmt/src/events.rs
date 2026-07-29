@@ -329,9 +329,7 @@ fn enqueue_block<'a>(block: &'a Block, q: &mut VecDeque<MuseEvent<'a>>) {
         Block::Table { rows, .. } => {
             q.push_back(MuseEvent::StartTable);
             for row in rows {
-                q.push_back(MuseEvent::StartTableRow {
-                    header: row.header,
-                });
+                q.push_back(MuseEvent::StartTableRow { header: row.header });
                 for cell in &row.cells {
                     q.push_back(MuseEvent::StartTableCell);
                     enqueue_inlines(cell, q);
@@ -341,9 +339,7 @@ fn enqueue_block<'a>(block: &'a Block, q: &mut VecDeque<MuseEvent<'a>>) {
             }
             q.push_back(MuseEvent::EndTable);
         }
-        Block::FootnoteDef {
-            label, content, ..
-        } => {
+        Block::FootnoteDef { label, content, .. } => {
             q.push_back(MuseEvent::StartFootnoteDef {
                 label: Cow::Borrowed(label),
             });
@@ -444,9 +440,15 @@ mod tests {
     fn test_events_heading() {
         let (doc, _) = crate::parse("* Hello\n");
         let evs: Vec<_> = events(&doc).collect();
-        assert!(evs.iter().any(|e| matches!(e, MuseEvent::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, MuseEvent::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, MuseEvent::EndHeading)));
-        assert!(evs.iter().any(|e| matches!(e, MuseEvent::Text(t) if t == "Hello")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, MuseEvent::Text(t) if t == "Hello"))
+        );
     }
 
     #[test]
@@ -478,9 +480,14 @@ mod tests {
     fn test_events_list() {
         let (doc, _) = crate::parse(" - item1\n - item2\n");
         let evs: Vec<_> = events(&doc).collect();
-        assert!(evs.iter().any(|e| matches!(e, MuseEvent::StartList { ordered: false })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, MuseEvent::StartList { ordered: false }))
+        );
         assert_eq!(
-            evs.iter().filter(|e| matches!(e, MuseEvent::StartListItem)).count(),
+            evs.iter()
+                .filter(|e| matches!(e, MuseEvent::StartListItem))
+                .count(),
             2
         );
         assert!(evs.iter().any(|e| matches!(e, MuseEvent::EndList)));
@@ -491,7 +498,10 @@ mod tests {
         let (doc, _) = crate::parse("|| Name || Age ||\n| Alice | 30 |\n");
         let evs: Vec<_> = events(&doc).collect();
         assert!(evs.iter().any(|e| matches!(e, MuseEvent::StartTable)));
-        assert!(evs.iter().any(|e| matches!(e, MuseEvent::StartTableRow { header: true })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, MuseEvent::StartTableRow { header: true }))
+        );
         assert!(evs.iter().any(|e| matches!(e, MuseEvent::EndTable)));
     }
 
@@ -506,7 +516,10 @@ mod tests {
     fn test_events_link() {
         let (doc, _) = crate::parse("[[https://example.com][click]]\n");
         let evs: Vec<_> = events(&doc).collect();
-        assert!(evs.iter().any(|e| matches!(e, MuseEvent::StartLink { url } if url == "https://example.com")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, MuseEvent::StartLink { url } if url == "https://example.com"))
+        );
         assert!(evs.iter().any(|e| matches!(e, MuseEvent::EndLink)));
     }
 
@@ -541,9 +554,10 @@ mod tests {
     fn test_events_footnote_def_and_ref() {
         let (doc, _) = crate::parse("[1] A footnote.\n");
         let evs: Vec<_> = events(&doc).collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, MuseEvent::StartFootnoteDef { label } if label == "1")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, MuseEvent::StartFootnoteDef { label } if label == "1"))
+        );
         assert!(evs.iter().any(|e| matches!(e, MuseEvent::EndFootnoteDef)));
     }
 }

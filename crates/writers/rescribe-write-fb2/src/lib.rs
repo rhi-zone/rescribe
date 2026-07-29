@@ -28,7 +28,11 @@ pub fn emit_with_options(
 fn doc_to_fb(doc: &Document) -> FictionBook {
     let genre = doc.metadata.get_str("genre").unwrap_or("prose").to_string();
     let author_str = doc.metadata.get_str("author").unwrap_or("").to_string();
-    let book_title = doc.metadata.get_str("title").unwrap_or("Untitled").to_string();
+    let book_title = doc
+        .metadata
+        .get_str("title")
+        .unwrap_or("Untitled")
+        .to_string();
     let lang = doc.metadata.get_str("lang").unwrap_or("en").to_string();
 
     let author = if !author_str.is_empty() {
@@ -214,11 +218,7 @@ fn nodes_to_section(nodes: &[Node]) -> Section {
             }
             node::CODE_BLOCK => {
                 // No code blocks in FB2 — wrap in p > code
-                let code_text = node
-                    .props
-                    .get_str(prop::CONTENT)
-                    .unwrap_or("")
-                    .to_string();
+                let code_text = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
                 content.push(SectionContent::Para(vec![InlineElement::Code(code_text)]));
             }
             node::HORIZONTAL_RULE => {
@@ -301,7 +301,10 @@ fn div_to_poem(node: &Node) -> Poem {
                         }
                     })
                     .collect();
-                Some(Stanza { v, ..Default::default() })
+                Some(Stanza {
+                    v,
+                    ..Default::default()
+                })
             } else {
                 None
             }
@@ -357,9 +360,9 @@ fn node_to_inline(node: &Node) -> InlineElement {
         node::STRIKEOUT => InlineElement::Strikethrough(nodes_to_inlines(&node.children)),
         node::SUBSCRIPT => InlineElement::Sub(nodes_to_inlines(&node.children)),
         node::SUPERSCRIPT => InlineElement::Sup(nodes_to_inlines(&node.children)),
-        node::CODE => InlineElement::Code(
-            node.props.get_str(prop::CONTENT).unwrap_or("").to_string(),
-        ),
+        node::CODE => {
+            InlineElement::Code(node.props.get_str(prop::CONTENT).unwrap_or("").to_string())
+        }
         node::IMAGE => {
             let href = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let href = if href.starts_with('#') || href.contains("://") {
@@ -496,4 +499,3 @@ mod tests {
         assert!(xml.contains("2. second"));
     }
 }
-

@@ -164,7 +164,11 @@ mod tests {
     fn test_parse_page_break() {
         let input = "Action\n\n===\n\nMore action";
         let (doc, _diags) = parse(input);
-        assert!(doc.blocks.iter().any(|b| matches!(b, Block::PageBreak { .. })));
+        assert!(
+            doc.blocks
+                .iter()
+                .any(|b| matches!(b, Block::PageBreak { .. }))
+        );
     }
 
     #[test]
@@ -224,7 +228,11 @@ mod tests {
     fn test_parse_forced_character() {
         let input = "@McCLANE\nYippee ki-yay.";
         let (doc, _diags) = parse(input);
-        assert!(doc.blocks.iter().any(|b| matches!(b, Block::Character { .. })));
+        assert!(
+            doc.blocks
+                .iter()
+                .any(|b| matches!(b, Block::Character { .. }))
+        );
         if let Block::Character { ref name, .. } = doc.blocks[0] {
             assert_eq!(name, "McCLANE");
         }
@@ -249,8 +257,7 @@ mod tests {
         let stripped = doc.strip_spans();
         for block in &stripped.blocks {
             match block {
-                Block::SceneHeading { span, .. }
-                | Block::Action { span, .. } => {
+                Block::SceneHeading { span, .. } | Block::Action { span, .. } => {
                     assert_eq!(*span, Span::NONE);
                 }
                 _ => {}

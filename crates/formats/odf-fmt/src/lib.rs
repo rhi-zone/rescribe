@@ -47,7 +47,7 @@ pub mod parser;
 pub mod writer;
 
 pub use ast::*;
-pub use error::{Diagnostic, DiagLevel, Error, ParseResult};
+pub use error::{DiagLevel, Diagnostic, Error, ParseResult};
 pub use events::{EventIter, OdfEvent};
 
 /// Parse an ODF ZIP archive from bytes and return a SAX-style event iterator.

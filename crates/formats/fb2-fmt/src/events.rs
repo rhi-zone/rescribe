@@ -40,11 +40,17 @@ pub enum Event {
     /// Complete `<description>` metadata block.
     Metadata(Box<Description>),
     /// `<body name="…">` opened.
-    StartBody { name: Option<String>, lang: Option<String> },
+    StartBody {
+        name: Option<String>,
+        lang: Option<String>,
+    },
     /// `</body>` closed.
     EndBody,
     /// `<section id="…">` opened.
-    StartSection { id: Option<String>, lang: Option<String> },
+    StartSection {
+        id: Option<String>,
+        lang: Option<String>,
+    },
     /// `</section>` closed.
     EndSection,
     /// `<title>` opened.
@@ -161,7 +167,10 @@ pub struct StreamingParser<H: Handler> {
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` delivering events to `handler`.
     pub fn new(handler: H) -> Self {
-        StreamingParser { buf: Vec::new(), handler }
+        StreamingParser {
+            buf: Vec::new(),
+            handler,
+        }
     }
 
     /// Feed a chunk of input bytes.
@@ -258,25 +267,45 @@ enum ParseState {
     Section,
     /// Marker for an open `<title>` inside a section.
     SectionTitle,
-    TitlePara { inlines: Vec<InlineElement> },
-    Paragraph { inlines: Vec<InlineElement> },
-    Subtitle { inlines: Vec<InlineElement> },
+    TitlePara {
+        inlines: Vec<InlineElement>,
+    },
+    Paragraph {
+        inlines: Vec<InlineElement>,
+    },
+    Subtitle {
+        inlines: Vec<InlineElement>,
+    },
     /// Marker for an open `<poem>` element.
     Poem,
     /// Marker for an open `<title>` inside a poem.
     PoemTitle,
     /// Marker for an open `<stanza>` element.
     Stanza,
-    VerseLine { inlines: Vec<InlineElement> },
+    VerseLine {
+        inlines: Vec<InlineElement>,
+    },
     /// Marker for an open `<cite>` element.
     Cite,
     /// Marker for an open `<epigraph>` element.
     Epigraph,
-    TextAuthor { inlines: Vec<InlineElement> },
+    TextAuthor {
+        inlines: Vec<InlineElement>,
+    },
     Annotation,
-    InlineWrapper { kind: InlineKind, children: Vec<InlineElement> },
-    Link { href: String, link_kind: Option<String>, children: Vec<InlineElement> },
-    Binary { id: String, content_type: String },
+    InlineWrapper {
+        kind: InlineKind,
+        children: Vec<InlineElement>,
+    },
+    Link {
+        href: String,
+        link_kind: Option<String>,
+        children: Vec<InlineElement>,
+    },
+    Binary {
+        id: String,
+        content_type: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -334,10 +363,12 @@ impl<'a> XmlEventIter<'a> {
                 self.handle_end(&name);
             }
             Ok(XmlEvent::Text(ref e)) => {
-                self.current_text.push_str(&String::from_utf8_lossy(e.as_ref()));
+                self.current_text
+                    .push_str(&String::from_utf8_lossy(e.as_ref()));
             }
             Ok(XmlEvent::CData(ref e)) => {
-                self.current_text.push_str(&String::from_utf8_lossy(e.as_ref()));
+                self.current_text
+                    .push_str(&String::from_utf8_lossy(e.as_ref()));
             }
             Ok(XmlEvent::GeneralRef(ref e)) => {
                 let n = String::from_utf8_lossy(e);
@@ -459,8 +490,7 @@ impl<'a> XmlEventIter<'a> {
                     inlines.push(InlineElement::Text(text));
                     return;
                 }
-                ParseState::InlineWrapper { children, .. }
-                | ParseState::Link { children, .. } => {
+                ParseState::InlineWrapper { children, .. } | ParseState::Link { children, .. } => {
                     children.push(InlineElement::Text(text));
                     return;
                 }
@@ -484,8 +514,7 @@ impl<'a> XmlEventIter<'a> {
                     inlines.push(el);
                     return;
                 }
-                ParseState::InlineWrapper { children, .. }
-                | ParseState::Link { children, .. } => {
+                ParseState::InlineWrapper { children, .. } | ParseState::Link { children, .. } => {
                     children.push(el);
                     return;
                 }
@@ -500,11 +529,7 @@ impl<'a> XmlEventIter<'a> {
     fn is_title_context(&self) -> bool {
         matches!(
             self.stack.last(),
-            Some(
-                ParseState::SectionTitle
-                    | ParseState::BodyTitle
-                    | ParseState::PoemTitle
-            )
+            Some(ParseState::SectionTitle | ParseState::BodyTitle | ParseState::PoemTitle)
         )
     }
 
@@ -524,7 +549,10 @@ impl<'a> XmlEventIter<'a> {
                 let body_name = attrs.get("name").cloned();
                 let lang = attrs.get("lang").cloned();
                 self.stack.push(ParseState::Body);
-                self.pending.push_back(Event::StartBody { name: body_name, lang });
+                self.pending.push_back(Event::StartBody {
+                    name: body_name,
+                    lang,
+                });
             }
             "title" => {
                 match self.stack.last() {
@@ -542,13 +570,19 @@ impl<'a> XmlEventIter<'a> {
             }
             "p" => {
                 if self.is_title_context() {
-                    self.stack.push(ParseState::TitlePara { inlines: Vec::new() });
+                    self.stack.push(ParseState::TitlePara {
+                        inlines: Vec::new(),
+                    });
                 } else {
-                    self.stack.push(ParseState::Paragraph { inlines: Vec::new() });
+                    self.stack.push(ParseState::Paragraph {
+                        inlines: Vec::new(),
+                    });
                     self.pending.push_back(Event::StartParagraph);
                 }
             }
-            "subtitle" => self.stack.push(ParseState::Subtitle { inlines: Vec::new() }),
+            "subtitle" => self.stack.push(ParseState::Subtitle {
+                inlines: Vec::new(),
+            }),
             "epigraph" => {
                 let id = attrs.get("id").cloned();
                 self.stack.push(ParseState::Epigraph);
@@ -562,13 +596,17 @@ impl<'a> XmlEventIter<'a> {
                 self.stack.push(ParseState::Stanza);
                 self.pending.push_back(Event::StartStanza);
             }
-            "v" => self.stack.push(ParseState::VerseLine { inlines: Vec::new() }),
+            "v" => self.stack.push(ParseState::VerseLine {
+                inlines: Vec::new(),
+            }),
             "cite" => {
                 let id = attrs.get("id").cloned();
                 self.stack.push(ParseState::Cite);
                 self.pending.push_back(Event::StartCite { id });
             }
-            "text-author" => self.stack.push(ParseState::TextAuthor { inlines: Vec::new() }),
+            "text-author" => self.stack.push(ParseState::TextAuthor {
+                inlines: Vec::new(),
+            }),
             "table" => {
                 self.current_table = Some(Table {
                     id: attrs.get("id").cloned(),
@@ -617,7 +655,11 @@ impl<'a> XmlEventIter<'a> {
             "a" => {
                 let href = attrs.get("href").cloned().unwrap_or_default();
                 let kind = attrs.get("type").cloned();
-                self.stack.push(ParseState::Link { href, link_kind: kind, children: Vec::new() });
+                self.stack.push(ParseState::Link {
+                    href,
+                    link_kind: kind,
+                    children: Vec::new(),
+                });
             }
             "binary" => {
                 let id = attrs.get("id").cloned().unwrap_or_default();
@@ -662,7 +704,9 @@ impl<'a> XmlEventIter<'a> {
                     };
                     if self.desc.in_title_info {
                         self.desc.ti.sequence.push(seq);
-                    } else if self.desc.in_pub_info && let Some(pi) = self.desc.pi.as_mut() {
+                    } else if self.desc.in_pub_info
+                        && let Some(pi) = self.desc.pi.as_mut()
+                    {
                         pi.sequence.push(seq);
                     }
                 }
@@ -678,7 +722,11 @@ impl<'a> XmlEventIter<'a> {
                 let text = std::mem::take(&mut self.current_text);
                 let text = text.trim();
                 if let Ok(data) = base64::engine::general_purpose::STANDARD.decode(text) {
-                    self.pending.push_back(Event::Binary(Binary { id, content_type, data }));
+                    self.pending.push_back(Event::Binary(Binary {
+                        id,
+                        content_type,
+                        data,
+                    }));
                 }
             }
             return;
@@ -764,15 +812,27 @@ impl<'a> XmlEventIter<'a> {
                 };
                 self.push_inline(el);
             }
-            ParseState::Link { href, link_kind, children } => {
-                self.push_inline(InlineElement::Link { href, kind: link_kind, children });
+            ParseState::Link {
+                href,
+                link_kind,
+                children,
+            } => {
+                self.push_inline(InlineElement::Link {
+                    href,
+                    kind: link_kind,
+                    children,
+                });
             }
             ParseState::Binary { id, content_type } => {
                 // fallback — normally handled at top
                 let text = std::mem::take(&mut self.current_text);
                 let text = text.trim();
                 if let Ok(data) = base64::engine::general_purpose::STANDARD.decode(text) {
-                    self.pending.push_back(Event::Binary(Binary { id, content_type, data }));
+                    self.pending.push_back(Event::Binary(Binary {
+                        id,
+                        content_type,
+                        data,
+                    }));
                 }
             }
             ParseState::Description | ParseState::Annotation => {}
@@ -793,9 +853,10 @@ impl<'a> XmlEventIter<'a> {
                 }
             }
             "td" | "th" => {
-                if let (Some(cell), Some(row)) =
-                    (self.current_table_cell.take(), self.current_table_row.as_mut())
-                {
+                if let (Some(cell), Some(row)) = (
+                    self.current_table_cell.take(),
+                    self.current_table_row.as_mut(),
+                ) {
                     row.cell.push(cell);
                 }
             }
@@ -885,7 +946,10 @@ impl<'a> XmlEventIter<'a> {
             "publish-info" => self.desc.in_pub_info = false,
             "custom-info" => {
                 if let Some(info_type) = self.desc.current_custom_info_type.take() {
-                    self.desc.desc.custom_info.push(CustomInfo { info_type, content: text });
+                    self.desc.desc.custom_info.push(CustomInfo {
+                        info_type,
+                        content: text,
+                    });
                 }
             }
             _ => {
@@ -900,34 +964,88 @@ impl<'a> XmlEventIter<'a> {
         // Try author context first
         if let Some(a) = self.desc.current_author_in_ti.as_mut() {
             match target {
-                LeafTarget::FirstName => { a.first_name = Some(text); return; }
-                LeafTarget::MiddleName => { a.middle_name = Some(text); return; }
-                LeafTarget::LastName => { a.last_name = Some(text); return; }
-                LeafTarget::Nickname => { a.nickname = Some(text); return; }
-                LeafTarget::Email => { a.email.push(text); return; }
-                LeafTarget::Id => { a.id = Some(text); return; }
+                LeafTarget::FirstName => {
+                    a.first_name = Some(text);
+                    return;
+                }
+                LeafTarget::MiddleName => {
+                    a.middle_name = Some(text);
+                    return;
+                }
+                LeafTarget::LastName => {
+                    a.last_name = Some(text);
+                    return;
+                }
+                LeafTarget::Nickname => {
+                    a.nickname = Some(text);
+                    return;
+                }
+                LeafTarget::Email => {
+                    a.email.push(text);
+                    return;
+                }
+                LeafTarget::Id => {
+                    a.id = Some(text);
+                    return;
+                }
                 _ => {}
             }
         }
         if let Some(a) = self.desc.current_author_in_di.as_mut() {
             match target {
-                LeafTarget::FirstName => { a.first_name = Some(text); return; }
-                LeafTarget::MiddleName => { a.middle_name = Some(text); return; }
-                LeafTarget::LastName => { a.last_name = Some(text); return; }
-                LeafTarget::Nickname => { a.nickname = Some(text); return; }
-                LeafTarget::Email => { a.email.push(text); return; }
-                LeafTarget::Id => { a.id = Some(text); return; }
+                LeafTarget::FirstName => {
+                    a.first_name = Some(text);
+                    return;
+                }
+                LeafTarget::MiddleName => {
+                    a.middle_name = Some(text);
+                    return;
+                }
+                LeafTarget::LastName => {
+                    a.last_name = Some(text);
+                    return;
+                }
+                LeafTarget::Nickname => {
+                    a.nickname = Some(text);
+                    return;
+                }
+                LeafTarget::Email => {
+                    a.email.push(text);
+                    return;
+                }
+                LeafTarget::Id => {
+                    a.id = Some(text);
+                    return;
+                }
                 _ => {}
             }
         }
         if let Some(a) = self.desc.current_translator.as_mut() {
             match target {
-                LeafTarget::FirstName => { a.first_name = Some(text); return; }
-                LeafTarget::MiddleName => { a.middle_name = Some(text); return; }
-                LeafTarget::LastName => { a.last_name = Some(text); return; }
-                LeafTarget::Nickname => { a.nickname = Some(text); return; }
-                LeafTarget::Email => { a.email.push(text); return; }
-                LeafTarget::Id => { a.id = Some(text); return; }
+                LeafTarget::FirstName => {
+                    a.first_name = Some(text);
+                    return;
+                }
+                LeafTarget::MiddleName => {
+                    a.middle_name = Some(text);
+                    return;
+                }
+                LeafTarget::LastName => {
+                    a.last_name = Some(text);
+                    return;
+                }
+                LeafTarget::Nickname => {
+                    a.nickname = Some(text);
+                    return;
+                }
+                LeafTarget::Email => {
+                    a.email.push(text);
+                    return;
+                }
+                LeafTarget::Id => {
+                    a.id = Some(text);
+                    return;
+                }
                 _ => {}
             }
         }
@@ -935,12 +1053,24 @@ impl<'a> XmlEventIter<'a> {
         // Title-info fields
         if self.desc.in_title_info {
             match target {
-                LeafTarget::Genre => { self.desc.ti.genre.push(text); }
-                LeafTarget::BookTitle => { self.desc.ti.book_title = text; }
-                LeafTarget::Lang => { self.desc.ti.lang = text; }
-                LeafTarget::SrcLang => { self.desc.ti.src_lang = Some(text); }
-                LeafTarget::Keywords => { self.desc.ti.keywords = Some(text); }
-                LeafTarget::Date => { self.desc.ti.date = Some(text); }
+                LeafTarget::Genre => {
+                    self.desc.ti.genre.push(text);
+                }
+                LeafTarget::BookTitle => {
+                    self.desc.ti.book_title = text;
+                }
+                LeafTarget::Lang => {
+                    self.desc.ti.lang = text;
+                }
+                LeafTarget::SrcLang => {
+                    self.desc.ti.src_lang = Some(text);
+                }
+                LeafTarget::Keywords => {
+                    self.desc.ti.keywords = Some(text);
+                }
+                LeafTarget::Date => {
+                    self.desc.ti.date = Some(text);
+                }
                 _ => {}
             }
             return;
@@ -950,12 +1080,24 @@ impl<'a> XmlEventIter<'a> {
         if self.desc.in_doc_info {
             if let Some(di) = self.desc.di.as_mut() {
                 match target {
-                    LeafTarget::ProgramUsed => { di.program_used = Some(text); }
-                    LeafTarget::Date => { di.date = Some(text); }
-                    LeafTarget::SrcUrl => { di.src_url.push(text); }
-                    LeafTarget::SrcOcr => { di.src_ocr = Some(text); }
-                    LeafTarget::Id => { di.id = Some(text); }
-                    LeafTarget::Version => { di.version = Some(text); }
+                    LeafTarget::ProgramUsed => {
+                        di.program_used = Some(text);
+                    }
+                    LeafTarget::Date => {
+                        di.date = Some(text);
+                    }
+                    LeafTarget::SrcUrl => {
+                        di.src_url.push(text);
+                    }
+                    LeafTarget::SrcOcr => {
+                        di.src_ocr = Some(text);
+                    }
+                    LeafTarget::Id => {
+                        di.id = Some(text);
+                    }
+                    LeafTarget::Version => {
+                        di.version = Some(text);
+                    }
                     _ => {}
                 }
             }
@@ -963,13 +1105,25 @@ impl<'a> XmlEventIter<'a> {
         }
 
         // Pub-info fields
-        if self.desc.in_pub_info && let Some(pi) = self.desc.pi.as_mut() {
+        if self.desc.in_pub_info
+            && let Some(pi) = self.desc.pi.as_mut()
+        {
             match target {
-                LeafTarget::BookName => { pi.book_name = Some(text); }
-                LeafTarget::Publisher => { pi.publisher = Some(text); }
-                LeafTarget::City => { pi.city = Some(text); }
-                LeafTarget::Year => { pi.year = Some(text); }
-                LeafTarget::Isbn => { pi.isbn = Some(text); }
+                LeafTarget::BookName => {
+                    pi.book_name = Some(text);
+                }
+                LeafTarget::Publisher => {
+                    pi.publisher = Some(text);
+                }
+                LeafTarget::City => {
+                    pi.city = Some(text);
+                }
+                LeafTarget::Year => {
+                    pi.year = Some(text);
+                }
+                LeafTarget::Isbn => {
+                    pi.isbn = Some(text);
+                }
                 _ => {}
             }
         }
@@ -1001,10 +1155,29 @@ impl<'a> XmlEventIter<'a> {
 fn is_leaf_tag(name: &str) -> bool {
     matches!(
         name,
-        "genre" | "book-title" | "lang" | "src-lang" | "keywords" | "date" | "version"
-        | "program-used" | "src-url" | "src-ocr" | "id" | "book-name" | "publisher"
-        | "city" | "year" | "isbn" | "first-name" | "middle-name" | "last-name"
-        | "nickname" | "email" | "code" | "sequence"
+        "genre"
+            | "book-title"
+            | "lang"
+            | "src-lang"
+            | "keywords"
+            | "date"
+            | "version"
+            | "program-used"
+            | "src-url"
+            | "src-ocr"
+            | "id"
+            | "book-name"
+            | "publisher"
+            | "city"
+            | "year"
+            | "isbn"
+            | "first-name"
+            | "middle-name"
+            | "last-name"
+            | "nickname"
+            | "email"
+            | "code"
+            | "sequence"
     )
 }
 
@@ -1031,7 +1204,7 @@ fn collect_attrs(e: &quick_xml::events::BytesStart<'_>) -> AttrMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{parse, emit};
+    use crate::{emit, parse};
 
     const BASIC_FB2: &str = r#"<?xml version="1.0"?>
 <FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
@@ -1163,7 +1336,9 @@ mod tests {
     }
 
     fn collect_cite_events(cite: &Cite, out: &mut Vec<Event>) {
-        out.push(Event::StartCite { id: cite.id.clone() });
+        out.push(Event::StartCite {
+            id: cite.id.clone(),
+        });
         for content in &cite.content {
             match content {
                 CiteContent::Para(il) => {
@@ -1183,7 +1358,9 @@ mod tests {
     }
 
     fn collect_epigraph_events(epigraph: &Epigraph, out: &mut Vec<Event>) {
-        out.push(Event::StartEpigraph { id: epigraph.id.clone() });
+        out.push(Event::StartEpigraph {
+            id: epigraph.id.clone(),
+        });
         for content in &epigraph.content {
             match content {
                 EpigraphContent::Para(il) => {
@@ -1212,7 +1389,10 @@ mod tests {
         assert!(evts.iter().any(|e| matches!(e, Event::Metadata(_))));
         assert!(evts.iter().any(|e| matches!(e, Event::StartBody { .. })));
         assert!(evts.iter().any(|e| matches!(e, Event::EndBody)));
-        assert!(evts.iter().any(|e| matches!(e, Event::StartSection { id: Some(s), .. } if s == "s1")));
+        assert!(
+            evts.iter()
+                .any(|e| matches!(e, Event::StartSection { id: Some(s), .. } if s == "s1"))
+        );
         assert!(evts.iter().any(|e| matches!(e, Event::EndSection)));
         assert!(evts.iter().any(|e| matches!(e, Event::EmptyLine)));
     }
@@ -1221,13 +1401,20 @@ mod tests {
     fn test_events_metadata() {
         let evts = collect_events(BASIC_FB2.as_bytes());
         let meta = evts.iter().find_map(|e| {
-            if let Event::Metadata(d) = e { Some(d) } else { None }
+            if let Event::Metadata(d) = e {
+                Some(d)
+            } else {
+                None
+            }
         });
         let meta = meta.expect("should have Metadata event");
         assert_eq!(meta.title_info.book_title, "Test Book");
         assert_eq!(meta.title_info.lang, "en");
         assert_eq!(meta.title_info.genre, vec!["prose"]);
-        assert_eq!(meta.title_info.author[0].first_name.as_deref(), Some("John"));
+        assert_eq!(
+            meta.title_info.author[0].first_name.as_deref(),
+            Some("John")
+        );
         assert_eq!(meta.title_info.author[0].last_name.as_deref(), Some("Doe"));
     }
 
@@ -1235,7 +1422,11 @@ mod tests {
     fn test_events_binary() {
         let evts = collect_events(BASIC_FB2.as_bytes());
         let bin = evts.iter().find_map(|e| {
-            if let Event::Binary(b) = e { Some(b) } else { None }
+            if let Event::Binary(b) = e {
+                Some(b)
+            } else {
+                None
+            }
         });
         let bin = bin.expect("should have Binary event");
         assert_eq!(bin.id, "cover.jpg");
@@ -1246,11 +1437,23 @@ mod tests {
     fn test_events_inline_content() {
         let evts = collect_events(BASIC_FB2.as_bytes());
         let inline = evts.iter().find_map(|e| {
-            if let Event::Inline(il) = e { Some(il) } else { None }
+            if let Event::Inline(il) = e {
+                Some(il)
+            } else {
+                None
+            }
         });
         let inline = inline.expect("should have Inline event");
-        assert!(inline.iter().any(|el| matches!(el, InlineElement::Text(t) if t.contains("Hello"))));
-        assert!(inline.iter().any(|el| matches!(el, InlineElement::Emphasis(_))));
+        assert!(
+            inline
+                .iter()
+                .any(|el| matches!(el, InlineElement::Text(t) if t.contains("Hello")))
+        );
+        assert!(
+            inline
+                .iter()
+                .any(|el| matches!(el, InlineElement::Emphasis(_)))
+        );
     }
 
     #[test]
@@ -1279,7 +1482,10 @@ mod tests {
         }
         sp.finish();
 
-        assert_eq!(collected, expected, "StreamingParser byte-by-byte must equal events()");
+        assert_eq!(
+            collected, expected,
+            "StreamingParser byte-by-byte must equal events()"
+        );
 
         // Feed in two halves
         let mid = input.len() / 2;
@@ -1289,7 +1495,10 @@ mod tests {
         sp2.feed(&input[mid..]);
         sp2.finish();
 
-        assert_eq!(collected2, expected, "StreamingParser split-chunk must equal events()");
+        assert_eq!(
+            collected2, expected,
+            "StreamingParser split-chunk must equal events()"
+        );
     }
 
     #[test]
@@ -1341,9 +1550,15 @@ mod tests {
   </body>
 </FictionBook>"#;
         let evts: Vec<Event> = events(xml.as_bytes()).collect();
-        assert!(evts.iter().any(|e| matches!(e, Event::StartEpigraph { id: Some(s), .. } if s == "e1")));
+        assert!(
+            evts.iter()
+                .any(|e| matches!(e, Event::StartEpigraph { id: Some(s), .. } if s == "e1"))
+        );
         assert!(evts.iter().any(|e| matches!(e, Event::EndEpigraph)));
-        assert!(evts.iter().any(|e| matches!(e, Event::StartCite { id: Some(s), .. } if s == "c1")));
+        assert!(
+            evts.iter()
+                .any(|e| matches!(e, Event::StartCite { id: Some(s), .. } if s == "c1"))
+        );
         assert!(evts.iter().any(|e| matches!(e, Event::EndCite)));
     }
 

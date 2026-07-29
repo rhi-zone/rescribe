@@ -30,7 +30,10 @@ pub struct Writer<W: Write> {
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
-        Writer { sink, events: Vec::new() }
+        Writer {
+            sink,
+            events: Vec::new(),
+        }
     }
 
     /// Feed one event to the writer.
@@ -58,31 +61,83 @@ fn events_to_doc(events: Vec<OwnedMarkuaEvent>) -> MarkuaDoc {
 }
 
 enum Frame {
-    Document { blocks: Vec<Block> },
-    Paragraph { inlines: Vec<Inline> },
-    Heading { level: u8, inlines: Vec<Inline> },
-    Blockquote { blocks: Vec<Block> },
-    List { ordered: bool, items: Vec<Vec<Block>> },
-    ListItem { blocks: Vec<Block> },
-    Table { rows: Vec<TableRow> },
-    TableRow { cells: Vec<Vec<Inline>> },
-    TableCell { inlines: Vec<Inline> },
-    SpecialBlock { kind: String, blocks: Vec<Block> },
-    DefinitionList { items: Vec<(Vec<Inline>, Vec<Block>)> },
-    DefinitionTerm { inlines: Vec<Inline> },
-    DefinitionDesc { blocks: Vec<Block> },
-    Figure { blocks: Vec<Block> },
-    Caption { inlines: Vec<Inline> },
+    Document {
+        blocks: Vec<Block>,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+    },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+    },
+    Blockquote {
+        blocks: Vec<Block>,
+    },
+    List {
+        ordered: bool,
+        items: Vec<Vec<Block>>,
+    },
+    ListItem {
+        blocks: Vec<Block>,
+    },
+    Table {
+        rows: Vec<TableRow>,
+    },
+    TableRow {
+        cells: Vec<Vec<Inline>>,
+    },
+    TableCell {
+        inlines: Vec<Inline>,
+    },
+    SpecialBlock {
+        kind: String,
+        blocks: Vec<Block>,
+    },
+    DefinitionList {
+        items: Vec<(Vec<Inline>, Vec<Block>)>,
+    },
+    DefinitionTerm {
+        inlines: Vec<Inline>,
+    },
+    DefinitionDesc {
+        blocks: Vec<Block>,
+    },
+    Figure {
+        blocks: Vec<Block>,
+    },
+    Caption {
+        inlines: Vec<Inline>,
+    },
     // Inline spans
-    Strong { inlines: Vec<Inline> },
-    Emphasis { inlines: Vec<Inline> },
-    Strikethrough { inlines: Vec<Inline> },
-    Subscript { inlines: Vec<Inline> },
-    Superscript { inlines: Vec<Inline> },
-    Underline { inlines: Vec<Inline> },
-    SmallCaps { inlines: Vec<Inline> },
-    FootnoteRef { inlines: Vec<Inline> },
-    Link { url: String, inlines: Vec<Inline> },
+    Strong {
+        inlines: Vec<Inline>,
+    },
+    Emphasis {
+        inlines: Vec<Inline>,
+    },
+    Strikethrough {
+        inlines: Vec<Inline>,
+    },
+    Subscript {
+        inlines: Vec<Inline>,
+    },
+    Superscript {
+        inlines: Vec<Inline>,
+    },
+    Underline {
+        inlines: Vec<Inline>,
+    },
+    SmallCaps {
+        inlines: Vec<Inline>,
+    },
+    FootnoteRef {
+        inlines: Vec<Inline>,
+    },
+    Link {
+        url: String,
+        inlines: Vec<Inline>,
+    },
 }
 
 struct DocBuilder {
@@ -91,7 +146,9 @@ struct DocBuilder {
 
 impl DocBuilder {
     fn new() -> Self {
-        DocBuilder { stack: vec![Frame::Document { blocks: vec![] }] }
+        DocBuilder {
+            stack: vec![Frame::Document { blocks: vec![] }],
+        }
     }
 
     #[allow(clippy::too_many_lines, clippy::collapsible_if)]
@@ -103,15 +160,25 @@ impl DocBuilder {
             }
             OwnedMarkuaEvent::EndParagraph => {
                 if let Some(Frame::Paragraph { inlines }) = self.stack.pop() {
-                    self.push_block(Block::Paragraph { inlines, span: Span::NONE });
+                    self.push_block(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::StartHeading { level } => {
-                self.stack.push(Frame::Heading { level, inlines: vec![] });
+                self.stack.push(Frame::Heading {
+                    level,
+                    inlines: vec![],
+                });
             }
             OwnedMarkuaEvent::EndHeading => {
                 if let Some(Frame::Heading { level, inlines }) = self.stack.pop() {
-                    self.push_block(Block::Heading { level, inlines, span: Span::NONE });
+                    self.push_block(Block::Heading {
+                        level,
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::StartBlockquote => {
@@ -119,15 +186,25 @@ impl DocBuilder {
             }
             OwnedMarkuaEvent::EndBlockquote => {
                 if let Some(Frame::Blockquote { blocks }) = self.stack.pop() {
-                    self.push_block(Block::Blockquote { children: blocks, span: Span::NONE });
+                    self.push_block(Block::Blockquote {
+                        children: blocks,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::StartList { ordered } => {
-                self.stack.push(Frame::List { ordered, items: vec![] });
+                self.stack.push(Frame::List {
+                    ordered,
+                    items: vec![],
+                });
             }
             OwnedMarkuaEvent::EndList => {
                 if let Some(Frame::List { ordered, items }) = self.stack.pop() {
-                    self.push_block(Block::List { ordered, items, span: Span::NONE });
+                    self.push_block(Block::List {
+                        ordered,
+                        items,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::StartListItem => {
@@ -158,7 +235,10 @@ impl DocBuilder {
             }
             OwnedMarkuaEvent::EndTable => {
                 if let Some(Frame::Table { rows }) = self.stack.pop() {
-                    self.push_block(Block::Table { rows, span: Span::NONE });
+                    self.push_block(Block::Table {
+                        rows,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::StartTableRow => {
@@ -168,7 +248,10 @@ impl DocBuilder {
                 if let Some(Frame::TableRow { cells }) = self.stack.pop()
                     && let Some(Frame::Table { rows }) = self.stack.last_mut()
                 {
-                    rows.push(TableRow { cells, span: Span::NONE });
+                    rows.push(TableRow {
+                        cells,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::StartTableCell => {
@@ -182,11 +265,18 @@ impl DocBuilder {
                 }
             }
             OwnedMarkuaEvent::StartSpecialBlock { kind } => {
-                self.stack.push(Frame::SpecialBlock { kind, blocks: vec![] });
+                self.stack.push(Frame::SpecialBlock {
+                    kind,
+                    blocks: vec![],
+                });
             }
             OwnedMarkuaEvent::EndSpecialBlock => {
                 if let Some(Frame::SpecialBlock { kind, blocks }) = self.stack.pop() {
-                    self.push_block(Block::SpecialBlock { block_type: kind, children: blocks, span: Span::NONE });
+                    self.push_block(Block::SpecialBlock {
+                        block_type: kind,
+                        children: blocks,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::StartDefinitionList => {
@@ -194,7 +284,10 @@ impl DocBuilder {
             }
             OwnedMarkuaEvent::EndDefinitionList => {
                 if let Some(Frame::DefinitionList { items }) = self.stack.pop() {
-                    self.push_block(Block::DefinitionList { items, span: Span::NONE });
+                    self.push_block(Block::DefinitionList {
+                        items,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::StartDefinitionTerm => {
@@ -224,8 +317,15 @@ impl DocBuilder {
             }
             OwnedMarkuaEvent::EndFigure => {
                 if let Some(Frame::Figure { blocks }) = self.stack.pop() {
-                    let body = blocks.into_iter().next().unwrap_or(Block::Paragraph { inlines: vec![], span: Span::NONE });
-                    self.push_block(Block::Figure { caption: vec![], body: Box::new(body), span: Span::NONE });
+                    let body = blocks.into_iter().next().unwrap_or(Block::Paragraph {
+                        inlines: vec![],
+                        span: Span::NONE,
+                    });
+                    self.push_block(Block::Figure {
+                        caption: vec![],
+                        body: Box::new(body),
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::StartCaption => {
@@ -237,7 +337,10 @@ impl DocBuilder {
                     if let Some(Frame::Figure { .. }) = self.stack.last() {
                         // Caption was inside figure; store as paragraph for now
                         if let Some(Frame::Figure { blocks }) = self.stack.last_mut() {
-                            blocks.push(Block::Paragraph { inlines, span: Span::NONE });
+                            blocks.push(Block::Paragraph {
+                                inlines,
+                                span: Span::NONE,
+                            });
                         }
                     }
                 }
@@ -314,28 +417,48 @@ impl DocBuilder {
             }
             OwnedMarkuaEvent::EndFootnoteRef => {
                 if let Some(Frame::FootnoteRef { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::FootnoteRef { content: inlines, span: Span::NONE });
+                    self.push_inline(Inline::FootnoteRef {
+                        content: inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::InlineCode(cow) => {
                 self.push_inline(Inline::Code(cow.into_owned(), Span::NONE));
             }
             OwnedMarkuaEvent::StartLink { url } => {
-                self.stack.push(Frame::Link { url, inlines: vec![] });
+                self.stack.push(Frame::Link {
+                    url,
+                    inlines: vec![],
+                });
             }
             OwnedMarkuaEvent::EndLink => {
                 if let Some(Frame::Link { url, inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Link { url, children: inlines, span: Span::NONE });
+                    self.push_inline(Inline::Link {
+                        url,
+                        children: inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedMarkuaEvent::Image { url, alt } => {
-                self.push_inline(Inline::Image { url, alt, span: Span::NONE });
+                self.push_inline(Inline::Image {
+                    url,
+                    alt,
+                    span: Span::NONE,
+                });
             }
             OwnedMarkuaEvent::IndexTerm { term } => {
-                self.push_inline(Inline::IndexTerm { term, span: Span::NONE });
+                self.push_inline(Inline::IndexTerm {
+                    term,
+                    span: Span::NONE,
+                });
             }
             OwnedMarkuaEvent::MathInline { content } => {
-                self.push_inline(Inline::MathInline { content, span: Span::NONE });
+                self.push_inline(Inline::MathInline {
+                    content,
+                    span: Span::NONE,
+                });
             }
         }
     }
@@ -395,7 +518,9 @@ mod tests {
     fn test_writer_heading() {
         let mut w = Writer::new(Vec::<u8>::new());
         w.write_event(OwnedMarkuaEvent::StartHeading { level: 1 });
-        w.write_event(OwnedMarkuaEvent::Text(std::borrow::Cow::Owned("Hello".to_string())));
+        w.write_event(OwnedMarkuaEvent::Text(std::borrow::Cow::Owned(
+            "Hello".to_string(),
+        )));
         w.write_event(OwnedMarkuaEvent::EndHeading);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();
@@ -406,7 +531,9 @@ mod tests {
     fn test_writer_paragraph() {
         let mut w = Writer::new(Vec::<u8>::new());
         w.write_event(OwnedMarkuaEvent::StartParagraph);
-        w.write_event(OwnedMarkuaEvent::Text(std::borrow::Cow::Owned("World".to_string())));
+        w.write_event(OwnedMarkuaEvent::Text(std::borrow::Cow::Owned(
+            "World".to_string(),
+        )));
         w.write_event(OwnedMarkuaEvent::EndParagraph);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();
@@ -425,6 +552,10 @@ mod tests {
         let emitted_text = String::from_utf8(bytes).unwrap();
         let (doc_orig, _) = crate::parse::parse(input);
         let (doc_emit, _) = crate::parse::parse(&emitted_text);
-        assert_eq!(doc_orig.blocks.len(), doc_emit.blocks.len(), "writer roundtrip block count mismatch");
+        assert_eq!(
+            doc_orig.blocks.len(),
+            doc_emit.blocks.len(),
+            "writer roundtrip block count mismatch"
+        );
     }
 }

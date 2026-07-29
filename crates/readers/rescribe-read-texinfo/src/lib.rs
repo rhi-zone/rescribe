@@ -143,20 +143,29 @@ fn block_to_node(block: &Block, _warnings: &mut Vec<FidelityWarning>) -> Node {
                 );
                 let desc_text = entry.description.clone().unwrap_or_default();
                 def_nodes.push(
-                    Node::new(node::DEFINITION_DESC)
-                        .child(Node::new(node::PARAGRAPH).child(
-                            Node::new(node::TEXT).prop(prop::CONTENT, desc_text),
-                        )),
+                    Node::new(node::DEFINITION_DESC).child(
+                        Node::new(node::PARAGRAPH)
+                            .child(Node::new(node::TEXT).prop(prop::CONTENT, desc_text)),
+                    ),
                 );
             }
             Node::new("menu").children(def_nodes)
         }
 
-        Block::RawBlock { environment, content, .. } => Node::new(node::RAW_BLOCK)
+        Block::RawBlock {
+            environment,
+            content,
+            ..
+        } => Node::new(node::RAW_BLOCK)
             .prop(prop::FORMAT, environment.clone())
             .prop(prop::CONTENT, content.clone()),
 
-        Block::Float { float_type, label, children, .. } => {
+        Block::Float {
+            float_type,
+            label,
+            children,
+            ..
+        } => {
             let mut n = Node::new("float");
             if let Some(ft) = float_type {
                 n = n.prop("texinfo:float-type", ft.clone());
@@ -248,7 +257,9 @@ fn inline_to_node(inline: &Inline) -> Node {
 
         Inline::Cite(s, _) => Node::new("cite").prop(prop::CONTENT, s.clone()),
 
-        Inline::Acronym { abbrev, expansion, .. } => {
+        Inline::Acronym {
+            abbrev, expansion, ..
+        } => {
             let mut n = Node::new("acronym").prop("texinfo:abbrev", abbrev.clone());
             if let Some(exp) = expansion {
                 n = n.prop("texinfo:expansion", exp.clone());
@@ -256,7 +267,9 @@ fn inline_to_node(inline: &Inline) -> Node {
             n.prop(prop::CONTENT, abbrev.clone())
         }
 
-        Inline::Abbr { abbrev, expansion, .. } => {
+        Inline::Abbr {
+            abbrev, expansion, ..
+        } => {
             let mut n = Node::new("abbr").prop("texinfo:abbrev", abbrev.clone());
             if let Some(exp) = expansion {
                 n = n.prop("texinfo:expansion", exp.clone());
@@ -264,11 +277,13 @@ fn inline_to_node(inline: &Inline) -> Node {
             n.prop(prop::CONTENT, abbrev.clone())
         }
 
-        Inline::Roman(s, _) => Node::new("roman")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, s.clone())),
+        Inline::Roman(s, _) => {
+            Node::new("roman").child(Node::new(node::TEXT).prop(prop::CONTENT, s.clone()))
+        }
 
-        Inline::SmallCaps(s, _) => Node::new("small_caps")
-            .child(Node::new(node::TEXT).prop(prop::CONTENT, s.clone())),
+        Inline::SmallCaps(s, _) => {
+            Node::new("small_caps").child(Node::new(node::TEXT).prop(prop::CONTENT, s.clone()))
+        }
 
         Inline::DirectItalic(children, _) => {
             let inline_nodes = inlines_to_nodes(children);
@@ -280,7 +295,9 @@ fn inline_to_node(inline: &Inline) -> Node {
             Node::new("direct_bold").children(inline_nodes)
         }
 
-        Inline::DirectTypewriter(s, _) => Node::new("direct_typewriter").prop(prop::CONTENT, s.clone()),
+        Inline::DirectTypewriter(s, _) => {
+            Node::new("direct_typewriter").prop(prop::CONTENT, s.clone())
+        }
 
         Inline::Image { file, alt, .. } => {
             let mut n = Node::new(node::IMAGE).prop(prop::URL, file.clone());
@@ -290,7 +307,11 @@ fn inline_to_node(inline: &Inline) -> Node {
             n
         }
 
-        Inline::CrossRef { node: ref_node, text, .. } => {
+        Inline::CrossRef {
+            node: ref_node,
+            text,
+            ..
+        } => {
             let mut n = Node::new("cross_ref").prop("texinfo:node", ref_node.clone());
             if let Some(t) = text {
                 n = n.prop(prop::CONTENT, t.clone());

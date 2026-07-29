@@ -12,8 +12,7 @@ pub mod writer;
 
 // Re-export everything callers need.
 pub use ast::{
-    Block, DefinitionItem, Diagnostic, Inline, MediawikiDoc, Severity, Span, TableCell,
-    TableRow,
+    Block, DefinitionItem, Diagnostic, Inline, MediawikiDoc, Severity, Span, TableCell, TableRow,
 };
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::emit;
@@ -86,7 +85,11 @@ mod tests {
             panic!("expected paragraph");
         };
         let has_link = inlines.iter().any(|i| {
-            if let Inline::Link { url, .. } = i { url == "Title" } else { false }
+            if let Inline::Link { url, .. } = i {
+                url == "Title"
+            } else {
+                false
+            }
         });
         assert!(has_link);
     }
@@ -151,7 +154,10 @@ mod tests {
         };
         assert!(inlines.iter().any(|i| matches!(
             i,
-            Inline::FootnoteRef { content: Some(_), .. }
+            Inline::FootnoteRef {
+                content: Some(_),
+                ..
+            }
         )));
     }
 
@@ -161,7 +167,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|i| matches!(i, Inline::MathInline { .. })));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::MathInline { .. }))
+        );
     }
 
     #[test]
@@ -187,7 +197,10 @@ mod tests {
         let (doc, _) =
             parse("<syntaxhighlight lang=\"python\">\nprint(\"hello\")\n</syntaxhighlight>");
         assert_eq!(doc.blocks.len(), 1);
-        if let Block::CodeBlock { language, content, .. } = &doc.blocks[0] {
+        if let Block::CodeBlock {
+            language, content, ..
+        } = &doc.blocks[0]
+        {
             assert_eq!(language.as_deref(), Some("python"));
             assert!(content.contains("print"));
         } else {

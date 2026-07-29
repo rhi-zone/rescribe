@@ -4,7 +4,9 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use tikiwiki::{Block as TwBlock, Inline as TwInline, ListItem as TwListItem, Span, TableCell as TwTableCell};
+use tikiwiki::{
+    Block as TwBlock, Inline as TwInline, ListItem as TwListItem, Span, TableCell as TwTableCell,
+};
 
 /// Emit a document to TikiWiki markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -23,7 +25,10 @@ pub fn emit_with_options(
         }
     }
 
-    let tw_doc = tikiwiki::TikiwikiDoc { blocks, span: Span::NONE };
+    let tw_doc = tikiwiki::TikiwikiDoc {
+        blocks,
+        span: Span::NONE,
+    };
     let output = tikiwiki::build(&tw_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
@@ -35,12 +40,19 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
             let inlines = nodes_to_inlines(&node.children);
-            Some(TwBlock::Heading { level, inlines, span: Span::NONE })
+            Some(TwBlock::Heading {
+                level,
+                inlines,
+                span: Span::NONE,
+            })
         }
 
         node::PARAGRAPH => {
             let inlines = nodes_to_inlines(&node.children);
-            Some(TwBlock::Paragraph { inlines, span: Span::NONE })
+            Some(TwBlock::Paragraph {
+                inlines,
+                span: Span::NONE,
+            })
         }
 
         node::CODE_BLOCK => {
@@ -50,12 +62,19 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
                 .unwrap_or_default()
                 .to_string();
             let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            Some(TwBlock::CodeBlock { content, language, span: Span::NONE })
+            Some(TwBlock::CodeBlock {
+                content,
+                language,
+                span: Span::NONE,
+            })
         }
 
         node::BLOCKQUOTE => {
             let blocks = node.children.iter().filter_map(node_to_block).collect();
-            Some(TwBlock::Blockquote { blocks, span: Span::NONE })
+            Some(TwBlock::Blockquote {
+                blocks,
+                span: Span::NONE,
+            })
         }
 
         node::LIST => {
@@ -64,10 +83,18 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
             for child in &node.children {
                 if child.kind.as_str() == node::LIST_ITEM {
                     let inlines = nodes_to_inlines(&child.children);
-                    items.push(TwListItem { inlines, children: Vec::new(), span: Span::NONE });
+                    items.push(TwListItem {
+                        inlines,
+                        children: Vec::new(),
+                        span: Span::NONE,
+                    });
                 }
             }
-            Some(TwBlock::List { ordered, items, span: Span::NONE })
+            Some(TwBlock::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            })
         }
 
         node::TABLE => {
@@ -80,13 +107,23 @@ fn node_to_block(node: &Node) -> Option<TwBlock> {
                             || cell_node.kind.as_str() == node::TABLE_HEADER
                         {
                             let inlines = nodes_to_inlines(&cell_node.children);
-                            cells.push(TwTableCell { inlines, span: Span::NONE });
+                            cells.push(TwTableCell {
+                                inlines,
+                                span: Span::NONE,
+                            });
                         }
                     }
-                    rows.push(tikiwiki::TableRow { cells, is_header: false, span: Span::NONE });
+                    rows.push(tikiwiki::TableRow {
+                        cells,
+                        is_header: false,
+                        span: Span::NONE,
+                    });
                 }
             }
-            Some(TwBlock::Table { rows, span: Span::NONE })
+            Some(TwBlock::Table {
+                rows,
+                span: Span::NONE,
+            })
         }
 
         node::HORIZONTAL_RULE => Some(TwBlock::HorizontalRule { span: Span::NONE }),
@@ -180,7 +217,11 @@ fn node_to_inline(node: &Node) -> Option<TwInline> {
                 .unwrap_or_default()
                 .to_string();
             let children = nodes_to_inlines(&node.children);
-            Some(TwInline::Link { url, children, span: Span::NONE })
+            Some(TwInline::Link {
+                url,
+                children,
+                span: Span::NONE,
+            })
         }
 
         node::IMAGE => {
@@ -194,7 +235,11 @@ fn node_to_inline(node: &Node) -> Option<TwInline> {
                 .get_str(prop::ALT)
                 .unwrap_or_default()
                 .to_string();
-            Some(TwInline::Image { url, alt, span: Span::NONE })
+            Some(TwInline::Image {
+                url,
+                alt,
+                span: Span::NONE,
+            })
         }
 
         node::LINE_BREAK => Some(TwInline::LineBreak { span: Span::NONE }),

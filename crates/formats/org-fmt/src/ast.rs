@@ -168,7 +168,17 @@ impl Block {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines, .. } => Block::Heading {
+            Block::Heading {
+                level,
+                todo,
+                priority,
+                tags,
+                properties,
+                scheduled,
+                deadline,
+                inlines,
+                ..
+            } => Block::Heading {
                 level: *level,
                 todo: todo.clone(),
                 priority: priority.clone(),
@@ -180,7 +190,11 @@ impl Block {
                 span: Span::NONE,
             },
             Block::CodeBlock {
-                language, header_args, name, content, ..
+                language,
+                header_args,
+                name,
+                content,
+                ..
             } => Block::CodeBlock {
                 language: language.clone(),
                 header_args: header_args.clone(),
@@ -193,7 +207,10 @@ impl Block {
                 span: Span::NONE,
             },
             Block::List {
-                ordered, start, items, ..
+                ordered,
+                start,
+                items,
+                ..
             } => Block::List {
                 ordered: *ordered,
                 start: *start,
@@ -266,7 +283,11 @@ pub struct ListItem {
 impl ListItem {
     pub fn strip_spans(&self) -> Self {
         ListItem {
-            children: self.children.iter().map(ListItemContent::strip_spans).collect(),
+            children: self
+                .children
+                .iter()
+                .map(ListItemContent::strip_spans)
+                .collect(),
             checkbox: self.checkbox,
         }
     }
@@ -391,16 +412,20 @@ impl Inline {
                 text: text.clone(),
                 span: Span::NONE,
             },
-            Inline::Bold(c, _) => Inline::Bold(c.iter().map(Inline::strip_spans).collect(), Span::NONE),
-            Inline::Italic(c, _) => Inline::Italic(c.iter().map(Inline::strip_spans).collect(), Span::NONE),
-            Inline::Underline(c, _) => Inline::Underline(c.iter().map(Inline::strip_spans).collect(), Span::NONE),
+            Inline::Bold(c, _) => {
+                Inline::Bold(c.iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Italic(c, _) => {
+                Inline::Italic(c.iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
+            Inline::Underline(c, _) => {
+                Inline::Underline(c.iter().map(Inline::strip_spans).collect(), Span::NONE)
+            }
             Inline::Strikethrough(c, _) => {
                 Inline::Strikethrough(c.iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
             Inline::Code(s, _) => Inline::Code(s.clone(), Span::NONE),
-            Inline::Link {
-                url, children, ..
-            } => Inline::Link {
+            Inline::Link { url, children, .. } => Inline::Link {
                 url: url.clone(),
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,

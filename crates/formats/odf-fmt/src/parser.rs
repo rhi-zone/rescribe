@@ -52,12 +52,12 @@ pub fn parse(input: &[u8]) -> Result<ParseResult<OdfDocument>, Error> {
     }
 
     // styles.xml
-    let (named_styles, page_layouts) =
-        if let Some(xml) = read_zip_text(&mut archive, "styles.xml") {
-            parse_styles_xml(&xml, &mut diags)
-        } else {
-            (Vec::new(), Vec::new())
-        };
+    let (named_styles, page_layouts) = if let Some(xml) = read_zip_text(&mut archive, "styles.xml")
+    {
+        parse_styles_xml(&xml, &mut diags)
+    } else {
+        (Vec::new(), Vec::new())
+    };
 
     // meta.xml
     let meta = if let Some(xml) = read_zip_text(&mut archive, "meta.xml") {
@@ -67,11 +67,12 @@ pub fn parse(input: &[u8]) -> Result<ParseResult<OdfDocument>, Error> {
     };
 
     // content.xml
-    let (body, automatic_styles, list_styles) = if let Some(xml) = read_zip_text(&mut archive, "content.xml") {
-        parse_content_xml(&xml, &mut diags)
-    } else {
-        (OdfBody::Empty, Vec::new(), Vec::new())
-    };
+    let (body, automatic_styles, list_styles) =
+        if let Some(xml) = read_zip_text(&mut archive, "content.xml") {
+            parse_content_xml(&xml, &mut diags)
+        } else {
+            (OdfBody::Empty, Vec::new(), Vec::new())
+        };
 
     let doc = OdfDocument {
         mimetype,
@@ -188,13 +189,17 @@ fn parse_spreadsheet_body(
                     "table:named-expressions" => {
                         named_ranges.extend(parse_named_ranges(reader));
                     }
-                    _ => { skip_element(reader); }
+                    _ => {
+                        skip_element(reader);
+                    }
                 }
                 continue;
             }
             Ok(Event::Empty(_)) => {}
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "office:spreadsheet" { break; }
+                if element_name(e.name().as_ref()) == "office:spreadsheet" {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -202,7 +207,10 @@ fn parse_spreadsheet_body(
         buf.clear();
     }
 
-    SpreadsheetBody { sheets, named_ranges }
+    SpreadsheetBody {
+        sheets,
+        named_ranges,
+    }
 }
 
 fn parse_sheet_attrs(
@@ -212,7 +220,9 @@ fn parse_sheet_attrs(
 ) -> Sheet {
     let name = attr_from_list(attrs, "table:name");
     let style_name = attr_from_list(attrs, "table:style-name");
-    let print = attr_from_list(attrs, "table:print").map(|v| v != "false").unwrap_or(true);
+    let print = attr_from_list(attrs, "table:print")
+        .map(|v| v != "false")
+        .unwrap_or(true);
     let mut columns = Vec::new();
     let mut rows = Vec::new();
     let mut buf = Vec::new();
@@ -237,7 +247,9 @@ fn parse_sheet_attrs(
                     "table:table-rows" | "table:table-header-rows" => {
                         rows.extend(parse_row_group(reader, &tag, diags));
                     }
-                    _ => { skip_element(reader); }
+                    _ => {
+                        skip_element(reader);
+                    }
                 }
                 continue;
             }
@@ -247,14 +259,20 @@ fn parse_sheet_attrs(
                     let a = collect_attrs(e);
                     columns.push(ColumnDef {
                         style_name: attr_from_list(&a, "table:style-name"),
-                        default_cell_style_name: attr_from_list(&a, "table:default-cell-style-name"),
-                        repeated: attr_from_list(&a, "table:number-columns-repeated").and_then(|v| v.parse().ok()),
+                        default_cell_style_name: attr_from_list(
+                            &a,
+                            "table:default-cell-style-name",
+                        ),
+                        repeated: attr_from_list(&a, "table:number-columns-repeated")
+                            .and_then(|v| v.parse().ok()),
                         visibility: attr_from_list(&a, "table:visibility"),
                     });
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "table:table" { break; }
+                if element_name(e.name().as_ref()) == "table:table" {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -262,17 +280,21 @@ fn parse_sheet_attrs(
         buf.clear();
     }
 
-    Sheet { name, style_name, print, columns, rows }
+    Sheet {
+        name,
+        style_name,
+        print,
+        columns,
+        rows,
+    }
 }
 
-fn parse_column_def_attrs(
-    attrs: &[(String, String)],
-    reader: &mut Reader<&[u8]>,
-) -> ColumnDef {
+fn parse_column_def_attrs(attrs: &[(String, String)], reader: &mut Reader<&[u8]>) -> ColumnDef {
     let col = ColumnDef {
         style_name: attr_from_list(attrs, "table:style-name"),
         default_cell_style_name: attr_from_list(attrs, "table:default-cell-style-name"),
-        repeated: attr_from_list(attrs, "table:number-columns-repeated").and_then(|v| v.parse().ok()),
+        repeated: attr_from_list(attrs, "table:number-columns-repeated")
+            .and_then(|v| v.parse().ok()),
         visibility: attr_from_list(attrs, "table:visibility"),
     };
     skip_element_children(reader, "table:table-column");
@@ -300,14 +322,20 @@ fn parse_column_group(reader: &mut Reader<&[u8]>, end_tag: &str) -> Vec<ColumnDe
                     let a = collect_attrs(e);
                     cols.push(ColumnDef {
                         style_name: attr_from_list(&a, "table:style-name"),
-                        default_cell_style_name: attr_from_list(&a, "table:default-cell-style-name"),
-                        repeated: attr_from_list(&a, "table:number-columns-repeated").and_then(|v| v.parse().ok()),
+                        default_cell_style_name: attr_from_list(
+                            &a,
+                            "table:default-cell-style-name",
+                        ),
+                        repeated: attr_from_list(&a, "table:number-columns-repeated")
+                            .and_then(|v| v.parse().ok()),
                         visibility: attr_from_list(&a, "table:visibility"),
                     });
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == end_tag { break; }
+                if element_name(e.name().as_ref()) == end_tag {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -352,16 +380,21 @@ fn parse_sheet_row_attrs(
                         value_type: attr_from_list(&a, "office:value-type"),
                         value: sheet_cell_value(&a),
                         formula: attr_from_list(&a, "table:formula"),
-                        col_span: attr_from_list(&a, "table:number-columns-spanned").and_then(|v| v.parse().ok()),
-                        row_span: attr_from_list(&a, "table:number-rows-spanned").and_then(|v| v.parse().ok()),
-                        repeated: attr_from_list(&a, "table:number-columns-repeated").and_then(|v| v.parse().ok()),
+                        col_span: attr_from_list(&a, "table:number-columns-spanned")
+                            .and_then(|v| v.parse().ok()),
+                        row_span: attr_from_list(&a, "table:number-rows-spanned")
+                            .and_then(|v| v.parse().ok()),
+                        repeated: attr_from_list(&a, "table:number-columns-repeated")
+                            .and_then(|v| v.parse().ok()),
                         covered,
                         content: Vec::new(),
                     });
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "table:table-row" { break; }
+                if element_name(e.name().as_ref()) == "table:table-row" {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -369,7 +402,12 @@ fn parse_sheet_row_attrs(
         buf.clear();
     }
 
-    SheetRow { style_name, default_cell_style_name, repeated, cells }
+    SheetRow {
+        style_name,
+        default_cell_style_name,
+        repeated,
+        cells,
+    }
 }
 
 fn parse_sheet_cell_attrs(
@@ -378,23 +416,35 @@ fn parse_sheet_cell_attrs(
     reader: &mut Reader<&[u8]>,
     diags: &mut Vec<Diagnostic>,
 ) -> SheetCell {
-    let end_tag = if covered { "table:covered-table-cell" } else { "table:table-cell" };
+    let end_tag = if covered {
+        "table:covered-table-cell"
+    } else {
+        "table:table-cell"
+    };
     SheetCell {
         style_name: attr_from_list(attrs, "table:style-name"),
         value_type: attr_from_list(attrs, "office:value-type"),
         value: sheet_cell_value(attrs),
         formula: attr_from_list(attrs, "table:formula"),
-        col_span: attr_from_list(attrs, "table:number-columns-spanned").and_then(|v| v.parse().ok()),
+        col_span: attr_from_list(attrs, "table:number-columns-spanned")
+            .and_then(|v| v.parse().ok()),
         row_span: attr_from_list(attrs, "table:number-rows-spanned").and_then(|v| v.parse().ok()),
-        repeated: attr_from_list(attrs, "table:number-columns-repeated").and_then(|v| v.parse().ok()),
+        repeated: attr_from_list(attrs, "table:number-columns-repeated")
+            .and_then(|v| v.parse().ok()),
         covered,
         content: parse_text_blocks(reader, end_tag, diags),
     }
 }
 
 fn sheet_cell_value(attrs: &[(String, String)]) -> Option<String> {
-    for key in ["office:value", "office:date-value", "office:time-value",
-                "office:boolean-value", "office:string-value", "office:currency-value"] {
+    for key in [
+        "office:value",
+        "office:date-value",
+        "office:time-value",
+        "office:boolean-value",
+        "office:string-value",
+        "office:currency-value",
+    ] {
         if let Some(v) = attr_from_list(attrs, key) {
             return Some(v);
         }
@@ -423,7 +473,9 @@ fn parse_row_group(
                 continue;
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == end_tag { break; }
+                if element_name(e.name().as_ref()) == end_tag {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -452,7 +504,9 @@ fn parse_named_ranges(reader: &mut Reader<&[u8]>) -> Vec<NamedRange> {
                 buf.clear();
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "table:named-expressions" { break; }
+                if element_name(e.name().as_ref()) == "table:named-expressions" {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -486,7 +540,9 @@ fn parse_presentation_body(
             }
             Ok(Event::Empty(_)) => {}
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "office:presentation" { break; }
+                if element_name(e.name().as_ref()) == "office:presentation" {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -523,7 +579,9 @@ fn parse_draw_page_attrs(
                     "presentation:notes" => {
                         notes = Some(Box::new(parse_notes_page_attrs(&a, reader, diags)));
                     }
-                    _ => { skip_element(reader); }
+                    _ => {
+                        skip_element(reader);
+                    }
                 }
                 continue;
             }
@@ -545,7 +603,9 @@ fn parse_draw_page_attrs(
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "draw:page" { break; }
+                if element_name(e.name().as_ref()) == "draw:page" {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -553,7 +613,14 @@ fn parse_draw_page_attrs(
         buf.clear();
     }
 
-    DrawPage { name, style_name, master_page_name, layout_name, shapes, notes }
+    DrawPage {
+        name,
+        style_name,
+        master_page_name,
+        layout_name,
+        shapes,
+        notes,
+    }
 }
 
 fn parse_draw_shape_attrs(
@@ -571,7 +638,17 @@ fn parse_draw_shape_attrs(
     let width = attr_from_list(attrs, "svg:width");
     let height = attr_from_list(attrs, "svg:height");
     let content = parse_draw_shape_content(outer_tag, reader, diags);
-    DrawShape { style_name, text_style_name, name, presentation_class, x, y, width, height, content }
+    DrawShape {
+        style_name,
+        text_style_name,
+        name,
+        presentation_class,
+        x,
+        y,
+        width,
+        height,
+        content,
+    }
 }
 
 fn parse_draw_shape_content(
@@ -616,7 +693,9 @@ fn parse_draw_shape_content(
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == end_tag { break; }
+                if element_name(e.name().as_ref()) == end_tag {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -651,7 +730,9 @@ fn parse_notes_page_attrs(
             }
             Ok(Event::Empty(_)) => {}
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "presentation:notes" { break; }
+                if element_name(e.name().as_ref()) == "presentation:notes" {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -678,11 +759,19 @@ fn parse_text_blocks(
                 let attrs = collect_attrs(e);
                 buf.clear();
                 let block = match name.as_str() {
-                    "text:p" => Some(TextBlock::Paragraph(parse_paragraph_attrs(&attrs, reader, diags))),
-                    "text:h" => Some(TextBlock::Heading(parse_heading_attrs(&attrs, reader, diags))),
+                    "text:p" => Some(TextBlock::Paragraph(parse_paragraph_attrs(
+                        &attrs, reader, diags,
+                    ))),
+                    "text:h" => Some(TextBlock::Heading(parse_heading_attrs(
+                        &attrs, reader, diags,
+                    ))),
                     "text:list" => Some(TextBlock::List(parse_list_attrs(&attrs, reader, diags))),
-                    "table:table" => Some(TextBlock::Table(parse_table_attrs(&attrs, reader, diags))),
-                    "text:section" => Some(TextBlock::Section(parse_section_attrs(&attrs, reader, diags))),
+                    "table:table" => {
+                        Some(TextBlock::Table(parse_table_attrs(&attrs, reader, diags)))
+                    }
+                    "text:section" => Some(TextBlock::Section(parse_section_attrs(
+                        &attrs, reader, diags,
+                    ))),
                     "draw:frame" => Some(TextBlock::Frame(parse_frame_attrs(&attrs, reader))),
                     "text:soft-page-break" => {
                         skip_element(reader);
@@ -702,8 +791,7 @@ fn parse_text_blocks(
                 let name = element_name(e.name().as_ref());
                 match name.as_str() {
                     "text:p" => {
-                        let style_name = attr_from_list(
-                            &collect_attrs(e), "text:style-name");
+                        let style_name = attr_from_list(&collect_attrs(e), "text:style-name");
                         blocks.push(TextBlock::Paragraph(Paragraph {
                             style_name,
                             ..Default::default()
@@ -747,8 +835,8 @@ fn parse_heading_attrs(
     reader: &mut Reader<&[u8]>,
     diags: &mut Vec<Diagnostic>,
 ) -> Heading {
-    let outline_level = attr_from_list(attrs, "text:outline-level")
-        .and_then(|s| s.parse::<u32>().ok());
+    let outline_level =
+        attr_from_list(attrs, "text:outline-level").and_then(|s| s.parse::<u32>().ok());
     Heading {
         style_name: attr_from_list(attrs, "text:style-name"),
         outline_level,
@@ -783,17 +871,28 @@ fn parse_list_attrs(
                     "text:list-item" | "text:list-header" => {
                         let start_value = attr_from_list(&item_attrs, "text:start-value")
                             .and_then(|s| s.parse::<u32>().ok());
-                        let end = if tag == "text:list-item" { "text:list-item" } else { "text:list-header" };
+                        let end = if tag == "text:list-item" {
+                            "text:list-item"
+                        } else {
+                            "text:list-header"
+                        };
                         let content = parse_text_blocks(reader, end, diags);
-                        items.push(ListItem { start_value, content });
+                        items.push(ListItem {
+                            start_value,
+                            content,
+                        });
                     }
-                    _ => { skip_element(reader); }
+                    _ => {
+                        skip_element(reader);
+                    }
                 }
                 continue;
             }
             Ok(Event::Empty(_)) => {}
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "text:list" { break; }
+                if element_name(e.name().as_ref()) == "text:list" {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -802,7 +901,11 @@ fn parse_list_attrs(
         buf.clear();
     }
 
-    List { style_name, continue_numbering, items }
+    List {
+        style_name,
+        continue_numbering,
+        items,
+    }
 }
 
 // ── Table ─────────────────────────────────────────────────────────────────────
@@ -831,13 +934,17 @@ fn parse_table_attrs(
                         let header_rows = parse_header_rows(reader, diags);
                         rows.extend(header_rows);
                     }
-                    _ => { skip_element(reader); }
+                    _ => {
+                        skip_element(reader);
+                    }
                 }
                 continue;
             }
             Ok(Event::Empty(_)) => {}
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "table:table" { break; }
+                if element_name(e.name().as_ref()) == "table:table" {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -846,13 +953,14 @@ fn parse_table_attrs(
         buf.clear();
     }
 
-    Table { style_name, name, rows }
+    Table {
+        style_name,
+        name,
+        rows,
+    }
 }
 
-fn parse_header_rows(
-    reader: &mut Reader<&[u8]>,
-    diags: &mut Vec<Diagnostic>,
-) -> Vec<TableRow> {
+fn parse_header_rows(reader: &mut Reader<&[u8]>, diags: &mut Vec<Diagnostic>) -> Vec<TableRow> {
     let mut rows = Vec::new();
     let mut buf = Vec::new();
 
@@ -870,7 +978,9 @@ fn parse_header_rows(
                 continue;
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "table:table-header-rows" { break; }
+                if element_name(e.name().as_ref()) == "table:table-header-rows" {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -899,8 +1009,18 @@ fn parse_table_row_attrs(
                 let cell_attrs = collect_attrs(e);
                 buf.clear();
                 if tag == "table:table-cell" || covered {
-                    let end = if covered { "table:covered-table-cell" } else { "table:table-cell" };
-                    cells.push(parse_table_cell_attrs(&cell_attrs, covered, end, reader, diags));
+                    let end = if covered {
+                        "table:covered-table-cell"
+                    } else {
+                        "table:table-cell"
+                    };
+                    cells.push(parse_table_cell_attrs(
+                        &cell_attrs,
+                        covered,
+                        end,
+                        reader,
+                        diags,
+                    ));
                 } else {
                     skip_element(reader);
                 }
@@ -925,7 +1045,9 @@ fn parse_table_row_attrs(
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "table:table-row" { break; }
+                if element_name(e.name().as_ref()) == "table:table-row" {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -948,7 +1070,8 @@ fn parse_table_cell_attrs(
         style_name: attr_from_list(attrs, "table:style-name"),
         value_type: attr_from_list(attrs, "office:value-type"),
         raw_value: cell_raw_value_attrs(attrs),
-        col_span: attr_from_list(attrs, "table:number-columns-spanned").and_then(|s| s.parse().ok()),
+        col_span: attr_from_list(attrs, "table:number-columns-spanned")
+            .and_then(|s| s.parse().ok()),
         row_span: attr_from_list(attrs, "table:number-rows-spanned").and_then(|s| s.parse().ok()),
         covered,
         content: parse_text_blocks(reader, end_tag, diags),
@@ -956,8 +1079,13 @@ fn parse_table_cell_attrs(
 }
 
 fn cell_raw_value_attrs(attrs: &[(String, String)]) -> Option<String> {
-    for key in ["office:value", "office:date-value", "office:time-value",
-                "office:boolean-value", "office:string-value"] {
+    for key in [
+        "office:value",
+        "office:date-value",
+        "office:time-value",
+        "office:boolean-value",
+        "office:string-value",
+    ] {
         if let Some(v) = attr_from_list(attrs, key) {
             return Some(v);
         }
@@ -984,17 +1112,21 @@ fn parse_section_attrs(
 
 // ── Frame ─────────────────────────────────────────────────────────────────────
 
-fn parse_frame_attrs(
-    attrs: &[(String, String)],
-    reader: &mut Reader<&[u8]>,
-) -> Frame {
+fn parse_frame_attrs(attrs: &[(String, String)], reader: &mut Reader<&[u8]>) -> Frame {
     let style_name = attr_from_list(attrs, "draw:style-name");
     let name = attr_from_list(attrs, "draw:name");
     let anchor_type = attr_from_list(attrs, "text:anchor-type");
     let width = attr_from_list(attrs, "svg:width");
     let height = attr_from_list(attrs, "svg:height");
     let content = parse_frame_content(reader);
-    Frame { style_name, name, anchor_type, width, height, content }
+    Frame {
+        style_name,
+        name,
+        anchor_type,
+        width,
+        height,
+        content,
+    }
 }
 
 fn parse_frame_content(reader: &mut Reader<&[u8]>) -> FrameContent {
@@ -1042,7 +1174,9 @@ fn parse_frame_content(reader: &mut Reader<&[u8]>) -> FrameContent {
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "draw:frame" { break; }
+                if element_name(e.name().as_ref()) == "draw:frame" {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -1108,12 +1242,22 @@ fn parse_inlines(
                         inlines.push(Inline::Frame(frame));
                     }
                     // Common field elements
-                    "text:page-number" | "text:date" | "text:time" | "text:author-name"
-                    | "text:author-initials" | "text:chapter" | "text:file-name"
-                    | "text:sequence" | "text:reference-ref" | "text:bookmark-ref" => {
+                    "text:page-number"
+                    | "text:date"
+                    | "text:time"
+                    | "text:author-name"
+                    | "text:author-initials"
+                    | "text:chapter"
+                    | "text:file-name"
+                    | "text:sequence"
+                    | "text:reference-ref"
+                    | "text:bookmark-ref" => {
                         let field_name = name.clone();
                         let value = read_text_until(reader, &name);
-                        inlines.push(Inline::Field { name: field_name, value });
+                        inlines.push(Inline::Field {
+                            name: field_name,
+                            value,
+                        });
                     }
                     "office:annotation" => {
                         // Extract text content from the annotation body
@@ -1154,7 +1298,9 @@ fn parse_inlines(
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == end_tag { break; }
+                if element_name(e.name().as_ref()) == end_tag {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -1192,12 +1338,16 @@ fn parse_note_attrs(
                     "text:note-body" => {
                         body = parse_text_blocks(reader, "text:note-body", diags);
                     }
-                    _ => { skip_element(reader); }
+                    _ => {
+                        skip_element(reader);
+                    }
                 }
                 continue;
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "text:note" { break; }
+                if element_name(e.name().as_ref()) == "text:note" {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -1206,15 +1356,17 @@ fn parse_note_attrs(
         buf.clear();
     }
 
-    Note { note_class, id, citation, body }
+    Note {
+        note_class,
+        id,
+        citation,
+        body,
+    }
 }
 
 // ── styles.xml ────────────────────────────────────────────────────────────────
 
-fn parse_styles_xml(
-    xml: &str,
-    _diags: &mut Vec<Diagnostic>,
-) -> (Vec<StyleEntry>, Vec<PageLayout>) {
+fn parse_styles_xml(xml: &str, _diags: &mut Vec<Diagnostic>) -> (Vec<StyleEntry>, Vec<PageLayout>) {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
@@ -1259,9 +1411,7 @@ fn parse_styles_xml(
 
 /// Parse `<office:automatic-styles>` from styles.xml, collecting both
 /// `<style:style>` entries and `<style:page-layout>` definitions.
-fn parse_styles_xml_auto_block(
-    reader: &mut Reader<&[u8]>,
-) -> (Vec<StyleEntry>, Vec<PageLayout>) {
+fn parse_styles_xml_auto_block(reader: &mut Reader<&[u8]>) -> (Vec<StyleEntry>, Vec<PageLayout>) {
     let mut styles = Vec::new();
     let mut page_layouts = Vec::new();
     let mut buf = Vec::new();
@@ -1281,7 +1431,9 @@ fn parse_styles_xml_auto_block(
                         let layout = parse_page_layout_attrs(&attrs, reader);
                         page_layouts.push(layout);
                     }
-                    _ => { skip_element(reader); }
+                    _ => {
+                        skip_element(reader);
+                    }
                 }
                 continue;
             }
@@ -1299,7 +1451,9 @@ fn parse_styles_xml_auto_block(
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "office:automatic-styles" { break; }
+                if element_name(e.name().as_ref()) == "office:automatic-styles" {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -1313,9 +1467,7 @@ fn parse_styles_xml_auto_block(
 /// Parse `<office:automatic-styles>` from content.xml.
 ///
 /// Returns (style_entries, list_styles) where list_styles is (name, is_ordered).
-fn parse_auto_styles_block(
-    reader: &mut Reader<&[u8]>,
-) -> (Vec<StyleEntry>, Vec<(String, bool)>) {
+fn parse_auto_styles_block(reader: &mut Reader<&[u8]>) -> (Vec<StyleEntry>, Vec<(String, bool)>) {
     let mut styles = Vec::new();
     let mut list_styles: Vec<(String, bool)> = Vec::new();
     let mut buf = Vec::new();
@@ -1336,7 +1488,9 @@ fn parse_auto_styles_block(
                         let is_ordered = parse_list_style_is_ordered(reader);
                         list_styles.push((style_name, is_ordered));
                     }
-                    _ => { skip_element(reader); }
+                    _ => {
+                        skip_element(reader);
+                    }
                 }
                 continue;
             }
@@ -1354,7 +1508,9 @@ fn parse_auto_styles_block(
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "office:automatic-styles" { break; }
+                if element_name(e.name().as_ref()) == "office:automatic-styles" {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -1380,7 +1536,9 @@ fn parse_list_style_is_ordered(reader: &mut Reader<&[u8]>) -> bool {
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "text:list-style" { break; }
+                if element_name(e.name().as_ref()) == "text:list-style" {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -1390,10 +1548,7 @@ fn parse_list_style_is_ordered(reader: &mut Reader<&[u8]>) -> bool {
     is_ordered
 }
 
-fn parse_styles_block(
-    reader: &mut Reader<&[u8]>,
-    end_tag: &str,
-) -> Vec<StyleEntry> {
+fn parse_styles_block(reader: &mut Reader<&[u8]>, end_tag: &str) -> Vec<StyleEntry> {
     let mut styles = Vec::new();
     let mut buf = Vec::new();
 
@@ -1408,7 +1563,9 @@ fn parse_styles_block(
                         let entry = parse_style_element_attrs(&attrs, reader);
                         styles.push(entry);
                     }
-                    _ => { skip_element(reader); }
+                    _ => {
+                        skip_element(reader);
+                    }
                 }
                 continue;
             }
@@ -1426,7 +1583,9 @@ fn parse_styles_block(
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == end_tag { break; }
+                if element_name(e.name().as_ref()) == end_tag {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -1438,10 +1597,7 @@ fn parse_styles_block(
     styles
 }
 
-fn parse_style_element_attrs(
-    attrs: &[(String, String)],
-    reader: &mut Reader<&[u8]>,
-) -> StyleEntry {
+fn parse_style_element_attrs(attrs: &[(String, String)], reader: &mut Reader<&[u8]>) -> StyleEntry {
     let mut entry = StyleEntry {
         name: attr_from_list(attrs, "style:name").unwrap_or_default(),
         family: attr_from_list(attrs, "style:family"),
@@ -1467,7 +1623,9 @@ fn parse_style_element_attrs(
                         parse_para_props_into(&prop_attrs, &mut entry.para_props);
                         skip_element_children(reader, "style:paragraph-properties");
                     }
-                    _ => { skip_element(reader); }
+                    _ => {
+                        skip_element(reader);
+                    }
                 }
                 continue;
             }
@@ -1489,7 +1647,9 @@ fn parse_style_element_attrs(
                 continue;
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "style:style" { break; }
+                if element_name(e.name().as_ref()) == "style:style" {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -1507,15 +1667,22 @@ fn parse_text_props_into(attrs: &[(String, String)], props: &mut TextProperties)
             "fo:font-weight" => props.bold = val == "bold",
             "fo:font-style" => props.italic = val == "italic",
             "style:text-underline-style" => props.underline = val != "none" && !val.is_empty(),
-            "style:text-line-through-style" => props.strikethrough = val != "none" && !val.is_empty(),
+            "style:text-line-through-style" => {
+                props.strikethrough = val != "none" && !val.is_empty()
+            }
             "style:text-position" => {
-                if val.starts_with("sub") { props.subscript = true; }
-                else if val.starts_with("super") { props.superscript = true; }
+                if val.starts_with("sub") {
+                    props.subscript = true;
+                } else if val.starts_with("super") {
+                    props.superscript = true;
+                }
             }
             "fo:color" => props.color = Some(val.clone()),
             "fo:background-color" => props.background_color = Some(val.clone()),
             "fo:font-size" if props.font_size.is_none() => props.font_size = Some(val.clone()),
-            "style:font-size-asian" if props.font_size.is_none() => props.font_size = Some(val.clone()),
+            "style:font-size-asian" if props.font_size.is_none() => {
+                props.font_size = Some(val.clone())
+            }
             "style:font-name" if props.font_name.is_none() => props.font_name = Some(val.clone()),
             "fo:font-family" if props.font_name.is_none() => props.font_name = Some(val.clone()),
             "fo:font-variant" => props.font_variant = Some(val.clone()),
@@ -1528,7 +1695,9 @@ fn parse_para_props_into(attrs: &[(String, String)], props: &mut ParagraphProper
     for (key, val) in attrs {
         match key.as_str() {
             "fo:text-align" => {
-                if val != "start" { props.align = Some(val.clone()); }
+                if val != "start" {
+                    props.align = Some(val.clone());
+                }
             }
             "fo:margin-left" => props.margin_left = non_zero_measure(val),
             "fo:margin-right" => props.margin_right = non_zero_measure(val),
@@ -1536,23 +1705,26 @@ fn parse_para_props_into(attrs: &[(String, String)], props: &mut ParagraphProper
             "fo:margin-bottom" => props.margin_bottom = non_zero_measure(val),
             "fo:text-indent" => props.text_indent = non_zero_measure(val),
             "fo:line-height" => {
-                if val != "100%" && val != "normal" { props.line_height = Some(val.clone()); }
+                if val != "100%" && val != "normal" {
+                    props.line_height = Some(val.clone());
+                }
             }
             "fo:border" => props.border = Some(val.clone()),
             "fo:background-color" => props.background_color = Some(val.clone()),
             "fo:keep-together" => props.keep_together = val == "always",
             "fo:keep-with-next" => props.keep_with_next = val == "always",
-            "fo:break-before" => props.page_break_before = matches!(val.as_str(), "page" | "even-page" | "odd-page"),
-            "fo:break-after" => props.page_break_after = matches!(val.as_str(), "page" | "even-page" | "odd-page"),
+            "fo:break-before" => {
+                props.page_break_before = matches!(val.as_str(), "page" | "even-page" | "odd-page")
+            }
+            "fo:break-after" => {
+                props.page_break_after = matches!(val.as_str(), "page" | "even-page" | "odd-page")
+            }
             _ => {}
         }
     }
 }
 
-fn parse_page_layout_attrs(
-    attrs: &[(String, String)],
-    reader: &mut Reader<&[u8]>,
-) -> PageLayout {
+fn parse_page_layout_attrs(attrs: &[(String, String)], reader: &mut Reader<&[u8]>) -> PageLayout {
     let mut layout = PageLayout {
         name: attr_from_list(attrs, "style:name").unwrap_or_default(),
         ..Default::default()
@@ -1582,7 +1754,9 @@ fn parse_page_layout_attrs(
                 continue;
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "style:page-layout" { break; }
+                if element_name(e.name().as_ref()) == "style:page-layout" {
+                    break;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -1653,7 +1827,9 @@ fn parse_meta_xml(xml: &str) -> OdfMeta {
                 }
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "office:meta" { in_meta = false; }
+                if element_name(e.name().as_ref()) == "office:meta" {
+                    in_meta = false;
+                }
             }
             Ok(Event::Eof) => break,
             Err(_) => break,
@@ -1707,7 +1883,9 @@ fn read_annotation_text(reader: &mut Reader<&[u8]>) -> String {
                 continue;
             }
             Ok(Event::End(ref e)) => {
-                if element_name(e.name().as_ref()) == "office:annotation" { break; }
+                if element_name(e.name().as_ref()) == "office:annotation" {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -1726,7 +1904,9 @@ fn skip_element(reader: &mut Reader<&[u8]>) {
             Ok(Event::Start(_)) => depth += 1,
             Ok(Event::End(_)) => {
                 depth -= 1;
-                if depth == 0 { break; }
+                if depth == 0 {
+                    break;
+                }
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -1745,7 +1925,9 @@ fn skip_element_children(reader: &mut Reader<&[u8]>, end_tag: &str) {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(_)) => depth += 1,
             Ok(Event::End(ref e)) => {
-                if depth == 0 && element_name(e.name().as_ref()) == end_tag { break; }
+                if depth == 0 && element_name(e.name().as_ref()) == end_tag {
+                    break;
+                }
                 depth = depth.saturating_sub(1);
             }
             Ok(Event::Eof) | Err(_) => break,
@@ -1770,7 +1952,9 @@ fn read_text_until(reader: &mut Reader<&[u8]>, end_tag: &str) -> String {
             }
             Ok(Event::Start(_)) => depth += 1,
             Ok(Event::End(ref e)) => {
-                if depth == 0 && element_name(e.name().as_ref()) == end_tag { break; }
+                if depth == 0 && element_name(e.name().as_ref()) == end_tag {
+                    break;
+                }
                 depth = depth.saturating_sub(1);
             }
             Ok(Event::Eof) | Err(_) => break,
@@ -1807,7 +1991,9 @@ fn capture_raw_until(reader: &mut Reader<&[u8]>, end_tag: &str) -> String {
             }
             Ok(Event::End(ref e)) => {
                 let name = element_name(e.name().as_ref());
-                if depth == 0 && name == end_tag { break; }
+                if depth == 0 && name == end_tag {
+                    break;
+                }
                 raw.push_str(&format!("</{name}>"));
                 depth = depth.saturating_sub(1);
             }
@@ -1901,4 +2087,3 @@ fn non_zero_measure(val: &str) -> Option<String> {
         Some(val.to_string())
     }
 }
-

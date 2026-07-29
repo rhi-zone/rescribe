@@ -28,7 +28,9 @@ fn corpus_dir() -> Option<PathBuf> {
 }
 
 fn find_pandoc() -> Option<PathBuf> {
-    if let Ok(out) = Command::new("sh").args(["-c", "command -v pandoc"]).output()
+    if let Ok(out) = Command::new("sh")
+        .args(["-c", "command -v pandoc"])
+        .output()
         && out.status.success()
     {
         let s = String::from_utf8_lossy(&out.stdout);
@@ -60,7 +62,11 @@ fn pandoc_to_plain(pandoc: &Path, file: &Path) -> Option<String> {
         .arg(file)
         .output()
         .ok()?;
-    if out.status.success() { String::from_utf8(out.stdout).ok() } else { None }
+    if out.status.success() {
+        String::from_utf8(out.stdout).ok()
+    } else {
+        None
+    }
 }
 
 // ── Text extraction from textile-fmt AST ─────────────────────────────────────
@@ -176,7 +182,11 @@ fn missing_words(reference: &[String], ours: &[String]) -> Vec<(String, usize)> 
         .iter()
         .filter_map(|(w, &rc)| {
             let oc = *our_counts.get(*w).unwrap_or(&0);
-            if oc < rc { Some((w.to_string(), rc - oc)) } else { None }
+            if oc < rc {
+                Some((w.to_string(), rc - oc))
+            } else {
+                None
+            }
         })
         .collect();
     missing.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
@@ -190,14 +200,22 @@ struct HarnessFile {
 }
 
 const CORPUS_FILES: &[HarnessFile] = &[
-    HarnessFile { filename: "textile-reader.textile" },
-    HarnessFile { filename: "tables.textile" },
-    HarnessFile { filename: "writer.textile" },
+    HarnessFile {
+        filename: "textile-reader.textile",
+    },
+    HarnessFile {
+        filename: "tables.textile",
+    },
+    HarnessFile {
+        filename: "writer.textile",
+    },
 ];
 
 fn run_harness(files: &[HarnessFile]) {
     let Some(corpus) = corpus_dir() else {
-        eprintln!("SKIP: ~/git/pandoc/test/ not found — set up the Pandoc corpus to run this harness");
+        eprintln!(
+            "SKIP: ~/git/pandoc/test/ not found — set up the Pandoc corpus to run this harness"
+        );
         return;
     };
 
@@ -260,7 +278,13 @@ fn run_harness(files: &[HarnessFile]) {
                         let missing_str: Vec<String> = missing
                             .iter()
                             .take(20)
-                            .map(|(w, n)| if *n > 1 { format!("{w}(×{n})") } else { w.clone() })
+                            .map(|(w, n)| {
+                                if *n > 1 {
+                                    format!("{w}(×{n})")
+                                } else {
+                                    w.clone()
+                                }
+                            })
                             .collect();
                         eprintln!("  missing: {}", missing_str.join(", "));
                     }
@@ -304,5 +328,8 @@ fn parse_sample_no_panic() {
     let sample = include_str!("../../../../fixtures/textile/oracle/input.textile");
     let (doc, _diags) = parse(sample);
     // Must produce at least one block.
-    assert!(!doc.blocks.is_empty(), "expected at least one block from sample input");
+    assert!(
+        !doc.blocks.is_empty(),
+        "expected at least one block from sample input"
+    );
 }

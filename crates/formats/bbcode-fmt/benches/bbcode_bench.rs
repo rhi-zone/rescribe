@@ -1,5 +1,5 @@
+use bbcode_fmt::{emit, events, parse};
 use criterion::{Criterion, criterion_group, criterion_main};
-use bbcode_fmt::{parse, emit, events};
 
 const SMALL: &str = r#"
 [h1]Hello World[/h1]
@@ -110,5 +110,11 @@ fn bench_roundtrip(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_parse, bench_emit, bench_events, bench_roundtrip);
+criterion_group!(
+    benches,
+    bench_parse,
+    bench_emit,
+    bench_events,
+    bench_roundtrip
+);
 criterion_main!(benches);

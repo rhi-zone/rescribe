@@ -43,7 +43,11 @@ pub fn emit_with_options(
 
     let title = doc.metadata.get_str("title").map(|s| s.to_string());
 
-    let texinfo_doc = TexinfoDoc { title, blocks, span: Span::NONE };
+    let texinfo_doc = TexinfoDoc {
+        title,
+        blocks,
+        span: Span::NONE,
+    };
     let output = texinfo::emit(&texinfo_doc);
 
     Ok(ConversionResult::ok(output.into_bytes()))
@@ -54,22 +58,37 @@ fn node_to_block(node: &Node) -> Option<Block> {
         node::HEADING => {
             let level = node.props.get_int(prop::LEVEL).unwrap_or(1) as u8;
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Some(Block::Heading { level, kind: HeadingKind::Numbered, inlines, span: Span::NONE })
+            Some(Block::Heading {
+                level,
+                kind: HeadingKind::Numbered,
+                inlines,
+                span: Span::NONE,
+            })
         }
 
         node::PARAGRAPH => {
             let inlines = node.children.iter().map(node_to_inline).collect();
-            Some(Block::Paragraph { inlines, span: Span::NONE })
+            Some(Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            })
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
-            Some(Block::CodeBlock { variant: CodeBlockVariant::Example, content, span: Span::NONE })
+            Some(Block::CodeBlock {
+                variant: CodeBlockVariant::Example,
+                content,
+                span: Span::NONE,
+            })
         }
 
         node::BLOCKQUOTE => {
             let children = node.children.iter().filter_map(node_to_block).collect();
-            Some(Block::Blockquote { children, span: Span::NONE })
+            Some(Block::Blockquote {
+                children,
+                span: Span::NONE,
+            })
         }
 
         node::LIST => {
@@ -98,7 +117,11 @@ fn node_to_block(node: &Node) -> Option<Block> {
                     }
                 })
                 .collect();
-            Some(Block::List { ordered, items, span: Span::NONE })
+            Some(Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            })
         }
 
         node::DEFINITION_LIST => {
@@ -122,7 +145,10 @@ fn node_to_block(node: &Node) -> Option<Block> {
                 }
                 i += 1;
             }
-            Some(Block::DefinitionList { items, span: Span::NONE })
+            Some(Block::DefinitionList {
+                items,
+                span: Span::NONE,
+            })
         }
 
         node::HORIZONTAL_RULE => Some(Block::HorizontalRule { span: Span::NONE }),
@@ -165,7 +191,11 @@ fn node_to_inline(node: &Node) -> Inline {
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = node.children.iter().map(node_to_inline).collect();
-            Inline::Link { url, children, span: Span::NONE }
+            Inline::Link {
+                url,
+                children,
+                span: Span::NONE,
+            }
         }
 
         node::SUPERSCRIPT => {
@@ -184,7 +214,10 @@ fn node_to_inline(node: &Node) -> Inline {
 
         node::FOOTNOTE_DEF => {
             let content = node.children.iter().map(node_to_inline).collect();
-            Inline::FootnoteDef { content, span: Span::NONE }
+            Inline::FootnoteDef {
+                content,
+                span: Span::NONE,
+            }
         }
 
         _ => Inline::Text(String::new(), Span::NONE),

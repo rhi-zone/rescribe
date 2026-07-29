@@ -11,9 +11,7 @@
 //! let doc = result.value;
 //! ```
 
-use djot_fmt::{
-    Alignment, Block, DjotDoc, Inline, ListKind,
-};
+use djot_fmt::{Alignment, Block, DjotDoc, Inline, ListKind};
 use rescribe_core::{ConversionResult, Document, FidelityWarning, Node, ParseError, Properties};
 use rescribe_std::{node, prop};
 
@@ -30,7 +28,10 @@ pub fn parse(input: &str) -> Result<ConversionResult<Document>, ParseError> {
         source: None,
     };
 
-    Ok(ConversionResult::with_warnings(document, converter.warnings))
+    Ok(ConversionResult::with_warnings(
+        document,
+        converter.warnings,
+    ))
 }
 
 struct Converter {
@@ -39,7 +40,9 @@ struct Converter {
 
 impl Converter {
     fn new() -> Self {
-        Self { warnings: Vec::new() }
+        Self {
+            warnings: Vec::new(),
+        }
     }
 
     fn convert_doc(&mut self, doc: &DjotDoc) -> Vec<Node> {
@@ -70,7 +73,9 @@ impl Converter {
             Block::Blockquote { blocks, .. } => {
                 Node::new(node::BLOCKQUOTE).children(self.convert_blocks(blocks))
             }
-            Block::List { kind, items, tight, .. } => {
+            Block::List {
+                kind, items, tight, ..
+            } => {
                 let (ordered, start) = match kind {
                     ListKind::Bullet(_) | ListKind::Task => (false, 1i64),
                     ListKind::Ordered { start, .. } => (true, *start as i64),
@@ -84,8 +89,8 @@ impl Converter {
                 let item_nodes: Vec<Node> = items
                     .iter()
                     .map(|item| {
-                        let mut li = Node::new(node::LIST_ITEM)
-                            .children(self.convert_blocks(&item.blocks));
+                        let mut li =
+                            Node::new(node::LIST_ITEM).children(self.convert_blocks(&item.blocks));
                         if let Some(checked) = item.checked {
                             li = li.prop(prop::CHECKED, checked);
                         }
@@ -94,14 +99,18 @@ impl Converter {
                     .collect();
                 list.children(item_nodes)
             }
-            Block::CodeBlock { language, content, .. } => {
+            Block::CodeBlock {
+                language, content, ..
+            } => {
                 let mut cb = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
                 if let Some(lang) = language {
                     cb = cb.prop(prop::LANGUAGE, lang.clone());
                 }
                 cb
             }
-            Block::RawBlock { format, content, .. } => Node::new(node::RAW_BLOCK)
+            Block::RawBlock {
+                format, content, ..
+            } => Node::new(node::RAW_BLOCK)
                 .prop(prop::FORMAT, format.clone())
                 .prop(prop::CONTENT, content.clone()),
             Block::Div { class, blocks, .. } => {
@@ -130,8 +139,8 @@ impl Converter {
                             } else {
                                 node::TABLE_CELL
                             };
-                            let mut cn = Node::new(kind)
-                                .children(self.convert_inlines(&cell.inlines));
+                            let mut cn =
+                                Node::new(kind).children(self.convert_inlines(&cell.inlines));
                             let align_str = match cell.alignment {
                                 Alignment::Left => "left",
                                 Alignment::Right => "right",
@@ -153,8 +162,7 @@ impl Converter {
                 let mut dl_children = Vec::new();
                 for item in items {
                     dl_children.push(
-                        Node::new(node::DEFINITION_TERM)
-                            .children(self.convert_inlines(&item.term)),
+                        Node::new(node::DEFINITION_TERM).children(self.convert_inlines(&item.term)),
                     );
                     for def_block in &item.definitions {
                         dl_children.push(
@@ -209,10 +217,17 @@ impl Converter {
             Inline::MathDisplay { content, .. } => {
                 Node::new("math:display").prop(prop::CONTENT, content.clone())
             }
-            Inline::RawInline { format, content, .. } => Node::new(node::RAW_INLINE)
+            Inline::RawInline {
+                format, content, ..
+            } => Node::new(node::RAW_INLINE)
                 .prop(prop::FORMAT, format.clone())
                 .prop(prop::CONTENT, content.clone()),
-            Inline::Link { inlines, url, title, .. } => {
+            Inline::Link {
+                inlines,
+                url,
+                title,
+                ..
+            } => {
                 let mut link = Node::new(node::LINK)
                     .prop(prop::URL, url.clone())
                     .children(self.convert_inlines(inlines));
@@ -221,7 +236,12 @@ impl Converter {
                 }
                 link
             }
-            Inline::Image { inlines, url, title, .. } => {
+            Inline::Image {
+                inlines,
+                url,
+                title,
+                ..
+            } => {
                 let alt = collect_text(inlines);
                 let mut img = Node::new(node::IMAGE).prop(prop::URL, url.clone());
                 if !alt.is_empty() {
@@ -293,8 +313,14 @@ mod tests {
         let doc = result.value;
         assert_eq!(doc.content.children.len(), 1);
         let para = &doc.content.children[0];
-        let has_emphasis = para.children.iter().any(|n| n.kind.as_str() == node::EMPHASIS);
-        let has_strong = para.children.iter().any(|n| n.kind.as_str() == node::STRONG);
+        let has_emphasis = para
+            .children
+            .iter()
+            .any(|n| n.kind.as_str() == node::EMPHASIS);
+        let has_strong = para
+            .children
+            .iter()
+            .any(|n| n.kind.as_str() == node::STRONG);
         assert!(has_emphasis);
         assert!(has_strong);
     }
@@ -306,14 +332,21 @@ mod tests {
         let para = &doc.content.children[0];
         let link = para.children.iter().find(|n| n.kind.as_str() == node::LINK);
         assert!(link.is_some());
-        assert_eq!(link.unwrap().props.get_str(prop::URL), Some("https://example.com"));
+        assert_eq!(
+            link.unwrap().props.get_str(prop::URL),
+            Some("https://example.com")
+        );
     }
 
     #[test]
     fn test_parse_code_block() {
         let result = parse("```rust\nfn main() {}\n```").unwrap();
         let doc = result.value;
-        let cb = doc.content.children.iter().find(|n| n.kind.as_str() == node::CODE_BLOCK);
+        let cb = doc
+            .content
+            .children
+            .iter()
+            .find(|n| n.kind.as_str() == node::CODE_BLOCK);
         assert!(cb.is_some());
         assert_eq!(cb.unwrap().props.get_str(prop::LANGUAGE), Some("rust"));
     }
@@ -322,7 +355,11 @@ mod tests {
     fn test_parse_list() {
         let result = parse("- item 1\n- item 2").unwrap();
         let doc = result.value;
-        let list = doc.content.children.iter().find(|n| n.kind.as_str() == node::LIST);
+        let list = doc
+            .content
+            .children
+            .iter()
+            .find(|n| n.kind.as_str() == node::LIST);
         assert!(list.is_some());
         assert_eq!(list.unwrap().props.get_bool(prop::ORDERED), Some(false));
         assert_eq!(list.unwrap().children.len(), 2);

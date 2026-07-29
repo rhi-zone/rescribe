@@ -60,7 +60,9 @@ pub mod parse;
 pub mod writer;
 
 // Re-export the most-used types at the crate root.
-pub use ast::{AnsiDoc, AnsiNode, Color, CursorDirection, Diagnostic, EraseMode, Severity, Span, Style};
+pub use ast::{
+    AnsiDoc, AnsiNode, Color, CursorDirection, Diagnostic, EraseMode, Severity, Span, Style,
+};
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
 pub use emit::{build, collect_text, emit};
 pub use events::{Event, EventIter, OwnedEvent};
@@ -144,9 +146,11 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert!(texts
-            .iter()
-            .any(|(t, s)| *t == "Bold and italic" && s.bold && s.italic));
+        assert!(
+            texts
+                .iter()
+                .any(|(t, s)| *t == "Bold and italic" && s.bold && s.italic)
+        );
     }
 
     #[test]
@@ -183,7 +187,8 @@ mod tests {
 
     #[test]
     fn test_roundtrip_colors() {
-        let input = b"\x1b[31mRed\x1b[0m \x1b[38;5;196mPalette\x1b[0m \x1b[38;2;255;128;0mTruecolor\x1b[0m";
+        let input =
+            b"\x1b[31mRed\x1b[0m \x1b[38;5;196mPalette\x1b[0m \x1b[38;2;255;128;0mTruecolor\x1b[0m";
         let (doc, _) = parse(input);
         let emitted = emit(&doc);
         let (doc2, _) = parse(emitted.as_bytes());

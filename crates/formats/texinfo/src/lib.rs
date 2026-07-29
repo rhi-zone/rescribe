@@ -368,15 +368,21 @@ Still visible."#;
         let input = "Use @dots{} and @copyright{} and @TeX{}.";
         let (doc, _diags) = parse(input);
         if let Block::Paragraph { ref inlines, .. } = doc.blocks[0] {
-            assert!(inlines
-                .iter()
-                .any(|i| matches!(i, Inline::Symbol(SymbolKind::Dots, _))));
-            assert!(inlines
-                .iter()
-                .any(|i| matches!(i, Inline::Symbol(SymbolKind::Copyright, _))));
-            assert!(inlines
-                .iter()
-                .any(|i| matches!(i, Inline::Symbol(SymbolKind::TeX, _))));
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::Symbol(SymbolKind::Dots, _)))
+            );
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::Symbol(SymbolKind::Copyright, _)))
+            );
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::Symbol(SymbolKind::TeX, _)))
+            );
         } else {
             panic!("expected paragraph");
         }

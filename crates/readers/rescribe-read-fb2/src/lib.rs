@@ -126,11 +126,7 @@ fn convert_fb(fb: &FictionBook) -> Vec<Node> {
 fn convert_body(body: &Body) -> Vec<Node> {
     if body.name.as_deref() == Some("notes") {
         // Notes body: each section is a footnote definition
-        return body
-            .section
-            .iter()
-            .map(convert_footnote_def)
-            .collect();
+        return body.section.iter().map(convert_footnote_def).collect();
     }
     let sections: Vec<Node> = body.section.iter().map(|s| convert_section(s, 1)).collect();
     vec![Node::new(node::DIV).children(sections)]
@@ -163,7 +159,11 @@ fn convert_section(section: &Section, depth: usize) -> Node {
             }
         }
         if !inlines.is_empty() {
-            children.push(Node::new(node::HEADING).prop(prop::LEVEL, level).children(inlines));
+            children.push(
+                Node::new(node::HEADING)
+                    .prop(prop::LEVEL, level)
+                    .children(inlines),
+            );
         }
     }
 
@@ -199,7 +199,11 @@ fn convert_section_content(item: &SectionContent) -> Vec<Node> {
         SectionContent::Poem(poem) => vec![convert_poem(poem)],
         SectionContent::Subtitle(inlines) => {
             let il = convert_inlines(inlines);
-            vec![Node::new(node::HEADING).prop(prop::LEVEL, 4i64).children(il)]
+            vec![
+                Node::new(node::HEADING)
+                    .prop(prop::LEVEL, 4i64)
+                    .children(il),
+            ]
         }
         SectionContent::Cite(cite) => vec![convert_cite(cite)],
         SectionContent::Table(table) => vec![convert_table(table)],
@@ -268,7 +272,9 @@ fn convert_cite(cite: &Cite) -> Node {
 
 fn convert_poem(poem: &Poem) -> Node {
     let children: Vec<Node> = poem.stanza.iter().map(convert_stanza).collect();
-    Node::new(node::DIV).prop("html:class", "poem").children(children)
+    Node::new(node::DIV)
+        .prop("html:class", "poem")
+        .children(children)
 }
 
 fn convert_stanza(stanza: &Stanza) -> Node {
@@ -278,7 +284,9 @@ fn convert_stanza(stanza: &Stanza) -> Node {
         line_children.push(Node::new(node::LINE_BREAK));
         children.push(Node::new(node::SPAN).children(line_children));
     }
-    Node::new(node::DIV).prop("html:class", "stanza").children(children)
+    Node::new(node::DIV)
+        .prop("html:class", "stanza")
+        .children(children)
 }
 
 fn convert_table(table: &Table) -> Node {
@@ -315,12 +323,8 @@ fn convert_inlines(inlines: &[InlineElement]) -> Vec<Node> {
 fn convert_inline(el: &InlineElement) -> Node {
     match el {
         InlineElement::Text(s) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
-        InlineElement::Strong(ch) => {
-            Node::new(node::STRONG).children(convert_inlines(ch))
-        }
-        InlineElement::Emphasis(ch) => {
-            Node::new(node::EMPHASIS).children(convert_inlines(ch))
-        }
+        InlineElement::Strong(ch) => Node::new(node::STRONG).children(convert_inlines(ch)),
+        InlineElement::Emphasis(ch) => Node::new(node::EMPHASIS).children(convert_inlines(ch)),
         InlineElement::Strikethrough(ch) => {
             Node::new(node::STRIKEOUT).children(convert_inlines(ch))
         }
@@ -331,7 +335,11 @@ fn convert_inline(el: &InlineElement) -> Node {
             let url = img.href.strip_prefix('#').unwrap_or(&img.href);
             Node::new(node::IMAGE).prop(prop::URL, url.to_string())
         }
-        InlineElement::Link { href, kind, children } => {
+        InlineElement::Link {
+            href,
+            kind,
+            children,
+        } => {
             let mut n = Node::new(node::LINK)
                 .prop(prop::URL, href.clone())
                 .children(convert_inlines(children));
@@ -382,9 +390,7 @@ mod fixture_tests {
     fn fb2_fixtures() {
         run_format_fixtures(&fixtures_root(), "fb2", |input| {
             let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-            super::parse(s)
-                .map(|r| r.value)
-                .map_err(|e| e.to_string())
+            super::parse(s).map(|r| r.value).map_err(|e| e.to_string())
         });
     }
 }

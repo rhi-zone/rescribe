@@ -12,11 +12,15 @@ pub enum Event<'a> {
     EndDocument,
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
     StartBlockquote,
     EndBlockquote,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
@@ -47,7 +51,9 @@ pub enum Event<'a> {
     EndTable,
     StartTableRow,
     EndTableRow,
-    StartTableCell { is_header: bool },
+    StartTableCell {
+        is_header: bool,
+    },
     EndTableCell,
 
     // -- Inline events --------------------------------------------------------
@@ -67,18 +73,32 @@ pub enum Event<'a> {
     EndSubscript,
     /// Leaf: inline code span.
     InlineCode(Cow<'a, str>),
-    StartLink { url: String },
+    StartLink {
+        url: String,
+    },
     EndLink,
     /// Leaf: image.
-    InlineImage { url: String, alt: String },
+    InlineImage {
+        url: String,
+        alt: String,
+    },
     /// Leaf: footnote reference.
-    FootnoteRef { label: String, content: Option<String> },
+    FootnoteRef {
+        label: String,
+        content: Option<String>,
+    },
     /// Leaf: inline math.
-    MathInline { source: String },
+    MathInline {
+        source: String,
+    },
     /// Leaf: template transclusion (preserved raw).
-    Template { content: String },
+    Template {
+        content: String,
+    },
     /// Leaf: nowiki span (preserved raw).
-    Nowiki { content: String },
+    Nowiki {
+        content: String,
+    },
 }
 
 /// Backwards-compatible alias for batch mode (all text is owned).
@@ -94,12 +114,12 @@ impl<'a> Event<'a> {
                 language,
                 content: Cow::Owned(content.into_owned()),
             },
-            Event::PreBlock { content } => {
-                Event::PreBlock { content: Cow::Owned(content.into_owned()) }
-            }
-            Event::RawBlock { content } => {
-                Event::RawBlock { content: Cow::Owned(content.into_owned()) }
-            }
+            Event::PreBlock { content } => Event::PreBlock {
+                content: Cow::Owned(content.into_owned()),
+            },
+            Event::RawBlock { content } => Event::RawBlock {
+                content: Cow::Owned(content.into_owned()),
+            },
             // Safety: all other variants contain only String/'static fields.
             other => unsafe { std::mem::transmute::<Event<'_>, OwnedEvent>(other) },
         }
@@ -159,7 +179,9 @@ fn emit_block_events(block: &Block, out: &mut Vec<OwnedEvent>) {
             emit_inline_events(inlines, out);
             out.push(Event::EndHeading);
         }
-        Block::CodeBlock { language, content, .. } => {
+        Block::CodeBlock {
+            language, content, ..
+        } => {
             out.push(Event::CodeBlock {
                 language: language.clone(),
                 content: Cow::Owned(content.clone()),
@@ -192,11 +214,15 @@ fn emit_block_events(block: &Block, out: &mut Vec<OwnedEvent>) {
             out.push(Event::HorizontalRule);
         }
         Block::Table { rows, caption, .. } => {
-            out.push(Event::StartTable { caption: caption.clone() });
+            out.push(Event::StartTable {
+                caption: caption.clone(),
+            });
             for row in rows {
                 out.push(Event::StartTableRow);
                 for cell in &row.cells {
-                    out.push(Event::StartTableCell { is_header: cell.is_header });
+                    out.push(Event::StartTableCell {
+                        is_header: cell.is_header,
+                    });
                     emit_inline_events(&cell.inlines, out);
                     out.push(Event::EndTableCell);
                 }
@@ -212,10 +238,14 @@ fn emit_block_events(block: &Block, out: &mut Vec<OwnedEvent>) {
             out.push(Event::EndBlockquote);
         }
         Block::PreBlock { content, .. } => {
-            out.push(Event::PreBlock { content: Cow::Owned(content.clone()) });
+            out.push(Event::PreBlock {
+                content: Cow::Owned(content.clone()),
+            });
         }
         Block::RawBlock { content, .. } => {
-            out.push(Event::RawBlock { content: Cow::Owned(content.clone()) });
+            out.push(Event::RawBlock {
+                content: Cow::Owned(content.clone()),
+            });
         }
     }
 }
@@ -245,7 +275,10 @@ fn emit_inline_events(inlines: &[Inline], out: &mut Vec<OwnedEvent>) {
                 out.push(Event::EndLink);
             }
             Inline::Image { url, alt } => {
-                out.push(Event::InlineImage { url: url.clone(), alt: alt.clone() });
+                out.push(Event::InlineImage {
+                    url: url.clone(),
+                    alt: alt.clone(),
+                });
             }
             Inline::LineBreak => {
                 out.push(Event::LineBreak);
@@ -277,13 +310,19 @@ fn emit_inline_events(inlines: &[Inline], out: &mut Vec<OwnedEvent>) {
                 });
             }
             Inline::MathInline { source } => {
-                out.push(Event::MathInline { source: source.clone() });
+                out.push(Event::MathInline {
+                    source: source.clone(),
+                });
             }
             Inline::Template { content } => {
-                out.push(Event::Template { content: content.clone() });
+                out.push(Event::Template {
+                    content: content.clone(),
+                });
             }
             Inline::Nowiki { content } => {
-                out.push(Event::Nowiki { content: content.clone() });
+                out.push(Event::Nowiki {
+                    content: content.clone(),
+                });
             }
         }
     }
@@ -305,13 +344,19 @@ mod tests {
         let evs: Vec<_> = events("Hello world").collect();
         assert!(evs.iter().any(|e| matches!(e, Event::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, Event::EndParagraph)));
-        assert!(evs.iter().any(|e| matches!(e, Event::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
     fn test_events_heading() {
         let evs: Vec<_> = events("== Title ==").collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::StartHeading { level: 2 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartHeading { level: 2 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndHeading)));
     }
 
@@ -325,9 +370,14 @@ mod tests {
     #[test]
     fn test_events_list() {
         let evs: Vec<_> = events("* item 1\n* item 2").collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::StartList { ordered: false })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartList { ordered: false }))
+        );
         assert_eq!(
-            evs.iter().filter(|e| matches!(e, Event::StartListItem)).count(),
+            evs.iter()
+                .filter(|e| matches!(e, Event::StartListItem))
+                .count(),
             2
         );
         assert!(evs.iter().any(|e| matches!(e, Event::EndList)));
@@ -337,8 +387,14 @@ mod tests {
     fn test_events_table() {
         let evs: Vec<_> = events("{|\n! Name\n|-\n| Alice\n|}").collect();
         assert!(evs.iter().any(|e| matches!(e, Event::StartTable { .. })));
-        assert!(evs.iter().any(|e| matches!(e, Event::StartTableCell { is_header: true })));
-        assert!(evs.iter().any(|e| matches!(e, Event::StartTableCell { is_header: false })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartTableCell { is_header: true }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartTableCell { is_header: false }))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndTable)));
     }
 
@@ -351,7 +407,10 @@ mod tests {
     #[test]
     fn test_events_link() {
         let evs: Vec<_> = events("[[Page|text]]").collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::StartLink { url } if url == "Page")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartLink { url } if url == "Page"))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndLink)));
     }
 
@@ -365,16 +424,18 @@ mod tests {
     #[test]
     fn test_events_footnote() {
         let evs: Vec<_> = events("Text<ref>note</ref>.").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::FootnoteRef { content: Some(c), .. } if c == "note")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::FootnoteRef { content: Some(c), .. } if c == "note"))
+        );
     }
 
     #[test]
     fn test_events_math() {
         let evs: Vec<_> = events("Solve <math>x^2</math>.").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::MathInline { source } if source == "x^2")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::MathInline { source } if source == "x^2"))
+        );
     }
 }

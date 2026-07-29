@@ -26,38 +26,101 @@ struct Parser {
 enum StackItem {
     FictionBook,
     Description,
-    TitleInfo { ti: TitleInfo },
-    DocumentInfo { di: DocumentInfo },
-    PublishInfo { pi: PublishInfo },
-    CustomInfo { info_type: String },
-    AuthorInTitleInfo { a: Author },
-    AuthorInDocInfo { a: Author },
-    Translator { a: Author },
+    TitleInfo {
+        ti: TitleInfo,
+    },
+    DocumentInfo {
+        di: DocumentInfo,
+    },
+    PublishInfo {
+        pi: PublishInfo,
+    },
+    CustomInfo {
+        info_type: String,
+    },
+    AuthorInTitleInfo {
+        a: Author,
+    },
+    AuthorInDocInfo {
+        a: Author,
+    },
+    Translator {
+        a: Author,
+    },
     /// A text-only leaf element in metadata (e.g. <genre>, <book-title>, <first-name>)
     /// Text accumulates in current_text; the tag name tells commit_leaf_text what to do.
     LeafText,
-    Body { b: Body },
-    BodyTitle { title: Title },
-    Section { s: Section },
-    SectionTitle { title: Title },
-    TitlePara { inlines: Vec<InlineElement> },
-    Paragraph { inlines: Vec<InlineElement> },
-    Subtitle { inlines: Vec<InlineElement> },
-    Poem { p: Poem },
-    PoemTitle { title: Title },
-    Stanza { s: Stanza },
-    VerseLine { inlines: Vec<InlineElement> },
-    Cite { c: Cite },
-    Epigraph { e: Epigraph },
-    TextAuthor { inlines: Vec<InlineElement> },
-    Annotation { ann: Annotation },
-    Table { t: Table },
-    TableRow { row: TableRow },
-    TableCell { cell: TableCell },
-    Binary { id: String, content_type: String },
-    InlineWrapper { kind: InlineKind, children: Vec<InlineElement> },
-    Link { href: String, link_kind: Option<String>, children: Vec<InlineElement> },
-    FootnoteRef { href: String, children: Vec<InlineElement> },
+    Body {
+        b: Body,
+    },
+    BodyTitle {
+        title: Title,
+    },
+    Section {
+        s: Section,
+    },
+    SectionTitle {
+        title: Title,
+    },
+    TitlePara {
+        inlines: Vec<InlineElement>,
+    },
+    Paragraph {
+        inlines: Vec<InlineElement>,
+    },
+    Subtitle {
+        inlines: Vec<InlineElement>,
+    },
+    Poem {
+        p: Poem,
+    },
+    PoemTitle {
+        title: Title,
+    },
+    Stanza {
+        s: Stanza,
+    },
+    VerseLine {
+        inlines: Vec<InlineElement>,
+    },
+    Cite {
+        c: Cite,
+    },
+    Epigraph {
+        e: Epigraph,
+    },
+    TextAuthor {
+        inlines: Vec<InlineElement>,
+    },
+    Annotation {
+        ann: Annotation,
+    },
+    Table {
+        t: Table,
+    },
+    TableRow {
+        row: TableRow,
+    },
+    TableCell {
+        cell: TableCell,
+    },
+    Binary {
+        id: String,
+        content_type: String,
+    },
+    InlineWrapper {
+        kind: InlineKind,
+        children: Vec<InlineElement>,
+    },
+    Link {
+        href: String,
+        link_kind: Option<String>,
+        children: Vec<InlineElement>,
+    },
+    FootnoteRef {
+        href: String,
+        children: Vec<InlineElement>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,12 +307,18 @@ impl Parser {
         match name {
             "FictionBook" => self.stack.push(StackItem::FictionBook),
             "description" => self.stack.push(StackItem::Description),
-            "title-info" => self.stack.push(StackItem::TitleInfo { ti: TitleInfo::default() }),
+            "title-info" => self.stack.push(StackItem::TitleInfo {
+                ti: TitleInfo::default(),
+            }),
             "document-info" => {
-                self.stack.push(StackItem::DocumentInfo { di: DocumentInfo::default() });
+                self.stack.push(StackItem::DocumentInfo {
+                    di: DocumentInfo::default(),
+                });
             }
             "publish-info" => {
-                self.stack.push(StackItem::PublishInfo { pi: PublishInfo::default() });
+                self.stack.push(StackItem::PublishInfo {
+                    pi: PublishInfo::default(),
+                });
             }
             "custom-info" => {
                 self.stack.push(StackItem::CustomInfo {
@@ -262,12 +331,18 @@ impl Parser {
                     .iter()
                     .any(|s| matches!(s, StackItem::DocumentInfo { .. }));
                 if in_doc_info {
-                    self.stack.push(StackItem::AuthorInDocInfo { a: Author::default() });
+                    self.stack.push(StackItem::AuthorInDocInfo {
+                        a: Author::default(),
+                    });
                 } else {
-                    self.stack.push(StackItem::AuthorInTitleInfo { a: Author::default() });
+                    self.stack.push(StackItem::AuthorInTitleInfo {
+                        a: Author::default(),
+                    });
                 }
             }
-            "translator" => self.stack.push(StackItem::Translator { a: Author::default() }),
+            "translator" => self.stack.push(StackItem::Translator {
+                a: Author::default(),
+            }),
             // Leaf text elements in metadata / inline code
             "genre" | "book-title" | "lang" | "src-lang" | "keywords" | "date" | "version"
             | "program-used" | "src-url" | "src-ocr" | "id" | "book-name" | "publisher"
@@ -288,25 +363,32 @@ impl Parser {
                     ..Default::default()
                 },
             }),
-            "title" => {
-                match self.stack.last() {
-                    Some(StackItem::Body { .. }) => {
-                        self.stack.push(StackItem::BodyTitle {
-                            title: Title { lang: attrs.get("lang").cloned(), ..Default::default() },
-                        });
-                    }
-                    Some(StackItem::Poem { .. }) => {
-                        self.stack.push(StackItem::PoemTitle {
-                            title: Title { lang: attrs.get("lang").cloned(), ..Default::default() },
-                        });
-                    }
-                    _ => {
-                        self.stack.push(StackItem::SectionTitle {
-                            title: Title { lang: attrs.get("lang").cloned(), ..Default::default() },
-                        });
-                    }
+            "title" => match self.stack.last() {
+                Some(StackItem::Body { .. }) => {
+                    self.stack.push(StackItem::BodyTitle {
+                        title: Title {
+                            lang: attrs.get("lang").cloned(),
+                            ..Default::default()
+                        },
+                    });
                 }
-            }
+                Some(StackItem::Poem { .. }) => {
+                    self.stack.push(StackItem::PoemTitle {
+                        title: Title {
+                            lang: attrs.get("lang").cloned(),
+                            ..Default::default()
+                        },
+                    });
+                }
+                _ => {
+                    self.stack.push(StackItem::SectionTitle {
+                        title: Title {
+                            lang: attrs.get("lang").cloned(),
+                            ..Default::default()
+                        },
+                    });
+                }
+            },
             "section" => self.stack.push(StackItem::Section {
                 s: Section {
                     id: attrs.get("id").cloned(),
@@ -316,12 +398,18 @@ impl Parser {
             }),
             "p" => {
                 if is_title_context(&self.stack) {
-                    self.stack.push(StackItem::TitlePara { inlines: Vec::new() });
+                    self.stack.push(StackItem::TitlePara {
+                        inlines: Vec::new(),
+                    });
                 } else {
-                    self.stack.push(StackItem::Paragraph { inlines: Vec::new() });
+                    self.stack.push(StackItem::Paragraph {
+                        inlines: Vec::new(),
+                    });
                 }
             }
-            "subtitle" => self.stack.push(StackItem::Subtitle { inlines: Vec::new() }),
+            "subtitle" => self.stack.push(StackItem::Subtitle {
+                inlines: Vec::new(),
+            }),
             "epigraph" => self.stack.push(StackItem::Epigraph {
                 e: Epigraph {
                     id: attrs.get("id").cloned(),
@@ -341,7 +429,9 @@ impl Parser {
                     ..Default::default()
                 },
             }),
-            "v" => self.stack.push(StackItem::VerseLine { inlines: Vec::new() }),
+            "v" => self.stack.push(StackItem::VerseLine {
+                inlines: Vec::new(),
+            }),
             "cite" => self.stack.push(StackItem::Cite {
                 c: Cite {
                     id: attrs.get("id").cloned(),
@@ -349,7 +439,9 @@ impl Parser {
                     ..Default::default()
                 },
             }),
-            "text-author" => self.stack.push(StackItem::TextAuthor { inlines: Vec::new() }),
+            "text-author" => self.stack.push(StackItem::TextAuthor {
+                inlines: Vec::new(),
+            }),
             "table" => self.stack.push(StackItem::Table {
                 t: Table {
                     id: attrs.get("id").cloned(),
@@ -494,8 +586,14 @@ impl Parser {
     fn push_sequence(&mut self, seq: Sequence) {
         for item in self.stack.iter_mut().rev() {
             match item {
-                StackItem::TitleInfo { ti } => { ti.sequence.push(seq); return; }
-                StackItem::PublishInfo { pi } => { pi.sequence.push(seq); return; }
+                StackItem::TitleInfo { ti } => {
+                    ti.sequence.push(seq);
+                    return;
+                }
+                StackItem::PublishInfo { pi } => {
+                    pi.sequence.push(seq);
+                    return;
+                }
                 _ => {}
             }
         }
@@ -514,7 +612,10 @@ impl Parser {
                         SectionContent::EmptyLine => CiteContent::EmptyLine,
                         SectionContent::Poem(p) => CiteContent::Poem(p),
                         SectionContent::Table(t) => CiteContent::Table(t),
-                        other => { let _ = other; return; }
+                        other => {
+                            let _ = other;
+                            return;
+                        }
                     };
                     c.content.push(cc);
                     return;
@@ -525,7 +626,10 @@ impl Parser {
                         SectionContent::EmptyLine => EpigraphContent::EmptyLine,
                         SectionContent::Poem(p) => EpigraphContent::Poem(p),
                         SectionContent::Cite(c) => EpigraphContent::Cite(c),
-                        other => { let _ = other; return; }
+                        other => {
+                            let _ = other;
+                            return;
+                        }
                     };
                     e.content.push(ec);
                     return;
@@ -555,7 +659,11 @@ impl Parser {
                 let text = std::mem::take(&mut self.current_text);
                 let text = text.trim();
                 match base64::engine::general_purpose::STANDARD.decode(text) {
-                    Ok(data) => self.fb.binaries.push(Binary { id, content_type, data }),
+                    Ok(data) => self.fb.binaries.push(Binary {
+                        id,
+                        content_type,
+                        data,
+                    }),
                     Err(_) => self.diags.push(Diagnostic {
                         severity: Severity::Warning,
                         message: "Failed to decode binary data".to_string(),
@@ -601,7 +709,10 @@ impl Parser {
             }
             StackItem::CustomInfo { info_type } => {
                 let text = std::mem::take(&mut self.current_text).trim().to_string();
-                self.fb.description.custom_info.push(CustomInfo { info_type, content: text });
+                self.fb.description.custom_info.push(CustomInfo {
+                    info_type,
+                    content: text,
+                });
             }
 
             StackItem::AuthorInTitleInfo { a } => {
@@ -632,8 +743,14 @@ impl Parser {
             StackItem::Annotation { ann } => {
                 for item in self.stack.iter_mut().rev() {
                     match item {
-                        StackItem::TitleInfo { ti } => { ti.annotation = Some(ann); return; }
-                        StackItem::Section { s } => { s.annotation = Some(ann); return; }
+                        StackItem::TitleInfo { ti } => {
+                            ti.annotation = Some(ann);
+                            return;
+                        }
+                        StackItem::Section { s } => {
+                            s.annotation = Some(ann);
+                            return;
+                        }
                         _ => {}
                     }
                 }
@@ -654,8 +771,14 @@ impl Parser {
             StackItem::Section { s } => {
                 for item in self.stack.iter_mut().rev() {
                     match item {
-                        StackItem::Section { s: parent } => { parent.section.push(s); return; }
-                        StackItem::Body { b } => { b.section.push(s); return; }
+                        StackItem::Section { s: parent } => {
+                            parent.section.push(s);
+                            return;
+                        }
+                        StackItem::Body { b } => {
+                            b.section.push(s);
+                            return;
+                        }
                         _ => {}
                     }
                 }
@@ -725,9 +848,18 @@ impl Parser {
                 let cite = c;
                 for item in self.stack.iter_mut().rev() {
                     match item {
-                        StackItem::Section { s } => { s.content.push(SectionContent::Cite(cite)); return; }
-                        StackItem::Epigraph { e } => { e.content.push(EpigraphContent::Cite(cite)); return; }
-                        StackItem::Annotation { ann } => { ann.content.push(AnnotationContent::Cite(cite)); return; }
+                        StackItem::Section { s } => {
+                            s.content.push(SectionContent::Cite(cite));
+                            return;
+                        }
+                        StackItem::Epigraph { e } => {
+                            e.content.push(EpigraphContent::Cite(cite));
+                            return;
+                        }
+                        StackItem::Annotation { ann } => {
+                            ann.content.push(AnnotationContent::Cite(cite));
+                            return;
+                        }
                         _ => {}
                     }
                 }
@@ -735,9 +867,18 @@ impl Parser {
             StackItem::Epigraph { e } => {
                 for item in self.stack.iter_mut().rev() {
                     match item {
-                        StackItem::Section { s } => { s.epigraph.push(e); return; }
-                        StackItem::Body { b } => { b.epigraph.push(e); return; }
-                        StackItem::Poem { p } => { p.epigraph.push(e); return; }
+                        StackItem::Section { s } => {
+                            s.epigraph.push(e);
+                            return;
+                        }
+                        StackItem::Body { b } => {
+                            b.epigraph.push(e);
+                            return;
+                        }
+                        StackItem::Poem { p } => {
+                            p.epigraph.push(e);
+                            return;
+                        }
                         _ => {}
                     }
                 }
@@ -745,9 +886,18 @@ impl Parser {
             StackItem::TextAuthor { inlines } => {
                 for item in self.stack.iter_mut().rev() {
                     match item {
-                        StackItem::Cite { c } => { c.text_author.push(inlines); return; }
-                        StackItem::Epigraph { e } => { e.text_author.push(inlines); return; }
-                        StackItem::Poem { p } => { p.text_author.push(inlines); return; }
+                        StackItem::Cite { c } => {
+                            c.text_author.push(inlines);
+                            return;
+                        }
+                        StackItem::Epigraph { e } => {
+                            e.text_author.push(inlines);
+                            return;
+                        }
+                        StackItem::Poem { p } => {
+                            p.text_author.push(inlines);
+                            return;
+                        }
                         _ => {}
                     }
                 }
@@ -783,8 +933,16 @@ impl Parser {
                 };
                 self.push_inline(el);
             }
-            StackItem::Link { href, link_kind, children } => {
-                self.push_inline(InlineElement::Link { href, kind: link_kind, children });
+            StackItem::Link {
+                href,
+                link_kind,
+                children,
+            } => {
+                self.push_inline(InlineElement::Link {
+                    href,
+                    kind: link_kind,
+                    children,
+                });
             }
             StackItem::FootnoteRef { href, children } => {
                 self.push_inline(InlineElement::FootnoteRef { href, children });
@@ -795,7 +953,11 @@ impl Parser {
                 let text = std::mem::take(&mut self.current_text);
                 let text = text.trim();
                 if let Ok(data) = base64::engine::general_purpose::STANDARD.decode(text) {
-                    self.fb.binaries.push(Binary { id, content_type, data });
+                    self.fb.binaries.push(Binary {
+                        id,
+                        content_type,
+                        data,
+                    });
                 }
             }
         }
@@ -806,49 +968,110 @@ impl Parser {
             match item {
                 StackItem::AuthorInTitleInfo { a }
                 | StackItem::AuthorInDocInfo { a }
-                | StackItem::Translator { a } => {
-                    match tag {
-                        "first-name" => { a.first_name = Some(text); return; }
-                        "middle-name" => { a.middle_name = Some(text); return; }
-                        "last-name" => { a.last_name = Some(text); return; }
-                        "nickname" => { a.nickname = Some(text); return; }
-                        "email" => { a.email.push(text); return; }
-                        "id" => { a.id = Some(text); return; }
-                        _ => {}
+                | StackItem::Translator { a } => match tag {
+                    "first-name" => {
+                        a.first_name = Some(text);
+                        return;
                     }
-                }
-                StackItem::TitleInfo { ti } => {
-                    match tag {
-                        "genre" => { ti.genre.push(text); return; }
-                        "book-title" => { ti.book_title = text; return; }
-                        "lang" => { ti.lang = text; return; }
-                        "src-lang" => { ti.src_lang = Some(text); return; }
-                        "keywords" => { ti.keywords = Some(text); return; }
-                        "date" => { ti.date = Some(text); return; }
-                        _ => {}
+                    "middle-name" => {
+                        a.middle_name = Some(text);
+                        return;
                     }
-                }
-                StackItem::DocumentInfo { di } => {
-                    match tag {
-                        "program-used" => { di.program_used = Some(text); return; }
-                        "date" => { di.date = Some(text); return; }
-                        "src-url" => { di.src_url.push(text); return; }
-                        "src-ocr" => { di.src_ocr = Some(text); return; }
-                        "id" => { di.id = Some(text); return; }
-                        "version" => { di.version = Some(text); return; }
-                        _ => {}
+                    "last-name" => {
+                        a.last_name = Some(text);
+                        return;
                     }
-                }
-                StackItem::PublishInfo { pi } => {
-                    match tag {
-                        "book-name" => { pi.book_name = Some(text); return; }
-                        "publisher" => { pi.publisher = Some(text); return; }
-                        "city" => { pi.city = Some(text); return; }
-                        "year" => { pi.year = Some(text); return; }
-                        "isbn" => { pi.isbn = Some(text); return; }
-                        _ => {}
+                    "nickname" => {
+                        a.nickname = Some(text);
+                        return;
                     }
-                }
+                    "email" => {
+                        a.email.push(text);
+                        return;
+                    }
+                    "id" => {
+                        a.id = Some(text);
+                        return;
+                    }
+                    _ => {}
+                },
+                StackItem::TitleInfo { ti } => match tag {
+                    "genre" => {
+                        ti.genre.push(text);
+                        return;
+                    }
+                    "book-title" => {
+                        ti.book_title = text;
+                        return;
+                    }
+                    "lang" => {
+                        ti.lang = text;
+                        return;
+                    }
+                    "src-lang" => {
+                        ti.src_lang = Some(text);
+                        return;
+                    }
+                    "keywords" => {
+                        ti.keywords = Some(text);
+                        return;
+                    }
+                    "date" => {
+                        ti.date = Some(text);
+                        return;
+                    }
+                    _ => {}
+                },
+                StackItem::DocumentInfo { di } => match tag {
+                    "program-used" => {
+                        di.program_used = Some(text);
+                        return;
+                    }
+                    "date" => {
+                        di.date = Some(text);
+                        return;
+                    }
+                    "src-url" => {
+                        di.src_url.push(text);
+                        return;
+                    }
+                    "src-ocr" => {
+                        di.src_ocr = Some(text);
+                        return;
+                    }
+                    "id" => {
+                        di.id = Some(text);
+                        return;
+                    }
+                    "version" => {
+                        di.version = Some(text);
+                        return;
+                    }
+                    _ => {}
+                },
+                StackItem::PublishInfo { pi } => match tag {
+                    "book-name" => {
+                        pi.book_name = Some(text);
+                        return;
+                    }
+                    "publisher" => {
+                        pi.publisher = Some(text);
+                        return;
+                    }
+                    "city" => {
+                        pi.city = Some(text);
+                        return;
+                    }
+                    "year" => {
+                        pi.year = Some(text);
+                        return;
+                    }
+                    "isbn" => {
+                        pi.isbn = Some(text);
+                        return;
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }
@@ -858,10 +1081,29 @@ impl Parser {
 fn is_leaf_tag(name: &str) -> bool {
     matches!(
         name,
-        "genre" | "book-title" | "lang" | "src-lang" | "keywords" | "date" | "version"
-        | "program-used" | "src-url" | "src-ocr" | "id" | "book-name" | "publisher"
-        | "city" | "year" | "isbn" | "first-name" | "middle-name" | "last-name"
-        | "nickname" | "email" | "code" | "sequence"
+        "genre"
+            | "book-title"
+            | "lang"
+            | "src-lang"
+            | "keywords"
+            | "date"
+            | "version"
+            | "program-used"
+            | "src-url"
+            | "src-ocr"
+            | "id"
+            | "book-name"
+            | "publisher"
+            | "city"
+            | "year"
+            | "isbn"
+            | "first-name"
+            | "middle-name"
+            | "last-name"
+            | "nickname"
+            | "email"
+            | "code"
+            | "sequence"
     )
 }
 

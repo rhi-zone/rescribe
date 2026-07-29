@@ -27,11 +27,19 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Warning, message: message.into(), span }
+        Self {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
     }
 
     pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Error, message: message.into(), span }
+        Self {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -104,9 +112,13 @@ impl Block {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { language, content, .. } => {
-                Block::CodeBlock { language, content, span: Span::NONE }
-            }
+            Block::CodeBlock {
+                language, content, ..
+            } => Block::CodeBlock {
+                language,
+                content,
+                span: Span::NONE,
+            },
             Block::Blockquote { inlines, .. } => Block::Blockquote {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
@@ -195,20 +207,31 @@ pub enum Inline {
     Superscript(Vec<Inline>, Span),
     Subscript(Vec<Inline>, Span),
     Code(String, Span),
-    Link { url: String, label: String, span: Span },
-    Image { url: String, alt: Option<String>, style: Option<String>, span: Span },
+    Link {
+        url: String,
+        label: String,
+        span: Span,
+    },
+    Image {
+        url: String,
+        alt: Option<String>,
+        style: Option<String>,
+        span: Span,
+    },
 }
 
 impl Inline {
     pub fn strip_spans(self) -> Self {
         match self {
             Inline::Text(s, _) => Inline::Text(s, Span::NONE),
-            Inline::Bold(children, _) => {
-                Inline::Bold(children.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
-            Inline::Italic(children, _) => {
-                Inline::Italic(children.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
+            Inline::Bold(children, _) => Inline::Bold(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Italic(children, _) => Inline::Italic(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::Strikethrough(children, _) => Inline::Strikethrough(
                 children.into_iter().map(Inline::strip_spans).collect(),
                 Span::NONE,
@@ -222,10 +245,19 @@ impl Inline {
                 Span::NONE,
             ),
             Inline::Code(s, _) => Inline::Code(s, Span::NONE),
-            Inline::Link { url, label, .. } => Inline::Link { url, label, span: Span::NONE },
-            Inline::Image { url, alt, style, .. } => {
-                Inline::Image { url, alt, style, span: Span::NONE }
-            }
+            Inline::Link { url, label, .. } => Inline::Link {
+                url,
+                label,
+                span: Span::NONE,
+            },
+            Inline::Image {
+                url, alt, style, ..
+            } => Inline::Image {
+                url,
+                alt,
+                style,
+                span: Span::NONE,
+            },
         }
     }
 }

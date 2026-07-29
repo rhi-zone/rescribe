@@ -211,11 +211,7 @@ impl<'a> EventGenerator<'a> {
             "/// Each container element produces a `Start…` / `End…` pair;"
         )
         .unwrap();
-        writeln!(
-            self.output,
-            "/// leaf elements produce a single variant."
-        )
-        .unwrap();
+        writeln!(self.output, "/// leaf elements produce a single variant.").unwrap();
         writeln!(self.output, "#[derive(Debug, Clone)]").unwrap();
         writeln!(self.output, "pub enum {}<'a> {{", name).unwrap();
 
@@ -293,12 +289,7 @@ impl<'a> EventGenerator<'a> {
             name
         )
         .unwrap();
-        writeln!(
-            self.output,
-            "pub type Owned{0} = {0}<'static>;",
-            name
-        )
-        .unwrap();
+        writeln!(self.output, "pub type Owned{0} = {0}<'static>;", name).unwrap();
         writeln!(self.output).unwrap();
     }
 
@@ -325,20 +316,10 @@ impl<'a> EventGenerator<'a> {
 
         // Document sentinels
         if let Some(s) = &self.config.document_start {
-            writeln!(
-                self.output,
-                "            {0}::{1} => {0}::{1},",
-                name, s
-            )
-            .unwrap();
+            writeln!(self.output, "            {0}::{1} => {0}::{1},", name, s).unwrap();
         }
         if let Some(e) = &self.config.document_end {
-            writeln!(
-                self.output,
-                "            {0}::{1} => {0}::{1},",
-                name, e
-            )
-            .unwrap();
+            writeln!(self.output, "            {0}::{1} => {0}::{1},", name, e).unwrap();
         }
 
         // Containers
@@ -514,7 +495,11 @@ impl<'a> EventGenerator<'a> {
     }
 
     fn gen_props_element(&mut self) {
-        let has_any_props = self.config.containers.iter().any(|c| c.props_xml_local.is_some());
+        let has_any_props = self
+            .config
+            .containers
+            .iter()
+            .any(|c| c.props_xml_local.is_some());
         if !has_any_props {
             return;
         }
@@ -581,7 +566,11 @@ impl<'a> EventGenerator<'a> {
             return;
         }
 
-        writeln!(self.output, "/// How props are obtained for a container element.").unwrap();
+        writeln!(
+            self.output,
+            "/// How props are obtained for a container element."
+        )
+        .unwrap();
         writeln!(self.output, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]").unwrap();
         writeln!(self.output, "pub enum PropsStrategy {{").unwrap();
         if has_child {
@@ -709,10 +698,7 @@ impl<'a> EventGenerator<'a> {
         if rust_type.contains("Cow") {
             if rust_type.starts_with("Option") {
                 // Option<Cow<'a, str>>
-                format!(
-                    "{}.map(|v| Cow::Owned(v.into_owned()))",
-                    field_name
-                )
+                format!("{}.map(|v| Cow::Owned(v.into_owned()))", field_name)
             } else {
                 // Cow<'a, str>
                 format!("Cow::Owned({}.into_owned())", field_name)

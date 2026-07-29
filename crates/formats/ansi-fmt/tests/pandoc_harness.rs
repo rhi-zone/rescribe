@@ -73,8 +73,8 @@ fn roundtrip_sample() {
 
 #[test]
 fn streaming_parser_roundtrip() {
-    use ansi_fmt::batch::StreamingParser;
     use ansi_fmt::OwnedEvent;
+    use ansi_fmt::batch::StreamingParser;
 
     let input = b"\x1b[1mHello\x1b[0m \x1b[31mWorld\x1b[0m";
     let mut evs: Vec<OwnedEvent> = Vec::new();
@@ -99,9 +99,9 @@ fn streaming_parser_roundtrip() {
 
 #[test]
 fn writer_roundtrip() {
+    use ansi_fmt::OwnedEvent;
     use ansi_fmt::ast::Style;
     use ansi_fmt::writer::Writer;
-    use ansi_fmt::OwnedEvent;
 
     let mut w = Writer::new(Vec::<u8>::new());
     let s = Style {

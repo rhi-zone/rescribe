@@ -28,7 +28,14 @@ pub fn parse(input: &str) -> (AsciiDoc, Vec<Diagnostic>) {
     }
     let attributes = p.take_attributes();
     let diagnostics = std::mem::take(&mut p.diagnostics);
-    (AsciiDoc { blocks, attributes, span: Span::NONE }, diagnostics)
+    (
+        AsciiDoc {
+            blocks,
+            attributes,
+            span: Span::NONE,
+        },
+        diagnostics,
+    )
 }
 
 // ── Parser ────────────────────────────────────────────────────────────────────
@@ -395,12 +402,20 @@ impl<'a> EventIter<'a> {
                 if let Some(delim_line) = self.current_line() {
                     if delim_line.starts_with('+') && delim_line.chars().all(|c| c == '+') {
                         let content = self.collect_delimited_content("++++");
-                        return Some(Block::MathBlock { content, flavor, span: Span::NONE });
+                        return Some(Block::MathBlock {
+                            content,
+                            flavor,
+                            span: Span::NONE,
+                        });
                     }
                 }
                 // Fallback: passthrough block content without delimiter
                 let content = self.collect_paragraph_content();
-                Some(Block::MathBlock { content, flavor, span: Span::NONE })
+                Some(Block::MathBlock {
+                    content,
+                    flavor,
+                    span: Span::NONE,
+                })
             }
             _ => {
                 // Unknown attribute — skip and try parsing next element
@@ -636,10 +651,7 @@ impl<'a> EventIter<'a> {
         }
 
         // Description list: term:: definition (but not image::)
-        if trimmed.contains("::")
-            && !trimmed.starts_with("::")
-            && !trimmed.starts_with("image::")
-        {
+        if trimmed.contains("::") && !trimmed.starts_with("::") && !trimmed.starts_with("image::") {
             return self.parse_description_list();
         }
 
@@ -1101,48 +1113,88 @@ impl<'a> EventIter<'a> {
     fn expand_block(&mut self, block: Block) {
         use crate::events::OwnedEvent;
         match block {
-            Block::Paragraph { inlines, id, role, checked, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndParagraph));
+            Block::Paragraph {
+                inlines,
+                id,
+                role,
+                checked,
+                ..
+            } => {
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndParagraph));
                 if !inlines.is_empty() {
                     self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartParagraph { id, role, checked }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartParagraph {
+                        id,
+                        role,
+                        checked,
+                    }));
             }
-            Block::Heading { level, inlines, id, role, .. } => {
+            Block::Heading {
+                level,
+                inlines,
+                id,
+                role,
+                ..
+            } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndHeading));
                 if !inlines.is_empty() {
                     self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartHeading { level, id, role }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartHeading { level, id, role }));
             }
-            Block::CodeBlock { content, language, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndCodeBlock));
-                self.frame_stack.push(Frame::Event(Event::CodeBlockContent(Cow::Owned(content))));
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartCodeBlock { language }));
+            Block::CodeBlock {
+                content, language, ..
+            } => {
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndCodeBlock));
+                self.frame_stack
+                    .push(Frame::Event(Event::CodeBlockContent(Cow::Owned(content))));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartCodeBlock { language }));
             }
-            Block::Blockquote { children, attribution, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndBlockquote));
+            Block::Blockquote {
+                children,
+                attribution,
+                ..
+            } => {
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndBlockquote));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Blocks(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartBlockquote { attribution }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartBlockquote { attribution }));
             }
-            Block::List { ordered, items, style, .. } => {
+            Block::List {
+                ordered,
+                items,
+                style,
+                ..
+            } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndList));
                 if !items.is_empty() {
                     self.frame_stack.push(Frame::ListItems(items.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartList { ordered, style }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartList { ordered, style }));
             }
             Block::DefinitionList { items, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionList));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndDefinitionList));
                 if !items.is_empty() {
-                    self.frame_stack.push(Frame::DefinitionItems(items.into_iter()));
+                    self.frame_stack
+                        .push(Frame::DefinitionItems(items.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionList));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartDefinitionList));
             }
             Block::HorizontalRule { .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::HorizontalRule));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::HorizontalRule));
             }
             Block::PageBreak { .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::PageBreak));
@@ -1155,18 +1207,30 @@ impl<'a> EventIter<'a> {
                     title,
                 }));
             }
-            Block::Div { class, title, children, .. } => {
+            Block::Div {
+                class,
+                title,
+                children,
+                ..
+            } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndDiv));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Blocks(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartDiv { class, title }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartDiv { class, title }));
             }
-            Block::RawBlock { format, content, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::RawBlock { format, content }));
+            Block::RawBlock {
+                format, content, ..
+            } => {
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::RawBlock { format, content }));
             }
-            Block::MathBlock { content, flavor, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::MathBlock { content, flavor }));
+            Block::MathBlock {
+                content, flavor, ..
+            } => {
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::MathBlock { content, flavor }));
             }
             Block::Table { rows, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndTable));
@@ -1182,7 +1246,8 @@ impl<'a> EventIter<'a> {
         use crate::events::OwnedEvent;
         match inline {
             Inline::Text { text, .. } => {
-                self.frame_stack.push(Frame::Event(Event::Text(Cow::Owned(text))));
+                self.frame_stack
+                    .push(Frame::Event(Event::Text(Cow::Owned(text))));
             }
             Inline::SoftBreak { .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::SoftBreak));
@@ -1202,54 +1267,72 @@ impl<'a> EventIter<'a> {
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartEmphasis));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartEmphasis));
             }
             Inline::Code(content, _) => {
-                self.frame_stack.push(Frame::Event(Event::Code(Cow::Owned(content))));
+                self.frame_stack
+                    .push(Frame::Event(Event::Code(Cow::Owned(content))));
             }
             Inline::Superscript(children, _) => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndSuperscript));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndSuperscript));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartSuperscript));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartSuperscript));
             }
             Inline::Subscript(children, _) => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndSubscript));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndSubscript));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartSubscript));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartSubscript));
             }
             Inline::Highlight(children, _) => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndHighlight));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndHighlight));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartHighlight));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartHighlight));
             }
             Inline::Strikeout(children, _) => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndStrikeout));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndStrikeout));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartStrikeout));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartStrikeout));
             }
             Inline::Underline(children, _) => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndUnderline));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndUnderline));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartUnderline));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartUnderline));
             }
             Inline::SmallCaps(children, _) => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndSmallCaps));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndSmallCaps));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartSmallCaps));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartSmallCaps));
             }
-            Inline::Quoted { quote_type, children, .. } => {
+            Inline::Quoted {
+                quote_type,
+                children,
+                ..
+            } => {
                 let qt = match quote_type {
                     QuoteType::Single => "single".to_string(),
                     QuoteType::Double => "double".to_string(),
@@ -1258,14 +1341,21 @@ impl<'a> EventIter<'a> {
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartQuoted { quote_type: qt }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartQuoted { quote_type: qt }));
             }
-            Inline::Link { url, children, target, .. } => {
+            Inline::Link {
+                url,
+                children,
+                target,
+                ..
+            } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndLink));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartLink { url, target }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartLink { url, target }));
             }
             Inline::Image(img, _) => {
                 let title = img.height.or(img.width);
@@ -1276,23 +1366,35 @@ impl<'a> EventIter<'a> {
                 }));
             }
             Inline::FootnoteRef { label, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::FootnoteRef { label }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::FootnoteRef { label }));
             }
-            Inline::FootnoteDef { label, children, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndFootnoteDef));
+            Inline::FootnoteDef {
+                label, children, ..
+            } => {
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndFootnoteDef));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartFootnoteDef { label }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartFootnoteDef { label }));
             }
-            Inline::MathInline { content, flavor, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::MathInline { content, flavor }));
+            Inline::MathInline {
+                content, flavor, ..
+            } => {
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::MathInline { content, flavor }));
             }
-            Inline::RawInline { format, content, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::RawInline { format, content }));
+            Inline::RawInline {
+                format, content, ..
+            } => {
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::RawInline { format, content }));
             }
             Inline::Anchor { id, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::Anchor { id }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::Anchor { id }));
             }
         }
     }
@@ -1334,9 +1436,11 @@ impl<'a> Iterator for EventIter<'a> {
                         self.frame_stack.push(Frame::ListItems(iter));
                         self.frame_stack.push(Frame::Event(OwnedEvent::EndListItem));
                         if !item_blocks.is_empty() {
-                            self.frame_stack.push(Frame::Blocks(item_blocks.into_iter()));
+                            self.frame_stack
+                                .push(Frame::Blocks(item_blocks.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartListItem));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartListItem));
                     }
                     continue;
                 }
@@ -1346,36 +1450,45 @@ impl<'a> Iterator for EventIter<'a> {
                         self.frame_stack.push(Frame::TableRows(iter));
                         self.frame_stack.push(Frame::Event(OwnedEvent::EndTableRow));
                         if !row.cells.is_empty() {
-                            self.frame_stack.push(Frame::TableCells(row.cells.into_iter()));
+                            self.frame_stack
+                                .push(Frame::TableCells(row.cells.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartTableRow { is_header }));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartTableRow { is_header }));
                     }
                     continue;
                 }
                 Some(Frame::TableCells(mut iter)) => {
                     if let Some(cell_inlines) = iter.next() {
                         self.frame_stack.push(Frame::TableCells(iter));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndTableCell));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndTableCell));
                         if !cell_inlines.is_empty() {
-                            self.frame_stack.push(Frame::Inlines(cell_inlines.into_iter()));
+                            self.frame_stack
+                                .push(Frame::Inlines(cell_inlines.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartTableCell));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartTableCell));
                     }
                     continue;
                 }
                 Some(Frame::DefinitionItems(mut iter)) => {
                     if let Some(item) = iter.next() {
                         self.frame_stack.push(Frame::DefinitionItems(iter));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionDesc));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndDefinitionDesc));
                         if !item.desc.is_empty() {
                             self.frame_stack.push(Frame::Inlines(item.desc.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionDesc));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionTerm));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartDefinitionDesc));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndDefinitionTerm));
                         if !item.term.is_empty() {
                             self.frame_stack.push(Frame::Inlines(item.term.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionTerm));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartDefinitionTerm));
                     }
                     continue;
                 }
@@ -1406,7 +1519,10 @@ impl<'a> Iterator for EventIter<'a> {
 /// - `[ ] ` → `(Some(false), rest)`
 /// - anything else → `(None, original)`
 fn parse_checklist_prefix(content: &str) -> (Option<bool>, &str) {
-    if let Some(rest) = content.strip_prefix("[x] ").or_else(|| content.strip_prefix("[*] ")) {
+    if let Some(rest) = content
+        .strip_prefix("[x] ")
+        .or_else(|| content.strip_prefix("[*] "))
+    {
         (Some(true), rest)
     } else if let Some(rest) = content.strip_prefix("[ ] ") {
         (Some(false), rest)
@@ -1429,10 +1545,7 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
             // Check for **text** first
             if pos + 1 < chars.len() && chars[pos + 1] == '*' {
                 if let Some((end, text)) = find_double_closing(&chars, pos + 2, '*') {
-                    nodes.push(Inline::Strong(
-                        parse_inline_content(&text),
-                        Span::NONE,
-                    ));
+                    nodes.push(Inline::Strong(parse_inline_content(&text), Span::NONE));
                     pos = end + 2;
                     continue;
                 }
@@ -1450,10 +1563,7 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
             // Check for __text__ first
             if pos + 1 < chars.len() && chars[pos + 1] == '_' {
                 if let Some((end, text)) = find_double_closing(&chars, pos + 2, '_') {
-                    nodes.push(Inline::Emphasis(
-                        parse_inline_content(&text),
-                        Span::NONE,
-                    ));
+                    nodes.push(Inline::Emphasis(parse_inline_content(&text), Span::NONE));
                     pos = end + 2;
                     continue;
                 }
@@ -1487,10 +1597,7 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
         // Superscript: ^text^
         if chars[pos] == '^' {
             if let Some((end, text)) = find_closing_char(&chars, pos + 1, '^') {
-                nodes.push(Inline::Superscript(
-                    parse_inline_content(&text),
-                    Span::NONE,
-                ));
+                nodes.push(Inline::Superscript(parse_inline_content(&text), Span::NONE));
                 pos = end + 1;
                 continue;
             }
@@ -1499,10 +1606,7 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
         // Subscript: ~text~
         if chars[pos] == '~' {
             if let Some((end, text)) = find_closing_char(&chars, pos + 1, '~') {
-                nodes.push(Inline::Subscript(
-                    parse_inline_content(&text),
-                    Span::NONE,
-                ));
+                nodes.push(Inline::Subscript(parse_inline_content(&text), Span::NONE));
                 pos = end + 1;
                 continue;
             }
@@ -1542,7 +1646,10 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
                 continue;
             }
             // Not a [role]#text# pattern — emit '[' as text
-            nodes.push(Inline::Text { text: "[".to_string(), span: Span::NONE });
+            nodes.push(Inline::Text {
+                text: "[".to_string(),
+                span: Span::NONE,
+            });
             pos += 1;
             continue;
         }
@@ -1550,10 +1657,7 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
         // Highlight: #text#
         if chars[pos] == '#' {
             if let Some((end, text)) = find_closing_char(&chars, pos + 1, '#') {
-                nodes.push(Inline::Highlight(
-                    parse_inline_content(&text),
-                    Span::NONE,
-                ));
+                nodes.push(Inline::Highlight(parse_inline_content(&text), Span::NONE));
                 pos = end + 1;
                 continue;
             }
@@ -1653,7 +1757,12 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
         }
 
         // Macro shortcuts: footnote:[...], kbd:[...], btn:[...], pass:[...], menu:...[...]
-        if chars[pos] == 'f' || chars[pos] == 'k' || chars[pos] == 'b' || chars[pos] == 'p' || chars[pos] == 'm' {
+        if chars[pos] == 'f'
+            || chars[pos] == 'k'
+            || chars[pos] == 'b'
+            || chars[pos] == 'p'
+            || chars[pos] == 'm'
+        {
             let remaining: String = chars[pos..].iter().take(12).collect();
 
             // footnote:[text], footnote:id[text], footnote:id[]
@@ -1666,31 +1775,36 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
                 //   footnote:id[text] — id between pos+9 and the next '['
                 //   footnote:id[]     — back-reference
                 let after_prefix = pos + 9; // after "footnote:"
-                let (id_opt, bracket_start) = if after_prefix < chars.len() && chars[after_prefix] == '[' {
-                    // anonymous: footnote:[...]
-                    (None, after_prefix)
-                } else if after_prefix < chars.len() && chars[after_prefix] == ':' {
-                    // legacy double-colon: footnote::[...]
-                    let bb = after_prefix + 1;
-                    if bb < chars.len() && chars[bb] == '[' {
-                        (None, bb)
+                let (id_opt, bracket_start) =
+                    if after_prefix < chars.len() && chars[after_prefix] == '[' {
+                        // anonymous: footnote:[...]
+                        (None, after_prefix)
+                    } else if after_prefix < chars.len() && chars[after_prefix] == ':' {
+                        // legacy double-colon: footnote::[...]
+                        let bb = after_prefix + 1;
+                        if bb < chars.len() && chars[bb] == '[' {
+                            (None, bb)
+                        } else {
+                            // Not a valid footnote macro — fall through to text handling.
+                            (None, usize::MAX)
+                        }
                     } else {
-                        // Not a valid footnote macro — fall through to text handling.
-                        (None, usize::MAX)
-                    }
-                } else {
-                    // Named: scan for '[' to extract id
-                    let mut scan = after_prefix;
-                    while scan < chars.len() && chars[scan] != '[' && chars[scan] != ' ' && chars[scan] != '\n' {
-                        scan += 1;
-                    }
-                    if scan < chars.len() && chars[scan] == '[' {
-                        let id: String = chars[after_prefix..scan].iter().collect();
-                        (Some(id), scan)
-                    } else {
-                        (None, usize::MAX)
-                    }
-                };
+                        // Named: scan for '[' to extract id
+                        let mut scan = after_prefix;
+                        while scan < chars.len()
+                            && chars[scan] != '['
+                            && chars[scan] != ' '
+                            && chars[scan] != '\n'
+                        {
+                            scan += 1;
+                        }
+                        if scan < chars.len() && chars[scan] == '[' {
+                            let id: String = chars[after_prefix..scan].iter().collect();
+                            (Some(id), scan)
+                        } else {
+                            (None, usize::MAX)
+                        }
+                    };
 
                 if bracket_start != usize::MAX {
                     // find_matching_bracket expects the position *after* the opening '['.
@@ -1827,8 +1941,16 @@ pub fn parse_inline_content(content: &str) -> Vec<Inline> {
             }
             // Check for macros: image:, link:, https://, http://, footnote:, kbd:, btn:, pass:, menu:,
             //                  stem:, latexmath:, asciimath:
-            if c == 'i' || c == 'l' || c == 'h' || c == 'f' || c == 'k' || c == 'b' || c == 'p' || c == 'm'
-                || c == 's' || c == 'a'
+            if c == 'i'
+                || c == 'l'
+                || c == 'h'
+                || c == 'f'
+                || c == 'k'
+                || c == 'b'
+                || c == 'p'
+                || c == 'm'
+                || c == 's'
+                || c == 'a'
             {
                 let remaining: String = chars[pos..].iter().take(12).collect();
                 // Check for footnote: macro (any form: anonymous, named, or back-ref).

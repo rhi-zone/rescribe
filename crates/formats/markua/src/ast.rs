@@ -156,9 +156,7 @@ impl Block {
                 children: children.iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::List {
-                ordered, items, ..
-            } => Block::List {
+            Block::List { ordered, items, .. } => Block::List {
                 ordered: *ordered,
                 items: items
                     .iter()
@@ -193,9 +191,7 @@ impl Block {
                 span: Span::NONE,
             },
             Block::PageBreak { .. } => Block::PageBreak { span: Span::NONE },
-            Block::Figure {
-                caption, body, ..
-            } => Block::Figure {
+            Block::Figure { caption, body, .. } => Block::Figure {
                 caption: caption.iter().map(Inline::strip_spans).collect(),
                 body: Box::new(body.strip_spans()),
                 span: Span::NONE,

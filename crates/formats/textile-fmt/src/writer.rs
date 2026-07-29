@@ -31,7 +31,10 @@ pub struct Writer<W: Write> {
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
-        Writer { sink, events: Vec::new() }
+        Writer {
+            sink,
+            events: Vec::new(),
+        }
     }
 
     /// Feed one event to the writer.
@@ -153,7 +156,9 @@ struct DocBuilder {
 
 impl DocBuilder {
     fn new() -> Self {
-        DocBuilder { stack: vec![Frame::Document { blocks: vec![] }] }
+        DocBuilder {
+            stack: vec![Frame::Document { blocks: vec![] }],
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -161,10 +166,19 @@ impl DocBuilder {
         match event {
             // ── Block open ──────────────────────────────────────────────────
             TextileEvent::StartParagraph { align, attrs } => {
-                self.stack.push(Frame::Paragraph { align, attrs, inlines: vec![] });
+                self.stack.push(Frame::Paragraph {
+                    align,
+                    attrs,
+                    inlines: vec![],
+                });
             }
             TextileEvent::EndParagraph => {
-                if let Some(Frame::Paragraph { align, attrs, inlines }) = self.stack.pop() {
+                if let Some(Frame::Paragraph {
+                    align,
+                    attrs,
+                    inlines,
+                }) = self.stack.pop()
+                {
                     self.push_block(Block::Paragraph {
                         inlines,
                         align,
@@ -175,10 +189,19 @@ impl DocBuilder {
             }
 
             TextileEvent::StartHeading { level, attrs } => {
-                self.stack.push(Frame::Heading { level, attrs, inlines: vec![] });
+                self.stack.push(Frame::Heading {
+                    level,
+                    attrs,
+                    inlines: vec![],
+                });
             }
             TextileEvent::EndHeading => {
-                if let Some(Frame::Heading { level, attrs, inlines }) = self.stack.pop() {
+                if let Some(Frame::Heading {
+                    level,
+                    attrs,
+                    inlines,
+                }) = self.stack.pop()
+                {
                     self.push_block(Block::Heading {
                         level,
                         inlines,
@@ -197,7 +220,10 @@ impl DocBuilder {
             }
 
             TextileEvent::StartBlockquote { attrs } => {
-                self.stack.push(Frame::Blockquote { attrs, blocks: vec![] });
+                self.stack.push(Frame::Blockquote {
+                    attrs,
+                    blocks: vec![],
+                });
             }
             TextileEvent::EndBlockquote => {
                 if let Some(Frame::Blockquote { attrs, blocks }) = self.stack.pop() {
@@ -210,10 +236,19 @@ impl DocBuilder {
             }
 
             TextileEvent::StartList { ordered } => {
-                self.stack.push(Frame::List { ordered, items: vec![], current_item: None });
+                self.stack.push(Frame::List {
+                    ordered,
+                    items: vec![],
+                    current_item: None,
+                });
             }
             TextileEvent::EndList => {
-                if let Some(Frame::List { ordered, mut items, current_item }) = self.stack.pop() {
+                if let Some(Frame::List {
+                    ordered,
+                    mut items,
+                    current_item,
+                }) = self.stack.pop()
+                {
                     // Flush any dangling current item (shouldn't happen with well-formed events)
                     if let Some(item) = current_item {
                         items.push(item);
@@ -226,10 +261,17 @@ impl DocBuilder {
                 }
             }
             TextileEvent::StartListItem => {
-                self.stack.push(Frame::ListItem { blocks: vec![], inline_buf: vec![] });
+                self.stack.push(Frame::ListItem {
+                    blocks: vec![],
+                    inline_buf: vec![],
+                });
             }
             TextileEvent::EndListItem => {
-                if let Some(Frame::ListItem { mut blocks, inline_buf }) = self.stack.pop() {
+                if let Some(Frame::ListItem {
+                    mut blocks,
+                    inline_buf,
+                }) = self.stack.pop()
+                {
                     // Flush any trailing inline content as a paragraph
                     if !inline_buf.is_empty() {
                         blocks.push(Block::Paragraph {
@@ -257,20 +299,35 @@ impl DocBuilder {
                 }
             }
             TextileEvent::StartTableRow { attrs } => {
-                self.stack.push(Frame::TableRow { attrs, cells: vec![] });
+                self.stack.push(Frame::TableRow {
+                    attrs,
+                    cells: vec![],
+                });
             }
             TextileEvent::EndTableRow => {
                 if let Some(Frame::TableRow { attrs, cells }) = self.stack.pop()
                     && let Some(Frame::Table { rows }) = self.stack.last_mut()
                 {
-                    rows.push(TableRow { attrs, cells, span: crate::ast::Span::dummy() });
+                    rows.push(TableRow {
+                        attrs,
+                        cells,
+                        span: crate::ast::Span::dummy(),
+                    });
                 }
             }
             TextileEvent::StartTableCell { is_header, align } => {
-                self.stack.push(Frame::TableCell { is_header, align, inlines: vec![] });
+                self.stack.push(Frame::TableCell {
+                    is_header,
+                    align,
+                    inlines: vec![],
+                });
             }
             TextileEvent::EndTableCell => {
-                if let Some(Frame::TableCell { is_header, align, inlines }) = self.stack.pop()
+                if let Some(Frame::TableCell {
+                    is_header,
+                    align,
+                    inlines,
+                }) = self.stack.pop()
                     && let Some(Frame::TableRow { cells, .. }) = self.stack.last_mut()
                 {
                     cells.push(TableCell {
@@ -283,11 +340,16 @@ impl DocBuilder {
             }
 
             TextileEvent::HorizontalRule => {
-                self.push_block(Block::HorizontalRule { span: crate::ast::Span::dummy() });
+                self.push_block(Block::HorizontalRule {
+                    span: crate::ast::Span::dummy(),
+                });
             }
 
             TextileEvent::StartFootnoteDef { label } => {
-                self.stack.push(Frame::FootnoteDef { label, inlines: vec![] });
+                self.stack.push(Frame::FootnoteDef {
+                    label,
+                    inlines: vec![],
+                });
             }
             TextileEvent::EndFootnoteDef => {
                 if let Some(Frame::FootnoteDef { label, inlines }) = self.stack.pop() {
@@ -300,7 +362,10 @@ impl DocBuilder {
             }
 
             TextileEvent::StartDefinitionList => {
-                self.stack.push(Frame::DefinitionList { items: vec![], current_term: None });
+                self.stack.push(Frame::DefinitionList {
+                    items: vec![],
+                    current_term: None,
+                });
             }
             TextileEvent::EndDefinitionList => {
                 if let Some(Frame::DefinitionList { items, .. }) = self.stack.pop() {
@@ -315,8 +380,7 @@ impl DocBuilder {
             }
             TextileEvent::EndDefinitionTerm => {
                 if let Some(Frame::DefinitionTerm { inlines }) = self.stack.pop()
-                    && let Some(Frame::DefinitionList { current_term, .. }) =
-                        self.stack.last_mut()
+                    && let Some(Frame::DefinitionList { current_term, .. }) = self.stack.last_mut()
                 {
                     *current_term = Some(inlines);
                 }
@@ -326,8 +390,10 @@ impl DocBuilder {
             }
             TextileEvent::EndDefinitionDesc => {
                 if let Some(Frame::DefinitionDesc { inlines }) = self.stack.pop()
-                    && let Some(Frame::DefinitionList { items, current_term }) =
-                        self.stack.last_mut()
+                    && let Some(Frame::DefinitionList {
+                        items,
+                        current_term,
+                    }) = self.stack.last_mut()
                 {
                     let term = current_term.take().unwrap_or_default();
                     items.push((term, inlines));
@@ -335,7 +401,10 @@ impl DocBuilder {
             }
 
             TextileEvent::RawBlock { content } => {
-                self.push_block(Block::Raw { content, span: crate::ast::Span::dummy() });
+                self.push_block(Block::Raw {
+                    content,
+                    span: crate::ast::Span::dummy(),
+                });
             }
 
             // ── Inline span open/close ──────────────────────────────────────
@@ -394,10 +463,19 @@ impl DocBuilder {
             }
 
             TextileEvent::StartLink { url, title } => {
-                self.stack.push(Frame::Link { url, title, inlines: vec![] });
+                self.stack.push(Frame::Link {
+                    url,
+                    title,
+                    inlines: vec![],
+                });
             }
             TextileEvent::EndLink => {
-                if let Some(Frame::Link { url, title, inlines }) = self.stack.pop() {
+                if let Some(Frame::Link {
+                    url,
+                    title,
+                    inlines,
+                }) = self.stack.pop()
+                {
                     self.push_inline(Inline::Link {
                         url,
                         title,
@@ -417,7 +495,10 @@ impl DocBuilder {
             }
 
             TextileEvent::StartGenericSpan { attrs } => {
-                self.stack.push(Frame::GenericSpan { attrs, inlines: vec![] });
+                self.stack.push(Frame::GenericSpan {
+                    attrs,
+                    inlines: vec![],
+                });
             }
             TextileEvent::EndGenericSpan => {
                 if let Some(Frame::GenericSpan { attrs, inlines }) = self.stack.pop() {
@@ -437,10 +518,17 @@ impl DocBuilder {
                 self.push_inline(Inline::Code(s, crate::ast::Span::dummy()));
             }
             TextileEvent::InlineImage { url, alt } => {
-                self.push_inline(Inline::Image { url, alt, span: crate::ast::Span::dummy() });
+                self.push_inline(Inline::Image {
+                    url,
+                    alt,
+                    span: crate::ast::Span::dummy(),
+                });
             }
             TextileEvent::FootnoteRef { label } => {
-                self.push_inline(Inline::FootnoteRef { label, span: crate::ast::Span::dummy() });
+                self.push_inline(Inline::FootnoteRef {
+                    label,
+                    span: crate::ast::Span::dummy(),
+                });
             }
             TextileEvent::LineBreak => {
                 self.push_inline(Inline::LineBreak(crate::ast::Span::dummy()));
@@ -506,7 +594,10 @@ impl DocBuilder {
             Some(Frame::Document { blocks }) => blocks,
             _ => vec![],
         };
-        TextileDoc { blocks, span: crate::ast::Span::dummy() }
+        TextileDoc {
+            blocks,
+            span: crate::ast::Span::dummy(),
+        }
     }
 }
 
@@ -576,7 +667,9 @@ mod tests {
     #[test]
     fn test_writer_footnote_def() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(TextileEvent::StartFootnoteDef { label: "1".to_string() });
+        w.write_event(TextileEvent::StartFootnoteDef {
+            label: "1".to_string(),
+        });
         w.write_event(TextileEvent::Text("Note content".to_string()));
         w.write_event(TextileEvent::EndFootnoteDef);
         let bytes = w.finish();
@@ -666,7 +759,9 @@ mod tests {
     #[test]
     fn test_writer_raw_block() {
         let mut w = Writer::new(Vec::<u8>::new());
-        w.write_event(TextileEvent::RawBlock { content: "<b>raw</b>".to_string() });
+        w.write_event(TextileEvent::RawBlock {
+            content: "<b>raw</b>".to_string(),
+        });
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();
         assert!(s.contains("notextile. <b>raw</b>"), "got: {s:?}");
@@ -679,7 +774,9 @@ mod tests {
             align: None,
             attrs: BlockAttrs::default(),
         });
-        w.write_event(TextileEvent::RawInline { content: "<em>x</em>".to_string() });
+        w.write_event(TextileEvent::RawInline {
+            content: "<em>x</em>".to_string(),
+        });
         w.write_event(TextileEvent::EndParagraph);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();

@@ -83,7 +83,9 @@ fn convert_block(block: &haddock_fmt::Block) -> Node {
             Node::new("at_code_block").prop(prop::CONTENT, content.clone())
         }
 
-        haddock_fmt::Block::DocTest { expression, result, .. } => {
+        haddock_fmt::Block::DocTest {
+            expression, result, ..
+        } => {
             let mut n = Node::new("doc_test").prop("expression", expression.clone());
             if let Some(res) = result {
                 n = n.prop("result", res.clone());
@@ -92,11 +94,17 @@ fn convert_block(block: &haddock_fmt::Block) -> Node {
         }
 
         haddock_fmt::Block::Blockquote { inlines, .. } => {
-            Node::new(node::BLOCKQUOTE)
-                .children(vec![Node::new(node::PARAGRAPH).children(convert_inlines(inlines))])
+            Node::new(node::BLOCKQUOTE).children(vec![
+                Node::new(node::PARAGRAPH).children(convert_inlines(inlines)),
+            ])
         }
 
-        haddock_fmt::Block::Property { key, name, description, .. } => {
+        haddock_fmt::Block::Property {
+            key,
+            name,
+            description,
+            ..
+        } => {
             let mut n = Node::new("property").prop("key", key.clone());
             if let Some(n_name) = name {
                 n = n.prop("name", n_name.clone());

@@ -204,7 +204,11 @@ mod tests {
     fn test_parse_strikethrough() {
         let (result, _) = parse("Some <del>struck</del> text");
         if let Block::Paragraph { inlines, .. } = &result.blocks[0] {
-            assert!(inlines.iter().any(|i| matches!(i, Inline::Strikethrough(..))));
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::Strikethrough(..)))
+            );
         } else {
             panic!("expected paragraph");
         }
@@ -234,7 +238,11 @@ mod tests {
     fn test_parse_wikiword() {
         let (result, _) = parse("Visit MyPage for info");
         if let Block::Paragraph { inlines, .. } = &result.blocks[0] {
-            assert!(inlines.iter().any(|i| matches!(i, Inline::WikiWord { word, .. } if word == "MyPage")));
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::WikiWord { word, .. } if word == "MyPage"))
+            );
         } else {
             panic!("expected paragraph");
         }
@@ -250,7 +258,11 @@ mod tests {
     fn test_parse_line_break() {
         let (result, _) = parse("Line one%BR%Line two");
         if let Block::Paragraph { inlines, .. } = &result.blocks[0] {
-            assert!(inlines.iter().any(|i| matches!(i, Inline::LineBreak { .. })));
+            assert!(
+                inlines
+                    .iter()
+                    .any(|i| matches!(i, Inline::LineBreak { .. }))
+            );
         } else {
             panic!("expected paragraph");
         }

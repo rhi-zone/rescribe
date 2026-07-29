@@ -315,7 +315,7 @@ impl Parser {
                 | Token::String
                 | Token::Namespace
                 | Token::Attribute
-                | Token::Element
+                | Token::Element,
             ) => {
                 matches!(self.tokens.get(self.pos + 2), Some(Token::Colon))
             }
@@ -515,15 +515,43 @@ impl Parser {
         // identifier — their keyword role is determined by syntactic position, not by
         // being forbidden as names.
         match self.peek() {
-            Some(Token::Ident(s)) => { let s = s.clone(); self.advance(); Ok(s) }
-            Some(Token::Text) => { self.advance(); Ok("text".to_string()) }
-            Some(Token::String) => { self.advance(); Ok("string".to_string()) }
-            Some(Token::Mixed) => { self.advance(); Ok("mixed".to_string()) }
-            Some(Token::List) => { self.advance(); Ok("list".to_string()) }
-            Some(Token::Empty) => { self.advance(); Ok("empty".to_string()) }
-            Some(Token::Element) => { self.advance(); Ok("element".to_string()) }
-            Some(Token::Attribute) => { self.advance(); Ok("attribute".to_string()) }
-            Some(Token::Namespace) => { self.advance(); Ok("namespace".to_string()) }
+            Some(Token::Ident(s)) => {
+                let s = s.clone();
+                self.advance();
+                Ok(s)
+            }
+            Some(Token::Text) => {
+                self.advance();
+                Ok("text".to_string())
+            }
+            Some(Token::String) => {
+                self.advance();
+                Ok("string".to_string())
+            }
+            Some(Token::Mixed) => {
+                self.advance();
+                Ok("mixed".to_string())
+            }
+            Some(Token::List) => {
+                self.advance();
+                Ok("list".to_string())
+            }
+            Some(Token::Empty) => {
+                self.advance();
+                Ok("empty".to_string())
+            }
+            Some(Token::Element) => {
+                self.advance();
+                Ok("element".to_string())
+            }
+            Some(Token::Attribute) => {
+                self.advance();
+                Ok("attribute".to_string())
+            }
+            Some(Token::Namespace) => {
+                self.advance();
+                Ok("namespace".to_string())
+            }
             _ => Err(self.error("expected identifier")),
         }
     }

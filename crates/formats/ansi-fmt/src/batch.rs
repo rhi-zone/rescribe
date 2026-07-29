@@ -163,8 +163,7 @@ fn is_complete_escape(data: &[u8]) -> bool {
             if j < data.len() && data[j] == b'?' {
                 j += 1;
             }
-            while j < data.len()
-                && (data[j].is_ascii_digit() || data[j] == b';' || data[j] == b':')
+            while j < data.len() && (data[j].is_ascii_digit() || data[j] == b';' || data[j] == b':')
             {
                 j += 1;
             }
@@ -245,9 +244,10 @@ mod tests {
         let mut p = StreamingParser::new(|ev| evs.push(ev));
         p.feed(b"\x1b[1mHello\x1b[0m");
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::Text { text, .. } if text == "Hello")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::Text { text, .. } if text == "Hello"))
+        );
     }
 
     #[test]
@@ -276,8 +276,10 @@ mod tests {
         let mut sink = BatchSink::new(|ev| events.push(ev));
         sink.feed(b"\x1b[1mHello\x1b[0m");
         sink.finish();
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::Text { text, .. } if text == "Hello")));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::Text { text, .. } if text == "Hello"))
+        );
     }
 }

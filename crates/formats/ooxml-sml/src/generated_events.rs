@@ -3,8 +3,8 @@
 
 #![allow(unused_imports)]
 
-use std::borrow::Cow;
 use super::generated::*;
+use std::borrow::Cow;
 
 /// Streaming events emitted by the DOCX SAX iterator.
 /// Each container element produces a `Start…` / `End…` pair;
@@ -17,13 +17,9 @@ pub enum SmlEvent<'a> {
     EndWorksheet,
     StartSheetData,
     EndSheetData,
-    StartRow {
-        props: Box<Row>,
-    },
+    StartRow { props: Box<Row> },
     EndRow,
-    StartCell {
-        props: Box<Cell>,
-    },
+    StartCell { props: Box<Cell> },
     EndCell,
     StartInlineString,
     EndInlineString,
@@ -45,13 +41,9 @@ impl<'a> SmlEvent<'a> {
             SmlEvent::EndWorksheet => SmlEvent::EndWorksheet,
             SmlEvent::StartSheetData => SmlEvent::StartSheetData,
             SmlEvent::EndSheetData => SmlEvent::EndSheetData,
-            SmlEvent::StartRow { props } => SmlEvent::StartRow {
-                props,
-            },
+            SmlEvent::StartRow { props } => SmlEvent::StartRow { props },
             SmlEvent::EndRow => SmlEvent::EndRow,
-            SmlEvent::StartCell { props } => SmlEvent::StartCell {
-                props,
-            },
+            SmlEvent::StartCell { props } => SmlEvent::StartCell { props },
             SmlEvent::EndCell => SmlEvent::EndCell,
             SmlEvent::StartInlineString => SmlEvent::StartInlineString,
             SmlEvent::EndInlineString => SmlEvent::EndInlineString,
@@ -107,10 +99,5 @@ pub fn props_strategy(kind: SmlStartKind) -> PropsStrategy {
 /// Return true if this XML local element name is a text-content leaf.
 /// The SAX iterator reads the element's text content and emits a text event.
 pub fn is_text_element(local: &[u8]) -> bool {
-    matches!(local,
-        b"v" |
-        b"t" |
-        b"f"
-    )
+    matches!(local, b"v" | b"t" | b"f")
 }
-

@@ -15,9 +15,9 @@ pub mod serializer_gen;
 pub use analysis::{ModuleReport, analyze_schema};
 pub use ast::{DatatypeParam, Definition, Namespace, Pattern, QName, Schema};
 pub use codegen::{CodegenConfig, FeatureMappings, ModuleMappings, NameMappings, generate};
+pub use event_gen::{AttrFieldDef, ContainerDef, EventConfig, LeafDef, generate_events};
 pub use lexer::{LexError, Lexer};
 pub use parser::{ParseError, Parser};
-pub use event_gen::{AttrFieldDef, ContainerDef, EventConfig, LeafDef, generate_events};
 pub use parser_gen::generate_parsers;
 pub use serializer_gen::generate_serializers;
 
@@ -40,9 +40,14 @@ fn strip_rnc_annotations(input: &str) -> String {
         loop {
             match chars.next() {
                 None => break,
-                Some('"') => { while !matches!(chars.next(), None | Some('"')) {} }
+                Some('"') => while !matches!(chars.next(), None | Some('"')) {},
                 Some('[') => depth += 1,
-                Some(']') => { depth -= 1; if depth == 0 { break; } }
+                Some(']') => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
                 _ => {}
             }
         }
@@ -55,16 +60,31 @@ fn strip_rnc_annotations(input: &str) -> String {
                 out.push('"');
                 for sc in chars.by_ref() {
                     out.push(sc);
-                    if sc == '"' { break; }
+                    if sc == '"' {
+                        break;
+                    }
                 }
             }
             '>' if chars.peek() == Some(&'>') => {
                 // >> QName [ ... ] — skip the whole annotation
                 chars.next(); // second '>'
-                while chars.peek().map(|c| c.is_whitespace()).unwrap_or(false) { chars.next(); }
-                while chars.peek().map(|c| !c.is_whitespace() && *c != '[').unwrap_or(false) { chars.next(); }
-                while chars.peek().map(|c| c.is_whitespace()).unwrap_or(false) { chars.next(); }
-                if chars.peek() == Some(&'[') { chars.next(); skip_bracket_block(&mut chars); }
+                while chars.peek().map(|c| c.is_whitespace()).unwrap_or(false) {
+                    chars.next();
+                }
+                while chars
+                    .peek()
+                    .map(|c| !c.is_whitespace() && *c != '[')
+                    .unwrap_or(false)
+                {
+                    chars.next();
+                }
+                while chars.peek().map(|c| c.is_whitespace()).unwrap_or(false) {
+                    chars.next();
+                }
+                if chars.peek() == Some(&'[') {
+                    chars.next();
+                    skip_bracket_block(&mut chars);
+                }
             }
             '[' => {
                 // Standalone annotation block — skip entirely

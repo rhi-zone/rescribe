@@ -89,7 +89,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &result.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|i| matches!(i, Inline::LineBreak { .. })));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::LineBreak { .. }))
+        );
     }
 
     #[test]
@@ -98,7 +102,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &result.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|i| matches!(i, Inline::Image { url, .. } if url == "photo.png")));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Image { url, .. } if url == "photo.png"))
+        );
     }
 
     #[test]

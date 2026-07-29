@@ -41,9 +41,9 @@
 
 use std::io::{Seek, Write};
 
-use crate::writer::PresentationBuilder;
 use crate::Result;
 use crate::generated_events::{OwnedPmlEvent, PmlEvent, ShapeTransform};
+use crate::writer::PresentationBuilder;
 
 // Default slide dimensions: 10 in × 7.5 in in EMU (914400 EMU/in).
 const SLIDE_W: i64 = 9_144_000;
@@ -66,7 +66,11 @@ pub struct PmlWriter<W: Write + Seek> {
 impl<W: Write + Seek> PmlWriter<W> {
     /// Create a new writer targeting `sink`.
     pub fn new(sink: W) -> Self {
-        PmlWriter { sink, events: Vec::new(), slide_boundary_positions: Vec::new() }
+        PmlWriter {
+            sink,
+            events: Vec::new(),
+            slide_boundary_positions: Vec::new(),
+        }
     }
 
     /// Buffer one event.

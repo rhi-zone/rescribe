@@ -10,13 +10,19 @@ pub enum Event<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
     StartBlockquote,
     EndBlockquote,
-    StartPanel { title: Option<String> },
+    StartPanel {
+        title: Option<String>,
+    },
     EndPanel,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
@@ -35,7 +41,9 @@ pub enum Event<'a> {
     EndTable,
     StartTableRow,
     EndTableRow,
-    StartTableCell { is_header: bool },
+    StartTableCell {
+        is_header: bool,
+    },
     EndTableCell,
 
     // ── Inline events ─────────────────────────────────────────────────────────
@@ -54,11 +62,18 @@ pub enum Event<'a> {
     EndSubscript,
     /// Leaf: inline code span.
     InlineCode(Cow<'a, str>),
-    StartLink { url: String },
+    StartLink {
+        url: String,
+    },
     EndLink,
     /// Leaf: standalone image.
-    InlineImage { url: String, alt: Option<String> },
-    StartColorSpan { color: String },
+    InlineImage {
+        url: String,
+        alt: Option<String>,
+    },
+    StartColorSpan {
+        color: String,
+    },
     EndColorSpan,
     /// Leaf: @mention.
     Mention(Cow<'a, str>),
@@ -127,7 +142,10 @@ pub fn events(input: &str) -> EagerEventIter {
     let (doc, _) = crate::parse::parse(input);
     let mut evs = Vec::new();
     emit_doc_events(&doc, &mut evs);
-    EagerEventIter { events: evs, pos: 0 }
+    EagerEventIter {
+        events: evs,
+        pos: 0,
+    }
 }
 
 /// Eager event iterator (events pre-computed from AST).
@@ -171,7 +189,9 @@ fn emit_block_events(block: &Block, out: &mut Vec<OwnedEvent>) {
             emit_inlines_events(inlines, out);
             out.push(Event::EndHeading);
         }
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             out.push(Event::CodeBlock {
                 language: language.clone(),
                 content: Cow::Owned(content.clone()),
@@ -189,8 +209,12 @@ fn emit_block_events(block: &Block, out: &mut Vec<OwnedEvent>) {
             }
             out.push(Event::EndBlockquote);
         }
-        Block::Panel { title, children, .. } => {
-            out.push(Event::StartPanel { title: title.clone() });
+        Block::Panel {
+            title, children, ..
+        } => {
+            out.push(Event::StartPanel {
+                title: title.clone(),
+            });
             for child in children {
                 emit_block_events(child, out);
             }
@@ -221,7 +245,9 @@ fn emit_block_events(block: &Block, out: &mut Vec<OwnedEvent>) {
             for row in rows {
                 out.push(Event::StartTableRow);
                 for cell in &row.cells {
-                    out.push(Event::StartTableCell { is_header: cell.is_header });
+                    out.push(Event::StartTableCell {
+                        is_header: cell.is_header,
+                    });
                     emit_inlines_events(&cell.inlines, out);
                     out.push(Event::EndTableCell);
                 }
@@ -275,7 +301,10 @@ fn emit_inline_events(inline: &Inline, out: &mut Vec<OwnedEvent>) {
             out.push(Event::EndLink);
         }
         Inline::Image { url, alt, .. } => {
-            out.push(Event::InlineImage { url: url.clone(), alt: alt.clone() });
+            out.push(Event::InlineImage {
+                url: url.clone(),
+                alt: alt.clone(),
+            });
         }
         Inline::Superscript(children, _) => {
             out.push(Event::StartSuperscript);
@@ -287,8 +316,12 @@ fn emit_inline_events(inline: &Inline, out: &mut Vec<OwnedEvent>) {
             emit_inlines_events(children, out);
             out.push(Event::EndSubscript);
         }
-        Inline::ColorSpan { color, children, .. } => {
-            out.push(Event::StartColorSpan { color: color.clone() });
+        Inline::ColorSpan {
+            color, children, ..
+        } => {
+            out.push(Event::StartColorSpan {
+                color: color.clone(),
+            });
             emit_inlines_events(children, out);
             out.push(Event::EndColorSpan);
         }
@@ -307,7 +340,10 @@ mod tests {
     #[test]
     fn test_events_heading() {
         let evs: Vec<_> = events("h1. Hello").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndHeading)));
     }
 
@@ -316,13 +352,20 @@ mod tests {
         let evs: Vec<_> = events("Hello world").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndParagraph)));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
     fn test_events_code_block() {
         let evs: Vec<_> = events("{code:java}\npublic class Test {}\n{code}").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::CodeBlock { language: Some(l), .. } if l == "java")));
+        assert!(
+            evs.iter().any(
+                |e| matches!(e, OwnedEvent::CodeBlock { language: Some(l), .. } if l == "java")
+            )
+        );
     }
 
     #[test]
@@ -335,15 +378,27 @@ mod tests {
     #[test]
     fn test_events_link() {
         let evs: Vec<_> = events("[click|https://example.com]").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartLink { url } if url == "https://example.com")));
+        assert!(
+            evs.iter().any(
+                |e| matches!(e, OwnedEvent::StartLink { url } if url == "https://example.com")
+            )
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndLink)));
     }
 
     #[test]
     fn test_events_list() {
         let evs: Vec<_> = events("* item 1\n* item 2").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartList { ordered: false })));
-        assert_eq!(evs.iter().filter(|e| matches!(e, OwnedEvent::StartListItem)).count(), 2);
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartList { ordered: false }))
+        );
+        assert_eq!(
+            evs.iter()
+                .filter(|e| matches!(e, OwnedEvent::StartListItem))
+                .count(),
+            2
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndList)));
     }
 
@@ -351,8 +406,14 @@ mod tests {
     fn test_events_table() {
         let evs: Vec<_> = events("||H1||H2||\n|a|b|").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTable)));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTableCell { is_header: true })));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTableCell { is_header: false })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartTableCell { is_header: true }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartTableCell { is_header: false }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndTable)));
     }
 

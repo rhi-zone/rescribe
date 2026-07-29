@@ -46,7 +46,9 @@ fn block_to_node(block: &Block) -> Node {
                 .children(children)
         }
 
-        Block::CodeBlock { language, content, .. } => {
+        Block::CodeBlock {
+            language, content, ..
+        } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -105,11 +107,9 @@ fn block_to_node(block: &Block) -> Node {
             Node::new("pre_block").prop(prop::CONTENT, content.clone())
         }
 
-        Block::RawBlock { content, .. } => {
-            Node::new(node::RAW_BLOCK)
-                .prop(prop::FORMAT, "mediawiki")
-                .prop(prop::CONTENT, content.clone())
-        }
+        Block::RawBlock { content, .. } => Node::new(node::RAW_BLOCK)
+            .prop(prop::FORMAT, "mediawiki")
+            .prop(prop::CONTENT, content.clone()),
 
         Block::Table { rows, .. } => {
             let children: Vec<Node> = rows
@@ -196,13 +196,9 @@ fn inline_to_node(inline: &Inline) -> Node {
             Node::new("math_inline").prop(prop::CONTENT, source.clone())
         }
 
-        Inline::Template { content } => {
-            Node::new("template").prop(prop::CONTENT, content.clone())
-        }
+        Inline::Template { content } => Node::new("template").prop(prop::CONTENT, content.clone()),
 
-        Inline::Nowiki { content } => {
-            Node::new("nowiki").prop(prop::CONTENT, content.clone())
-        }
+        Inline::Nowiki { content } => Node::new("nowiki").prop(prop::CONTENT, content.clone()),
     }
 }
 

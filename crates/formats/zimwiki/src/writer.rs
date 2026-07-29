@@ -14,7 +14,10 @@ pub struct Writer<W: Write> {
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
-        Writer { sink, events: Vec::new() }
+        Writer {
+            sink,
+            events: Vec::new(),
+        }
     }
 
     /// Feed one event to the writer.
@@ -60,7 +63,8 @@ mod tests {
 
     #[test]
     fn test_writer_roundtrip_via_events() {
-        let input = "====== Hello ======\n\nA paragraph with **bold** text.\n\n* item one\n* item two\n";
+        let input =
+            "====== Hello ======\n\nA paragraph with **bold** text.\n\n* item one\n* item two\n";
         let evts: Vec<_> = crate::events::events(input).collect();
         let mut w = Writer::new(Vec::<u8>::new());
         for e in evts {

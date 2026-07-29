@@ -38,7 +38,10 @@ struct Emitter {
 
 impl Emitter {
     fn new() -> Self {
-        Emitter { buf: String::new(), pending_blanks: 0 }
+        Emitter {
+            buf: String::new(),
+            pending_blanks: 0,
+        }
     }
 
     fn finish(self) -> String {
@@ -91,7 +94,12 @@ impl Emitter {
                 self.emit_attr_line(attr);
                 self.emit_inlines(inlines);
             }
-            Block::Heading { level, inlines, attr, .. } => {
+            Block::Heading {
+                level,
+                inlines,
+                attr,
+                ..
+            } => {
                 self.emit_attr_line(attr);
                 for _ in 0..*level {
                     self.push_char('#');
@@ -120,11 +128,18 @@ impl Emitter {
                     self.buf.pop();
                 }
             }
-            Block::List { kind, items, attr, .. } => {
+            Block::List {
+                kind, items, attr, ..
+            } => {
                 self.emit_attr_line(attr);
                 self.emit_list(kind, items);
             }
-            Block::CodeBlock { language, content, attr, .. } => {
+            Block::CodeBlock {
+                language,
+                content,
+                attr,
+                ..
+            } => {
                 self.emit_attr_line(attr);
                 let lang = language.as_deref().unwrap_or("");
                 self.push("```");
@@ -136,7 +151,12 @@ impl Emitter {
                 }
                 self.push("```");
             }
-            Block::RawBlock { format, content, attr, .. } => {
+            Block::RawBlock {
+                format,
+                content,
+                attr,
+                ..
+            } => {
                 self.emit_attr_line(attr);
                 self.push("```=");
                 self.push(format);
@@ -147,7 +167,12 @@ impl Emitter {
                 }
                 self.push("```");
             }
-            Block::Div { class, blocks, attr, .. } => {
+            Block::Div {
+                class,
+                blocks,
+                attr,
+                ..
+            } => {
                 self.emit_attr_line(attr);
                 self.push(":::");
                 if let Some(cls) = class {
@@ -375,7 +400,9 @@ impl Emitter {
                 self.push(content);
                 self.push(&ticks);
             }
-            Inline::RawInline { format, content, .. } => {
+            Inline::RawInline {
+                format, content, ..
+            } => {
                 let ticks = choose_backticks(content);
                 self.push(&ticks);
                 self.push(content);
@@ -384,7 +411,13 @@ impl Emitter {
                 self.push(format);
                 self.push_char('}');
             }
-            Inline::Link { inlines, url, title, attr, .. } => {
+            Inline::Link {
+                inlines,
+                url,
+                title,
+                attr,
+                ..
+            } => {
                 self.push_char('[');
                 self.emit_inlines(inlines);
                 self.push("](");
@@ -397,7 +430,13 @@ impl Emitter {
                 self.push_char(')');
                 self.push(&format_attr_inline(attr));
             }
-            Inline::Image { inlines, url, title, attr, .. } => {
+            Inline::Image {
+                inlines,
+                url,
+                title,
+                attr,
+                ..
+            } => {
                 self.push("![");
                 self.emit_inlines(inlines);
                 self.push("](");
@@ -490,7 +529,11 @@ fn list_item_marker(kind: &ListKind, idx: u32) -> String {
         ListKind::Bullet(BulletStyle::Star) => "* ".to_string(),
         ListKind::Bullet(BulletStyle::Plus) => "+ ".to_string(),
         ListKind::Task => "- ".to_string(),
-        ListKind::Ordered { style, delimiter, start } => {
+        ListKind::Ordered {
+            style,
+            delimiter,
+            start,
+        } => {
             let n = start + idx;
             let num_str = format_ordered_number(n, style);
             match delimiter {
@@ -542,7 +585,11 @@ fn to_roman(n: u32) -> String {
             n -= val;
         }
     }
-    if result.is_empty() { "0".to_string() } else { result }
+    if result.is_empty() {
+        "0".to_string()
+    } else {
+        result
+    }
 }
 
 fn choose_backticks(content: &str) -> String {

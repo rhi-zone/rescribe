@@ -295,7 +295,10 @@ fn convert_list_item(
         children.push(ListItemContent::Inline(vec![]));
     }
 
-    ListItem { children, checkbox: None }
+    ListItem {
+        children,
+        checkbox: None,
+    }
 }
 
 fn convert_table(n: &Node, warnings: &mut Vec<FidelityWarning>) -> Block {
@@ -558,8 +561,7 @@ fn collect_text(inlines: &[Inline]) -> String {
             }
             Inline::Image { url, .. } => out.push_str(url),
             Inline::LineBreak { .. } | Inline::SoftBreak { .. } => out.push(' '),
-            Inline::FootnoteRef { label, .. }
-            | Inline::FootnoteDefinition { label, .. } => {
+            Inline::FootnoteRef { label, .. } | Inline::FootnoteDefinition { label, .. } => {
                 out.push_str(label)
             }
             Inline::MathInline { source, .. } => {

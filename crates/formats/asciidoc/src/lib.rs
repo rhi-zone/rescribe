@@ -17,11 +17,11 @@ pub use ast::{
     AsciiDoc, AsciiDocError, Block, DefinitionItem, Diagnostic, ImageData, Inline, QuoteType,
     Severity, Span, TableRow,
 };
-pub use emit::build;
 pub use batch::{BatchParser, BatchSink, Handler, StreamingParser};
+pub use emit::build;
 pub use events::{Event, EventIter, OwnedEvent};
-pub use writer::Writer;
 pub use parse::{parse, parse_inline_content};
+pub use writer::Writer;
 
 /// Return a streaming event iterator over the AsciiDoc source.
 pub fn events(input: &str) -> EventIter<'_> {
@@ -93,7 +93,10 @@ mod tests {
     fn test_parse_code_block() {
         let (doc, _) = parse("[source,python]\n----\nprint('hello')\n----");
         assert_eq!(doc.blocks.len(), 1);
-        let Block::CodeBlock { language, content, .. } = &doc.blocks[0] else {
+        let Block::CodeBlock {
+            language, content, ..
+        } = &doc.blocks[0]
+        else {
             panic!("expected code block");
         };
         assert_eq!(language.as_deref(), Some("python"));
@@ -352,15 +355,27 @@ mod tests {
                 rows: vec![
                     TableRow {
                         cells: vec![
-                            vec![Inline::Text { text: "Col1".into(), span: Span::NONE }],
-                            vec![Inline::Text { text: "Col2".into(), span: Span::NONE }],
+                            vec![Inline::Text {
+                                text: "Col1".into(),
+                                span: Span::NONE,
+                            }],
+                            vec![Inline::Text {
+                                text: "Col2".into(),
+                                span: Span::NONE,
+                            }],
                         ],
                         is_header: false,
                     },
                     TableRow {
                         cells: vec![
-                            vec![Inline::Text { text: "A".into(), span: Span::NONE }],
-                            vec![Inline::Text { text: "B".into(), span: Span::NONE }],
+                            vec![Inline::Text {
+                                text: "A".into(),
+                                span: Span::NONE,
+                            }],
+                            vec![Inline::Text {
+                                text: "B".into(),
+                                span: Span::NONE,
+                            }],
                         ],
                         is_header: false,
                     },
@@ -381,7 +396,10 @@ mod tests {
         let evs: Vec<_> = events("|===\n| A | B\n|===\n").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTable)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndTable)));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTableRow { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartTableRow { .. }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTableCell)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndTableCell)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndTableRow)));

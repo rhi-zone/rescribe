@@ -240,9 +240,7 @@ impl Block {
                 rows: rows.into_iter().map(TableRow::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::FootnoteDef {
-                label, content, ..
-            } => Block::FootnoteDef {
+            Block::FootnoteDef { label, content, .. } => Block::FootnoteDef {
                 label,
                 content: content.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
@@ -295,12 +293,14 @@ impl Inline {
     pub fn strip_spans(self) -> Self {
         match self {
             Inline::Text(s, _) => Inline::Text(s, Span::NONE),
-            Inline::Bold(children, _) => {
-                Inline::Bold(children.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
-            Inline::Italic(children, _) => {
-                Inline::Italic(children.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
+            Inline::Bold(children, _) => Inline::Bold(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Italic(children, _) => Inline::Italic(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::Code(s, _) => Inline::Code(s, Span::NONE),
             Inline::Link { url, children, .. } => Inline::Link {
                 url,

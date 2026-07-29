@@ -139,13 +139,17 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             build_blocks(children, ctx);
         }
 
-        Block::RawBlock { format, content, .. } => {
+        Block::RawBlock {
+            format, content, ..
+        } => {
             if format == "asciidoc" {
                 ctx.write(content);
             }
         }
 
-        Block::MathBlock { content, flavor, .. } => {
+        Block::MathBlock {
+            content, flavor, ..
+        } => {
             let macro_name = flavor.as_deref().unwrap_or("stem");
             ctx.write("[");
             ctx.write(macro_name);
@@ -192,8 +196,16 @@ fn build_inlines(inlines: &[Inline], ctx: &mut BuildContext) {
     while i < inlines.len() {
         // FootnoteRef immediately followed by FootnoteDef with the same label
         // collapses back to footnote:id[text] (or footnote:[text] for auto ids).
-        if let Inline::FootnoteRef { label: ref_label, .. } = &inlines[i] {
-            if let Some(Inline::FootnoteDef { label: def_label, children, .. }) = inlines.get(i + 1) {
+        if let Inline::FootnoteRef {
+            label: ref_label, ..
+        } = &inlines[i]
+        {
+            if let Some(Inline::FootnoteDef {
+                label: def_label,
+                children,
+                ..
+            }) = inlines.get(i + 1)
+            {
                 if ref_label == def_label {
                     // Emit as single inline footnote macro.
                     // Auto-generated labels (fn<N>) are not user-visible IDs,
@@ -336,7 +348,9 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("]");
         }
 
-        Inline::MathInline { content, flavor, .. } => {
+        Inline::MathInline {
+            content, flavor, ..
+        } => {
             let macro_name = flavor.as_deref().unwrap_or("stem");
             ctx.write(macro_name);
             ctx.write(":[");
@@ -344,7 +358,9 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("]");
         }
 
-        Inline::RawInline { format, content, .. } => {
+        Inline::RawInline {
+            format, content, ..
+        } => {
             if format == "asciidoc" {
                 ctx.write(content);
             }

@@ -143,11 +143,7 @@ pub enum AnsiNode {
     /// Restore cursor position (CSI u / ESC 8).
     RestoreCursor { span: Span },
     /// Set scroll region (CSI r).
-    ScrollRegion {
-        top: u32,
-        bottom: u32,
-        span: Span,
-    },
+    ScrollRegion { top: u32, bottom: u32, span: Span },
     /// OSC hyperlink (OSC 8).
     Hyperlink {
         url: String,

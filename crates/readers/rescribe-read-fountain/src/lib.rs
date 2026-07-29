@@ -106,7 +106,9 @@ fn parse_character_name(name: &str) -> (String, Option<String>) {
     if let Some(paren_start) = name.find('(') {
         let char_name = name[..paren_start].trim().to_string();
         let rest = &name[paren_start + 1..];
-        let extension = rest.find(')').map(|paren_end| rest[..paren_end].trim().to_string());
+        let extension = rest
+            .find(')')
+            .map(|paren_end| rest[..paren_end].trim().to_string());
         (char_name, extension)
     } else {
         (name.to_string(), None)
@@ -190,8 +192,7 @@ fn parse_inline_markup(text: &str) -> Vec<Node> {
                 }
                 let inner: String = chars[pos + 2..end].iter().collect();
                 nodes.push(
-                    Node::new(node::STRONG)
-                        .child(Node::new(node::TEXT).prop(prop::CONTENT, inner)),
+                    Node::new(node::STRONG).child(Node::new(node::TEXT).prop(prop::CONTENT, inner)),
                 );
                 pos = end + 2;
                 continue;
@@ -199,9 +200,7 @@ fn parse_inline_markup(text: &str) -> Vec<Node> {
         }
 
         // Check for italic: *text* (not **)
-        if chars[pos] == '*'
-            && (pos + 1 >= chars.len() || chars[pos + 1] != '*')
-        {
+        if chars[pos] == '*' && (pos + 1 >= chars.len() || chars[pos + 1] != '*') {
             // Find closing * (not **)
             if let Some(end) = find_closing_single_star(&chars, pos + 1) {
                 if !current_text.is_empty() {
@@ -219,15 +218,16 @@ fn parse_inline_markup(text: &str) -> Vec<Node> {
         }
 
         // Check for underline: _text_
-        if chars[pos] == '_' && let Some(end) = find_closing(&chars, pos + 1, "_") {
+        if chars[pos] == '_'
+            && let Some(end) = find_closing(&chars, pos + 1, "_")
+        {
             if !current_text.is_empty() {
                 nodes.push(Node::new(node::TEXT).prop(prop::CONTENT, current_text.clone()));
                 current_text.clear();
             }
             let inner: String = chars[pos + 1..end].iter().collect();
             nodes.push(
-                Node::new(node::UNDERLINE)
-                    .child(Node::new(node::TEXT).prop(prop::CONTENT, inner)),
+                Node::new(node::UNDERLINE).child(Node::new(node::TEXT).prop(prop::CONTENT, inner)),
             );
             pos = end + 1;
             continue;

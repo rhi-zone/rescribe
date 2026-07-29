@@ -154,7 +154,9 @@ impl<H: Handler> StreamingParser<H> {
             if !self.block_lines.is_empty() {
                 self.emit_block();
             }
-            self.state = BlockState::InHtmlBlock { end_tag: "</blockquote>".to_string() };
+            self.state = BlockState::InHtmlBlock {
+                end_tag: "</blockquote>".to_string(),
+            };
             self.block_lines.push(line);
             // Check if self-closing on same line
             if lower_trimmed.contains("</blockquote>") {
@@ -168,7 +170,9 @@ impl<H: Handler> StreamingParser<H> {
             if !self.block_lines.is_empty() {
                 self.emit_block();
             }
-            self.state = BlockState::InHtmlBlock { end_tag: "</pre>".to_string() };
+            self.state = BlockState::InHtmlBlock {
+                end_tag: "</pre>".to_string(),
+            };
             self.block_lines.push(line);
             if lower_trimmed.contains("</pre>") {
                 self.emit_block();
@@ -186,7 +190,9 @@ impl<H: Handler> StreamingParser<H> {
             } else {
                 "</source>"
             };
-            self.state = BlockState::InHtmlBlock { end_tag: end_tag.to_string() };
+            self.state = BlockState::InHtmlBlock {
+                end_tag: end_tag.to_string(),
+            };
             self.block_lines.push(line);
             if lower_trimmed.contains(end_tag) {
                 self.emit_block();
@@ -242,7 +248,10 @@ pub struct BatchSink<F: FnMut(OwnedEvent)> {
 
 impl<F: FnMut(OwnedEvent)> BatchSink<F> {
     pub fn new(callback: F) -> Self {
-        BatchSink { buf: Vec::new(), callback }
+        BatchSink {
+            buf: Vec::new(),
+            callback,
+        }
     }
 
     /// Feed a chunk of input bytes.
@@ -290,7 +299,10 @@ mod tests {
         p.feed(b"== Hello ==\n\n");
         p.feed(b"A paragraph.\n");
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 2 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 2 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 
@@ -302,7 +314,10 @@ mod tests {
             p.feed(std::slice::from_ref(b));
         }
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { .. }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 
@@ -312,7 +327,10 @@ mod tests {
         let mut p = StreamingParser::new(|ev| evs.push(ev));
         p.feed(b"{|\n! Header\n|-\n| Cell\n|}\n");
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTable { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartTable { .. }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndTable)));
     }
 
@@ -333,9 +351,15 @@ mod tests {
         sink.feed(b"== Hello ==\n\n");
         sink.feed(b"A paragraph.\n");
         sink.finish();
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartHeading { level: 2 })));
-        assert!(events.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 2 }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartParagraph))
+        );
     }
 }

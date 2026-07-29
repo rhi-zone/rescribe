@@ -117,9 +117,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::Strikethrough(_, _))));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Strikethrough(_, _)))
+        );
     }
 
     #[test]

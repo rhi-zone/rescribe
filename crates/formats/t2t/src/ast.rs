@@ -142,9 +142,7 @@ impl Block {
                 children: children.iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::List {
-                ordered, items, ..
-            } => Block::List {
+            Block::List { ordered, items, .. } => Block::List {
                 ordered: *ordered,
                 items: items
                     .iter()
@@ -228,12 +226,14 @@ impl Inline {
     pub fn strip_spans(&self) -> Self {
         match self {
             Inline::Text(s, _) => Inline::Text(s.clone(), Span::NONE),
-            Inline::Bold(children, _) => {
-                Inline::Bold(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
-            Inline::Italic(children, _) => {
-                Inline::Italic(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
+            Inline::Bold(children, _) => Inline::Bold(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Italic(children, _) => Inline::Italic(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::Underline(children, _) => Inline::Underline(
                 children.iter().map(Inline::strip_spans).collect(),
                 Span::NONE,

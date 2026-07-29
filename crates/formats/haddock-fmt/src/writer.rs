@@ -30,7 +30,10 @@ pub struct Writer<W: Write> {
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
-        Writer { sink, events: Vec::new() }
+        Writer {
+            sink,
+            events: Vec::new(),
+        }
     }
 
     /// Feed one event to the writer.
@@ -58,21 +61,54 @@ fn events_to_doc(events: Vec<OwnedEvent>) -> HaddockDoc {
 }
 
 enum Frame {
-    Document { blocks: Vec<Block> },
-    Paragraph { inlines: Vec<Inline> },
-    Heading { level: u8, inlines: Vec<Inline> },
-    UnorderedList { items: Vec<Vec<Inline>> },
-    OrderedList { items: Vec<Vec<Inline>> },
-    ListItem { inlines: Vec<Inline> },
-    DefinitionList { items: Vec<(Vec<Inline>, Vec<Inline>)> },
-    DefinitionTerm { inlines: Vec<Inline> },
-    DefinitionDesc { inlines: Vec<Inline> },
-    Blockquote { inlines: Vec<Inline> },
-    Property { key: String, name: Option<String>, inlines: Vec<Inline> },
+    Document {
+        blocks: Vec<Block>,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+    },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+    },
+    UnorderedList {
+        items: Vec<Vec<Inline>>,
+    },
+    OrderedList {
+        items: Vec<Vec<Inline>>,
+    },
+    ListItem {
+        inlines: Vec<Inline>,
+    },
+    DefinitionList {
+        items: Vec<(Vec<Inline>, Vec<Inline>)>,
+    },
+    DefinitionTerm {
+        inlines: Vec<Inline>,
+    },
+    DefinitionDesc {
+        inlines: Vec<Inline>,
+    },
+    Blockquote {
+        inlines: Vec<Inline>,
+    },
+    Property {
+        key: String,
+        name: Option<String>,
+        inlines: Vec<Inline>,
+    },
     // Inline spans
-    Strong { inlines: Vec<Inline> },
-    Emphasis { inlines: Vec<Inline> },
-    Link { url: String, text: String, inlines: Vec<Inline> },
+    Strong {
+        inlines: Vec<Inline>,
+    },
+    Emphasis {
+        inlines: Vec<Inline>,
+    },
+    Link {
+        url: String,
+        text: String,
+        inlines: Vec<Inline>,
+    },
 }
 
 struct DocBuilder {
@@ -119,19 +155,31 @@ impl DocBuilder {
     fn process(&mut self, event: OwnedEvent) {
         match event {
             OwnedEvent::StartParagraph => {
-                self.stack.push(Frame::Paragraph { inlines: Vec::new() });
+                self.stack.push(Frame::Paragraph {
+                    inlines: Vec::new(),
+                });
             }
             OwnedEvent::EndParagraph => {
                 if let Some(Frame::Paragraph { inlines }) = self.stack.pop() {
-                    self.push_block(Block::Paragraph { inlines, span: Span::NONE });
+                    self.push_block(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartHeading { level } => {
-                self.stack.push(Frame::Heading { level, inlines: Vec::new() });
+                self.stack.push(Frame::Heading {
+                    level,
+                    inlines: Vec::new(),
+                });
             }
             OwnedEvent::EndHeading => {
                 if let Some(Frame::Heading { level, inlines }) = self.stack.pop() {
-                    self.push_block(Block::Heading { level, inlines, span: Span::NONE });
+                    self.push_block(Block::Heading {
+                        level,
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::CodeBlock { content } => {
@@ -151,7 +199,10 @@ impl DocBuilder {
             }
             OwnedEvent::EndUnorderedList => {
                 if let Some(Frame::UnorderedList { items }) = self.stack.pop() {
-                    self.push_block(Block::UnorderedList { items, span: Span::NONE });
+                    self.push_block(Block::UnorderedList {
+                        items,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartOrderedList => {
@@ -159,11 +210,16 @@ impl DocBuilder {
             }
             OwnedEvent::EndOrderedList => {
                 if let Some(Frame::OrderedList { items }) = self.stack.pop() {
-                    self.push_block(Block::OrderedList { items, span: Span::NONE });
+                    self.push_block(Block::OrderedList {
+                        items,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartListItem => {
-                self.stack.push(Frame::ListItem { inlines: Vec::new() });
+                self.stack.push(Frame::ListItem {
+                    inlines: Vec::new(),
+                });
             }
             OwnedEvent::EndListItem => {
                 if let Some(Frame::ListItem { inlines }) = self.stack.pop() {
@@ -184,18 +240,25 @@ impl DocBuilder {
             }
             OwnedEvent::EndDefinitionList => {
                 if let Some(Frame::DefinitionList { items }) = self.stack.pop() {
-                    self.push_block(Block::DefinitionList { items, span: Span::NONE });
+                    self.push_block(Block::DefinitionList {
+                        items,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::StartDefinitionTerm => {
-                self.stack.push(Frame::DefinitionTerm { inlines: Vec::new() });
+                self.stack.push(Frame::DefinitionTerm {
+                    inlines: Vec::new(),
+                });
             }
             OwnedEvent::EndDefinitionTerm => {
                 // Leave term on a temporary — will be consumed by EndDefinitionDesc
                 // Actually, keep it as-is; we'll pair it when we get desc.
             }
             OwnedEvent::StartDefinitionDesc => {
-                self.stack.push(Frame::DefinitionDesc { inlines: Vec::new() });
+                self.stack.push(Frame::DefinitionDesc {
+                    inlines: Vec::new(),
+                });
             }
             OwnedEvent::EndDefinitionDesc => {
                 let desc = if let Some(Frame::DefinitionDesc { inlines }) = self.stack.pop() {
@@ -223,11 +286,16 @@ impl DocBuilder {
                 });
             }
             OwnedEvent::StartBlockquote => {
-                self.stack.push(Frame::Blockquote { inlines: Vec::new() });
+                self.stack.push(Frame::Blockquote {
+                    inlines: Vec::new(),
+                });
             }
             OwnedEvent::EndBlockquote => {
                 if let Some(Frame::Blockquote { inlines }) = self.stack.pop() {
-                    self.push_block(Block::Blockquote { inlines, span: Span::NONE });
+                    self.push_block(Block::Blockquote {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::Property { key, name } => {
@@ -254,7 +322,9 @@ impl DocBuilder {
                 self.push_inline(Inline::Code(cow.into_owned(), Span::NONE));
             }
             OwnedEvent::StartStrong => {
-                self.stack.push(Frame::Strong { inlines: Vec::new() });
+                self.stack.push(Frame::Strong {
+                    inlines: Vec::new(),
+                });
             }
             OwnedEvent::EndStrong => {
                 if let Some(Frame::Strong { inlines }) = self.stack.pop() {
@@ -262,7 +332,9 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartEmphasis => {
-                self.stack.push(Frame::Emphasis { inlines: Vec::new() });
+                self.stack.push(Frame::Emphasis {
+                    inlines: Vec::new(),
+                });
             }
             OwnedEvent::EndEmphasis => {
                 if let Some(Frame::Emphasis { inlines }) = self.stack.pop() {
@@ -270,15 +342,26 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartLink { url, text } => {
-                self.stack.push(Frame::Link { url, text, inlines: Vec::new() });
+                self.stack.push(Frame::Link {
+                    url,
+                    text,
+                    inlines: Vec::new(),
+                });
             }
             OwnedEvent::EndLink => {
                 if let Some(Frame::Link { url, text, .. }) = self.stack.pop() {
-                    self.push_inline(Inline::Link { url, text, span: Span::NONE });
+                    self.push_inline(Inline::Link {
+                        url,
+                        text,
+                        span: Span::NONE,
+                    });
                 }
             }
             OwnedEvent::ModuleLink { module } => {
-                self.push_inline(Inline::ModuleLink { module, span: Span::NONE });
+                self.push_inline(Inline::ModuleLink {
+                    module,
+                    span: Span::NONE,
+                });
             }
         }
     }
@@ -288,6 +371,9 @@ impl DocBuilder {
             Some(Frame::Document { blocks }) => blocks,
             _ => Vec::new(),
         };
-        HaddockDoc { blocks, span: Span::NONE }
+        HaddockDoc {
+            blocks,
+            span: Span::NONE,
+        }
     }
 }

@@ -5,7 +5,9 @@
 //! Delegates all parsing to `org-fmt`, then maps the `OrgDoc` AST into
 //! rescribe `Node`/`Document` types.
 
-use org_fmt::{Block, CheckboxState, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc, TableRow};
+use org_fmt::{
+    Block, CheckboxState, Diagnostic, Inline, ListItem, ListItemContent, OrgDoc, TableRow,
+};
 use rescribe_core::{
     ConversionResult, Document, FidelityWarning, ParseError, ParseOptions, Severity, WarningKind,
 };
@@ -46,7 +48,6 @@ pub fn parse_with_options(
     let doc = Document::new().with_content(root).with_metadata(metadata);
 
     Ok(ConversionResult::with_warnings(doc, warnings))
-
 }
 
 fn convert_doc(org_doc: &OrgDoc) -> (Vec<Node>, Vec<FidelityWarning>) {
@@ -68,7 +69,17 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             Node::new(node::PARAGRAPH).children(convert_inlines(inlines))
         }
 
-        Block::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines, .. } => {
+        Block::Heading {
+            level,
+            todo,
+            priority,
+            tags,
+            properties,
+            scheduled,
+            deadline,
+            inlines,
+            ..
+        } => {
             let mut n = Node::new(node::HEADING)
                 .prop(prop::LEVEL, *level as i64)
                 .children(convert_inlines(inlines));
@@ -94,7 +105,11 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
         }
 
         Block::CodeBlock {
-            language, header_args, name, content, ..
+            language,
+            header_args,
+            name,
+            content,
+            ..
         } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
@@ -117,7 +132,12 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             Node::new(node::BLOCKQUOTE).children(child_nodes)
         }
 
-        Block::List { ordered, start, items, .. } => {
+        Block::List {
+            ordered,
+            start,
+            items,
+            ..
+        } => {
             let item_nodes: Vec<Node> = items.iter().map(convert_list_item).collect();
             let mut n = Node::new(node::LIST)
                 .prop(prop::ORDERED, *ordered)
@@ -168,11 +188,9 @@ fn convert_block(block: &Block) -> Result<Option<Node>, FidelityWarning> {
             Node::new(node::CAPTION).children(convert_inlines(inlines))
         }
 
-        Block::FootnoteDef { label, content, .. } => {
-            Node::new(node::FOOTNOTE_DEF)
-                .prop(prop::LABEL, label.clone())
-                .children(convert_inlines(content))
-        }
+        Block::FootnoteDef { label, content, .. } => Node::new(node::FOOTNOTE_DEF)
+            .prop(prop::LABEL, label.clone())
+            .children(convert_inlines(content)),
 
         Block::Unknown { kind, .. } => {
             return Err(FidelityWarning::new(
@@ -250,9 +268,7 @@ fn convert_inline(inline: &Inline) -> Node {
     match inline {
         Inline::Text { text: s, .. } => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
 
-        Inline::Bold(children, _) => {
-            Node::new(node::STRONG).children(convert_inlines(children))
-        }
+        Inline::Bold(children, _) => Node::new(node::STRONG).children(convert_inlines(children)),
 
         Inline::Italic(children, _) => {
             Node::new(node::EMPHASIS).children(convert_inlines(children))

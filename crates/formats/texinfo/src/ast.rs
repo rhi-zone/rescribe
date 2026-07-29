@@ -153,7 +153,12 @@ impl Block {
     /// Return a copy of this block with all spans set to [`Span::NONE`].
     pub fn strip_spans(&self) -> Self {
         match self {
-            Block::Heading { level, kind, inlines, .. } => Block::Heading {
+            Block::Heading {
+                level,
+                kind,
+                inlines,
+                ..
+            } => Block::Heading {
                 level: *level,
                 kind: kind.clone(),
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
@@ -163,7 +168,9 @@ impl Block {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { variant, content, .. } => Block::CodeBlock {
+            Block::CodeBlock {
+                variant, content, ..
+            } => Block::CodeBlock {
                 variant: variant.clone(),
                 content: content.clone(),
                 span: Span::NONE,
@@ -211,12 +218,21 @@ impl Block {
                 span: Span::NONE,
             },
             Block::HorizontalRule { .. } => Block::HorizontalRule { span: Span::NONE },
-            Block::RawBlock { environment, content, .. } => Block::RawBlock {
+            Block::RawBlock {
+                environment,
+                content,
+                ..
+            } => Block::RawBlock {
                 environment: environment.clone(),
                 content: content.clone(),
                 span: Span::NONE,
             },
-            Block::Float { float_type, label, children, .. } => Block::Float {
+            Block::Float {
+                float_type,
+                label,
+                children,
+                ..
+            } => Block::Float {
                 float_type: float_type.clone(),
                 label: label.clone(),
                 children: children.iter().map(Block::strip_spans).collect(),
@@ -363,16 +379,19 @@ impl Inline {
     pub fn strip_spans(&self) -> Self {
         match self {
             Inline::Text(s, _) => Inline::Text(s.clone(), Span::NONE),
-            Inline::Strong(children, _) => {
-                Inline::Strong(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
-            Inline::Emphasis(children, _) => {
-                Inline::Emphasis(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
+            Inline::Strong(children, _) => Inline::Strong(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Emphasis(children, _) => Inline::Emphasis(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::Code(s, _) => Inline::Code(s.clone(), Span::NONE),
-            Inline::Var(children, _) => {
-                Inline::Var(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
+            Inline::Var(children, _) => Inline::Var(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::File(s, _) => Inline::File(s.clone(), Span::NONE),
             Inline::Command(s, _) => Inline::Command(s.clone(), Span::NONE),
             Inline::Option(s, _) => Inline::Option(s.clone(), Span::NONE),
@@ -380,35 +399,49 @@ impl Inline {
             Inline::Samp(s, _) => Inline::Samp(s.clone(), Span::NONE),
             Inline::Kbd(s, _) => Inline::Kbd(s.clone(), Span::NONE),
             Inline::Key(s, _) => Inline::Key(s.clone(), Span::NONE),
-            Inline::Dfn(children, _) => {
-                Inline::Dfn(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
+            Inline::Dfn(children, _) => Inline::Dfn(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::Cite(s, _) => Inline::Cite(s.clone(), Span::NONE),
-            Inline::Acronym { abbrev, expansion, .. } => Inline::Acronym {
+            Inline::Acronym {
+                abbrev, expansion, ..
+            } => Inline::Acronym {
                 abbrev: abbrev.clone(),
                 expansion: expansion.clone(),
                 span: Span::NONE,
             },
-            Inline::Abbr { abbrev, expansion, .. } => Inline::Abbr {
+            Inline::Abbr {
+                abbrev, expansion, ..
+            } => Inline::Abbr {
                 abbrev: abbrev.clone(),
                 expansion: expansion.clone(),
                 span: Span::NONE,
             },
             Inline::Roman(s, _) => Inline::Roman(s.clone(), Span::NONE),
             Inline::SmallCaps(s, _) => Inline::SmallCaps(s.clone(), Span::NONE),
-            Inline::DirectItalic(children, _) => {
-                Inline::DirectItalic(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
-            Inline::DirectBold(children, _) => {
-                Inline::DirectBold(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
+            Inline::DirectItalic(children, _) => Inline::DirectItalic(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::DirectBold(children, _) => Inline::DirectBold(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::DirectTypewriter(s, _) => Inline::DirectTypewriter(s.clone(), Span::NONE),
             Inline::Link { url, children, .. } => Inline::Link {
                 url: url.clone(),
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::Image { file, width, height, alt, extension, .. } => Inline::Image {
+            Inline::Image {
+                file,
+                width,
+                height,
+                alt,
+                extension,
+                ..
+            } => Inline::Image {
                 file: file.clone(),
                 width: width.clone(),
                 height: height.clone(),
@@ -416,19 +449,23 @@ impl Inline {
                 extension: extension.clone(),
                 span: Span::NONE,
             },
-            Inline::Superscript(children, _) => {
-                Inline::Superscript(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
-            Inline::Subscript(children, _) => {
-                Inline::Subscript(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
+            Inline::Superscript(children, _) => Inline::Superscript(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Subscript(children, _) => Inline::Subscript(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::LineBreak { .. } => Inline::LineBreak { span: Span::NONE },
             Inline::SoftBreak { .. } => Inline::SoftBreak { span: Span::NONE },
             Inline::FootnoteDef { content, .. } => Inline::FootnoteDef {
                 content: content.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::CrossRef { kind, node, text, .. } => Inline::CrossRef {
+            Inline::CrossRef {
+                kind, node, text, ..
+            } => Inline::CrossRef {
                 kind: kind.clone(),
                 node: node.clone(),
                 text: text.clone(),

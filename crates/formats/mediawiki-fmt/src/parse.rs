@@ -116,7 +116,13 @@ fn extract_lang_attr(chars: &[char], start: usize, end: usize) -> Option<String>
 pub fn parse(input: &str) -> (MediawikiDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let (blocks, diags) = p.parse();
-    (MediawikiDoc { blocks, span: Span::NONE }, diags)
+    (
+        MediawikiDoc {
+            blocks,
+            span: Span::NONE,
+        },
+        diags,
+    )
 }
 
 struct Parser<'a> {
@@ -188,8 +194,7 @@ impl<'a> Parser<'a> {
             }
 
             // Horizontal rule
-            if trimmed == "----" || (trimmed.chars().all(|c| c == '-') && trimmed.len() >= 4)
-            {
+            if trimmed == "----" || (trimmed.chars().all(|c| c == '-') && trimmed.len() >= 4) {
                 blocks.push(Block::HorizontalRule);
                 i += 1;
                 continue;
@@ -294,13 +299,14 @@ impl<'a> Parser<'a> {
         }
 
         // Check for matching trailing `=`
-        let content = trimmed
-            .trim_start_matches('=')
-            .trim_end_matches('=')
-            .trim();
+        let content = trimmed.trim_start_matches('=').trim_end_matches('=').trim();
 
         let inlines = self.parse_inline(content);
-        Some(Block::Heading { level: level as u8, inlines, span: Span::NONE })
+        Some(Block::Heading {
+            level: level as u8,
+            inlines,
+            span: Span::NONE,
+        })
     }
 
     fn parse_definition_list(&self, lines: &[&str]) -> (Block, usize) {
@@ -317,7 +323,10 @@ impl<'a> Parser<'a> {
             if let Some(rest) = trimmed.strip_prefix(';') {
                 // Flush previous pending term without description
                 if let Some(term) = pending_term.take() {
-                    items.push(DefinitionItem { term, desc: Vec::new() });
+                    items.push(DefinitionItem {
+                        term,
+                        desc: Vec::new(),
+                    });
                 }
                 let content = rest.trim();
                 // Check if term and def are on the same line with ":"
@@ -350,10 +359,19 @@ impl<'a> Parser<'a> {
 
         // Flush any remaining pending term
         if let Some(term) = pending_term {
-            items.push(DefinitionItem { term, desc: Vec::new() });
+            items.push(DefinitionItem {
+                term,
+                desc: Vec::new(),
+            });
         }
 
-        (Block::DefinitionList { items, span: Span::NONE }, consumed.max(1))
+        (
+            Block::DefinitionList {
+                items,
+                span: Span::NONE,
+            },
+            consumed.max(1),
+        )
     }
 
     fn parse_list(&self, lines: &[&str]) -> (Block, usize) {
@@ -377,12 +395,22 @@ impl<'a> Parser<'a> {
             // For simplicity, flatten nested items
             let content = trimmed.trim_start_matches(marker).trim();
             let inlines = self.parse_inline(content);
-            items.push(vec![Block::Paragraph { inlines, span: Span::NONE }]);
+            items.push(vec![Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            }]);
 
             consumed += 1;
         }
 
-        (Block::List { ordered, items, span: Span::NONE }, consumed.max(1))
+        (
+            Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            },
+            consumed.max(1),
+        )
     }
 
     fn parse_code_block(&self, lines: &[&str]) -> (Block, usize) {
@@ -401,7 +429,14 @@ impl<'a> Parser<'a> {
             consumed += 1;
         }
 
-        (Block::CodeBlock { language: None, content, span: Span::NONE }, consumed.max(1))
+        (
+            Block::CodeBlock {
+                language: None,
+                content,
+                span: Span::NONE,
+            },
+            consumed.max(1),
+        )
     }
 
     fn parse_blockquote_tag(&self, lines: &[&str]) -> (Block, usize) {
@@ -410,14 +445,14 @@ impl<'a> Parser<'a> {
         if let Some(end) = lower.find("</blockquote>") {
             let open_end = joined.find('>').unwrap_or(0) + 1;
             let inner = joined[open_end..end].trim();
-            let consumed = joined[..end + "</blockquote>".len()]
-                .matches('\n')
-                .count()
-                + 1;
+            let consumed = joined[..end + "</blockquote>".len()].matches('\n').count() + 1;
             // Parse inner content as blocks
             let (inner_doc, _) = parse(inner);
             (
-                Block::Blockquote { children: inner_doc.blocks, span: Span::NONE },
+                Block::Blockquote {
+                    children: inner_doc.blocks,
+                    span: Span::NONE,
+                },
                 consumed,
             )
         } else {
@@ -426,7 +461,10 @@ impl<'a> Parser<'a> {
             let inner = joined[open_end..].trim();
             let (inner_doc, _) = parse(inner);
             (
-                Block::Blockquote { children: inner_doc.blocks, span: Span::NONE },
+                Block::Blockquote {
+                    children: inner_doc.blocks,
+                    span: Span::NONE,
+                },
                 lines.len(),
             )
         }
@@ -439,11 +477,20 @@ impl<'a> Parser<'a> {
             let open_end = joined.find('>').unwrap_or(0) + 1;
             let content = &joined[open_end..end];
             let consumed = joined[..end + "</pre>".len()].matches('\n').count() + 1;
-            (Block::PreBlock { content: content.to_string(), span: Span::NONE }, consumed)
+            (
+                Block::PreBlock {
+                    content: content.to_string(),
+                    span: Span::NONE,
+                },
+                consumed,
+            )
         } else {
             let open_end = joined.find('>').unwrap_or(0) + 1;
             (
-                Block::PreBlock { content: joined[open_end..].to_string(), span: Span::NONE },
+                Block::PreBlock {
+                    content: joined[open_end..].to_string(),
+                    span: Span::NONE,
+                },
                 lines.len(),
             )
         }
@@ -456,7 +503,13 @@ impl<'a> Parser<'a> {
             let open_end = lower.find("<nowiki>").unwrap_or(0) + "<nowiki>".len();
             let content = &joined[open_end..end];
             let consumed = joined[..end + "</nowiki>".len()].matches('\n').count() + 1;
-            (Block::PreBlock { content: content.to_string(), span: Span::NONE }, consumed)
+            (
+                Block::PreBlock {
+                    content: content.to_string(),
+                    span: Span::NONE,
+                },
+                consumed,
+            )
         } else {
             let open_end = "<nowiki>".len();
             (
@@ -473,23 +526,22 @@ impl<'a> Parser<'a> {
         let joined = lines.join("\n");
         let lower = joined.to_lowercase();
         // Find the end tag
-        let (end_tag, end_pos) =
-            if let Some(pos) = lower.find("</syntaxhighlight>") {
-                ("</syntaxhighlight>", pos)
-            } else if let Some(pos) = lower.find("</source>") {
-                ("</source>", pos)
-            } else {
-                // Unclosed
-                let open_end = joined.find('>').unwrap_or(0) + 1;
-                return (
-                    Block::CodeBlock {
-                        language: None,
-                        content: joined[open_end..].to_string(),
-                        span: Span::NONE,
-                    },
-                    lines.len(),
-                );
-            };
+        let (end_tag, end_pos) = if let Some(pos) = lower.find("</syntaxhighlight>") {
+            ("</syntaxhighlight>", pos)
+        } else if let Some(pos) = lower.find("</source>") {
+            ("</source>", pos)
+        } else {
+            // Unclosed
+            let open_end = joined.find('>').unwrap_or(0) + 1;
+            return (
+                Block::CodeBlock {
+                    language: None,
+                    content: joined[open_end..].to_string(),
+                    span: Span::NONE,
+                },
+                lines.len(),
+            );
+        };
 
         let open_end = joined.find('>').unwrap_or(0) + 1;
         let chars: Vec<char> = joined.chars().collect();
@@ -500,7 +552,11 @@ impl<'a> Parser<'a> {
         let content = content.strip_suffix('\n').unwrap_or(content);
         let consumed = joined[..end_pos + end_tag.len()].matches('\n').count() + 1;
         (
-            Block::CodeBlock { language: lang, content: content.to_string(), span: Span::NONE },
+            Block::CodeBlock {
+                language: lang,
+                content: content.to_string(),
+                span: Span::NONE,
+            },
             consumed,
         )
     }
@@ -515,7 +571,9 @@ impl<'a> Parser<'a> {
             // Emit as a paragraph containing MathInline
             (
                 Block::Paragraph {
-                    inlines: vec![Inline::MathInline { source: source.to_string() }],
+                    inlines: vec![Inline::MathInline {
+                        source: source.to_string(),
+                    }],
                     span: Span::NONE,
                 },
                 consumed,
@@ -574,18 +632,32 @@ impl<'a> Parser<'a> {
 
                 for cell_content in cells_str {
                     let inlines = self.parse_inline(cell_content.trim());
-                    cells.push(TableCell { is_header, inlines, span: Span::NONE });
+                    cells.push(TableCell {
+                        is_header,
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
 
                 if !cells.is_empty() {
-                    rows.push(TableRow { cells, span: Span::NONE });
+                    rows.push(TableRow {
+                        cells,
+                        span: Span::NONE,
+                    });
                 }
             }
 
             consumed += 1;
         }
 
-        (Block::Table { rows, caption, span: Span::NONE }, consumed.max(1))
+        (
+            Block::Table {
+                rows,
+                caption,
+                span: Span::NONE,
+            },
+            consumed.max(1),
+        )
     }
 
     fn parse_paragraph(&self, lines: &[&str]) -> (Block, usize) {
@@ -632,7 +704,13 @@ impl<'a> Parser<'a> {
         }
 
         let inlines = self.parse_inline(&text);
-        (Block::Paragraph { inlines, span: Span::NONE }, consumed.max(1))
+        (
+            Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            },
+            consumed.max(1),
+        )
     }
 
     #[allow(clippy::only_used_in_recursion)]
@@ -730,10 +808,7 @@ impl<'a> Parser<'a> {
                 let start = i + 3;
                 let mut end = start;
                 while end + 2 < chars.len() {
-                    if chars[end] == '\''
-                        && chars[end + 1] == '\''
-                        && chars[end + 2] == '\''
-                    {
+                    if chars[end] == '\'' && chars[end + 1] == '\'' && chars[end + 2] == '\'' {
                         break;
                     }
                     end += 1;
@@ -813,8 +888,7 @@ impl<'a> Parser<'a> {
                         None
                     };
                     if let Some(prefix_len) = image_prefix {
-                        let (url_part, alt_part) = if let Some(pipe_pos) = inner.find('|')
-                        {
+                        let (url_part, alt_part) = if let Some(pipe_pos) = inner.find('|') {
                             (
                                 inner[prefix_len..pipe_pos].to_string(),
                                 inner[pipe_pos + 1..].to_string(),
@@ -822,7 +896,10 @@ impl<'a> Parser<'a> {
                         } else {
                             (inner[prefix_len..].to_string(), String::new())
                         };
-                        inlines.push(Inline::Image { url: url_part, alt: alt_part });
+                        inlines.push(Inline::Image {
+                            url: url_part,
+                            alt: alt_part,
+                        });
                         i = end + 2;
                         continue;
                     }

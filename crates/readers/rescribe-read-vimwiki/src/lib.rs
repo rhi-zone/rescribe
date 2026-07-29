@@ -40,7 +40,9 @@ fn block_to_node(block: &Block) -> Node {
                 .children(inline_nodes)
         }
 
-        Block::CodeBlock { language, content, .. } => {
+        Block::CodeBlock {
+            language, content, ..
+        } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -137,7 +139,9 @@ fn inline_to_node(inline: &Inline) -> Node {
                 .children(vec![text_node])
         }
 
-        Inline::Image { url, alt, style, .. } => {
+        Inline::Image {
+            url, alt, style, ..
+        } => {
             let mut img = Node::new(node::IMAGE).prop(prop::URL, url.clone());
             if let Some(a) = alt {
                 img = img.prop(prop::ALT, a.clone());
@@ -148,13 +152,11 @@ fn inline_to_node(inline: &Inline) -> Node {
             img
         }
 
-        Inline::Superscript(children, _) => {
-            Node::new(node::SUPERSCRIPT).children(children.iter().map(inline_to_node).collect::<Vec<_>>())
-        }
+        Inline::Superscript(children, _) => Node::new(node::SUPERSCRIPT)
+            .children(children.iter().map(inline_to_node).collect::<Vec<_>>()),
 
-        Inline::Subscript(children, _) => {
-            Node::new(node::SUBSCRIPT).children(children.iter().map(inline_to_node).collect::<Vec<_>>())
-        }
+        Inline::Subscript(children, _) => Node::new(node::SUBSCRIPT)
+            .children(children.iter().map(inline_to_node).collect::<Vec<_>>()),
     }
 }
 

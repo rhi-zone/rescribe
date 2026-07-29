@@ -96,7 +96,9 @@ pub mod events;
 #[cfg(feature = "reader-streaming")]
 pub use events::{SmlEventIter, events as sml_events};
 #[cfg(feature = "reader-streaming")]
-pub use generated_events::{OwnedSmlEvent, SmlEvent, SmlStartKind, dispatch_start, is_text_element, props_strategy};
+pub use generated_events::{
+    OwnedSmlEvent, SmlEvent, SmlStartKind, dispatch_start, is_text_element, props_strategy,
+};
 
 // Extension traits for generated types (see ADR-003)
 pub mod ext;

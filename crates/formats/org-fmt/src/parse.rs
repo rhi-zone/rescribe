@@ -101,7 +101,10 @@ impl<'a> EventIter<'a> {
                 if !self.current_para.is_empty() {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 return None;
             }
@@ -115,7 +118,10 @@ impl<'a> EventIter<'a> {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
                     // We'll re-process this line next time around; don't advance.
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 let caption_text = line["#+CAPTION:".len()..].trim().to_string();
                 self.advance();
@@ -135,7 +141,10 @@ impl<'a> EventIter<'a> {
                 }
 
                 let caption_inlines = parse_inline_content(&caption_text);
-                let caption_block = Block::Caption { inlines: caption_inlines, span: Span::NONE };
+                let caption_block = Block::Caption {
+                    inlines: caption_inlines,
+                    span: Span::NONE,
+                };
 
                 // Try to parse the body block that the caption is affiliated with.
                 let body_block: Option<Block> = if let Some(next_line) = self.current_line() {
@@ -144,7 +153,10 @@ impl<'a> EventIter<'a> {
                         // Image link
                         let img_chars: Vec<char> = trimmed.chars().collect();
                         if let Some((Inline::Image { url, .. }, _)) = parse_link(&img_chars, 0) {
-                            let img_inline = Inline::Image { url, span: Span::NONE };
+                            let img_inline = Inline::Image {
+                                url,
+                                span: Span::NONE,
+                            };
                             self.advance();
                             Some(Block::Paragraph {
                                 inlines: vec![img_inline],
@@ -161,7 +173,9 @@ impl<'a> EventIter<'a> {
                         if let Some(mut block) = self.parse_block() {
                             // Attach any pending #+NAME: to code blocks
                             if let Some(name) = figure_name.take()
-                                && let Block::CodeBlock { name: ref mut n, .. } = block
+                                && let Block::CodeBlock {
+                                    name: ref mut n, ..
+                                } = block
                             {
                                 *n = Some(name);
                             }
@@ -211,7 +225,10 @@ impl<'a> EventIter<'a> {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
                     self.advance();
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 self.advance();
                 continue;
@@ -223,7 +240,10 @@ impl<'a> EventIter<'a> {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
                     // Re-process the heading line on the next call.
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 return Some(self.parse_heading());
             }
@@ -234,12 +254,17 @@ impl<'a> EventIter<'a> {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
                     // Re-process the BEGIN line on the next call.
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 if let Some(mut block) = self.parse_block() {
                     // Attach #+NAME: affiliated keyword to the block
                     if let Some(name) = self.pending_name.take()
-                        && let Block::CodeBlock { name: ref mut n, .. } = block
+                        && let Block::CodeBlock {
+                            name: ref mut n, ..
+                        } = block
                     {
                         *n = Some(name);
                     }
@@ -255,7 +280,10 @@ impl<'a> EventIter<'a> {
                 if !self.current_para.is_empty() {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 return Some(self.parse_definition_list());
             }
@@ -265,7 +293,10 @@ impl<'a> EventIter<'a> {
                 if !self.current_para.is_empty() {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 return Some(self.parse_list());
             }
@@ -275,7 +306,10 @@ impl<'a> EventIter<'a> {
                 if !self.current_para.is_empty() {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 return Some(self.parse_table());
             }
@@ -292,13 +326,20 @@ impl<'a> EventIter<'a> {
                     if !self.current_para.is_empty() {
                         let inlines = parse_para_lines(&self.current_para);
                         self.current_para.clear();
-                        return Some(Block::Paragraph { inlines, span: Span::NONE });
+                        return Some(Block::Paragraph {
+                            inlines,
+                            span: Span::NONE,
+                        });
                     }
                     let label = label_part.to_string();
                     let body = rest[bracket_end + 1..].trim().to_string();
                     let content = parse_inline_content(&body);
                     self.advance();
-                    return Some(Block::FootnoteDef { label, content, span: Span::NONE });
+                    return Some(Block::FootnoteDef {
+                        label,
+                        content,
+                        span: Span::NONE,
+                    });
                 }
             }
 
@@ -307,7 +348,10 @@ impl<'a> EventIter<'a> {
                 if !self.current_para.is_empty() {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 self.advance();
                 return Some(Block::HorizontalRule { span: Span::NONE });
@@ -325,7 +369,10 @@ impl<'a> EventIter<'a> {
                 if !self.current_para.is_empty() {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 return Some(self.parse_fixed_width());
             }
@@ -335,7 +382,10 @@ impl<'a> EventIter<'a> {
                 if !self.current_para.is_empty() {
                     let inlines = parse_para_lines(&self.current_para);
                     self.current_para.clear();
-                    return Some(Block::Paragraph { inlines, span: Span::NONE });
+                    return Some(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                 }
                 let drawer_name = line.trim().trim_matches(':').to_string();
                 self.skip_drawer();
@@ -397,7 +447,10 @@ impl<'a> EventIter<'a> {
         // Parse SCHEDULED: and DEADLINE: planning lines (may appear in any order)
         loop {
             match self.current_line() {
-                Some(line) if line.trim_start().starts_with("SCHEDULED:") || line.trim_start().starts_with("DEADLINE:") => {
+                Some(line)
+                    if line.trim_start().starts_with("SCHEDULED:")
+                        || line.trim_start().starts_with("DEADLINE:") =>
+                {
                     let trimmed = line.trim();
                     if let Some(rest) = trimmed.strip_prefix("SCHEDULED:") {
                         scheduled = Some(rest.trim().to_string());
@@ -446,10 +499,17 @@ impl<'a> EventIter<'a> {
             let upper_offset = "#+BEGIN_SRC".len();
             let rest = &orig_line[upper_offset..].trim_start();
             let mut parts = rest.splitn(2, |c: char| c.is_whitespace());
-            let lang_str = parts.next().filter(|s| !s.is_empty()).map(|s| s.to_lowercase());
+            let lang_str = parts
+                .next()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_lowercase());
             let args = parts.next().and_then(|s| {
                 let s = s.trim();
-                if s.is_empty() { None } else { Some(s.to_string()) }
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
             });
             (lang_str, args)
         } else {
@@ -688,11 +748,17 @@ impl<'a> EventIter<'a> {
 
             // Data row
             let cells = parse_table_row(line);
-            rows.push(TableRow { cells, is_header: false });
+            rows.push(TableRow {
+                cells,
+                is_header: false,
+            });
             self.advance();
         }
 
-        Block::Table { rows, span: Span::NONE }
+        Block::Table {
+            rows,
+            span: Span::NONE,
+        }
     }
 
     fn parse_definition_list(&mut self) -> Block {
@@ -715,7 +781,10 @@ impl<'a> EventIter<'a> {
             self.advance();
         }
 
-        Block::DefinitionList { items, span: Span::NONE }
+        Block::DefinitionList {
+            items,
+            span: Span::NONE,
+        }
     }
 
     /// Parse consecutive fixed-width lines (`: text`) into a CodeBlock.
@@ -734,7 +803,13 @@ impl<'a> EventIter<'a> {
             }
         }
         let content = content_lines.join("\n");
-        Block::CodeBlock { language: None, header_args: None, name: None, content, span: Span::NONE }
+        Block::CodeBlock {
+            language: None,
+            header_args: None,
+            name: None,
+            content,
+            span: Span::NONE,
+        }
     }
 
     /// Skip drawer content up to and including the `:END:` line.
@@ -754,22 +829,47 @@ impl<'a> EventIter<'a> {
         use crate::events::{Event as Ev, OwnedEvent};
         match block {
             Block::Paragraph { inlines, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndParagraph));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndParagraph));
                 if !inlines.is_empty() {
                     self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartParagraph));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartParagraph));
             }
-            Block::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines, .. } => {
+            Block::Heading {
+                level,
+                todo,
+                priority,
+                tags,
+                properties,
+                scheduled,
+                deadline,
+                inlines,
+                ..
+            } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndHeading));
                 if !inlines.is_empty() {
                     self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartHeading {
-                    level, todo, priority, tags, properties, scheduled, deadline,
-                }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartHeading {
+                        level,
+                        todo,
+                        priority,
+                        tags,
+                        properties,
+                        scheduled,
+                        deadline,
+                    }));
             }
-            Block::CodeBlock { language, header_args, name, content, .. } => {
+            Block::CodeBlock {
+                language,
+                header_args,
+                name,
+                content,
+                ..
+            } => {
                 self.frame_stack.push(Frame::Event(Ev::CodeBlock {
                     language,
                     header_args,
@@ -778,18 +878,26 @@ impl<'a> EventIter<'a> {
                 }));
             }
             Block::Blockquote { children, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndBlockquote));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndBlockquote));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Blocks(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartBlockquote));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartBlockquote));
             }
-            Block::List { ordered, start, items, .. } => {
+            Block::List {
+                ordered,
+                start,
+                items,
+                ..
+            } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndList));
                 if !items.is_empty() {
                     self.frame_stack.push(Frame::ListItems(items.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartList { ordered, start }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartList { ordered, start }));
             }
             Block::Table { rows, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndTable));
@@ -799,14 +907,18 @@ impl<'a> EventIter<'a> {
                 self.frame_stack.push(Frame::Event(OwnedEvent::StartTable));
             }
             Block::HorizontalRule { .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::HorizontalRule));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::HorizontalRule));
             }
             Block::DefinitionList { items, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionList));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndDefinitionList));
                 if !items.is_empty() {
-                    self.frame_stack.push(Frame::DefinitionItems(items.into_iter()));
+                    self.frame_stack
+                        .push(Frame::DefinitionItems(items.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionList));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartDefinitionList));
             }
             Block::Div { inlines, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndDiv));
@@ -815,32 +927,40 @@ impl<'a> EventIter<'a> {
                 }
                 self.frame_stack.push(Frame::Event(OwnedEvent::StartDiv));
             }
-            Block::RawBlock { format, content, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::RawBlock { format, content }));
+            Block::RawBlock {
+                format, content, ..
+            } => {
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::RawBlock { format, content }));
             }
             Block::Figure { name, children, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndFigure));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Blocks(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartFigure { name }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartFigure { name }));
             }
             Block::Caption { inlines, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndCaption));
                 if !inlines.is_empty() {
                     self.frame_stack.push(Frame::Inlines(inlines.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartCaption));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartCaption));
             }
             Block::FootnoteDef { label, content, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndBlockFootnoteDef));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndBlockFootnoteDef));
                 if !content.is_empty() {
                     self.frame_stack.push(Frame::Inlines(content.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartBlockFootnoteDef { label }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartBlockFootnoteDef { label }));
             }
             Block::Unknown { kind, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::UnknownBlock { kind }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::UnknownBlock { kind }));
             }
         }
     }
@@ -849,7 +969,8 @@ impl<'a> EventIter<'a> {
         use crate::events::{Event as Ev, OwnedEvent};
         match inline {
             Inline::Text { text, .. } => {
-                self.frame_stack.push(Frame::Event(Ev::Text(Cow::Owned(text))));
+                self.frame_stack
+                    .push(Frame::Event(Ev::Text(Cow::Owned(text))));
             }
             Inline::SoftBreak { .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::SoftBreak));
@@ -872,64 +993,83 @@ impl<'a> EventIter<'a> {
                 self.frame_stack.push(Frame::Event(OwnedEvent::StartItalic));
             }
             Inline::Underline(children, _) => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndUnderline));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndUnderline));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartUnderline));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartUnderline));
             }
             Inline::Strikethrough(children, _) => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndStrikethrough));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndStrikethrough));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartStrikethrough));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartStrikethrough));
             }
             Inline::Superscript(children, _) => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndSuperscript));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndSuperscript));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartSuperscript));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartSuperscript));
             }
             Inline::Subscript(children, _) => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndSubscript));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndSubscript));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartSubscript));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartSubscript));
             }
             Inline::Code(content, _) => {
-                self.frame_stack.push(Frame::Event(Ev::InlineCode(Cow::Owned(content))));
+                self.frame_stack
+                    .push(Frame::Event(Ev::InlineCode(Cow::Owned(content))));
             }
             Inline::Link { url, children, .. } => {
                 self.frame_stack.push(Frame::Event(OwnedEvent::EndLink));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartLink { url }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartLink { url }));
             }
             Inline::Image { url, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::InlineImage { url }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::InlineImage { url }));
             }
             Inline::FootnoteRef { label, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::FootnoteRef { label }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::FootnoteRef { label }));
             }
-            Inline::FootnoteDefinition { label, children, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::EndFootnoteDefinition));
+            Inline::FootnoteDefinition {
+                label, children, ..
+            } => {
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::EndFootnoteDefinition));
                 if !children.is_empty() {
                     self.frame_stack.push(Frame::Inlines(children.into_iter()));
                 }
-                self.frame_stack.push(Frame::Event(OwnedEvent::StartFootnoteDefinition { label }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::StartFootnoteDefinition { label }));
             }
             Inline::MathInline { source, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::MathInline { source }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::MathInline { source }));
             }
             Inline::Timestamp { active, value, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::Timestamp { active, value }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::Timestamp { active, value }));
             }
             Inline::ExportSnippet { backend, value, .. } => {
-                self.frame_stack.push(Frame::Event(OwnedEvent::ExportSnippet { backend, value }));
+                self.frame_stack
+                    .push(Frame::Event(OwnedEvent::ExportSnippet { backend, value }));
             }
         }
     }
@@ -963,9 +1103,11 @@ impl<'a> Iterator for EventIter<'a> {
                         self.frame_stack.push(Frame::ListItems(iter));
                         self.frame_stack.push(Frame::Event(OwnedEvent::EndListItem));
                         if !item.children.is_empty() {
-                            self.frame_stack.push(Frame::ListItemContents(item.children.into_iter()));
+                            self.frame_stack
+                                .push(Frame::ListItemContents(item.children.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartListItem { checkbox }));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartListItem { checkbox }));
                     }
                     continue;
                 }
@@ -991,36 +1133,45 @@ impl<'a> Iterator for EventIter<'a> {
                         self.frame_stack.push(Frame::TableRows(iter));
                         self.frame_stack.push(Frame::Event(OwnedEvent::EndTableRow));
                         if !row.cells.is_empty() {
-                            self.frame_stack.push(Frame::TableCells(row.cells.into_iter()));
+                            self.frame_stack
+                                .push(Frame::TableCells(row.cells.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartTableRow { is_header }));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartTableRow { is_header }));
                     }
                     continue;
                 }
                 Some(Frame::TableCells(mut iter)) => {
                     if let Some(cell_inlines) = iter.next() {
                         self.frame_stack.push(Frame::TableCells(iter));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndTableCell));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndTableCell));
                         if !cell_inlines.is_empty() {
-                            self.frame_stack.push(Frame::Inlines(cell_inlines.into_iter()));
+                            self.frame_stack
+                                .push(Frame::Inlines(cell_inlines.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartTableCell));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartTableCell));
                     }
                     continue;
                 }
                 Some(Frame::DefinitionItems(mut iter)) => {
                     if let Some(item) = iter.next() {
                         self.frame_stack.push(Frame::DefinitionItems(iter));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionDesc));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndDefinitionDesc));
                         if !item.desc.is_empty() {
                             self.frame_stack.push(Frame::Inlines(item.desc.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionDesc));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionTerm));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartDefinitionDesc));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndDefinitionTerm));
                         if !item.term.is_empty() {
                             self.frame_stack.push(Frame::Inlines(item.term.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionTerm));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartDefinitionTerm));
                     }
                     continue;
                 }
@@ -1064,8 +1215,14 @@ pub(crate) fn parse_heading_metadata(
         let words: Vec<&str> = text.splitn(2, ' ').collect();
         if words.len() == 2 {
             let w = words[0];
-            if w == "TODO" || w == "DONE" || w == "NEXT" || w == "WAITING"
-                || w == "CANCELLED" || w == "HOLD" || w == "STARTED" || w == "COMMENT"
+            if w == "TODO"
+                || w == "DONE"
+                || w == "NEXT"
+                || w == "WAITING"
+                || w == "CANCELLED"
+                || w == "HOLD"
+                || w == "STARTED"
+                || w == "COMMENT"
             {
                 (Some(w.to_string()), words[1])
             } else {
@@ -1327,9 +1484,7 @@ pub(crate) fn parse_inline_content(text: &str) -> Vec<Inline> {
                     .get(pos + 1)
                     .map(|c| c.is_ascii_digit())
                     .unwrap_or(false);
-                if !next_is_digit
-                    && let Some((content, end)) = find_inline_span(&chars, pos, '$')
-                {
+                if !next_is_digit && let Some((content, end)) = find_inline_span(&chars, pos, '$') {
                     nodes.push(Inline::MathInline {
                         source: content,
                         span: Span::NONE,
@@ -1468,7 +1623,13 @@ pub(crate) fn parse_link(chars: &[char], start: usize) -> Option<(Inline, usize)
             if pos + 1 < chars.len() && chars[pos + 1] == ']' {
                 // End of link — check if URL is an image (no description)
                 if description.is_empty() && is_image_url(&url) {
-                    return Some((Inline::Image { url, span: Span::NONE }, pos + 2));
+                    return Some((
+                        Inline::Image {
+                            url,
+                            span: Span::NONE,
+                        },
+                        pos + 2,
+                    ));
                 }
                 let children = if description.is_empty() {
                     vec![Inline::Text {
@@ -1547,7 +1708,13 @@ fn parse_footnote_ref(chars: &[char], start: usize) -> Option<(Inline, usize)> {
     if inner.is_empty() {
         return None;
     }
-    Some((Inline::FootnoteRef { label: inner, span: Span::NONE }, end_pos))
+    Some((
+        Inline::FootnoteRef {
+            label: inner,
+            span: Span::NONE,
+        },
+        end_pos,
+    ))
 }
 
 /// Parse active timestamp `<YYYY-MM-DD ...>` at `start`.
@@ -1566,7 +1733,11 @@ fn parse_timestamp_active(chars: &[char], start: usize) -> Option<(Inline, usize
         return None;
     }
     Some((
-        Inline::Timestamp { active: true, value, span: Span::NONE },
+        Inline::Timestamp {
+            active: true,
+            value,
+            span: Span::NONE,
+        },
         start + 1 + close + 1,
     ))
 }
@@ -1584,7 +1755,11 @@ fn parse_timestamp_inactive(chars: &[char], start: usize) -> Option<(Inline, usi
         return None;
     }
     Some((
-        Inline::Timestamp { active: false, value, span: Span::NONE },
+        Inline::Timestamp {
+            active: false,
+            value,
+            span: Span::NONE,
+        },
         start + 1 + close + 1,
     ))
 }
@@ -1601,7 +1776,11 @@ fn parse_export_snippet(chars: &[char], start: usize) -> Option<(Inline, usize)>
                 let backend = inner[..colon].to_string();
                 let value = inner[colon + 1..].to_string();
                 return Some((
-                    Inline::ExportSnippet { backend, value, span: Span::NONE },
+                    Inline::ExportSnippet {
+                        backend,
+                        value,
+                        span: Span::NONE,
+                    },
                     i + 2,
                 ));
             }
@@ -1620,7 +1799,13 @@ fn parse_latex_fragment(chars: &[char], start: usize) -> Option<(Inline, usize)>
     while i + 1 < chars.len() {
         if chars[i] == '\\' && chars[i + 1] == ')' {
             let source: String = chars[inner_start..i].iter().collect();
-            return Some((Inline::MathInline { source, span: Span::NONE }, i + 2));
+            return Some((
+                Inline::MathInline {
+                    source,
+                    span: Span::NONE,
+                },
+                i + 2,
+            ));
         }
         i += 1;
     }
@@ -1646,7 +1831,13 @@ fn parse_entity(chars: &[char], start: usize) -> Option<(Inline, usize)> {
         end
     };
     let text = org_entity_to_unicode(&name).unwrap_or_else(|| format!("\\{}", name));
-    Some((Inline::Text { text, span: Span::NONE }, end))
+    Some((
+        Inline::Text {
+            text,
+            span: Span::NONE,
+        },
+        end,
+    ))
 }
 
 /// Map common Org entity names to their Unicode representations.
@@ -1717,4 +1908,3 @@ fn org_entity_to_unicode(name: &str) -> Option<String> {
         .to_string(),
     )
 }
-

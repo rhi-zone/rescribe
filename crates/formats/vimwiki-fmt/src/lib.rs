@@ -98,9 +98,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::Superscript(_, _))));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Superscript(_, _)))
+        );
     }
 
     #[test]
@@ -109,9 +111,7 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines
-            .iter()
-            .any(|i| matches!(i, Inline::Subscript(_, _))));
+        assert!(inlines.iter().any(|i| matches!(i, Inline::Subscript(_, _))));
     }
 
     #[test]
@@ -445,7 +445,8 @@ mod tests {
 
     #[test]
     fn test_roundtrip_basic() {
-        let input = "= Hello =\n\nA paragraph with *bold* and _italic_ text.\n\n* item one\n* item two\n";
+        let input =
+            "= Hello =\n\nA paragraph with *bold* and _italic_ text.\n\n* item one\n* item two\n";
         let (doc, _) = parse(input);
         let output = build(&doc);
         let (doc2, _) = parse(&output);
@@ -458,6 +459,10 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|i| matches!(i, Inline::Code(s, _) if s == "inline code")));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::Code(s, _) if s == "inline code"))
+        );
     }
 }

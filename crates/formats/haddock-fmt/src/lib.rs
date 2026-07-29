@@ -140,7 +140,10 @@ mod tests {
         let (doc, _) = parse(">>> 1 + 1\n2\n");
         assert_eq!(doc.blocks.len(), 1);
         assert!(matches!(doc.blocks[0], Block::DocTest { .. }));
-        if let Block::DocTest { expression, result, .. } = &doc.blocks[0] {
+        if let Block::DocTest {
+            expression, result, ..
+        } = &doc.blocks[0]
+        {
             assert_eq!(expression, "1 + 1");
             assert_eq!(result.as_deref(), Some("2"));
         }
@@ -150,7 +153,10 @@ mod tests {
     fn test_parse_property_since() {
         let (doc, _) = parse("@since 4.2.0\n");
         assert_eq!(doc.blocks.len(), 1);
-        if let Block::Property { key, description, .. } = &doc.blocks[0] {
+        if let Block::Property {
+            key, description, ..
+        } = &doc.blocks[0]
+        {
             assert_eq!(key, "since");
             assert_eq!(description.len(), 1);
         } else {
@@ -198,7 +204,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|i| matches!(i, Inline::ModuleLink { .. })));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::ModuleLink { .. }))
+        );
     }
 
     #[test]
@@ -357,7 +367,10 @@ mod tests {
     fn test_events_roundtrip() {
         let input = "= Hello\n\nWorld.\n";
         let evs: Vec<OwnedEvent> = events(input).map(|e| e.into_owned()).collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 

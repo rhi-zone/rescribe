@@ -28,12 +28,13 @@
 
 use std::borrow::Cow;
 
-use quick_xml::events::Event as XmlEvent;
 use quick_xml::Reader;
+use quick_xml::events::Event as XmlEvent;
 
 use super::generated::{Cell, Row};
-use super::generated_events::{PropsStrategy, SmlEvent, SmlStartKind, dispatch_start,
-    is_text_element, props_strategy};
+use super::generated_events::{
+    PropsStrategy, SmlEvent, SmlStartKind, dispatch_start, is_text_element, props_strategy,
+};
 use ooxml_xml::FromXml;
 
 /// Return a streaming iterator over the SML events in the given worksheet XML bytes.
@@ -204,7 +205,10 @@ impl<'input> SmlEventIter<'input> {
                 // attributes into the typed props struct (no children consumed).
                 let tag_str = std::str::from_utf8(tag_bytes).unwrap_or("");
                 // Strip leading '<' if present (buf may include it).
-                let content = tag_str.trim_start_matches('<').trim_end_matches('>').trim_end_matches('/');
+                let content = tag_str
+                    .trim_start_matches('<')
+                    .trim_end_matches('>')
+                    .trim_end_matches('/');
                 let name_len = content
                     .bytes()
                     .position(|b| b == b' ')
@@ -212,21 +216,23 @@ impl<'input> SmlEventIter<'input> {
                 let start = quick_xml::events::BytesStart::from_content(content, name_len);
                 match kind {
                     SmlStartKind::Row => {
-                        let props = Row::from_xml(&mut self.reader, &start, true)
-                            .unwrap_or_default();
-                        SmlEvent::StartRow { props: Box::new(props) }
+                        let props =
+                            Row::from_xml(&mut self.reader, &start, true).unwrap_or_default();
+                        SmlEvent::StartRow {
+                            props: Box::new(props),
+                        }
                     }
                     SmlStartKind::Cell => {
-                        let props = Cell::from_xml(&mut self.reader, &start, true)
-                            .unwrap_or_default();
-                        SmlEvent::StartCell { props: Box::new(props) }
+                        let props =
+                            Cell::from_xml(&mut self.reader, &start, true).unwrap_or_default();
+                        SmlEvent::StartCell {
+                            props: Box::new(props),
+                        }
                     }
                     _ => start_event_no_props(kind),
                 }
             }
-            PropsStrategy::None => {
-                start_event_no_props(kind)
-            }
+            PropsStrategy::None => start_event_no_props(kind),
         }
     }
 }
@@ -293,8 +299,12 @@ fn start_event_no_props(kind: SmlStartKind) -> SmlEvent<'static> {
     match kind {
         SmlStartKind::Worksheet => SmlEvent::StartWorksheet,
         SmlStartKind::SheetData => SmlEvent::StartSheetData,
-        SmlStartKind::Row => SmlEvent::StartRow { props: Box::default() },
-        SmlStartKind::Cell => SmlEvent::StartCell { props: Box::default() },
+        SmlStartKind::Row => SmlEvent::StartRow {
+            props: Box::default(),
+        },
+        SmlStartKind::Cell => SmlEvent::StartCell {
+            props: Box::default(),
+        },
         SmlStartKind::InlineString => SmlEvent::StartInlineString,
     }
 }

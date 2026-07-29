@@ -7,10 +7,10 @@
 //! Run with:
 //!   cargo test -q -p pod-fmt -- --ignored --nocapture
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
 use pod_fmt::ast::{Block, Inline, PodDoc};
 use pod_fmt::parse;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 // ── Path discovery ────────────────────────────────────────────────────────────
 
@@ -19,7 +19,9 @@ fn home_dir() -> PathBuf {
 }
 
 fn find_pandoc() -> Option<PathBuf> {
-    if let Ok(out) = Command::new("sh").args(["-c", "command -v pandoc"]).output()
+    if let Ok(out) = Command::new("sh")
+        .args(["-c", "command -v pandoc"])
+        .output()
         && out.status.success()
     {
         let s = String::from_utf8_lossy(&out.stdout);

@@ -61,23 +61,19 @@ fn block_to_node(block: &Block) -> Node {
                 .prop(prop::ORDERED, *ordered)
                 .children(list_items)
         }
-        Block::RawBlock { content, .. } => {
-            Node::new(node::RAW_BLOCK)
-                .prop(prop::FORMAT, "twiki")
-                .prop(prop::CONTENT, content.clone())
-        }
+        Block::RawBlock { content, .. } => Node::new(node::RAW_BLOCK)
+            .prop(prop::FORMAT, "twiki")
+            .prop(prop::CONTENT, content.clone()),
         Block::DefinitionList { items, .. } => {
             let def_nodes: Vec<Node> = items
                 .iter()
                 .map(|item| {
                     Node::new("definition_item")
                         .child(
-                            Node::new(node::DEFINITION_TERM)
-                                .children(inlines_to_nodes(&item.term)),
+                            Node::new(node::DEFINITION_TERM).children(inlines_to_nodes(&item.term)),
                         )
                         .child(
-                            Node::new(node::DEFINITION_DESC)
-                                .children(inlines_to_nodes(&item.desc)),
+                            Node::new(node::DEFINITION_DESC).children(inlines_to_nodes(&item.desc)),
                         )
                 })
                 .collect();
@@ -126,7 +122,9 @@ fn inline_to_node(inline: &Inline) -> Node {
     match inline {
         Inline::Text(s, _) => Node::new(node::TEXT).prop(prop::CONTENT, s.clone()),
         Inline::Bold(children, _) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
-        Inline::Italic(children, _) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
+        Inline::Italic(children, _) => {
+            Node::new(node::EMPHASIS).children(inlines_to_nodes(children))
+        }
         Inline::BoldItalic(children, _) => Node::new(node::STRONG)
             .child(Node::new(node::EMPHASIS).children(inlines_to_nodes(children))),
         Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),

@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use xwiki::{parse, build};
+use xwiki::{build, parse};
 
 const SMALL: &str = r#"
 = Hello World =

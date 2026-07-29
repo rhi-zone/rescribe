@@ -181,9 +181,7 @@ fn emit_block(block: &Block, out: &mut String) {
             out.push_str("{pagebreak}\n\n");
         }
 
-        Block::Figure {
-            caption, body, ..
-        } => {
+        Block::Figure { caption, body, .. } => {
             emit_block(body, out);
             if !caption.is_empty() {
                 out.push_str("Figure: ");

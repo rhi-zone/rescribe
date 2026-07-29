@@ -27,11 +27,19 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Warning, message: message.into(), span }
+        Self {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
     }
 
     pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Error, message: message.into(), span }
+        Self {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -56,19 +64,51 @@ impl XwikiDoc {
 /// Block-level element.
 #[derive(Debug, Clone)]
 pub enum Block {
-    Heading { level: u8, inlines: Vec<Inline>, span: Span },
-    Paragraph { inlines: Vec<Inline>, span: Span },
-    CodeBlock { content: String, language: Option<String>, span: Span },
-    Table { rows: Vec<TableRow>, span: Span },
-    List { ordered: bool, items: Vec<Vec<Block>>, span: Span },
-    HorizontalRule { span: Span },
-    Blockquote { children: Vec<Block>, span: Span },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    CodeBlock {
+        content: String,
+        language: Option<String>,
+        span: Span,
+    },
+    Table {
+        rows: Vec<TableRow>,
+        span: Span,
+    },
+    List {
+        ordered: bool,
+        items: Vec<Vec<Block>>,
+        span: Span,
+    },
+    HorizontalRule {
+        span: Span,
+    },
+    Blockquote {
+        children: Vec<Block>,
+        span: Span,
+    },
     /// A macro block: `{{name params}}content{{/name}}`.
     /// Used for `{{info}}`, `{{warning}}`, `{{error}}`, `{{success}}`,
     /// `{{velocity}}`, `{{groovy}}`, `{{html}}`, etc.
-    MacroBlock { name: String, params: String, content: String, span: Span },
+    MacroBlock {
+        name: String,
+        params: String,
+        content: String,
+        span: Span,
+    },
     /// A self-closing macro: `{{name params/}}` (e.g. `{{toc/}}`).
-    MacroInline { name: String, params: String, span: Span },
+    MacroInline {
+        name: String,
+        params: String,
+        span: Span,
+    },
 }
 
 impl Block {
@@ -83,9 +123,13 @@ impl Block {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { content, language, .. } => {
-                Block::CodeBlock { content, language, span: Span::NONE }
-            }
+            Block::CodeBlock {
+                content, language, ..
+            } => Block::CodeBlock {
+                content,
+                language,
+                span: Span::NONE,
+            },
             Block::Table { rows, .. } => Block::Table {
                 rows: rows.into_iter().map(TableRow::strip_spans).collect(),
                 span: Span::NONE,
@@ -103,12 +147,22 @@ impl Block {
                 children: children.into_iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::MacroBlock { name, params, content, .. } => {
-                Block::MacroBlock { name, params, content, span: Span::NONE }
-            }
-            Block::MacroInline { name, params, .. } => {
-                Block::MacroInline { name, params, span: Span::NONE }
-            }
+            Block::MacroBlock {
+                name,
+                params,
+                content,
+                ..
+            } => Block::MacroBlock {
+                name,
+                params,
+                content,
+                span: Span::NONE,
+            },
+            Block::MacroInline { name, params, .. } => Block::MacroInline {
+                name,
+                params,
+                span: Span::NONE,
+            },
         }
     }
 }
@@ -158,10 +212,23 @@ pub enum Inline {
     Superscript(Vec<Inline>, Span),
     Subscript(Vec<Inline>, Span),
     Code(String, Span),
-    Link { url: String, label: String, span: Span },
-    Image { url: String, alt: Option<String>, params: Vec<(String, String)>, span: Span },
-    LineBreak { span: Span },
-    SoftBreak { span: Span },
+    Link {
+        url: String,
+        label: String,
+        span: Span,
+    },
+    Image {
+        url: String,
+        alt: Option<String>,
+        params: Vec<(String, String)>,
+        span: Span,
+    },
+    LineBreak {
+        span: Span,
+    },
+    SoftBreak {
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -187,10 +254,19 @@ impl Inline {
                 Inline::Subscript(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
             Inline::Code(s, _) => Inline::Code(s, Span::NONE),
-            Inline::Link { url, label, .. } => Inline::Link { url, label, span: Span::NONE },
-            Inline::Image { url, alt, params, .. } => {
-                Inline::Image { url, alt, params, span: Span::NONE }
-            }
+            Inline::Link { url, label, .. } => Inline::Link {
+                url,
+                label,
+                span: Span::NONE,
+            },
+            Inline::Image {
+                url, alt, params, ..
+            } => Inline::Image {
+                url,
+                alt,
+                params,
+                span: Span::NONE,
+            },
             Inline::LineBreak { .. } => Inline::LineBreak { span: Span::NONE },
             Inline::SoftBreak { .. } => Inline::SoftBreak { span: Span::NONE },
         }

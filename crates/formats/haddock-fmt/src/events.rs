@@ -10,10 +10,16 @@ pub enum Event<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
-    CodeBlock { content: Cow<'a, str> },
-    AtCodeBlock { content: Cow<'a, str> },
+    CodeBlock {
+        content: Cow<'a, str>,
+    },
+    AtCodeBlock {
+        content: Cow<'a, str>,
+    },
     StartUnorderedList,
     EndUnorderedList,
     StartOrderedList,
@@ -26,10 +32,16 @@ pub enum Event<'a> {
     EndDefinitionTerm,
     StartDefinitionDesc,
     EndDefinitionDesc,
-    DocTest { expression: Cow<'a, str>, result: Option<Cow<'a, str>> },
+    DocTest {
+        expression: Cow<'a, str>,
+        result: Option<Cow<'a, str>>,
+    },
     StartBlockquote,
     EndBlockquote,
-    Property { key: Cow<'a, str>, name: Option<Cow<'a, str>> },
+    Property {
+        key: Cow<'a, str>,
+        name: Option<Cow<'a, str>>,
+    },
     EndProperty,
 
     // ── Inline events ─────────────────────────────────────────────────────────
@@ -39,9 +51,14 @@ pub enum Event<'a> {
     EndStrong,
     StartEmphasis,
     EndEmphasis,
-    StartLink { url: String, text: String },
+    StartLink {
+        url: String,
+        text: String,
+    },
     EndLink,
-    ModuleLink { module: String },
+    ModuleLink {
+        module: String,
+    },
 }
 
 /// Backwards-compatible alias for batch mode (all text is owned).
@@ -167,7 +184,9 @@ impl<'a> EventIter<'a> {
                 }
                 self.pending.push(Event::StartDefinitionList);
             }
-            Block::DocTest { expression, result, .. } => {
+            Block::DocTest {
+                expression, result, ..
+            } => {
                 self.pending.push(Event::DocTest {
                     expression: Cow::Owned(expression),
                     result: result.map(Cow::Owned),
@@ -178,7 +197,12 @@ impl<'a> EventIter<'a> {
                 self.expand_inlines_reversed(&inlines);
                 self.pending.push(Event::StartBlockquote);
             }
-            Block::Property { key, name, description, .. } => {
+            Block::Property {
+                key,
+                name,
+                description,
+                ..
+            } => {
                 self.pending.push(Event::EndProperty);
                 self.expand_inlines_reversed(&description);
                 self.pending.push(Event::Property {
@@ -222,7 +246,9 @@ impl<'a> EventIter<'a> {
                 });
             }
             Inline::ModuleLink { module, .. } => {
-                self.pending.push(Event::ModuleLink { module: module.clone() });
+                self.pending.push(Event::ModuleLink {
+                    module: module.clone(),
+                });
             }
         }
     }

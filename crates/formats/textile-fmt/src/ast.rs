@@ -134,7 +134,9 @@ pub enum Block {
         span: Span,
     },
     /// Horizontal rule (`---` on its own line).
-    HorizontalRule { span: Span },
+    HorizontalRule {
+        span: Span,
+    },
     /// Footnote definition: `fn1. content` at block level.
     FootnoteDef {
         label: String,
@@ -147,7 +149,10 @@ pub enum Block {
         span: Span,
     },
     /// Raw (notextile) block: content is passed through verbatim.
-    Raw { content: String, span: Span },
+    Raw {
+        content: String,
+        span: Span,
+    },
 }
 
 impl Block {
@@ -169,19 +174,31 @@ impl Block {
     pub fn strip_spans(self) -> Self {
         let dummy = Span::dummy();
         match self {
-            Block::Paragraph { inlines, align, attrs, .. } => Block::Paragraph {
+            Block::Paragraph {
+                inlines,
+                align,
+                attrs,
+                ..
+            } => Block::Paragraph {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 align,
                 attrs,
                 span: dummy,
             },
-            Block::Heading { level, inlines, attrs, .. } => Block::Heading {
+            Block::Heading {
+                level,
+                inlines,
+                attrs,
+                ..
+            } => Block::Heading {
                 level,
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 attrs,
                 span: dummy,
             },
-            Block::CodeBlock { content, language, .. } => Block::CodeBlock {
+            Block::CodeBlock {
+                content, language, ..
+            } => Block::CodeBlock {
                 content,
                 language,
                 span: dummy,
@@ -221,7 +238,10 @@ impl Block {
                     .collect(),
                 span: dummy,
             },
-            Block::Raw { content, .. } => Block::Raw { content, span: dummy },
+            Block::Raw { content, .. } => Block::Raw {
+                content,
+                span: dummy,
+            },
         }
     }
 }
@@ -290,7 +310,10 @@ pub enum Inline {
     Superscript(Vec<Inline>, Span),
     Subscript(Vec<Inline>, Span),
     /// Inline footnote reference: `[1]` in Textile.
-    FootnoteRef { label: String, span: Span },
+    FootnoteRef {
+        label: String,
+        span: Span,
+    },
     /// Hard line break (newline within a paragraph).
     LineBreak(Span),
     /// Raw (notextile) inline: `==content==` — content passed through verbatim.
@@ -298,9 +321,17 @@ pub enum Inline {
     /// Citation: `??text??` — maps to `<cite>` semantics.
     Citation(Vec<Inline>, Span),
     /// Generic span: `%text%` — maps to `<span>`. May carry inline attributes.
-    GenericSpan { attrs: BlockAttrs, children: Vec<Inline>, span: Span },
+    GenericSpan {
+        attrs: BlockAttrs,
+        children: Vec<Inline>,
+        span: Span,
+    },
     /// Acronym: `ABC(meaning)` — all-caps abbreviation with title.
-    Acronym { text: String, title: String, span: Span },
+    Acronym {
+        text: String,
+        title: String,
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -329,21 +360,29 @@ impl Inline {
         let dummy = Span::dummy();
         match self {
             Inline::Text(s, _) => Inline::Text(s, dummy),
-            Inline::Bold(children, _) => {
-                Inline::Bold(children.into_iter().map(Inline::strip_spans).collect(), dummy)
-            }
-            Inline::Italic(children, _) => {
-                Inline::Italic(children.into_iter().map(Inline::strip_spans).collect(), dummy)
-            }
-            Inline::Underline(children, _) => {
-                Inline::Underline(children.into_iter().map(Inline::strip_spans).collect(), dummy)
-            }
+            Inline::Bold(children, _) => Inline::Bold(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                dummy,
+            ),
+            Inline::Italic(children, _) => Inline::Italic(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                dummy,
+            ),
+            Inline::Underline(children, _) => Inline::Underline(
+                children.into_iter().map(Inline::strip_spans).collect(),
+                dummy,
+            ),
             Inline::Strikethrough(children, _) => Inline::Strikethrough(
                 children.into_iter().map(Inline::strip_spans).collect(),
                 dummy,
             ),
             Inline::Code(s, _) => Inline::Code(s, dummy),
-            Inline::Link { url, title, children, .. } => Inline::Link {
+            Inline::Link {
+                url,
+                title,
+                children,
+                ..
+            } => Inline::Link {
                 url,
                 title,
                 children: children.into_iter().map(Inline::strip_spans).collect(),
@@ -369,12 +408,18 @@ impl Inline {
                 children.into_iter().map(Inline::strip_spans).collect(),
                 dummy,
             ),
-            Inline::GenericSpan { attrs, children, .. } => Inline::GenericSpan {
+            Inline::GenericSpan {
+                attrs, children, ..
+            } => Inline::GenericSpan {
                 attrs,
                 children: children.into_iter().map(Inline::strip_spans).collect(),
                 span: dummy,
             },
-            Inline::Acronym { text, title, .. } => Inline::Acronym { text, title, span: dummy },
+            Inline::Acronym { text, title, .. } => Inline::Acronym {
+                text,
+                title,
+                span: dummy,
+            },
         }
     }
 }

@@ -51,7 +51,12 @@ fn apply_block_attrs(mut n: Node, attrs: &BlockAttrs) -> Node {
 
 fn convert_block(block: &Block) -> Node {
     match block {
-        Block::Paragraph { inlines, align, attrs, .. } => {
+        Block::Paragraph {
+            inlines,
+            align,
+            attrs,
+            ..
+        } => {
             let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
             let mut n = Node::new(node::PARAGRAPH).children(children);
             if let Some(a) = align {
@@ -61,7 +66,12 @@ fn convert_block(block: &Block) -> Node {
             n
         }
 
-        Block::Heading { level, inlines, attrs, .. } => {
+        Block::Heading {
+            level,
+            inlines,
+            attrs,
+            ..
+        } => {
             let children: Vec<Node> = inlines.iter().map(convert_inline).collect();
             let mut n = Node::new(node::HEADING)
                 .prop(prop::LEVEL, *level as i64)
@@ -70,7 +80,9 @@ fn convert_block(block: &Block) -> Node {
             n
         }
 
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -152,11 +164,9 @@ fn convert_block(block: &Block) -> Node {
             Node::new(node::DEFINITION_LIST).children(children)
         }
 
-        Block::Raw { content, .. } => {
-            Node::new(node::RAW_BLOCK)
-                .prop(prop::CONTENT, content.clone())
-                .prop(prop::FORMAT, "textile")
-        }
+        Block::Raw { content, .. } => Node::new(node::RAW_BLOCK)
+            .prop(prop::CONTENT, content.clone())
+            .prop(prop::FORMAT, "textile"),
     }
 }
 
@@ -186,7 +196,12 @@ fn convert_inline(inline: &Inline) -> Node {
 
         Inline::Code(s, _) => Node::new(node::CODE).prop(prop::CONTENT, s.clone()),
 
-        Inline::Link { url, title, children, .. } => {
+        Inline::Link {
+            url,
+            title,
+            children,
+            ..
+        } => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             let mut n = Node::new(node::LINK)
                 .prop(prop::URL, url.clone())
@@ -221,11 +236,9 @@ fn convert_inline(inline: &Inline) -> Node {
 
         Inline::LineBreak(_) => Node::new(node::LINE_BREAK),
 
-        Inline::Raw(content, _) => {
-            Node::new(node::RAW_INLINE)
-                .prop(prop::CONTENT, content.clone())
-                .prop(prop::FORMAT, "textile")
-        }
+        Inline::Raw(content, _) => Node::new(node::RAW_INLINE)
+            .prop(prop::CONTENT, content.clone())
+            .prop(prop::FORMAT, "textile"),
 
         Inline::Citation(children, _) => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
@@ -234,18 +247,18 @@ fn convert_inline(inline: &Inline) -> Node {
                 .children(converted)
         }
 
-        Inline::GenericSpan { attrs, children, .. } => {
+        Inline::GenericSpan {
+            attrs, children, ..
+        } => {
             let converted: Vec<Node> = children.iter().map(convert_inline).collect();
             let mut n = Node::new(node::SPAN).children(converted);
             n = apply_block_attrs(n, attrs);
             n
         }
 
-        Inline::Acronym { text, title, .. } => {
-            Node::new(node::SPAN)
-                .prop("textile:abbr", text.clone())
-                .prop(prop::TITLE, title.clone())
-        }
+        Inline::Acronym { text, title, .. } => Node::new(node::SPAN)
+            .prop("textile:abbr", text.clone())
+            .prop(prop::TITLE, title.clone()),
     }
 }
 

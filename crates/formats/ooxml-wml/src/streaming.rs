@@ -31,10 +31,10 @@
 use std::collections::HashMap;
 use std::io::{Seek, Write};
 
-use crate::types;
-use crate::writer::{DocumentBuilder, Drawing};
 use crate::Result;
 use crate::generated_events::{OwnedWmlEvent, WmlEvent};
+use crate::types;
+use crate::writer::{DocumentBuilder, Drawing};
 
 /// Internal stack frame for tracking nested content during event processing.
 enum WmlFrame {
@@ -62,7 +62,11 @@ pub struct WmlWriter<W: Write + Seek> {
 impl<W: Write + Seek> WmlWriter<W> {
     /// Create a new writer targeting `sink`.
     pub fn new(sink: W) -> Self {
-        WmlWriter { sink, events: Vec::new(), registered_images: HashMap::new() }
+        WmlWriter {
+            sink,
+            events: Vec::new(),
+            registered_images: HashMap::new(),
+        }
     }
 
     /// Register image bytes under a caller-supplied rel_id.
@@ -76,7 +80,8 @@ impl<W: Write + Seek> WmlWriter<W> {
         data: Vec<u8>,
         content_type: impl Into<String>,
     ) {
-        self.registered_images.insert(rel_id.into(), (data, content_type.into()));
+        self.registered_images
+            .insert(rel_id.into(), (data, content_type.into()));
     }
 
     /// Buffer one event.
@@ -151,22 +156,24 @@ fn process_events(
 
             WmlEvent::Text(text) => {
                 if let Some(WmlFrame::Run(run)) = stack.last_mut() {
-                    run.run_content.push(types::RunContent::T(Box::new(types::Text {
-                        text: Some(text.into_owned()),
-                        #[cfg(feature = "extra-children")]
-                        extra_children: Vec::new(),
-                    })));
+                    run.run_content
+                        .push(types::RunContent::T(Box::new(types::Text {
+                            text: Some(text.into_owned()),
+                            #[cfg(feature = "extra-children")]
+                            extra_children: Vec::new(),
+                        })));
                 }
             }
 
             WmlEvent::LineBreak => {
                 if let Some(WmlFrame::Run(run)) = stack.last_mut() {
-                    run.run_content.push(types::RunContent::Br(Box::new(types::CTBr {
-                        r#type: None,
-                        clear: None,
-                        #[cfg(feature = "extra-attrs")]
-                        extra_attrs: Default::default(),
-                    })));
+                    run.run_content
+                        .push(types::RunContent::Br(Box::new(types::CTBr {
+                            r#type: None,
+                            clear: None,
+                            #[cfg(feature = "extra-attrs")]
+                            extra_attrs: Default::default(),
+                        })));
                 }
             }
 
@@ -260,7 +267,8 @@ fn process_events(
                     let mut drawing = Drawing::new();
                     drawing.add_image(builder_rel_id.clone());
                     let ct_drawing = builder.build_drawing(drawing);
-                    run.run_content.push(types::RunContent::Drawing(Box::new(ct_drawing)));
+                    run.run_content
+                        .push(types::RunContent::Drawing(Box::new(ct_drawing)));
                 }
             }
 
@@ -273,11 +281,7 @@ fn process_events(
 }
 
 /// Push block content to the nearest block parent (innermost table cell or document body).
-fn push_block(
-    content: types::BlockContent,
-    stack: &mut [WmlFrame],
-    builder: &mut DocumentBuilder,
-) {
+fn push_block(content: types::BlockContent, stack: &mut [WmlFrame], builder: &mut DocumentBuilder) {
     if let Some(WmlFrame::TableCell(cell)) = stack.last_mut() {
         cell.block_content.push(content);
         return;

@@ -12,10 +12,19 @@ pub fn parse(input: &str) -> (TsvDoc, Vec<Diagnostic>) {
         }
 
         let cells = parse_tsv_line(line);
-        rows.push(Row { cells, span: Span::NONE });
+        rows.push(Row {
+            cells,
+            span: Span::NONE,
+        });
     }
 
-    (TsvDoc { rows, span: Span::NONE }, Vec::new())
+    (
+        TsvDoc {
+            rows,
+            span: Span::NONE,
+        },
+        Vec::new(),
+    )
 }
 
 fn parse_tsv_line(line: &str) -> Vec<Cell> {
@@ -41,7 +50,10 @@ fn parse_tsv_line(line: &str) -> Vec<Cell> {
                 }
             }
             '\t' if !in_quotes => {
-                cells.push(Cell { value: current.clone(), span: Span::NONE });
+                cells.push(Cell {
+                    value: current.clone(),
+                    span: Span::NONE,
+                });
                 current.clear();
             }
             _ => {
@@ -50,6 +62,9 @@ fn parse_tsv_line(line: &str) -> Vec<Cell> {
         }
     }
 
-    cells.push(Cell { value: current, span: Span::NONE });
+    cells.push(Cell {
+        value: current,
+        span: Span::NONE,
+    });
     cells
 }

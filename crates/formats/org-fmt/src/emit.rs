@@ -68,7 +68,17 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.ensure_blank_line();
         }
 
-        Block::Heading { level, todo, priority, tags, properties, scheduled, deadline, inlines, .. } => {
+        Block::Heading {
+            level,
+            todo,
+            priority,
+            tags,
+            properties,
+            scheduled,
+            deadline,
+            inlines,
+            ..
+        } => {
             ctx.ensure_newline();
             for _ in 0..*level {
                 ctx.write("*");
@@ -122,7 +132,13 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.ensure_blank_line();
         }
 
-        Block::CodeBlock { language, header_args, name, content, .. } => {
+        Block::CodeBlock {
+            language,
+            header_args,
+            name,
+            content,
+            ..
+        } => {
             ctx.ensure_newline();
             if let Some(nm) = name {
                 ctx.write("#+NAME: ");
@@ -156,7 +172,12 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("#+END_QUOTE\n\n");
         }
 
-        Block::List { ordered, start, items, .. } => {
+        Block::List {
+            ordered,
+            start,
+            items,
+            ..
+        } => {
             ctx.list_depth += 1;
             let mut counter = start.map(|s| s as i32).unwrap_or(1);
             let mut first_item = true;
@@ -195,7 +216,9 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             build_inlines(inlines, ctx);
         }
 
-        Block::RawBlock { format, content, .. } => {
+        Block::RawBlock {
+            format, content, ..
+        } => {
             if format == "org" {
                 ctx.write(content);
             }
@@ -452,7 +475,9 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
             ctx.write("]");
         }
 
-        Inline::FootnoteDefinition { label, children, .. } => {
+        Inline::FootnoteDefinition {
+            label, children, ..
+        } => {
             ctx.write("[fn:");
             ctx.write(label);
             ctx.write(": ");
@@ -487,4 +512,3 @@ fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
         }
     }
 }
-

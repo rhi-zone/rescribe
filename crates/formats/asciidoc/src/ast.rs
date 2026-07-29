@@ -155,14 +155,26 @@ pub enum Block {
 impl Block {
     pub fn strip_spans(&self) -> Self {
         match self {
-            Block::Paragraph { inlines, id, role, checked, .. } => Block::Paragraph {
+            Block::Paragraph {
+                inlines,
+                id,
+                role,
+                checked,
+                ..
+            } => Block::Paragraph {
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 id: id.clone(),
                 role: role.clone(),
                 checked: *checked,
                 span: Span::NONE,
             },
-            Block::Heading { level, inlines, id, role, .. } => Block::Heading {
+            Block::Heading {
+                level,
+                inlines,
+                id,
+                role,
+                ..
+            } => Block::Heading {
                 level: *level,
                 inlines: inlines.iter().map(Inline::strip_spans).collect(),
                 id: id.clone(),
@@ -186,7 +198,10 @@ impl Block {
                 span: Span::NONE,
             },
             Block::List {
-                ordered, items, style, ..
+                ordered,
+                items,
+                style,
+                ..
             } => Block::List {
                 ordered: *ordered,
                 items: items
@@ -207,7 +222,10 @@ impl Block {
                 span: Span::NONE,
             },
             Block::Div {
-                class, title, children, ..
+                class,
+                title,
+                children,
+                ..
             } => Block::Div {
                 class: class.clone(),
                 title: title.clone(),
@@ -221,7 +239,9 @@ impl Block {
                 content: content.clone(),
                 span: Span::NONE,
             },
-            Block::MathBlock { content, flavor, .. } => Block::MathBlock {
+            Block::MathBlock {
+                content, flavor, ..
+            } => Block::MathBlock {
                 content: content.clone(),
                 flavor: flavor.clone(),
                 span: Span::NONE,
@@ -305,12 +325,14 @@ impl Inline {
                 text: text.clone(),
                 span: Span::NONE,
             },
-            Inline::Strong(children, _) => {
-                Inline::Strong(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
-            Inline::Emphasis(children, _) => {
-                Inline::Emphasis(children.iter().map(Inline::strip_spans).collect(), Span::NONE)
-            }
+            Inline::Strong(children, _) => Inline::Strong(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
+            Inline::Emphasis(children, _) => Inline::Emphasis(
+                children.iter().map(Inline::strip_spans).collect(),
+                Span::NONE,
+            ),
             Inline::Code(s, _) => Inline::Code(s.clone(), Span::NONE),
             Inline::Superscript(children, _) => Inline::Superscript(
                 children.iter().map(Inline::strip_spans).collect(),
@@ -346,7 +368,10 @@ impl Inline {
                 span: Span::NONE,
             },
             Inline::Link {
-                url, children, target, ..
+                url,
+                children,
+                target,
+                ..
             } => Inline::Link {
                 url: url.clone(),
                 children: children.iter().map(Inline::strip_spans).collect(),
@@ -367,7 +392,9 @@ impl Inline {
                 children: children.iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::MathInline { content, flavor, .. } => Inline::MathInline {
+            Inline::MathInline {
+                content, flavor, ..
+            } => Inline::MathInline {
                 content: content.clone(),
                 flavor: flavor.clone(),
                 span: Span::NONE,

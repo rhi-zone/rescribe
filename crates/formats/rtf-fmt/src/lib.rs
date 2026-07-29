@@ -39,11 +39,11 @@
 //! harness (`fuzz_rtf_roundtrip`).
 
 mod ast;
+pub mod batch;
 mod emit;
 mod events;
 mod parse;
 mod sem_events;
-pub mod batch;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────

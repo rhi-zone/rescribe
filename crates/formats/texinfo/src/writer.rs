@@ -177,7 +177,12 @@ impl DocBuilder {
                 });
             }
             OwnedEvent::EndHeading => {
-                if let Some(Frame::Heading { level, kind, inlines }) = self.stack.pop() {
+                if let Some(Frame::Heading {
+                    level,
+                    kind,
+                    inlines,
+                }) = self.stack.pop()
+                {
                     self.push_block(Block::Heading {
                         level,
                         kind,
@@ -230,8 +235,7 @@ impl DocBuilder {
                 });
             }
             OwnedEvent::StartDefinitionList => {
-                self.stack
-                    .push(Frame::DefinitionList { items: vec![] });
+                self.stack.push(Frame::DefinitionList { items: vec![] });
             }
             OwnedEvent::EndDefinitionList => {
                 if let Some(Frame::DefinitionList { items }) = self.stack.pop() {
@@ -242,8 +246,7 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartDefinitionTerm => {
-                self.stack
-                    .push(Frame::DefinitionTerm { inlines: vec![] });
+                self.stack.push(Frame::DefinitionTerm { inlines: vec![] });
             }
             OwnedEvent::EndDefinitionTerm => {
                 if let Some(Frame::DefinitionTerm { inlines }) = self.stack.pop() {
@@ -253,8 +256,7 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartDefinitionDesc => {
-                self.stack
-                    .push(Frame::DefinitionDesc { blocks: vec![] });
+                self.stack.push(Frame::DefinitionDesc { blocks: vec![] });
             }
             OwnedEvent::EndDefinitionDesc => {
                 if let Some(Frame::DefinitionDesc { blocks }) = self.stack.pop() {
@@ -318,7 +320,10 @@ impl DocBuilder {
             OwnedEvent::HorizontalRule => {
                 self.push_block(Block::HorizontalRule { span: Span::NONE });
             }
-            OwnedEvent::RawBlock { environment, content } => {
+            OwnedEvent::RawBlock {
+                environment,
+                content,
+            } => {
                 self.push_block(Block::RawBlock {
                     environment,
                     content,
@@ -441,8 +446,7 @@ impl DocBuilder {
                 self.push_inline(Inline::SmallCaps(cow.into_owned(), Span::NONE));
             }
             OwnedEvent::StartDirectItalic => {
-                self.stack
-                    .push(Frame::DirectItalic { inlines: vec![] });
+                self.stack.push(Frame::DirectItalic { inlines: vec![] });
             }
             OwnedEvent::EndDirectItalic => {
                 if let Some(Frame::DirectItalic { inlines }) = self.stack.pop() {
@@ -475,7 +479,13 @@ impl DocBuilder {
                     });
                 }
             }
-            OwnedEvent::Image { file, width, height, alt, extension } => {
+            OwnedEvent::Image {
+                file,
+                width,
+                height,
+                alt,
+                extension,
+            } => {
                 self.push_inline(Inline::Image {
                     file,
                     width,
@@ -486,8 +496,7 @@ impl DocBuilder {
                 });
             }
             OwnedEvent::StartSuperscript => {
-                self.stack
-                    .push(Frame::Superscript { inlines: vec![] });
+                self.stack.push(Frame::Superscript { inlines: vec![] });
             }
             OwnedEvent::EndSuperscript => {
                 if let Some(Frame::Superscript { inlines }) = self.stack.pop() {
@@ -503,8 +512,7 @@ impl DocBuilder {
                 }
             }
             OwnedEvent::StartFootnoteDef => {
-                self.stack
-                    .push(Frame::FootnoteDef { inlines: vec![] });
+                self.stack.push(Frame::FootnoteDef { inlines: vec![] });
             }
             OwnedEvent::EndFootnoteDef => {
                 if let Some(Frame::FootnoteDef { inlines }) = self.stack.pop() {

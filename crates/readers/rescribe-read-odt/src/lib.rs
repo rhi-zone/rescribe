@@ -6,8 +6,10 @@
 use odf_fmt::ast::{
     FrameContent, Inline, ListItem, NoteClass, OdfBody, OdfDocument, StyleEntry, TextBlock,
 };
-use rescribe_core::{ConversionResult, Document, ParseError, ParseOptions, Properties, Resource,
-    ResourceId, ResourceMap};
+use rescribe_core::{
+    ConversionResult, Document, ParseError, ParseOptions, Properties, Resource, ResourceId,
+    ResourceMap,
+};
 use rescribe_std::{Node, node, prop};
 
 /// Parse ODT input into a document.
@@ -30,25 +32,50 @@ pub fn parse_with_options(
 fn convert_document(odf: OdfDocument) -> Result<ConversionResult<Document>, ParseError> {
     // Metadata
     let mut metadata = Properties::new();
-    if let Some(v) = &odf.meta.title { metadata.set("title", v.as_str()); }
-    if let Some(v) = &odf.meta.creator { metadata.set("author", v.as_str()); }
-    if let Some(v) = &odf.meta.modification_date.as_ref().or(odf.meta.creation_date.as_ref()) {
+    if let Some(v) = &odf.meta.title {
+        metadata.set("title", v.as_str());
+    }
+    if let Some(v) = &odf.meta.creator {
+        metadata.set("author", v.as_str());
+    }
+    if let Some(v) = &odf
+        .meta
+        .modification_date
+        .as_ref()
+        .or(odf.meta.creation_date.as_ref())
+    {
         metadata.set("date", v.as_str());
     }
-    if let Some(v) = &odf.meta.description { metadata.set("description", v.as_str()); }
-    if let Some(v) = &odf.meta.language { metadata.set("language", v.as_str()); }
+    if let Some(v) = &odf.meta.description {
+        metadata.set("description", v.as_str());
+    }
+    if let Some(v) = &odf.meta.language {
+        metadata.set("language", v.as_str());
+    }
     for (name, value) in &odf.meta.user_defined {
         metadata.set(format!("meta:{name}"), value.as_str());
     }
 
     // Page layout from first page layout entry
     if let Some(pl) = odf.page_layouts.first() {
-        if let Some(v) = &pl.page_width { metadata.set("page-width", v.as_str()); }
-        if let Some(v) = &pl.page_height { metadata.set("page-height", v.as_str()); }
-        if let Some(v) = &pl.margin_top { metadata.set("margin-top", v.as_str()); }
-        if let Some(v) = &pl.margin_bottom { metadata.set("margin-bottom", v.as_str()); }
-        if let Some(v) = &pl.margin_left { metadata.set("margin-left", v.as_str()); }
-        if let Some(v) = &pl.margin_right { metadata.set("margin-right", v.as_str()); }
+        if let Some(v) = &pl.page_width {
+            metadata.set("page-width", v.as_str());
+        }
+        if let Some(v) = &pl.page_height {
+            metadata.set("page-height", v.as_str());
+        }
+        if let Some(v) = &pl.margin_top {
+            metadata.set("margin-top", v.as_str());
+        }
+        if let Some(v) = &pl.margin_bottom {
+            metadata.set("margin-bottom", v.as_str());
+        }
+        if let Some(v) = &pl.margin_left {
+            metadata.set("margin-left", v.as_str());
+        }
+        if let Some(v) = &pl.margin_right {
+            metadata.set("margin-right", v.as_str());
+        }
     }
 
     // Embedded images
@@ -133,12 +160,17 @@ struct StyleCtx<'a> {
 
 impl<'a> StyleCtx<'a> {
     fn find_style(&self, name: &str) -> Option<&StyleEntry> {
-        self.auto.iter().find(|s| s.name == name)
+        self.auto
+            .iter()
+            .find(|s| s.name == name)
             .or_else(|| self.named.iter().find(|s| s.name == name))
     }
 
     fn is_ordered_list_style(&self, name: &str) -> Option<bool> {
-        self.list_styles.iter().find(|(n, _)| n == name).map(|(_, o)| *o)
+        self.list_styles
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, o)| *o)
     }
 }
 
@@ -153,7 +185,12 @@ enum ParaKind {
     HorizontalRule,
 }
 
-fn resolve_para_kind(style_name: Option<&str>, is_heading_tag: bool, outline_level: Option<u32>, ctx: &StyleCtx<'_>) -> ParaKind {
+fn resolve_para_kind(
+    style_name: Option<&str>,
+    is_heading_tag: bool,
+    outline_level: Option<u32>,
+    ctx: &StyleCtx<'_>,
+) -> ParaKind {
     if is_heading_tag {
         let level = outline_level.unwrap_or(1).min(6) as u8;
         return ParaKind::Heading(level.max(1));
@@ -168,14 +205,26 @@ fn resolve_para_kind(style_name: Option<&str>, is_heading_tag: bool, outline_lev
     if let Some(entry) = ctx.find_style(name) {
         // Use display_name or name for heuristics
         let check = entry.display_name.as_deref().unwrap_or(&entry.name);
-        if let k @ (ParaKind::Code | ParaKind::Blockquote | ParaKind::HorizontalRule | ParaKind::Heading(_)) = para_kind_from_name(check) {
+        if let k @ (ParaKind::Code
+        | ParaKind::Blockquote
+        | ParaKind::HorizontalRule
+        | ParaKind::Heading(_)) = para_kind_from_name(check)
+        {
             return k;
         }
         // Also check parent style
         if let Some(parent) = &entry.parent_style_name
-            && let Some(parent_entry) = ctx.find_style(parent) {
-            let pcheck = parent_entry.display_name.as_deref().unwrap_or(&parent_entry.name);
-            if let k @ (ParaKind::Code | ParaKind::Blockquote | ParaKind::HorizontalRule | ParaKind::Heading(_)) = para_kind_from_name(pcheck) {
+            && let Some(parent_entry) = ctx.find_style(parent)
+        {
+            let pcheck = parent_entry
+                .display_name
+                .as_deref()
+                .unwrap_or(&parent_entry.name);
+            if let k @ (ParaKind::Code
+            | ParaKind::Blockquote
+            | ParaKind::HorizontalRule
+            | ParaKind::Heading(_)) = para_kind_from_name(pcheck)
+            {
                 return k;
             }
         }
@@ -195,8 +244,12 @@ fn para_kind_from_name(name: &str) -> ParaKind {
         }
         return ParaKind::Heading(1);
     }
-    if lower.contains("preformat") || lower.contains("code") || lower.contains("monospace")
-        || lower.contains("verbatim") || lower == "source text" {
+    if lower.contains("preformat")
+        || lower.contains("code")
+        || lower.contains("monospace")
+        || lower.contains("verbatim")
+        || lower == "source text"
+    {
         return ParaKind::Code;
     }
     if lower.contains("quotation") || lower.contains("blockquote") || lower.contains("quote") {
@@ -226,19 +279,25 @@ fn convert_block(block: &TextBlock, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>
                 ParaKind::Blockquote => {
                     // Mark for blockquote accumulation
                     let mut n = Node::new(node::PARAGRAPH);
-                    for c in children { n = n.child(c); }
+                    for c in children {
+                        n = n.child(c);
+                    }
                     n = n.prop("odt:is-blockquote", "1");
                     if let Some(sn) = &p.style_name
-                        && !sn.is_empty() {
+                        && !sn.is_empty()
+                    {
                         n = n.prop("odt:style-name", sn.as_str());
                     }
                     return (vec![n], footnotes);
                 }
                 _ => {
                     let mut n = Node::new(node::PARAGRAPH);
-                    for c in children { n = n.child(c); }
+                    for c in children {
+                        n = n.child(c);
+                    }
                     if let Some(sn) = &p.style_name
-                        && !sn.is_empty() {
+                        && !sn.is_empty()
+                    {
                         n = n.prop("odt:style-name", sn.as_str());
                     }
                     n
@@ -259,14 +318,18 @@ fn convert_block(block: &TextBlock, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>
             let level = h.outline_level.unwrap_or(1).min(6) as u8;
             let (children, footnotes) = convert_inlines(&h.content, ctx);
             let mut n = Node::new(node::HEADING).prop(prop::LEVEL, level as i64);
-            for c in children { n = n.child(c); }
+            for c in children {
+                n = n.child(c);
+            }
             (vec![n], footnotes)
         }
 
         TextBlock::List(list) => {
             let ordered = is_ordered_list(list.style_name.as_deref(), ctx);
             let mut list_node = Node::new(node::LIST);
-            if ordered { list_node = list_node.prop("ordered", true); }
+            if ordered {
+                list_node = list_node.prop("ordered", true);
+            }
             let mut all_footnotes = Vec::new();
 
             for item in &list.items {
@@ -294,7 +357,9 @@ fn convert_block(block: &TextBlock, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>
                     }
                     for block in &cell.content {
                         let (nodes, fn_defs) = convert_block(block, ctx);
-                        for n in nodes { cell_node = cell_node.child(n); }
+                        for n in nodes {
+                            cell_node = cell_node.child(n);
+                        }
                         all_footnotes.extend(fn_defs);
                     }
                     row_node = row_node.child(cell_node);
@@ -316,28 +381,34 @@ fn convert_block(block: &TextBlock, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>
             (all_nodes, all_footnotes)
         }
 
-        TextBlock::Frame(frame) => {
-            match &frame.content {
-                FrameContent::Image { href, .. } => {
-                    let mut img = Node::new(node::IMAGE);
-                    let src = ctx.image_map.get(href).map(String::as_str).unwrap_or(href.as_str());
-                    img = img.prop("src", src);
-                    if let Some(n) = &frame.name { img = img.prop("odt:name", n.as_str()); }
-                    (vec![img], Vec::new())
+        TextBlock::Frame(frame) => match &frame.content {
+            FrameContent::Image { href, .. } => {
+                let mut img = Node::new(node::IMAGE);
+                let src = ctx
+                    .image_map
+                    .get(href)
+                    .map(String::as_str)
+                    .unwrap_or(href.as_str());
+                img = img.prop("src", src);
+                if let Some(n) = &frame.name {
+                    img = img.prop("odt:name", n.as_str());
                 }
-                FrameContent::TextBox(blocks) => {
-                    let mut div = Node::new(node::DIV);
-                    let mut all_footnotes = Vec::new();
-                    for block in blocks {
-                        let (nodes, fn_defs) = convert_block(block, ctx);
-                        for n in nodes { div = div.child(n); }
-                        all_footnotes.extend(fn_defs);
-                    }
-                    (vec![div], all_footnotes)
-                }
-                _ => (Vec::new(), Vec::new()),
+                (vec![img], Vec::new())
             }
-        }
+            FrameContent::TextBox(blocks) => {
+                let mut div = Node::new(node::DIV);
+                let mut all_footnotes = Vec::new();
+                for block in blocks {
+                    let (nodes, fn_defs) = convert_block(block, ctx);
+                    for n in nodes {
+                        div = div.child(n);
+                    }
+                    all_footnotes.extend(fn_defs);
+                }
+                (vec![div], all_footnotes)
+            }
+            _ => (Vec::new(), Vec::new()),
+        },
 
         TextBlock::Unknown { .. } => (Vec::new(), Vec::new()),
     }
@@ -349,7 +420,9 @@ fn convert_list_item(item: &ListItem, ctx: &StyleCtx<'_>) -> (Node, Vec<Node>) {
 
     for block in &item.content {
         let (nodes, fn_defs) = convert_block(block, ctx);
-        for n in nodes { item_node = item_node.child(n); }
+        for n in nodes {
+            item_node = item_node.child(n);
+        }
         all_footnotes.extend(fn_defs);
     }
 
@@ -392,7 +465,10 @@ fn convert_inline(inline: &Inline, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>)
             if s.is_empty() {
                 (Vec::new(), Vec::new())
             } else {
-                (vec![Node::new(node::TEXT).prop(prop::CONTENT, s.as_str())], Vec::new())
+                (
+                    vec![Node::new(node::TEXT).prop(prop::CONTENT, s.as_str())],
+                    Vec::new(),
+                )
             }
         }
 
@@ -408,7 +484,10 @@ fn convert_inline(inline: &Inline, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>)
 
         Inline::Space { count } => {
             let spaces = " ".repeat(*count as usize);
-            (vec![Node::new(node::TEXT).prop(prop::CONTENT, spaces)], Vec::new())
+            (
+                vec![Node::new(node::TEXT).prop(prop::CONTENT, spaces)],
+                Vec::new(),
+            )
         }
 
         Inline::LineBreak => (vec![Node::new(node::LINE_BREAK)], Vec::new()),
@@ -433,10 +512,13 @@ fn convert_inline(inline: &Inline, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>)
             let href = link.href.as_deref().unwrap_or("");
             let mut n = Node::new(node::LINK).prop(prop::URL, href);
             if let Some(title) = &link.title
-                && !title.is_empty() {
+                && !title.is_empty()
+            {
                 n = n.prop(prop::TITLE, title.as_str());
             }
-            for c in children { n = n.child(c); }
+            for c in children {
+                n = n.child(c);
+            }
             (vec![n], footnotes)
         }
 
@@ -453,7 +535,9 @@ fn convert_inline(inline: &Inline, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>)
             }
             for block in &note.body {
                 let (nodes, _) = convert_block(block, ctx);
-                for n in nodes { def = def.child(n); }
+                for n in nodes {
+                    def = def.child(n);
+                }
             }
 
             (vec![ref_node], vec![def])
@@ -468,7 +552,10 @@ fn convert_inline(inline: &Inline, ctx: &StyleCtx<'_>) -> (Vec<Node>, Vec<Node>)
             if value.is_empty() {
                 (Vec::new(), Vec::new())
             } else {
-                (vec![Node::new(node::TEXT).prop(prop::CONTENT, value.as_str())], Vec::new())
+                (
+                    vec![Node::new(node::TEXT).prop(prop::CONTENT, value.as_str())],
+                    Vec::new(),
+                )
             }
         }
 
@@ -518,24 +605,51 @@ fn inline_kind_from_style(style_name: &str, ctx: &StyleCtx<'_>) -> InlineKind {
     if let Some(entry) = ctx.find_style(style_name) {
         let p = &entry.text_props;
         // Check monospace font → code
-        let is_mono = p.font_name.as_ref().map(|f| {
-            let lf = f.to_lowercase();
-            lf.contains("courier") || lf.contains("mono") || lf.contains("consol")
-                || lf.contains("fixed") || lf.contains("inconsolata") || lf.contains("menlo")
-                || lf == "code2000" || lf == "source code pro"
-        }).unwrap_or(false);
+        let is_mono = p
+            .font_name
+            .as_ref()
+            .map(|f| {
+                let lf = f.to_lowercase();
+                lf.contains("courier")
+                    || lf.contains("mono")
+                    || lf.contains("consol")
+                    || lf.contains("fixed")
+                    || lf.contains("inconsolata")
+                    || lf.contains("menlo")
+                    || lf == "code2000"
+                    || lf == "source code pro"
+            })
+            .unwrap_or(false);
 
-        if is_mono { return InlineKind::Code; }
-        if p.subscript { return InlineKind::Subscript; }
-        if p.superscript { return InlineKind::Superscript; }
-        if p.bold { return InlineKind::Strong; }
-        if p.italic { return InlineKind::Emphasis; }
-        if p.underline { return InlineKind::Underline; }
-        if p.strikethrough { return InlineKind::Strikeout; }
+        if is_mono {
+            return InlineKind::Code;
+        }
+        if p.subscript {
+            return InlineKind::Subscript;
+        }
+        if p.superscript {
+            return InlineKind::Superscript;
+        }
+        if p.bold {
+            return InlineKind::Strong;
+        }
+        if p.italic {
+            return InlineKind::Emphasis;
+        }
+        if p.underline {
+            return InlineKind::Underline;
+        }
+        if p.strikethrough {
+            return InlineKind::Strikeout;
+        }
         let is_small_caps = p.font_variant.as_deref() == Some("small-caps");
         if is_small_caps || p.color.is_some() || p.font_size.is_some() || p.font_name.is_some() {
             let is_non_mono_font = p.font_name.as_ref().map(|_f| !is_mono).unwrap_or(false);
-            let font_name_for_span = if is_non_mono_font { p.font_name.clone() } else { None };
+            let font_name_for_span = if is_non_mono_font {
+                p.font_name.clone()
+            } else {
+                None
+            };
             return InlineKind::Span {
                 color: p.color.clone(),
                 font_size: p.font_size.clone(),
@@ -547,21 +661,41 @@ fn inline_kind_from_style(style_name: &str, ctx: &StyleCtx<'_>) -> InlineKind {
 
     // Heuristic on style name
     let lower = style_name.to_lowercase();
-    if lower.contains("code") || lower.contains("preformat") || lower.contains("verbatim")
-        || lower.contains("monospace") {
+    if lower.contains("code")
+        || lower.contains("preformat")
+        || lower.contains("verbatim")
+        || lower.contains("monospace")
+    {
         return InlineKind::Code;
     }
-    if lower.contains("subscript") || lower == "sub" { return InlineKind::Subscript; }
-    if lower.contains("superscript") || lower == "sup" { return InlineKind::Superscript; }
-    if lower.contains("bold") { return InlineKind::Strong; }
-    if lower.contains("italic") || lower.contains("oblique") { return InlineKind::Emphasis; }
-    if lower.contains("underline") { return InlineKind::Underline; }
-    if lower.contains("strike") { return InlineKind::Strikeout; }
+    if lower.contains("subscript") || lower == "sub" {
+        return InlineKind::Subscript;
+    }
+    if lower.contains("superscript") || lower == "sup" {
+        return InlineKind::Superscript;
+    }
+    if lower.contains("bold") {
+        return InlineKind::Strong;
+    }
+    if lower.contains("italic") || lower.contains("oblique") {
+        return InlineKind::Emphasis;
+    }
+    if lower.contains("underline") {
+        return InlineKind::Underline;
+    }
+    if lower.contains("strike") {
+        return InlineKind::Strikeout;
+    }
 
     InlineKind::Plain
 }
 
-fn wrap_inline_nodes(children: Vec<Node>, kind: InlineKind, style_name: &str, _ctx: &StyleCtx<'_>) -> Vec<Node> {
+fn wrap_inline_nodes(
+    children: Vec<Node>,
+    kind: InlineKind,
+    style_name: &str,
+    _ctx: &StyleCtx<'_>,
+) -> Vec<Node> {
     match kind {
         InlineKind::Plain => {
             // Pass-through: plain spans contribute no wrapper node
@@ -570,22 +704,30 @@ fn wrap_inline_nodes(children: Vec<Node>, kind: InlineKind, style_name: &str, _c
         }
         InlineKind::Strong => {
             let mut n = Node::new(node::STRONG);
-            for c in children { n = n.child(c); }
+            for c in children {
+                n = n.child(c);
+            }
             vec![n]
         }
         InlineKind::Emphasis => {
             let mut n = Node::new(node::EMPHASIS);
-            for c in children { n = n.child(c); }
+            for c in children {
+                n = n.child(c);
+            }
             vec![n]
         }
         InlineKind::Underline => {
             let mut n = Node::new(node::UNDERLINE);
-            for c in children { n = n.child(c); }
+            for c in children {
+                n = n.child(c);
+            }
             vec![n]
         }
         InlineKind::Strikeout => {
             let mut n = Node::new(node::STRIKEOUT);
-            for c in children { n = n.child(c); }
+            for c in children {
+                n = n.child(c);
+            }
             vec![n]
         }
         InlineKind::Code => {
@@ -594,21 +736,40 @@ fn wrap_inline_nodes(children: Vec<Node>, kind: InlineKind, style_name: &str, _c
         }
         InlineKind::Subscript => {
             let mut n = Node::new(node::SUBSCRIPT);
-            for c in children { n = n.child(c); }
+            for c in children {
+                n = n.child(c);
+            }
             vec![n]
         }
         InlineKind::Superscript => {
             let mut n = Node::new(node::SUPERSCRIPT);
-            for c in children { n = n.child(c); }
+            for c in children {
+                n = n.child(c);
+            }
             vec![n]
         }
-        InlineKind::Span { color, font_size, font_name, small_caps } => {
+        InlineKind::Span {
+            color,
+            font_size,
+            font_name,
+            small_caps,
+        } => {
             let mut n = Node::new(node::SPAN);
-            if let Some(c) = color { n = n.prop("style:color", c); }
-            if let Some(s) = font_size { n = n.prop("style:size", s); }
-            if let Some(f) = font_name { n = n.prop("style:font", f); }
-            if small_caps { n = n.prop("style:variant", "small-caps"); }
-            for c in children { n = n.child(c); }
+            if let Some(c) = color {
+                n = n.prop("style:color", c);
+            }
+            if let Some(s) = font_size {
+                n = n.prop("style:size", s);
+            }
+            if let Some(f) = font_name {
+                n = n.prop("style:font", f);
+            }
+            if small_caps {
+                n = n.prop("style:variant", "small-caps");
+            }
+            for c in children {
+                n = n.child(c);
+            }
             vec![n]
         }
     }
@@ -617,7 +778,11 @@ fn wrap_inline_nodes(children: Vec<Node>, kind: InlineKind, style_name: &str, _c
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn extract_text_from_children(nodes: &[Node]) -> String {
-    nodes.iter().map(extract_text_node).collect::<Vec<_>>().join("")
+    nodes
+        .iter()
+        .map(extract_text_node)
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 fn extract_text_node(n: &Node) -> String {
@@ -641,47 +806,84 @@ fn is_ordered_list(style_name: Option<&str>, ctx: &StyleCtx<'_>) -> bool {
     }
     // Fall through to heuristic on style name
     let lower = name.to_lowercase();
-    lower.contains("numb") || lower.contains("order") || lower.contains("decimal")
-        || lower == "list number" || lower == "list_number"
+    lower.contains("numb")
+        || lower.contains("order")
+        || lower.contains("decimal")
+        || lower == "list number"
+        || lower == "list_number"
 }
 
 fn apply_para_props_from_style(mut n: Node, style_name: &str, ctx: &StyleCtx<'_>) -> Node {
     if let Some(entry) = ctx.find_style(style_name) {
         let p = &entry.para_props;
-        if let Some(v) = &p.align { n = n.prop("style:align", v.as_str()); }
-        if let Some(v) = &p.margin_left { n = n.prop("style:margin-left", v.as_str()); }
-        if let Some(v) = &p.margin_right { n = n.prop("style:margin-right", v.as_str()); }
-        if let Some(v) = &p.margin_top { n = n.prop("style:margin-top", v.as_str()); }
-        if let Some(v) = &p.margin_bottom { n = n.prop("style:margin-bottom", v.as_str()); }
-        if let Some(v) = &p.text_indent { n = n.prop("style:text-indent", v.as_str()); }
-        if let Some(v) = &p.line_height { n = n.prop("style:line-height", v.as_str()); }
-        if let Some(v) = &p.border { n = n.prop("style:border", v.as_str()); }
-        if let Some(v) = &p.background_color { n = n.prop("style:background", v.as_str()); }
-        if p.keep_together { n = n.prop("style:keep-together", "always"); }
-        if p.keep_with_next { n = n.prop("style:keep-with-next", "always"); }
+        if let Some(v) = &p.align {
+            n = n.prop("style:align", v.as_str());
+        }
+        if let Some(v) = &p.margin_left {
+            n = n.prop("style:margin-left", v.as_str());
+        }
+        if let Some(v) = &p.margin_right {
+            n = n.prop("style:margin-right", v.as_str());
+        }
+        if let Some(v) = &p.margin_top {
+            n = n.prop("style:margin-top", v.as_str());
+        }
+        if let Some(v) = &p.margin_bottom {
+            n = n.prop("style:margin-bottom", v.as_str());
+        }
+        if let Some(v) = &p.text_indent {
+            n = n.prop("style:text-indent", v.as_str());
+        }
+        if let Some(v) = &p.line_height {
+            n = n.prop("style:line-height", v.as_str());
+        }
+        if let Some(v) = &p.border {
+            n = n.prop("style:border", v.as_str());
+        }
+        if let Some(v) = &p.background_color {
+            n = n.prop("style:background", v.as_str());
+        }
+        if p.keep_together {
+            n = n.prop("style:keep-together", "always");
+        }
+        if p.keep_with_next {
+            n = n.prop("style:keep-with-next", "always");
+        }
     }
     n
 }
 
 fn flush_pending_blockquote(pending: &mut Option<Vec<Node>>, doc: &mut Node) {
     if let Some(paras) = pending.take()
-        && !paras.is_empty() {
+        && !paras.is_empty()
+    {
         let mut bq = Node::new(node::BLOCKQUOTE);
-        for p in paras { bq = bq.child(p); }
+        for p in paras {
+            bq = bq.child(p);
+        }
         *doc = doc.clone().child(bq);
     }
 }
 
 fn mime_from_name(name: &str) -> &'static str {
     let lower = name.to_lowercase();
-    if lower.ends_with(".png") { "image/png" }
-    else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") { "image/jpeg" }
-    else if lower.ends_with(".gif") { "image/gif" }
-    else if lower.ends_with(".svg") { "image/svg+xml" }
-    else if lower.ends_with(".webp") { "image/webp" }
-    else if lower.ends_with(".tiff") || lower.ends_with(".tif") { "image/tiff" }
-    else if lower.ends_with(".bmp") { "image/bmp" }
-    else { "application/octet-stream" }
+    if lower.ends_with(".png") {
+        "image/png"
+    } else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if lower.ends_with(".gif") {
+        "image/gif"
+    } else if lower.ends_with(".svg") {
+        "image/svg+xml"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else if lower.ends_with(".tiff") || lower.ends_with(".tif") {
+        "image/tiff"
+    } else if lower.ends_with(".bmp") {
+        "image/bmp"
+    } else {
+        "application/octet-stream"
+    }
 }
 
 #[cfg(test)]
@@ -698,7 +900,8 @@ mod tests {
             let mut zip = ZipWriter::new(&mut buf);
             let options = SimpleFileOptions::default();
             zip.start_file("mimetype", options).unwrap();
-            zip.write_all(b"application/vnd.oasis.opendocument.text").unwrap();
+            zip.write_all(b"application/vnd.oasis.opendocument.text")
+                .unwrap();
             zip.start_file("content.xml", options).unwrap();
             zip.write_all(content_xml.as_bytes()).unwrap();
             zip.finish().unwrap();
@@ -767,12 +970,17 @@ mod tests {
 
     #[test]
     fn test_parse_bold_named_style() {
-        let xml = body(r#"<text:p>Some <text:span text:style-name="Bold">bold</text:span> text.</text:p>"#);
+        let xml = body(
+            r#"<text:p>Some <text:span text:style-name="Bold">bold</text:span> text.</text:p>"#,
+        );
         let odt = make_odt_bytes(&xml);
         let result = parse(&odt).unwrap();
         let para = &result.value.content.children[0];
         assert_eq!(para.kind.as_str(), node::PARAGRAPH);
-        let strong = para.children.iter().find(|c| c.kind.as_str() == node::STRONG);
+        let strong = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::STRONG);
         assert!(strong.is_some(), "should have a strong node");
     }
 
@@ -788,40 +996,57 @@ mod tests {
         let odt = make_odt_bytes(&xml);
         let result = parse(&odt).unwrap();
         let para = &result.value.content.children[0];
-        let strong = para.children.iter().find(|c| c.kind.as_str() == node::STRONG);
-        assert!(strong.is_some(), "auto-style T1 with fo:font-weight=bold should produce strong node");
+        let strong = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::STRONG);
+        assert!(
+            strong.is_some(),
+            "auto-style T1 with fo:font-weight=bold should produce strong node"
+        );
     }
 
     #[test]
     fn test_parse_italic() {
-        let xml = body(r#"<text:p><text:span text:style-name="Italic">italic</text:span></text:p>"#);
+        let xml =
+            body(r#"<text:p><text:span text:style-name="Italic">italic</text:span></text:p>"#);
         let odt = make_odt_bytes(&xml);
         let result = parse(&odt).unwrap();
         let para = &result.value.content.children[0];
-        let em = para.children.iter().find(|c| c.kind.as_str() == node::EMPHASIS);
+        let em = para
+            .children
+            .iter()
+            .find(|c| c.kind.as_str() == node::EMPHASIS);
         assert!(em.is_some(), "should have an emphasis node");
     }
 
     #[test]
     fn test_parse_hyperlink() {
-        let xml = body(r#"<text:p><text:a xlink:type="simple" xlink:href="https://example.com">link text</text:a></text:p>"#);
+        let xml = body(
+            r#"<text:p><text:a xlink:type="simple" xlink:href="https://example.com">link text</text:a></text:p>"#,
+        );
         let odt = make_odt_bytes(&xml);
         let result = parse(&odt).unwrap();
         let para = &result.value.content.children[0];
         let link = para.children.iter().find(|c| c.kind.as_str() == node::LINK);
         assert!(link.is_some(), "should have a link node");
-        assert_eq!(link.unwrap().props.get_str(prop::URL), Some("https://example.com"));
+        assert_eq!(
+            link.unwrap().props.get_str(prop::URL),
+            Some("https://example.com")
+        );
     }
 
     #[test]
     fn test_parse_table() {
-        let xml = body(r#"
+        let xml = body(
+            r#"
         <table:table>
           <table:table-row>
             <table:table-cell><text:p>Cell 1</text:p></table:table-cell>
             <table:table-cell><text:p>Cell 2</text:p></table:table-cell>
           </table:table-row>
-        </table:table>"#);
+        </table:table>"#,
+        );
         let odt = make_odt_bytes(&xml);
         let result = parse(&odt).unwrap();
         let table = &result.value.content.children[0];
@@ -837,11 +1062,14 @@ mod tests {
         let auto = r#"<text:list-style style:name="L1">
             <text:list-level-style-number text:level="1" style:num-format="1"/>
         </text:list-style>"#;
-        let xml = body_with_styles(auto, r#"
+        let xml = body_with_styles(
+            auto,
+            r#"
         <text:list text:style-name="L1">
           <text:list-item><text:p>one</text:p></text:list-item>
           <text:list-item><text:p>two</text:p></text:list-item>
-        </text:list>"#);
+        </text:list>"#,
+        );
         let odt = make_odt_bytes(&xml);
         let result = parse(&odt).unwrap();
         let list = &result.value.content.children[0];

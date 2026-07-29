@@ -28,7 +28,9 @@ fn corpus_dir() -> Option<PathBuf> {
 }
 
 fn find_pandoc() -> Option<PathBuf> {
-    if let Ok(out) = Command::new("sh").args(["-c", "command -v pandoc"]).output()
+    if let Ok(out) = Command::new("sh")
+        .args(["-c", "command -v pandoc"])
+        .output()
         && out.status.success()
     {
         let s = String::from_utf8_lossy(&out.stdout);
@@ -182,11 +184,9 @@ struct HarnessFile {
     filename: &'static str,
 }
 
-const CORPUS_FILES: &[HarnessFile] = &[
-    HarnessFile {
-        filename: "t2t-reader.t2t",
-    },
-];
+const CORPUS_FILES: &[HarnessFile] = &[HarnessFile {
+    filename: "t2t-reader.t2t",
+}];
 
 fn run_harness(files: &[HarnessFile]) {
     let Some(corpus) = corpus_dir() else {

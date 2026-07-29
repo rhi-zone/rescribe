@@ -27,7 +27,14 @@ pub fn parse(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
     let footnotes = std::mem::take(&mut iter.footnote_defs);
     let link_defs = std::mem::take(&mut iter.link_defs);
     let diagnostics = std::mem::take(&mut iter.diagnostics);
-    (DjotDoc { blocks, footnotes, link_defs }, diagnostics)
+    (
+        DjotDoc {
+            blocks,
+            footnotes,
+            link_defs,
+        },
+        diagnostics,
+    )
 }
 
 /// Parse all top-level blocks from an `EventIter`, returning them as a `Vec<Block>`.
@@ -67,10 +74,15 @@ fn parse_next_block_direct(iter: &mut EventIter<'_>) -> Option<Block> {
             if parse_footnote_def_start(trimmed).is_some() {
                 iter.advance();
                 loop {
-                    let starts_with_indent = iter.current_line()
+                    let starts_with_indent = iter
+                        .current_line()
                         .map(|l| l.starts_with(' ') || l.starts_with('\t'))
                         .unwrap_or(false);
-                    if starts_with_indent { iter.advance(); } else { break; }
+                    if starts_with_indent {
+                        iter.advance();
+                    } else {
+                        break;
+                    }
                 }
                 continue;
             }
@@ -87,7 +99,9 @@ fn parse_next_block_direct(iter: &mut EventIter<'_>) -> Option<Block> {
 
         // Heading
         if trimmed.starts_with('#') {
-            if let Some(b) = parse_heading_direct(iter) { return Some(b); }
+            if let Some(b) = parse_heading_direct(iter) {
+                return Some(b);
+            }
         }
 
         // Thematic break
@@ -97,36 +111,50 @@ fn parse_next_block_direct(iter: &mut EventIter<'_>) -> Option<Block> {
 
         // Fenced code / raw block
         if trimmed.starts_with("```") {
-            if let Some(b) = parse_fenced_code_direct(iter) { return Some(b); }
+            if let Some(b) = parse_fenced_code_direct(iter) {
+                return Some(b);
+            }
         }
 
         // Div block
         if trimmed.starts_with(":::") {
-            if let Some(b) = parse_div_direct(iter) { return Some(b); }
+            if let Some(b) = parse_div_direct(iter) {
+                return Some(b);
+            }
         }
 
         // Blockquote
         if trimmed.starts_with("> ") || trimmed == ">" {
-            if let Some(b) = parse_blockquote_direct(iter) { return Some(b); }
+            if let Some(b) = parse_blockquote_direct(iter) {
+                return Some(b);
+            }
         }
 
         // Table (may start with caption line `^` or pipe row `|`)
         if trimmed.starts_with('|') || trimmed.starts_with('^') {
-            if let Some(b) = parse_table_direct(iter) { return Some(b); }
+            if let Some(b) = parse_table_direct(iter) {
+                return Some(b);
+            }
         }
 
         // List
         if let Some(list_marker) = detect_list_marker(trimmed) {
-            if let Some(b) = parse_list_direct(iter, list_marker) { return Some(b); }
+            if let Some(b) = parse_list_direct(iter, list_marker) {
+                return Some(b);
+            }
         }
 
         // Definition list
         if trimmed.starts_with(": ") || trimmed == ":" {
-            if let Some(b) = parse_definition_list_direct(iter) { return Some(b); }
+            if let Some(b) = parse_definition_list_direct(iter) {
+                return Some(b);
+            }
         }
 
         // Paragraph (fallback)
-        if let Some(b) = parse_paragraph_direct(iter) { return Some(b); }
+        if let Some(b) = parse_paragraph_direct(iter) {
+            return Some(b);
+        }
 
         // Nothing parsed — advance to avoid infinite loop
         iter.advance();
@@ -140,9 +168,13 @@ fn parse_heading_direct(iter: &mut EventIter<'_>) -> Option<Block> {
     let line: String = iter.current_line()?.to_string();
     let trimmed = line.trim_start();
     let level = trimmed.chars().take_while(|&c| c == '#').count() as u8;
-    if level == 0 || level > 6 { return None; }
+    if level == 0 || level > 6 {
+        return None;
+    }
     let after = &trimmed[level as usize..];
-    if !after.is_empty() && !after.starts_with(' ') { return None; }
+    if !after.is_empty() && !after.starts_with(' ') {
+        return None;
+    }
     let content = after.trim_start().to_string();
     iter.advance();
     let attr = iter.take_pending_attr();
@@ -153,20 +185,30 @@ fn parse_heading_direct(iter: &mut EventIter<'_>) -> Option<Block> {
     let base_offset = iter.line_offsets.get(heading_line).copied().unwrap_or(0)
         + line.len().saturating_sub(content.len());
     let inlines = parse_inlines(&content, base_offset, &link_defs);
-    Some(Block::Heading { level, inlines, attr, span: Span::NONE })
+    Some(Block::Heading {
+        level,
+        inlines,
+        attr,
+        span: Span::NONE,
+    })
 }
 
 fn parse_thematic_break_direct(iter: &mut EventIter<'_>) -> Block {
     iter.advance();
     let attr = iter.take_pending_attr();
-    Block::ThematicBreak { attr, span: Span::NONE }
+    Block::ThematicBreak {
+        attr,
+        span: Span::NONE,
+    }
 }
 
 fn parse_fenced_code_direct(iter: &mut EventIter<'_>) -> Option<Block> {
     let line: String = iter.current_line()?.to_string();
     let indent = count_leading_spaces(&line);
     let trimmed_line = &line[indent..];
-    if !trimmed_line.starts_with("```") { return None; }
+    if !trimmed_line.starts_with("```") {
+        return None;
+    }
     let fence_len = trimmed_line.chars().take_while(|&c| c == '`').count();
     let info = trimmed_line[fence_len..].trim().to_string();
     iter.advance();
@@ -215,9 +257,18 @@ fn parse_fenced_code_direct(iter: &mut EventIter<'_>) -> Option<Block> {
             span: Span::NONE,
         })
     } else {
-        let content = if raw_content.is_empty() { String::new() } else { format!("{raw_content}\n") };
+        let content = if raw_content.is_empty() {
+            String::new()
+        } else {
+            format!("{raw_content}\n")
+        };
         let language = if info.is_empty() { None } else { Some(info) };
-        Some(Block::CodeBlock { language, content, attr, span: Span::NONE })
+        Some(Block::CodeBlock {
+            language,
+            content,
+            attr,
+            span: Span::NONE,
+        })
     }
 }
 
@@ -225,7 +276,9 @@ fn parse_div_direct(iter: &mut EventIter<'_>) -> Option<Block> {
     let (class, valid) = {
         let line: String = iter.current_line()?.to_string();
         let trimmed = line.trim_start();
-        if !trimmed.starts_with(":::") { return None; }
+        if !trimmed.starts_with(":::") {
+            return None;
+        }
         let after = trimmed[3..].trim().to_string();
         let class = if after.is_empty() { None } else { Some(after) };
         (class, true)
@@ -240,20 +293,28 @@ fn parse_div_direct(iter: &mut EventIter<'_>) -> Option<Block> {
         iter.advance();
     }
     {
-        let should_advance = iter.current_line()
+        let should_advance = iter
+            .current_line()
             .map(|t| {
                 let t = t.trim_start();
                 t.starts_with(":::") && t[3..].trim().is_empty()
             })
             .unwrap_or(false);
-        if should_advance { iter.advance(); }
+        if should_advance {
+            iter.advance();
+        }
     }
 
     let attr = iter.take_pending_attr();
     let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
     let sub = SubParser::new(inner_lines, link_defs);
     let blocks = collect_blocks_from_sub(sub);
-    Some(Block::Div { class, blocks, attr, span: Span::NONE })
+    Some(Block::Div {
+        class,
+        blocks,
+        attr,
+        span: Span::NONE,
+    })
 }
 
 fn parse_blockquote_direct(iter: &mut EventIter<'_>) -> Option<Block> {
@@ -270,16 +331,25 @@ fn parse_blockquote_direct(iter: &mut EventIter<'_>) -> Option<Block> {
             }
         });
         match action {
-            Some(Some(content)) => { inner_lines.push(content); iter.advance(); }
+            Some(Some(content)) => {
+                inner_lines.push(content);
+                iter.advance();
+            }
             Some(None) | None => break,
         }
     }
-    if inner_lines.is_empty() { return None; }
+    if inner_lines.is_empty() {
+        return None;
+    }
     let attr = iter.take_pending_attr();
     let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
     let sub = SubParser::new(inner_lines, link_defs);
     let blocks = collect_blocks_from_sub(sub);
-    Some(Block::Blockquote { blocks, attr, span: Span::NONE })
+    Some(Block::Blockquote {
+        blocks,
+        attr,
+        span: Span::NONE,
+    })
 }
 
 fn parse_table_direct(iter: &mut EventIter<'_>) -> Option<Block> {
@@ -289,7 +359,11 @@ fn parse_table_direct(iter: &mut EventIter<'_>) -> Option<Block> {
     let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
 
     loop {
-        enum TableLineAction { Caption(String), Row(String), Stop }
+        enum TableLineAction {
+            Caption(String),
+            Row(String),
+            Stop,
+        }
         let action = iter.current_line().map(|line| {
             let trimmed = line.trim_start();
             if trimmed.starts_with('^') && !trimmed.starts_with('|') {
@@ -318,7 +392,8 @@ fn parse_table_direct(iter: &mut EventIter<'_>) -> Option<Block> {
         return None;
     }
 
-    let mut separator_positions: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut separator_positions: std::collections::HashSet<usize> =
+        std::collections::HashSet::new();
     let mut alignment_map: Vec<Option<Alignment>> = Vec::new();
     for (idx, (row_str, _)) in raw_rows.iter().enumerate() {
         if is_separator_row(row_str) {
@@ -339,10 +414,18 @@ fn parse_table_direct(iter: &mut EventIter<'_>) -> Option<Block> {
         }
         let is_header = separator_positions.contains(&(idx + 1));
         let cells = parse_table_row(row_str, 0, &alignment_map, &link_defs);
-        rows.push(TableRow { cells, is_header, span: Span::NONE });
+        rows.push(TableRow {
+            cells,
+            is_header,
+            span: Span::NONE,
+        });
     }
 
-    Some(Block::Table { caption, rows, span: Span::NONE })
+    Some(Block::Table {
+        caption,
+        rows,
+        span: Span::NONE,
+    })
 }
 
 fn parse_list_direct(iter: &mut EventIter<'_>, marker: ListMarker) -> Option<Block> {
@@ -375,12 +458,18 @@ fn parse_list_direct(iter: &mut EventIter<'_>, marker: ListMarker) -> Option<Blo
         } else {
             break;
         };
-        if !m.compatible_with(&marker) { break; }
+        if !m.compatible_with(&marker) {
+            break;
+        }
 
         let marker_str = m.marker_str();
         let skip = marker_str.len().min(trimmed_owned.len());
         let content_after_marker = trimmed_owned[skip..].trim_start().to_string();
-        let checked = if m.is_task() { parse_task_marker(&content_after_marker) } else { None };
+        let checked = if m.is_task() {
+            parse_task_marker(&content_after_marker)
+        } else {
+            None
+        };
         let first_line = if checked.is_some() {
             skip_task_marker(&content_after_marker).to_string()
         } else {
@@ -392,7 +481,10 @@ fn parse_list_direct(iter: &mut EventIter<'_>, marker: ListMarker) -> Option<Blo
         let mut item_lines = vec![first_line];
         loop {
             let next_owned: Option<String> = iter.current_line().map(|l| l.to_string());
-            let next = match next_owned { Some(ref s) => s.as_str(), None => break };
+            let next = match next_owned {
+                Some(ref s) => s.as_str(),
+                None => break,
+            };
             if next.trim().is_empty() {
                 let blank_pos = iter.pos();
                 iter.advance();
@@ -410,7 +502,11 @@ fn parse_list_direct(iter: &mut EventIter<'_>, marker: ListMarker) -> Option<Blo
                     break;
                 }
             } else if next.starts_with("  ") || next.starts_with('\t') {
-                let stripped = if next.starts_with('\t') { next[1..].to_string() } else { next[2..].to_string() };
+                let stripped = if next.starts_with('\t') {
+                    next[1..].to_string()
+                } else {
+                    next[2..].to_string()
+                };
                 item_lines.push(stripped);
                 iter.advance();
             } else {
@@ -421,7 +517,10 @@ fn parse_list_direct(iter: &mut EventIter<'_>, marker: ListMarker) -> Option<Blo
         items.push((item_lines, checked));
 
         {
-            let next_is_blank = iter.current_line().map(|l| l.trim().is_empty()).unwrap_or(false);
+            let next_is_blank = iter
+                .current_line()
+                .map(|l| l.trim().is_empty())
+                .unwrap_or(false);
             if next_is_blank {
                 let saved_pos = iter.pos();
                 iter.skip_blank_lines();
@@ -441,18 +540,30 @@ fn parse_list_direct(iter: &mut EventIter<'_>, marker: ListMarker) -> Option<Blo
         }
     }
 
-    if items.is_empty() { return None; }
+    if items.is_empty() {
+        return None;
+    }
 
     let list_items: Vec<ListItem> = items
         .into_iter()
         .map(|(item_lines, checked)| {
             let sub = SubParser::new(item_lines, link_defs.clone());
             let blocks = collect_blocks_from_sub(sub);
-            ListItem { blocks, checked, span: Span::NONE }
+            ListItem {
+                blocks,
+                checked,
+                span: Span::NONE,
+            }
         })
         .collect();
 
-    Some(Block::List { kind, tight, items: list_items, attr, span: Span::NONE })
+    Some(Block::List {
+        kind,
+        tight,
+        items: list_items,
+        attr,
+        span: Span::NONE,
+    })
 }
 
 fn parse_definition_list_direct(iter: &mut EventIter<'_>) -> Option<Block> {
@@ -462,10 +573,19 @@ fn parse_definition_list_direct(iter: &mut EventIter<'_>) -> Option<Block> {
 
     loop {
         let (term_content, valid) = {
-            let line_owned: String = match iter.current_line() { Some(l) => l.to_string(), None => break };
+            let line_owned: String = match iter.current_line() {
+                Some(l) => l.to_string(),
+                None => break,
+            };
             let trimmed = line_owned.trim_start().to_string();
-            if !trimmed.starts_with(": ") && trimmed != ":" { break; }
-            let tc = if trimmed.starts_with(": ") { trimmed[2..].to_string() } else { String::new() };
+            if !trimmed.starts_with(": ") && trimmed != ":" {
+                break;
+            }
+            let tc = if trimmed.starts_with(": ") {
+                trimmed[2..].to_string()
+            } else {
+                String::new()
+            };
             (tc, true)
         };
         let _ = valid;
@@ -474,9 +594,16 @@ fn parse_definition_list_direct(iter: &mut EventIter<'_>) -> Option<Block> {
         let mut def_lines: Vec<String> = Vec::new();
         loop {
             let next_owned: Option<String> = iter.current_line().map(|l| l.to_string());
-            let next = match next_owned { Some(ref s) => s.as_str(), None => break };
+            let next = match next_owned {
+                Some(ref s) => s.as_str(),
+                None => break,
+            };
             if next.starts_with("  ") || next.starts_with('\t') {
-                let stripped = if next.starts_with('\t') { next[1..].to_string() } else { next[2..].to_string() };
+                let stripped = if next.starts_with('\t') {
+                    next[1..].to_string()
+                } else {
+                    next[2..].to_string()
+                };
                 def_lines.push(stripped);
                 iter.advance();
             } else if next.trim().is_empty() {
@@ -491,18 +618,28 @@ fn parse_definition_list_direct(iter: &mut EventIter<'_>) -> Option<Block> {
         def_items.push((term, def_lines));
     }
 
-    if def_items.is_empty() { return None; }
+    if def_items.is_empty() {
+        return None;
+    }
 
     let items: Vec<DefItem> = def_items
         .into_iter()
         .map(|(term, def_lines)| {
             let sub = SubParser::new(def_lines, link_defs.clone());
             let definitions = collect_blocks_from_sub(sub);
-            DefItem { term, definitions, span: Span::NONE }
+            DefItem {
+                term,
+                definitions,
+                span: Span::NONE,
+            }
         })
         .collect();
 
-    Some(Block::DefinitionList { items, attr, span: Span::NONE })
+    Some(Block::DefinitionList {
+        items,
+        attr,
+        span: Span::NONE,
+    })
 }
 
 fn parse_paragraph_direct(iter: &mut EventIter<'_>) -> Option<Block> {
@@ -510,8 +647,13 @@ fn parse_paragraph_direct(iter: &mut EventIter<'_>) -> Option<Block> {
     let mut lines: Vec<String> = Vec::new();
     loop {
         let line_owned: Option<String> = iter.current_line().map(|l| l.to_string());
-        let line = match line_owned { Some(ref s) => s.as_str(), None => break };
-        if line.trim().is_empty() { break; }
+        let line = match line_owned {
+            Some(ref s) => s.as_str(),
+            None => break,
+        };
+        if line.trim().is_empty() {
+            break;
+        }
         let trimmed = line.trim_start();
         if trimmed.starts_with('#')
             || trimmed.starts_with("```")
@@ -528,7 +670,9 @@ fn parse_paragraph_direct(iter: &mut EventIter<'_>) -> Option<Block> {
         lines.push(line.trim_end().to_string());
         iter.advance();
     }
-    if lines.is_empty() { return None; }
+    if lines.is_empty() {
+        return None;
+    }
     let attr = iter.take_pending_attr();
     // base_offset: byte position of the paragraph's first character in `self.input`.
     // Inline spans are relative to the joined content; adding base_offset maps them to
@@ -539,7 +683,11 @@ fn parse_paragraph_direct(iter: &mut EventIter<'_>) -> Option<Block> {
     let content = lines.join("\n");
     let link_defs: Vec<LinkDef> = iter.link_defs().to_vec();
     let inlines = parse_inlines(&content, base_offset, &link_defs);
-    Some(Block::Paragraph { inlines, attr, span: Span::NONE })
+    Some(Block::Paragraph {
+        inlines,
+        attr,
+        span: Span::NONE,
+    })
 }
 
 /// Collect all blocks from a `SubParser` by draining its event stream into
@@ -614,10 +762,16 @@ trait ParseContext {
     /// Returns 0 by default (SubParser has no original-input reference).
     /// EventIter overrides this to return real offsets so that inline spans
     /// produced by `parse_inlines` can be used for `Cow::Borrowed` slices.
-    fn line_offset_at(&self, _line_idx: usize) -> usize { 0 }
+    fn line_offset_at(&self, _line_idx: usize) -> usize {
+        0
+    }
 
     fn current_line(&self) -> Option<&str> {
-        if self.pos() < self.num_lines() { Some(self.line_at(self.pos())) } else { None }
+        if self.pos() < self.num_lines() {
+            Some(self.line_at(self.pos()))
+        } else {
+            None
+        }
     }
     fn advance(&mut self) {
         let p = self.pos();
@@ -628,7 +782,11 @@ trait ParseContext {
     }
     fn skip_blank_lines(&mut self) {
         while let Some(line) = self.current_line() {
-            if line.trim().is_empty() { self.advance(); } else { break; }
+            if line.trim().is_empty() {
+                self.advance();
+            } else {
+                break;
+            }
         }
     }
 }
@@ -668,14 +826,30 @@ impl SubParser {
 }
 
 impl ParseContext for SubParser {
-    fn num_lines(&self) -> usize { self.lines.len() }
-    fn line_at(&self, idx: usize) -> &str { &self.lines[idx] }
-    fn pos(&self) -> usize { self.pos }
-    fn set_pos(&mut self, pos: usize) { self.pos = pos; }
-    fn take_pending_attr(&mut self) -> Attr { self.pending_attr.take().unwrap_or_default() }
-    fn set_pending_attr(&mut self, attr: Attr) { self.pending_attr = Some(attr); }
-    fn link_defs(&self) -> &[LinkDef] { &self.link_defs }
-    fn push_frame(&mut self, frame: Frame) { self.frame_stack.push(frame); }
+    fn num_lines(&self) -> usize {
+        self.lines.len()
+    }
+    fn line_at(&self, idx: usize) -> &str {
+        &self.lines[idx]
+    }
+    fn pos(&self) -> usize {
+        self.pos
+    }
+    fn set_pos(&mut self, pos: usize) {
+        self.pos = pos;
+    }
+    fn take_pending_attr(&mut self) -> Attr {
+        self.pending_attr.take().unwrap_or_default()
+    }
+    fn set_pending_attr(&mut self, attr: Attr) {
+        self.pending_attr = Some(attr);
+    }
+    fn link_defs(&self) -> &[LinkDef] {
+        &self.link_defs
+    }
+    fn push_frame(&mut self, frame: Frame) {
+        self.frame_stack.push(frame);
+    }
 }
 
 impl Iterator for SubParser {
@@ -708,11 +882,13 @@ impl Iterator for SubParser {
                         self.frame_stack.push(Frame::ListItems(iter));
                         self.frame_stack.push(Frame::Event(OwnedEvent::EndListItem));
                         if !item.blocks.is_empty() {
-                            self.frame_stack.push(Frame::Blocks(item.blocks.into_iter()));
+                            self.frame_stack
+                                .push(Frame::Blocks(item.blocks.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartListItem {
-                            checked: item.checked,
-                        }));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartListItem {
+                                checked: item.checked,
+                            }));
                     }
                     continue;
                 }
@@ -721,40 +897,50 @@ impl Iterator for SubParser {
                         self.frame_stack.push(Frame::TableRows(iter));
                         self.frame_stack.push(Frame::Event(OwnedEvent::EndTableRow));
                         if !row.cells.is_empty() {
-                            self.frame_stack.push(Frame::TableCells(row.cells.into_iter()));
+                            self.frame_stack
+                                .push(Frame::TableCells(row.cells.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartTableRow {
-                            is_header: row.is_header,
-                        }));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartTableRow {
+                                is_header: row.is_header,
+                            }));
                     }
                     continue;
                 }
                 Some(Frame::TableCells(mut iter)) => {
                     if let Some(cell) = iter.next() {
                         self.frame_stack.push(Frame::TableCells(iter));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndTableCell));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndTableCell));
                         if !cell.inlines.is_empty() {
-                            self.frame_stack.push(Frame::Inlines(cell.inlines.into_iter()));
+                            self.frame_stack
+                                .push(Frame::Inlines(cell.inlines.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartTableCell {
-                            alignment: cell.alignment,
-                        }));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartTableCell {
+                                alignment: cell.alignment,
+                            }));
                     }
                     continue;
                 }
                 Some(Frame::DefItems(mut iter)) => {
                     if let Some(item) = iter.next() {
                         self.frame_stack.push(Frame::DefItems(iter));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionDesc));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndDefinitionDesc));
                         if !item.definitions.is_empty() {
-                            self.frame_stack.push(Frame::Blocks(item.definitions.into_iter()));
+                            self.frame_stack
+                                .push(Frame::Blocks(item.definitions.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionDesc));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionTerm));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartDefinitionDesc));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndDefinitionTerm));
                         if !item.term.is_empty() {
                             self.frame_stack.push(Frame::Inlines(item.term.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionTerm));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartDefinitionTerm));
                     }
                     continue;
                 }
@@ -798,14 +984,30 @@ pub struct EventIter<'a> {
 }
 
 impl<'a> ParseContext for EventIter<'a> {
-    fn num_lines(&self) -> usize { self.lines.len() }
-    fn line_at(&self, idx: usize) -> &str { self.lines[idx] }
-    fn pos(&self) -> usize { self.pos }
-    fn set_pos(&mut self, pos: usize) { self.pos = pos; }
-    fn take_pending_attr(&mut self) -> Attr { self.pending_attr.take().unwrap_or_default() }
-    fn set_pending_attr(&mut self, attr: Attr) { self.pending_attr = Some(attr); }
-    fn link_defs(&self) -> &[LinkDef] { &self.link_defs }
-    fn push_frame(&mut self, frame: Frame) { self.frame_stack.push(frame); }
+    fn num_lines(&self) -> usize {
+        self.lines.len()
+    }
+    fn line_at(&self, idx: usize) -> &str {
+        self.lines[idx]
+    }
+    fn pos(&self) -> usize {
+        self.pos
+    }
+    fn set_pos(&mut self, pos: usize) {
+        self.pos = pos;
+    }
+    fn take_pending_attr(&mut self) -> Attr {
+        self.pending_attr.take().unwrap_or_default()
+    }
+    fn set_pending_attr(&mut self, attr: Attr) {
+        self.pending_attr = Some(attr);
+    }
+    fn link_defs(&self) -> &[LinkDef] {
+        &self.link_defs
+    }
+    fn push_frame(&mut self, frame: Frame) {
+        self.frame_stack.push(frame);
+    }
     fn line_offset_at(&self, line_idx: usize) -> usize {
         self.line_offsets.get(line_idx).copied().unwrap_or(0)
     }
@@ -891,7 +1093,11 @@ impl<'a> EventIter<'a> {
                         blocks: inner_doc.blocks,
                         span: Span {
                             start: start_offset,
-                            end: self.line_offsets.get(i).copied().unwrap_or(self.input.len()),
+                            end: self
+                                .line_offsets
+                                .get(i)
+                                .copied()
+                                .unwrap_or(self.input.len()),
                         },
                     });
                     continue;
@@ -915,16 +1121,26 @@ fn expand_block_frames<C: ParseContext>(ctx: &mut C, block: Block) {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartParagraph {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
-        Block::Heading { level, inlines, attr, .. } => {
+        Block::Heading {
+            level,
+            inlines,
+            attr,
+            ..
+        } => {
             ctx.push_frame(Frame::Event(OwnedEvent::EndHeading));
             if !inlines.is_empty() {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartHeading {
-                level, id: attr.id, classes: attr.classes, kv: attr.kv,
+                level,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Block::Blockquote { blocks, attr, .. } => {
@@ -933,35 +1149,67 @@ fn expand_block_frames<C: ParseContext>(ctx: &mut C, block: Block) {
                 ctx.push_frame(Frame::Blocks(blocks.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartBlockquote {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
-        Block::List { kind, items, tight, attr, .. } => {
+        Block::List {
+            kind,
+            items,
+            tight,
+            attr,
+            ..
+        } => {
             ctx.push_frame(Frame::Event(OwnedEvent::EndList));
             if !items.is_empty() {
                 ctx.push_frame(Frame::ListItems(items.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartList {
-                kind, tight, id: attr.id, classes: attr.classes, kv: attr.kv,
+                kind,
+                tight,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
-        Block::CodeBlock { language, content, attr, .. } => {
+        Block::CodeBlock {
+            language,
+            content,
+            attr,
+            ..
+        } => {
             ctx.push_frame(Frame::Event(OwnedEvent::EndCodeBlock));
-            ctx.push_frame(Frame::Event(OwnedEvent::CodeBlockContent(Cow::Owned(content))));
+            ctx.push_frame(Frame::Event(OwnedEvent::CodeBlockContent(Cow::Owned(
+                content,
+            ))));
             ctx.push_frame(Frame::Event(OwnedEvent::StartCodeBlock {
-                language, id: attr.id, classes: attr.classes, kv: attr.kv,
+                language,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
-        Block::RawBlock { format, content, .. } => {
+        Block::RawBlock {
+            format, content, ..
+        } => {
             ctx.push_frame(Frame::Event(OwnedEvent::RawBlock { format, content }));
         }
-        Block::Div { class, blocks, attr, .. } => {
+        Block::Div {
+            class,
+            blocks,
+            attr,
+            ..
+        } => {
             ctx.push_frame(Frame::Event(OwnedEvent::EndDiv));
             if !blocks.is_empty() {
                 ctx.push_frame(Frame::Blocks(blocks.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartDiv {
-                class, id: attr.id, classes: attr.classes, kv: attr.kv,
+                class,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Block::Table { caption, rows, .. } => {
@@ -976,7 +1224,9 @@ fn expand_block_frames<C: ParseContext>(ctx: &mut C, block: Block) {
         }
         Block::ThematicBreak { attr, .. } => {
             ctx.push_frame(Frame::Event(OwnedEvent::ThematicBreak {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Block::DefinitionList { items, attr, .. } => {
@@ -985,7 +1235,9 @@ fn expand_block_frames<C: ParseContext>(ctx: &mut C, block: Block) {
                 ctx.push_frame(Frame::DefItems(items.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartDefinitionList {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
     }
@@ -1009,7 +1261,9 @@ fn expand_inline_frames<C: ParseContext>(ctx: &mut C, inline: Inline) {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartEmphasis {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Inline::Strong { inlines, attr, .. } => {
@@ -1018,7 +1272,9 @@ fn expand_inline_frames<C: ParseContext>(ctx: &mut C, inline: Inline) {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartStrong {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Inline::Delete { inlines, attr, .. } => {
@@ -1027,7 +1283,9 @@ fn expand_inline_frames<C: ParseContext>(ctx: &mut C, inline: Inline) {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartDelete {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Inline::Insert { inlines, attr, .. } => {
@@ -1036,7 +1294,9 @@ fn expand_inline_frames<C: ParseContext>(ctx: &mut C, inline: Inline) {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartInsert {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Inline::Highlight { inlines, attr, .. } => {
@@ -1045,7 +1305,9 @@ fn expand_inline_frames<C: ParseContext>(ctx: &mut C, inline: Inline) {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartHighlight {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Inline::Subscript { inlines, attr, .. } => {
@@ -1054,7 +1316,9 @@ fn expand_inline_frames<C: ParseContext>(ctx: &mut C, inline: Inline) {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartSubscript {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Inline::Superscript { inlines, attr, .. } => {
@@ -1063,13 +1327,17 @@ fn expand_inline_frames<C: ParseContext>(ctx: &mut C, inline: Inline) {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartSuperscript {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Inline::Verbatim { content, attr, .. } => {
             ctx.push_frame(Frame::Event(Event::Verbatim {
                 content: Cow::Owned(content),
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Inline::MathInline { content, .. } => {
@@ -1078,25 +1346,47 @@ fn expand_inline_frames<C: ParseContext>(ctx: &mut C, inline: Inline) {
         Inline::MathDisplay { content, .. } => {
             ctx.push_frame(Frame::Event(Event::MathDisplay(Cow::Owned(content))));
         }
-        Inline::RawInline { format, content, .. } => {
+        Inline::RawInline {
+            format, content, ..
+        } => {
             ctx.push_frame(Frame::Event(OwnedEvent::RawInline { format, content }));
         }
-        Inline::Link { inlines, url, title, attr, .. } => {
+        Inline::Link {
+            inlines,
+            url,
+            title,
+            attr,
+            ..
+        } => {
             ctx.push_frame(Frame::Event(OwnedEvent::EndLink));
             if !inlines.is_empty() {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartLink {
-                url, title, id: attr.id, classes: attr.classes, kv: attr.kv,
+                url,
+                title,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
-        Inline::Image { inlines, url, title, attr, .. } => {
+        Inline::Image {
+            inlines,
+            url,
+            title,
+            attr,
+            ..
+        } => {
             ctx.push_frame(Frame::Event(OwnedEvent::EndImage));
             if !inlines.is_empty() {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartImage {
-                url, title, id: attr.id, classes: attr.classes, kv: attr.kv,
+                url,
+                title,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Inline::Span { inlines, attr, .. } => {
@@ -1105,7 +1395,9 @@ fn expand_inline_frames<C: ParseContext>(ctx: &mut C, inline: Inline) {
                 ctx.push_frame(Frame::Inlines(inlines.into_iter()));
             }
             ctx.push_frame(Frame::Event(OwnedEvent::StartSpan {
-                id: attr.id, classes: attr.classes, kv: attr.kv,
+                id: attr.id,
+                classes: attr.classes,
+                kv: attr.kv,
             }));
         }
         Inline::FootnoteRef { label, .. } => {
@@ -1153,10 +1445,15 @@ fn push_next_block_frames<C: ParseContext>(ctx: &mut C) -> bool {
             if parse_footnote_def_start(trimmed).is_some() {
                 ctx.advance();
                 loop {
-                    let starts_with_indent = ctx.current_line()
+                    let starts_with_indent = ctx
+                        .current_line()
                         .map(|l| l.starts_with(' ') || l.starts_with('\t'))
                         .unwrap_or(false);
-                    if starts_with_indent { ctx.advance(); } else { break; }
+                    if starts_with_indent {
+                        ctx.advance();
+                    } else {
+                        break;
+                    }
                 }
                 continue;
             }
@@ -1173,7 +1470,9 @@ fn push_next_block_frames<C: ParseContext>(ctx: &mut C) -> bool {
 
         // Heading
         if trimmed.starts_with('#') {
-            if push_heading_frames(ctx) { return true; }
+            if push_heading_frames(ctx) {
+                return true;
+            }
         }
 
         // Thematic break
@@ -1184,36 +1483,50 @@ fn push_next_block_frames<C: ParseContext>(ctx: &mut C) -> bool {
 
         // Fenced code / raw block
         if trimmed.starts_with("```") {
-            if push_fenced_code_frames(ctx) { return true; }
+            if push_fenced_code_frames(ctx) {
+                return true;
+            }
         }
 
         // Div block
         if trimmed.starts_with(":::") {
-            if push_div_frames(ctx) { return true; }
+            if push_div_frames(ctx) {
+                return true;
+            }
         }
 
         // Blockquote
         if trimmed.starts_with("> ") || trimmed == ">" {
-            if push_blockquote_frames(ctx) { return true; }
+            if push_blockquote_frames(ctx) {
+                return true;
+            }
         }
 
         // Table (may start with caption line `^` or pipe row `|`)
         if trimmed.starts_with('|') || trimmed.starts_with('^') {
-            if push_table_frames(ctx) { return true; }
+            if push_table_frames(ctx) {
+                return true;
+            }
         }
 
         // List
         if let Some(list_marker) = detect_list_marker(trimmed) {
-            if push_list_frames(ctx, list_marker) { return true; }
+            if push_list_frames(ctx, list_marker) {
+                return true;
+            }
         }
 
         // Definition list
         if trimmed.starts_with(": ") || trimmed == ":" {
-            if push_definition_list_frames(ctx) { return true; }
+            if push_definition_list_frames(ctx) {
+                return true;
+            }
         }
 
         // Paragraph (fallback)
-        if push_paragraph_frames(ctx) { return true; }
+        if push_paragraph_frames(ctx) {
+            return true;
+        }
 
         // Nothing parsed — advance to avoid infinite loop
         ctx.advance();
@@ -1224,26 +1537,35 @@ fn push_next_block_frames<C: ParseContext>(ctx: &mut C) -> bool {
 
 fn push_heading_frames<C: ParseContext>(ctx: &mut C) -> bool {
     let heading_line = ctx.pos();
-    let line: String = match ctx.current_line() { Some(l) => l.to_string(), None => return false };
+    let line: String = match ctx.current_line() {
+        Some(l) => l.to_string(),
+        None => return false,
+    };
     let trimmed = line.trim_start();
     let level = trimmed.chars().take_while(|&c| c == '#').count() as u8;
-    if level == 0 || level > 6 { return false; }
+    if level == 0 || level > 6 {
+        return false;
+    }
     let after = &trimmed[level as usize..];
-    if !after.is_empty() && !after.starts_with(' ') { return false; }
+    if !after.is_empty() && !after.starts_with(' ') {
+        return false;
+    }
     let content = after.trim_start().to_string();
     ctx.advance();
     let attr = ctx.take_pending_attr();
     let link_defs: Vec<LinkDef> = ctx.link_defs().to_vec();
     // base_offset positions `content` within the document input for Cow::Borrowed.
-    let base_offset = ctx.line_offset_at(heading_line)
-        + line.len().saturating_sub(content.len());
+    let base_offset = ctx.line_offset_at(heading_line) + line.len().saturating_sub(content.len());
     let inlines = parse_inlines(&content, base_offset, &link_defs);
     ctx.push_frame(Frame::Event(OwnedEvent::EndHeading));
     if !inlines.is_empty() {
         ctx.push_frame(Frame::Inlines(inlines.into_iter()));
     }
     ctx.push_frame(Frame::Event(OwnedEvent::StartHeading {
-        level, id: attr.id, classes: attr.classes, kv: attr.kv,
+        level,
+        id: attr.id,
+        classes: attr.classes,
+        kv: attr.kv,
     }));
     true
 }
@@ -1252,15 +1574,22 @@ fn push_thematic_break_frame<C: ParseContext>(ctx: &mut C) {
     ctx.advance();
     let attr = ctx.take_pending_attr();
     ctx.push_frame(Frame::Event(OwnedEvent::ThematicBreak {
-        id: attr.id, classes: attr.classes, kv: attr.kv,
+        id: attr.id,
+        classes: attr.classes,
+        kv: attr.kv,
     }));
 }
 
 fn push_fenced_code_frames<C: ParseContext>(ctx: &mut C) -> bool {
-    let line: String = match ctx.current_line() { Some(l) => l.to_string(), None => return false };
+    let line: String = match ctx.current_line() {
+        Some(l) => l.to_string(),
+        None => return false,
+    };
     let indent = count_leading_spaces(&line);
     let trimmed_line = &line[indent..];
-    if !trimmed_line.starts_with("```") { return false; }
+    if !trimmed_line.starts_with("```") {
+        return false;
+    }
     let fence_len = trimmed_line.chars().take_while(|&c| c == '`').count();
     let info = trimmed_line[fence_len..].trim().to_string();
     ctx.advance();
@@ -1308,12 +1637,21 @@ fn push_fenced_code_frames<C: ParseContext>(ctx: &mut C) -> bool {
             content: raw_content,
         }));
     } else {
-        let content = if raw_content.is_empty() { String::new() } else { format!("{raw_content}\n") };
+        let content = if raw_content.is_empty() {
+            String::new()
+        } else {
+            format!("{raw_content}\n")
+        };
         let language = if info.is_empty() { None } else { Some(info) };
         ctx.push_frame(Frame::Event(OwnedEvent::EndCodeBlock));
-        ctx.push_frame(Frame::Event(OwnedEvent::CodeBlockContent(Cow::Owned(content))));
+        ctx.push_frame(Frame::Event(OwnedEvent::CodeBlockContent(Cow::Owned(
+            content,
+        ))));
         ctx.push_frame(Frame::Event(OwnedEvent::StartCodeBlock {
-            language, id: attr.id, classes: attr.classes, kv: attr.kv,
+            language,
+            id: attr.id,
+            classes: attr.classes,
+            kv: attr.kv,
         }));
     }
     true
@@ -1327,7 +1665,9 @@ fn find_div_close_generic<C: ParseContext>(ctx: &C, start: usize) -> usize {
         if t.starts_with(":::") {
             let rest = t[3..].trim();
             if rest.is_empty() {
-                if depth == 0 { return i; }
+                if depth == 0 {
+                    return i;
+                }
                 depth -= 1;
             } else {
                 depth += 1;
@@ -1339,9 +1679,14 @@ fn find_div_close_generic<C: ParseContext>(ctx: &C, start: usize) -> usize {
 
 fn push_div_frames<C: ParseContext>(ctx: &mut C) -> bool {
     let (class, valid) = {
-        let line: String = match ctx.current_line() { Some(l) => l.to_string(), None => return false };
+        let line: String = match ctx.current_line() {
+            Some(l) => l.to_string(),
+            None => return false,
+        };
         let trimmed = line.trim_start();
-        if !trimmed.starts_with(":::") { return false; }
+        if !trimmed.starts_with(":::") {
+            return false;
+        }
         let after = trimmed[3..].trim().to_string();
         let class = if after.is_empty() { None } else { Some(after) };
         (class, true)
@@ -1358,13 +1703,16 @@ fn push_div_frames<C: ParseContext>(ctx: &mut C) -> bool {
     }
     // Consume closing `:::`
     {
-        let should_advance = ctx.current_line()
+        let should_advance = ctx
+            .current_line()
             .map(|t| {
                 let t = t.trim_start();
                 t.starts_with(":::") && t[3..].trim().is_empty()
             })
             .unwrap_or(false);
-        if should_advance { ctx.advance(); }
+        if should_advance {
+            ctx.advance();
+        }
     }
 
     let attr = ctx.take_pending_attr();
@@ -1374,7 +1722,10 @@ fn push_div_frames<C: ParseContext>(ctx: &mut C) -> bool {
     ctx.push_frame(Frame::Event(OwnedEvent::EndDiv));
     ctx.push_frame(Frame::SubParser(Box::new(sub)));
     ctx.push_frame(Frame::Event(OwnedEvent::StartDiv {
-        class, id: attr.id, classes: attr.classes, kv: attr.kv,
+        class,
+        id: attr.id,
+        classes: attr.classes,
+        kv: attr.kv,
     }));
     true
 }
@@ -1394,12 +1745,17 @@ fn push_blockquote_frames<C: ParseContext>(ctx: &mut C) -> bool {
             }
         });
         match action {
-            Some(Some(content)) => { inner_lines.push(content); ctx.advance(); }
+            Some(Some(content)) => {
+                inner_lines.push(content);
+                ctx.advance();
+            }
             Some(None) | None => break,
         }
     }
 
-    if inner_lines.is_empty() { return false; }
+    if inner_lines.is_empty() {
+        return false;
+    }
 
     let attr = ctx.take_pending_attr();
     let link_defs: Vec<LinkDef> = ctx.link_defs().to_vec();
@@ -1408,7 +1764,9 @@ fn push_blockquote_frames<C: ParseContext>(ctx: &mut C) -> bool {
     ctx.push_frame(Frame::Event(OwnedEvent::EndBlockquote));
     ctx.push_frame(Frame::SubParser(Box::new(sub)));
     ctx.push_frame(Frame::Event(OwnedEvent::StartBlockquote {
-        id: attr.id, classes: attr.classes, kv: attr.kv,
+        id: attr.id,
+        classes: attr.classes,
+        kv: attr.kv,
     }));
     true
 }
@@ -1420,7 +1778,11 @@ fn push_table_frames<C: ParseContext>(ctx: &mut C) -> bool {
     let link_defs: Vec<LinkDef> = ctx.link_defs().to_vec();
 
     loop {
-        enum TableLineAction { Caption(String), Row(String), Stop }
+        enum TableLineAction {
+            Caption(String),
+            Row(String),
+            Stop,
+        }
         let action = ctx.current_line().map(|line| {
             let trimmed = line.trim_start();
             if trimmed.starts_with('^') && !trimmed.starts_with('|') {
@@ -1450,7 +1812,8 @@ fn push_table_frames<C: ParseContext>(ctx: &mut C) -> bool {
         return false;
     }
 
-    let mut separator_positions: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut separator_positions: std::collections::HashSet<usize> =
+        std::collections::HashSet::new();
     let mut alignment_map: Vec<Option<Alignment>> = Vec::new();
 
     for (idx, (row_str, _)) in raw_rows.iter().enumerate() {
@@ -1472,10 +1835,18 @@ fn push_table_frames<C: ParseContext>(ctx: &mut C) -> bool {
         }
         let is_header = separator_positions.contains(&(idx + 1));
         let cells = parse_table_row(row_str, 0, &alignment_map, &link_defs);
-        rows.push(TableRow { cells, is_header, span: Span::NONE });
+        rows.push(TableRow {
+            cells,
+            is_header,
+            span: Span::NONE,
+        });
     }
 
-    let table = Block::Table { caption, rows, span: Span::NONE };
+    let table = Block::Table {
+        caption,
+        rows,
+        span: Span::NONE,
+    };
     expand_block_frames(ctx, table);
     true
 }
@@ -1511,12 +1882,18 @@ fn push_list_frames<C: ParseContext>(ctx: &mut C, marker: ListMarker) -> bool {
         } else {
             break;
         };
-        if !m.compatible_with(&marker) { break; }
+        if !m.compatible_with(&marker) {
+            break;
+        }
 
         let marker_str = m.marker_str();
         let skip = marker_str.len().min(trimmed_owned.len());
         let content_after_marker = trimmed_owned[skip..].trim_start().to_string();
-        let checked = if m.is_task() { parse_task_marker(&content_after_marker) } else { None };
+        let checked = if m.is_task() {
+            parse_task_marker(&content_after_marker)
+        } else {
+            None
+        };
         let first_line = if checked.is_some() {
             skip_task_marker(&content_after_marker).to_string()
         } else {
@@ -1529,7 +1906,10 @@ fn push_list_frames<C: ParseContext>(ctx: &mut C, marker: ListMarker) -> bool {
         loop {
             // Use owned to avoid borrow conflict with advance/set_pos
             let next_owned: Option<String> = ctx.current_line().map(|l| l.to_string());
-            let next = match next_owned { Some(ref s) => s.as_str(), None => break };
+            let next = match next_owned {
+                Some(ref s) => s.as_str(),
+                None => break,
+            };
             if next.trim().is_empty() {
                 let blank_pos = ctx.pos();
                 ctx.advance();
@@ -1547,7 +1927,11 @@ fn push_list_frames<C: ParseContext>(ctx: &mut C, marker: ListMarker) -> bool {
                     break;
                 }
             } else if next.starts_with("  ") || next.starts_with('\t') {
-                let stripped = if next.starts_with('\t') { next[1..].to_string() } else { next[2..].to_string() };
+                let stripped = if next.starts_with('\t') {
+                    next[1..].to_string()
+                } else {
+                    next[2..].to_string()
+                };
                 item_lines.push(stripped);
                 ctx.advance();
             } else {
@@ -1559,7 +1943,10 @@ fn push_list_frames<C: ParseContext>(ctx: &mut C, marker: ListMarker) -> bool {
 
         // Check for blank line between items
         {
-            let next_is_blank = ctx.current_line().map(|l| l.trim().is_empty()).unwrap_or(false);
+            let next_is_blank = ctx
+                .current_line()
+                .map(|l| l.trim().is_empty())
+                .unwrap_or(false);
             if next_is_blank {
                 let saved_pos = ctx.pos();
                 ctx.skip_blank_lines();
@@ -1579,7 +1966,9 @@ fn push_list_frames<C: ParseContext>(ctx: &mut C, marker: ListMarker) -> bool {
         }
     }
 
-    if items.is_empty() { return false; }
+    if items.is_empty() {
+        return false;
+    }
 
     // Build list items as SubParsers to avoid intermediate Block allocation
     // for item content. Push in reverse so first item is on top of stack.
@@ -1594,7 +1983,11 @@ fn push_list_frames<C: ParseContext>(ctx: &mut C, marker: ListMarker) -> bool {
     }
 
     ctx.push_frame(Frame::Event(OwnedEvent::StartList {
-        kind, tight, id: attr.id, classes: attr.classes, kv: attr.kv,
+        kind,
+        tight,
+        id: attr.id,
+        classes: attr.classes,
+        kv: attr.kv,
     }));
     true
 }
@@ -1607,10 +2000,19 @@ fn push_definition_list_frames<C: ParseContext>(ctx: &mut C) -> bool {
     loop {
         // Convert to owned to avoid borrow conflict with advance()
         let (term_content, valid) = {
-            let line_owned: String = match ctx.current_line() { Some(l) => l.to_string(), None => break };
+            let line_owned: String = match ctx.current_line() {
+                Some(l) => l.to_string(),
+                None => break,
+            };
             let trimmed = line_owned.trim_start().to_string();
-            if !trimmed.starts_with(": ") && trimmed != ":" { break; }
-            let tc = if trimmed.starts_with(": ") { trimmed[2..].to_string() } else { String::new() };
+            if !trimmed.starts_with(": ") && trimmed != ":" {
+                break;
+            }
+            let tc = if trimmed.starts_with(": ") {
+                trimmed[2..].to_string()
+            } else {
+                String::new()
+            };
             (tc, true)
         };
         let _ = valid;
@@ -1619,9 +2021,16 @@ fn push_definition_list_frames<C: ParseContext>(ctx: &mut C) -> bool {
         let mut def_lines: Vec<String> = Vec::new();
         loop {
             let next_owned: Option<String> = ctx.current_line().map(|l| l.to_string());
-            let next = match next_owned { Some(ref s) => s.as_str(), None => break };
+            let next = match next_owned {
+                Some(ref s) => s.as_str(),
+                None => break,
+            };
             if next.starts_with("  ") || next.starts_with('\t') {
-                let stripped = if next.starts_with('\t') { next[1..].to_string() } else { next[2..].to_string() };
+                let stripped = if next.starts_with('\t') {
+                    next[1..].to_string()
+                } else {
+                    next[2..].to_string()
+                };
                 def_lines.push(stripped);
                 ctx.advance();
             } else if next.trim().is_empty() {
@@ -1636,7 +2045,9 @@ fn push_definition_list_frames<C: ParseContext>(ctx: &mut C) -> bool {
         items.push((term, def_lines));
     }
 
-    if items.is_empty() { return false; }
+    if items.is_empty() {
+        return false;
+    }
 
     ctx.push_frame(Frame::Event(OwnedEvent::EndDefinitionList));
 
@@ -1654,7 +2065,9 @@ fn push_definition_list_frames<C: ParseContext>(ctx: &mut C) -> bool {
     }
 
     ctx.push_frame(Frame::Event(OwnedEvent::StartDefinitionList {
-        id: attr.id, classes: attr.classes, kv: attr.kv,
+        id: attr.id,
+        classes: attr.classes,
+        kv: attr.kv,
     }));
     true
 }
@@ -1666,8 +2079,13 @@ fn push_paragraph_frames<C: ParseContext>(ctx: &mut C) -> bool {
     loop {
         // Convert to owned to avoid borrow conflict with ctx.advance()
         let line_owned: Option<String> = ctx.current_line().map(|l| l.to_string());
-        let line = match line_owned { Some(ref s) => s.as_str(), None => break };
-        if line.trim().is_empty() { break; }
+        let line = match line_owned {
+            Some(ref s) => s.as_str(),
+            None => break,
+        };
+        if line.trim().is_empty() {
+            break;
+        }
         let trimmed = line.trim_start();
         if trimmed.starts_with('#')
             || trimmed.starts_with("```")
@@ -1685,7 +2103,9 @@ fn push_paragraph_frames<C: ParseContext>(ctx: &mut C) -> bool {
         ctx.advance();
     }
 
-    if lines.is_empty() { return false; }
+    if lines.is_empty() {
+        return false;
+    }
 
     let attr = ctx.take_pending_attr();
     // base_offset: byte position of the paragraph start within the document input.
@@ -1700,7 +2120,9 @@ fn push_paragraph_frames<C: ParseContext>(ctx: &mut C) -> bool {
         ctx.push_frame(Frame::Inlines(inlines.into_iter()));
     }
     ctx.push_frame(Frame::Event(OwnedEvent::StartParagraph {
-        id: attr.id, classes: attr.classes, kv: attr.kv,
+        id: attr.id,
+        classes: attr.classes,
+        kv: attr.kv,
     }));
     true
 }
@@ -1753,11 +2175,13 @@ impl<'a> Iterator for EventIter<'a> {
                         self.frame_stack.push(Frame::ListItems(iter));
                         self.frame_stack.push(Frame::Event(OwnedEvent::EndListItem));
                         if !item.blocks.is_empty() {
-                            self.frame_stack.push(Frame::Blocks(item.blocks.into_iter()));
+                            self.frame_stack
+                                .push(Frame::Blocks(item.blocks.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartListItem {
-                            checked: item.checked,
-                        }));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartListItem {
+                                checked: item.checked,
+                            }));
                     }
                     continue;
                 }
@@ -1768,11 +2192,13 @@ impl<'a> Iterator for EventIter<'a> {
                         self.frame_stack.push(Frame::TableRows(iter));
                         self.frame_stack.push(Frame::Event(OwnedEvent::EndTableRow));
                         if !row.cells.is_empty() {
-                            self.frame_stack.push(Frame::TableCells(row.cells.into_iter()));
+                            self.frame_stack
+                                .push(Frame::TableCells(row.cells.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartTableRow {
-                            is_header: row.is_header,
-                        }));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartTableRow {
+                                is_header: row.is_header,
+                            }));
                     }
                     continue;
                 }
@@ -1781,13 +2207,16 @@ impl<'a> Iterator for EventIter<'a> {
                 Some(Frame::TableCells(mut iter)) => {
                     if let Some(cell) = iter.next() {
                         self.frame_stack.push(Frame::TableCells(iter));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndTableCell));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndTableCell));
                         if !cell.inlines.is_empty() {
-                            self.frame_stack.push(Frame::Inlines(cell.inlines.into_iter()));
+                            self.frame_stack
+                                .push(Frame::Inlines(cell.inlines.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartTableCell {
-                            alignment: cell.alignment,
-                        }));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartTableCell {
+                                alignment: cell.alignment,
+                            }));
                     }
                     continue;
                 }
@@ -1796,16 +2225,21 @@ impl<'a> Iterator for EventIter<'a> {
                 Some(Frame::DefItems(mut iter)) => {
                     if let Some(item) = iter.next() {
                         self.frame_stack.push(Frame::DefItems(iter));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionDesc));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndDefinitionDesc));
                         if !item.definitions.is_empty() {
-                            self.frame_stack.push(Frame::Blocks(item.definitions.into_iter()));
+                            self.frame_stack
+                                .push(Frame::Blocks(item.definitions.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionDesc));
-                        self.frame_stack.push(Frame::Event(OwnedEvent::EndDefinitionTerm));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartDefinitionDesc));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::EndDefinitionTerm));
                         if !item.term.is_empty() {
                             self.frame_stack.push(Frame::Inlines(item.term.into_iter()));
                         }
-                        self.frame_stack.push(Frame::Event(OwnedEvent::StartDefinitionTerm));
+                        self.frame_stack
+                            .push(Frame::Event(OwnedEvent::StartDefinitionTerm));
                     }
                     continue;
                 }
@@ -1828,13 +2262,16 @@ impl<'a> Iterator for EventIter<'a> {
                         // All top-level blocks consumed; push footnote defs.
                         let fns = std::mem::take(&mut self.footnote_defs);
                         for fn_def in fns.into_iter().rev() {
-                            self.frame_stack.push(Frame::Event(OwnedEvent::EndFootnoteDef));
+                            self.frame_stack
+                                .push(Frame::Event(OwnedEvent::EndFootnoteDef));
                             if !fn_def.blocks.is_empty() {
-                                self.frame_stack.push(Frame::Blocks(fn_def.blocks.into_iter()));
+                                self.frame_stack
+                                    .push(Frame::Blocks(fn_def.blocks.into_iter()));
                             }
-                            self.frame_stack.push(Frame::Event(OwnedEvent::StartFootnoteDef {
-                                label: fn_def.label,
-                            }));
+                            self.frame_stack
+                                .push(Frame::Event(OwnedEvent::StartFootnoteDef {
+                                    label: fn_def.label,
+                                }));
                         }
                         self.phase = Phase::Done;
                     }
@@ -1885,7 +2322,11 @@ impl<'a> InlineParser<'a> {
     }
 
     fn current_byte_offset(&self) -> usize {
-        self.base_offset + self.chars[..self.pos].iter().map(|c| c.len_utf8()).sum::<usize>()
+        self.base_offset
+            + self.chars[..self.pos]
+                .iter()
+                .map(|c| c.len_utf8())
+                .sum::<usize>()
     }
 
     fn parse(&mut self) -> Vec<Inline> {
@@ -1907,7 +2348,12 @@ impl<'a> InlineParser<'a> {
             self.pos += 1;
             // Check what came before: if last char was `\`, that's a hard break
             // We handle `\` + newline below; here it's just a soft break
-            return Some(Inline::SoftBreak { span: Span { start: start_offset, end: start_offset + 1 } });
+            return Some(Inline::SoftBreak {
+                span: Span {
+                    start: start_offset,
+                    end: start_offset + 1,
+                },
+            });
         }
 
         // Backslash escapes / hard break / non-breaking space
@@ -1922,14 +2368,20 @@ impl<'a> InlineParser<'a> {
                     }
                     self.pos += 1;
                     return Some(Inline::HardBreak {
-                        span: Span { start: start_offset, end: self.current_byte_offset() },
+                        span: Span {
+                            start: start_offset,
+                            end: self.current_byte_offset(),
+                        },
                     });
                 }
                 Some(' ') => {
                     self.pos += 1;
                     return Some(Inline::Text {
                         content: "\u{00A0}".to_string(),
-                        span: Span { start: start_offset, end: self.current_byte_offset() },
+                        span: Span {
+                            start: start_offset,
+                            end: self.current_byte_offset(),
+                        },
                     });
                 }
                 Some(c) if is_punct(c) => {
@@ -1937,13 +2389,19 @@ impl<'a> InlineParser<'a> {
                     self.pos += 1;
                     return Some(Inline::Text {
                         content: escaped.to_string(),
-                        span: Span { start: start_offset, end: self.current_byte_offset() },
+                        span: Span {
+                            start: start_offset,
+                            end: self.current_byte_offset(),
+                        },
                     });
                 }
                 _ => {
                     return Some(Inline::Text {
                         content: "\\".to_string(),
-                        span: Span { start: start_offset, end: end_offset },
+                        span: Span {
+                            start: start_offset,
+                            end: end_offset,
+                        },
                     });
                 }
             }
@@ -1955,7 +2413,10 @@ impl<'a> InlineParser<'a> {
                 let end_offset = self.current_byte_offset();
                 return Some(Inline::Text {
                     content: s,
-                    span: Span { start: start_offset, end: end_offset },
+                    span: Span {
+                        start: start_offset,
+                        end: end_offset,
+                    },
                 });
             }
         }
@@ -2004,27 +2465,39 @@ impl<'a> InlineParser<'a> {
 
         // Emphasis: `_text_`
         if ch == '_' {
-            if let Some(inline) = self.try_delimited('_', start_offset, |inlines, attr, span| {
-                Inline::Emphasis { inlines, attr, span }
-            }) {
+            if let Some(inline) =
+                self.try_delimited('_', start_offset, |inlines, attr, span| Inline::Emphasis {
+                    inlines,
+                    attr,
+                    span,
+                })
+            {
                 return Some(inline);
             }
         }
 
         // Strong: `*text*`
         if ch == '*' {
-            if let Some(inline) = self.try_delimited('*', start_offset, |inlines, attr, span| {
-                Inline::Strong { inlines, attr, span }
-            }) {
+            if let Some(inline) =
+                self.try_delimited('*', start_offset, |inlines, attr, span| Inline::Strong {
+                    inlines,
+                    attr,
+                    span,
+                })
+            {
                 return Some(inline);
             }
         }
 
         // Subscript: `~text~`
         if ch == '~' {
-            if let Some(inline) = self.try_delimited('~', start_offset, |inlines, attr, span| {
-                Inline::Subscript { inlines, attr, span }
-            }) {
+            if let Some(inline) =
+                self.try_delimited('~', start_offset, |inlines, attr, span| Inline::Subscript {
+                    inlines,
+                    attr,
+                    span,
+                })
+            {
                 return Some(inline);
             }
         }
@@ -2032,7 +2505,11 @@ impl<'a> InlineParser<'a> {
         // Superscript: `^text^`
         if ch == '^' {
             if let Some(inline) = self.try_delimited('^', start_offset, |inlines, attr, span| {
-                Inline::Superscript { inlines, attr, span }
+                Inline::Superscript {
+                    inlines,
+                    attr,
+                    span,
+                }
             }) {
                 return Some(inline);
             }
@@ -2050,7 +2527,10 @@ impl<'a> InlineParser<'a> {
         let end_offset = self.current_byte_offset();
         Some(Inline::Text {
             content: ch.to_string(),
-            span: Span { start: start_offset, end: end_offset },
+            span: Span {
+                start: start_offset,
+                end: end_offset,
+            },
         })
     }
 
@@ -2108,7 +2588,9 @@ impl<'a> InlineParser<'a> {
             // close_pos_bytes is a byte index in `remaining` (a UTF-8 string).
             // Convert to a char count for indexing into self.chars.
             let close_pos = remaining[..close_pos_bytes].chars().count();
-            let content: String = self.chars[search_from..search_from + close_pos].iter().collect();
+            let content: String = self.chars[search_from..search_from + close_pos]
+                .iter()
+                .collect();
             // Trim single space on each side if content is non-empty and starts/ends with space
             let content = if content.starts_with(' ') && content.ends_with(' ') && content.len() > 2
             {
@@ -2124,7 +2606,10 @@ impl<'a> InlineParser<'a> {
                 return Some(Inline::RawInline {
                     format: fmt,
                     content,
-                    span: Span { start: start_offset, end: self.current_byte_offset() },
+                    span: Span {
+                        start: start_offset,
+                        end: self.current_byte_offset(),
+                    },
                 });
             }
             // Check for math prefix in original token
@@ -2132,7 +2617,10 @@ impl<'a> InlineParser<'a> {
             return Some(Inline::Verbatim {
                 content,
                 attr,
-                span: Span { start: start_offset, end: end_offset },
+                span: Span {
+                    start: start_offset,
+                    end: end_offset,
+                },
             });
         }
         // No closing found — emit backticks as text
@@ -2141,7 +2629,10 @@ impl<'a> InlineParser<'a> {
         let end_offset = self.current_byte_offset();
         Some(Inline::Text {
             content: backtick_text,
-            span: Span { start: start_offset, end: end_offset },
+            span: Span {
+                start: start_offset,
+                end: end_offset,
+            },
         })
     }
 
@@ -2153,9 +2644,17 @@ impl<'a> InlineParser<'a> {
             let mut depth = 1;
             while !self.at_end() && depth > 0 {
                 match self.peek() {
-                    Some('{') => { depth += 1; self.pos += 1; }
-                    Some('}') => { depth -= 1; self.pos += 1; }
-                    _ => { self.pos += 1; }
+                    Some('{') => {
+                        depth += 1;
+                        self.pos += 1;
+                    }
+                    Some('}') => {
+                        depth -= 1;
+                        self.pos += 1;
+                    }
+                    _ => {
+                        self.pos += 1;
+                    }
                 }
             }
             if depth > 0 {
@@ -2194,12 +2693,18 @@ impl<'a> InlineParser<'a> {
                 if is_display {
                     return Some(Inline::MathDisplay {
                         content,
-                        span: Span { start: start_offset, end: end_offset },
+                        span: Span {
+                            start: start_offset,
+                            end: end_offset,
+                        },
                     });
                 } else {
                     return Some(Inline::MathInline {
                         content,
-                        span: Span { start: start_offset, end: end_offset },
+                        span: Span {
+                            start: start_offset,
+                            end: end_offset,
+                        },
                     });
                 }
             }
@@ -2233,7 +2738,10 @@ impl<'a> InlineParser<'a> {
                 return Some(Inline::Autolink {
                     url,
                     is_email,
-                    span: Span { start: start_offset, end: end_offset },
+                    span: Span {
+                        start: start_offset,
+                        end: end_offset,
+                    },
                 });
             }
         }
@@ -2245,10 +2753,26 @@ impl<'a> InlineParser<'a> {
         self.pos += 1; // consume `!`
         if let Some(inline) = self.try_bracket(start_offset) {
             match inline {
-                Inline::Link { inlines, url, title, attr, span } => {
-                    return Some(Inline::Image { inlines, url, title, attr, span });
+                Inline::Link {
+                    inlines,
+                    url,
+                    title,
+                    attr,
+                    span,
+                } => {
+                    return Some(Inline::Image {
+                        inlines,
+                        url,
+                        title,
+                        attr,
+                        span,
+                    });
                 }
-                Inline::Span { inlines, attr, span } => {
+                Inline::Span {
+                    inlines,
+                    attr,
+                    span,
+                } => {
                     // Image with reference — look up in link_defs
                     // Extract label from span (simplified: use text content)
                     let label = extract_text_content(&inlines);
@@ -2302,7 +2826,10 @@ impl<'a> InlineParser<'a> {
                 let end_offset = self.current_byte_offset();
                 return Some(Inline::FootnoteRef {
                     label,
-                    span: Span { start: start_offset, end: end_offset },
+                    span: Span {
+                        start: start_offset,
+                        end: end_offset,
+                    },
                 });
             }
             // Not a footnote ref — restore
@@ -2315,9 +2842,21 @@ impl<'a> InlineParser<'a> {
         let mut depth = 1;
         while !self.at_end() && depth > 0 {
             match self.peek() {
-                Some('[') => { depth += 1; self.pos += 1; }
-                Some(']') => { depth -= 1; if depth > 0 { self.pos += 1; } else { break; } }
-                _ => { self.pos += 1; }
+                Some('[') => {
+                    depth += 1;
+                    self.pos += 1;
+                }
+                Some(']') => {
+                    depth -= 1;
+                    if depth > 0 {
+                        self.pos += 1;
+                    } else {
+                        break;
+                    }
+                }
+                _ => {
+                    self.pos += 1;
+                }
             }
         }
         if self.peek() != Some(']') {
@@ -2339,9 +2878,21 @@ impl<'a> InlineParser<'a> {
                 let mut paren_depth = 1;
                 while !self.at_end() && paren_depth > 0 {
                     match self.peek() {
-                        Some('(') => { paren_depth += 1; self.pos += 1; }
-                        Some(')') => { paren_depth -= 1; if paren_depth > 0 { self.pos += 1; } else { break; } }
-                        _ => { self.pos += 1; }
+                        Some('(') => {
+                            paren_depth += 1;
+                            self.pos += 1;
+                        }
+                        Some(')') => {
+                            paren_depth -= 1;
+                            if paren_depth > 0 {
+                                self.pos += 1;
+                            } else {
+                                break;
+                            }
+                        }
+                        _ => {
+                            self.pos += 1;
+                        }
                     }
                 }
                 let url_content: String = self.chars[url_start..self.pos].iter().collect();
@@ -2357,7 +2908,10 @@ impl<'a> InlineParser<'a> {
                     url,
                     title,
                     attr,
-                    span: Span { start: start_offset, end: end_offset },
+                    span: Span {
+                        start: start_offset,
+                        end: end_offset,
+                    },
                 });
             }
             Some('[') => {
@@ -2365,7 +2919,9 @@ impl<'a> InlineParser<'a> {
                 self.pos += 1;
                 let label_start = self.pos;
                 while let Some(c) = self.peek() {
-                    if c == ']' { break; }
+                    if c == ']' {
+                        break;
+                    }
                     self.pos += 1;
                 }
                 let label: String = self.chars[label_start..self.pos].iter().collect();
@@ -2390,7 +2946,10 @@ impl<'a> InlineParser<'a> {
                     url,
                     title,
                     attr: Attr::default(),
-                    span: Span { start: start_offset, end: end_offset },
+                    span: Span {
+                        start: start_offset,
+                        end: end_offset,
+                    },
                 });
             }
             Some('{') => {
@@ -2401,7 +2960,10 @@ impl<'a> InlineParser<'a> {
                 return Some(Inline::Span {
                     inlines,
                     attr,
-                    span: Span { start: start_offset, end: end_offset },
+                    span: Span {
+                        start: start_offset,
+                        end: end_offset,
+                    },
                 });
             }
             _ => {
@@ -2417,14 +2979,20 @@ impl<'a> InlineParser<'a> {
                         url: ld.url.clone(),
                         title: ld.title.clone(),
                         attr: Attr::default(),
-                        span: Span { start: start_offset, end: end_offset },
+                        span: Span {
+                            start: start_offset,
+                            end: end_offset,
+                        },
                     });
                 }
                 // Fall back: just return text-like span
                 return Some(Inline::Span {
                     inlines,
                     attr: Attr::default(),
-                    span: Span { start: start_offset, end: end_offset },
+                    span: Span {
+                        start: start_offset,
+                        end: end_offset,
+                    },
                 });
             }
         }
@@ -2441,9 +3009,21 @@ impl<'a> InlineParser<'a> {
             char,
             fn(Vec<Inline>, Attr, Span) -> Inline,
         ) = match next {
-            '-' => ('-', '-', |i, a, s| Inline::Delete { inlines: i, attr: a, span: s }),
-            '+' => ('+', '+', |i, a, s| Inline::Insert { inlines: i, attr: a, span: s }),
-            '=' => ('=', '=', |i, a, s| Inline::Highlight { inlines: i, attr: a, span: s }),
+            '-' => ('-', '-', |i, a, s| Inline::Delete {
+                inlines: i,
+                attr: a,
+                span: s,
+            }),
+            '+' => ('+', '+', |i, a, s| Inline::Insert {
+                inlines: i,
+                attr: a,
+                span: s,
+            }),
+            '=' => ('=', '=', |i, a, s| Inline::Highlight {
+                inlines: i,
+                attr: a,
+                span: s,
+            }),
             _ => return None,
         };
 
@@ -2456,12 +3036,21 @@ impl<'a> InlineParser<'a> {
         if let Some(close_pos_bytes) = remaining.find(&close_pattern) {
             // close_pos_bytes is a byte index in `remaining`; convert to char count.
             let close_pos = remaining[..close_pos_bytes].chars().count();
-            let content: String = self.chars[content_start..content_start + close_pos].iter().collect();
+            let content: String = self.chars[content_start..content_start + close_pos]
+                .iter()
+                .collect();
             self.pos = content_start + close_pos + 2; // past `marker}`
             let end_offset = self.current_byte_offset();
             let inlines = parse_inlines(&content, start_offset + 2, self.link_defs);
             let _ = open_marker; // suppress unused warning
-            return Some(builder(inlines, Attr::default(), Span { start: start_offset, end: end_offset }));
+            return Some(builder(
+                inlines,
+                Attr::default(),
+                Span {
+                    start: start_offset,
+                    end: end_offset,
+                },
+            ));
         }
 
         // No match — restore
@@ -2507,7 +3096,14 @@ impl<'a> InlineParser<'a> {
         let (attr, _) = self.try_post_verbatim_attr();
         let end_offset = self.current_byte_offset();
         let inlines = parse_inlines(&content, start_offset + 1, self.link_defs);
-        Some(builder(inlines, attr, Span { start: start_offset, end: end_offset }))
+        Some(builder(
+            inlines,
+            attr,
+            Span {
+                start: start_offset,
+                end: end_offset,
+            },
+        ))
     }
 
     fn try_symbol(&mut self, start_offset: usize) -> Option<Inline> {
@@ -2534,7 +3130,10 @@ impl<'a> InlineParser<'a> {
         let end_offset = self.current_byte_offset();
         Some(Inline::Symbol {
             name,
-            span: Span { start: start_offset, end: end_offset },
+            span: Span {
+                start: start_offset,
+                end: end_offset,
+            },
         })
     }
 }
@@ -2546,8 +3145,10 @@ fn merge_text_nodes(inlines: Vec<Inline>) -> Vec<Inline> {
     for inline in inlines {
         match inline {
             Inline::Text { content, span } => {
-                if let Some(Inline::Text { content: prev_content, span: prev_span }) =
-                    result.last_mut()
+                if let Some(Inline::Text {
+                    content: prev_content,
+                    span: prev_span,
+                }) = result.last_mut()
                 {
                     prev_content.push_str(&content);
                     prev_span.end = span.end;
@@ -2611,8 +3212,7 @@ fn is_thematic_break(s: &str) -> bool {
     if first != '*' && first != '-' {
         return false;
     }
-    s.chars().all(|c| c == first || c == ' ')
-        && s.chars().filter(|&c| c == first).count() >= 3
+    s.chars().all(|c| c == first || c == ' ') && s.chars().filter(|&c| c == first).count() >= 3
 }
 
 fn looks_like_attr_line(s: &str) -> bool {
@@ -2626,7 +3226,9 @@ fn looks_like_attr_line(s: &str) -> bool {
         || inner.starts_with('#')
         || inner.starts_with('.')
         || inner.contains('=')
-        || inner.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        || inner
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
 }
 
 /// Parse `{#id .class key=val}` attribute string.
@@ -2645,12 +3247,16 @@ pub fn parse_attr(s: &str) -> Option<Attr> {
         }
         if remaining.starts_with('#') {
             // ID
-            let end = remaining.find(|c: char| c.is_whitespace()).unwrap_or(remaining.len());
+            let end = remaining
+                .find(|c: char| c.is_whitespace())
+                .unwrap_or(remaining.len());
             attr.id = Some(remaining[1..end].to_string());
             remaining = &remaining[end..];
         } else if remaining.starts_with('.') {
             // Class
-            let end = remaining.find(|c: char| c.is_whitespace()).unwrap_or(remaining.len());
+            let end = remaining
+                .find(|c: char| c.is_whitespace())
+                .unwrap_or(remaining.len());
             attr.classes.push(remaining[1..end].to_string());
             remaining = &remaining[end..];
         } else if remaining.starts_with('%') {
@@ -2667,7 +3273,9 @@ pub fn parse_attr(s: &str) -> Option<Attr> {
                 remaining = &remaining[close + 1..];
                 v
             } else {
-                let end = remaining.find(|c: char| c.is_whitespace()).unwrap_or(remaining.len());
+                let end = remaining
+                    .find(|c: char| c.is_whitespace())
+                    .unwrap_or(remaining.len());
                 let v = remaining[..end].to_string();
                 remaining = &remaining[end..];
                 v
@@ -2694,7 +3302,12 @@ fn parse_link_def(s: &str) -> Option<LinkDef> {
         return None;
     }
     let (url, title) = parse_url_title(url_and_title);
-    Some(LinkDef { label, url, title, attr: Attr::default() })
+    Some(LinkDef {
+        label,
+        url,
+        title,
+        attr: Attr::default(),
+    })
 }
 
 fn parse_footnote_def_start(s: &str) -> Option<(&str, &str)> {
@@ -2714,9 +3327,7 @@ fn parse_footnote_def_start(s: &str) -> Option<(&str, &str)> {
 fn parse_url_title(s: &str) -> (String, Option<String>) {
     let s = s.trim();
     // Find url (up to whitespace or end)
-    let url_end = s
-        .find(|c: char| c.is_whitespace())
-        .unwrap_or(s.len());
+    let url_end = s.find(|c: char| c.is_whitespace()).unwrap_or(s.len());
     let url = s[..url_end].to_string();
     let rest = s[url_end..].trim();
     let title = if rest.starts_with('"') && rest.ends_with('"') && rest.len() > 1 {
@@ -2748,7 +3359,11 @@ impl ListMarker {
     fn to_list_kind(&self) -> ListKind {
         match self {
             ListMarker::Bullet(s) => ListKind::Bullet(s.clone()),
-            ListMarker::Ordered { style, delimiter, number } => ListKind::Ordered {
+            ListMarker::Ordered {
+                style,
+                delimiter,
+                number,
+            } => ListKind::Ordered {
                 style: style.clone(),
                 delimiter: delimiter.clone(),
                 start: *number,
@@ -2762,8 +3377,16 @@ impl ListMarker {
             (ListMarker::Bullet(a), ListMarker::Bullet(b)) => a == b,
             (ListMarker::Task, ListMarker::Task) => true,
             (
-                ListMarker::Ordered { style: s1, delimiter: d1, .. },
-                ListMarker::Ordered { style: s2, delimiter: d2, .. },
+                ListMarker::Ordered {
+                    style: s1,
+                    delimiter: d1,
+                    ..
+                },
+                ListMarker::Ordered {
+                    style: s2,
+                    delimiter: d2,
+                    ..
+                },
             ) => s1 == s2 && d1 == d2,
             _ => false,
         }
@@ -2775,7 +3398,11 @@ impl ListMarker {
             ListMarker::Bullet(BulletStyle::Star) => "* ".to_string(),
             ListMarker::Bullet(BulletStyle::Plus) => "+ ".to_string(),
             ListMarker::Task => "- ".to_string(),
-            ListMarker::Ordered { style, delimiter, number } => {
+            ListMarker::Ordered {
+                style,
+                delimiter,
+                number,
+            } => {
                 let num_str = format_ordered_number(*number, style);
                 match delimiter {
                     OrderedDelimiter::Period => format!("{num_str}. "),
@@ -2897,7 +3524,11 @@ fn detect_ordered_marker_with_hint(s: &str, hint: Option<&OrderedStyle>) -> Opti
                 } else {
                     OrderedDelimiter::Paren
                 };
-                return Some(ListMarker::Ordered { style, delimiter, number });
+                return Some(ListMarker::Ordered {
+                    style,
+                    delimiter,
+                    number,
+                });
             }
         }
     }
@@ -2924,9 +3555,12 @@ fn parse_ordered_token_with_hint(
     if let Ok(n) = s.parse::<u32>() {
         return Some((OrderedStyle::Decimal, n));
     }
-    let is_all_roman = s
-        .chars()
-        .all(|c| matches!(c, 'i' | 'v' | 'x' | 'l' | 'c' | 'd' | 'm' | 'I' | 'V' | 'X' | 'L' | 'C' | 'D' | 'M'));
+    let is_all_roman = s.chars().all(|c| {
+        matches!(
+            c,
+            'i' | 'v' | 'x' | 'l' | 'c' | 'd' | 'm' | 'I' | 'V' | 'X' | 'L' | 'C' | 'D' | 'M'
+        )
+    });
     let is_single_char = s.len() == 1;
 
     // If the token is a single char that's a valid roman char, it's ambiguous.
@@ -2957,7 +3591,11 @@ fn parse_ordered_token_with_hint(
     // Multi-char all-roman token → unambiguously roman
     if !is_single_char && is_all_roman {
         if let Some(n) = from_roman(s) {
-            if s.chars().next().map(|c| c.is_ascii_lowercase()).unwrap_or(false) {
+            if s.chars()
+                .next()
+                .map(|c| c.is_ascii_lowercase())
+                .unwrap_or(false)
+            {
                 return Some((OrderedStyle::LowerRoman, n));
             } else {
                 return Some((OrderedStyle::UpperRoman, n));
@@ -2980,7 +3618,15 @@ fn parse_ordered_token_with_hint(
 
 fn from_roman(s: &str) -> Option<u32> {
     let s = s.to_uppercase();
-    let vals = [('I', 1), ('V', 5), ('X', 10), ('L', 50), ('C', 100), ('D', 500), ('M', 1000)];
+    let vals = [
+        ('I', 1),
+        ('V', 5),
+        ('X', 10),
+        ('L', 50),
+        ('C', 100),
+        ('D', 500),
+        ('M', 1000),
+    ];
     let mut result = 0u32;
     let chars: Vec<char> = s.chars().collect();
     if chars.is_empty() {
@@ -2992,10 +3638,19 @@ fn from_roman(s: &str) -> Option<u32> {
             return None;
         }
     }
-    let val_of = |c: char| vals.iter().find(|&&(ch, _)| ch == c).map(|&(_, v)| v).unwrap_or(0);
+    let val_of = |c: char| {
+        vals.iter()
+            .find(|&&(ch, _)| ch == c)
+            .map(|&(_, v)| v)
+            .unwrap_or(0)
+    };
     for i in 0..chars.len() {
         let v = val_of(chars[i]);
-        let next_v = if i + 1 < chars.len() { val_of(chars[i + 1]) } else { 0 };
+        let next_v = if i + 1 < chars.len() {
+            val_of(chars[i + 1])
+        } else {
+            0
+        };
         if v < next_v {
             result = result.saturating_sub(v);
         } else {
@@ -3135,7 +3790,9 @@ mod tests {
         let (doc, _) = parse(input);
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
-            Block::CodeBlock { language, content, .. } => {
+            Block::CodeBlock {
+                language, content, ..
+            } => {
                 assert_eq!(language.as_deref(), Some("rust"));
                 assert_eq!(content, "fn main() {}\n");
             }
@@ -3196,9 +3853,16 @@ mod tests {
             if let crate::events::Event::Text(Cow::Borrowed(s)) = ev {
                 // Verify it's actually a slice of the input (same bytes, same address range)
                 let input_range = input.as_ptr()..=input.as_ptr().wrapping_add(input.len());
-                assert!(input_range.contains(&s.as_ptr()), "borrowed slice not in input");
-                if s == "Hello" { heading_borrowed = true; }
-                if s == "A paragraph." { para_borrowed = true; }
+                assert!(
+                    input_range.contains(&s.as_ptr()),
+                    "borrowed slice not in input"
+                );
+                if s == "Hello" {
+                    heading_borrowed = true;
+                }
+                if s == "A paragraph." {
+                    para_borrowed = true;
+                }
             }
         }
         assert!(heading_borrowed, "heading text should be Cow::Borrowed");
@@ -3213,12 +3877,20 @@ mod tests {
         let input = "A -- B"; // em-dash substitution
         let owned_texts: Vec<_> = EventIter::new(input)
             .filter_map(|ev| {
-                if let crate::events::Event::Text(Cow::Owned(s)) = ev { Some(s) } else { None }
+                if let crate::events::Event::Text(Cow::Owned(s)) = ev {
+                    Some(s)
+                } else {
+                    None
+                }
             })
             .collect();
         // The em-dash text should be owned (can't borrow "—" from "–" input)
-        assert!(owned_texts.iter().any(|s| s.contains('\u{2013}') || s.contains('\u{2014}')),
-            "smart punctuation should yield Cow::Owned");
+        assert!(
+            owned_texts
+                .iter()
+                .any(|s| s.contains('\u{2013}') || s.contains('\u{2014}')),
+            "smart punctuation should yield Cow::Owned"
+        );
     }
 
     #[test]

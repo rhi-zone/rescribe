@@ -24,12 +24,21 @@ pub fn emit_with_options(
                 let cells: Vec<Cell> = row
                     .children
                     .iter()
-                    .map(|n| Cell { value: get_text_content(n), span: Span::NONE })
+                    .map(|n| Cell {
+                        value: get_text_content(n),
+                        span: Span::NONE,
+                    })
                     .collect();
-                rows.push(Row { cells, span: Span::NONE });
+                rows.push(Row {
+                    cells,
+                    span: Span::NONE,
+                });
             }
         }
-        let tsv_doc = TsvDoc { rows, span: Span::NONE };
+        let tsv_doc = TsvDoc {
+            rows,
+            span: Span::NONE,
+        };
         let output = tsv_fmt::emit(&tsv_doc);
         Ok(ConversionResult::ok(output.into_bytes()))
     } else {

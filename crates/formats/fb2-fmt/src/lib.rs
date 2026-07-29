@@ -31,8 +31,8 @@ pub use parse::{parse, parse_str};
 
 #[cfg(test)]
 mod whitespace_tests {
-    use crate::{emit, parse};
     use crate::ast::*;
+    use crate::{emit, parse};
 
     fn roundtrip_inline(el: InlineElement) -> InlineElement {
         let mut fb = FictionBook::default();
@@ -40,7 +40,10 @@ mod whitespace_tests {
             content: vec![SectionContent::Para(vec![el])],
             ..Default::default()
         };
-        fb.bodies.push(Body { section: vec![section], ..Default::default() });
+        fb.bodies.push(Body {
+            section: vec![section],
+            ..Default::default()
+        });
         let bytes = emit(&fb);
         let (fb2, _) = parse(&bytes);
         match &fb2.bodies[0].section[0].content[0] {

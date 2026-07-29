@@ -19,7 +19,8 @@ fn make_odt_full(content_xml: &str, meta_xml: Option<&str>) -> Vec<u8> {
     let mut zip = ZipWriter::new(&mut buf);
     let opts = SimpleFileOptions::default();
     zip.start_file("mimetype", opts).unwrap();
-    zip.write_all(b"application/vnd.oasis.opendocument.text").unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.text")
+        .unwrap();
     zip.start_file("content.xml", opts).unwrap();
     zip.write_all(content_xml.as_bytes()).unwrap();
     if let Some(meta) = meta_xml {
@@ -62,7 +63,8 @@ fn make_odt_with_styles(content_xml: &str, styles_xml: &str) -> Vec<u8> {
     let mut zip = ZipWriter::new(&mut buf);
     let opts = SimpleFileOptions::default();
     zip.start_file("mimetype", opts).unwrap();
-    zip.write_all(b"application/vnd.oasis.opendocument.text").unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.text")
+        .unwrap();
     zip.start_file("content.xml", opts).unwrap();
     zip.write_all(content_xml.as_bytes()).unwrap();
     zip.start_file("styles.xml", opts).unwrap();
@@ -92,7 +94,7 @@ fn tiny_png() -> Vec<u8> {
         0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00, // IDAT data
         0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc, // IDAT CRC
         0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, // IEND length + type
-        0x44, 0xae, 0x42, 0x60, 0x82,                   // IEND CRC
+        0x44, 0xae, 0x42, 0x60, 0x82, // IEND CRC
     ]
 }
 
@@ -101,7 +103,8 @@ fn make_odt_with_image(content_xml: &str, image_name: &str, image_bytes: Vec<u8>
     let mut zip = ZipWriter::new(&mut buf);
     let opts = SimpleFileOptions::default();
     zip.start_file("mimetype", opts).unwrap();
-    zip.write_all(b"application/vnd.oasis.opendocument.text").unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.text")
+        .unwrap();
     zip.start_file("content.xml", opts).unwrap();
     zip.write_all(content_xml.as_bytes()).unwrap();
     zip.start_file(image_name, opts).unwrap();
@@ -110,7 +113,13 @@ fn make_odt_with_image(content_xml: &str, image_name: &str, image_bytes: Vec<u8>
     buf.into_inner()
 }
 
-fn write_fixture_image(name: &str, content_xml: &str, image_name: &str, image_bytes: Vec<u8>, expected_json: &str) {
+fn write_fixture_image(
+    name: &str,
+    content_xml: &str,
+    image_name: &str,
+    image_bytes: Vec<u8>,
+    expected_json: &str,
+) {
     let dir = format!("fixtures/odt/{name}");
     std::fs::create_dir_all(&dir).unwrap();
     let odt = make_odt_with_image(content_xml, image_name, image_bytes);
@@ -125,7 +134,8 @@ fn make_odt_no_content() -> Vec<u8> {
     let mut zip = ZipWriter::new(&mut buf);
     let opts = SimpleFileOptions::default();
     zip.start_file("mimetype", opts).unwrap();
-    zip.write_all(b"application/vnd.oasis.opendocument.text").unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.text")
+        .unwrap();
     zip.finish().unwrap();
     buf.into_inner()
 }
@@ -135,7 +145,8 @@ fn make_odt_wrong_mimetype() -> Vec<u8> {
     let mut zip = ZipWriter::new(&mut buf);
     let opts = SimpleFileOptions::default();
     zip.start_file("mimetype", opts).unwrap();
-    zip.write_all(b"application/vnd.oasis.opendocument.spreadsheet").unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.spreadsheet")
+        .unwrap();
     zip.start_file("content.xml", opts).unwrap();
     zip.write_all(b"<root/>").unwrap();
     zip.finish().unwrap();
@@ -147,11 +158,13 @@ fn make_odt_corrupt_styles() -> Vec<u8> {
     let mut zip = ZipWriter::new(&mut buf);
     let opts = SimpleFileOptions::default();
     zip.start_file("mimetype", opts).unwrap();
-    zip.write_all(b"application/vnd.oasis.opendocument.text").unwrap();
+    zip.write_all(b"application/vnd.oasis.opendocument.text")
+        .unwrap();
     zip.start_file("styles.xml", opts).unwrap();
     zip.write_all(b"<not valid xml at all <<<").unwrap();
     zip.start_file("content.xml", opts).unwrap();
-    zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
   xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
@@ -160,7 +173,9 @@ fn make_odt_corrupt_styles() -> Vec<u8> {
       <text:p>Body text.</text:p>
     </office:text>
   </office:body>
-</office:document-content>"#).unwrap();
+</office:document-content>"#,
+    )
+    .unwrap();
     zip.finish().unwrap();
     buf.into_inner()
 }
@@ -169,13 +184,17 @@ fn main() {
     // Change to workspace root so we write fixtures/ in the right place.
     let manifest = env!("CARGO_MANIFEST_DIR");
     let workspace_root = Path::new(manifest)
-        .parent().unwrap() // readers/
-        .parent().unwrap() // crates/
-        .parent().unwrap(); // workspace root
+        .parent()
+        .unwrap() // readers/
+        .parent()
+        .unwrap() // crates/
+        .parent()
+        .unwrap(); // workspace root
     std::env::set_current_dir(workspace_root).unwrap();
 
     // ── bold (automatic style with fo:font-weight="bold") ──────────────────────
-    write_fixture("bold",
+    write_fixture(
+        "bold",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -208,7 +227,8 @@ fn main() {
     );
 
     // ── italic ────────────────────────────────────────────────────────────────
-    write_fixture("italic",
+    write_fixture(
+        "italic",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -241,7 +261,8 @@ fn main() {
     );
 
     // ── underline ─────────────────────────────────────────────────────────────
-    write_fixture("underline",
+    write_fixture(
+        "underline",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -274,7 +295,8 @@ fn main() {
     );
 
     // ── strikeout ─────────────────────────────────────────────────────────────
-    write_fixture("strikeout",
+    write_fixture(
+        "strikeout",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -307,7 +329,8 @@ fn main() {
     );
 
     // ── hyperlink ─────────────────────────────────────────────────────────────
-    write_fixture("hyperlink",
+    write_fixture(
+        "hyperlink",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -334,7 +357,8 @@ fn main() {
     );
 
     // ── ordered-list ─────────────────────────────────────────────────────────
-    write_fixture("ordered-list",
+    write_fixture(
+        "ordered-list",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -368,7 +392,8 @@ fn main() {
     );
 
     // ── table ─────────────────────────────────────────────────────────────────
-    write_fixture("table",
+    write_fixture(
+        "table",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -404,7 +429,8 @@ fn main() {
     );
 
     // ── code-block ────────────────────────────────────────────────────────────
-    write_fixture("code-block",
+    write_fixture(
+        "code-block",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -426,7 +452,8 @@ fn main() {
     );
 
     // ── blockquote ────────────────────────────────────────────────────────────
-    write_fixture("blockquote",
+    write_fixture(
+        "blockquote",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -450,7 +477,8 @@ fn main() {
     );
 
     // ── subscript ─────────────────────────────────────────────────────────────
-    write_fixture("subscript",
+    write_fixture(
+        "subscript",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -483,7 +511,8 @@ fn main() {
     );
 
     // ── superscript ───────────────────────────────────────────────────────────
-    write_fixture("superscript",
+    write_fixture(
+        "superscript",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -515,7 +544,8 @@ fn main() {
     );
 
     // ── tab ───────────────────────────────────────────────────────────────────
-    write_fixture("tab",
+    write_fixture(
+        "tab",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -538,7 +568,8 @@ fn main() {
     );
 
     // ── heading-levels ───────────────────────────────────────────────────────
-    write_fixture("heading-levels",
+    write_fixture(
+        "heading-levels",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -569,7 +600,8 @@ fn main() {
     );
 
     // ── table-header ─────────────────────────────────────────────────────────
-    write_fixture("table-header",
+    write_fixture(
+        "table-header",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -606,7 +638,8 @@ fn main() {
     );
 
     // ── nested-list ──────────────────────────────────────────────────────────
-    write_fixture("nested-list",
+    write_fixture(
+        "nested-list",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -638,7 +671,8 @@ fn main() {
 
     // ── font-color ────────────────────────────────────────────────────────────
     // Use r##"..."## because the XML contains "#ff0000" which would prematurely end r#"..."#
-    write_fixture("font-color",
+    write_fixture(
+        "font-color",
         r##"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -670,7 +704,8 @@ fn main() {
     );
 
     // ── font-size ─────────────────────────────────────────────────────────────
-    write_fixture("font-size",
+    write_fixture(
+        "font-size",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -702,7 +737,8 @@ fn main() {
     );
 
     // ── font-name ─────────────────────────────────────────────────────────────
-    write_fixture("font-name",
+    write_fixture(
+        "font-name",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -734,7 +770,8 @@ fn main() {
     );
 
     // ── small-caps ────────────────────────────────────────────────────────────
-    write_fixture("small-caps",
+    write_fixture(
+        "small-caps",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -766,7 +803,8 @@ fn main() {
     );
 
     // ── soft-hyphen ───────────────────────────────────────────────────────────
-    write_fixture("soft-hyphen",
+    write_fixture(
+        "soft-hyphen",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -788,7 +826,8 @@ fn main() {
     );
 
     // ── para-align ────────────────────────────────────────────────────────────
-    write_fixture("para-align",
+    write_fixture(
+        "para-align",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -817,7 +856,8 @@ fn main() {
     );
 
     // ── para-indent ───────────────────────────────────────────────────────────
-    write_fixture("para-indent",
+    write_fixture(
+        "para-indent",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -846,7 +886,8 @@ fn main() {
     );
 
     // ── para-spacing ──────────────────────────────────────────────────────────
-    write_fixture("para-spacing",
+    write_fixture(
+        "para-spacing",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -876,7 +917,8 @@ fn main() {
 
     // ── para-background ───────────────────────────────────────────────────────
     // Use r##"..."## because the XML contains "#ffffcc" which would prematurely end r#"..."#
-    write_fixture("para-background",
+    write_fixture(
+        "para-background",
         r##"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -905,7 +947,8 @@ fn main() {
     );
 
     // ── para-border ───────────────────────────────────────────────────────────
-    write_fixture("para-border",
+    write_fixture(
+        "para-border",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -934,7 +977,8 @@ fn main() {
     );
 
     // ── line-height ───────────────────────────────────────────────────────────
-    write_fixture("line-height",
+    write_fixture(
+        "line-height",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -963,7 +1007,8 @@ fn main() {
     );
 
     // ── keep-together ─────────────────────────────────────────────────────────
-    write_fixture("keep-together",
+    write_fixture(
+        "keep-together",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -992,7 +1037,8 @@ fn main() {
     );
 
     // ── meta-title ────────────────────────────────────────────────────────────
-    write_fixture_meta("meta-title",
+    write_fixture_meta(
+        "meta-title",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1021,7 +1067,8 @@ fn main() {
     );
 
     // ── meta-author ───────────────────────────────────────────────────────────
-    write_fixture_meta("meta-author",
+    write_fixture_meta(
+        "meta-author",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1051,7 +1098,8 @@ fn main() {
 
     // ── non-breaking-space ───────────────────────────────────────────────────
     // text:s represents a run of multiple spaces; here just the non-breaking concept
-    write_fixture("non-breaking-space",
+    write_fixture(
+        "non-breaking-space",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1073,7 +1121,8 @@ fn main() {
     );
 
     // ── meta-description ─────────────────────────────────────────────────────
-    write_fixture_meta("meta-description",
+    write_fixture_meta(
+        "meta-description",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1102,7 +1151,8 @@ fn main() {
     );
 
     // ── meta-date ─────────────────────────────────────────────────────────────
-    write_fixture_meta("meta-date",
+    write_fixture_meta(
+        "meta-date",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1131,7 +1181,8 @@ fn main() {
     );
 
     // ── meta-language ─────────────────────────────────────────────────────────
-    write_fixture_meta("meta-language",
+    write_fixture_meta(
+        "meta-language",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1160,7 +1211,8 @@ fn main() {
     );
 
     // ── para-style-name ───────────────────────────────────────────────────────
-    write_fixture("para-style-name",
+    write_fixture(
+        "para-style-name",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1182,7 +1234,8 @@ fn main() {
     );
 
     // ── colspan-rowspan ───────────────────────────────────────────────────────
-    write_fixture("colspan-rowspan",
+    write_fixture(
+        "colspan-rowspan",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1219,7 +1272,8 @@ fn main() {
     );
 
     // ── footnote ──────────────────────────────────────────────────────────────
-    write_fixture("footnote",
+    write_fixture(
+        "footnote",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1248,7 +1302,8 @@ fn main() {
     );
 
     // ── endnote ───────────────────────────────────────────────────────────────
-    write_fixture("endnote",
+    write_fixture(
+        "endnote",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1276,7 +1331,8 @@ fn main() {
     );
 
     // ── bookmark ──────────────────────────────────────────────────────────────
-    write_fixture("bookmark",
+    write_fixture(
+        "bookmark",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1300,7 +1356,8 @@ fn main() {
     );
 
     // ── horizontal-rule ───────────────────────────────────────────────────────
-    write_fixture("horizontal-rule",
+    write_fixture(
+        "horizontal-rule",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1327,7 +1384,8 @@ fn main() {
     // ── Composition ──────────────────────────────────────────────────────────
 
     // ── table-cells-formatted ────────────────────────────────────────────────
-    write_fixture("table-cells-formatted",
+    write_fixture(
+        "table-cells-formatted",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1364,7 +1422,8 @@ fn main() {
     );
 
     // ── list-items-formatted ─────────────────────────────────────────────────
-    write_fixture("list-items-formatted",
+    write_fixture(
+        "list-items-formatted",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1397,7 +1456,8 @@ fn main() {
     );
 
     // ── heading-formatted ─────────────────────────────────────────────────────
-    write_fixture("heading-formatted",
+    write_fixture(
+        "heading-formatted",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1428,7 +1488,8 @@ fn main() {
     );
 
     // ── link-formatted ────────────────────────────────────────────────────────
-    write_fixture("link-formatted",
+    write_fixture(
+        "link-formatted",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1460,7 +1521,8 @@ fn main() {
     // ── Adversarial ──────────────────────────────────────────────────────────
 
     // ── adv-empty ─────────────────────────────────────────────────────────────
-    write_fixture("adv-empty",
+    write_fixture(
+        "adv-empty",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1479,7 +1541,8 @@ fn main() {
     );
 
     // ── adv-unknown-namespace ─────────────────────────────────────────────────
-    write_fixture("adv-unknown-namespace",
+    write_fixture(
+        "adv-unknown-namespace",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1503,7 +1566,8 @@ fn main() {
     );
 
     // ── adv-corrupt-styles ────────────────────────────────────────────────────
-    write_fixture_raw("adv-corrupt-styles",
+    write_fixture_raw(
+        "adv-corrupt-styles",
         make_odt_corrupt_styles(),
         r#"{
   "description": "ODT with corrupt styles.xml still parses body content",
@@ -1516,7 +1580,8 @@ fn main() {
     );
 
     // ── adv-missing-content ───────────────────────────────────────────────────
-    write_fixture_raw("adv-missing-content",
+    write_fixture_raw(
+        "adv-missing-content",
         make_odt_no_content(),
         r#"{
   "description": "ODT zip missing content.xml returns a parse error",
@@ -1527,7 +1592,8 @@ fn main() {
     );
 
     // ── adv-malformed-zip ─────────────────────────────────────────────────────
-    write_fixture_raw("adv-malformed-zip",
+    write_fixture_raw(
+        "adv-malformed-zip",
         b"this is not a zip file at all".to_vec(),
         r#"{
   "description": "Non-zip input returns a parse error",
@@ -1538,7 +1604,8 @@ fn main() {
     );
 
     // ── adv-wrong-mimetype ────────────────────────────────────────────────────
-    write_fixture_raw("adv-wrong-mimetype",
+    write_fixture_raw(
+        "adv-wrong-mimetype",
         make_odt_wrong_mimetype(),
         r#"{
   "description": "ODT zip with wrong mimetype (spreadsheet) returns parse error",
@@ -1549,7 +1616,8 @@ fn main() {
     );
 
     // ── annotation ───────────────────────────────────────────────────────────
-    write_fixture("annotation",
+    write_fixture(
+        "annotation",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1573,7 +1641,8 @@ fn main() {
     );
 
     // ── text-box ─────────────────────────────────────────────────────────────
-    write_fixture("text-box",
+    write_fixture(
+        "text-box",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1602,7 +1671,8 @@ fn main() {
     );
 
     // ── image ────────────────────────────────────────────────────────────────
-    write_fixture_image("image",
+    write_fixture_image(
+        "image",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1633,7 +1703,8 @@ fn main() {
     );
 
     // ── meta-custom ───────────────────────────────────────────────────────────
-    write_fixture_meta("meta-custom",
+    write_fixture_meta(
+        "meta-custom",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1665,7 +1736,8 @@ fn main() {
     );
 
     // ── page-layout ───────────────────────────────────────────────────────────
-    write_fixture_styles("page-layout",
+    write_fixture_styles(
+        "page-layout",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1709,7 +1781,8 @@ fn main() {
     );
 
     // ── footnote-formatted ────────────────────────────────────────────────────
-    write_fixture("footnote-formatted",
+    write_fixture(
+        "footnote-formatted",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1751,7 +1824,8 @@ fn main() {
     // ── nested-blockquote ─────────────────────────────────────────────────────
     // ODT has no native nested blockquote; consecutive Quotations paragraphs merge into one.
     // This fixture verifies that behavior.
-    write_fixture("nested-blockquote",
+    write_fixture(
+        "nested-blockquote",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1777,7 +1851,8 @@ fn main() {
     );
 
     // ── image-caption ─────────────────────────────────────────────────────────
-    write_fixture_image("image-caption",
+    write_fixture_image(
+        "image-caption",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1808,7 +1883,8 @@ fn main() {
     );
 
     // ── adv-corrupt-image ─────────────────────────────────────────────────────
-    write_fixture_image("adv-corrupt-image",
+    write_fixture_image(
+        "adv-corrupt-image",
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -1854,7 +1930,9 @@ fn main() {
   </office:body>
 </office:document-content>"#
         );
-        write_fixture("path-many-paragraphs", &content,
+        write_fixture(
+            "path-many-paragraphs",
+            &content,
             r#"{
   "description": "Document with 1000 paragraphs parses without error",
   "category": "pathological",
@@ -1890,7 +1968,9 @@ fn main() {
   </office:body>
 </office:document-content>"#
         );
-        write_fixture("path-many-char-runs", &content,
+        write_fixture(
+            "path-many-char-runs",
+            &content,
             r#"{
   "description": "Paragraph with 200 interleaved text runs parses without error",
   "category": "pathological",
@@ -1904,12 +1984,12 @@ fn main() {
     // ── path-deeply-nested-list ───────────────────────────────────────────────
     {
         // Build a list nested 6 levels deep
-        let item_open: String = (0..6).map(|_|
-            "      <text:list><text:list-item>\n".to_owned()
-        ).collect();
-        let item_close: String = (0..6).map(|_|
-            "      </text:list-item></text:list>\n".to_owned()
-        ).collect();
+        let item_open: String = (0..6)
+            .map(|_| "      <text:list><text:list-item>\n".to_owned())
+            .collect();
+        let item_close: String = (0..6)
+            .map(|_| "      </text:list-item></text:list>\n".to_owned())
+            .collect();
         let content = format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
@@ -1922,7 +2002,9 @@ fn main() {
   </office:body>
 </office:document-content>"#
         );
-        write_fixture("path-deeply-nested-list", &content,
+        write_fixture(
+            "path-deeply-nested-list",
+            &content,
             r#"{
   "description": "List nested 6 levels deep parses without error",
   "category": "pathological",
@@ -1953,7 +2035,9 @@ fn main() {
   </office:body>
 </office:document-content>"#
         );
-        write_fixture("path-deeply-nested-table", &content,
+        write_fixture(
+            "path-deeply-nested-table",
+            &content,
             r#"{
   "description": "Table nested 3 levels deep parses without error",
   "category": "pathological",
@@ -1968,7 +2052,8 @@ fn main() {
     // 100 KB of "image" data (not valid PNG but should not panic)
     {
         let large_bytes = vec![0xffu8; 100_000];
-        write_fixture_image("path-large-image",
+        write_fixture_image(
+            "path-large-image",
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content
   xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"

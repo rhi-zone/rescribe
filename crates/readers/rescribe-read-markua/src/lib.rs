@@ -103,14 +103,10 @@ fn convert_block(block: &markua::Block) -> Node {
 
         markua::Block::PageBreak { .. } => Node::new(node::HORIZONTAL_RULE),
 
-        markua::Block::Figure {
-            caption, body, ..
-        } => {
+        markua::Block::Figure { caption, body, .. } => {
             let mut children = vec![convert_block(body)];
             if !caption.is_empty() {
-                children.push(
-                    Node::new(node::PARAGRAPH).children(convert_inlines(caption)),
-                );
+                children.push(Node::new(node::PARAGRAPH).children(convert_inlines(caption)));
             }
             Node::new(node::FIGURE).children(children)
         }
@@ -159,21 +155,17 @@ fn convert_inline(inline: &markua::Inline) -> Node {
             Node::new(node::UNDERLINE).children(convert_inlines(children))
         }
 
-        markua::Inline::SmallCaps(children, _) => {
-            Node::new(node::SPAN)
-                .prop("style:variant", "small-caps")
-                .children(convert_inlines(children))
-        }
+        markua::Inline::SmallCaps(children, _) => Node::new(node::SPAN)
+            .prop("style:variant", "small-caps")
+            .children(convert_inlines(children)),
 
         markua::Inline::FootnoteRef { content, .. } => {
             Node::new(node::FOOTNOTE_REF).children(convert_inlines(content))
         }
 
-        markua::Inline::IndexTerm { term, .. } => {
-            Node::new(node::RAW_INLINE)
-                .prop(prop::CONTENT, format!("i[{}]", term))
-                .prop("markua:type", "index-term")
-        }
+        markua::Inline::IndexTerm { term, .. } => Node::new(node::RAW_INLINE)
+            .prop(prop::CONTENT, format!("i[{}]", term))
+            .prop("markua:type", "index-term"),
 
         markua::Inline::MathInline { content, .. } => {
             Node::new("math_inline").prop(prop::CONTENT, content.as_str())

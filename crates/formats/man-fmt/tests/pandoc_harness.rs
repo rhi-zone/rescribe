@@ -10,11 +10,11 @@
 //! The harness reports but does NOT fail on low text coverage — the goal is to
 //! catalogue gaps, not gate CI.  Tests DO fail if the parser panics.
 
+use man_fmt::ast::{Block, Inline, ManDoc};
+use man_fmt::parse;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use man_fmt::ast::{Block, Inline, ManDoc};
-use man_fmt::parse;
 
 // ── Path discovery ────────────────────────────────────────────────────────────
 
@@ -28,7 +28,9 @@ fn corpus_dir() -> Option<PathBuf> {
 }
 
 fn find_pandoc() -> Option<PathBuf> {
-    if let Ok(out) = Command::new("sh").args(["-c", "command -v pandoc"]).output()
+    if let Ok(out) = Command::new("sh")
+        .args(["-c", "command -v pandoc"])
+        .output()
         && out.status.success()
     {
         let s = String::from_utf8_lossy(&out.stdout);

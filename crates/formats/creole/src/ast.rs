@@ -25,10 +25,18 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Diagnostic { severity: Severity::Warning, message: message.into(), span }
+        Diagnostic {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
     }
     pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Diagnostic { severity: Severity::Error, message: message.into(), span }
+        Diagnostic {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -182,8 +190,16 @@ pub enum Inline {
     Bold(Vec<Inline>, Span),
     Italic(Vec<Inline>, Span),
     Code(String, Span),
-    Link { url: String, children: Vec<Inline>, span: Span },
-    Image { url: String, alt: Option<String>, span: Span },
+    Link {
+        url: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    Image {
+        url: String,
+        alt: Option<String>,
+        span: Span,
+    },
     LineBreak(Span),
 }
 
@@ -191,19 +207,25 @@ impl Inline {
     pub fn strip_spans(self) -> Self {
         match self {
             Inline::Text(s, _) => Inline::Text(s, Span::NONE),
-            Inline::Bold(children, _) => {
-                Inline::Bold(children.into_iter().map(|i| i.strip_spans()).collect(), Span::NONE)
-            }
-            Inline::Italic(children, _) => {
-                Inline::Italic(children.into_iter().map(|i| i.strip_spans()).collect(), Span::NONE)
-            }
+            Inline::Bold(children, _) => Inline::Bold(
+                children.into_iter().map(|i| i.strip_spans()).collect(),
+                Span::NONE,
+            ),
+            Inline::Italic(children, _) => Inline::Italic(
+                children.into_iter().map(|i| i.strip_spans()).collect(),
+                Span::NONE,
+            ),
             Inline::Code(s, _) => Inline::Code(s, Span::NONE),
             Inline::Link { url, children, .. } => Inline::Link {
                 url,
                 children: children.into_iter().map(|i| i.strip_spans()).collect(),
                 span: Span::NONE,
             },
-            Inline::Image { url, alt, .. } => Inline::Image { url, alt, span: Span::NONE },
+            Inline::Image { url, alt, .. } => Inline::Image {
+                url,
+                alt,
+                span: Span::NONE,
+            },
             Inline::LineBreak(_) => Inline::LineBreak(Span::NONE),
         }
     }

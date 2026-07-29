@@ -72,7 +72,9 @@ enum BlockState {
     Accumulating,
     /// Inside a delimited block (e.g. `----`…`----`).
     /// The delimiter is stored to detect the closing line.
-    InDelimitedBlock { delim: String },
+    InDelimitedBlock {
+        delim: String,
+    },
 }
 
 /// Chunked streaming AsciiDoc parser that delivers events to a [`Handler`].
@@ -204,8 +206,7 @@ fn is_delimited_block_marker(line: &str) -> bool {
         return false;
     }
     let ch = line.chars().next().unwrap();
-    matches!(ch, '-' | '=' | '.' | '_' | '*' | '+' | '/' | '|')
-        && line.chars().all(|c| c == ch)
+    matches!(ch, '-' | '=' | '.' | '_' | '*' | '+' | '/' | '|') && line.chars().all(|c| c == ch)
 }
 
 /// Chunk-driven AsciiDoc parser that delivers events to a callback on finish.
@@ -219,7 +220,10 @@ pub struct BatchSink<F: FnMut(OwnedEvent)> {
 
 impl<F: FnMut(OwnedEvent)> BatchSink<F> {
     pub fn new(callback: F) -> Self {
-        BatchSink { buf: Vec::new(), callback }
+        BatchSink {
+            buf: Vec::new(),
+            callback,
+        }
     }
 
     /// Feed a chunk of input bytes.
@@ -268,8 +272,14 @@ mod tests {
         p.feed(b"== Hello\n\n");
         p.feed(b"A paragraph.\n");
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 2, .. })));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 2, .. }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartParagraph { .. }))
+        );
     }
 
     #[test]
@@ -280,7 +290,10 @@ mod tests {
             p.feed(std::slice::from_ref(b));
         }
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { .. }))
+        );
     }
 
     #[test]
@@ -309,7 +322,15 @@ mod tests {
         sink.feed(b"== Hello\n\n");
         sink.feed(b"A paragraph.\n");
         sink.finish();
-        assert!(events.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 2, .. })));
-        assert!(events.iter().any(|e| matches!(e, OwnedEvent::StartParagraph { .. })));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 2, .. }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartParagraph { .. }))
+        );
     }
 }

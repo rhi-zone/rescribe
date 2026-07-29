@@ -28,7 +28,10 @@ pub struct Writer<W: Write> {
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
-        Writer { sink, events: Vec::new() }
+        Writer {
+            sink,
+            events: Vec::new(),
+        }
     }
 
     /// Feed one event to the writer.
@@ -53,7 +56,9 @@ mod tests {
     fn test_writer_heading() {
         let mut w = Writer::new(Vec::<u8>::new());
         w.write_event(OwnedEvent::StartHeading { level: 1 });
-        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("Hello".to_string())));
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned(
+            "Hello".to_string(),
+        )));
         w.write_event(OwnedEvent::EndHeading);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();
@@ -64,7 +69,9 @@ mod tests {
     fn test_writer_paragraph() {
         let mut w = Writer::new(Vec::<u8>::new());
         w.write_event(OwnedEvent::StartParagraph);
-        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned("World".to_string())));
+        w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned(
+            "World".to_string(),
+        )));
         w.write_event(OwnedEvent::EndParagraph);
         let bytes = w.finish();
         let s = String::from_utf8(bytes).unwrap();

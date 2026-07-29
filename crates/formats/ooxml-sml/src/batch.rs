@@ -20,9 +20,9 @@
 //! let workbook = parser.finish()?;
 //! ```
 
-use std::io::Cursor;
 use crate::Result;
 use crate::workbook::Workbook;
+use std::io::Cursor;
 
 /// Chunk-driven XLSX parser.
 #[derive(Default)]

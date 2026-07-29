@@ -108,10 +108,7 @@ fn pandoc_oracle() {
             );
         }
         Ok(out) => {
-            eprintln!(
-                "pandoc failed: {}",
-                String::from_utf8_lossy(&out.stderr)
-            );
+            eprintln!("pandoc failed: {}", String::from_utf8_lossy(&out.stderr));
         }
         Err(e) => {
             eprintln!("pandoc not available: {e}");

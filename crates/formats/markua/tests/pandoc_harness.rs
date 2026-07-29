@@ -13,14 +13,17 @@ use markua::parse;
 fn parse_sample_no_panic() {
     let sample = include_str!("../../../../fixtures/markua/oracle/input.markua");
     let (doc, _diags) = parse(sample);
-    assert!(!doc.blocks.is_empty(), "expected at least one block from sample input");
+    assert!(
+        !doc.blocks.is_empty(),
+        "expected at least one block from sample input"
+    );
 }
 
 /// Parse each fixture input without panicking.
 #[test]
 fn parse_all_fixtures_no_panic() {
-    let fixtures_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../fixtures/markua");
+    let fixtures_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/markua");
     if !fixtures_dir.is_dir() {
         eprintln!("SKIP: fixtures/markua/ not found");
         return;

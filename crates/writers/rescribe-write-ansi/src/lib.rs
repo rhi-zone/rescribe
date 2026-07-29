@@ -36,7 +36,10 @@ struct EmitContext {
 
 impl EmitContext {
     fn new() -> Self {
-        Self { output: Vec::new(), warnings: Vec::new() }
+        Self {
+            output: Vec::new(),
+            warnings: Vec::new(),
+        }
     }
 
     fn push(&mut self, s: &str) {
@@ -44,7 +47,8 @@ impl EmitContext {
     }
 
     fn warn(&mut self, kind: WarningKind, msg: impl Into<String>) {
-        self.warnings.push(FidelityWarning::new(Severity::Minor, kind, msg.into()));
+        self.warnings
+            .push(FidelityWarning::new(Severity::Minor, kind, msg.into()));
     }
 }
 
@@ -230,7 +234,11 @@ fn emit_block(n: &Node, ctx: &mut EmitContext) {
 }
 
 fn emit_list_item(n: &Node, ordered: bool, index: usize, ctx: &mut EmitContext) {
-    let bullet = if ordered { format!("{}. ", index) } else { "• ".to_string() };
+    let bullet = if ordered {
+        format!("{}. ", index)
+    } else {
+        "• ".to_string()
+    };
     ctx.push(&bullet);
     for child in &n.children {
         // If child is a paragraph, emit its inlines without the trailing newlines.
@@ -338,15 +346,26 @@ fn emit_inline(n: &Node, ctx: &mut EmitContext) {
             let dim = n.props.get_bool("style:dim").unwrap_or(false);
             let fg_color = n.props.get_str("style:color");
 
-            let any_style = bold || italic || underline || strikethrough || dim || fg_color.is_some();
+            let any_style =
+                bold || italic || underline || strikethrough || dim || fg_color.is_some();
 
             if any_style {
                 let mut codes: Vec<&str> = Vec::new();
-                if bold { codes.push("1"); }
-                if dim { codes.push("2"); }
-                if italic { codes.push("3"); }
-                if underline { codes.push("4"); }
-                if strikethrough { codes.push("9"); }
+                if bold {
+                    codes.push("1");
+                }
+                if dim {
+                    codes.push("2");
+                }
+                if italic {
+                    codes.push("3");
+                }
+                if underline {
+                    codes.push("4");
+                }
+                if strikethrough {
+                    codes.push("9");
+                }
                 let sgr = format!("\x1b[{}m", codes.join(";"));
                 ctx.push(&sgr);
             }

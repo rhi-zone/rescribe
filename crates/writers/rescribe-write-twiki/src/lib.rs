@@ -23,7 +23,10 @@ pub fn emit_with_options(
         .filter_map(node_to_block)
         .collect();
 
-    let twiki_doc = TwikiDoc { blocks, span: Span::NONE };
+    let twiki_doc = TwikiDoc {
+        blocks,
+        span: Span::NONE,
+    };
     let output = twiki::build(&twiki_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
@@ -55,7 +58,10 @@ fn node_to_block(node: &Node) -> Option<Block> {
                 .get_str(prop::CONTENT)
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            Some(Block::CodeBlock { content, span: Span::NONE })
+            Some(Block::CodeBlock {
+                content,
+                span: Span::NONE,
+            })
         }
 
         node::LIST => {
@@ -71,10 +77,18 @@ fn node_to_block(node: &Node) -> Option<Block> {
                         .find(|c| c.kind.as_str() == node::PARAGRAPH)
                         .map(|para| node_children_to_inlines(&para.children))
                         .unwrap_or_default();
-                    ListItem { inlines, children: Vec::new(), span: Span::NONE }
+                    ListItem {
+                        inlines,
+                        children: Vec::new(),
+                        span: Span::NONE,
+                    }
                 })
                 .collect();
-            Some(Block::List { ordered, items, span: Span::NONE })
+            Some(Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            })
         }
 
         node::TABLE => {
@@ -89,13 +103,23 @@ fn node_to_block(node: &Node) -> Option<Block> {
                         .map(|cell| {
                             let is_header = cell.kind.as_str() == node::TABLE_HEADER;
                             let inlines = node_children_to_inlines(&cell.children);
-                            TableCell { inlines, is_header, span: Span::NONE }
+                            TableCell {
+                                inlines,
+                                is_header,
+                                span: Span::NONE,
+                            }
                         })
                         .collect();
-                    TableRow { cells, span: Span::NONE }
+                    TableRow {
+                        cells,
+                        span: Span::NONE,
+                    }
                 })
                 .collect();
-            Some(Block::Table { rows, span: Span::NONE })
+            Some(Block::Table {
+                rows,
+                span: Span::NONE,
+            })
         }
 
         node::HORIZONTAL_RULE => Some(Block::HorizontalRule { span: Span::NONE }),
@@ -172,7 +196,11 @@ fn node_to_inline(node: &Node) -> Option<Inline> {
                 .and_then(|c| c.props.get_str(prop::CONTENT))
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| url.clone());
-            Some(Inline::Link { url, label, span: Span::NONE })
+            Some(Inline::Link {
+                url,
+                label,
+                span: Span::NONE,
+            })
         }
 
         node::LINE_BREAK => Some(Inline::LineBreak { span: Span::NONE }),

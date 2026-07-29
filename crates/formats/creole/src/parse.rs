@@ -139,7 +139,10 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Block::CodeBlock { content, span: Span::NONE }
+        Block::CodeBlock {
+            content,
+            span: Span::NONE,
+        }
     }
 
     fn parse_table(&mut self) -> Block {
@@ -156,7 +159,10 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
 
-        Block::Table { rows, span: Span::NONE }
+        Block::Table {
+            rows,
+            span: Span::NONE,
+        }
     }
 
     fn parse_table_row(&self, line: &str) -> TableRow {
@@ -186,7 +192,10 @@ impl<'a> Parser<'a> {
             });
         }
 
-        TableRow { cells, span: Span::NONE }
+        TableRow {
+            cells,
+            span: Span::NONE,
+        }
     }
 
     fn parse_definition_list(&mut self) -> Block {
@@ -202,7 +211,11 @@ impl<'a> Parser<'a> {
             }
 
             // Parse the term
-            let term_text = if trimmed == ";" { "" } else { trimmed[2..].trim() };
+            let term_text = if trimmed == ";" {
+                ""
+            } else {
+                trimmed[2..].trim()
+            };
             let term = Self::parse_inline(term_text);
             self.pos += 1;
 
@@ -226,7 +239,10 @@ impl<'a> Parser<'a> {
             items.push(DefinitionItem { term, desc });
         }
 
-        Block::DefinitionList { items, span: Span::NONE }
+        Block::DefinitionList {
+            items,
+            span: Span::NONE,
+        }
     }
 
     fn parse_blockquote(&mut self) -> Block {
@@ -247,7 +263,10 @@ impl<'a> Parser<'a> {
                 // Empty blockquote line — flush current paragraph if any
                 if !text.is_empty() {
                     let inlines = Self::parse_inline(&text);
-                    children.push(Block::Paragraph { inlines, span: Span::NONE });
+                    children.push(Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    });
                     text.clear();
                 }
                 self.pos += 1;
@@ -258,10 +277,16 @@ impl<'a> Parser<'a> {
 
         if !text.is_empty() {
             let inlines = Self::parse_inline(&text);
-            children.push(Block::Paragraph { inlines, span: Span::NONE });
+            children.push(Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            });
         }
 
-        Block::Blockquote { children, span: Span::NONE }
+        Block::Blockquote {
+            children,
+            span: Span::NONE,
+        }
     }
 
     fn parse_list(&mut self) -> Block {
@@ -270,7 +295,11 @@ impl<'a> Parser<'a> {
         let ordered = first_char == '#';
 
         let (items, _) = self.parse_list_at_level(1, ordered);
-        Block::List { ordered, items, span: Span::NONE }
+        Block::List {
+            ordered,
+            items,
+            span: Span::NONE,
+        }
     }
 
     fn parse_list_at_level(&mut self, level: usize, ordered: bool) -> (Vec<Vec<Block>>, usize) {
@@ -416,10 +445,7 @@ impl<'a> Parser<'a> {
             }
 
             // Inline nowiki {{{...}}}
-            if i + 2 < chars.len()
-                && chars[i] == '{'
-                && chars[i + 1] == '{'
-                && chars[i + 2] == '{'
+            if i + 2 < chars.len() && chars[i] == '{' && chars[i + 1] == '{' && chars[i + 2] == '{'
             {
                 if !current.is_empty() {
                     nodes.push(Inline::Text(current.clone(), Span::NONE));

@@ -72,7 +72,10 @@ pub struct BatchSink<F: FnMut(TokenEvent)> {
 
 impl<F: FnMut(TokenEvent)> BatchSink<F> {
     pub fn new(callback: F) -> Self {
-        BatchSink { buf: Vec::new(), callback }
+        BatchSink {
+            buf: Vec::new(),
+            callback,
+        }
     }
 
     /// Feed a chunk of input bytes.
@@ -117,7 +120,10 @@ pub struct StreamingParser<H: Handler> {
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
     pub fn new(handler: H) -> Self {
-        StreamingParser { buf: Vec::new(), handler }
+        StreamingParser {
+            buf: Vec::new(),
+            handler,
+        }
     }
 
     /// Feed a chunk of bytes.
@@ -163,6 +169,10 @@ mod tests {
         let mut sink = BatchSink::new(|ev| events.push(ev));
         sink.feed(b"{\\rtf1 Hello}");
         sink.finish();
-        assert!(events.iter().any(|e| matches!(e, TokenEvent::GroupStart { .. })));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, TokenEvent::GroupStart { .. }))
+        );
     }
 }

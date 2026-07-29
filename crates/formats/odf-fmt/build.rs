@@ -5,7 +5,10 @@ use std::path::Path;
 fn main() {
     let spec_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../spec/odf");
     let names_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../spec/odf-names.yaml");
-    let features_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../spec/odf-features.yaml");
+    let features_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../spec/odf-features.yaml"
+    );
 
     let schema_12 = format!("{}/odf-1.2.rnc", spec_dir);
     let schema_13 = format!("{}/odf-1.3.rnc", spec_dir);
@@ -39,7 +42,10 @@ fn main() {
         return;
     };
 
-    eprintln!("Regenerating src/generated.rs from ODF {} schema...", version);
+    eprintln!(
+        "Regenerating src/generated.rs from ODF {} schema...",
+        version
+    );
 
     let schema_input = fs::read_to_string(schema_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", schema_path, e));
@@ -82,7 +88,10 @@ fn main() {
         let dest = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/generated_parsers.rs");
         let code = generate_parsers(&schema, &config);
         fs::write(&dest, code).expect("failed to write generated parsers");
-        eprintln!("Generated {} bytes to src/generated_parsers.rs", dest.metadata().map(|m| m.len()).unwrap_or(0));
+        eprintln!(
+            "Generated {} bytes to src/generated_parsers.rs",
+            dest.metadata().map(|m| m.len()).unwrap_or(0)
+        );
     }
 
     // Enable with ODF_GENERATE_SERIALIZERS=1
@@ -91,7 +100,10 @@ fn main() {
         let dest = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/generated_serializers.rs");
         let code = generate_serializers(&schema, &config);
         fs::write(&dest, code).expect("failed to write generated serializers");
-        eprintln!("Generated {} bytes to src/generated_serializers.rs", dest.metadata().map(|m| m.len()).unwrap_or(0));
+        eprintln!(
+            "Generated {} bytes to src/generated_serializers.rs",
+            dest.metadata().map(|m| m.len()).unwrap_or(0)
+        );
     }
 }
 

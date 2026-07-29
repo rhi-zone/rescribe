@@ -111,9 +111,7 @@ mod tests {
     fn test_parse_warning() {
         let (doc, _) = parse("W> This is a warning.\n");
         let block = &doc.blocks[0];
-        assert!(
-            matches!(block, Block::SpecialBlock { block_type, .. } if block_type == "warning")
-        );
+        assert!(matches!(block, Block::SpecialBlock { block_type, .. } if block_type == "warning"));
     }
 
     #[test]
@@ -222,7 +220,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|i| matches!(i, Inline::FootnoteRef { .. })));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::FootnoteRef { .. }))
+        );
     }
 
     #[test]
@@ -231,7 +233,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|i| matches!(i, Inline::IndexTerm { term, .. } if term == "Markua")));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::IndexTerm { term, .. } if term == "Markua"))
+        );
     }
 
     #[test]
@@ -240,7 +246,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|i| matches!(i, Inline::MathInline { .. })));
+        assert!(
+            inlines
+                .iter()
+                .any(|i| matches!(i, Inline::MathInline { .. }))
+        );
     }
 
     #[test]
@@ -259,7 +269,11 @@ mod tests {
     fn test_parse_special_block_with_children() {
         let (doc, _) = parse("W> - item 1\nW> - item 2\n");
         match &doc.blocks[0] {
-            Block::SpecialBlock { block_type, children, .. } => {
+            Block::SpecialBlock {
+                block_type,
+                children,
+                ..
+            } => {
                 assert_eq!(block_type, "warning");
                 assert!(!children.is_empty());
             }

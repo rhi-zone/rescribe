@@ -27,11 +27,19 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Warning, message: message.into(), span }
+        Self {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
     }
 
     pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Error, message: message.into(), span }
+        Self {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -78,6 +86,9 @@ pub struct Cell {
 
 impl Cell {
     pub fn strip_spans(self) -> Self {
-        Cell { value: self.value, span: Span::NONE }
+        Cell {
+            value: self.value,
+            span: Span::NONE,
+        }
     }
 }

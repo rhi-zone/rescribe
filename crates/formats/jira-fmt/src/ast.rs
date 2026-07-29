@@ -27,11 +27,19 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Warning, message: message.into(), span }
+        Self {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
     }
 
     pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Error, message: message.into(), span }
+        Self {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -56,15 +64,45 @@ impl JiraDoc {
 /// Block-level element.
 #[derive(Debug, Clone)]
 pub enum Block {
-    Paragraph { inlines: Vec<Inline>, span: Span },
-    Heading { level: u8, inlines: Vec<Inline>, span: Span },
-    CodeBlock { content: String, language: Option<String>, span: Span },
-    Noformat { content: String, span: Span },
-    Blockquote { children: Vec<Block>, span: Span },
-    Panel { title: Option<String>, children: Vec<Block>, span: Span },
-    List { ordered: bool, items: Vec<ListItem>, span: Span },
-    Table { rows: Vec<TableRow>, span: Span },
-    HorizontalRule { span: Span },
+    Paragraph {
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    CodeBlock {
+        content: String,
+        language: Option<String>,
+        span: Span,
+    },
+    Noformat {
+        content: String,
+        span: Span,
+    },
+    Blockquote {
+        children: Vec<Block>,
+        span: Span,
+    },
+    Panel {
+        title: Option<String>,
+        children: Vec<Block>,
+        span: Span,
+    },
+    List {
+        ordered: bool,
+        items: Vec<ListItem>,
+        span: Span,
+    },
+    Table {
+        rows: Vec<TableRow>,
+        span: Span,
+    },
+    HorizontalRule {
+        span: Span,
+    },
 }
 
 impl Block {
@@ -79,15 +117,24 @@ impl Block {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { content, language, .. } => {
-                Block::CodeBlock { content, language, span: Span::NONE }
-            }
-            Block::Noformat { content, .. } => Block::Noformat { content, span: Span::NONE },
+            Block::CodeBlock {
+                content, language, ..
+            } => Block::CodeBlock {
+                content,
+                language,
+                span: Span::NONE,
+            },
+            Block::Noformat { content, .. } => Block::Noformat {
+                content,
+                span: Span::NONE,
+            },
             Block::Blockquote { children, .. } => Block::Blockquote {
                 children: children.into_iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::Panel { title, children, .. } => Block::Panel {
+            Block::Panel {
+                title, children, ..
+            } => Block::Panel {
                 title,
                 children: children.into_iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
@@ -115,7 +162,11 @@ pub struct ListItem {
 impl ListItem {
     pub fn strip_spans(self) -> Self {
         ListItem {
-            children: self.children.into_iter().map(ListItemContent::strip_spans).collect(),
+            children: self
+                .children
+                .into_iter()
+                .map(ListItemContent::strip_spans)
+                .collect(),
         }
     }
 }
@@ -133,9 +184,7 @@ impl ListItemContent {
             ListItemContent::Inline(inlines) => {
                 ListItemContent::Inline(inlines.into_iter().map(Inline::strip_spans).collect())
             }
-            ListItemContent::NestedList(block) => {
-                ListItemContent::NestedList(block.strip_spans())
-            }
+            ListItemContent::NestedList(block) => ListItemContent::NestedList(block.strip_spans()),
         }
     }
 }
@@ -183,11 +232,23 @@ pub enum Inline {
     Underline(Vec<Inline>, Span),
     Strikethrough(Vec<Inline>, Span),
     Code(String, Span),
-    Link { url: String, children: Vec<Inline>, span: Span },
-    Image { url: String, alt: Option<String>, span: Span },
+    Link {
+        url: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    Image {
+        url: String,
+        alt: Option<String>,
+        span: Span,
+    },
     Superscript(Vec<Inline>, Span),
     Subscript(Vec<Inline>, Span),
-    ColorSpan { color: String, children: Vec<Inline>, span: Span },
+    ColorSpan {
+        color: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
     Mention(String, Span),
 }
 
@@ -213,14 +274,20 @@ impl Inline {
                 children: children.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::Image { url, alt, .. } => Inline::Image { url, alt, span: Span::NONE },
+            Inline::Image { url, alt, .. } => Inline::Image {
+                url,
+                alt,
+                span: Span::NONE,
+            },
             Inline::Superscript(c, _) => {
                 Inline::Superscript(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
             Inline::Subscript(c, _) => {
                 Inline::Subscript(c.into_iter().map(Inline::strip_spans).collect(), Span::NONE)
             }
-            Inline::ColorSpan { color, children, .. } => Inline::ColorSpan {
+            Inline::ColorSpan {
+                color, children, ..
+            } => Inline::ColorSpan {
                 color,
                 children: children.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,

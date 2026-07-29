@@ -24,7 +24,11 @@ pub fn parse_with_options(
         let mut table_row = Node::new(node::TABLE_ROW);
 
         for cell in &row.cells {
-            let cell_kind = if is_first_row { node::TABLE_HEADER } else { node::TABLE_CELL };
+            let cell_kind = if is_first_row {
+                node::TABLE_HEADER
+            } else {
+                node::TABLE_CELL
+            };
             let cell_node = Node::new(cell_kind)
                 .child(Node::new(node::TEXT).prop(prop::CONTENT, cell.value.trim()));
             table_row = table_row.child(cell_node);

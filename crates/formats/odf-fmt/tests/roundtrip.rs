@@ -72,7 +72,9 @@ fn roundtrip_minimal() {
     };
     assert_eq!(p.style_name, Some("Text_20_Body".to_string()));
     assert_eq!(p.content.len(), 1);
-    let Inline::Text(t) = &p.content[0] else { panic!("expected Text") };
+    let Inline::Text(t) = &p.content[0] else {
+        panic!("expected Text")
+    };
     assert_eq!(t, "Hello, world!");
 
     // Second block: heading
@@ -80,7 +82,9 @@ fn roundtrip_minimal() {
         panic!("expected Heading, got {:?}", blocks[1]);
     };
     assert_eq!(h.outline_level, Some(1));
-    let Inline::Text(ht) = &h.content[0] else { panic!("expected Text") };
+    let Inline::Text(ht) = &h.content[0] else {
+        panic!("expected Text")
+    };
     assert_eq!(ht, "Introduction");
 
     // Third block: paragraph with spans
@@ -88,7 +92,9 @@ fn roundtrip_minimal() {
         panic!("expected Paragraph");
     };
     assert_eq!(p3.content.len(), 5);
-    let Inline::Span(span) = &p3.content[1] else { panic!("expected Span") };
+    let Inline::Span(span) = &p3.content[1] else {
+        panic!("expected Span")
+    };
     assert_eq!(span.style_name, Some("Bold".to_string()));
 }
 
@@ -96,28 +102,26 @@ fn roundtrip_minimal() {
 fn roundtrip_list() {
     let doc = OdfDocument {
         mimetype: "application/vnd.oasis.opendocument.text".to_string(),
-        body: OdfBody::Text(vec![
-            TextBlock::List(List {
-                style_name: Some("List_20_1".to_string()),
-                items: vec![
-                    ListItem {
-                        content: vec![TextBlock::Paragraph(Paragraph {
-                            content: vec![Inline::Text("First item".to_string())],
-                            ..Default::default()
-                        })],
+        body: OdfBody::Text(vec![TextBlock::List(List {
+            style_name: Some("List_20_1".to_string()),
+            items: vec![
+                ListItem {
+                    content: vec![TextBlock::Paragraph(Paragraph {
+                        content: vec![Inline::Text("First item".to_string())],
                         ..Default::default()
-                    },
-                    ListItem {
-                        content: vec![TextBlock::Paragraph(Paragraph {
-                            content: vec![Inline::Text("Second item".to_string())],
-                            ..Default::default()
-                        })],
+                    })],
+                    ..Default::default()
+                },
+                ListItem {
+                    content: vec![TextBlock::Paragraph(Paragraph {
+                        content: vec![Inline::Text("Second item".to_string())],
                         ..Default::default()
-                    },
-                ],
-                ..Default::default()
-            }),
-        ]),
+                    })],
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        })]),
         ..Default::default()
     };
 
@@ -125,12 +129,20 @@ fn roundtrip_list() {
     let result = parse(&bytes).unwrap();
     let doc2 = result.value;
 
-    let OdfBody::Text(blocks) = &doc2.body else { panic!("expected Text body") };
+    let OdfBody::Text(blocks) = &doc2.body else {
+        panic!("expected Text body")
+    };
     assert_eq!(blocks.len(), 1);
-    let TextBlock::List(l) = &blocks[0] else { panic!("expected List") };
+    let TextBlock::List(l) = &blocks[0] else {
+        panic!("expected List")
+    };
     assert_eq!(l.items.len(), 2);
-    let TextBlock::Paragraph(p) = &l.items[0].content[0] else { panic!("expected Paragraph") };
-    let Inline::Text(t) = &p.content[0] else { panic!("expected Text") };
+    let TextBlock::Paragraph(p) = &l.items[0].content[0] else {
+        panic!("expected Paragraph")
+    };
+    let Inline::Text(t) = &p.content[0] else {
+        panic!("expected Text")
+    };
     assert_eq!(t, "First item");
 }
 
@@ -138,33 +150,29 @@ fn roundtrip_list() {
 fn roundtrip_table() {
     let doc = OdfDocument {
         mimetype: "application/vnd.oasis.opendocument.text".to_string(),
-        body: OdfBody::Text(vec![
-            TextBlock::Table(Table {
-                name: Some("Table1".to_string()),
-                rows: vec![
-                    TableRow {
-                        cells: vec![
-                            TableCell {
-                                content: vec![TextBlock::Paragraph(Paragraph {
-                                    content: vec![Inline::Text("Cell A1".to_string())],
-                                    ..Default::default()
-                                })],
-                                ..Default::default()
-                            },
-                            TableCell {
-                                content: vec![TextBlock::Paragraph(Paragraph {
-                                    content: vec![Inline::Text("Cell B1".to_string())],
-                                    ..Default::default()
-                                })],
-                                ..Default::default()
-                            },
-                        ],
+        body: OdfBody::Text(vec![TextBlock::Table(Table {
+            name: Some("Table1".to_string()),
+            rows: vec![TableRow {
+                cells: vec![
+                    TableCell {
+                        content: vec![TextBlock::Paragraph(Paragraph {
+                            content: vec![Inline::Text("Cell A1".to_string())],
+                            ..Default::default()
+                        })],
+                        ..Default::default()
+                    },
+                    TableCell {
+                        content: vec![TextBlock::Paragraph(Paragraph {
+                            content: vec![Inline::Text("Cell B1".to_string())],
+                            ..Default::default()
+                        })],
                         ..Default::default()
                     },
                 ],
                 ..Default::default()
-            }),
-        ]),
+            }],
+            ..Default::default()
+        })]),
         ..Default::default()
     };
 
@@ -172,8 +180,12 @@ fn roundtrip_table() {
     let result = parse(&bytes).unwrap();
     let doc2 = result.value;
 
-    let OdfBody::Text(blocks) = &doc2.body else { panic!("expected Text body") };
-    let TextBlock::Table(t) = &blocks[0] else { panic!("expected Table") };
+    let OdfBody::Text(blocks) = &doc2.body else {
+        panic!("expected Text body")
+    };
+    let TextBlock::Table(t) = &blocks[0] else {
+        panic!("expected Table")
+    };
     assert_eq!(t.rows.len(), 1);
     assert_eq!(t.rows[0].cells.len(), 2);
 }
@@ -188,8 +200,12 @@ fn events_basic() {
     // Should see StartText, at least some paragraph/heading events, EndText
     let has_start_text = events.iter().any(|e| matches!(e, OdfEvent::StartText));
     let has_end_text = events.iter().any(|e| matches!(e, OdfEvent::EndText));
-    let has_paragraph = events.iter().any(|e| matches!(e, OdfEvent::StartParagraph { .. }));
-    let has_heading = events.iter().any(|e| matches!(e, OdfEvent::StartHeading { .. }));
+    let has_paragraph = events
+        .iter()
+        .any(|e| matches!(e, OdfEvent::StartParagraph { .. }));
+    let has_heading = events
+        .iter()
+        .any(|e| matches!(e, OdfEvent::StartHeading { .. }));
 
     assert!(has_start_text, "missing StartText event");
     assert!(has_end_text, "missing EndText event");
@@ -287,7 +303,10 @@ fn roundtrip_spreadsheet_basic() {
     let result = parse(&bytes).expect("parse failed");
     let doc2 = result.value;
 
-    assert_eq!(doc2.mimetype, "application/vnd.oasis.opendocument.spreadsheet");
+    assert_eq!(
+        doc2.mimetype,
+        "application/vnd.oasis.opendocument.spreadsheet"
+    );
     assert_eq!(doc2.meta.title, Some("Test Spreadsheet".to_string()));
 
     let OdfBody::Spreadsheet(body) = &doc2.body else {
@@ -301,7 +320,10 @@ fn roundtrip_spreadsheet_basic() {
 
     // Header row
     assert_eq!(sheet.rows[0].cells.len(), 2);
-    assert_eq!(sheet.rows[0].cells[0].value_type, Some("string".to_string()));
+    assert_eq!(
+        sheet.rows[0].cells[0].value_type,
+        Some("string".to_string())
+    );
     assert_eq!(sheet.rows[0].cells[0].value, Some("Name".to_string()));
 
     // Data row
@@ -369,40 +391,34 @@ fn roundtrip_presentation_basic() {
     let doc = OdfDocument {
         mimetype: "application/vnd.oasis.opendocument.presentation".to_string(),
         body: OdfBody::Presentation(PresentationBody {
-            pages: vec![
-                DrawPage {
-                    name: Some("page1".to_string()),
-                    master_page_name: Some("Default".to_string()),
-                    shapes: vec![
-                        DrawShape {
-                            presentation_class: Some("title".to_string()),
-                            x: Some("5.0cm".to_string()),
-                            y: Some("4.0cm".to_string()),
-                            width: Some("20.0cm".to_string()),
-                            height: Some("3.0cm".to_string()),
-                            content: DrawShapeContent::TextBox(vec![
-                                TextBlock::Paragraph(Paragraph {
-                                    content: vec![Inline::Text("Hello Presentation".to_string())],
-                                    ..Default::default()
-                                }),
-                            ]),
+            pages: vec![DrawPage {
+                name: Some("page1".to_string()),
+                master_page_name: Some("Default".to_string()),
+                shapes: vec![
+                    DrawShape {
+                        presentation_class: Some("title".to_string()),
+                        x: Some("5.0cm".to_string()),
+                        y: Some("4.0cm".to_string()),
+                        width: Some("20.0cm".to_string()),
+                        height: Some("3.0cm".to_string()),
+                        content: DrawShapeContent::TextBox(vec![TextBlock::Paragraph(Paragraph {
+                            content: vec![Inline::Text("Hello Presentation".to_string())],
                             ..Default::default()
-                        },
-                        DrawShape {
-                            presentation_class: Some("subtitle".to_string()),
-                            content: DrawShapeContent::TextBox(vec![
-                                TextBlock::Paragraph(Paragraph {
-                                    content: vec![Inline::Text("Subtitle text".to_string())],
-                                    ..Default::default()
-                                }),
-                            ]),
+                        })]),
+                        ..Default::default()
+                    },
+                    DrawShape {
+                        presentation_class: Some("subtitle".to_string()),
+                        content: DrawShapeContent::TextBox(vec![TextBlock::Paragraph(Paragraph {
+                            content: vec![Inline::Text("Subtitle text".to_string())],
                             ..Default::default()
-                        },
-                    ],
-                    notes: None,
-                    ..Default::default()
-                },
-            ],
+                        })]),
+                        ..Default::default()
+                    },
+                ],
+                notes: None,
+                ..Default::default()
+            }],
         }),
         meta: OdfMeta {
             title: Some("My Presentation".to_string()),
@@ -417,7 +433,10 @@ fn roundtrip_presentation_basic() {
     let result = parse(&bytes).expect("parse failed");
     let doc2 = result.value;
 
-    assert_eq!(doc2.mimetype, "application/vnd.oasis.opendocument.presentation");
+    assert_eq!(
+        doc2.mimetype,
+        "application/vnd.oasis.opendocument.presentation"
+    );
     assert_eq!(doc2.meta.title, Some("My Presentation".to_string()));
 
     let OdfBody::Presentation(body) = &doc2.body else {
@@ -438,8 +457,12 @@ fn roundtrip_presentation_basic() {
         panic!("expected TextBox");
     };
     assert_eq!(blocks.len(), 1);
-    let TextBlock::Paragraph(p) = &blocks[0] else { panic!("expected Paragraph") };
-    let Inline::Text(t) = &p.content[0] else { panic!("expected Text") };
+    let TextBlock::Paragraph(p) = &blocks[0] else {
+        panic!("expected Paragraph")
+    };
+    let Inline::Text(t) = &p.content[0] else {
+        panic!("expected Text")
+    };
     assert_eq!(t, "Hello Presentation");
 }
 
@@ -452,23 +475,19 @@ fn roundtrip_presentation_notes() {
                 name: Some("slide1".to_string()),
                 shapes: vec![DrawShape {
                     presentation_class: Some("body".to_string()),
-                    content: DrawShapeContent::TextBox(vec![
-                        TextBlock::Paragraph(Paragraph {
-                            content: vec![Inline::Text("Slide body".to_string())],
-                            ..Default::default()
-                        }),
-                    ]),
+                    content: DrawShapeContent::TextBox(vec![TextBlock::Paragraph(Paragraph {
+                        content: vec![Inline::Text("Slide body".to_string())],
+                        ..Default::default()
+                    })]),
                     ..Default::default()
                 }],
                 notes: Some(Box::new(NotesPage {
                     shapes: vec![DrawShape {
                         presentation_class: Some("notes".to_string()),
-                        content: DrawShapeContent::TextBox(vec![
-                            TextBlock::Paragraph(Paragraph {
-                                content: vec![Inline::Text("Speaker notes here".to_string())],
-                                ..Default::default()
-                            }),
-                        ]),
+                        content: DrawShapeContent::TextBox(vec![TextBlock::Paragraph(Paragraph {
+                            content: vec![Inline::Text("Speaker notes here".to_string())],
+                            ..Default::default()
+                        })]),
                         ..Default::default()
                     }],
                     ..Default::default()
@@ -492,8 +511,12 @@ fn roundtrip_presentation_notes() {
     let DrawShapeContent::TextBox(blocks) = &notes.shapes[0].content else {
         panic!("expected TextBox in notes");
     };
-    let TextBlock::Paragraph(p) = &blocks[0] else { panic!("expected Paragraph") };
-    let Inline::Text(t) = &p.content[0] else { panic!("expected Text") };
+    let TextBlock::Paragraph(p) = &blocks[0] else {
+        panic!("expected Paragraph")
+    };
+    let Inline::Text(t) = &p.content[0] else {
+        panic!("expected Text")
+    };
     assert_eq!(t, "Speaker notes here");
 }
 
@@ -524,14 +547,29 @@ fn events_spreadsheet() {
     let bytes = emit(&doc).unwrap();
     let evts: Vec<_> = odf_fmt::events(&bytes).collect();
 
-    assert!(evts.iter().any(|e| matches!(e, OdfEvent::StartSpreadsheet)), "missing StartSpreadsheet");
-    assert!(evts.iter().any(|e| matches!(e, OdfEvent::EndSpreadsheet)), "missing EndSpreadsheet");
     assert!(
-        evts.iter().any(|e| matches!(e, OdfEvent::StartSheet { name, .. } if name.as_deref() == Some("Data"))),
+        evts.iter().any(|e| matches!(e, OdfEvent::StartSpreadsheet)),
+        "missing StartSpreadsheet"
+    );
+    assert!(
+        evts.iter().any(|e| matches!(e, OdfEvent::EndSpreadsheet)),
+        "missing EndSpreadsheet"
+    );
+    assert!(
+        evts.iter().any(
+            |e| matches!(e, OdfEvent::StartSheet { name, .. } if name.as_deref() == Some("Data"))
+        ),
         "missing StartSheet with name=Data"
     );
-    assert!(evts.iter().any(|e| matches!(e, OdfEvent::EndSheet)), "missing EndSheet");
-    assert!(evts.iter().any(|e| matches!(e, OdfEvent::StartSheetRow { .. })), "missing StartSheetRow");
+    assert!(
+        evts.iter().any(|e| matches!(e, OdfEvent::EndSheet)),
+        "missing EndSheet"
+    );
+    assert!(
+        evts.iter()
+            .any(|e| matches!(e, OdfEvent::StartSheetRow { .. })),
+        "missing StartSheetRow"
+    );
     assert!(
         evts.iter().any(|e| matches!(e, OdfEvent::StartSheetCell { value_type, .. } if value_type.as_deref() == Some("float"))),
         "missing StartSheetCell with value_type=float"
@@ -549,12 +587,10 @@ fn events_presentation() {
                 name: Some("slide1".to_string()),
                 shapes: vec![DrawShape {
                     presentation_class: Some("title".to_string()),
-                    content: DrawShapeContent::TextBox(vec![
-                        TextBlock::Paragraph(Paragraph {
-                            content: vec![Inline::Text("My Title".to_string())],
-                            ..Default::default()
-                        }),
-                    ]),
+                    content: DrawShapeContent::TextBox(vec![TextBlock::Paragraph(Paragraph {
+                        content: vec![Inline::Text("My Title".to_string())],
+                        ..Default::default()
+                    })]),
                     ..Default::default()
                 }],
                 ..Default::default()
@@ -566,21 +602,41 @@ fn events_presentation() {
     let bytes = emit(&doc).unwrap();
     let evts: Vec<_> = odf_fmt::events(&bytes).collect();
 
-    assert!(evts.iter().any(|e| matches!(e, OdfEvent::StartPresentation)), "missing StartPresentation");
-    assert!(evts.iter().any(|e| matches!(e, OdfEvent::EndPresentation)), "missing EndPresentation");
     assert!(
-        evts.iter().any(|e| matches!(e, OdfEvent::StartSlide { name, .. } if name.as_deref() == Some("slide1"))),
+        evts.iter()
+            .any(|e| matches!(e, OdfEvent::StartPresentation)),
+        "missing StartPresentation"
+    );
+    assert!(
+        evts.iter().any(|e| matches!(e, OdfEvent::EndPresentation)),
+        "missing EndPresentation"
+    );
+    assert!(
+        evts.iter().any(
+            |e| matches!(e, OdfEvent::StartSlide { name, .. } if name.as_deref() == Some("slide1"))
+        ),
         "missing StartSlide with name=slide1"
     );
-    assert!(evts.iter().any(|e| matches!(e, OdfEvent::EndSlide)), "missing EndSlide");
+    assert!(
+        evts.iter().any(|e| matches!(e, OdfEvent::EndSlide)),
+        "missing EndSlide"
+    );
     assert!(
         evts.iter().any(|e| matches!(e, OdfEvent::StartShape { presentation_class, .. } if presentation_class.as_deref() == Some("title"))),
         "missing StartShape with presentation_class=title"
     );
-    assert!(evts.iter().any(|e| matches!(e, OdfEvent::StartTextBox)), "missing StartTextBox");
-    assert!(evts.iter().any(|e| matches!(e, OdfEvent::StartParagraph { .. })), "missing StartParagraph");
     assert!(
-        evts.iter().any(|e| matches!(e, OdfEvent::Text(t) if t.contains("My Title"))),
+        evts.iter().any(|e| matches!(e, OdfEvent::StartTextBox)),
+        "missing StartTextBox"
+    );
+    assert!(
+        evts.iter()
+            .any(|e| matches!(e, OdfEvent::StartParagraph { .. })),
+        "missing StartParagraph"
+    );
+    assert!(
+        evts.iter()
+            .any(|e| matches!(e, OdfEvent::Text(t) if t.contains("My Title"))),
         "missing Text 'My Title'"
     );
 }

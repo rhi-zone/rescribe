@@ -10,11 +10,11 @@
 //! The harness reports but does NOT fail on low text coverage -- the goal is to
 //! catalogue gaps, not gate CI. Tests DO fail if the parser panics.
 
+use mediawiki_fmt::ast::{Block, Inline, MediawikiDoc};
+use mediawiki_fmt::parse;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use mediawiki_fmt::ast::{Block, Inline, MediawikiDoc};
-use mediawiki_fmt::parse;
 
 // -- Path discovery -----------------------------------------------------------
 
@@ -28,7 +28,9 @@ fn corpus_dir() -> Option<PathBuf> {
 }
 
 fn find_pandoc() -> Option<PathBuf> {
-    if let Ok(out) = Command::new("sh").args(["-c", "command -v pandoc"]).output()
+    if let Ok(out) = Command::new("sh")
+        .args(["-c", "command -v pandoc"])
+        .output()
         && out.status.success()
     {
         let s = String::from_utf8_lossy(&out.stdout);
@@ -58,7 +60,11 @@ fn pandoc_to_plain(pandoc: &Path, file: &Path) -> Option<String> {
         .arg(file)
         .output()
         .ok()?;
-    if out.status.success() { String::from_utf8(out.stdout).ok() } else { None }
+    if out.status.success() {
+        String::from_utf8(out.stdout).ok()
+    } else {
+        None
+    }
 }
 
 // -- Text extraction ----------------------------------------------------------
@@ -84,7 +90,9 @@ fn words_from_inlines(inlines: &[Inline], out: &mut Vec<String>) {
             | Inline::Subscript(children) => words_from_inlines(children, out),
             Inline::Code(s) => words_from_str(s, out),
             Inline::Link { text, .. } => words_from_str(text, out),
-            Inline::FootnoteRef { content: Some(c), .. } => words_from_str(c, out),
+            Inline::FootnoteRef {
+                content: Some(c), ..
+            } => words_from_str(c, out),
             Inline::MathInline { source } => words_from_str(source, out),
             Inline::Template { content } => words_from_str(content, out),
             Inline::Nowiki { content } => words_from_str(content, out),
@@ -168,7 +176,11 @@ fn missing_words(reference: &[String], ours: &[String]) -> Vec<(String, usize)> 
         .iter()
         .filter_map(|(w, &rc)| {
             let oc = *our_counts.get(*w).unwrap_or(&0);
-            if oc < rc { Some((w.to_string(), rc - oc)) } else { None }
+            if oc < rc {
+                Some((w.to_string(), rc - oc))
+            } else {
+                None
+            }
         })
         .collect();
     missing.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
@@ -181,9 +193,9 @@ struct HarnessFile {
     filename: &'static str,
 }
 
-const CORPUS_FILES: &[HarnessFile] = &[
-    HarnessFile { filename: "mediawiki-reader.wiki" },
-];
+const CORPUS_FILES: &[HarnessFile] = &[HarnessFile {
+    filename: "mediawiki-reader.wiki",
+}];
 
 fn run_harness(files: &[HarnessFile]) {
     let Some(corpus) = corpus_dir() else {
@@ -249,7 +261,13 @@ fn run_harness(files: &[HarnessFile]) {
                         let missing_str: Vec<String> = missing
                             .iter()
                             .take(20)
-                            .map(|(w, n)| if *n > 1 { format!("{w}(x{n})") } else { w.clone() })
+                            .map(|(w, n)| {
+                                if *n > 1 {
+                                    format!("{w}(x{n})")
+                                } else {
+                                    w.clone()
+                                }
+                            })
                             .collect();
                         eprintln!("  missing: {}", missing_str.join(", "));
                     }
@@ -285,5 +303,8 @@ fn pandoc_mediawiki_corpus() {
 fn parse_sample_no_panic() {
     let sample = include_str!("../../../../fixtures/mediawiki/oracle/input.mediawiki");
     let (doc, _diags) = parse(sample);
-    assert!(!doc.blocks.is_empty(), "expected at least one block from sample input");
+    assert!(
+        !doc.blocks.is_empty(),
+        "expected at least one block from sample input"
+    );
 }

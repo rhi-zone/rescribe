@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use zimwiki::{parse, build};
+use zimwiki::{build, parse};
 
 const SMALL: &str = r#"
 ====== Hello World ======

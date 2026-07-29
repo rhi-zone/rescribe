@@ -39,7 +39,9 @@ fn block_to_node(block: &Block) -> Node {
             .prop(prop::LEVEL, *level as i64)
             .children(inlines_to_nodes(inlines)),
 
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -52,7 +54,9 @@ fn block_to_node(block: &Block) -> Node {
             Node::new(node::BLOCKQUOTE).children(block_children)
         }
 
-        Block::Panel { title, children, .. } => {
+        Block::Panel {
+            title, children, ..
+        } => {
             let block_children: Vec<Node> = children.iter().map(block_to_node).collect();
             let mut n = Node::new(node::DIV).prop("jira:type", "panel");
             if let Some(t) = title {
@@ -74,8 +78,9 @@ fn block_to_node(block: &Block) -> Node {
 
         Block::Table { rows, .. } => {
             let mut result_rows = Vec::new();
-            let has_header =
-                rows.first().is_some_and(|r| r.cells.iter().all(|c| c.is_header));
+            let has_header = rows
+                .first()
+                .is_some_and(|r| r.cells.iter().all(|c| c.is_header));
 
             let mut row_iter = rows.iter().peekable();
             if has_header && let Some(header_row) = row_iter.next() {
@@ -83,13 +88,11 @@ fn block_to_node(block: &Block) -> Node {
                     .cells
                     .iter()
                     .map(|cell| {
-                        Node::new(node::TABLE_HEADER)
-                            .children(inlines_to_nodes(&cell.inlines))
+                        Node::new(node::TABLE_HEADER).children(inlines_to_nodes(&cell.inlines))
                     })
                     .collect();
                 result_rows.push(
-                    Node::new(node::TABLE_HEAD)
-                        .child(Node::new(node::TABLE_ROW).children(cells)),
+                    Node::new(node::TABLE_HEAD).child(Node::new(node::TABLE_ROW).children(cells)),
                 );
             }
 
@@ -98,8 +101,11 @@ fn block_to_node(block: &Block) -> Node {
                     .cells
                     .iter()
                     .map(|cell| {
-                        let kind =
-                            if cell.is_header { node::TABLE_HEADER } else { node::TABLE_CELL };
+                        let kind = if cell.is_header {
+                            node::TABLE_HEADER
+                        } else {
+                            node::TABLE_CELL
+                        };
                         Node::new(kind).children(inlines_to_nodes(&cell.inlines))
                     })
                     .collect();
@@ -139,7 +145,9 @@ fn inline_to_node(inline: &Inline) -> Node {
 
         Inline::Bold(children, _) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
 
-        Inline::Italic(children, _) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
+        Inline::Italic(children, _) => {
+            Node::new(node::EMPHASIS).children(inlines_to_nodes(children))
+        }
 
         Inline::Underline(children, _) => {
             Node::new(node::UNDERLINE).children(inlines_to_nodes(children))
@@ -171,7 +179,9 @@ fn inline_to_node(inline: &Inline) -> Node {
             Node::new(node::SUBSCRIPT).children(inlines_to_nodes(children))
         }
 
-        Inline::ColorSpan { color, children, .. } => Node::new(node::SPAN)
+        Inline::ColorSpan {
+            color, children, ..
+        } => Node::new(node::SPAN)
             .prop("style:color", color.clone())
             .children(inlines_to_nodes(children)),
 

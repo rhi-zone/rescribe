@@ -45,12 +45,21 @@ fn document_to_csv_doc(table: &Node) -> CsvDoc {
             let cells: Vec<Cell> = row
                 .children
                 .iter()
-                .map(|n| Cell { value: get_text_content(n), span: Span::NONE })
+                .map(|n| Cell {
+                    value: get_text_content(n),
+                    span: Span::NONE,
+                })
                 .collect();
-            rows.push(Row { cells, span: Span::NONE });
+            rows.push(Row {
+                cells,
+                span: Span::NONE,
+            });
         }
     }
-    CsvDoc { rows, span: Span::NONE }
+    CsvDoc {
+        rows,
+        span: Span::NONE,
+    }
 }
 
 fn get_text_content(node: &Node) -> String {

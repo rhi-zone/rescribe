@@ -16,7 +16,10 @@ mod tests {
     use super::*;
 
     fn rows_as_strings(doc: &TsvDoc) -> Vec<Vec<String>> {
-        doc.rows.iter().map(|r| r.cells.iter().map(|c| c.value.clone()).collect()).collect()
+        doc.rows
+            .iter()
+            .map(|r| r.cells.iter().map(|c| c.value.clone()).collect())
+            .collect()
     }
 
     #[test]
@@ -43,15 +46,27 @@ mod tests {
             rows: vec![
                 Row {
                     cells: vec![
-                        Cell { value: "Name".to_string(), span: Span::NONE },
-                        Cell { value: "Age".to_string(), span: Span::NONE },
+                        Cell {
+                            value: "Name".to_string(),
+                            span: Span::NONE,
+                        },
+                        Cell {
+                            value: "Age".to_string(),
+                            span: Span::NONE,
+                        },
                     ],
                     span: Span::NONE,
                 },
                 Row {
                     cells: vec![
-                        Cell { value: "Alice".to_string(), span: Span::NONE },
-                        Cell { value: "30".to_string(), span: Span::NONE },
+                        Cell {
+                            value: "Alice".to_string(),
+                            span: Span::NONE,
+                        },
+                        Cell {
+                            value: "30".to_string(),
+                            span: Span::NONE,
+                        },
                     ],
                     span: Span::NONE,
                 },

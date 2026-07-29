@@ -10,23 +10,31 @@ pub enum Event<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
     StartBlockquote,
     EndBlockquote,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
     /// Leaf: a preformatted/code block.
-    CodeBlock { content: Cow<'a, str> },
+    CodeBlock {
+        content: Cow<'a, str>,
+    },
     /// Leaf: a horizontal rule (`----`).
     HorizontalRule,
     StartTable,
     EndTable,
     StartTableRow,
     EndTableRow,
-    StartTableCell { is_header: bool },
+    StartTableCell {
+        is_header: bool,
+    },
     EndTableCell,
     StartDefinitionList,
     EndDefinitionList,
@@ -44,10 +52,15 @@ pub enum Event<'a> {
     EndItalic,
     /// Leaf: inline code span.
     InlineCode(Cow<'a, str>),
-    StartLink { url: String },
+    StartLink {
+        url: String,
+    },
     EndLink,
     /// Leaf: inline image.
-    InlineImage { url: String, alt: Option<String> },
+    InlineImage {
+        url: String,
+        alt: Option<String>,
+    },
 }
 
 /// Backwards-compatible alias for batch mode (all text is owned).
@@ -155,7 +168,9 @@ fn collect_block_events(block: &Block, events: &mut Vec<OwnedEvent>) {
             events.push(Event::EndHeading);
         }
         Block::CodeBlock { content, .. } => {
-            events.push(Event::CodeBlock { content: Cow::Owned(content.clone()) });
+            events.push(Event::CodeBlock {
+                content: Cow::Owned(content.clone()),
+            });
         }
         Block::Blockquote { children, .. } => {
             events.push(Event::StartBlockquote);
@@ -180,7 +195,9 @@ fn collect_block_events(block: &Block, events: &mut Vec<OwnedEvent>) {
             for row in rows {
                 events.push(Event::StartTableRow);
                 for cell in &row.cells {
-                    events.push(Event::StartTableCell { is_header: cell.is_header });
+                    events.push(Event::StartTableCell {
+                        is_header: cell.is_header,
+                    });
                     collect_inline_events(&cell.inlines, events);
                     events.push(Event::EndTableCell);
                 }
@@ -234,7 +251,10 @@ fn collect_inline_events(inlines: &[Inline], events: &mut Vec<OwnedEvent>) {
                 events.push(Event::EndLink);
             }
             Inline::Image { url, alt, .. } => {
-                events.push(Event::InlineImage { url: url.clone(), alt: alt.clone() });
+                events.push(Event::InlineImage {
+                    url: url.clone(),
+                    alt: alt.clone(),
+                });
             }
         }
     }
@@ -256,7 +276,10 @@ mod tests {
     #[test]
     fn test_events_heading() {
         let evs: Vec<_> = events("= Hello").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndHeading)));
     }
 
@@ -265,20 +288,34 @@ mod tests {
         let evs: Vec<_> = events("Hello world").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndParagraph)));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
     fn test_events_code_block() {
         let evs: Vec<_> = events("{{{\nfn main() {}\n}}}").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::CodeBlock { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::CodeBlock { .. }))
+        );
     }
 
     #[test]
     fn test_events_list() {
         let evs: Vec<_> = events("* item 1\n* item 2").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartList { ordered: false })));
-        assert_eq!(evs.iter().filter(|e| matches!(e, OwnedEvent::StartListItem)).count(), 2);
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartList { ordered: false }))
+        );
+        assert_eq!(
+            evs.iter()
+                .filter(|e| matches!(e, OwnedEvent::StartListItem))
+                .count(),
+            2
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndList)));
     }
 
@@ -286,7 +323,10 @@ mod tests {
     fn test_events_table() {
         let evs: Vec<_> = events("|= Name |= Age |\n| Alice | 30 |").collect();
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTable)));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartTableCell { is_header: true })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartTableCell { is_header: true }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndTable)));
     }
 
@@ -308,14 +348,21 @@ mod tests {
     #[test]
     fn test_events_link() {
         let evs: Vec<_> = events("[[https://example.com|click here]]").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartLink { url } if url == "https://example.com")));
+        assert!(
+            evs.iter().any(
+                |e| matches!(e, OwnedEvent::StartLink { url } if url == "https://example.com")
+            )
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndLink)));
     }
 
     #[test]
     fn test_events_inline_code() {
         let evs: Vec<_> = events("Some {{{verbatim}}} text").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::InlineCode(s) if s == "verbatim")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::InlineCode(s) if s == "verbatim"))
+        );
     }
 
     #[test]
@@ -328,9 +375,21 @@ mod tests {
     #[test]
     fn test_events_definition_list() {
         let evs: Vec<_> = events("; Term\n: Description").collect();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartDefinitionList)));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartDefinitionTerm)));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartDefinitionDesc)));
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::EndDefinitionList)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartDefinitionList))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartDefinitionTerm))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartDefinitionDesc))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::EndDefinitionList))
+        );
     }
 }

@@ -104,7 +104,9 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n");
         }
 
-        Block::DocTest { expression, result, .. } => {
+        Block::DocTest {
+            expression, result, ..
+        } => {
             ctx.write(">>> ");
             ctx.write(expression);
             ctx.write("\n");
@@ -123,7 +125,12 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n\n");
         }
 
-        Block::Property { key, name, description, .. } => {
+        Block::Property {
+            key,
+            name,
+            description,
+            ..
+        } => {
             ctx.write("@");
             ctx.write(key);
             if let Some(n) = name {

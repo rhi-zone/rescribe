@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use twiki::{parse, build};
+use twiki::{build, parse};
 
 const SMALL: &str = r#"
 ---+ Hello World

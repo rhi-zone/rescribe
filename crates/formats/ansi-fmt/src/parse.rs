@@ -92,8 +92,10 @@ pub fn parse(input: &[u8]) -> (AnsiDoc, Vec<Diagnostic>) {
                 }
                 _ => {
                     // Unknown ESC sequence — preserve raw.
-                    let raw: String =
-                        input[esc_start..pos + 1].iter().map(|&b| b as char).collect();
+                    let raw: String = input[esc_start..pos + 1]
+                        .iter()
+                        .map(|&b| b as char)
+                        .collect();
                     diagnostics.push(Diagnostic {
                         span: Span::new(esc_start, pos + 1),
                         severity: Severity::Warning,
@@ -142,7 +144,13 @@ pub fn parse(input: &[u8]) -> (AnsiDoc, Vec<Diagnostic>) {
     }
 
     let doc_span = Span::new(0, input.len());
-    (AnsiDoc { nodes, span: doc_span }, diagnostics)
+    (
+        AnsiDoc {
+            nodes,
+            span: doc_span,
+        },
+        diagnostics,
+    )
 }
 
 /// Convenience wrapper that accepts `&str`.
@@ -224,7 +232,13 @@ fn parse_csi(
         // Handle private-mode sequences.
         match terminator {
             b'h' if params == "25" => {
-                return (Some(AnsiNode::CursorVisibility { visible: true, span }), pos);
+                return (
+                    Some(AnsiNode::CursorVisibility {
+                        visible: true,
+                        span,
+                    }),
+                    pos,
+                );
             }
             b'l' if params == "25" => {
                 return (
@@ -386,10 +400,7 @@ fn parse_osc(
             let mut link_text = String::new();
             let _text_start = pos;
             while pos < input.len() {
-                if input[pos] == 0x1b
-                    && pos + 1 < input.len()
-                    && input[pos + 1] == b']'
-                {
+                if input[pos] == 0x1b && pos + 1 < input.len() && input[pos + 1] == b']' {
                     // Potential OSC close — peek for "8;;\a" or "8;;\x1b\\"
                     let osc_inner_start = pos + 2;
                     let mut osc_end = osc_inner_start;

@@ -47,9 +47,7 @@ pub fn parse(input: &str) -> (RisDoc, Vec<Diagnostic>) {
                         entry.add_field(tag, value);
                     } else {
                         diagnostics.push(Diagnostic {
-                            message: format!(
-                                "field '{tag}' outside of any entry; ignoring"
-                            ),
+                            message: format!("field '{tag}' outside of any entry; ignoring"),
                             severity: crate::ast::Severity::Warning,
                             span: Span::NONE,
                         });
@@ -64,5 +62,11 @@ pub fn parse(input: &str) -> (RisDoc, Vec<Diagnostic>) {
         entries.push(entry);
     }
 
-    (RisDoc { entries, span: Span::NONE }, diagnostics)
+    (
+        RisDoc {
+            entries,
+            span: Span::NONE,
+        },
+        diagnostics,
+    )
 }

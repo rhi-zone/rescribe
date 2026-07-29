@@ -6,7 +6,13 @@ use crate::ast::*;
 pub fn parse(input: &str) -> (VimwikiDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.parse();
-    (VimwikiDoc { blocks, span: Span::NONE }, vec![])
+    (
+        VimwikiDoc {
+            blocks,
+            span: Span::NONE,
+        },
+        vec![],
+    )
 }
 
 struct Parser<'a> {
@@ -127,7 +133,11 @@ impl<'a> Parser<'a> {
         }
 
         let inlines = parse_inline(content);
-        Some(Block::Heading { level, inlines, span: Span::NONE })
+        Some(Block::Heading {
+            level,
+            inlines,
+            span: Span::NONE,
+        })
     }
 
     fn parse_preformatted(&mut self) -> Block {
@@ -167,7 +177,11 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
 
-        Block::CodeBlock { language, content, span: Span::NONE }
+        Block::CodeBlock {
+            language,
+            content,
+            span: Span::NONE,
+        }
     }
 
     fn is_ordered_list_item(&self, line: &str) -> bool {
@@ -250,7 +264,11 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
 
-        Block::List { ordered, items, span: Span::NONE }
+        Block::List {
+            ordered,
+            items,
+            span: Span::NONE,
+        }
     }
 
     fn parse_blockquote(&mut self) -> Block {
@@ -280,7 +298,10 @@ impl<'a> Parser<'a> {
         }
 
         let inlines = parse_inline(&content);
-        Block::Blockquote { inlines, span: Span::NONE }
+        Block::Blockquote {
+            inlines,
+            span: Span::NONE,
+        }
     }
 
     fn parse_table(&mut self) -> Block {
@@ -313,12 +334,18 @@ impl<'a> Parser<'a> {
             }
 
             if !cells.is_empty() {
-                rows.push(TableRow { cells, span: Span::NONE });
+                rows.push(TableRow {
+                    cells,
+                    span: Span::NONE,
+                });
             }
             self.pos += 1;
         }
 
-        Block::Table { rows, span: Span::NONE }
+        Block::Table {
+            rows,
+            span: Span::NONE,
+        }
     }
 
     fn parse_definition_list(&mut self) -> Block {
@@ -349,10 +376,17 @@ impl<'a> Parser<'a> {
                 Vec::new()
             };
 
-            items.push(DefinitionItem { term, desc, span: Span::NONE });
+            items.push(DefinitionItem {
+                term,
+                desc,
+                span: Span::NONE,
+            });
         }
 
-        Block::DefinitionList { items, span: Span::NONE }
+        Block::DefinitionList {
+            items,
+            span: Span::NONE,
+        }
     }
 
     fn parse_paragraph(&mut self) -> Block {
@@ -391,7 +425,10 @@ impl<'a> Parser<'a> {
         }
 
         let inlines = parse_inline(&text);
-        Block::Paragraph { inlines, span: Span::NONE }
+        Block::Paragraph {
+            inlines,
+            span: Span::NONE,
+        }
     }
 }
 
@@ -536,7 +573,11 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 inlines.push(Inline::Text(current.clone(), Span::NONE));
                 current.clear();
             }
-            inlines.push(Inline::Link { url, label, span: Span::NONE });
+            inlines.push(Inline::Link {
+                url,
+                label,
+                span: Span::NONE,
+            });
             i = end;
             continue;
         }
@@ -552,7 +593,12 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 inlines.push(Inline::Text(current.clone(), Span::NONE));
                 current.clear();
             }
-            inlines.push(Inline::Image { url, alt, style, span: Span::NONE });
+            inlines.push(Inline::Image {
+                url,
+                alt,
+                style,
+                span: Span::NONE,
+            });
             i = end;
             continue;
         }
@@ -639,7 +685,10 @@ fn parse_wiki_link(chars: &[char], start: usize) -> Option<(usize, String, Strin
     None
 }
 
-fn parse_image(chars: &[char], start: usize) -> Option<(usize, String, Option<String>, Option<String>)> {
+fn parse_image(
+    chars: &[char],
+    start: usize,
+) -> Option<(usize, String, Option<String>, Option<String>)> {
     // {{image.png}} or {{image.png|alt}} or {{image.png|alt|style}}
     if start + 1 >= chars.len() || chars[start] != '{' || chars[start + 1] != '{' {
         return None;

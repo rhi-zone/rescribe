@@ -27,11 +27,19 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn warning(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Warning, message: message.into(), span }
+        Self {
+            severity: Severity::Warning,
+            message: message.into(),
+            span,
+        }
     }
 
     pub fn error(message: impl Into<String>, span: Span) -> Self {
-        Self { severity: Severity::Error, message: message.into(), span }
+        Self {
+            severity: Severity::Error,
+            message: message.into(),
+            span,
+        }
     }
 }
 
@@ -56,13 +64,35 @@ impl ZimwikiDoc {
 /// Block-level element.
 #[derive(Debug, Clone)]
 pub enum Block {
-    Paragraph { inlines: Vec<Inline>, span: Span },
-    Heading { level: u8, inlines: Vec<Inline>, span: Span },
-    CodeBlock { content: String, span: Span },
-    Blockquote { children: Vec<Block>, span: Span },
-    List { ordered: bool, items: Vec<ListItem>, span: Span },
-    Table { rows: Vec<TableRow>, span: Span },
-    HorizontalRule { span: Span },
+    Paragraph {
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+        span: Span,
+    },
+    CodeBlock {
+        content: String,
+        span: Span,
+    },
+    Blockquote {
+        children: Vec<Block>,
+        span: Span,
+    },
+    List {
+        ordered: bool,
+        items: Vec<ListItem>,
+        span: Span,
+    },
+    Table {
+        rows: Vec<TableRow>,
+        span: Span,
+    },
+    HorizontalRule {
+        span: Span,
+    },
 }
 
 impl Block {
@@ -77,7 +107,10 @@ impl Block {
                 inlines: inlines.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Block::CodeBlock { content, .. } => Block::CodeBlock { content, span: Span::NONE },
+            Block::CodeBlock { content, .. } => Block::CodeBlock {
+                content,
+                span: Span::NONE,
+            },
             Block::Blockquote { children, .. } => Block::Blockquote {
                 children: children.into_iter().map(Block::strip_spans).collect(),
                 span: Span::NONE,
@@ -145,10 +178,21 @@ pub enum Inline {
     Subscript(Vec<Inline>, Span),
     Superscript(Vec<Inline>, Span),
     Code(String, Span),
-    Link { url: String, children: Vec<Inline>, span: Span },
-    Image { url: String, span: Span },
-    LineBreak { span: Span },
-    SoftBreak { span: Span },
+    Link {
+        url: String,
+        children: Vec<Inline>,
+        span: Span,
+    },
+    Image {
+        url: String,
+        span: Span,
+    },
+    LineBreak {
+        span: Span,
+    },
+    SoftBreak {
+        span: Span,
+    },
 }
 
 impl Inline {
@@ -179,7 +223,10 @@ impl Inline {
                 children: children.into_iter().map(Inline::strip_spans).collect(),
                 span: Span::NONE,
             },
-            Inline::Image { url, .. } => Inline::Image { url, span: Span::NONE },
+            Inline::Image { url, .. } => Inline::Image {
+                url,
+                span: Span::NONE,
+            },
             Inline::LineBreak { .. } => Inline::LineBreak { span: Span::NONE },
             Inline::SoftBreak { .. } => Inline::SoftBreak { span: Span::NONE },
         }

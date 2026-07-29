@@ -22,7 +22,10 @@ pub fn emit_with_options(
         blocks.push(node_to_block(child));
     }
 
-    let jira_doc = JiraDoc { blocks, span: Span::NONE };
+    let jira_doc = JiraDoc {
+        blocks,
+        span: Span::NONE,
+    };
     let output = jira_build(&jira_doc);
     Ok(ConversionResult::ok(output.into_bytes()))
 }
@@ -46,12 +49,19 @@ fn node_to_block(node: &Node) -> Block {
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            Block::CodeBlock { content, language, span: Span::NONE }
+            Block::CodeBlock {
+                content,
+                language,
+                span: Span::NONE,
+            }
         }
 
         node::BLOCKQUOTE => {
             let children: Vec<Block> = node.children.iter().map(node_to_block).collect();
-            Block::Blockquote { children, span: Span::NONE }
+            Block::Blockquote {
+                children,
+                span: Span::NONE,
+            }
         }
 
         node::DIV => {
@@ -63,10 +73,17 @@ fn node_to_block(node: &Node) -> Block {
             if is_panel {
                 let title = node.props.get_str("jira:panel-title").map(|s| s.to_owned());
                 let children: Vec<Block> = node.children.iter().map(node_to_block).collect();
-                Block::Panel { title, children, span: Span::NONE }
+                Block::Panel {
+                    title,
+                    children,
+                    span: Span::NONE,
+                }
             } else {
                 let children: Vec<Block> = node.children.iter().map(node_to_block).collect();
-                Block::Blockquote { children, span: Span::NONE }
+                Block::Blockquote {
+                    children,
+                    span: Span::NONE,
+                }
             }
         }
 
@@ -83,15 +100,19 @@ fn node_to_block(node: &Node) -> Block {
                             ));
                         } else {
                             // Treat any other block as inline content
-                            content.push(jira_fmt::ast::ListItemContent::Inline(
-                                nodes_to_inlines(&block_node.children),
-                            ));
+                            content.push(jira_fmt::ast::ListItemContent::Inline(nodes_to_inlines(
+                                &block_node.children,
+                            )));
                         }
                     }
                     items.push(jira_fmt::ast::ListItem { children: content });
                 }
             }
-            Block::List { ordered, items, span: Span::NONE }
+            Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            }
         }
 
         node::TABLE => {
@@ -105,7 +126,10 @@ fn node_to_block(node: &Node) -> Block {
                     rows.push(node_to_table_row(child));
                 }
             }
-            Block::Table { rows, span: Span::NONE }
+            Block::Table {
+                rows,
+                span: Span::NONE,
+            }
         }
 
         node::HORIZONTAL_RULE => Block::HorizontalRule { span: Span::NONE },
@@ -127,7 +151,10 @@ fn node_to_table_row(node: &Node) -> jira_fmt::TableRow {
             span: Span::NONE,
         });
     }
-    jira_fmt::TableRow { cells, span: Span::NONE }
+    jira_fmt::TableRow {
+        cells,
+        span: Span::NONE,
+    }
 }
 
 fn nodes_to_inlines(nodes: &[Node]) -> Vec<Inline> {
@@ -157,13 +184,21 @@ fn node_to_inline(node: &Node) -> Inline {
         node::LINK => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let children = nodes_to_inlines(&node.children);
-            Inline::Link { url, children, span: Span::NONE }
+            Inline::Link {
+                url,
+                children,
+                span: Span::NONE,
+            }
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
-            Inline::Image { url, alt, span: Span::NONE }
+            Inline::Image {
+                url,
+                alt,
+                span: Span::NONE,
+            }
         }
 
         node::SUPERSCRIPT => Inline::Superscript(nodes_to_inlines(&node.children), Span::NONE),

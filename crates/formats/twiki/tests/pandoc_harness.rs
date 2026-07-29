@@ -31,7 +31,11 @@ fn parse_sample_no_panic() {
     // Roundtrip
     let emitted = twiki::build(&doc);
     let (doc2, _) = twiki::parse(&emitted);
-    assert_eq!(doc.blocks.len(), doc2.blocks.len(), "roundtrip block count mismatch");
+    assert_eq!(
+        doc.blocks.len(),
+        doc2.blocks.len(),
+        "roundtrip block count mismatch"
+    );
 }
 
 /// Pandoc oracle test — compare our parse output against pandoc's.
@@ -59,7 +63,10 @@ fn pandoc_oracle() {
 
     // We don't do structural comparison yet — just confirm pandoc can parse it.
     let json = String::from_utf8_lossy(&output.stdout);
-    assert!(json.contains("\"blocks\""), "pandoc JSON should contain blocks");
+    assert!(
+        json.contains("\"blocks\""),
+        "pandoc JSON should contain blocks"
+    );
 
     let _ = std::fs::remove_file(&tmp);
 }

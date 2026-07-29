@@ -406,7 +406,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|n| matches!(n, Inline::Superscript(_, _))));
+        assert!(
+            inlines
+                .iter()
+                .any(|n| matches!(n, Inline::Superscript(_, _)))
+        );
     }
 
     #[test]
@@ -424,7 +428,11 @@ mod tests {
         let Block::Paragraph { inlines, .. } = &doc.blocks[0] else {
             panic!("expected paragraph");
         };
-        assert!(inlines.iter().any(|n| matches!(n, Inline::FootnoteRef { .. })));
+        assert!(
+            inlines
+                .iter()
+                .any(|n| matches!(n, Inline::FootnoteRef { .. }))
+        );
     }
 
     #[test]

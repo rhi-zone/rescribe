@@ -23,11 +23,21 @@ pub fn parse_with_options(
     let root = Node::new(node::DOCUMENT).children(blocks);
 
     let mut metadata = rescribe_core::Properties::new();
-    if let Some(t) = &muse_doc.title    { metadata.set("title",       t.clone()); }
-    if let Some(a) = &muse_doc.author   { metadata.set("author",      a.clone()); }
-    if let Some(d) = &muse_doc.date     { metadata.set("date",        d.clone()); }
-    if let Some(d) = &muse_doc.description { metadata.set("description", d.clone()); }
-    if let Some(k) = &muse_doc.keywords { metadata.set("keywords",   k.clone()); }
+    if let Some(t) = &muse_doc.title {
+        metadata.set("title", t.clone());
+    }
+    if let Some(a) = &muse_doc.author {
+        metadata.set("author", a.clone());
+    }
+    if let Some(d) = &muse_doc.date {
+        metadata.set("date", d.clone());
+    }
+    if let Some(d) = &muse_doc.description {
+        metadata.set("description", d.clone());
+    }
+    if let Some(k) = &muse_doc.keywords {
+        metadata.set("keywords", k.clone());
+    }
 
     let doc = Document::new().with_content(root).with_metadata(metadata);
     Ok(ConversionResult::ok(doc))
@@ -83,23 +93,17 @@ fn convert_block(block: &muse_fmt::Block) -> Node {
 
         muse_fmt::Block::HorizontalRule { .. } => Node::new(node::HORIZONTAL_RULE),
 
-        muse_fmt::Block::Verse { children, .. } => {
-            Node::new(node::BLOCKQUOTE)
-                .prop("muse:block-type", "verse")
-                .children(convert_blocks(children))
-        }
+        muse_fmt::Block::Verse { children, .. } => Node::new(node::BLOCKQUOTE)
+            .prop("muse:block-type", "verse")
+            .children(convert_blocks(children)),
 
-        muse_fmt::Block::CenteredBlock { children, .. } => {
-            Node::new(node::DIV)
-                .prop("style:align", "center")
-                .children(convert_blocks(children))
-        }
+        muse_fmt::Block::CenteredBlock { children, .. } => Node::new(node::DIV)
+            .prop("style:align", "center")
+            .children(convert_blocks(children)),
 
-        muse_fmt::Block::RightBlock { children, .. } => {
-            Node::new(node::DIV)
-                .prop("style:align", "right")
-                .children(convert_blocks(children))
-        }
+        muse_fmt::Block::RightBlock { children, .. } => Node::new(node::DIV)
+            .prop("style:align", "right")
+            .children(convert_blocks(children)),
 
         muse_fmt::Block::LiteralBlock { content, .. } => {
             Node::new(node::RAW_BLOCK).prop(prop::CONTENT, content.clone())
@@ -113,11 +117,9 @@ fn convert_block(block: &muse_fmt::Block) -> Node {
             n
         }
 
-        muse_fmt::Block::Comment { content, .. } => {
-            Node::new(node::RAW_BLOCK)
-                .prop(prop::FORMAT, "muse")
-                .prop(prop::CONTENT, content.clone())
-        }
+        muse_fmt::Block::Comment { content, .. } => Node::new(node::RAW_BLOCK)
+            .prop(prop::FORMAT, "muse")
+            .prop(prop::CONTENT, content.clone()),
 
         muse_fmt::Block::Table { rows, .. } => {
             let row_nodes: Vec<Node> = rows
@@ -139,11 +141,9 @@ fn convert_block(block: &muse_fmt::Block) -> Node {
             Node::new(node::TABLE).children(row_nodes)
         }
 
-        muse_fmt::Block::FootnoteDef { label, content, .. } => {
-            Node::new(node::FOOTNOTE_DEF)
-                .prop(prop::LABEL, label.clone())
-                .children(convert_inlines(content))
-        }
+        muse_fmt::Block::FootnoteDef { label, content, .. } => Node::new(node::FOOTNOTE_DEF)
+            .prop(prop::LABEL, label.clone())
+            .children(convert_inlines(content)),
     }
 }
 
@@ -191,9 +191,7 @@ fn convert_inline(inline: &muse_fmt::Inline) -> Node {
 
         muse_fmt::Inline::LineBreak(_) => Node::new(node::LINE_BREAK),
 
-        muse_fmt::Inline::Anchor { name, .. } => {
-            Node::new(node::SPAN).prop(prop::ID, name.clone())
-        }
+        muse_fmt::Inline::Anchor { name, .. } => Node::new(node::SPAN).prop(prop::ID, name.clone()),
 
         muse_fmt::Inline::Image { src, alt, .. } => {
             let mut n = Node::new(node::IMAGE).prop(prop::URL, src.clone());
@@ -225,9 +223,7 @@ mod fixture_tests {
     fn muse_fixtures() {
         run_format_fixtures(&fixtures_root(), "muse", |input| {
             let s = std::str::from_utf8(input).map_err(|e| e.to_string())?;
-            super::parse(s)
-                .map(|r| r.value)
-                .map_err(|e| e.to_string())
+            super::parse(s).map(|r| r.value).map_err(|e| e.to_string())
         });
     }
 }

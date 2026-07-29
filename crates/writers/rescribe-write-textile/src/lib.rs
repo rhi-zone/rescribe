@@ -4,7 +4,9 @@
 
 use rescribe_core::{ConversionResult, Document, EmitError, EmitOptions, Node};
 use rescribe_std::{node, prop};
-use textile_fmt::{Block, BlockAttrs, Inline, Span, TableCell, TableRow, TextileDoc, emit as emit_textile};
+use textile_fmt::{
+    Block, BlockAttrs, Inline, Span, TableCell, TableRow, TextileDoc, emit as emit_textile,
+};
 
 /// Emit a document as Textile markup.
 pub fn emit(doc: &Document) -> Result<ConversionResult<Vec<u8>>, EmitError> {
@@ -106,10 +108,7 @@ fn convert_node_to_block(node: &Node) -> Block {
                             let is_header = cell.kind.as_str() == node::TABLE_HEADER;
                             let inlines: Vec<Inline> =
                                 cell.children.iter().map(convert_node_to_inline).collect();
-                            let align = cell
-                                .props
-                                .get_str(prop::ALIGN)
-                                .map(|s| s.to_string());
+                            let align = cell.props.get_str(prop::ALIGN).map(|s| s.to_string());
                             TableCell {
                                 is_header,
                                 align,
@@ -118,7 +117,11 @@ fn convert_node_to_block(node: &Node) -> Block {
                             }
                         })
                         .collect();
-                    TableRow { attrs: BlockAttrs::default(), cells, span: dummy }
+                    TableRow {
+                        attrs: BlockAttrs::default(),
+                        cells,
+                        span: dummy,
+                    }
                 })
                 .collect();
             Block::Table { rows, span: dummy }

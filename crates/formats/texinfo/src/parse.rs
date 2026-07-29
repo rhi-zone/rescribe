@@ -253,8 +253,14 @@ fn code_block_end_marker(variant: &CodeBlockVariant) -> String {
 
 fn try_conditional_start(line: &str) -> Option<String> {
     let conditionals = &[
-        "@iftex", "@ifhtml", "@ifinfo", "@ifplaintext", "@ifnottex", "@ifnothtml",
-        "@ifnotinfo", "@ifnotplaintext",
+        "@iftex",
+        "@ifhtml",
+        "@ifinfo",
+        "@ifplaintext",
+        "@ifnottex",
+        "@ifnothtml",
+        "@ifnotinfo",
+        "@ifnotplaintext",
     ];
     for cond in conditionals {
         if line.starts_with(cond)
@@ -291,12 +297,46 @@ fn collect_paragraph<'b>(lines: &[&'b str], start: usize) -> (Vec<&'b str>, usiz
 /// Returns true if the line starts with an inline @-command (not a block command).
 fn is_inline_command_at_start(line: &str) -> bool {
     let inline_prefixes = &[
-        "@code{", "@emph{", "@strong{", "@uref{", "@url{", "@xref{", "@pxref{", "@ref{",
-        "@samp{", "@var{", "@file{", "@dfn{", "@kbd{", "@key{", "@acronym{", "@email{",
-        "@command{", "@option{", "@env{", "@cite{", "@abbr{", "@sc{", "@r{", "@i{", "@b{",
-        "@t{", "@w{", "@footnote{", "@anchor{", "@dots{", "@enddots{", "@minus{",
-        "@copyright{", "@registeredsymbol{", "@LaTeX{", "@TeX{", "@tie{", "@image{",
-        "@sup{", "@sub{",
+        "@code{",
+        "@emph{",
+        "@strong{",
+        "@uref{",
+        "@url{",
+        "@xref{",
+        "@pxref{",
+        "@ref{",
+        "@samp{",
+        "@var{",
+        "@file{",
+        "@dfn{",
+        "@kbd{",
+        "@key{",
+        "@acronym{",
+        "@email{",
+        "@command{",
+        "@option{",
+        "@env{",
+        "@cite{",
+        "@abbr{",
+        "@sc{",
+        "@r{",
+        "@i{",
+        "@b{",
+        "@t{",
+        "@w{",
+        "@footnote{",
+        "@anchor{",
+        "@dots{",
+        "@enddots{",
+        "@minus{",
+        "@copyright{",
+        "@registeredsymbol{",
+        "@LaTeX{",
+        "@TeX{",
+        "@tie{",
+        "@image{",
+        "@sup{",
+        "@sub{",
     ];
     for prefix in inline_prefixes {
         if line.starts_with(prefix) {
@@ -391,7 +431,13 @@ fn parse_definition_list(lines: &[&str], start: usize) -> (Block, usize) {
                 }
                 items.push((term_inlines, desc_blocks));
             }
-            return (Block::DefinitionList { items, span: Span::NONE }, i + 1);
+            return (
+                Block::DefinitionList {
+                    items,
+                    span: Span::NONE,
+                },
+                i + 1,
+            );
         }
 
         if line.starts_with("@item ") || line == "@item" {
@@ -434,7 +480,13 @@ fn parse_definition_list(lines: &[&str], start: usize) -> (Block, usize) {
         items.push((term_inlines, desc_blocks));
     }
 
-    (Block::DefinitionList { items, span: Span::NONE }, i)
+    (
+        Block::DefinitionList {
+            items,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 fn parse_multitable(lines: &[&str], start: usize) -> (Block, usize) {
@@ -445,7 +497,13 @@ fn parse_multitable(lines: &[&str], start: usize) -> (Block, usize) {
         let line = lines[i].trim();
 
         if line.starts_with("@end multitable") {
-            return (Block::Table { rows, span: Span::NONE }, i + 1);
+            return (
+                Block::Table {
+                    rows,
+                    span: Span::NONE,
+                },
+                i + 1,
+            );
         }
 
         if line.starts_with("@headitem ") || line.starts_with("@item ") {
@@ -465,7 +523,13 @@ fn parse_multitable(lines: &[&str], start: usize) -> (Block, usize) {
         i += 1;
     }
 
-    (Block::Table { rows, span: Span::NONE }, i)
+    (
+        Block::Table {
+            rows,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 fn parse_code_block(
@@ -558,7 +622,13 @@ fn parse_menu(lines: &[&str], start: usize) -> (Block, usize) {
         let line = lines[i].trim();
 
         if line.starts_with("@end menu") {
-            return (Block::Menu { entries, span: Span::NONE }, i + 1);
+            return (
+                Block::Menu {
+                    entries,
+                    span: Span::NONE,
+                },
+                i + 1,
+            );
         }
 
         // Menu entries look like: * Node Name:: Description
@@ -578,16 +648,19 @@ fn parse_menu(lines: &[&str], start: usize) -> (Block, usize) {
         i += 1;
     }
 
-    (Block::Menu { entries, span: Span::NONE }, i)
+    (
+        Block::Menu {
+            entries,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 fn parse_float(lines: &[&str], start: usize) -> (Block, usize) {
     // @float [type][,label]
     let first_line = lines[start].trim();
-    let args = first_line
-        .strip_prefix("@float")
-        .unwrap_or("")
-        .trim();
+    let args = first_line.strip_prefix("@float").unwrap_or("").trim();
     let (float_type, label) = if args.is_empty() {
         (None, None)
     } else {
@@ -910,19 +983,35 @@ fn try_parse_inline_command(chars: &[char], start: usize) -> Option<(Inline, usi
             let file = parts[0].trim().to_string();
             let width = parts.get(1).and_then(|s| {
                 let s = s.trim();
-                if s.is_empty() { None } else { Some(s.to_string()) }
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
             });
             let height = parts.get(2).and_then(|s| {
                 let s = s.trim();
-                if s.is_empty() { None } else { Some(s.to_string()) }
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
             });
             let alt = parts.get(3).and_then(|s| {
                 let s = s.trim();
-                if s.is_empty() { None } else { Some(s.to_string()) }
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
             });
             let extension = parts.get(4).and_then(|s| {
                 let s = s.trim();
-                if s.is_empty() { None } else { Some(s.to_string()) }
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
             });
             Inline::Image {
                 file,

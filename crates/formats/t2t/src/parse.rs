@@ -94,15 +94,27 @@ impl<'a> Parser<'a> {
 
         let title = {
             let t = self.lines[0].trim();
-            if t.is_empty() { None } else { Some(t.to_string()) }
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
         };
         let author = {
             let t = self.lines[1].trim();
-            if t.is_empty() { None } else { Some(t.to_string()) }
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
         };
         let date = {
             let t = self.lines[2].trim();
-            if t.is_empty() { None } else { Some(t.to_string()) }
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
         };
 
         // Only consume header if at least title is present
@@ -201,8 +213,7 @@ impl<'a> Parser<'a> {
         for (marker, numbered) in [('=', false), ('+', true)] {
             let level = trimmed.chars().take_while(|&c| c == marker).count();
             if level > 0 && level <= 5 {
-                let end_marker_count =
-                    trimmed.chars().rev().take_while(|&c| c == marker).count();
+                let end_marker_count = trimmed.chars().rev().take_while(|&c| c == marker).count();
                 if end_marker_count >= level {
                     // Extract content between markers
                     let content_start = level;
@@ -223,10 +234,7 @@ impl<'a> Parser<'a> {
                             (content, None)
                         };
 
-                        let span = Span::new(
-                            self.line_start(self.pos),
-                            self.line_end(self.pos),
-                        );
+                        let span = Span::new(self.line_start(self.pos), self.line_end(self.pos));
                         let inlines = parse_inline(text, span.start);
                         return Some(Block::Heading {
                             level: level as u8,

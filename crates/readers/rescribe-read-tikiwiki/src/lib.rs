@@ -45,7 +45,9 @@ fn block_to_node(block: &tikiwiki::Block) -> Node {
             .prop(prop::LEVEL, *level as i64)
             .children(inlines_to_nodes(inlines)),
 
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             let mut n = Node::new(node::CODE_BLOCK).prop(prop::CONTENT, content.clone());
             if let Some(lang) = language {
                 n = n.prop(prop::LANGUAGE, lang.clone());
@@ -102,7 +104,9 @@ fn inline_to_node(inline: &TwInline) -> Node {
 
         Inline::Bold(children, _) => Node::new(node::STRONG).children(inlines_to_nodes(children)),
 
-        Inline::Italic(children, _) => Node::new(node::EMPHASIS).children(inlines_to_nodes(children)),
+        Inline::Italic(children, _) => {
+            Node::new(node::EMPHASIS).children(inlines_to_nodes(children))
+        }
 
         Inline::Underline(children, _) => {
             Node::new(node::UNDERLINE).children(inlines_to_nodes(children))
@@ -140,7 +144,9 @@ fn inline_to_node(inline: &TwInline) -> Node {
             } else {
                 inlines_to_nodes(children)
             };
-            Node::new("wikilink").prop("page", page.clone()).children(label_nodes)
+            Node::new("wikilink")
+                .prop("page", page.clone())
+                .children(label_nodes)
         }
 
         Inline::Nowiki(s, _) => Node::new("nowiki").prop(prop::CONTENT, s.clone()),

@@ -360,7 +360,11 @@ impl Iterator for EventIter {
                     }
                 }
 
-                Frame::DefinitionDesc { blocks, idx, started } => {
+                Frame::DefinitionDesc {
+                    blocks,
+                    idx,
+                    started,
+                } => {
                     if !*started {
                         *started = true;
                         return Some(Event::StartDefinitionDesc);
@@ -420,10 +424,7 @@ fn push_block(stack: &mut Vec<Frame>, block: Block) -> OwnedEvent {
             content: Cow::Owned(content),
         },
         Block::Blockquote { children, .. } => {
-            stack.push(Frame::Blockquote {
-                children,
-                idx: 0,
-            });
+            stack.push(Frame::Blockquote { children, idx: 0 });
             Event::StartBlockquote
         }
         Block::List { ordered, items, .. } => {
@@ -516,9 +517,13 @@ mod tests {
     #[test]
     fn test_events_heading() {
         let evs: Vec<_> = events("= Hello =\n").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::StartHeading { level: 1, numbered: false })));
+        assert!(evs.iter().any(|e| matches!(
+            e,
+            Event::StartHeading {
+                level: 1,
+                numbered: false
+            }
+        )));
         assert!(evs.iter().any(|e| matches!(e, Event::EndHeading)));
     }
 
@@ -527,25 +532,25 @@ mod tests {
         let evs: Vec<_> = events("Hello world\n").collect();
         assert!(evs.iter().any(|e| matches!(e, Event::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, Event::EndParagraph)));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
     fn test_events_code_block() {
         let evs: Vec<_> = events("```\nfn main() {}\n```\n").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::CodeBlock { .. })));
+        assert!(evs.iter().any(|e| matches!(e, Event::CodeBlock { .. })));
     }
 
     #[test]
     fn test_events_list() {
         let evs: Vec<_> = events("- item 1\n- item 2\n").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::StartList { ordered: false })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartList { ordered: false }))
+        );
         assert_eq!(
             evs.iter()
                 .filter(|e| matches!(e, Event::StartListItem))
@@ -559,9 +564,10 @@ mod tests {
     fn test_events_table() {
         let evs: Vec<_> = events("|| Name | Age |\n| Alice | 30 |\n").collect();
         assert!(evs.iter().any(|e| matches!(e, Event::StartTable)));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::StartTableRow { header: true })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartTableRow { header: true }))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndTable)));
     }
 
@@ -583,40 +589,37 @@ mod tests {
     #[test]
     fn test_events_link() {
         let evs: Vec<_> = events("[click http://example.com]\n").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::StartLink { url } if url == "http://example.com")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartLink { url } if url == "http://example.com"))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndLink)));
     }
 
     #[test]
     fn test_events_definition_list() {
         let evs: Vec<_> = events(": Term\nDefinition text\n").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::StartDefinitionList)));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::StartDefinitionTerm)));
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::EndDefinitionList)));
+        assert!(evs.iter().any(|e| matches!(e, Event::StartDefinitionList)));
+        assert!(evs.iter().any(|e| matches!(e, Event::StartDefinitionTerm)));
+        assert!(evs.iter().any(|e| matches!(e, Event::EndDefinitionList)));
     }
 
     #[test]
     fn test_events_verbatim() {
         let evs: Vec<_> = events("\"\"raw text\"\"\n").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::Verbatim(t) if t == "raw text")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Verbatim(t) if t == "raw text"))
+        );
     }
 
     #[test]
     fn test_events_tagged() {
         let evs: Vec<_> = events("''tagged text''\n").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::Tagged(t) if t == "tagged text")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Tagged(t) if t == "tagged text"))
+        );
     }
 
     #[test]

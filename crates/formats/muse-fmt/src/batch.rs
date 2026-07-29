@@ -178,10 +178,14 @@ mod tests {
         p.feed(b"* Hello\n\n");
         p.feed(b"A paragraph.\n");
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedMuseEvent::StartHeading { level: 1 })));
-        assert!(evs.iter().any(|e| matches!(e, OwnedMuseEvent::StartParagraph)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedMuseEvent::StartHeading { level: 1 }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedMuseEvent::StartParagraph))
+        );
     }
 
     #[test]
@@ -192,10 +196,14 @@ mod tests {
             p.feed(std::slice::from_ref(b));
         }
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedMuseEvent::StartHeading { .. })));
-        assert!(evs.iter().any(|e| matches!(e, OwnedMuseEvent::StartParagraph)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedMuseEvent::StartHeading { .. }))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedMuseEvent::StartParagraph))
+        );
     }
 
     #[test]
@@ -224,11 +232,15 @@ mod tests {
         sink.feed(b"* Hello\n\n");
         sink.feed(b"A paragraph.\n");
         sink.finish();
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedMuseEvent::StartHeading { level: 1 })));
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedMuseEvent::StartParagraph)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedMuseEvent::StartHeading { level: 1 }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedMuseEvent::StartParagraph))
+        );
     }
 }

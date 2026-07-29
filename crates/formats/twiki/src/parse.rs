@@ -74,10 +74,7 @@ pub fn parse(input: &str) -> (TwikiDoc, Vec<Diagnostic>) {
         }
 
         // Definition lists (   $ term: definition)
-        if line.starts_with("   ")
-            && line.trim().starts_with('$')
-            && line.contains(':')
-        {
+        if line.starts_with("   ") && line.trim().starts_with('$') && line.contains(':') {
             let (dl_node, end) = parse_definition_list(&lines, i);
             result.push(dl_node);
             i = end.max(i + 1);
@@ -113,7 +110,13 @@ pub fn parse(input: &str) -> (TwikiDoc, Vec<Diagnostic>) {
         i = end.max(i + 1);
     }
 
-    (TwikiDoc { blocks: result, span: Span::NONE }, vec![])
+    (
+        TwikiDoc {
+            blocks: result,
+            span: Span::NONE,
+        },
+        vec![],
+    )
 }
 
 fn is_macro_block(line: &str) -> bool {
@@ -123,7 +126,9 @@ fn is_macro_block(line: &str) -> bool {
         let inner = &trimmed[1..trimmed.len() - 1];
         // Must be a single macro (uppercase letters, possibly with {})
         if let Some(name_end) = inner.find(['{', '%']) {
-            return inner[..name_end].chars().all(|c| c.is_ascii_uppercase() || c == '_');
+            return inner[..name_end]
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c == '_');
         }
         return inner.chars().all(|c| c.is_ascii_uppercase() || c == '_');
     }
@@ -305,7 +310,10 @@ fn parse_blockquote(lines: &[&str], start: usize) -> (Block, usize) {
             }]
         };
         return (
-            Block::Blockquote { children, span: Span::NONE },
+            Block::Blockquote {
+                children,
+                span: Span::NONE,
+            },
             start + 1,
         );
     }
@@ -337,7 +345,10 @@ fn parse_blockquote(lines: &[&str], start: usize) -> (Block, usize) {
                 }]
             };
             return (
-                Block::Blockquote { children, span: Span::NONE },
+                Block::Blockquote {
+                    children,
+                    span: Span::NONE,
+                },
                 i + 1,
             );
         }
@@ -356,7 +367,13 @@ fn parse_blockquote(lines: &[&str], start: usize) -> (Block, usize) {
             span: Span::NONE,
         }]
     };
-    (Block::Blockquote { children, span: Span::NONE }, i)
+    (
+        Block::Blockquote {
+            children,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 fn parse_table(lines: &[&str], start: usize) -> (Block, usize) {
@@ -380,8 +397,7 @@ fn parse_table(lines: &[&str], start: usize) -> (Block, usize) {
             .map(|cell| {
                 let cell = cell.trim();
                 // Header cells start and end with * (need at least 2 chars)
-                let is_header =
-                    cell.len() >= 2 && cell.starts_with('*') && cell.ends_with('*');
+                let is_header = cell.len() >= 2 && cell.starts_with('*') && cell.ends_with('*');
                 let content = if is_header {
                     &cell[1..cell.len() - 1]
                 } else {
@@ -395,11 +411,20 @@ fn parse_table(lines: &[&str], start: usize) -> (Block, usize) {
             })
             .collect();
 
-        rows.push(TableRow { cells, span: Span::NONE });
+        rows.push(TableRow {
+            cells,
+            span: Span::NONE,
+        });
         i += 1;
     }
 
-    (Block::Table { rows, span: Span::NONE }, i)
+    (
+        Block::Table {
+            rows,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 fn parse_definition_list(lines: &[&str], start: usize) -> (Block, usize) {
@@ -429,7 +454,13 @@ fn parse_definition_list(lines: &[&str], start: usize) -> (Block, usize) {
         i += 1;
     }
 
-    (Block::DefinitionList { items, span: Span::NONE }, i)
+    (
+        Block::DefinitionList {
+            items,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 fn parse_list(lines: &[&str], start: usize) -> (Block, usize) {
@@ -473,7 +504,14 @@ fn parse_list(lines: &[&str], start: usize) -> (Block, usize) {
         i += 1;
     }
 
-    (Block::List { ordered, items, span: Span::NONE }, i)
+    (
+        Block::List {
+            ordered,
+            items,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 fn parse_nested_list(lines: &[&str], start: usize, min_indent: usize) -> (Block, usize) {
@@ -516,7 +554,14 @@ fn parse_nested_list(lines: &[&str], start: usize, min_indent: usize) -> (Block,
         i += 1;
     }
 
-    (Block::List { ordered, items, span: Span::NONE }, i)
+    (
+        Block::List {
+            ordered,
+            items,
+            span: Span::NONE,
+        },
+        i,
+    )
 }
 
 pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
@@ -542,9 +587,16 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                     "img" => {
                         // Already handled by try_html_inline_tag
                         let url = content.clone();
-                        nodes.push(Inline::Image { url, alt: String::new(), span: Span::NONE });
+                        nodes.push(Inline::Image {
+                            url,
+                            alt: String::new(),
+                            span: Span::NONE,
+                        });
                     }
-                    _ => nodes.push(Inline::RawInline { content: format!("<{tag}>{content}</{tag}>"), span: Span::NONE }),
+                    _ => nodes.push(Inline::RawInline {
+                        content: format!("<{tag}>{content}</{tag}>"),
+                        span: Span::NONE,
+                    }),
                 }
                 i = end;
                 continue;
@@ -555,7 +607,11 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                     nodes.push(Inline::Text(current.clone(), Span::NONE));
                     current.clear();
                 }
-                nodes.push(Inline::Image { url, alt, span: Span::NONE });
+                nodes.push(Inline::Image {
+                    url,
+                    alt,
+                    span: Span::NONE,
+                });
                 i = end;
                 continue;
             }
@@ -565,7 +621,10 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                     nodes.push(Inline::Text(current.clone(), Span::NONE));
                     current.clear();
                 }
-                nodes.push(Inline::RawInline { content: raw, span: Span::NONE });
+                nodes.push(Inline::RawInline {
+                    content: raw,
+                    span: Span::NONE,
+                });
                 i = end;
                 continue;
             }
@@ -584,9 +643,16 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 nodes.push(Inline::LineBreak { span: Span::NONE });
             } else if raw.starts_with("%ATTACHURL%") || raw.starts_with("%PUBURL%") {
                 // Image reference
-                nodes.push(Inline::Image { url: raw, alt: String::new(), span: Span::NONE });
+                nodes.push(Inline::Image {
+                    url: raw,
+                    alt: String::new(),
+                    span: Span::NONE,
+                });
             } else {
-                nodes.push(Inline::RawInline { content: raw, span: Span::NONE });
+                nodes.push(Inline::RawInline {
+                    content: raw,
+                    span: Span::NONE,
+                });
             }
             i = end;
             continue;
@@ -680,7 +746,11 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 nodes.push(Inline::Text(current.clone(), Span::NONE));
                 current.clear();
             }
-            nodes.push(Inline::Link { url, label, span: Span::NONE });
+            nodes.push(Inline::Link {
+                url,
+                label,
+                span: Span::NONE,
+            });
             i = end;
             continue;
         }
@@ -706,7 +776,10 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 nodes.push(Inline::Text(current.clone(), Span::NONE));
                 current.clear();
             }
-            nodes.push(Inline::WikiWord { word, span: Span::NONE });
+            nodes.push(Inline::WikiWord {
+                word,
+                span: Span::NONE,
+            });
             i = end;
             continue;
         }
@@ -807,7 +880,9 @@ fn extract_attr_value(s: &str) -> Option<String> {
         let end = rest.find('\'')?;
         Some(rest[..end].to_string())
     } else {
-        let end = s.find(|c: char| c.is_whitespace() || c == '>' || c == '/').unwrap_or(s.len());
+        let end = s
+            .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
+            .unwrap_or(s.len());
         Some(s[..end].to_string())
     }
 }

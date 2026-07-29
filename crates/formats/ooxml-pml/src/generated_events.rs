@@ -3,9 +3,11 @@
 
 #![allow(unused_imports)]
 
-use std::borrow::Cow;
 use super::generated::*;
-use ooxml_dml::types::{CTTableCellProperties, CTTableProperties, TextCharacterProperties, TextParagraphProperties};
+use ooxml_dml::types::{
+    CTTableCellProperties, CTTableProperties, TextCharacterProperties, TextParagraphProperties,
+};
+use std::borrow::Cow;
 
 /// Shape transform (position and size) extracted from `<p:spPr><a:xfrm>`.
 /// All values are in EMU (English Metric Units; 914400 EMU = 1 inch).
@@ -28,39 +30,25 @@ pub struct ShapeTransform {
 pub enum PmlEvent<'a> {
     StartPresentation,
     EndPresentation,
-    StartShape {
-        transform: Option<ShapeTransform>,
-    },
+    StartShape { transform: Option<ShapeTransform> },
     EndShape,
     StartGraphicFrame,
     EndGraphicFrame,
-    StartTable {
-        props: Box<CTTableProperties>,
-    },
+    StartTable { props: Box<CTTableProperties> },
     EndTable,
     StartTableRow,
     EndTableRow,
-    StartTableCell {
-        props: Box<CTTableCellProperties>,
-    },
+    StartTableCell { props: Box<CTTableCellProperties> },
     EndTableCell,
-    StartParagraph {
-        props: Box<TextParagraphProperties>,
-    },
+    StartParagraph { props: Box<TextParagraphProperties> },
     EndParagraph,
-    StartRun {
-        props: Box<TextCharacterProperties>,
-    },
+    StartRun { props: Box<TextCharacterProperties> },
     EndRun,
-    StartHyperlink {
-        rel_id: Option<Cow<'a, str>>,
-    },
+    StartHyperlink { rel_id: Option<Cow<'a, str>> },
     EndHyperlink,
     Text(Cow<'a, str>),
     LineBreak,
-    FieldId {
-        field_type: Option<Cow<'a, str>>,
-    },
+    FieldId { field_type: Option<Cow<'a, str>> },
 }
 
 /// Owned variant of [`PmlEvent`] with `'static` lifetime.
@@ -76,23 +64,15 @@ impl<'a> PmlEvent<'a> {
             PmlEvent::EndShape => PmlEvent::EndShape,
             PmlEvent::StartGraphicFrame => PmlEvent::StartGraphicFrame,
             PmlEvent::EndGraphicFrame => PmlEvent::EndGraphicFrame,
-            PmlEvent::StartTable { props } => PmlEvent::StartTable {
-                props,
-            },
+            PmlEvent::StartTable { props } => PmlEvent::StartTable { props },
             PmlEvent::EndTable => PmlEvent::EndTable,
             PmlEvent::StartTableRow => PmlEvent::StartTableRow,
             PmlEvent::EndTableRow => PmlEvent::EndTableRow,
-            PmlEvent::StartTableCell { props } => PmlEvent::StartTableCell {
-                props,
-            },
+            PmlEvent::StartTableCell { props } => PmlEvent::StartTableCell { props },
             PmlEvent::EndTableCell => PmlEvent::EndTableCell,
-            PmlEvent::StartParagraph { props } => PmlEvent::StartParagraph {
-                props,
-            },
+            PmlEvent::StartParagraph { props } => PmlEvent::StartParagraph { props },
             PmlEvent::EndParagraph => PmlEvent::EndParagraph,
-            PmlEvent::StartRun { props } => PmlEvent::StartRun {
-                props,
-            },
+            PmlEvent::StartRun { props } => PmlEvent::StartRun { props },
             PmlEvent::EndRun => PmlEvent::EndRun,
             PmlEvent::StartHyperlink { rel_id } => PmlEvent::StartHyperlink {
                 rel_id: rel_id.map(|v| Cow::Owned(v.into_owned())),
@@ -175,8 +155,5 @@ pub fn props_strategy(kind: PmlStartKind) -> PropsStrategy {
 /// Return true if this XML local element name is a text-content leaf.
 /// The SAX iterator reads the element's text content and emits a text event.
 pub fn is_text_element(local: &[u8]) -> bool {
-    matches!(local,
-        b"t"
-    )
+    matches!(local, b"t")
 }
-

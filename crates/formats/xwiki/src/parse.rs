@@ -7,7 +7,13 @@ pub fn parse(input: &str) -> (XwikiDoc, Vec<Diagnostic>) {
     let lines: Vec<&str> = input.lines().collect();
     let mut parser = Parser::new(&lines);
     let blocks = parser.parse().unwrap_or_default();
-    (XwikiDoc { blocks, span: Span::NONE }, vec![])
+    (
+        XwikiDoc {
+            blocks,
+            span: Span::NONE,
+        },
+        vec![],
+    )
 }
 
 struct Parser<'a> {
@@ -194,7 +200,10 @@ impl<'a> Parser<'a> {
                 let inner = content_lines.join("\n");
                 let (inner_doc, _) = parse(&inner);
                 return (
-                    Block::Blockquote { children: inner_doc.blocks, span: Span::NONE },
+                    Block::Blockquote {
+                        children: inner_doc.blocks,
+                        span: Span::NONE,
+                    },
                     i + 1,
                 );
             }
@@ -204,7 +213,13 @@ impl<'a> Parser<'a> {
 
         let inner = content_lines.join("\n");
         let (inner_doc, _) = parse(&inner);
-        (Block::Blockquote { children: inner_doc.blocks, span: Span::NONE }, i)
+        (
+            Block::Blockquote {
+                children: inner_doc.blocks,
+                span: Span::NONE,
+            },
+            i,
+        )
     }
 
     fn parse_macro_block(&mut self, name: &str, params: &str) -> (Block, usize) {
@@ -277,11 +292,20 @@ impl<'a> Parser<'a> {
                 })
                 .collect();
 
-            rows.push(TableRow { cells, span: Span::NONE });
+            rows.push(TableRow {
+                cells,
+                span: Span::NONE,
+            });
             i += 1;
         }
 
-        (Block::Table { rows, span: Span::NONE }, i)
+        (
+            Block::Table {
+                rows,
+                span: Span::NONE,
+            },
+            i,
+        )
     }
 
     fn parse_list(&mut self) -> (Block, usize) {
@@ -305,7 +329,14 @@ impl<'a> Parser<'a> {
             i += 1;
         }
 
-        (Block::List { ordered, items, span: Span::NONE }, i)
+        (
+            Block::List {
+                ordered,
+                items,
+                span: Span::NONE,
+            },
+            i,
+        )
     }
 }
 
@@ -338,10 +369,17 @@ fn try_parse_block_macro_start(line: &str) -> Option<MacroInfo> {
         (inner, String::new())
     };
     // Macro names are alphabetic
-    if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
         return None;
     }
-    Some(MacroInfo { name: name.to_string(), params })
+    Some(MacroInfo {
+        name: name.to_string(),
+        params,
+    })
 }
 
 /// Try to parse `{{name .../}}` self-closing macro.
@@ -355,10 +393,17 @@ fn try_parse_self_closing_macro(line: &str) -> Option<MacroInfo> {
     } else {
         (inner, String::new())
     };
-    if name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
         return None;
     }
-    Some(MacroInfo { name: name.to_string(), params })
+    Some(MacroInfo {
+        name: name.to_string(),
+        params,
+    })
 }
 
 pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
@@ -493,10 +538,7 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
         }
 
         // Image: [[image:...]] with optional params
-        if i + 8 < chars.len()
-            && chars[i] == '['
-            && chars[i + 1] == '['
-        {
+        if i + 8 < chars.len() && chars[i] == '[' && chars[i + 1] == '[' {
             let rest: String = chars[i + 2..].iter().collect();
             if rest.starts_with("image:")
                 && let Some((img, end)) = parse_xwiki_image(&chars, i + 2)
@@ -521,7 +563,11 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 nodes.push(Inline::Text(current.clone(), Span::NONE));
                 current.clear();
             }
-            nodes.push(Inline::Link { url, label, span: Span::NONE });
+            nodes.push(Inline::Link {
+                url,
+                label,
+                span: Span::NONE,
+            });
             i = end;
             continue;
         }
@@ -656,7 +702,12 @@ fn parse_xwiki_image(chars: &[char], start: usize) -> Option<(Inline, usize)> {
                 (rest.to_string(), None, vec![])
             };
             return Some((
-                Inline::Image { url, alt, params, span: Span::NONE },
+                Inline::Image {
+                    url,
+                    alt,
+                    params,
+                    span: Span::NONE,
+                },
                 i + 2,
             ));
         }

@@ -16,7 +16,10 @@ mod tests {
     use super::*;
 
     fn rows_as_strings(doc: &CsvDoc) -> Vec<Vec<String>> {
-        doc.rows.iter().map(|r| r.cells.iter().map(|c| c.value.clone()).collect()).collect()
+        doc.rows
+            .iter()
+            .map(|r| r.cells.iter().map(|c| c.value.clone()).collect())
+            .collect()
     }
 
     #[test]
@@ -51,17 +54,35 @@ mod tests {
             rows: vec![
                 Row {
                     cells: vec![
-                        Cell { value: "a".to_string(), span: Span::NONE },
-                        Cell { value: "b".to_string(), span: Span::NONE },
-                        Cell { value: "c".to_string(), span: Span::NONE },
+                        Cell {
+                            value: "a".to_string(),
+                            span: Span::NONE,
+                        },
+                        Cell {
+                            value: "b".to_string(),
+                            span: Span::NONE,
+                        },
+                        Cell {
+                            value: "c".to_string(),
+                            span: Span::NONE,
+                        },
                     ],
                     span: Span::NONE,
                 },
                 Row {
                     cells: vec![
-                        Cell { value: "1".to_string(), span: Span::NONE },
-                        Cell { value: "2".to_string(), span: Span::NONE },
-                        Cell { value: "3".to_string(), span: Span::NONE },
+                        Cell {
+                            value: "1".to_string(),
+                            span: Span::NONE,
+                        },
+                        Cell {
+                            value: "2".to_string(),
+                            span: Span::NONE,
+                        },
+                        Cell {
+                            value: "3".to_string(),
+                            span: Span::NONE,
+                        },
                     ],
                     span: Span::NONE,
                 },

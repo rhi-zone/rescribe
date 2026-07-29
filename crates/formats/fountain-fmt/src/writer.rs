@@ -134,9 +134,7 @@ impl DocBuilder {
             }
 
             OwnedEvent::StartDialogueBlock => {
-                self.stack.push(Frame::DialogueBlock {
-                    blocks: Vec::new(),
-                });
+                self.stack.push(Frame::DialogueBlock { blocks: Vec::new() });
             }
             OwnedEvent::EndDialogueBlock => {
                 if let Some(Frame::DialogueBlock { blocks }) = self.stack.pop() {

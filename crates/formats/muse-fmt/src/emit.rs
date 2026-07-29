@@ -244,9 +244,7 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("\n");
         }
 
-        Block::FootnoteDef {
-            label, content, ..
-        } => {
+        Block::FootnoteDef { label, content, .. } => {
             ctx.write("[");
             ctx.write(label);
             ctx.write("] ");

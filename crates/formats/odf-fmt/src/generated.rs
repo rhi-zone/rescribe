@@ -19581,4 +19581,3 @@ pub struct XmlId {
     #[cfg(feature = "extra-attrs")]
     pub extra_attrs: std::collections::HashMap<String, String>,
 }
-

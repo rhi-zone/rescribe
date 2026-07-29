@@ -61,7 +61,10 @@ fn convert_node(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<FmtB
                 .iter()
                 .filter_map(|n| convert_inline(n, warnings))
                 .collect();
-            Some(FmtBlock::Paragraph { inlines, span: dokuwiki::Span::NONE })
+            Some(FmtBlock::Paragraph {
+                inlines,
+                span: dokuwiki::Span::NONE,
+            })
         }
 
         node::HEADING => {
@@ -71,18 +74,29 @@ fn convert_node(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<FmtB
                 .iter()
                 .filter_map(|n| convert_inline(n, warnings))
                 .collect();
-            Some(FmtBlock::Heading { level, inlines, span: dokuwiki::Span::NONE })
+            Some(FmtBlock::Heading {
+                level,
+                inlines,
+                span: dokuwiki::Span::NONE,
+            })
         }
 
         node::CODE_BLOCK => {
             let content = node.props.get_str(prop::CONTENT).unwrap_or("").to_string();
             let language = node.props.get_str(prop::LANGUAGE).map(|s| s.to_string());
-            Some(FmtBlock::CodeBlock { language, content, span: dokuwiki::Span::NONE })
+            Some(FmtBlock::CodeBlock {
+                language,
+                content,
+                span: dokuwiki::Span::NONE,
+            })
         }
 
         node::BLOCKQUOTE => {
             let children = convert_nodes(&node.children, warnings);
-            Some(FmtBlock::Blockquote { children, span: dokuwiki::Span::NONE })
+            Some(FmtBlock::Blockquote {
+                children,
+                span: dokuwiki::Span::NONE,
+            })
         }
 
         node::LIST => {
@@ -115,10 +129,17 @@ fn convert_node(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<FmtB
                             }
                         }
                     }
-                    items.push(dokuwiki::ListItem { inlines, children: nested_children });
+                    items.push(dokuwiki::ListItem {
+                        inlines,
+                        children: nested_children,
+                    });
                 }
             }
-            Some(FmtBlock::List { ordered, items, span: dokuwiki::Span::NONE })
+            Some(FmtBlock::List {
+                ordered,
+                items,
+                span: dokuwiki::Span::NONE,
+            })
         }
 
         node::HORIZONTAL_RULE => Some(FmtBlock::HorizontalRule(dokuwiki::Span::NONE)),
@@ -233,13 +254,21 @@ fn convert_inline(node: &Node, warnings: &mut Vec<FidelityWarning>) -> Option<Fm
                 .iter()
                 .filter_map(|n| convert_inline(n, warnings))
                 .collect();
-            Some(FmtInline::Link { url, children, span: dokuwiki::Span::NONE })
+            Some(FmtInline::Link {
+                url,
+                children,
+                span: dokuwiki::Span::NONE,
+            })
         }
 
         node::IMAGE => {
             let url = node.props.get_str(prop::URL).unwrap_or("").to_string();
             let alt = node.props.get_str(prop::ALT).map(|s| s.to_string());
-            Some(FmtInline::Image { url, alt, span: dokuwiki::Span::NONE })
+            Some(FmtInline::Image {
+                url,
+                alt,
+                span: dokuwiki::Span::NONE,
+            })
         }
 
         node::LINE_BREAK => Some(FmtInline::LineBreak(dokuwiki::Span::NONE)),

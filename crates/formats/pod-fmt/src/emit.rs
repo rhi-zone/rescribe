@@ -42,7 +42,9 @@ struct BuildContext {
 
 impl BuildContext {
     fn new() -> Self {
-        Self { output: String::new() }
+        Self {
+            output: String::new(),
+        }
     }
 
     fn write(&mut self, s: &str) {
@@ -109,7 +111,9 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write("=back\n\n");
         }
 
-        Block::RawBlock { format, content, .. } => {
+        Block::RawBlock {
+            format, content, ..
+        } => {
             ctx.write(&format!("=begin {}\n", format));
             if !content.is_empty() {
                 ctx.write(content);
@@ -118,7 +122,9 @@ fn build_block(block: &Block, ctx: &mut BuildContext) {
             ctx.write(&format!("=end {}\n\n", format));
         }
 
-        Block::ForBlock { format, content, .. } => {
+        Block::ForBlock {
+            format, content, ..
+        } => {
             ctx.write(&format!("=for {} {}\n\n", format, content));
         }
 

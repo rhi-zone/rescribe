@@ -40,7 +40,12 @@ const SAMPLES: &[&str] = &[
 fn parse_sample_no_panic() {
     for (i, sample) in SAMPLES.iter().enumerate() {
         let result = std::panic::catch_unwind(|| parse(sample));
-        assert!(result.is_ok(), "Sample {} panicked: {:?}", i, &sample[..sample.len().min(80)]);
+        assert!(
+            result.is_ok(),
+            "Sample {} panicked: {:?}",
+            i,
+            &sample[..sample.len().min(80)]
+        );
     }
 
     // Stress inputs (runtime-generated)

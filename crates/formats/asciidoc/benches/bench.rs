@@ -1,5 +1,5 @@
+use asciidoc::{build, parse};
 use criterion::{Criterion, criterion_group, criterion_main};
-use asciidoc::{parse, build};
 
 const SMALL: &str = r#"
 == Hello World

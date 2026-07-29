@@ -254,8 +254,7 @@ impl DocBuilder {
                 }
             }
             OwnedMuseEvent::StartDefinitionList => {
-                self.stack
-                    .push(Frame::DefinitionList { items: vec![] });
+                self.stack.push(Frame::DefinitionList { items: vec![] });
             }
             OwnedMuseEvent::EndDefinitionList => {
                 if let Some(Frame::DefinitionList { items }) = self.stack.pop() {
@@ -266,8 +265,7 @@ impl DocBuilder {
                 }
             }
             OwnedMuseEvent::StartDefinitionTerm => {
-                self.stack
-                    .push(Frame::DefinitionTerm { inlines: vec![] });
+                self.stack.push(Frame::DefinitionTerm { inlines: vec![] });
             }
             OwnedMuseEvent::EndDefinitionTerm => {
                 if let Some(Frame::DefinitionTerm { inlines }) = self.stack.pop()
@@ -277,8 +275,7 @@ impl DocBuilder {
                 }
             }
             OwnedMuseEvent::StartDefinitionDesc => {
-                self.stack
-                    .push(Frame::DefinitionDesc { blocks: vec![] });
+                self.stack.push(Frame::DefinitionDesc { blocks: vec![] });
             }
             OwnedMuseEvent::EndDefinitionDesc => {
                 if let Some(Frame::DefinitionDesc { blocks }) = self.stack.pop()
@@ -397,8 +394,7 @@ impl DocBuilder {
                 }
             }
             OwnedMuseEvent::StartStrikethrough => {
-                self.stack
-                    .push(Frame::Strikethrough { inlines: vec![] });
+                self.stack.push(Frame::Strikethrough { inlines: vec![] });
             }
             OwnedMuseEvent::EndStrikethrough => {
                 if let Some(Frame::Strikethrough { inlines }) = self.stack.pop() {

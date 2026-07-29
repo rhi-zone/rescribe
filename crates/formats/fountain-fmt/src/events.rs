@@ -453,7 +453,10 @@ mod tests {
     fn test_events_dialogue() {
         let evs: Vec<_> = events("JOHN\nHello there.").collect();
         assert!(evs.iter().any(|e| matches!(e, Event::StartDialogueBlock)));
-        assert!(evs.iter().any(|e| matches!(e, Event::StartCharacter { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartCharacter { .. }))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::StartDialogue)));
         assert!(evs.iter().any(|e| matches!(e, Event::EndDialogueBlock)));
     }
@@ -481,8 +484,9 @@ mod tests {
     #[test]
     fn test_events_metadata() {
         let evs: Vec<_> = events("Title: My Script\n\nINT. HOUSE - DAY").collect();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, Event::Metadata { key, .. } if key == "title")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Metadata { key, .. } if key == "title"))
+        );
     }
 }

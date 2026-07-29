@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use mediawiki_fmt::{parse, emit};
+use mediawiki_fmt::{emit, parse};
 
 const SMALL: &str = r#"
 == Hello World ==

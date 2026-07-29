@@ -129,9 +129,7 @@ fn convert_block(block: &Block) -> Option<Node> {
             Some(Node::new("example_block").prop(prop::CONTENT, content.clone()))
         }
 
-        Block::Comment { text, .. } => {
-            Some(Node::new("comment").prop(prop::CONTENT, text.clone()))
-        }
+        Block::Comment { text, .. } => Some(Node::new("comment").prop(prop::CONTENT, text.clone())),
 
         Block::HorizontalRule { .. } => Some(Node::new(node::HORIZONTAL_RULE)),
     }
@@ -161,9 +159,7 @@ fn convert_inline(inline: &Inline) -> Option<Node> {
             Some(Node::new(node::EMPHASIS).children(child_nodes))
         }
 
-        Inline::Code(text, _) => {
-            Some(Node::new(node::CODE).prop(prop::CONTENT, text.clone()))
-        }
+        Inline::Code(text, _) => Some(Node::new(node::CODE).prop(prop::CONTENT, text.clone())),
 
         Inline::Superscript(children, _) => {
             let child_nodes = convert_inlines(children);

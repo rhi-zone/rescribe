@@ -6,7 +6,13 @@ use crate::ast::*;
 pub fn parse(input: &str) -> (ZimwikiDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.parse();
-    (ZimwikiDoc { blocks, span: Span::NONE }, vec![])
+    (
+        ZimwikiDoc {
+            blocks,
+            span: Span::NONE,
+        },
+        vec![],
+    )
 }
 
 struct Parser<'a> {
@@ -141,7 +147,10 @@ impl<'a> Parser<'a> {
             if let Some(end_pos) = after.find("'''") {
                 content.push_str(&after[..end_pos]);
                 self.pos += 1;
-                return Block::CodeBlock { content, span: Span::NONE };
+                return Block::CodeBlock {
+                    content,
+                    span: Span::NONE,
+                };
             }
             content.push_str(after);
             content.push('\n');
@@ -212,7 +221,10 @@ impl<'a> Parser<'a> {
             };
 
             let inlines = parse_inline(content);
-            let para = Block::Paragraph { inlines, span: Span::NONE };
+            let para = Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            };
             items.push(ListItem {
                 checked: None,
                 children: vec![para],
@@ -221,7 +233,11 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
 
-        Block::List { ordered, items, span: Span::NONE }
+        Block::List {
+            ordered,
+            items,
+            span: Span::NONE,
+        }
     }
 
     fn parse_checkbox_list(&mut self) -> Block {
@@ -242,7 +258,10 @@ impl<'a> Parser<'a> {
             };
 
             let inlines = parse_inline(content);
-            let para = Block::Paragraph { inlines, span: Span::NONE };
+            let para = Block::Paragraph {
+                inlines,
+                span: Span::NONE,
+            };
             items.push(ListItem {
                 checked,
                 children: vec![para],
@@ -276,7 +295,10 @@ impl<'a> Parser<'a> {
         let inner_text = lines.join("\n");
         let mut inner_parser = Parser::new(&inner_text);
         let children = inner_parser.parse();
-        Block::Blockquote { children, span: Span::NONE }
+        Block::Blockquote {
+            children,
+            span: Span::NONE,
+        }
     }
 
     fn parse_table(&mut self) -> Block {
@@ -292,10 +314,16 @@ impl<'a> Parser<'a> {
                 .split('|')
                 .map(|cell| parse_inline(cell.trim()))
                 .collect();
-            rows.push(TableRow { cells, span: Span::NONE });
+            rows.push(TableRow {
+                cells,
+                span: Span::NONE,
+            });
             self.pos += 1;
         }
-        Block::Table { rows, span: Span::NONE }
+        Block::Table {
+            rows,
+            span: Span::NONE,
+        }
     }
 
     fn parse_paragraph(&mut self) -> Block {
@@ -333,7 +361,10 @@ impl<'a> Parser<'a> {
         }
 
         let inlines = parse_inline(&text);
-        Block::Paragraph { inlines, span: Span::NONE }
+        Block::Paragraph {
+            inlines,
+            span: Span::NONE,
+        }
     }
 }
 
@@ -485,7 +516,10 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
                 inlines.push(Inline::Text(current.clone(), Span::NONE));
                 current.clear();
             }
-            inlines.push(Inline::Image { url, span: Span::NONE });
+            inlines.push(Inline::Image {
+                url,
+                span: Span::NONE,
+            });
             i = end;
             continue;
         }

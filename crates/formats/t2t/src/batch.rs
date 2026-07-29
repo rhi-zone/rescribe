@@ -155,9 +155,7 @@ impl<H: Handler> StreamingParser<H> {
             if !self.block_lines.is_empty() {
                 self.emit_block();
             }
-            self.state = BlockState::InFenced {
-                end_marker: "```",
-            };
+            self.state = BlockState::InFenced { end_marker: "```" };
             self.block_lines.push(line);
             return;
         }
@@ -262,9 +260,10 @@ mod tests {
         p.feed(b"= Hello =\n\n");
         p.feed(b"A paragraph.\n");
         p.finish();
-        assert!(evs
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1, .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1, .. }))
+        );
         assert!(evs.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
     }
 
@@ -274,7 +273,10 @@ mod tests {
         let mut p = StreamingParser::new(|ev| evs.push(ev));
         p.feed(b"```\nlet x = 1;\n```\n");
         p.finish();
-        assert!(evs.iter().any(|e| matches!(e, OwnedEvent::CodeBlock { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, OwnedEvent::CodeBlock { .. }))
+        );
     }
 
     #[test]
@@ -287,7 +289,11 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, OwnedEvent::CodeBlock { .. }))
             .collect();
-        assert_eq!(code_blocks.len(), 1, "should be exactly one code block event");
+        assert_eq!(
+            code_blocks.len(),
+            1,
+            "should be exactly one code block event"
+        );
         if let OwnedEvent::CodeBlock { content, .. } = &code_blocks[0] {
             assert!(content.contains("line 1"));
             assert!(content.contains("line 2"));
@@ -301,9 +307,15 @@ mod tests {
         sink.feed(b"= Hello =\n\n");
         sink.feed(b"A paragraph.\n");
         sink.finish();
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1, .. })));
-        assert!(events.iter().any(|e| matches!(e, OwnedEvent::StartParagraph)));
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartHeading { level: 1, .. }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, OwnedEvent::StartParagraph))
+        );
     }
 }

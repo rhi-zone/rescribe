@@ -58,7 +58,10 @@ pub enum TextBlock {
     Frame(Frame),
     /// An element that has no specific representation in this AST.
     /// Preserved as raw XML bytes for roundtrip fidelity.
-    Unknown { name: String, raw: String },
+    Unknown {
+        name: String,
+        raw: String,
+    },
 }
 
 /// `<text:p>` — a paragraph.
@@ -166,7 +169,10 @@ pub struct Frame {
 #[derive(Debug, Clone, Default)]
 pub enum FrameContent {
     /// `<draw:image>` with `xlink:href` pointing to an image in the ZIP.
-    Image { href: String, mime_type: Option<String> },
+    Image {
+        href: String,
+        mime_type: Option<String>,
+    },
     /// `<draw:text-box>` with block content.
     TextBox(Vec<TextBlock>),
     /// Anything else (preserved as raw XML).
@@ -489,7 +495,10 @@ pub enum DrawShapeContent {
     /// `<draw:text-box>` with block content.
     TextBox(Vec<TextBlock>),
     /// `<draw:image>` with `xlink:href`.
-    Image { href: String, mime_type: Option<String> },
+    Image {
+        href: String,
+        mime_type: Option<String>,
+    },
     /// Anything else preserved as raw XML.
     Other(String),
     #[default]

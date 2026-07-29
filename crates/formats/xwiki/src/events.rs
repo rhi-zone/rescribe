@@ -10,24 +10,40 @@ pub enum Event<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u8 },
+    StartHeading {
+        level: u8,
+    },
     EndHeading,
     StartBlockquote,
     EndBlockquote,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
-    CodeBlock { language: Option<String>, content: Cow<'a, str> },
+    CodeBlock {
+        language: Option<String>,
+        content: Cow<'a, str>,
+    },
     HorizontalRule,
     StartTable,
     EndTable,
     StartTableRow,
     EndTableRow,
-    StartTableCell { is_header: bool },
+    StartTableCell {
+        is_header: bool,
+    },
     EndTableCell,
-    MacroBlock { name: String, params: String, content: String },
-    MacroInline { name: String, params: String },
+    MacroBlock {
+        name: String,
+        params: String,
+        content: String,
+    },
+    MacroInline {
+        name: String,
+        params: String,
+    },
 
     // ── Inline events ─────────────────────────────────────────────────────────
     Text(Cow<'a, str>),
@@ -46,9 +62,15 @@ pub enum Event<'a> {
     StartSubscript,
     EndSubscript,
     InlineCode(Cow<'a, str>),
-    StartLink { url: String },
+    StartLink {
+        url: String,
+    },
     EndLink,
-    InlineImage { url: String, alt: Option<String>, params: Vec<(String, String)> },
+    InlineImage {
+        url: String,
+        alt: Option<String>,
+        params: Vec<(String, String)>,
+    },
 }
 
 /// Backwards-compatible alias for batch mode (all text is owned).
@@ -134,7 +156,10 @@ impl EndTag {
 impl<'a> EventIter<'a> {
     pub fn new(doc: &'a XwikiDoc) -> Self {
         EventIter {
-            stack: vec![Frame::Blocks { blocks: &doc.blocks, idx: 0 }],
+            stack: vec![Frame::Blocks {
+                blocks: &doc.blocks,
+                idx: 0,
+            }],
             pending: None,
         }
     }
@@ -178,7 +203,9 @@ impl<'a> Iterator for EventIter<'a> {
                             self.stack.push(Frame::Inlines { inlines, idx: 0 });
                             return Some(Event::StartHeading { level: *level });
                         }
-                        Block::CodeBlock { language, content, .. } => {
+                        Block::CodeBlock {
+                            language, content, ..
+                        } => {
                             return Some(Event::CodeBlock {
                                 language: language.clone(),
                                 content: Cow::Borrowed(content),
@@ -199,10 +226,18 @@ impl<'a> Iterator for EventIter<'a> {
                         }
                         Block::Blockquote { children, .. } => {
                             self.stack.push(Frame::EndBlock(EndTag::Blockquote));
-                            self.stack.push(Frame::Blocks { blocks: children, idx: 0 });
+                            self.stack.push(Frame::Blocks {
+                                blocks: children,
+                                idx: 0,
+                            });
                             return Some(Event::StartBlockquote);
                         }
-                        Block::MacroBlock { name, params, content, .. } => {
+                        Block::MacroBlock {
+                            name,
+                            params,
+                            content,
+                            ..
+                        } => {
                             return Some(Event::MacroBlock {
                                 name: name.clone(),
                                 params: params.clone(),
@@ -225,7 +260,10 @@ impl<'a> Iterator for EventIter<'a> {
                     let row = &rows[*idx];
                     *idx += 1;
                     self.stack.push(Frame::EndBlock(EndTag::TableRow));
-                    self.stack.push(Frame::TableCells { cells: &row.cells, idx: 0 });
+                    self.stack.push(Frame::TableCells {
+                        cells: &row.cells,
+                        idx: 0,
+                    });
                     return Some(Event::StartTableRow);
                 }
                 Frame::TableCells { cells, idx } => {
@@ -236,8 +274,13 @@ impl<'a> Iterator for EventIter<'a> {
                     let cell = &cells[*idx];
                     *idx += 1;
                     self.stack.push(Frame::EndBlock(EndTag::TableCell));
-                    self.stack.push(Frame::Inlines { inlines: &cell.inlines, idx: 0 });
-                    return Some(Event::StartTableCell { is_header: cell.is_header });
+                    self.stack.push(Frame::Inlines {
+                        inlines: &cell.inlines,
+                        idx: 0,
+                    });
+                    return Some(Event::StartTableCell {
+                        is_header: cell.is_header,
+                    });
                 }
                 Frame::ListItems { items, idx } => {
                     if *idx >= items.len() {
@@ -247,7 +290,10 @@ impl<'a> Iterator for EventIter<'a> {
                     let item_blocks = &items[*idx];
                     *idx += 1;
                     self.stack.push(Frame::EndBlock(EndTag::ListItem));
-                    self.stack.push(Frame::Blocks { blocks: item_blocks, idx: 0 });
+                    self.stack.push(Frame::Blocks {
+                        blocks: item_blocks,
+                        idx: 0,
+                    });
                     return Some(Event::StartListItem);
                 }
                 Frame::Inlines { inlines, idx } => {
@@ -263,32 +309,50 @@ impl<'a> Iterator for EventIter<'a> {
                         }
                         Inline::Bold(children, _) => {
                             self.stack.push(Frame::EndInline(EndTag::Bold));
-                            self.stack.push(Frame::Inlines { inlines: children, idx: 0 });
+                            self.stack.push(Frame::Inlines {
+                                inlines: children,
+                                idx: 0,
+                            });
                             return Some(Event::StartBold);
                         }
                         Inline::Italic(children, _) => {
                             self.stack.push(Frame::EndInline(EndTag::Italic));
-                            self.stack.push(Frame::Inlines { inlines: children, idx: 0 });
+                            self.stack.push(Frame::Inlines {
+                                inlines: children,
+                                idx: 0,
+                            });
                             return Some(Event::StartItalic);
                         }
                         Inline::Underline(children, _) => {
                             self.stack.push(Frame::EndInline(EndTag::Underline));
-                            self.stack.push(Frame::Inlines { inlines: children, idx: 0 });
+                            self.stack.push(Frame::Inlines {
+                                inlines: children,
+                                idx: 0,
+                            });
                             return Some(Event::StartUnderline);
                         }
                         Inline::Strikeout(children, _) => {
                             self.stack.push(Frame::EndInline(EndTag::Strikeout));
-                            self.stack.push(Frame::Inlines { inlines: children, idx: 0 });
+                            self.stack.push(Frame::Inlines {
+                                inlines: children,
+                                idx: 0,
+                            });
                             return Some(Event::StartStrikeout);
                         }
                         Inline::Superscript(children, _) => {
                             self.stack.push(Frame::EndInline(EndTag::Superscript));
-                            self.stack.push(Frame::Inlines { inlines: children, idx: 0 });
+                            self.stack.push(Frame::Inlines {
+                                inlines: children,
+                                idx: 0,
+                            });
                             return Some(Event::StartSuperscript);
                         }
                         Inline::Subscript(children, _) => {
                             self.stack.push(Frame::EndInline(EndTag::Subscript));
-                            self.stack.push(Frame::Inlines { inlines: children, idx: 0 });
+                            self.stack.push(Frame::Inlines {
+                                inlines: children,
+                                idx: 0,
+                            });
                             return Some(Event::StartSubscript);
                         }
                         Inline::Code(s, _) => {
@@ -299,11 +363,12 @@ impl<'a> Iterator for EventIter<'a> {
                             // We can only queue one pending event, so push EndLink
                             // on the stack and set pending to Text(label).
                             self.stack.push(Frame::EndInline(EndTag::Link));
-                            self.pending =
-                                Some(Event::Text(Cow::Owned(label.clone())));
+                            self.pending = Some(Event::Text(Cow::Owned(label.clone())));
                             return Some(Event::StartLink { url: url.clone() });
                         }
-                        Inline::Image { url, alt, params, .. } => {
+                        Inline::Image {
+                            url, alt, params, ..
+                        } => {
                             return Some(Event::InlineImage {
                                 url: url.clone(),
                                 alt: alt.clone(),
@@ -341,19 +406,43 @@ pub fn collect_doc_from_events(events: impl IntoIterator<Item = OwnedEvent>) -> 
         _ => Vec::new(),
     };
 
-    XwikiDoc { blocks, span: Span::NONE }
+    XwikiDoc {
+        blocks,
+        span: Span::NONE,
+    }
 }
 
 enum BlockFrame {
-    Document { blocks: Vec<Block> },
-    Paragraph { inlines: Vec<Inline> },
-    Heading { level: u8, inlines: Vec<Inline> },
-    Blockquote { children: Vec<Block> },
-    List { ordered: bool, items: Vec<Vec<Block>> },
-    ListItem { blocks: Vec<Block> },
-    Table { rows: Vec<TableRow> },
-    TableRow { cells: Vec<TableCell> },
-    TableCell { is_header: bool, inlines: Vec<Inline> },
+    Document {
+        blocks: Vec<Block>,
+    },
+    Paragraph {
+        inlines: Vec<Inline>,
+    },
+    Heading {
+        level: u8,
+        inlines: Vec<Inline>,
+    },
+    Blockquote {
+        children: Vec<Block>,
+    },
+    List {
+        ordered: bool,
+        items: Vec<Vec<Block>>,
+    },
+    ListItem {
+        blocks: Vec<Block>,
+    },
+    Table {
+        rows: Vec<TableRow>,
+    },
+    TableRow {
+        cells: Vec<TableCell>,
+    },
+    TableCell {
+        is_header: bool,
+        inlines: Vec<Inline>,
+    },
 }
 
 enum InlineFrame {
@@ -407,43 +496,70 @@ fn handle_event(
 ) {
     match event {
         Event::StartParagraph => {
-            block_stack.push(BlockFrame::Paragraph { inlines: Vec::new() });
+            block_stack.push(BlockFrame::Paragraph {
+                inlines: Vec::new(),
+            });
         }
         Event::EndParagraph => {
             if let Some(BlockFrame::Paragraph { inlines }) = block_stack.pop() {
-                push_block(block_stack, Block::Paragraph { inlines, span: Span::NONE });
+                push_block(
+                    block_stack,
+                    Block::Paragraph {
+                        inlines,
+                        span: Span::NONE,
+                    },
+                );
             }
         }
         Event::StartHeading { level } => {
-            block_stack.push(BlockFrame::Heading { level, inlines: Vec::new() });
+            block_stack.push(BlockFrame::Heading {
+                level,
+                inlines: Vec::new(),
+            });
         }
         Event::EndHeading => {
             if let Some(BlockFrame::Heading { level, inlines }) = block_stack.pop() {
                 push_block(
                     block_stack,
-                    Block::Heading { level, inlines, span: Span::NONE },
+                    Block::Heading {
+                        level,
+                        inlines,
+                        span: Span::NONE,
+                    },
                 );
             }
         }
         Event::StartBlockquote => {
-            block_stack.push(BlockFrame::Blockquote { children: Vec::new() });
+            block_stack.push(BlockFrame::Blockquote {
+                children: Vec::new(),
+            });
         }
         Event::EndBlockquote => {
             if let Some(BlockFrame::Blockquote { children }) = block_stack.pop() {
                 push_block(
                     block_stack,
-                    Block::Blockquote { children, span: Span::NONE },
+                    Block::Blockquote {
+                        children,
+                        span: Span::NONE,
+                    },
                 );
             }
         }
         Event::StartList { ordered } => {
-            block_stack.push(BlockFrame::List { ordered, items: Vec::new() });
+            block_stack.push(BlockFrame::List {
+                ordered,
+                items: Vec::new(),
+            });
         }
         Event::EndList => {
             if let Some(BlockFrame::List { ordered, items }) = block_stack.pop() {
                 push_block(
                     block_stack,
-                    Block::List { ordered, items, span: Span::NONE },
+                    Block::List {
+                        ordered,
+                        items,
+                        span: Span::NONE,
+                    },
                 );
             }
         }
@@ -475,7 +591,13 @@ fn handle_event(
         }
         Event::EndTable => {
             if let Some(BlockFrame::Table { rows }) = block_stack.pop() {
-                push_block(block_stack, Block::Table { rows, span: Span::NONE });
+                push_block(
+                    block_stack,
+                    Block::Table {
+                        rows,
+                        span: Span::NONE,
+                    },
+                );
             }
         }
         Event::StartTableRow => {
@@ -485,29 +607,52 @@ fn handle_event(
             if let Some(BlockFrame::TableRow { cells }) = block_stack.pop()
                 && let Some(BlockFrame::Table { rows }) = block_stack.last_mut()
             {
-                rows.push(TableRow { cells, span: Span::NONE });
+                rows.push(TableRow {
+                    cells,
+                    span: Span::NONE,
+                });
             }
         }
         Event::StartTableCell { is_header } => {
-            block_stack.push(BlockFrame::TableCell { is_header, inlines: Vec::new() });
+            block_stack.push(BlockFrame::TableCell {
+                is_header,
+                inlines: Vec::new(),
+            });
         }
         Event::EndTableCell => {
             if let Some(BlockFrame::TableCell { is_header, inlines }) = block_stack.pop()
                 && let Some(BlockFrame::TableRow { cells }) = block_stack.last_mut()
             {
-                cells.push(TableCell { is_header, inlines, span: Span::NONE });
+                cells.push(TableCell {
+                    is_header,
+                    inlines,
+                    span: Span::NONE,
+                });
             }
         }
-        Event::MacroBlock { name, params, content } => {
+        Event::MacroBlock {
+            name,
+            params,
+            content,
+        } => {
             push_block(
                 block_stack,
-                Block::MacroBlock { name, params, content, span: Span::NONE },
+                Block::MacroBlock {
+                    name,
+                    params,
+                    content,
+                    span: Span::NONE,
+                },
             );
         }
         Event::MacroInline { name, params } => {
             push_block(
                 block_stack,
-                Block::MacroInline { name, params, span: Span::NONE },
+                Block::MacroInline {
+                    name,
+                    params,
+                    span: Span::NONE,
+                },
             );
         }
 
@@ -520,10 +665,18 @@ fn handle_event(
             );
         }
         Event::SoftBreak => {
-            push_inline(block_stack, inline_ctx, Inline::SoftBreak { span: Span::NONE });
+            push_inline(
+                block_stack,
+                inline_ctx,
+                Inline::SoftBreak { span: Span::NONE },
+            );
         }
         Event::LineBreak => {
-            push_inline(block_stack, inline_ctx, Inline::LineBreak { span: Span::NONE });
+            push_inline(
+                block_stack,
+                inline_ctx,
+                Inline::LineBreak { span: Span::NONE },
+            );
         }
         Event::InlineCode(cow) => {
             push_inline(
@@ -533,7 +686,9 @@ fn handle_event(
             );
         }
         Event::StartBold => {
-            inline_ctx.push(InlineFrame::Bold { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Bold {
+                inlines: Vec::new(),
+            });
         }
         Event::EndBold => {
             if let Some(InlineFrame::Bold { inlines }) = inline_ctx.pop() {
@@ -541,7 +696,9 @@ fn handle_event(
             }
         }
         Event::StartItalic => {
-            inline_ctx.push(InlineFrame::Italic { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Italic {
+                inlines: Vec::new(),
+            });
         }
         Event::EndItalic => {
             if let Some(InlineFrame::Italic { inlines }) = inline_ctx.pop() {
@@ -549,7 +706,9 @@ fn handle_event(
             }
         }
         Event::StartUnderline => {
-            inline_ctx.push(InlineFrame::Underline { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Underline {
+                inlines: Vec::new(),
+            });
         }
         Event::EndUnderline => {
             if let Some(InlineFrame::Underline { inlines }) = inline_ctx.pop() {
@@ -561,7 +720,9 @@ fn handle_event(
             }
         }
         Event::StartStrikeout => {
-            inline_ctx.push(InlineFrame::Strikeout { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Strikeout {
+                inlines: Vec::new(),
+            });
         }
         Event::EndStrikeout => {
             if let Some(InlineFrame::Strikeout { inlines }) = inline_ctx.pop() {
@@ -573,7 +734,9 @@ fn handle_event(
             }
         }
         Event::StartSuperscript => {
-            inline_ctx.push(InlineFrame::Superscript { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Superscript {
+                inlines: Vec::new(),
+            });
         }
         Event::EndSuperscript => {
             if let Some(InlineFrame::Superscript { inlines }) = inline_ctx.pop() {
@@ -585,7 +748,9 @@ fn handle_event(
             }
         }
         Event::StartSubscript => {
-            inline_ctx.push(InlineFrame::Subscript { inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Subscript {
+                inlines: Vec::new(),
+            });
         }
         Event::EndSubscript => {
             if let Some(InlineFrame::Subscript { inlines }) = inline_ctx.pop() {
@@ -597,7 +762,10 @@ fn handle_event(
             }
         }
         Event::StartLink { url } => {
-            inline_ctx.push(InlineFrame::Link { url, inlines: Vec::new() });
+            inline_ctx.push(InlineFrame::Link {
+                url,
+                inlines: Vec::new(),
+            });
         }
         Event::EndLink => {
             if let Some(InlineFrame::Link { url, inlines }) = inline_ctx.pop() {
@@ -605,7 +773,11 @@ fn handle_event(
                 push_inline(
                     block_stack,
                     inline_ctx,
-                    Inline::Link { url, label, span: Span::NONE },
+                    Inline::Link {
+                        url,
+                        label,
+                        span: Span::NONE,
+                    },
                 );
             }
         }
@@ -613,7 +785,12 @@ fn handle_event(
             push_inline(
                 block_stack,
                 inline_ctx,
-                Inline::Image { url, alt, params, span: Span::NONE },
+                Inline::Image {
+                    url,
+                    alt,
+                    params,
+                    span: Span::NONE,
+                },
             );
         }
     }
@@ -627,7 +804,10 @@ mod tests {
     fn test_events_heading() {
         let (doc, _) = crate::parse::parse("= Hello =");
         let evs: Vec<_> = events(&doc).collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::StartHeading { level: 1 })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartHeading { level: 1 }))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndHeading)));
     }
 
@@ -637,7 +817,10 @@ mod tests {
         let evs: Vec<_> = events(&doc).collect();
         assert!(evs.iter().any(|e| matches!(e, Event::StartParagraph)));
         assert!(evs.iter().any(|e| matches!(e, Event::EndParagraph)));
-        assert!(evs.iter().any(|e| matches!(e, Event::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
@@ -660,7 +843,10 @@ mod tests {
         let (doc, _) = crate::parse::parse("|=Name|=Age|\n|Alice|30|");
         let evs: Vec<_> = events(&doc).collect();
         assert!(evs.iter().any(|e| matches!(e, Event::StartTable)));
-        assert!(evs.iter().any(|e| matches!(e, Event::StartTableCell { is_header: true })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartTableCell { is_header: true }))
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::EndTable)));
     }
 
@@ -668,9 +854,14 @@ mod tests {
     fn test_events_list() {
         let (doc, _) = crate::parse::parse("* Item 1\n* Item 2");
         let evs: Vec<_> = events(&doc).collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::StartList { ordered: false })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::StartList { ordered: false }))
+        );
         assert_eq!(
-            evs.iter().filter(|e| matches!(e, Event::StartListItem)).count(),
+            evs.iter()
+                .filter(|e| matches!(e, Event::StartListItem))
+                .count(),
             2
         );
         assert!(evs.iter().any(|e| matches!(e, Event::EndList)));

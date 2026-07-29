@@ -18,7 +18,9 @@ use vimwiki_fmt::parse;
 // -- Path discovery -----------------------------------------------------------
 
 fn find_pandoc() -> Option<PathBuf> {
-    if let Ok(out) = Command::new("sh").args(["-c", "command -v pandoc"]).output()
+    if let Ok(out) = Command::new("sh")
+        .args(["-c", "command -v pandoc"])
+        .output()
         && out.status.success()
     {
         let s = String::from_utf8_lossy(&out.stdout);
@@ -51,7 +53,12 @@ fn pandoc_to_plain(pandoc: &Path, input: &str) -> Option<String> {
         .ok()
         .and_then(|mut child| {
             use std::io::Write;
-            child.stdin.take().unwrap().write_all(input.as_bytes()).ok()?;
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(input.as_bytes())
+                .ok()?;
             child.wait_with_output().ok()
         })?;
     if out.status.success() {

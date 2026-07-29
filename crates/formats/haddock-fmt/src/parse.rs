@@ -4,7 +4,13 @@ use crate::ast::{Block, Diagnostic, HaddockDoc, Inline, Span};
 pub fn parse(input: &str) -> (HaddockDoc, Vec<Diagnostic>) {
     let mut p = Parser::new(input);
     let blocks = p.parse();
-    (HaddockDoc { blocks, span: Span::NONE }, Vec::new())
+    (
+        HaddockDoc {
+            blocks,
+            span: Span::NONE,
+        },
+        Vec::new(),
+    )
 }
 
 struct Parser<'a> {
@@ -204,10 +210,7 @@ impl<'a> Parser<'a> {
         }
         // @deprecated REASON
         if trimmed == "@deprecated" || trimmed.starts_with("@deprecated ") {
-            let desc_text = trimmed
-                .strip_prefix("@deprecated")
-                .unwrap_or("")
-                .trim();
+            let desc_text = trimmed.strip_prefix("@deprecated").unwrap_or("").trim();
             let description = if desc_text.is_empty() {
                 Vec::new()
             } else {
@@ -289,7 +292,10 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
 
-        Block::UnorderedList { items, span: Span::NONE }
+        Block::UnorderedList {
+            items,
+            span: Span::NONE,
+        }
     }
 
     fn parse_ordered_list(&mut self) -> Block {
@@ -320,7 +326,10 @@ impl<'a> Parser<'a> {
             self.pos += 1;
         }
 
-        Block::OrderedList { items, span: Span::NONE }
+        Block::OrderedList {
+            items,
+            span: Span::NONE,
+        }
     }
 
     fn parse_definition_list(&mut self) -> Option<Block> {
@@ -350,7 +359,10 @@ impl<'a> Parser<'a> {
         if items.is_empty() {
             None
         } else {
-            Some(Block::DefinitionList { items, span: Span::NONE })
+            Some(Block::DefinitionList {
+                items,
+                span: Span::NONE,
+            })
         }
     }
 
@@ -386,7 +398,10 @@ impl<'a> Parser<'a> {
         }
 
         let inlines = parse_inline(&text);
-        Block::Paragraph { inlines, span: Span::NONE }
+        Block::Paragraph {
+            inlines,
+            span: Span::NONE,
+        }
     }
 
     fn is_property_line(&self, trimmed: &str) -> bool {
@@ -468,9 +483,7 @@ pub(crate) fn parse_inline(text: &str) -> Vec<Inline> {
         }
 
         // Module reference "Module"
-        if chars[i] == '"'
-            && i + 1 < chars.len()
-        {
+        if chars[i] == '"' && i + 1 < chars.len() {
             // Try "text"<url> link first
             if let Some((end, link_text, url)) = parse_haddock_link(&chars, i) {
                 if !current.is_empty() {
@@ -643,7 +656,9 @@ fn parse_module_ref(chars: &[char], start: usize) -> Option<(usize, String)> {
 
     // Validate: module name must be a valid Haskell module (letters, digits, dots, underscores)
     if module.is_empty()
-        || !module.chars().all(|c| c.is_alphanumeric() || c == '.' || c == '_')
+        || !module
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '.' || c == '_')
     {
         return None;
     }

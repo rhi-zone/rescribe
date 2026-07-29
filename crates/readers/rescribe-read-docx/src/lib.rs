@@ -13,10 +13,10 @@
 //! ```
 
 use ooxml_wml::Document as OoxmlDocument;
-use ooxml_wml::parse_numbering_order;
 use ooxml_wml::ext::{
     CellExt, DrawingExt, HyperlinkExt, ParagraphExt, RowExt, RunExt, RunPropertiesExt, TableExt,
 };
+use ooxml_wml::parse_numbering_order;
 use ooxml_wml::types::{
     BlockContent, BlockContentChoice, FootnoteEndnote, Hyperlink, Paragraph, ParagraphContent, Run,
     RunContent, RunContentChoice, STJc, Table,

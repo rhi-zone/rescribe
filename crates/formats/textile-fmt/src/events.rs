@@ -155,7 +155,12 @@ impl Iterator for EventIter {
 
 fn push_block_events(block: &Block, out: &mut Vec<TextileEvent>) {
     match block {
-        Block::Paragraph { inlines, align, attrs, .. } => {
+        Block::Paragraph {
+            inlines,
+            align,
+            attrs,
+            ..
+        } => {
             out.push(TextileEvent::StartParagraph {
                 align: align.clone(),
                 attrs: attrs.clone(),
@@ -166,15 +171,25 @@ fn push_block_events(block: &Block, out: &mut Vec<TextileEvent>) {
             out.push(TextileEvent::EndParagraph);
         }
 
-        Block::Heading { level, inlines, attrs, .. } => {
-            out.push(TextileEvent::StartHeading { level: *level, attrs: attrs.clone() });
+        Block::Heading {
+            level,
+            inlines,
+            attrs,
+            ..
+        } => {
+            out.push(TextileEvent::StartHeading {
+                level: *level,
+                attrs: attrs.clone(),
+            });
             for inline in inlines {
                 push_inline_events(inline, out);
             }
             out.push(TextileEvent::EndHeading);
         }
 
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             out.push(TextileEvent::CodeBlock {
                 content: content.clone(),
                 language: language.clone(),
@@ -182,7 +197,9 @@ fn push_block_events(block: &Block, out: &mut Vec<TextileEvent>) {
         }
 
         Block::Blockquote { blocks, attrs, .. } => {
-            out.push(TextileEvent::StartBlockquote { attrs: attrs.clone() });
+            out.push(TextileEvent::StartBlockquote {
+                attrs: attrs.clone(),
+            });
             for b in blocks {
                 push_block_events(b, out);
             }
@@ -204,7 +221,9 @@ fn push_block_events(block: &Block, out: &mut Vec<TextileEvent>) {
         Block::Table { rows, .. } => {
             out.push(TextileEvent::StartTable);
             for row in rows {
-                out.push(TextileEvent::StartTableRow { attrs: row.attrs.clone() });
+                out.push(TextileEvent::StartTableRow {
+                    attrs: row.attrs.clone(),
+                });
                 for cell in &row.cells {
                     out.push(TextileEvent::StartTableCell {
                         is_header: cell.is_header,
@@ -225,7 +244,9 @@ fn push_block_events(block: &Block, out: &mut Vec<TextileEvent>) {
         }
 
         Block::FootnoteDef { label, inlines, .. } => {
-            out.push(TextileEvent::StartFootnoteDef { label: label.clone() });
+            out.push(TextileEvent::StartFootnoteDef {
+                label: label.clone(),
+            });
             for inline in inlines {
                 push_inline_events(inline, out);
             }
@@ -250,7 +271,9 @@ fn push_block_events(block: &Block, out: &mut Vec<TextileEvent>) {
         }
 
         Block::Raw { content, .. } => {
-            out.push(TextileEvent::RawBlock { content: content.clone() });
+            out.push(TextileEvent::RawBlock {
+                content: content.clone(),
+            });
         }
     }
 }
@@ -293,8 +316,16 @@ fn push_inline_events(inline: &Inline, out: &mut Vec<TextileEvent>) {
 
         Inline::Code(s, _) => out.push(TextileEvent::InlineCode(s.clone())),
 
-        Inline::Link { url, title, children, .. } => {
-            out.push(TextileEvent::StartLink { url: url.clone(), title: title.clone() });
+        Inline::Link {
+            url,
+            title,
+            children,
+            ..
+        } => {
+            out.push(TextileEvent::StartLink {
+                url: url.clone(),
+                title: title.clone(),
+            });
             for c in children {
                 push_inline_events(c, out);
             }
@@ -302,7 +333,10 @@ fn push_inline_events(inline: &Inline, out: &mut Vec<TextileEvent>) {
         }
 
         Inline::Image { url, alt, .. } => {
-            out.push(TextileEvent::InlineImage { url: url.clone(), alt: alt.clone() });
+            out.push(TextileEvent::InlineImage {
+                url: url.clone(),
+                alt: alt.clone(),
+            });
         }
 
         Inline::Superscript(children, _) => {
@@ -322,7 +356,9 @@ fn push_inline_events(inline: &Inline, out: &mut Vec<TextileEvent>) {
         }
 
         Inline::FootnoteRef { label, .. } => {
-            out.push(TextileEvent::FootnoteRef { label: label.clone() });
+            out.push(TextileEvent::FootnoteRef {
+                label: label.clone(),
+            });
         }
 
         Inline::LineBreak(_) => out.push(TextileEvent::LineBreak),
@@ -337,8 +373,12 @@ fn push_inline_events(inline: &Inline, out: &mut Vec<TextileEvent>) {
             out.push(TextileEvent::EndCitation);
         }
 
-        Inline::GenericSpan { attrs, children, .. } => {
-            out.push(TextileEvent::StartGenericSpan { attrs: attrs.clone() });
+        Inline::GenericSpan {
+            attrs, children, ..
+        } => {
+            out.push(TextileEvent::StartGenericSpan {
+                attrs: attrs.clone(),
+            });
             for c in children {
                 push_inline_events(c, out);
             }
@@ -346,7 +386,10 @@ fn push_inline_events(inline: &Inline, out: &mut Vec<TextileEvent>) {
         }
 
         Inline::Acronym { text, title, .. } => {
-            out.push(TextileEvent::Acronym { text: text.clone(), title: title.clone() });
+            out.push(TextileEvent::Acronym {
+                text: text.clone(),
+                title: title.clone(),
+            });
         }
     }
 }
@@ -368,16 +411,25 @@ mod tests {
     #[test]
     fn test_events_heading() {
         let evs: Vec<_> = events("h1. Title\n").collect();
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::StartHeading { level: 1, .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::StartHeading { level: 1, .. }))
+        );
         assert!(evs.iter().any(|e| matches!(e, TextileEvent::EndHeading)));
     }
 
     #[test]
     fn test_events_paragraph() {
         let evs: Vec<_> = events("Hello world\n").collect();
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::StartParagraph { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::StartParagraph { .. }))
+        );
         assert!(evs.iter().any(|e| matches!(e, TextileEvent::EndParagraph)));
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::Text(t) if t == "Hello world")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::Text(t) if t == "Hello world"))
+        );
     }
 
     #[test]
@@ -392,15 +444,23 @@ mod tests {
     #[test]
     fn test_events_code_block() {
         let evs: Vec<_> = events("bc. code here\n").collect();
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::CodeBlock { .. })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::CodeBlock { .. }))
+        );
     }
 
     #[test]
     fn test_events_list() {
         let evs: Vec<_> = events("* item1\n* item2\n").collect();
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::StartList { ordered: false })));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::StartList { ordered: false }))
+        );
         assert_eq!(
-            evs.iter().filter(|e| matches!(e, TextileEvent::StartListItem)).count(),
+            evs.iter()
+                .filter(|e| matches!(e, TextileEvent::StartListItem))
+                .count(),
             2
         );
         assert!(evs.iter().any(|e| matches!(e, TextileEvent::EndList)));
@@ -416,13 +476,22 @@ mod tests {
     #[test]
     fn test_events_horizontal_rule() {
         let evs: Vec<_> = events("---\n").collect();
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::HorizontalRule)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::HorizontalRule))
+        );
     }
 
     #[test]
     fn test_events_footnote_def() {
         let evs: Vec<_> = events("fn1. Footnote content\n").collect();
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::StartFootnoteDef { label } if label == "1")));
-        assert!(evs.iter().any(|e| matches!(e, TextileEvent::EndFootnoteDef)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::StartFootnoteDef { label } if label == "1"))
+        );
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, TextileEvent::EndFootnoteDef))
+        );
     }
 }

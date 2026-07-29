@@ -709,7 +709,8 @@ impl<'a> Parser<'a> {
 
             let item_span = self.line_span(self.pos);
             let content = line.trim_start()[2..].trim();
-            let inline_nodes = parse_inline(content, item_span.start + line.find(content).unwrap_or(0));
+            let inline_nodes =
+                parse_inline(content, item_span.start + line.find(content).unwrap_or(0));
             items.push(vec![Block::Paragraph {
                 inlines: inline_nodes,
                 span: item_span,
@@ -740,7 +741,8 @@ impl<'a> Parser<'a> {
             let trimmed = line.trim_start();
             if let Some(dot_pos) = trimmed.find(". ") {
                 let content = &trimmed[dot_pos + 2..];
-                let inline_nodes = parse_inline(content, item_span.start + line.find(content).unwrap_or(0));
+                let inline_nodes =
+                    parse_inline(content, item_span.start + line.find(content).unwrap_or(0));
                 items.push(vec![Block::Paragraph {
                     inlines: inline_nodes,
                     span: item_span,
@@ -897,8 +899,7 @@ fn is_inline_tag_line(line: &str) -> bool {
 /// Check if a line is a table row (starts with `|` or `||`).
 fn is_table_row(line: &str) -> bool {
     let trimmed = line.trim();
-    (trimmed.starts_with('|') || trimmed.starts_with("||"))
-        && (trimmed.ends_with('|'))
+    (trimmed.starts_with('|') || trimmed.starts_with("||")) && (trimmed.ends_with('|'))
 }
 
 /// Parse a single table row line.
@@ -1105,7 +1106,8 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
             if i + 3 < chars.len()
                 && chars[i + 1] == 'b'
                 && chars[i + 2] == 'r'
-                && (chars[i + 3] == '>' || (i + 4 < chars.len() && chars[i + 3] == '/' && chars[i + 4] == '>'))
+                && (chars[i + 3] == '>'
+                    || (i + 4 < chars.len() && chars[i + 3] == '/' && chars[i + 4] == '>'))
             {
                 if !current.is_empty() {
                     nodes.push(Inline::Text(
@@ -1115,7 +1117,11 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
                     current.clear();
                 }
                 let br_start = base_offset + char_byte_offset(text, i);
-                let advance = if i + 4 < chars.len() && chars[i + 3] == '/' { 5 } else { 4 };
+                let advance = if i + 4 < chars.len() && chars[i + 3] == '/' {
+                    5
+                } else {
+                    4
+                };
                 let br_end = base_offset + char_byte_offset(text, (i + advance).min(chars.len()));
                 nodes.push(Inline::LineBreak(Span::new(br_start, br_end)));
                 i += advance;
@@ -1135,12 +1141,14 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
                     current.clear();
                 }
                 let sub_start = base_offset + char_byte_offset(text, i);
-                let content_str = &text[char_byte_offset(text, i) + 5..char_byte_offset(text, i) + close];
+                let content_str =
+                    &text[char_byte_offset(text, i) + 5..char_byte_offset(text, i) + close];
                 let sub_end = base_offset + char_byte_offset(text, i) + close + 6;
                 let inner = parse_inline(content_str, sub_start + 5);
                 nodes.push(Inline::Subscript(inner, Span::new(sub_start, sub_end)));
                 let bytes_consumed = close + 6;
-                let consumed_text = &text[char_byte_offset(text, i)..char_byte_offset(text, i) + bytes_consumed];
+                let consumed_text =
+                    &text[char_byte_offset(text, i)..char_byte_offset(text, i) + bytes_consumed];
                 let chars_consumed = consumed_text.chars().count();
                 i += chars_consumed;
                 current_start = base_offset + char_byte_offset(text, i.min(chars.len()));
@@ -1159,12 +1167,14 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
                     current.clear();
                 }
                 let sup_start = base_offset + char_byte_offset(text, i);
-                let content_str = &text[char_byte_offset(text, i) + 5..char_byte_offset(text, i) + close];
+                let content_str =
+                    &text[char_byte_offset(text, i) + 5..char_byte_offset(text, i) + close];
                 let sup_end = base_offset + char_byte_offset(text, i) + close + 6;
                 let inner = parse_inline(content_str, sup_start + 5);
                 nodes.push(Inline::Superscript(inner, Span::new(sup_start, sup_end)));
                 let bytes_consumed = close + 6;
-                let consumed_text = &text[char_byte_offset(text, i)..char_byte_offset(text, i) + bytes_consumed];
+                let consumed_text =
+                    &text[char_byte_offset(text, i)..char_byte_offset(text, i) + bytes_consumed];
                 let chars_consumed = consumed_text.chars().count();
                 i += chars_consumed;
                 current_start = base_offset + char_byte_offset(text, i.min(chars.len()));
@@ -1190,7 +1200,8 @@ pub(crate) fn parse_inline(text: &str, base_offset: usize) -> Vec<Inline> {
                     span: Span::new(anchor_start, anchor_end),
                 });
                 let bytes_consumed = close + 1;
-                let consumed_text = &text[char_byte_offset(text, i)..char_byte_offset(text, i) + bytes_consumed];
+                let consumed_text =
+                    &text[char_byte_offset(text, i)..char_byte_offset(text, i) + bytes_consumed];
                 let chars_consumed = consumed_text.chars().count();
                 i += chars_consumed;
                 current_start = base_offset + char_byte_offset(text, i.min(chars.len()));

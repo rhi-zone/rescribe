@@ -47,7 +47,10 @@ Line one\\Line two
 ~**escaped bold~**
 "#;
     let (doc, diags) = parse(sample);
-    assert!(!doc.blocks.is_empty(), "parsed document should not be empty");
+    assert!(
+        !doc.blocks.is_empty(),
+        "parsed document should not be empty"
+    );
     assert!(diags.is_empty(), "no diagnostics expected for valid input");
 }
 

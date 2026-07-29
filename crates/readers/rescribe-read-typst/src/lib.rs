@@ -527,9 +527,7 @@ mod eval_impl {
             );
             let main_id = FileId::new_fake(VirtualPath::new("input.typ"));
             let source = Source::new(main_id, text.to_string());
-            let searched = FontSearcher::new()
-                .include_system_fonts(false)
-                .search();
+            let searched = FontSearcher::new().include_system_fonts(false).search();
             Self {
                 library,
                 font_book: LazyHash::new(searched.book),
@@ -614,9 +612,8 @@ mod eval_impl {
                 let trimmed = text.trim();
                 if !trimmed.is_empty() {
                     out.push(
-                        Node::new(node::PARAGRAPH).children(vec![
-                            Node::new(node::TEXT).prop(prop::CONTENT, trimmed),
-                        ]),
+                        Node::new(node::PARAGRAPH)
+                            .children(vec![Node::new(node::TEXT).prop(prop::CONTENT, trimmed)]),
                     );
                 }
             }
@@ -695,9 +692,7 @@ mod eval_impl {
                         match child_tag.as_str() {
                             "figcaption" => {
                                 let cap_children = collect_inline_children(child_elem);
-                                children.push(
-                                    Node::new(node::PARAGRAPH).children(cap_children),
-                                );
+                                children.push(Node::new(node::PARAGRAPH).children(cap_children));
                             }
                             _ => {
                                 if let Some(n) = convert_html_element(child_elem) {
@@ -934,9 +929,7 @@ mod eval_impl {
         match result.output {
             Ok(html_doc) => {
                 let blocks = convert_html_doc_to_nodes(&html_doc);
-                let doc = Document::new().with_content(
-                    Node::new(node::DOCUMENT).children(blocks),
-                );
+                let doc = Document::new().with_content(Node::new(node::DOCUMENT).children(blocks));
                 let mut cr = ConversionResult::ok(doc);
                 for w in warning_msgs {
                     cr = cr.warn(FidelityWarning::new(

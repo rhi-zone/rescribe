@@ -87,7 +87,10 @@ pub struct Writer<W: Write> {
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
-        Writer { sink, builder: DocBuilder::new() }
+        Writer {
+            sink,
+            builder: DocBuilder::new(),
+        }
     }
 
     /// Feed one event to the writer.
@@ -107,34 +110,102 @@ impl<W: Write> Writer<W> {
 // ── DocBuilder — event → AST ──────────────────────────────────────────────────
 
 enum BuildFrame {
-    Text { blocks: Vec<TextBlock> },
-    Spreadsheet { sheets: Vec<Sheet>, named_ranges: Vec<NamedRange> },
-    Presentation { pages: Vec<DrawPage> },
-    Paragraph { style_name: Option<String>, content: Vec<Inline> },
-    Heading { style_name: Option<String>, outline_level: Option<u32>, content: Vec<Inline> },
-    List { style_name: Option<String>, items: Vec<ListItem> },
-    ListItem { content: Vec<TextBlock> },
-    TableText { name: Option<String>, style_name: Option<String>, rows: Vec<TableRow> },
-    TableRow { style_name: Option<String>, cells: Vec<TableCell> },
-    TableCell { style_name: Option<String>, content: Vec<TextBlock> },
+    Text {
+        blocks: Vec<TextBlock>,
+    },
+    Spreadsheet {
+        sheets: Vec<Sheet>,
+        named_ranges: Vec<NamedRange>,
+    },
+    Presentation {
+        pages: Vec<DrawPage>,
+    },
+    Paragraph {
+        style_name: Option<String>,
+        content: Vec<Inline>,
+    },
+    Heading {
+        style_name: Option<String>,
+        outline_level: Option<u32>,
+        content: Vec<Inline>,
+    },
+    List {
+        style_name: Option<String>,
+        items: Vec<ListItem>,
+    },
+    ListItem {
+        content: Vec<TextBlock>,
+    },
+    TableText {
+        name: Option<String>,
+        style_name: Option<String>,
+        rows: Vec<TableRow>,
+    },
+    TableRow {
+        style_name: Option<String>,
+        cells: Vec<TableCell>,
+    },
+    TableCell {
+        style_name: Option<String>,
+        content: Vec<TextBlock>,
+    },
     #[allow(dead_code)]
-    Section { style_name: Option<String>, name: Option<String>, protected: bool, content: Vec<TextBlock> },
-    InlineFrame { frame: crate::ast::Frame },
+    Section {
+        style_name: Option<String>,
+        name: Option<String>,
+        protected: bool,
+        content: Vec<TextBlock>,
+    },
+    InlineFrame {
+        frame: crate::ast::Frame,
+    },
     // ODS
-    Sheet { name: Option<String>, style_name: Option<String>, print: bool, columns: Vec<ColumnDef>, rows: Vec<SheetRow> },
-    SheetRow { style_name: Option<String>, repeated: Option<u32>, cells: Vec<SheetCell> },
-    SheetCell { cell: SheetCell },
+    Sheet {
+        name: Option<String>,
+        style_name: Option<String>,
+        print: bool,
+        columns: Vec<ColumnDef>,
+        rows: Vec<SheetRow>,
+    },
+    SheetRow {
+        style_name: Option<String>,
+        repeated: Option<u32>,
+        cells: Vec<SheetCell>,
+    },
+    SheetCell {
+        cell: SheetCell,
+    },
     // ODP
-    Slide { page: DrawPage },
-    Shape { shape: DrawShape },
-    TextBox { blocks: Vec<TextBlock> },
-    Notes { notes: NotesPage },
+    Slide {
+        page: DrawPage,
+    },
+    Shape {
+        shape: DrawShape,
+    },
+    TextBox {
+        blocks: Vec<TextBlock>,
+    },
+    Notes {
+        notes: NotesPage,
+    },
     // Inline spans
-    Span { style_name: Option<String>, content: Vec<Inline> },
-    Hyperlink { href: Option<String>, title: Option<String>, style_name: Option<String>, content: Vec<Inline> },
-    Note { note: Note },
+    Span {
+        style_name: Option<String>,
+        content: Vec<Inline>,
+    },
+    Hyperlink {
+        href: Option<String>,
+        title: Option<String>,
+        style_name: Option<String>,
+        content: Vec<Inline>,
+    },
+    Note {
+        note: Note,
+    },
     #[allow(dead_code)]
-    NoteBody { content: Vec<TextBlock> },
+    NoteBody {
+        content: Vec<TextBlock>,
+    },
 }
 
 struct DocBuilder {
@@ -144,7 +215,10 @@ struct DocBuilder {
 
 impl DocBuilder {
     fn new() -> Self {
-        DocBuilder { stack: vec![], doc: OdfDocument::default() }
+        DocBuilder {
+            stack: vec![],
+            doc: OdfDocument::default(),
+        }
     }
 
     fn finish(mut self) -> OdfDocument {
@@ -168,11 +242,21 @@ impl DocBuilder {
                 }
             }
             OdfEvent::StartSpreadsheet => {
-                self.stack.push(BuildFrame::Spreadsheet { sheets: vec![], named_ranges: vec![] });
+                self.stack.push(BuildFrame::Spreadsheet {
+                    sheets: vec![],
+                    named_ranges: vec![],
+                });
             }
             OdfEvent::EndSpreadsheet => {
-                if let Some(BuildFrame::Spreadsheet { sheets, named_ranges }) = self.stack.pop() {
-                    self.doc.body = OdfBody::Spreadsheet(SpreadsheetBody { sheets, named_ranges });
+                if let Some(BuildFrame::Spreadsheet {
+                    sheets,
+                    named_ranges,
+                }) = self.stack.pop()
+                {
+                    self.doc.body = OdfBody::Spreadsheet(SpreadsheetBody {
+                        sheets,
+                        named_ranges,
+                    });
                 }
             }
             OdfEvent::StartPresentation => {
@@ -186,27 +270,62 @@ impl DocBuilder {
 
             // ── Block elements ────────────────────────────────────────────────
             OdfEvent::StartParagraph { style_name } => {
-                self.stack.push(BuildFrame::Paragraph { style_name: style_name.map(|s| s.into_owned()), content: vec![] });
+                self.stack.push(BuildFrame::Paragraph {
+                    style_name: style_name.map(|s| s.into_owned()),
+                    content: vec![],
+                });
             }
             OdfEvent::EndParagraph => {
-                if let Some(BuildFrame::Paragraph { style_name, content }) = self.stack.pop() {
-                    self.push_block(TextBlock::Paragraph(Paragraph { style_name, content, ..Default::default() }));
+                if let Some(BuildFrame::Paragraph {
+                    style_name,
+                    content,
+                }) = self.stack.pop()
+                {
+                    self.push_block(TextBlock::Paragraph(Paragraph {
+                        style_name,
+                        content,
+                        ..Default::default()
+                    }));
                 }
             }
-            OdfEvent::StartHeading { style_name, outline_level } => {
-                self.stack.push(BuildFrame::Heading { style_name: style_name.map(|s| s.into_owned()), outline_level, content: vec![] });
+            OdfEvent::StartHeading {
+                style_name,
+                outline_level,
+            } => {
+                self.stack.push(BuildFrame::Heading {
+                    style_name: style_name.map(|s| s.into_owned()),
+                    outline_level,
+                    content: vec![],
+                });
             }
             OdfEvent::EndHeading => {
-                if let Some(BuildFrame::Heading { style_name, outline_level, content }) = self.stack.pop() {
-                    self.push_block(TextBlock::Heading(Heading { style_name, outline_level, content, ..Default::default() }));
+                if let Some(BuildFrame::Heading {
+                    style_name,
+                    outline_level,
+                    content,
+                }) = self.stack.pop()
+                {
+                    self.push_block(TextBlock::Heading(Heading {
+                        style_name,
+                        outline_level,
+                        content,
+                        ..Default::default()
+                    }));
                 }
             }
             OdfEvent::StartList { style_name } => {
-                self.stack.push(BuildFrame::List { style_name: style_name.map(|s| s.into_owned()), items: vec![] });
+                self.stack.push(BuildFrame::List {
+                    style_name: style_name.map(|s| s.into_owned()),
+                    items: vec![],
+                });
             }
             OdfEvent::EndList => {
                 if let Some(BuildFrame::List { style_name, items }) = self.stack.pop() {
-                    self.push_block(TextBlock::List(List { style_name, items, ..Default::default() }));
+                    self.push_block(TextBlock::List(List {
+                        style_name,
+                        items,
+                        ..Default::default()
+                    }));
                 }
             }
             OdfEvent::StartListItem => {
@@ -214,8 +333,12 @@ impl DocBuilder {
             }
             OdfEvent::EndListItem => {
                 if let Some(BuildFrame::ListItem { content }) = self.stack.pop()
-                    && let Some(BuildFrame::List { items, .. }) = self.stack.last_mut() {
-                    items.push(ListItem { content, ..Default::default() });
+                    && let Some(BuildFrame::List { items, .. }) = self.stack.last_mut()
+                {
+                    items.push(ListItem {
+                        content,
+                        ..Default::default()
+                    });
                 }
             }
             OdfEvent::StartTable { name, style_name } => {
@@ -226,20 +349,37 @@ impl DocBuilder {
                 });
             }
             OdfEvent::EndTable => {
-                if let Some(BuildFrame::TableText { name, style_name, rows }) = self.stack.pop() {
-                    self.push_block(TextBlock::Table(Table { name, style_name, rows }));
+                if let Some(BuildFrame::TableText {
+                    name,
+                    style_name,
+                    rows,
+                }) = self.stack.pop()
+                {
+                    self.push_block(TextBlock::Table(Table {
+                        name,
+                        style_name,
+                        rows,
+                    }));
                 }
             }
             OdfEvent::StartRow { style_name } => {
-                self.stack.push(BuildFrame::TableRow { style_name: style_name.map(|s| s.into_owned()), cells: vec![] });
+                self.stack.push(BuildFrame::TableRow {
+                    style_name: style_name.map(|s| s.into_owned()),
+                    cells: vec![],
+                });
             }
             OdfEvent::EndRow => {
                 if let Some(BuildFrame::TableRow { style_name, cells }) = self.stack.pop()
-                    && let Some(BuildFrame::TableText { rows, .. }) = self.stack.last_mut() {
+                    && let Some(BuildFrame::TableText { rows, .. }) = self.stack.last_mut()
+                {
                     rows.push(TableRow { style_name, cells });
                 }
             }
-            OdfEvent::StartCell { style_name, value_type, covered } => {
+            OdfEvent::StartCell {
+                style_name,
+                value_type,
+                covered,
+            } => {
                 self.stack.push(BuildFrame::TableCell {
                     style_name: style_name.map(|s| s.into_owned()),
                     content: vec![],
@@ -247,9 +387,17 @@ impl DocBuilder {
                 let _ = (value_type, covered); // available but not used in text-table cells
             }
             OdfEvent::EndCell => {
-                if let Some(BuildFrame::TableCell { style_name, content }) = self.stack.pop()
-                    && let Some(BuildFrame::TableRow { cells, .. }) = self.stack.last_mut() {
-                    cells.push(TableCell { style_name, content, ..Default::default() });
+                if let Some(BuildFrame::TableCell {
+                    style_name,
+                    content,
+                }) = self.stack.pop()
+                    && let Some(BuildFrame::TableRow { cells, .. }) = self.stack.last_mut()
+                {
+                    cells.push(TableCell {
+                        style_name,
+                        content,
+                        ..Default::default()
+                    });
                 }
             }
 
@@ -264,21 +412,57 @@ impl DocBuilder {
                 });
             }
             OdfEvent::EndSheet => {
-                if let Some(BuildFrame::Sheet { name, style_name, print, columns, rows }) = self.stack.pop()
-                    && let Some(BuildFrame::Spreadsheet { sheets, .. }) = self.stack.last_mut() {
-                    sheets.push(Sheet { name, style_name, print, columns, rows });
+                if let Some(BuildFrame::Sheet {
+                    name,
+                    style_name,
+                    print,
+                    columns,
+                    rows,
+                }) = self.stack.pop()
+                    && let Some(BuildFrame::Spreadsheet { sheets, .. }) = self.stack.last_mut()
+                {
+                    sheets.push(Sheet {
+                        name,
+                        style_name,
+                        print,
+                        columns,
+                        rows,
+                    });
                 }
             }
-            OdfEvent::StartSheetRow { style_name, repeated } => {
-                self.stack.push(BuildFrame::SheetRow { style_name: style_name.map(|s| s.into_owned()), repeated, cells: vec![] });
+            OdfEvent::StartSheetRow {
+                style_name,
+                repeated,
+            } => {
+                self.stack.push(BuildFrame::SheetRow {
+                    style_name: style_name.map(|s| s.into_owned()),
+                    repeated,
+                    cells: vec![],
+                });
             }
             OdfEvent::EndSheetRow => {
-                if let Some(BuildFrame::SheetRow { style_name, repeated, cells }) = self.stack.pop()
-                    && let Some(BuildFrame::Sheet { rows, .. }) = self.stack.last_mut() {
-                    rows.push(SheetRow { style_name, repeated, cells, ..Default::default() });
+                if let Some(BuildFrame::SheetRow {
+                    style_name,
+                    repeated,
+                    cells,
+                }) = self.stack.pop()
+                    && let Some(BuildFrame::Sheet { rows, .. }) = self.stack.last_mut()
+                {
+                    rows.push(SheetRow {
+                        style_name,
+                        repeated,
+                        cells,
+                        ..Default::default()
+                    });
                 }
             }
-            OdfEvent::StartSheetCell { style_name, value_type, value, formula, covered } => {
+            OdfEvent::StartSheetCell {
+                style_name,
+                value_type,
+                value,
+                formula,
+                covered,
+            } => {
                 let cell = SheetCell {
                     style_name: style_name.map(|s| s.into_owned()),
                     value_type: value_type.map(|s| s.into_owned()),
@@ -291,13 +475,18 @@ impl DocBuilder {
             }
             OdfEvent::EndSheetCell => {
                 if let Some(BuildFrame::SheetCell { cell }) = self.stack.pop()
-                    && let Some(BuildFrame::SheetRow { cells, .. }) = self.stack.last_mut() {
+                    && let Some(BuildFrame::SheetRow { cells, .. }) = self.stack.last_mut()
+                {
                     cells.push(cell);
                 }
             }
 
             // ── ODP events ────────────────────────────────────────────────────
-            OdfEvent::StartSlide { name, master_page_name, layout_name } => {
+            OdfEvent::StartSlide {
+                name,
+                master_page_name,
+                layout_name,
+            } => {
                 let page = DrawPage {
                     name: name.map(|s| s.into_owned()),
                     master_page_name: master_page_name.map(|s| s.into_owned()),
@@ -308,11 +497,19 @@ impl DocBuilder {
             }
             OdfEvent::EndSlide => {
                 if let Some(BuildFrame::Slide { page }) = self.stack.pop()
-                    && let Some(BuildFrame::Presentation { pages }) = self.stack.last_mut() {
+                    && let Some(BuildFrame::Presentation { pages }) = self.stack.last_mut()
+                {
                     pages.push(page);
                 }
             }
-            OdfEvent::StartShape { name, presentation_class, x, y, width, height } => {
+            OdfEvent::StartShape {
+                name,
+                presentation_class,
+                x,
+                y,
+                width,
+                height,
+            } => {
                 let shape = DrawShape {
                     name: name.map(|s| s.into_owned()),
                     presentation_class: presentation_class.map(|s| s.into_owned()),
@@ -334,27 +531,44 @@ impl DocBuilder {
             }
             OdfEvent::EndTextBox => {
                 if let Some(BuildFrame::TextBox { blocks }) = self.stack.pop()
-                    && let Some(BuildFrame::Shape { shape }) = self.stack.last_mut() {
+                    && let Some(BuildFrame::Shape { shape }) = self.stack.last_mut()
+                {
                     shape.content = DrawShapeContent::TextBox(blocks);
                 }
             }
             OdfEvent::StartNotes { style_name } => {
-                self.stack.push(BuildFrame::Notes { notes: NotesPage { style_name: style_name.map(|s| s.into_owned()), shapes: vec![] } });
+                self.stack.push(BuildFrame::Notes {
+                    notes: NotesPage {
+                        style_name: style_name.map(|s| s.into_owned()),
+                        shapes: vec![],
+                    },
+                });
             }
             OdfEvent::EndNotes => {
                 if let Some(BuildFrame::Notes { notes }) = self.stack.pop()
-                    && let Some(BuildFrame::Slide { page }) = self.stack.last_mut() {
+                    && let Some(BuildFrame::Slide { page }) = self.stack.last_mut()
+                {
                     page.notes = Some(Box::new(notes));
                 }
             }
 
             // ── Inline events ─────────────────────────────────────────────────
             OdfEvent::StartSpan { style_name } => {
-                self.stack.push(BuildFrame::Span { style_name: style_name.map(|s| s.into_owned()), content: vec![] });
+                self.stack.push(BuildFrame::Span {
+                    style_name: style_name.map(|s| s.into_owned()),
+                    content: vec![],
+                });
             }
             OdfEvent::EndSpan => {
-                if let Some(BuildFrame::Span { style_name, content }) = self.stack.pop() {
-                    self.push_inline(Inline::Span(Span { style_name, content }));
+                if let Some(BuildFrame::Span {
+                    style_name,
+                    content,
+                }) = self.stack.pop()
+                {
+                    self.push_inline(Inline::Span(Span {
+                        style_name,
+                        content,
+                    }));
                 }
             }
             OdfEvent::StartHyperlink { href, title } => {
@@ -366,14 +580,34 @@ impl DocBuilder {
                 });
             }
             OdfEvent::EndHyperlink => {
-                if let Some(BuildFrame::Hyperlink { href, title, style_name, content }) = self.stack.pop() {
-                    self.push_inline(Inline::Hyperlink(Hyperlink { href, title, style_name, content }));
+                if let Some(BuildFrame::Hyperlink {
+                    href,
+                    title,
+                    style_name,
+                    content,
+                }) = self.stack.pop()
+                {
+                    self.push_inline(Inline::Hyperlink(Hyperlink {
+                        href,
+                        title,
+                        style_name,
+                        content,
+                    }));
                 }
             }
             OdfEvent::StartNote { note_class, id } => {
-                let class = if note_class == "endnote" { NoteClass::Endnote } else { NoteClass::Footnote };
+                let class = if note_class == "endnote" {
+                    NoteClass::Endnote
+                } else {
+                    NoteClass::Footnote
+                };
                 self.stack.push(BuildFrame::Note {
-                    note: Note { note_class: class, id: id.map(|s| s.into_owned()), citation: None, body: vec![] },
+                    note: Note {
+                        note_class: class,
+                        id: id.map(|s| s.into_owned()),
+                        citation: None,
+                        body: vec![],
+                    },
                 });
             }
             OdfEvent::EndNote => {
@@ -397,7 +631,10 @@ impl DocBuilder {
             OdfEvent::Image { href } => {
                 let href_s = href.into_owned();
                 if let Some(BuildFrame::InlineFrame { frame }) = self.stack.last_mut() {
-                    frame.content = FrameContent::Image { href: href_s, mime_type: None };
+                    frame.content = FrameContent::Image {
+                        href: href_s,
+                        mime_type: None,
+                    };
                 }
             }
 
@@ -457,4 +694,3 @@ impl DocBuilder {
         }
     }
 }
-

@@ -31,7 +31,12 @@ impl EmitContext {
 
 fn emit_block(block: &Block, ctx: &mut EmitContext) {
     match block {
-        Block::Paragraph { inlines, align, attrs, .. } => {
+        Block::Paragraph {
+            inlines,
+            align,
+            attrs,
+            ..
+        } => {
             // Emit "p" + block attrs only if there's something to write
             let has_align = align.is_some();
             let has_attrs = !attrs.is_empty();
@@ -54,7 +59,12 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             ctx.write("\n\n");
         }
 
-        Block::Heading { level, inlines, attrs, .. } => {
+        Block::Heading {
+            level,
+            inlines,
+            attrs,
+            ..
+        } => {
             ctx.write(&format!("h{}", level));
             emit_block_attrs(attrs, ctx);
             ctx.write(". ");
@@ -62,7 +72,9 @@ fn emit_block(block: &Block, ctx: &mut EmitContext) {
             ctx.write("\n\n");
         }
 
-        Block::CodeBlock { content, language, .. } => {
+        Block::CodeBlock {
+            content, language, ..
+        } => {
             if let Some(lang) = language {
                 ctx.write(&format!("bc({}). ", lang));
             } else {
@@ -302,7 +314,12 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write("@");
         }
 
-        Inline::Link { url, title, children, .. } => {
+        Inline::Link {
+            url,
+            title,
+            children,
+            ..
+        } => {
             ctx.write("\"");
             emit_inlines(children, ctx);
             if let Some(t) = title {
@@ -347,7 +364,9 @@ fn emit_inline(inline: &Inline, ctx: &mut EmitContext) {
             ctx.write("??");
         }
 
-        Inline::GenericSpan { attrs, children, .. } => {
+        Inline::GenericSpan {
+            attrs, children, ..
+        } => {
             ctx.write("%");
             if !attrs.is_empty() {
                 emit_inline_attrs(attrs, ctx);

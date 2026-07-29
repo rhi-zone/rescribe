@@ -11,10 +11,7 @@ use crate::ast::{Color, CursorDirection, EraseMode, Style};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event<'a> {
     /// Plain or styled text.
-    Text {
-        text: Cow<'a, str>,
-        style: Style,
-    },
+    Text { text: Cow<'a, str>, style: Style },
     /// A newline.
     Newline,
     /// Style change (SGR sequence applied — no text emitted).
@@ -27,10 +24,7 @@ pub enum Event<'a> {
         count: u32,
     },
     /// Cursor absolute position.
-    CursorPosition {
-        row: u32,
-        col: u32,
-    },
+    CursorPosition { row: u32, col: u32 },
     /// Erase in display.
     EraseDisplay(EraseMode),
     /// Erase in line.
@@ -42,10 +36,7 @@ pub enum Event<'a> {
     /// Restore cursor position.
     RestoreCursor,
     /// Scroll region.
-    ScrollRegion {
-        top: u32,
-        bottom: u32,
-    },
+    ScrollRegion { top: u32, bottom: u32 },
     /// Hyperlink with URL and display text.
     Hyperlink {
         url: String,
@@ -322,9 +313,7 @@ impl<'a> EventIter<'a> {
             let url = &rest[semi_pos + 1..];
             if url.is_empty() {
                 // Close — return raw.
-                return Some(Event::RawEscape(Cow::Owned(
-                    "\x1b]8;;\x07".to_string(),
-                )));
+                return Some(Event::RawEscape(Cow::Owned("\x1b]8;;\x07".to_string())));
             }
             // Collect link text until closing OSC 8.
             let mut link_text = String::new();
@@ -507,14 +496,24 @@ mod tests {
     #[test]
     fn test_events_plain_text() {
         let evs: Vec<_> = events(b"Hello").collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::Text { text, .. } if text == "Hello")));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::Text { text, .. } if text == "Hello"))
+        );
     }
 
     #[test]
     fn test_events_bold() {
         let evs: Vec<_> = events(b"\x1b[1mBold\x1b[0m").collect();
-        assert!(evs.iter().any(|e| matches!(e, Event::SetStyle(s) if s.bold)));
-        assert!(evs.iter().any(|e| matches!(e, Event::Text { text, style, .. } if text == "Bold" && style.bold)));
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::SetStyle(s) if s.bold))
+        );
+        assert!(
+            evs.iter().any(
+                |e| matches!(e, Event::Text { text, style, .. } if text == "Bold" && style.bold)
+            )
+        );
         assert!(evs.iter().any(|e| matches!(e, Event::ResetStyle)));
     }
 
@@ -532,8 +531,7 @@ mod tests {
 
     #[test]
     fn test_events_hyperlink() {
-        let evs: Vec<_> =
-            events(b"\x1b]8;;https://example.com\x07Click\x1b]8;;\x07").collect();
+        let evs: Vec<_> = events(b"\x1b]8;;https://example.com\x07Click\x1b]8;;\x07").collect();
         assert!(evs
             .iter()
             .any(|e| matches!(e, Event::Hyperlink { url, text, .. } if url == "https://example.com" && text == "Click")));

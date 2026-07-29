@@ -13,8 +13,8 @@
 
 use std::borrow::Cow;
 
-use quick_xml::events::Event as XmlEvent;
 use quick_xml::Reader;
+use quick_xml::events::Event as XmlEvent;
 
 use super::generated::{
     ParagraphProperties, RunProperties, TableCellProperties, TableProperties, TableRowProperties,
@@ -142,7 +142,9 @@ impl<'input> Iterator for WmlEventIter<'input> {
                     return Some(start_event);
                 }
                 XmlInfo::HyperlinkStart { rel_id, anchor } => {
-                    self.stack.push(ContextFrame { kind: WmlStartKind::Hyperlink });
+                    self.stack.push(ContextFrame {
+                        kind: WmlStartKind::Hyperlink,
+                    });
                     return Some(WmlEvent::StartHyperlink {
                         rel_id: rel_id.map(Cow::Owned),
                         anchor: anchor.map(Cow::Owned),
@@ -292,23 +294,33 @@ impl<'input> WmlEventIter<'input> {
         match kind {
             WmlStartKind::Paragraph => {
                 let props = self.read_props::<ParagraphProperties>(b"pPr");
-                WmlEvent::StartParagraph { props: Box::new(props) }
+                WmlEvent::StartParagraph {
+                    props: Box::new(props),
+                }
             }
             WmlStartKind::Run => {
                 let props = self.read_props::<RunProperties>(b"rPr");
-                WmlEvent::StartRun { props: Box::new(props) }
+                WmlEvent::StartRun {
+                    props: Box::new(props),
+                }
             }
             WmlStartKind::Table => {
                 let props = self.read_props::<TableProperties>(b"tblPr");
-                WmlEvent::StartTable { props: Box::new(props) }
+                WmlEvent::StartTable {
+                    props: Box::new(props),
+                }
             }
             WmlStartKind::TableRow => {
                 let props = self.read_props::<TableRowProperties>(b"trPr");
-                WmlEvent::StartTableRow { props: Box::new(props) }
+                WmlEvent::StartTableRow {
+                    props: Box::new(props),
+                }
             }
             WmlStartKind::TableCell => {
                 let props = self.read_props::<TableCellProperties>(b"tcPr");
-                WmlEvent::StartTableCell { props: Box::new(props) }
+                WmlEvent::StartTableCell {
+                    props: Box::new(props),
+                }
             }
             // Hyperlink is handled separately (attrs on the element itself).
             WmlStartKind::Hyperlink => unreachable!(),
@@ -356,7 +368,9 @@ impl<'input> WmlEventIter<'input> {
                         rel_id: rel_id.map(Cow::Owned),
                         anchor: anchor.map(Cow::Owned),
                     };
-                    self.stack.push(ContextFrame { kind: WmlStartKind::Hyperlink });
+                    self.stack.push(ContextFrame {
+                        kind: WmlStartKind::Hyperlink,
+                    });
                     self.queue(ev, None);
                     return T::default();
                 }
