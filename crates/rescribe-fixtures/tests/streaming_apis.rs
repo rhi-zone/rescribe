@@ -410,7 +410,7 @@ fn rst_streaming_parser_matches_events_under_adversarial_chunking() {
     const SKIP: &[&str] = &["anonymous-link", "citation"];
     let mut checked = 0;
     let mut result: Result<(), String> = Ok(());
-    'fixtures: for entry in std::fs::read_dir(&root).expect("fixtures/rst dir") {
+    for entry in std::fs::read_dir(&root).expect("fixtures/rst dir") {
         let path = entry.unwrap().path();
         if !path.is_dir() {
             continue;
@@ -428,6 +428,15 @@ fn rst_streaming_parser_matches_events_under_adversarial_chunking() {
         };
         let bulk: Vec<rst_fmt::OwnedEvent> =
             rst_fmt::events(input_str).map(|e| e.into_owned()).collect();
+        // Count this fixture as checked as soon as we've computed its `events()`
+        // baseline, not only when it passes: the `checked > N` assert below is a
+        // sanity floor on how many fixtures were exercised, not a pass counter.
+        // Incrementing it only on the non-break path made the floor dependent on
+        // `read_dir` iteration order — whichever fixture the known-failure bug
+        // (see the KnownFailure below) happens to land on first, `checked` would
+        // freeze there, so the assert's pass/fail flipped with filesystem order
+        // alone rather than test content.
+        checked += 1;
 
         for (chunking_name, chunks) in adversarial_chunkings(&input) {
             let mut streamed = Vec::new();
@@ -438,14 +447,21 @@ fn rst_streaming_parser_matches_events_under_adversarial_chunking() {
             }
             parser.finish();
             if bulk != streamed {
-                result = Err(format!(
-                    "StreamingParser diverged from events() for fixture {name} under chunking \
-                     {chunking_name}:\n  events():         {bulk:?}\n  StreamingParser: {streamed:?}"
-                ));
-                break 'fixtures;
+                // Record only the first divergence (further chunkings/fixtures may
+                // hit the same known bug repeatedly and would just add noise), but
+                // keep iterating the remaining fixtures so `checked` reflects the
+                // true number exercised regardless of which fixture the divergence
+                // landed on — see the comment above `checked += 1`.
+                if result.is_ok() {
+                    result = Err(format!(
+                        "StreamingParser diverged from events() for fixture {name} under \
+                         chunking {chunking_name}:\n  events():         {bulk:?}\n  \
+                         StreamingParser: {streamed:?}"
+                    ));
+                }
+                break;
             }
         }
-        checked += 1;
     }
     assert!(
         checked > 5,
