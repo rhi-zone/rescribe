@@ -280,21 +280,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              three are downstream of emit_block() (batch.rs:190) re-parsing each accumulated \
              block in isolation; see TODO.md",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "org-fmt's Writer loses content vs build() on 3 of 89 org fixtures. The dominant \
-             cause is an expressiveness gap in the Event enum, not a logic error: Event \
-             (events.rs:14-133) has no document-metadata variant at all — metadata is delivered \
-             out-of-band via EventIter::take_metadata() (parse.rs:87) — so events() cannot carry \
-             #+TITLE:/#+AUTHOR:/#+CUSTOM_KEY: lines and writer.rs's DocBuilder::finish \
-             (writer.rs:616) has no choice but to hardcode `metadata: vec![]`, dropping every \
-             leading keyword line (fixtures metadata, keyword-line). The third fixture, \
-             dynamic-block, stacks on a separate pre-existing parse/emit bug: parse.rs has no \
-             #+BEGIN:/#+END: support, so parse_metadata_line absorbs a bare #+END: as document \
-             metadata key `end`, which build() re-emits as a stray leading `#+END: ` before all \
-             blocks and DocBuilder::finish then discards. Note Writer is also not incrementally \
-             streaming — writer.rs's module docs state it buffers all events, reconstructs the \
-             AST, then calls emit::build; see TODO.md",
-        ),
+        // streaming_writer was KnownFailure: Event had no document-metadata
+        // variant, so events() couldn't carry #+TITLE:/#+AUTHOR:/#+CUSTOM_KEY:
+        // lines and writer.rs's DocBuilder::finish hardcoded `metadata:
+        // vec![]`, dropping every leading keyword line (fixtures metadata,
+        // keyword-line). Fixed by adding `Event::Metadata { key, value }`,
+        // emitted by EventIter::next() (parse.rs) alongside the block it
+        // precedes, and handled by DocBuilder::process/finish (writer.rs).
+        // Note Writer is still not incrementally streaming — writer.rs's
+        // module docs state it buffers all events, reconstructs the AST,
+        // then calls emit::build.
+        streaming_writer: ApiState::Wired,
     },
     // html-fmt is html5ever-backed. CLAUDE.md puts third-party-library-backed
     // formats (pulldown-cmark, html5ever) out of scope for the "three
@@ -1241,13 +1237,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        nesting depth in InSpecialBlock, emit_block() flushing an affiliated \
                        #+NAME: line away from its block, and the #+BEGIN_ test trimming so an \
                        indented list-item code block reads as top-level",
-    },
-    KnownFailure {
-        format: "org",
-        api: "streaming_writer",
-        description: "org-fmt Event enum has no document-metadata variant, so events() cannot \
-                       carry #+KEY: lines and writer.rs's DocBuilder::finish hardcodes \
-                       metadata: vec![], dropping every leading keyword line",
     },
     KnownFailure {
         format: "rst",

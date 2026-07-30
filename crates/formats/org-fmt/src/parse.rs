@@ -1179,15 +1179,35 @@ impl<'a> Iterator for EventIter<'a> {
                     if self.done {
                         return None;
                     }
-                    match self.parse_next_block() {
+                    // `parse_next_block` may consume one or more `#+KEY: value`
+                    // metadata lines (via `self.metadata.push`) transparently
+                    // before returning the next block (or `None` at EOF) — see
+                    // the metadata branch in `parse_next_block`. Snapshot the
+                    // length before/after so any newly-accumulated entries can
+                    // be surfaced as `Event::Metadata`, keeping `events()` a
+                    // single source of truth alongside `take_metadata()`
+                    // (still used by `parse()`'s direct recursive descent).
+                    let metadata_before = self.metadata.len();
+                    let next_block = self.parse_next_block();
+                    match next_block {
                         None => {
                             self.done = true;
-                            return None;
                         }
                         Some(block) => {
                             self.expand_block(block);
                             // Block may produce no events (e.g. dropped COMMENT block) —
                             // continue looping; if frame_stack is still empty, we'll parse next block.
+                        }
+                    }
+                    // Push metadata events on top of whatever `expand_block`
+                    // pushed, so they pop (and are emitted) first — matching
+                    // their position before the block in the source.
+                    if self.metadata.len() > metadata_before {
+                        for (key, value) in self.metadata[metadata_before..].iter().rev() {
+                            self.frame_stack.push(Frame::Event(OwnedEvent::Metadata {
+                                key: key.clone(),
+                                value: value.clone(),
+                            }));
                         }
                     }
                     continue;

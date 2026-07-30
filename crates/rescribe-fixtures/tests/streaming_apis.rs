@@ -536,6 +536,19 @@ mod org_events_check {
     /// streaming API.
     fn org_ast_to_events(doc: &OrgDoc) -> Vec<OwnedEvent> {
         let mut out = Vec::new();
+        // All fixtures that carry `#+KEY: value` metadata lines have them at
+        // the very top of the document, before any block content, so a flat
+        // prefix of `Metadata` events matches `events()`'s actual output.
+        // (`OrgDoc.metadata` itself carries no per-entry source position, so
+        // this projection can't reconstruct interleaving if a future fixture
+        // put metadata lines between blocks — see `Event::Metadata`'s doc
+        // comment for where `events()` actually places them.)
+        for (key, value) in &doc.metadata {
+            out.push(OwnedEvent::Metadata {
+                key: key.clone(),
+                value: value.clone(),
+            });
+        }
         for b in &doc.blocks {
             org_block_events(b, &mut out);
         }

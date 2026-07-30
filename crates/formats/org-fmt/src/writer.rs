@@ -155,12 +155,16 @@ enum Frame {
 
 struct DocBuilder {
     stack: Vec<Frame>,
+    /// Document-level metadata accumulated from `Event::Metadata` events, in
+    /// the order received (mirrors `OrgDoc.metadata`).
+    metadata: Vec<(String, String)>,
 }
 
 impl DocBuilder {
     fn new() -> Self {
         DocBuilder {
             stack: vec![Frame::Document { blocks: vec![] }],
+            metadata: Vec::new(),
         }
     }
 
@@ -420,6 +424,9 @@ impl DocBuilder {
                     span: Span::NONE,
                 });
             }
+            OwnedEvent::Metadata { key, value } => {
+                self.metadata.push((key, value));
+            }
 
             // ── Inline events ──────────────────────────────────────────────────
             OwnedEvent::Text(cow) => {
@@ -620,7 +627,7 @@ impl DocBuilder {
         };
         OrgDoc {
             blocks,
-            metadata: vec![],
+            metadata: self.metadata,
         }
     }
 }
