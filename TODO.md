@@ -3484,3 +3484,103 @@ embedded resource's bytes unconditionally, even when the filter never touches
 `.resources`. Fine for the fixture-sized documents this was tested against; would need
 revisiting before recommending `query` for large-corpus batch use against documents with
 many/large embedded images.
+
+## Cross-API harness: docbook/jats/tei, odt, ansi audited (2026-07-30)
+
+Second pass on the cross-API harness (`crates/rescribe-fixtures/src/streaming_harness.rs`,
+`tests/streaming_apis.rs`) begun in the prior session, scoped to document/markup/data
+formats. 5 formats moved out of `NOT_YET_AUDITED`; 12 new `KnownFailure` entries. See
+`docs/format-audit.md`'s "Cross-API harness inventory" for the full per-format/per-API table.
+Defect classes surfacing again, by name, as the task brief predicted:
+
+- **XML-passthrough sibling-crate bug propagation** (docbook-fmt/jats-fmt/tei-fmt): the
+  three crates are byte-identical in implementation shape (confirmed via `diff` across
+  `batch.rs`/`writer.rs` — only doc comments and AST/event type names differ), so the same
+  three bugs, found once in docbook, apply identically to all three:
+  1. `events()`/`EventIter` emits one `Text` event per resolved character/predefined XML
+     entity instead of merging it into the surrounding text run the way `parse()`'s AST
+     does (`parse.rs`'s `current_text` accumulator, documented as deliberate coalescing).
+  2. `StreamingParser`'s `drain()` sets `check_end_names = false` and
+     `allow_unmatched_ends = true` on its per-drain-call `quick_xml::Reader` — genuinely
+     architecturally required, since each call only ever sees the unconsumed tail, not the
+     full document (documented in `batch.rs`) — but the side effect is that a mismatched end
+     tag (e.g. `<article><para>Unclosed<para>Another</article>`) is silently accepted
+     instead of rejected the way `events()`'s single continuous `Reader` (default
+     `check_end_names = true`) correctly rejects it. Zero diagnostics, wrong event sequence.
+  3. Downstream of (1)/(2)-adjacent: `parse()` has explicit malformed-XML recovery
+     (auto-closes unclosed elements with synthetic `EndElement` nodes) so `build()` always
+     emits well-formed output, but `events()` has no such recovery — it just stops at the
+     parse error — so the streaming `Writer` (fed by `events()`) emits truncated/unclosed
+     XML for input `build()` recovers from cleanly.
+  Fix belongs in `docbook-fmt`'s `events.rs`/`batch.rs` (then propagate the same diff to
+  `jats-fmt`/`tei-fmt`, given the crates are kept in lockstep) — see
+  `streaming_harness::KNOWN_FAILURES` for the exact fixture names (`adv-entity-references`,
+  `adv-malformed-xml`).
+
+- **Event-enum expressiveness gap** (`odf-fmt`, backing `odt`/`ods`/`odp`): `OdfEvent` has
+  no variant carrying the document's `mimetype`, `meta` (title/author/date), `styles.xml`
+  content, or embedded image bytes — `events()` only covers document *body* content
+  (paragraphs, tables, slides). The streaming `Writer` genuinely builds its `OdfDocument`
+  incrementally per event (the same sanctioned shape as `ooxml-sml`'s `SmlWriter` — real
+  per-event work, ZIP byte packaging deferred to `finish()` only because ZIP's central
+  directory lives at the end of the file), so it is not architecturally hollow — but the
+  reconstructed document always has `mimetype: ""` and empty `meta`/`styles`/`images`
+  compared to `parse()`'s AST. Same defect class as org-fmt's missing-metadata-variant gap.
+  Also confirmed and corrected a prior (wrong) assessment that called `odf-fmt`'s `events()`
+  a `parse()`-then-walk fake — it is a genuine independent `quick_xml` scan of
+  `content.xml`, just eagerly/fully buffered rather than lazily incremental (self-documented
+  in `events.rs`), and no `StreamingParser<H>` exists in the crate yet at all.
+
+- **Logic bugs surfaced by cross-checking, not present in either implementation alone**
+  (`ansi-fmt`): `events()`'s `parse_csi_event` 'm' arm emits a `ResetStyle` event whenever
+  the resulting style is empty (`self.style.is_empty() && !params.is_empty()`), conflating
+  "style ended up empty" with "an explicit reset code (`\x1b[0m`) was seen" — an
+  unrecognized/no-op SGR group (e.g. `\x1b[999m`) that changes nothing still emits a
+  spurious `ResetStyle`, which the streaming `Writer` then faithfully turns into spurious
+  literal `\x1b[0m` bytes in the output (fixture `adv-unknown-sgr`: `build()` emits
+  `"Text\n"`, the streaming path emits `"\x1b[0mText\x1b[0m\n"`). Separately,
+  `StreamingParser::drain_complete` (`batch.rs`) constructs a **fresh** `EventIter` (with
+  `style: Style::default()`) on every drain call instead of carrying running style state
+  across drains, so a chunk boundary landing between an SGR sequence and the text it colors
+  loses that style under fine-grained (e.g. `single_byte`) chunking. Also confirmed
+  `parse()`'s `AnsiNode` has no variant for a bare SGR sequence at all (`apply_sgr` folds it
+  into a running `style` var and returns no node) — the reverse of the usual "events() is
+  lossier than the AST" shape, so no faithful `ast_to_events` projection exists for this
+  crate; `events` left `NotYetWired` rather than wiring a shape-only/lossy comparison.
+
+**`latex` investigated, left `NOT_YET_AUDITED`**: there is no `latex-fmt` standalone crate
+at all. `rescribe-read-latex`'s adapter (`crates/readers/rescribe-read-latex`) contains an
+~895-line hand-rolled LaTeX tokenizer/parser directly in adapter production code — a
+CLAUDE.md "adapter must not contain parsing logic" / "`{format}-fmt` crate must already
+exist before writing `rescribe-read-{format}`" violation in its own right, not merely a
+cross-API-harness gap. Extracting a proper `latex-fmt` crate (parse/events/StreamingParser/
+emit/Writer, per the vertical-completion checklist) is a prerequisite before this format can
+get a real `CAPABILITIES` entry; until then there is no five-API contract to check against.
+Tracked here rather than guessed at.
+
+**`rtf` spot-checked, left `NOT_YET_AUDITED`**: `rtf-fmt`'s `COVERAGE.md` claims
+"5-Production" in prose; this was not taken at face value. Reading `sem_events.rs` and
+`batch.rs` directly: `events()` is self-documented as parsing the full input into an
+`RtfDoc` before yielding the first event ("the document is fully parsed... Events are then
+streamed lazily from the AST via a frame stack"), and `StreamingParser<H>`'s `feed()` only
+buffers bytes, calling `sem_events::events()` inside `finish()`. Both look like the same
+architecturally-hollow pattern already tracked as `KnownFailure` for texinfo/fb2/textile —
+but `sem_events.rs`'s module doc claims a structural justification (RTF's font/colour
+tables and group-stack property inheritance must be fully known before body content can be
+interpreted), similar in *shape* to html-fmt's accepted `NotApplicable` carve-out. Whether
+that justification is as airtight as HTML5's provably-order-independent-impossible tree
+construction (vs. an implementation choice that a more careful streaming design could avoid,
+since font/colour tables are conventionally declared before body use) needs real scrutiny
+before committing to either `KnownFailure` or `NotApplicable` — left `NOT_YET_AUDITED`
+rather than guess between them.
+
+**Remaining scope for a future pass** (all still `NOT_YET_AUDITED`, 44 formats total):
+`epub`, `bibtex`, `biblatex`, `csl-json`, `endnotexml`, `opml`, `ipynb`, `typst`,
+`pandoc-json` have **no standalone `-fmt` crate at all** (only `rescribe-read-{format}`/
+`rescribe-write-{format}` adapters) — each needs the same "does the adapter contain parsing
+logic" check applied to `latex` above before a `CAPABILITIES` entry is meaningful; not
+verified this session. `man`, `csv`, `tsv`, `ris`, `native` were not reached; per the task
+brief's hint, `csv-fmt`/`tsv-fmt`/`ris` have no `batch.rs`/`events.rs`/`writer.rs` at all
+(confirmed by directory listing only, not read in full) so they likely warrant
+`NotApplicable` streaming-writer/streaming-parser entries, but this was not verified against
+source the way the audited formats above were, so no entry was written rather than guess.

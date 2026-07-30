@@ -310,14 +310,40 @@ audited this format's cross-API status yet" placeholder, not a claim of absence 
 | docx | KnownFailure: `events()` drops the `Text` event and reverses `EndRun`/`EndParagraph` order for the common `<w:p><w:r><w:t>` shape (no `<w:pPr>`) — a `read_props()`/`queue()` clobber bug | NotYetWired | NotYetWired |
 | pptx | KnownFailure: `events()` cannot reach slide text at all (`<p:txBody>` unhandled in `dispatch_start`); shares docx's Text-drop/reversal bug once that's fixed | NotYetWired | NotYetWired |
 | xlsx | Wired | NotYetWired | Wired |
+| docbook | KnownFailure: emits one `Text` event per resolved character/predefined entity instead of merging into the surrounding run the way `parse()`'s AST does (3/110 fixtures contain entities) | KnownFailure: `StreamingParser`'s per-drain-call `Reader` disables `check_end_names`/`allow_unmatched_ends` (architecturally required — each call only sees the unconsumed tail) so it silently accepts mismatched end tags `events()` correctly rejects | KnownFailure: downstream of the `events()` gap — `parse()` auto-closes unclosed elements on malformed XML but `events()` has no such recovery, so the streaming `Writer` emits truncated output where `build()` recovers |
+| jats | KnownFailure: shares docbook-fmt's implementation (byte-identical `batch.rs`/`events.rs` shape, verified via `diff`); same entity-coalescing gap | KnownFailure: same `check_end_names`-disabled gap | KnownFailure: same malformed-XML recovery gap |
+| tei | KnownFailure: shares docbook-fmt's implementation; same entity-coalescing gap | KnownFailure: same `check_end_names`-disabled gap | KnownFailure: same malformed-XML recovery gap |
+| odt (`odf-fmt`) | NotYetWired: `events()` is a genuine independent quick_xml scan of `content.xml` (not a `parse()`-then-walk fake — corrects a prior assessment), but eagerly buffers every event before the first `next()` call (not memory-bounded); a faithful `ast_to_events` projection spanning odt/ods/odp body shapes is substantial follow-up work | NotYetWired: no `StreamingParser<H>` type exists in the crate at all yet (`batch.rs` calls it "future" work) | KnownFailure: the streaming `Writer` genuinely builds its AST incrementally per event (same sanctioned shape as `ooxml-sml`'s `SmlWriter`), but `OdfEvent` has no variant for mimetype/meta/styles/images, so round-tripping through it always drops them — an `Event`-enum expressiveness gap, the same class as org-fmt's missing-metadata-variant gap |
+| ansi | NotYetWired: `parse()`'s `AnsiNode` has no variant for a bare SGR sequence at all (folded into a running `style` var, no node emitted), the reverse of the usual defect shape, so no faithful `ast_to_events` projection exists; a real, distinct bug was found independently via the checks below (`events()` emits a spurious `ResetStyle` whenever an unrecognized/no-op SGR group happens to leave style empty) | KnownFailure: `StreamingParser::drain_complete` constructs a fresh `EventIter` (default style) on every drain, losing running style state across chunk boundaries under fine-grained chunking; also inherits the spurious-`ResetStyle` bug | KnownFailure: downstream of the spurious-`ResetStyle` bug — `Writer` unconditionally writes literal reset bytes for every `ResetStyle` event it receives |
 
-**Session tally (2026-07-30):** 11 formats moved from `NOT_YET_AUDITED` to a real, audited
-`CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark, gfm,
-markdown), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the harness's
-initial wiring. 49 formats remain in `NOT_YET_AUDITED`. `streaming_harness::KNOWN_FAILURES`
-now has 21 entries total; 18 are new from this session (the other 3 — docx/events,
-pptx/events, rst/streaming_parser — predate it). None were weakened or hidden to make a
-check pass; every divergence found a real, root-caused, tracked `KnownFailure` entry instead.
+**Session tally (2026-07-30, first pass):** 11 formats moved from `NOT_YET_AUDITED` to a real,
+audited `CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark,
+gfm, markdown), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the harness's
+initial wiring. `streaming_harness::KNOWN_FAILURES` had 21 entries; 18 new from that session.
+
+**Session tally (2026-07-30, second pass — document/markup/data formats):** 5 more formats
+moved out of `NOT_YET_AUDITED`: docbook, jats, tei (all `Wired` for all three APIs, but each
+carries 3 `KnownFailure`s — the byte-identical `docbook-fmt`/`jats-fmt`/`tei-fmt` shape means
+the same bugs repeat across all three), odt (`streaming_writer` wired as `KnownFailure`;
+`events`/`streaming_parser` left `NotYetWired` — see table above for why), and ansi
+(`streaming_parser`/`streaming_writer` wired as `KnownFailure`; `events` left `NotYetWired`).
+12 new `KnownFailure` entries this pass (`streaming_harness::KNOWN_FAILURES` now 33 total).
+`latex` was investigated but left `NOT_YET_AUDITED`: no `latex-fmt` crate exists at all (an
+895-line hand-rolled XML-free parser lives directly in the `rescribe-read-latex` adapter),
+which is itself a CLAUDE.md "adapter must not contain parsing logic" violation tracked in
+TODO.md, not merely a harness gap — see TODO.md for the follow-up. `rtf`'s claimed
+"5-Production" state was spot-checked (not fully audited): `rtf-fmt`'s `events()`
+(`sem_events.rs`) is explicitly self-documented as parsing the full input into an `RtfDoc`
+before yielding the first event ("the document is fully parsed... Events are then streamed
+lazily from the AST"), and its `StreamingParser<H>` (`batch.rs`) buffers all fed bytes and only
+calls `sem_events::events()` inside `finish()` — both look like the same
+architecturally-hollow pattern already tracked for texinfo/fb2/textile, but classifying
+`events()` correctly (`KnownFailure` vs. a genuine html5-style `NotApplicable`) needs more
+scrutiny of whether RTF's font/color-table-before-body constraint is a provable impossibility
+or an implementation choice; left `NOT_YET_AUDITED` rather than guess. 44 formats remain in
+`NOT_YET_AUDITED` after this pass. Across both passes, none of the checks written were
+weakened or hidden to make a failure pass — every divergence found a real, root-caused,
+tracked `KnownFailure` entry instead.
 
 ### Remaining hand-written formats (crate exists, API not started)
 

@@ -3122,11 +3122,15 @@ dependencies = [
 name = "rescribe-fixtures"
 version = "0.1.0"
 dependencies = [
+ "ansi-fmt",
  "asciidoc",
  "commonmark-fmt",
  "djot-fmt",
+ "docbook-fmt",
  "fb2-fmt",
  "html-fmt",
+ "jats-fmt",
+ "odf-fmt",
  "ooxml-pml",
  "ooxml-sml",
  "ooxml-wml",
@@ -3208,6 +3212,7 @@ dependencies = [
  "rst-fmt",
  "serde",
  "serde_json",
+ "tei-fmt",
  "texinfo",
  "textile-fmt",
  "zip 7.2.0",

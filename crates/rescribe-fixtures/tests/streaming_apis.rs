@@ -3753,3 +3753,696 @@ fn commonmark_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     }
     assert_or_known_failure("commonmark", "streaming_writer", result);
 }
+
+// ---------------------------------------------------------------------------
+// docbook-fmt / jats-fmt / tei-fmt: three byte-identical-shape XML-passthrough
+// crates (verified via `diff` across batch.rs/writer.rs — only doc comments
+// and AST/event type names differ). Unlike html-fmt, XML is well-nested by
+// construction, so all three APIs beyond parse()/emit() are genuinely
+// independent, incremental implementations, not parse()-then-wrap fakes:
+//
+// - `events()` (`EventIter`) wraps `quick_xml::Reader` directly and pulls one
+//   token at a time from the input slice; it never materializes an AST.
+// - `StreamingParser<H>` (batch.rs's `drain()`) dispatches every event it can
+//   prove is complete from the buffered-so-far bytes, shrinking the buffer as
+//   tokens are consumed — bounded by the largest in-progress token, not the
+//   whole input; a documented ambiguous-text-at-chunk-boundary rule holds
+//   text events back only when the buffer's end coincides with input's end.
+// - The streaming `Writer` calls `quick_xml::Writer` directly per event, no
+//   buffering.
+//
+// Each crate also exports `events::events_from_doc(&Ast) -> Vec<OwnedEvent>`
+// as a documented, crate-provided (not test-hand-rolled) AST->events
+// projection used by the crate's own round-trip tests — using it here as the
+// equivalence oracle is stronger than a hand-rolled projection since it's
+// exactly the mapping the crate itself commits to.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn docbook_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("docbook");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/docbook dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let (doc, _diags) = docbook_fmt::parse(&input);
+        let expected = docbook_fmt::events::events_from_doc(&doc);
+        let actual: Vec<_> = docbook_fmt::events(&input)
+            .map(|e| e.into_owned())
+            .collect();
+        checked += 1;
+        if expected != actual && result.is_ok() {
+            result = Err(format!(
+                "events() diverged from events_from_doc(&parse(input)) for fixture {name}:\n  \
+                 ast-derived: {expected:?}\n  events():    {actual:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of docbook fixtures, got {checked}"
+    );
+    assert_or_known_failure("docbook", "events", result);
+}
+
+#[test]
+fn docbook_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("docbook");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/docbook dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let bulk: Vec<docbook_fmt::OwnedEvent> = docbook_fmt::events(&input)
+            .map(|e| e.into_owned())
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                docbook_fmt::StreamingParser::new(|e: docbook_fmt::OwnedEvent| streamed.push(e));
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+
+        if input.len() > 32 && !bulk.is_empty() {
+            let mid = input.len() / 2;
+            let mut delivered: Vec<docbook_fmt::OwnedEvent> = Vec::new();
+            let mut parser = docbook_fmt::StreamingParser::new(|e| delivered.push(e));
+            parser.feed(&input[..mid]);
+            if delivered.is_empty() && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser delivered zero events to the handler after feed() with \
+                     half of fixture {name} ({mid} bytes) and before finish() — expected real \
+                     incremental delivery per batch.rs's drain() design"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of docbook fixtures, got {checked}"
+    );
+    assert_or_known_failure("docbook", "streaming_parser", result);
+}
+
+#[test]
+fn docbook_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
+    let root = fixtures_root().join("docbook");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/docbook dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let (doc, _diags) = docbook_fmt::parse(&input);
+        let built = docbook_fmt::emit(&doc);
+
+        let mut w = docbook_fmt::Writer::new(Vec::<u8>::new());
+        for e in docbook_fmt::events(&input) {
+            w.write_event(e);
+        }
+        let streamed = w.finish();
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of docbook fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        use std::borrow::Cow;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = docbook_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(docbook_fmt::Event::StartElement {
+            name: Cow::Borrowed("para"),
+            attrs: vec![],
+        });
+        w.write_event(docbook_fmt::Event::Text(Cow::Borrowed("Hello world")));
+        w.write_event(docbook_fmt::Event::EndElement {
+            name: Cow::Borrowed("para"),
+        });
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink before finish() for a complete \
+                 StartElement/Text/EndElement sequence — expected genuine incremental \
+                 writing per writer.rs's direct quick_xml::Writer calls"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("docbook", "streaming_writer", result);
+}
+
+#[test]
+fn jats_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("jats");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/jats dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let (doc, _diags) = jats_fmt::parse(&input);
+        let expected = jats_fmt::events::events_from_doc(&doc);
+        let actual: Vec<_> = jats_fmt::events(&input).map(|e| e.into_owned()).collect();
+        checked += 1;
+        if expected != actual && result.is_ok() {
+            result = Err(format!(
+                "events() diverged from events_from_doc(&parse(input)) for fixture {name}:\n  \
+                 ast-derived: {expected:?}\n  events():    {actual:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of jats fixtures, got {checked}"
+    );
+    assert_or_known_failure("jats", "events", result);
+}
+
+#[test]
+fn jats_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("jats");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/jats dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let bulk: Vec<jats_fmt::OwnedEvent> =
+            jats_fmt::events(&input).map(|e| e.into_owned()).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                jats_fmt::StreamingParser::new(|e: jats_fmt::OwnedEvent| streamed.push(e));
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+
+        if input.len() > 32 && !bulk.is_empty() {
+            let mid = input.len() / 2;
+            let mut delivered: Vec<jats_fmt::OwnedEvent> = Vec::new();
+            let mut parser = jats_fmt::StreamingParser::new(|e| delivered.push(e));
+            parser.feed(&input[..mid]);
+            if delivered.is_empty() && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser delivered zero events to the handler after feed() with \
+                     half of fixture {name} ({mid} bytes) and before finish() — expected real \
+                     incremental delivery per batch.rs's drain() design"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of jats fixtures, got {checked}"
+    );
+    assert_or_known_failure("jats", "streaming_parser", result);
+}
+
+#[test]
+fn jats_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
+    let root = fixtures_root().join("jats");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/jats dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let (doc, _diags) = jats_fmt::parse(&input);
+        let built = jats_fmt::emit(&doc);
+
+        let mut w = jats_fmt::Writer::new(Vec::<u8>::new());
+        for e in jats_fmt::events(&input) {
+            w.write_event(e);
+        }
+        let streamed = w.finish();
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of jats fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        use std::borrow::Cow;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = jats_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(jats_fmt::Event::StartElement {
+            name: Cow::Borrowed("p"),
+            attrs: vec![],
+        });
+        w.write_event(jats_fmt::Event::Text(Cow::Borrowed("Hello world")));
+        w.write_event(jats_fmt::Event::EndElement {
+            name: Cow::Borrowed("p"),
+        });
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink before finish() for a complete \
+                 StartElement/Text/EndElement sequence — expected genuine incremental \
+                 writing per writer.rs's direct quick_xml::Writer calls"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("jats", "streaming_writer", result);
+}
+
+#[test]
+fn tei_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("tei");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/tei dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let (doc, _diags) = tei_fmt::parse(&input);
+        let expected = tei_fmt::events::events_from_doc(&doc);
+        let actual: Vec<_> = tei_fmt::events(&input).map(|e| e.into_owned()).collect();
+        checked += 1;
+        if expected != actual && result.is_ok() {
+            result = Err(format!(
+                "events() diverged from events_from_doc(&parse(input)) for fixture {name}:\n  \
+                 ast-derived: {expected:?}\n  events():    {actual:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of tei fixtures, got {checked}"
+    );
+    assert_or_known_failure("tei", "events", result);
+}
+
+#[test]
+fn tei_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("tei");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/tei dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let bulk: Vec<tei_fmt::OwnedEvent> =
+            tei_fmt::events(&input).map(|e| e.into_owned()).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                tei_fmt::StreamingParser::new(|e: tei_fmt::OwnedEvent| streamed.push(e));
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+
+        if input.len() > 32 && !bulk.is_empty() {
+            let mid = input.len() / 2;
+            let mut delivered: Vec<tei_fmt::OwnedEvent> = Vec::new();
+            let mut parser = tei_fmt::StreamingParser::new(|e| delivered.push(e));
+            parser.feed(&input[..mid]);
+            if delivered.is_empty() && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser delivered zero events to the handler after feed() with \
+                     half of fixture {name} ({mid} bytes) and before finish() — expected real \
+                     incremental delivery per batch.rs's drain() design"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of tei fixtures, got {checked}"
+    );
+    assert_or_known_failure("tei", "streaming_parser", result);
+}
+
+#[test]
+fn tei_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
+    let root = fixtures_root().join("tei");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/tei dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let (doc, _diags) = tei_fmt::parse(&input);
+        let built = tei_fmt::emit(&doc);
+
+        let mut w = tei_fmt::Writer::new(Vec::<u8>::new());
+        for e in tei_fmt::events(&input) {
+            w.write_event(e);
+        }
+        let streamed = w.finish();
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of tei fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        use std::borrow::Cow;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = tei_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(tei_fmt::Event::StartElement {
+            name: Cow::Borrowed("p"),
+            attrs: vec![],
+        });
+        w.write_event(tei_fmt::Event::Text(Cow::Borrowed("Hello world")));
+        w.write_event(tei_fmt::Event::EndElement {
+            name: Cow::Borrowed("p"),
+        });
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink before finish() for a complete \
+                 StartElement/Text/EndElement sequence — expected genuine incremental \
+                 writing per writer.rs's direct quick_xml::Writer calls"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("tei", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// odf-fmt (odt/ods/odp): events() is genuinely independent of parse() (a
+// direct quick_xml scan of content.xml — see
+// crates/formats/odf-fmt/src/events.rs's `parse_content_events`, not a walk
+// over `parse()`'s `OdfDocument`), correcting a prior assessment that called
+// it a parse()-derived fake. It is, however, eagerly and fully buffered —
+// `EventIter::new` calls `extract_events` synchronously and queues every
+// event before the first `next()` call, self-documented in events.rs's
+// module doc ("Events are pre-buffered... For large files consider... a
+// future StreamingParser") — so it is not memory-bounded the way
+// docbook/jats/tei's `EventIter` is, even though it is a real independent
+// implementation. No `StreamingParser<H>` type exists in the crate at all
+// (batch.rs only has `BatchParser`, which is a legitimate buffer-until-
+// finish AST builder, and `Writer`); the module doc calls a true chunked
+// streaming parser "future" work. Both left `NotYetWired` below rather than
+// writing a same-format ast_to_events projection under time pressure — ODF's
+// `OdfEvent` enum spans three sibling document-body shapes (text/spreadsheet/
+// presentation) and a faithful hand-written projection is a substantial
+// undertaking; see TODO.md.
+//
+// The streaming Writer *is* checkable now: `write_event()` incrementally
+// builds an `OdfDocument` via `DocBuilder::process` (real per-event work,
+// the same sanctioned shape as ooxml-sml's `SmlWriter` above), only
+// deferring ZIP byte serialization to `finish()` (inherent to ZIP's
+// central-directory-at-end layout, documented in batch.rs). This check found
+// a real, distinct defect: `OdfEvent` has no variant carrying the document's
+// `mimetype`, `meta` (title/author/date), `styles.xml`, or embedded image
+// bytes — `events()` only covers document *body* content (paragraphs,
+// tables, slides, etc.), so `DocBuilder`'s reconstructed `OdfDocument`
+// always has `mimetype: ""` (never set anywhere in batch.rs) and default/
+// empty `meta`/`styles`/`images`, while `parse()`'s AST carries all of them
+// from the ZIP's other parts. This is the same defect class as org-fmt's
+// missing-metadata-variant gap: an `Event` enum expressiveness gap, not a
+// logic bug.
+#[test]
+fn odf_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
+    let root = fixtures_root().join("odt");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/odt dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(parsed) = odf_fmt::parser::parse(&input) else {
+            continue;
+        };
+        let Ok(built) = odf_fmt::writer::emit(&parsed.value) else {
+            continue;
+        };
+
+        let mut w = odf_fmt::batch::Writer::new(Vec::<u8>::new());
+        for e in odf_fmt::events(&input) {
+            w.write_event(e);
+        }
+        let Ok(streamed) = w.finish() else {
+            if result.is_ok() {
+                result = Err(format!(
+                    "streaming Writer::finish failed for fixture {name}"
+                ));
+            }
+            checked += 1;
+            continue;
+        };
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name} (built {} bytes, \
+                 streamed {} bytes)",
+                built.len(),
+                streamed.len()
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of odt fixtures, got {checked}"
+    );
+    assert_or_known_failure("odt", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// ansi-fmt: events(), StreamingParser, and the streaming Writer are all
+// genuinely independent, incremental implementations (verified by reading
+// events.rs/batch.rs/writer.rs directly, not assumed from crate docs):
+// EventIter advances its own position through the byte slice per next() call;
+// StreamingParser::drain_complete only re-parses the *safe* prefix of its
+// buffer (up to the last position that could not be an in-progress escape
+// sequence, via find_safe_boundary/is_complete_escape) and drains it, so
+// memory is bounded by the longest in-progress escape sequence, not the
+// whole input; Writer::write_event writes straight to the sink per event
+// with no buffering.
+//
+// No `events`-vs-AST-projection check is wired: parse()'s AnsiNode has no
+// variant for a bare SGR sequence at all — apply_sgr() (parse.rs) folds SGR
+// codes into a running `style` variable and returns `(None, pos)`, so a run
+// of SGR codes not immediately followed by text produces zero AST nodes,
+// while events()'s EventIter unconditionally emits one SetStyle/ResetStyle
+// event per 'm'-terminated CSI group regardless of what follows. This is the
+// reverse of the usual "events() drops information the AST has" defect
+// shape: here parse()'s own AST is the lossier side, so there is no way to
+// reconstruct a faithful ast_to_events projection purely from the AST for
+// inputs with standalone/trailing SGR sequences (fixtures adv-bare-esc,
+// adv-esc-eof and similar) — the two implementations are independent but not
+// equally expressive, not a bug in either one. See TODO.md.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn ansi_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("ansi");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/ansi dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let bulk: Vec<ansi_fmt::OwnedEvent> =
+            ansi_fmt::events(&input).map(|e| e.into_owned()).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                ansi_fmt::batch::StreamingParser::new(|e: ansi_fmt::OwnedEvent| streamed.push(e));
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of ansi fixtures, got {checked}"
+    );
+    assert_or_known_failure("ansi", "streaming_parser", result);
+}
+
+#[test]
+fn ansi_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
+    let root = fixtures_root().join("ansi");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/ansi dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let (doc, _diags) = ansi_fmt::parse(&input);
+        let built = ansi_fmt::emit(&doc);
+
+        let mut w = ansi_fmt::Writer::new(Vec::<u8>::new());
+        for e in ansi_fmt::events(&input) {
+            w.write_event(e.into_owned());
+        }
+        let streamed_bytes = w.finish();
+        let streamed = String::from_utf8_lossy(&streamed_bytes).into_owned();
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build(): \
+                 {built:?}\n  Writer:  {streamed:?}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of ansi fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = ansi_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(ansi_fmt::OwnedEvent::Text {
+            text: "Hello world".to_string().into(),
+            style: ansi_fmt::ast::Style::default(),
+        });
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink before finish() for a Text event — \
+                 expected genuine incremental writing per writer.rs's direct sink.write_all calls"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("ansi", "streaming_writer", result);
+}
