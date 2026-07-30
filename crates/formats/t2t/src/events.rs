@@ -10,22 +10,43 @@ pub enum Event<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartDocument,
     EndDocument,
+    /// The txt2tags 3-line document header (title / author / date), emitted
+    /// once at the start of the stream when at least one field is present.
+    /// Mirrors `T2tDoc.title`/`.author`/`.date` — a fixed 3-field atomic
+    /// unit (not a generic metadata bag), so it gets one dedicated variant
+    /// rather than three separate events.
+    Header {
+        title: Option<String>,
+        author: Option<String>,
+        date: Option<String>,
+    },
     StartParagraph,
     EndParagraph,
-    StartHeading { level: u8, numbered: bool },
+    StartHeading {
+        level: u8,
+        numbered: bool,
+    },
     EndHeading,
-    CodeBlock { content: Cow<'a, str> },
-    RawBlock { content: Cow<'a, str> },
+    CodeBlock {
+        content: Cow<'a, str>,
+    },
+    RawBlock {
+        content: Cow<'a, str>,
+    },
     StartBlockquote,
     EndBlockquote,
     StartTable,
     EndTable,
-    StartTableRow { header: bool },
+    StartTableRow {
+        header: bool,
+    },
     EndTableRow,
     StartTableCell,
     EndTableCell,
     HorizontalRule,
-    StartList { ordered: bool },
+    StartList {
+        ordered: bool,
+    },
     EndList,
     StartListItem,
     EndListItem,
@@ -49,9 +70,13 @@ pub enum Event<'a> {
     Code(Cow<'a, str>),
     Verbatim(Cow<'a, str>),
     Tagged(Cow<'a, str>),
-    StartLink { url: Cow<'a, str> },
+    StartLink {
+        url: Cow<'a, str>,
+    },
     EndLink,
-    Image { src: Cow<'a, str> },
+    Image {
+        src: Cow<'a, str>,
+    },
     LineBreak,
     SoftBreak,
 }
@@ -82,6 +107,15 @@ impl<'a> Event<'a> {
             // All other variants contain no borrowed data.
             Event::StartDocument => Event::StartDocument,
             Event::EndDocument => Event::EndDocument,
+            Event::Header {
+                title,
+                author,
+                date,
+            } => Event::Header {
+                title,
+                author,
+                date,
+            },
             Event::StartParagraph => Event::StartParagraph,
             Event::EndParagraph => Event::EndParagraph,
             Event::StartHeading { level, numbered } => Event::StartHeading { level, numbered },
@@ -178,10 +212,18 @@ pub struct EventIter {
     done: bool,
     /// True if we need to emit StartDocument on the first call.
     emit_start: bool,
+    /// Header fields to emit right after StartDocument, if the document has
+    /// any of title/author/date set. Taken (and cleared) on first emission.
+    pending_header: Option<(Option<String>, Option<String>, Option<String>)>,
 }
 
 impl EventIter {
     pub fn new(doc: T2tDoc) -> Self {
+        let pending_header = if doc.title.is_some() || doc.author.is_some() || doc.date.is_some() {
+            Some((doc.title, doc.author, doc.date))
+        } else {
+            None
+        };
         EventIter {
             frame_stack: vec![Frame::Document {
                 blocks: doc.blocks,
@@ -189,6 +231,7 @@ impl EventIter {
             }],
             done: false,
             emit_start: true,
+            pending_header,
         }
     }
 }
@@ -204,6 +247,14 @@ impl Iterator for EventIter {
         if self.emit_start {
             self.emit_start = false;
             return Some(Event::StartDocument);
+        }
+
+        if let Some((title, author, date)) = self.pending_header.take() {
+            return Some(Event::Header {
+                title,
+                author,
+                date,
+            });
         }
 
         loop {

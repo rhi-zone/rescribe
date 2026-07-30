@@ -145,12 +145,14 @@ enum Frame {
 
 struct DocBuilder {
     stack: Vec<Frame>,
+    title: Option<String>,
 }
 
 impl DocBuilder {
     fn new() -> Self {
         DocBuilder {
             stack: vec![Frame::Document { blocks: vec![] }],
+            title: None,
         }
     }
 
@@ -549,6 +551,11 @@ impl DocBuilder {
             OwnedEvent::Symbol(kind) => {
                 self.push_inline(Inline::Symbol(kind, Span::NONE));
             }
+
+            // ── Document metadata ───────────────────────────────────────────────
+            OwnedEvent::Title(title) => {
+                self.title = Some(title);
+            }
         }
     }
 
@@ -589,7 +596,7 @@ impl DocBuilder {
             _ => vec![],
         };
         TexinfoDoc {
-            title: None,
+            title: self.title,
             blocks,
             span: Span::NONE,
         }

@@ -101,6 +101,18 @@ pub enum Event<'a> {
         label: String,
     },
     EndFootnoteDef,
+    /// A reference link definition (`[label]: url "title"`), mirroring
+    /// `DjotDoc::link_defs`/`ast::LinkDef` field-for-field. Emitted once per
+    /// entry, in document order, after all top-level blocks (and before any
+    /// footnote defs — see `EventIter::next`'s `None` arm).
+    LinkDef {
+        label: String,
+        url: String,
+        title: Option<String>,
+        id: Option<String>,
+        classes: Vec<String>,
+        kv: Vec<(String, String)>,
+    },
     Text(Cow<'a, str>),
     SoftBreak,
     HardBreak,
@@ -232,6 +244,7 @@ pub(crate) fn collect_blocks_from_event_iter<I: Iterator<Item = OwnedEvent>>(
     let mut block_stack: Vec<BlockFrame> = vec![BlockFrame::Document {
         blocks: Vec::new(),
         footnotes: Vec::new(),
+        link_defs: Vec::new(),
     }];
     let mut inline_stack: Vec<InlineFrame> = Vec::new();
 
@@ -257,6 +270,7 @@ pub(crate) fn collect_doc_from_iter(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
     let mut block_stack: Vec<BlockFrame> = vec![BlockFrame::Document {
         blocks: Vec::new(),
         footnotes: Vec::new(),
+        link_defs: Vec::new(),
     }];
     let mut inline_stack: Vec<InlineFrame> = Vec::new();
 
@@ -265,11 +279,18 @@ pub(crate) fn collect_doc_from_iter(input: &str) -> (DjotDoc, Vec<Diagnostic>) {
     }
 
     let diagnostics = std::mem::take(&mut iter.diagnostics);
-    let link_defs = std::mem::take(&mut iter.link_defs);
 
-    let (blocks, footnotes) = match block_stack.pop() {
-        Some(BlockFrame::Document { blocks, footnotes }) => (blocks, footnotes),
-        _ => (Vec::new(), Vec::new()),
+    // `link_defs` are recovered from the event stream itself (via the
+    // `Event::LinkDef` arm below), not from `EventIter::link_defs` — by the
+    // time iteration completes, `EventIter::next`'s `None` arm has already
+    // drained that field to build the `LinkDef` events it yields.
+    let (blocks, footnotes, link_defs) = match block_stack.pop() {
+        Some(BlockFrame::Document {
+            blocks,
+            footnotes,
+            link_defs,
+        }) => (blocks, footnotes, link_defs),
+        _ => (Vec::new(), Vec::new(), Vec::new()),
     };
 
     let doc = DjotDoc {
@@ -286,6 +307,7 @@ enum BlockFrame {
     Document {
         blocks: Vec<Block>,
         footnotes: Vec<FootnoteDef>,
+        link_defs: Vec<LinkDef>,
     },
     Paragraph {
         inlines: Vec<Inline>,
@@ -775,6 +797,23 @@ fn handle_event(
                     label,
                     blocks,
                     span: Span::NONE,
+                });
+            }
+        }
+        Event::LinkDef {
+            label,
+            url,
+            title,
+            id,
+            classes,
+            kv,
+        } => {
+            if let Some(BlockFrame::Document { link_defs, .. }) = block_stack.last_mut() {
+                link_defs.push(LinkDef {
+                    label,
+                    url,
+                    title,
+                    attr: make_attr(id, classes, kv),
                 });
             }
         }

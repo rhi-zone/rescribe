@@ -210,18 +210,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              (parse_definition_list_direct itself is fine). See TODO.md",
         ),
         streaming_writer: ApiState::KnownFailure(
-            "djot-fmt's Writer drops link-reference definitions (fixture link-reference). Two \
-             confirmed halves: the Event enum has no variant corresponding to LinkDef — \
-             events()/EventIter keeps link defs in iter.link_defs and only surfaces them via \
-             collect_doc_from_iter (events.rs:268), reaching into the iterator's field, a channel \
-             Writer does not have since write_event only receives Event values — and in \
-             writer.rs DocBuilder.link_defs is declared (line 180), initialized to vec![] (188) \
-             and moved into the reconstructed DjotDoc (781) but never pushed to anywhere in the \
-             file, so events_to_doc always returns link_defs: []. Footnotes do NOT have this \
-             problem: StartFootnoteDef/EndFootnoteDef exist and DocBuilder::process handles them \
-             at writer.rs:477-491. Note Writer is also not incrementally streaming — writer.rs's \
-             module docs admit it buffers all events, reconstructs the AST, then emits. See \
-             TODO.md",
+            "djot-fmt's Writer is not incrementally streaming: writer.rs's module docs \
+             self-admit it buffers all events into a Vec<OwnedEvent>, reconstructs the AST via \
+             DocBuilder, then calls emit::emit inside finish() — write_event() delivers zero \
+             bytes to the sink before finish(), confirmed by an incrementality probe (a complete \
+             heading + paragraph produces no pre-finish output). Content correctness — including \
+             link-reference definitions (fixture link-reference) — is no longer at issue: Event \
+             now has a LinkDef variant (mirroring ast::LinkDef field-for-field), emitted by \
+             EventIter::next's None arm once top-level blocks are exhausted (before footnote \
+             defs), and DocBuilder::process pushes it to DocBuilder.link_defs, so events_to_doc \
+             round-trips link_defs correctly. See TODO.md for the hollow-writer performance \
+             rework, tracked alongside org/texinfo/commonmark-fmt's writers with the same defect.",
         ),
     },
     // asciidoc's `events = Wired` is a narrower claim than rst's: `parse()`
@@ -280,21 +279,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              three are downstream of emit_block() (batch.rs:190) re-parsing each accumulated \
              block in isolation; see TODO.md",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "org-fmt's Writer loses content vs build() on 3 of 89 org fixtures. The dominant \
-             cause is an expressiveness gap in the Event enum, not a logic error: Event \
-             (events.rs:14-133) has no document-metadata variant at all — metadata is delivered \
-             out-of-band via EventIter::take_metadata() (parse.rs:87) — so events() cannot carry \
-             #+TITLE:/#+AUTHOR:/#+CUSTOM_KEY: lines and writer.rs's DocBuilder::finish \
-             (writer.rs:616) has no choice but to hardcode `metadata: vec![]`, dropping every \
-             leading keyword line (fixtures metadata, keyword-line). The third fixture, \
-             dynamic-block, stacks on a separate pre-existing parse/emit bug: parse.rs has no \
-             #+BEGIN:/#+END: support, so parse_metadata_line absorbs a bare #+END: as document \
-             metadata key `end`, which build() re-emits as a stray leading `#+END: ` before all \
-             blocks and DocBuilder::finish then discards. Note Writer is also not incrementally \
-             streaming — writer.rs's module docs state it buffers all events, reconstructs the \
-             AST, then calls emit::build; see TODO.md",
-        ),
+        // streaming_writer was KnownFailure: Event had no document-metadata
+        // variant, so events() couldn't carry #+TITLE:/#+AUTHOR:/#+CUSTOM_KEY:
+        // lines and writer.rs's DocBuilder::finish hardcoded `metadata:
+        // vec![]`, dropping every leading keyword line (fixtures metadata,
+        // keyword-line). Fixed by adding `Event::Metadata { key, value }`,
+        // emitted by EventIter::next() (parse.rs) alongside the block it
+        // precedes, and handled by DocBuilder::process/finish (writer.rs).
+        // Note Writer is still not incrementally streaming — writer.rs's
+        // module docs state it buffers all events, reconstructs the AST,
+        // then calls emit::build.
+        streaming_writer: ApiState::Wired,
     },
     // html-fmt is html5ever-backed. CLAUDE.md puts third-party-library-backed
     // formats (pulldown-cmark, html5ever) out of scope for the "three
@@ -395,10 +390,9 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
             "texinfo::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
              reconstructs the AST + calls emit() inside finish() (see crates/formats/texinfo/src/\
              writer.rs's own module doc, \"buffers all events, reconstructs the AST, then \
-             emits\"); additionally, texinfo::events::Event has no variant carrying \
-             TexinfoDoc::title, so events_to_doc() always reconstructs title: None, silently \
-             dropping @settitle (see fixtures/texinfo/settitle-header) when content round-trips \
-             through the streaming writer",
+             emits\"); zero bytes reach the sink before finish() despite content round-tripping \
+             correctly (including @settitle, now carried via events::Event::Title — see \
+             fixtures/texinfo/settitle-header)",
         ),
     },
     FormatCapabilities {
@@ -713,18 +707,29 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              calls a true chunked event-delivering parser \"a future StreamingParser\"",
         ),
         streaming_writer: ApiState::KnownFailure(
-            "odf_fmt::batch::Writer::write_event() genuinely builds an OdfDocument \
-             incrementally per event via DocBuilder::process (same sanctioned shape as \
-             ooxml-sml's SmlWriter — real per-event work, only ZIP byte packaging deferred to \
-             finish(), which is inherent to ZIP's central-directory-at-end layout) — but \
-             OdfEvent has no variant carrying the document's mimetype, meta (title/author/\
-             date), styles.xml, or embedded image bytes; events() only covers body content \
-             (paragraphs, tables, slides), so the reconstructed OdfDocument always has \
-             mimetype: \"\" (never set anywhere in batch.rs) and default/empty meta/styles/\
-             images, unlike parse()'s AST which reads all of them from the ZIP's other parts — \
-             an Event-enum expressiveness gap, the same defect class as org-fmt's missing- \
-             metadata-variant gap, found via this harness's byte-identical-to-builder check \
-             (fixture adv-corrupt-image: built 1676 bytes vs streamed 1440 bytes)",
+            "the resource-loss defect this entry originally tracked (OdfEvent had no variant \
+             carrying mimetype/meta/styles/images) is fixed: OdfEvent now has Mimetype, Meta, \
+             AutomaticStyle, NamedStyle, ListStyle, PageLayout, and EmbeddedImage variants, \
+             produced by events::extract_events reading mimetype/meta.xml/styles.xml/ \
+             content.xml's <office:automatic-styles>/Pictures+media (via parser.rs's \
+             read_zip_text/parse_meta_xml/parse_styles_xml/parse_auto_styles_block, now \
+             pub(crate)) and consumed by batch::DocBuilder::process. Two directly-adjacent bugs \
+             that were blocking verification of that fix were fixed alongside it: StartFrame had \
+             no width/height (draw:frame's svg:width/svg:height were silently dropped, found via \
+             fixture adv-corrupt-image) and self-closing <office:text/> was not recognized by \
+             events.rs's own quick_xml scan (found via fixture adv-empty). However, the \
+             byte-identical-to-builder check still fails: it found the OdfEvent vocabulary has \
+             many other, unrelated pre-existing gaps for inline/block body content — \
+             office:annotation, text:bookmark(-start), field elements (text:date, \
+             text:page-number, etc.), text:soft-hyphen, text:soft-page-break, table cell \
+             col-span/row-span, footnote/endnote citations, draw:text-box inside a text-body \
+             draw:frame (image captions), and at least one heading-only divergence — none of \
+             which relate to mimetype/meta/styles/images. 12 of 66 odt fixtures diverge \
+             (annotation, bookmark, colspan-rowspan, endnote, footnote, footnote-formatted, \
+             heading, image-caption, non-breaking-space, path-deeply-nested-table, soft-hyphen, \
+             text-box). Completing OdfEvent's vocabulary to cover all of this is a substantially \
+             larger, separate body of work than the resource-loss defect this entry originally \
+             tracked; see TODO.md",
         ),
     },
     FormatCapabilities {
@@ -1047,30 +1052,35 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         streaming_parser: ApiState::KnownFailure(
             "t2t::batch::StreamingParser genuinely flushes events per accumulated block as fed \
              (not only at finish()), but emit_block() re-parses each block's text in isolation \
-             via crate::events::events(&text) — the same \"re-parse each block alone, lose \
-             cross-block context\" root cause already tracked for org-fmt/asciidoc. Two \
-             distinct fixtures expose it: definition-list, where the blank line between items \
-             (batch.rs's feed_line blank-line branch, batch.rs:143-150) ends the accumulated \
-             block, splitting one multi-item DefinitionList into two DefinitionList event pairs \
-             (the same bug class already tracked for rst/org); and document-header, where the \
-             isolated re-parse of the 3-line header block re-triggers try_parse_header() \
-             (parse.rs:70, requires >=3 lines and a non-heading/list/table/comment first line), \
-             which any 3+ line block satisfies purely by looking like a header out of context, \
-             producing a spurious extra StartDocument/EndDocument pair (Event has no metadata \
-             variant to carry the consumed header text) that events() over the whole document \
-             never produces; see TODO.md",
+             via crate::events::events(&text), and events() always wraps its output in its own \
+             StartDocument/EndDocument pair — the same \"re-parse each block alone, lose \
+             cross-block context\" root cause already tracked for org-fmt/asciidoc/fountain. \
+             Bulk events() over the whole document emits exactly one such pair, but \
+             StreamingParser emits one per accumulated block, diverging on every fixture with \
+             more than one top-level block (heading-h2, horizontal-rule, path-many-sections, \
+             comp-heading-list, definition-list, etc. — not limited to definition-list, where \
+             the blank line between items, batch.rs's feed_line blank-line branch, \
+             batch.rs:143-150, ends the accumulated block, splitting one multi-item \
+             DefinitionList into two DefinitionList event pairs). The related \
+             document-header-specific defect — an isolated re-parse of the 3-line header block \
+             re-triggering try_parse_header() and producing a spurious *empty* \
+             StartDocument/EndDocument pair with title/author/date silently dropped — is fixed: \
+             Event::Header was added and StreamingParser's try_emit_header() recognizes the \
+             first block directly via Parser::try_parse_header instead of falling through to \
+             the generic re-parse path; see TODO.md",
         ),
         streaming_writer: ApiState::KnownFailure(
             "t2t::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
              reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
              \"This implementation buffers all events, reconstructs the AST, then emits\") — the \
-             same fake-streaming-writer pattern as textile/commonmark/org/texinfo. It also drops \
-             doc.title/author/date on every fixture with a document header: emit::emit() always \
-             writes the 3-line header verbatim from T2tDoc.title/author/date (emit.rs:9-16), but \
-             t2t::Event has no variant carrying those fields, so writer.rs's DocBuilder::finish \
-             (writer.rs:400-404) always reconstructs title: None/author: None/date: None — an \
-             Event-enum expressiveness gap, not a one-line logic bug, exposed by the \
-             document-header fixture; see TODO.md",
+             same fake-streaming-writer pattern as textile/commonmark/org/texinfo; this \
+             non-incrementality is the only remaining failure (the incrementality probe writes \
+             zero bytes to the sink before finish()). The separate defect this entry used to \
+             also cover — Event had no variant carrying doc.title/author/date, so \
+             DocBuilder::finish always reconstructed title: None/author: None/date: None — is \
+             fixed: Event::Header now carries those fields, DocBuilder tracks and threads them \
+             through finish(), and the byte-identical-to-builder content check passes on every \
+             fixture including document-header; see TODO.md",
         ),
     },
     // pod-fmt's events() is `pod_fmt::events()` (src/lib.rs) — `parse(input)`
@@ -1269,9 +1279,10 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "djot",
         api: "streaming_writer",
-        description: "djot-fmt Event enum has no LinkDef variant and writer.rs's \
-                       DocBuilder.link_defs is never pushed to, so events_to_doc always returns \
-                       link_defs: [] and Writer drops link-reference definitions",
+        description: "djot_fmt::writer::Writer buffers all events and only reconstructs the AST \
+                       + calls emit() inside finish(); zero bytes reach the sink before finish() \
+                       despite content round-tripping correctly (including link-reference \
+                       definitions, now that Event::LinkDef exists and DocBuilder handles it)",
     },
     KnownFailure {
         format: "asciidoc",
@@ -1288,13 +1299,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        nesting depth in InSpecialBlock, emit_block() flushing an affiliated \
                        #+NAME: line away from its block, and the #+BEGIN_ test trimming so an \
                        indented list-item code block reads as top-level",
-    },
-    KnownFailure {
-        format: "org",
-        api: "streaming_writer",
-        description: "org-fmt Event enum has no document-metadata variant, so events() cannot \
-                       carry #+KEY: lines and writer.rs's DocBuilder::finish hardcodes \
-                       metadata: vec![], dropping every leading keyword line",
     },
     KnownFailure {
         format: "rst",
@@ -1314,8 +1318,9 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         format: "texinfo",
         api: "streaming_writer",
         description: "texinfo::writer::Writer buffers all events and only emits inside finish(); \
-                       also, Event has no variant for TexinfoDoc::title, so @settitle is always \
-                       dropped when round-tripped through the streaming writer",
+                       zero bytes reach the sink before finish() despite content \
+                       round-tripping correctly (including @settitle, now carried via \
+                       events::Event::Title)",
     },
     KnownFailure {
         format: "fb2",
@@ -1443,9 +1448,15 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "odt",
         api: "streaming_writer",
-        description: "OdfEvent has no variant carrying mimetype/meta/styles/images, so the \
-                       streaming Writer's reconstructed OdfDocument always drops them even \
-                       though it genuinely builds incrementally per event",
+        description: "OdfEvent now carries mimetype/meta/styles/images (the originally-tracked \
+                       resource-loss gap is fixed), but the byte-identical-to-builder check \
+                       still fails on 12 of 66 odt fixtures over unrelated, pre-existing \
+                       OdfEvent gaps for inline/block body content: office:annotation, \
+                       text:bookmark(-start), field elements (text:date, text:page-number, \
+                       etc.), text:soft-hyphen, text:soft-page-break, table cell col-span/ \
+                       row-span, footnote/endnote citations, draw:text-box inside a text-body \
+                       draw:frame (image captions), and at least one heading-only divergence; \
+                       see the matching CAPABILITIES entry for the full fixture list",
     },
     KnownFailure {
         format: "ansi",
@@ -1554,19 +1565,23 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         format: "t2t",
         api: "streaming_parser",
         description: "t2t::batch::StreamingParser's emit_block() re-parses each accumulated \
-                       block in isolation: a blank line splits a multi-item DefinitionList into \
-                       one StartDefinitionList/EndDefinitionList pair per item, and an isolated \
-                       3+ line block that looks like a document header re-triggers \
-                       try_parse_header(), producing a spurious extra StartDocument/EndDocument \
-                       pair events() over the whole document never produces",
+                       block in isolation, and events() always wraps its output in its own \
+                       StartDocument/EndDocument pair, so StreamingParser emits one such pair \
+                       per block instead of one for the whole document — reproduces on any \
+                       fixture with more than one top-level block, e.g. a blank line splitting a \
+                       multi-item DefinitionList into one StartDefinitionList/EndDefinitionList \
+                       pair per item. (The narrower document-header instance of this — an \
+                       isolated re-parse of the header's own 3 lines mis-triggering \
+                       try_parse_header() and silently dropping title/author/date — is fixed via \
+                       the new Event::Header variant.)",
     },
     KnownFailure {
         format: "t2t",
         api: "streaming_writer",
         description: "t2t::writer::Writer buffers all events and only reconstructs the AST + \
-                       emits inside finish() — a fake streaming writer per CLAUDE.md; it also \
-                       always drops doc.title/author/date since t2t::Event has no variant \
-                       carrying them",
+                       emits inside finish() — a fake streaming writer per CLAUDE.md; content \
+                       (including doc.title/author/date, now carried via Event::Header) is \
+                       byte-identical to the builder path, only the incrementality probe fails",
     },
     KnownFailure {
         format: "pod",

@@ -9,6 +9,23 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-07-30: texinfo `@settitle` title-loss gap closed.** One of the two `KnownFailure`s
+tracked against `texinfo/streaming_writer` (see the 2026-07-30 cross-API harness entry below)
+was an `Event`-enum expressiveness gap: `texinfo::events::Event` had no variant carrying
+`TexinfoDoc::title`, so `events_to_doc()` in the streaming writer always reconstructed
+`title: None`, silently dropping `@settitle` (`fixtures/texinfo/settitle-header`). Fixed by
+adding `Event::Title(String)`, emitted by `events()`/`EventIter` (and thus by
+`StreamingParser`, which is `events()`-backed) whenever `TexinfoDoc::title.is_some()`, and
+handled by the streaming `Writer`'s `DocBuilder` to set the reconstructed doc's `title` field.
+The **separate**, still-open half of that `KnownFailure` entry — `texinfo::batch::StreamingParser`
+and `texinfo::writer::Writer` both being architecturally hollow (buffer-all-input/buffer-all-events
+and only parse/emit inside `finish()`, not genuinely incremental) — is untouched; the
+`KNOWN_FAILURES`/`CAPABILITIES` entries for `texinfo/streaming_parser` and
+`texinfo/streaming_writer` in `streaming_harness.rs` remain, with descriptions trimmed to
+reflect only the incrementality gap.
+
+---
+
 **2026-07-28: every "5-Production" / "done" claim below (and in `docs/format-audit.md`,
 `README.md`, crate doc comments, and every `fixtures/*/COVERAGE.md` header) carries an
 unverified construct-completeness caveat.** The hand-written construct checklists these
@@ -17,6 +34,84 @@ claims are partly based on have not been checked against any spec-derived source
 "Status reset: construct-completeness marked unverified pending registry" entry below for
 what this does and doesn't change. The reader/writer/API/fuzz work behind each "5" is real
 and not being retracted — only the construct-list-completeness component of it is unverified.
+
+---
+
+**2026-07-30: djot-fmt `Event` enum expressiveness gap closed — `Event::LinkDef` added,
+carried through `events()`/`StreamingParser`/the streaming `Writer`.** Fixes the gap named in
+the 2026-07-30 cross-API harness entry below ("djot's `Event` has no `LinkDef` variant, drops
+link-reference definitions"). `Event::LinkDef { label, url, title, id, classes, kv }` mirrors
+`ast::LinkDef` field-for-field (flattening `Attr` the same way every other attribute-carrying
+`Event` variant in `events.rs` does). `EventIter::next`'s `None` arm now emits one `LinkDef`
+event per entry once top-level blocks are exhausted, taking `self.link_defs` at that point —
+landing right after the body and before footnote defs in the stream. `writer.rs::DocBuilder`
+gained a matching arm pushing to `DocBuilder.link_defs` (previously declared, initialized to
+`vec![]`, and never written to — the concrete bug). `collect_doc_from_iter` (`events.rs`) was
+updated to recover `link_defs` from the reconstructed `BlockFrame::Document` (which now
+carries a `link_defs` field, populated via the new `Event::LinkDef` handler in `handle_event`)
+rather than reaching into `EventIter::link_defs` directly — that field is now drained by
+`next()` itself before iteration completes, so the old direct-field read would return empty.
+`crates/rescribe-fixtures/tests/streaming_apis.rs`'s hand-written `dj_ast_to_events` AST→Event
+projection (used to check `events()` against `parse()`'s own AST independently) was updated to
+project `doc.link_defs` into the same `LinkDef` events at the same stream position.
+
+Confirmed **not** fixed (out of scope, tracked separately): djot's `StreamingParser`
+(`batch.rs`) still resolves a `[label]: url` definition to `url: ""` when the definition and
+its reference live in different top-level blocks (fixture `link-reference` is exactly this
+shape) — `emit_block()` re-parses each flushed block in isolation via `crate::events()`, so
+that block's own `pre_scan()` never sees a definition sitting in a sibling block. `Event` now
+being able to carry a `LinkDef` doesn't change that `StreamingParser` never gets to run
+`pre_scan()` over more than one block's text at a time; this is a distinct batch.rs
+cross-block-context bug, still tracked in `streaming_harness::KNOWN_FAILURES` under
+`djot`/`streaming_parser`. Also confirmed **not** fixed: `writer.rs`'s `Writer` is still
+architecturally hollow (buffers all events into a `Vec<OwnedEvent>`, only reconstructs the AST
++ calls `emit()` inside `finish()`) — a separate, still-open concern from the `LinkDef` gap.
+Added an incrementality probe to `djot_streaming_writer_matches_builder_over_all_fixtures`
+(same idiom as texinfo/commonmark/bbcode/creole's writer tests) so this stays a tracked
+`KnownFailure` under `djot`/`streaming_writer` rather than silently going green — the fixture
+content-equivalence half of that test now passes (the `LinkDef` gap was its only cause of
+failure), but the probe still finds zero bytes reach the sink before `finish()`.
+`streaming_harness::CAPABILITIES`/`KNOWN_FAILURES` and `docs/format-audit.md`'s djot row were
+updated accordingly; do not fix the hollow-writer performance rework here, it needs its own
+pass.
+
+---
+
+**2026-07-30: t2t-fmt — `Event::Header` closes the title/author/date expressiveness gap.**
+Fix pass on the `t2t` `KnownFailure`s from the follow-up-pass entry below. Added
+`Event::Header { title: Option<String>, author: Option<String>, date: Option<String> }` to
+`crates/formats/t2t/src/events.rs` (one dedicated variant, not three, mirroring `T2tDoc`'s own
+fixed 3-field header shape) and wired it through all three reader APIs plus the streaming
+writer:
+- `events()`/`EventIter` emits it right after `StartDocument` when any of title/author/date is
+  `Some`.
+- `StreamingParser` (`batch.rs`'s new `try_emit_header`) recognizes the header directly via
+  `Parser::try_parse_header` on the stream's first accumulated block, instead of falling
+  through to the generic `crate::events::events(&text)` re-parse path that used to
+  spuriously re-trigger `try_parse_header()` on an isolated block and produce an extra *empty*
+  `StartDocument`/`EndDocument` pair with the header silently dropped. This closes the
+  document-header-specific half of the `streaming_parser` `KnownFailure`.
+- The streaming `Writer`/`DocBuilder` (`writer.rs`) now tracks `title`/`author`/`date` fields,
+  set by a new `Event::Header` arm in `process()` and threaded through `finish()`, so
+  `t2t_streaming_writer_matches_builder_over_all_fixtures`'s content-equality check now passes
+  on every fixture including `document-header`.
+
+What's still open, deliberately not touched by this pass (out of scope — different defect
+class): the **general per-block `StartDocument`/`EndDocument` duplication** in
+`StreamingParser` (bulk `events()` emits one pair for the whole document, `StreamingParser`
+emits one per accumulated block since `emit_block()` re-parses each block via
+`crate::events::events()`, which always wraps its own pair) — this is much broader than the
+two fixtures originally named in the `KnownFailure` text (definition-list and document-header);
+it also reproduces on heading-h2, horizontal-rule, path-many-sections, comp-heading-list, and
+any other multi-block fixture. The `definition-list` fixture's blank-line-splits-a-multi-item-
+list symptom is one instance of this general issue and remains tracked. Also untouched: the
+streaming `Writer`'s **buffer-then-emit-in-`finish()` non-incrementality** (the "hollow writer
+performance" concern) — content is now correct but the writer still isn't a genuine incremental
+streamer; `t2t_streaming_writer_matches_builder_over_all_fixtures`'s incrementality probe still
+(correctly) fails on this and remains tracked in `KNOWN_FAILURES`.
+`streaming_harness::KNOWN_FAILURES` entries for `t2t`/`streaming_parser` and
+`t2t`/`streaming_writer` were both updated (not removed — both `Err` results persist for the
+reasons above) to describe only the now-narrower remaining defects.
 
 ---
 
@@ -3882,19 +3977,60 @@ Defect classes surfacing again, by name, as the task brief predicted:
   `streaming_harness::KNOWN_FAILURES` for the exact fixture names (`adv-entity-references`,
   `adv-malformed-xml`).
 
-- **Event-enum expressiveness gap** (`odf-fmt`, backing `odt`/`ods`/`odp`): `OdfEvent` has
+- **Event-enum expressiveness gap** (`odf-fmt`, backing `odt`/`ods`/`odp`): `OdfEvent` had
   no variant carrying the document's `mimetype`, `meta` (title/author/date), `styles.xml`
-  content, or embedded image bytes — `events()` only covers document *body* content
+  content, or embedded image bytes — `events()` only covered document *body* content
   (paragraphs, tables, slides). The streaming `Writer` genuinely builds its `OdfDocument`
   incrementally per event (the same sanctioned shape as `ooxml-sml`'s `SmlWriter` — real
   per-event work, ZIP byte packaging deferred to `finish()` only because ZIP's central
   directory lives at the end of the file), so it is not architecturally hollow — but the
-  reconstructed document always has `mimetype: ""` and empty `meta`/`styles`/`images`
+  reconstructed document always had `mimetype: ""` and empty `meta`/`styles`/`images`
   compared to `parse()`'s AST. Same defect class as org-fmt's missing-metadata-variant gap.
   Also confirmed and corrected a prior (wrong) assessment that called `odf-fmt`'s `events()`
   a `parse()`-then-walk fake — it is a genuine independent `quick_xml` scan of
   `content.xml`, just eagerly/fully buffered rather than lazily incremental (self-documented
   in `events.rs`), and no `StreamingParser<H>` exists in the crate yet at all.
+
+  **Fixed (2026-07-30, follow-up session):** added `OdfEvent::Mimetype(String)`,
+  `Meta(OdfMeta)`, `AutomaticStyle(StyleEntry)`, `NamedStyle(StyleEntry)`,
+  `ListStyle(String, bool)`, `PageLayout(PageLayout)`, and `EmbeddedImage { name, data }`
+  (named `EmbeddedImage` rather than `Image` to avoid colliding with the pre-existing inline
+  `Image { href }` body-content event). `events::extract_events` now reads
+  `mimetype`/`meta.xml`/`styles.xml`/`content.xml`'s `<office:automatic-styles>`/
+  `Pictures`+`media` via the same free functions `parser::parse` uses (`read_zip_text`,
+  `parse_meta_xml`, `parse_styles_xml`, `parse_auto_styles_block` — made `pub(crate)` for
+  this), and `batch::DocBuilder::process` now sets/pushes them onto the reconstructed
+  `OdfDocument`. Verifying the fix against `adv-corrupt-image` (the fixture the original
+  `KnownFailure` cited) surfaced a second, directly-adjacent bug in the same fixture:
+  `OdfEvent::StartFrame` had no `width`/`height` fields, so `draw:frame`'s `svg:width`/
+  `svg:height` were silently dropped even though `ast::Frame` has both — fixed by adding
+  them to the variant. Checking `adv-empty` surfaced a third: `events.rs`'s own
+  `content.xml` scan didn't recognize a self-closing `<office:text/>` (only `parser.rs`'s
+  `parse_content_xml` handled that case), so the streaming path always built `OdfBody::Empty`
+  instead of `OdfBody::Text(vec![])` — fixed by mirroring `parser.rs`'s handling in the
+  `Event::Empty` branch.
+
+  **Still open — much larger, separate gap surfaced by the fix above:** once the
+  resource-loss and two adjacent bugs were fixed, the byte-identical-to-builder check still
+  fails: 12 of 66 odt fixtures diverge (`annotation`, `bookmark`, `colspan-rowspan`,
+  `endnote`, `footnote`, `footnote-formatted`, `heading`, `image-caption`,
+  `non-breaking-space`, `path-deeply-nested-table`, `soft-hyphen`, `text-box`) because
+  `OdfEvent` has never covered several `Inline`/structural constructs that `parser.rs`'s
+  unified `parse_inlines` handles: `office:annotation`, `text:bookmark`/`bookmark-start`,
+  field elements (`text:date`, `text:page-number`, `text:author-name`, etc. — 9 element
+  names), `text:soft-hyphen`, `text:soft-page-break`, table cell `col-span`/`row-span`,
+  footnote/endnote `<text:note-citation>` content, and `draw:text-box` inside a *text-body*
+  `draw:frame` (only presentation-body frames get `StartTextBox`/`EndTextBox` today). This
+  is a distinct defect class (or rather, the same class applied to a much larger surface)
+  from the mimetype/meta/styles/images gap this entry originally tracked, and is a
+  substantially larger body of work — closing it means extending `OdfEvent`'s inline
+  vocabulary to match `ast::Inline`'s full surface, plus (for fields/citations) adding
+  small amounts of buffering state to `events.rs`'s otherwise-flat SAX scan, since those
+  need to capture text between a start and end tag into a single event rather than letting
+  it fall through as loose `Text` events into the enclosing paragraph/span. Left as the
+  `streaming_writer` `KnownFailure` for `odt` (updated description, not flipped to `Wired`)
+  rather than attempted in the same pass — out of scope for a task specifically bounded to
+  the resource-loss gap.
 
 - **Logic bugs surfaced by cross-checking, not present in either implementation alone**
   (`ansi-fmt`): `events()`'s `parse_csi_event` 'm' arm emits a `ResetStyle` event whenever

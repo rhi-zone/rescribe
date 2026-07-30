@@ -122,12 +122,18 @@ enum Frame {
 
 struct DocBuilder {
     stack: Vec<Frame>,
+    title: Option<String>,
+    author: Option<String>,
+    date: Option<String>,
 }
 
 impl DocBuilder {
     fn new() -> Self {
         DocBuilder {
             stack: vec![Frame::Document { blocks: vec![] }],
+            title: None,
+            author: None,
+            date: None,
         }
     }
 
@@ -136,6 +142,15 @@ impl DocBuilder {
             // ── Block open/close ───────────────────────────────────────────────
             OwnedEvent::StartDocument => {}
             OwnedEvent::EndDocument => {}
+            OwnedEvent::Header {
+                title,
+                author,
+                date,
+            } => {
+                self.title = title;
+                self.author = author;
+                self.date = date;
+            }
             OwnedEvent::StartParagraph => {
                 self.stack.push(Frame::Paragraph { inlines: vec![] });
             }
@@ -399,6 +414,9 @@ impl DocBuilder {
         };
         T2tDoc {
             blocks,
+            title: self.title,
+            author: self.author,
+            date: self.date,
             ..Default::default()
         }
     }

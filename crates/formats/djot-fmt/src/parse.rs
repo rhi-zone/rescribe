@@ -2259,7 +2259,13 @@ impl<'a> Iterator for EventIter<'a> {
                         return None;
                     }
                     if !push_next_block_frames(self) {
-                        // All top-level blocks consumed; push footnote defs.
+                        // All top-level blocks consumed; push footnote defs, then
+                        // (on top of the stack, so they pop *before* footnotes —
+                        // link_defs land right after the body, footnotes trail
+                        // everything) link reference definitions. `link_defs` is
+                        // taken here rather than surfaced via `ctx.link_defs()`
+                        // borrows used during body parsing, which are unaffected
+                        // since they read the field before it's emptied.
                         let fns = std::mem::take(&mut self.footnote_defs);
                         for fn_def in fns.into_iter().rev() {
                             self.frame_stack
@@ -2272,6 +2278,17 @@ impl<'a> Iterator for EventIter<'a> {
                                 .push(Frame::Event(OwnedEvent::StartFootnoteDef {
                                     label: fn_def.label,
                                 }));
+                        }
+                        let lds = std::mem::take(&mut self.link_defs);
+                        for ld in lds.into_iter().rev() {
+                            self.frame_stack.push(Frame::Event(OwnedEvent::LinkDef {
+                                label: ld.label,
+                                url: ld.url,
+                                title: ld.title,
+                                id: ld.attr.id,
+                                classes: ld.attr.classes,
+                                kv: ld.attr.kv,
+                            }));
                         }
                         self.phase = Phase::Done;
                     }

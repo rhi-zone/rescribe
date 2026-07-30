@@ -536,6 +536,19 @@ mod org_events_check {
     /// streaming API.
     fn org_ast_to_events(doc: &OrgDoc) -> Vec<OwnedEvent> {
         let mut out = Vec::new();
+        // All fixtures that carry `#+KEY: value` metadata lines have them at
+        // the very top of the document, before any block content, so a flat
+        // prefix of `Metadata` events matches `events()`'s actual output.
+        // (`OrgDoc.metadata` itself carries no per-entry source position, so
+        // this projection can't reconstruct interleaving if a future fixture
+        // put metadata lines between blocks — see `Event::Metadata`'s doc
+        // comment for where `events()` actually places them.)
+        for (key, value) in &doc.metadata {
+            out.push(OwnedEvent::Metadata {
+                key: key.clone(),
+                value: value.clone(),
+            });
+        }
         for b in &doc.blocks {
             org_block_events(b, &mut out);
         }
@@ -1469,15 +1482,25 @@ mod djot_events_check {
     /// CONTRACT (document level): `DjotDoc` carries `blocks`, `footnotes` and
     /// `link_defs` side by side, and the type definitions alone do not say where
     /// the latter two land in the stream. Resolved against `EventIter::next`'s
-    /// `None` arm: once top-level blocks are exhausted, footnote defs are pushed
-    /// in document order as `StartFootnoteDef`/blocks/`EndFootnoteDef`, i.e. they
-    /// trail the body. `link_defs` never appear as events at all — there is no
-    /// event variant for them, and `collect_doc_from_iter` recovers them from
-    /// `EventIter::link_defs` rather than from the stream.
+    /// `None` arm: once top-level blocks are exhausted, `link_defs` are pushed
+    /// first as `Event::LinkDef` (one per entry, document order), then footnote
+    /// defs as `StartFootnoteDef`/blocks/`EndFootnoteDef` — i.e. link defs land
+    /// right after the body and footnotes trail everything.
     fn dj_ast_to_events(doc: &DjotDoc) -> Vec<OwnedEvent> {
         let mut out = Vec::new();
         for b in &doc.blocks {
             dj_block_events(b, &mut out);
+        }
+        for ld in &doc.link_defs {
+            let (id, classes, kv) = dj_unpack(&ld.attr);
+            out.push(OwnedEvent::LinkDef {
+                label: ld.label.clone(),
+                url: ld.url.clone(),
+                title: ld.title.clone(),
+                id,
+                classes,
+                kv,
+            });
         }
         for f in &doc.footnotes {
             out.push(OwnedEvent::StartFootnoteDef {
@@ -1892,11 +1915,14 @@ fn djot_streaming_parser_matches_events_under_adversarial_chunking() {
 /// The streaming `Writer` driven with `events(input)` must reproduce what
 /// builder `emit()` produces for the AST `parse(input)` returned.
 ///
-/// djot's `Writer` is not incrementally streaming — `writer.rs`'s module docs
-/// say it "buffers all events, reconstructs the AST, then emits", and
-/// `finish()` calls `emit::emit`. The check still exercises `events_to_doc`/
-/// `DocBuilder`, a substantial second AST reconstruction, against `parse()`'s
-/// AST — and that is exactly where it finds the tracked defect.
+/// Content correctness (this loop) is expected to pass now that `Event` has
+/// a `LinkDef` variant and `DocBuilder` handles it (see `Event::LinkDef` in
+/// `events.rs` and its arm in `writer.rs::DocBuilder::process`) — the prior
+/// `link_defs: []` gap is closed. `djot`'s `Writer` is still not
+/// incrementally streaming, though: `writer.rs`'s module docs say it
+/// "buffers all events, reconstructs the AST, then emits", and `finish()`
+/// calls `emit::emit`. That's checked separately below via an incrementality
+/// probe, the same way texinfo/commonmark/bbcode/creole's hollow writers are.
 #[test]
 fn djot_streaming_writer_matches_builder_over_all_fixtures() {
     let root = fixtures_root().join("djot");
@@ -1933,6 +1959,43 @@ fn djot_streaming_writer_matches_builder_over_all_fixtures() {
         checked > 50,
         "expected to check a substantial number of djot fixtures, got {checked}"
     );
+
+    // Incrementality probe: byte-identical final content (checked above)
+    // only proves the *content* is right, not that the writer is genuinely
+    // streaming. Feed a complete heading + paragraph (well short of
+    // finish()) and check whether any bytes have already reached the sink.
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = djot_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(djot_fmt::OwnedEvent::StartHeading {
+            level: 1,
+            id: None,
+            classes: vec![],
+            kv: vec![],
+        });
+        w.write_event(djot_fmt::OwnedEvent::Text("Hello".to_string().into()));
+        w.write_event(djot_fmt::OwnedEvent::EndHeading);
+        w.write_event(djot_fmt::OwnedEvent::StartParagraph {
+            id: None,
+            classes: vec![],
+            kv: vec![],
+        });
+        w.write_event(djot_fmt::OwnedEvent::Text("World".to_string().into()));
+        w.write_event(djot_fmt::OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after 6 complete write_event() calls (a \
+                 full heading + paragraph) and before finish() — djot_fmt::writer::Writer \
+                 buffers all events into a Vec<OwnedEvent> and only reconstructs the AST + \
+                 calls emit() inside finish() (crates/formats/djot-fmt/src/writer.rs), so it \
+                 is not a genuine incremental streaming writer despite content round-tripping \
+                 correctly"
+                    .to_string(),
+            );
+        }
+    }
     assert_or_known_failure("djot", "streaming_writer", result);
 }
 
@@ -2277,16 +2340,23 @@ fn sml_streaming_writer_preserves_row_and_cell_attributes() {
 }
 
 // ---------------------------------------------------------------------------
-// texinfo: events() vs parse(), real and passing. StreamingParser and the
-// streaming Writer are both buffer-until-finish wrappers (see their own
+// texinfo: events() vs parse(), real and passing (including Event::Title for
+// @settitle — see crates/formats/texinfo/src/events.rs). StreamingParser and
+// the streaming Writer are both buffer-until-finish wrappers (see their own
 // module docs in crates/formats/texinfo/src/batch.rs and writer.rs, which
 // self-report "Memory usage is O(full input)" / "buffers all events,
 // reconstructs the AST, then emits") rather than genuine incremental
-// implementations; tracked as KnownFailure entries.
+// implementations; tracked as KnownFailure entries. (The @settitle-dropping
+// bug that used to additionally afflict the streaming writer is fixed:
+// Event::Title now carries the title through events()/StreamingParser/
+// Writer; only the buffer-until-finish incrementality gap remains open.)
 // ---------------------------------------------------------------------------
 
 fn texinfo_ast_to_events(doc: &texinfo::TexinfoDoc) -> Vec<texinfo::events::Event<'static>> {
     let mut out = Vec::new();
+    if let Some(title) = &doc.title {
+        out.push(texinfo::events::Event::Title(title.clone()));
+    }
     for b in &doc.blocks {
         texinfo_block_events(b, &mut out);
     }
@@ -2658,12 +2728,10 @@ fn texinfo_streaming_parser_matches_events_and_is_incremental() {
 /// reconstructs the AST and calls `emit()` inside `finish()` (see
 /// `crates/formats/texinfo/src/writer.rs`'s own module doc, "This
 /// implementation buffers all events, reconstructs the AST, then emits").
-/// Content-wise this still round-trips correctly for most fixtures (since
-/// finish() ends up calling the same `emit()` the builder path uses) with one
-/// exception this check found: the `Event` enum has no representation for
-/// `TexinfoDoc::title` (no `@settitle`-carrying event exists), so
-/// `events_to_doc()` always reconstructs a document with `title: None`,
-/// silently dropping `@settitle` for any fixture that has one.
+/// Content-wise this round-trips correctly for all fixtures, including
+/// `@settitle` (carried via `Event::Title`, handled by `DocBuilder`) — the
+/// remaining, still-open defect this check surfaces is purely the
+/// incrementality probe below: no bytes reach the sink before `finish()`.
 #[test]
 fn texinfo_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     let root = fixtures_root().join("texinfo");
@@ -4258,16 +4326,37 @@ fn tei_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
 // builds an `OdfDocument` via `DocBuilder::process` (real per-event work,
 // the same sanctioned shape as ooxml-sml's `SmlWriter` above), only
 // deferring ZIP byte serialization to `finish()` (inherent to ZIP's
-// central-directory-at-end layout, documented in batch.rs). This check found
-// a real, distinct defect: `OdfEvent` has no variant carrying the document's
-// `mimetype`, `meta` (title/author/date), `styles.xml`, or embedded image
-// bytes — `events()` only covers document *body* content (paragraphs,
-// tables, slides, etc.), so `DocBuilder`'s reconstructed `OdfDocument`
-// always has `mimetype: ""` (never set anywhere in batch.rs) and default/
-// empty `meta`/`styles`/`images`, while `parse()`'s AST carries all of them
-// from the ZIP's other parts. This is the same defect class as org-fmt's
-// missing-metadata-variant gap: an `Event` enum expressiveness gap, not a
-// logic bug.
+// central-directory-at-end layout, documented in batch.rs). This check used
+// to find a real, distinct defect: `OdfEvent` had no variant carrying the
+// document's `mimetype`, `meta` (title/author/date), `styles.xml`, or
+// embedded image bytes — `events()` only covered document *body* content
+// (paragraphs, tables, slides, etc.), so `DocBuilder`'s reconstructed
+// `OdfDocument` always had `mimetype: ""` (never set anywhere in batch.rs)
+// and default/empty `meta`/`styles`/`images`, while `parse()`'s AST carried
+// all of them from the ZIP's other parts — the same defect class as
+// org-fmt's missing-metadata-variant gap: an `Event` enum expressiveness
+// gap, not a logic bug. Fixed by adding `OdfEvent::Mimetype`, `Meta`,
+// `AutomaticStyle`, `NamedStyle`, `ListStyle`, `PageLayout`, and
+// `EmbeddedImage` variants (the last named to avoid colliding with the
+// pre-existing inline `Image { href }` body-content event), produced by
+// `events::extract_events` reading `mimetype`/`meta.xml`/`styles.xml`/
+// `content.xml`'s `<office:automatic-styles>`/`Pictures`+`media` via the
+// same free-function helpers `parser::parse` uses (`read_zip_text`,
+// `parse_meta_xml`, `parse_styles_xml`, `parse_auto_styles_block`, now
+// `pub(crate)`), and consumed by `batch::DocBuilder::process`. Fixing that
+// exposed two directly-adjacent bugs blocking its own verification —
+// `StartFrame` had no `width`/`height` (fixture adv-corrupt-image) and
+// self-closing `<office:text/>` wasn't recognized by `events.rs`'s own scan
+// (fixture adv-empty) — both fixed too. The check still fails overall,
+// though: it now surfaces a much larger, pre-existing, and unrelated set of
+// `OdfEvent` vocabulary gaps for inline/block body content (annotations,
+// bookmarks, field elements, soft-hyphen/soft-page-break, table cell
+// col/row-span, footnote/endnote citations, image-caption text-boxes, at
+// least one heading divergence — 12 of 66 odt fixtures), which is a
+// separate, substantially larger body of work than the resource-loss defect
+// this check originally tracked. See `KNOWN_FAILURES["odt"]
+// ["streaming_writer"]` for the current fixture list and TODO.md for the
+// follow-up.
 #[test]
 fn odf_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     let root = fixtures_root().join("odt");
@@ -8743,36 +8832,63 @@ fn muse_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
 // feed_line/BlockState machine flushes each accumulated block via
 // emit_block() as soon as a blank line or fence boundary is seen, not only
 // at finish()) but emit_block() re-parses each block's text in isolation via
-// crate::events::events(&text) — the same "re-parse each block alone, lose
-// cross-block context" root cause already documented for org-fmt/asciidoc's
-// StreamingParsers. Two distinct fixtures expose it here: the definition-list
-// fixture, where the blank line between items ends the accumulated block
-// (see feed_line's blank-line branch, batch.rs:143-150), splitting one
-// multi-item DefinitionList into two DefinitionList event pairs (the same bug
-// class already tracked for rst/org); and document-header, where the
-// isolated re-parse of the header's own three lines re-triggers
-// `try_parse_header()` (parse.rs:70), which requires >=3 lines and a
-// non-heading/list/table/comment first line — a condition any 3+ line
-// document-header-shaped block satisfies purely by looking like one out of
-// context, producing a spurious extra StartDocument/EndDocument pair (since
-// Event has no metadata variant to carry the consumed header text) that
-// events() over the whole document never produces.
+// crate::events::events(&text), and events() always wraps its output in its
+// own StartDocument/EndDocument pair — so bulk events() over the whole
+// document emits exactly one such pair, but StreamingParser emits one PER
+// accumulated block, diverging on every fixture with more than one top-level
+// block (heading-h2, horizontal-rule, path-many-sections, comp-heading-list,
+// definition-list, etc. — not just the two fixtures originally called out
+// here). This is the same "re-parse each block alone, lose cross-block
+// context" root cause already documented for org-fmt/asciidoc/fountain's
+// StreamingParsers; the definition-list fixture is one instance of it (the
+// blank line between items ends the accumulated block, see feed_line's
+// blank-line branch, batch.rs:143-150, splitting one multi-item
+// DefinitionList into two DefinitionList event pairs).
 //
-// Writer buffers all events into a Vec<OwnedEvent> and only reconstructs the
-// AST + calls emit() inside finish() (writer.rs's own module doc: "This
-// implementation buffers all events, reconstructs the AST, then emits") —
-// the same fake-streaming-writer pattern as textile/commonmark/org/texinfo.
-// It also drops doc.title/author/date on every fixture with a document
-// header: emit::emit() always writes the 3-line header verbatim from
-// T2tDoc.title/author/date (emit.rs:9-16), but t2t::Event has no variant
-// carrying those fields, so writer.rs's DocBuilder::finish (T2tDoc {
-// blocks, ..Default::default() }, writer.rs:400-404) always reconstructs
-// title: None/author: None/date: None — an Event-enum expressiveness gap,
-// not a one-line logic bug, exposed by the document-header fixture.
+// The document-header-specific defect that used to live alongside the above
+// — an isolated re-parse of the header's own three lines re-triggering
+// `try_parse_header()` (parse.rs:70) and producing a spurious *empty*
+// StartDocument/EndDocument pair with the header's title/author/date
+// silently dropped (Event had no variant to carry them) — is now fixed:
+// `Event::Header { title, author, date }` was added, and StreamingParser
+// (batch.rs's `try_emit_header`) recognizes the first block of the stream
+// directly via `Parser::try_parse_header` instead of falling through to the
+// generic re-parse-via-events() path, so the header round-trips and no
+// longer produces a spurious empty pair. The still-open general per-block
+// StartDocument/EndDocument duplication (above) is unrelated to headers and
+// remains the reason `t2t_streaming_parser_matches_events_under_adversarial_chunking`
+// still fails overall — see `document-header`'s own streamed output for
+// confirmation the header itself is now carried correctly.
+//
+// Writer used to buffer all events into a Vec<OwnedEvent> and only
+// reconstruct the AST + call emit() inside finish() (writer.rs's own module
+// doc: "This implementation buffers all events, reconstructs the AST, then
+// emits") — the same fake-streaming-writer pattern as
+// textile/commonmark/org/texinfo — and separately always dropped
+// doc.title/author/date on every fixture with a document header, since
+// t2t::Event had no variant carrying those fields, so writer.rs's
+// DocBuilder::finish (writer.rs:400-404) always reconstructed
+// title: None/author: None/date: None. The title/author/date-dropping half
+// is now fixed: `DocBuilder` tracks title/author/date fields, set by the new
+// `Event::Header` arm in `process()` and threaded through in `finish()`, so
+// the byte-identical-to-builder content check now passes on every fixture,
+// including document-header. The buffering/non-incrementality half (writer
+// writes zero bytes to the sink until finish()) is a separate, still-open
+// concern — CLAUDE.md's "fake streaming writer" / hollow-writer performance
+// rework — unrelated to Event expressiveness, and is what
+// `t2t_streaming_writer_matches_builder_over_all_fixtures`'s incrementality
+// probe still (correctly) fails on.
 // ---------------------------------------------------------------------------
 
 fn t2t_ast_to_events(doc: &t2t::T2tDoc) -> Vec<t2t::Event<'static>> {
     let mut out = vec![t2t::Event::StartDocument];
+    if doc.title.is_some() || doc.author.is_some() || doc.date.is_some() {
+        out.push(t2t::Event::Header {
+            title: doc.title.clone(),
+            author: doc.author.clone(),
+            date: doc.date.clone(),
+        });
+    }
     for b in &doc.blocks {
         t2t_block_events(b, &mut out);
     }

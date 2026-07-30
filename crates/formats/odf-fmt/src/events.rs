@@ -10,6 +10,7 @@
 //!
 //! Unsupported constructs emit [`OdfEvent::Unknown`] carrying the raw element name.
 
+use crate::ast::{OdfMeta, PageLayout, StyleEntry};
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::io::{Cursor, Read};
@@ -102,6 +103,8 @@ pub enum OdfEvent<'a> {
     StartFrame {
         name: Option<Cow<'a, str>>,
         anchor_type: Option<Cow<'a, str>>,
+        width: Option<Cow<'a, str>>,
+        height: Option<Cow<'a, str>>,
     },
     EndFrame,
 
@@ -194,6 +197,46 @@ pub enum OdfEvent<'a> {
     /// `</presentation:notes>` closed.
     EndNotes,
 
+    // ── Package-level events ───────────────────────────────────────────────
+    // These carry the parts of an ODF document that live outside
+    // `content.xml`'s body: the `mimetype` package entry, `meta.xml`,
+    // `styles.xml`'s named styles / page layouts, `content.xml`'s
+    // automatic styles and list styles, and embedded resource bytes
+    // (`Pictures/`, `media/`). Without them, `batch::Writer`'s
+    // reconstructed `OdfDocument` always had an empty `mimetype`, default
+    // `meta`, and no styles or images — see `KNOWN_FAILURES["odt"]
+    // ["streaming_writer"]` in `rescribe-fixtures`.
+    /// The ZIP package's `mimetype` entry.
+    Mimetype(String),
+
+    /// Document metadata from `meta.xml` `<office:meta>`.
+    Meta(OdfMeta),
+
+    /// One entry from `content.xml`'s `<office:automatic-styles>`.
+    AutomaticStyle(StyleEntry),
+
+    /// One entry from `styles.xml`'s `<office:styles>` (named styles).
+    NamedStyle(StyleEntry),
+
+    /// One `<text:list-style>` from `content.xml`'s automatic-styles:
+    /// `(style-name, is_ordered)`.
+    ListStyle(String, bool),
+
+    /// One `<style:page-layout>` from `styles.xml`.
+    PageLayout(PageLayout),
+
+    /// One embedded resource from `Pictures/` or `media/`, keyed by its
+    /// path within the ZIP archive.
+    ///
+    /// Named `EmbeddedImage` rather than `Image` to avoid colliding with
+    /// the existing inline `Image { href }` event above, which represents
+    /// a `<draw:image>` element's `xlink:href` reference inside body
+    /// content, not the referenced resource's bytes.
+    EmbeddedImage {
+        name: String,
+        data: Vec<u8>,
+    },
+
     /// An element not otherwise handled.
     Unknown {
         name: Cow<'a, str>,
@@ -246,20 +289,61 @@ fn extract_events(input: &[u8]) -> VecDeque<OdfEvent<'static>> {
         Err(_) => return VecDeque::new(),
     };
 
+    let mut events = VecDeque::new();
+
+    // Package-level parts, emitted before body content so a consumer sees
+    // document identity/metadata/styles before the content that depends on
+    // them (mirroring the order `parser::parse` reads them in).
+    if let Some(mimetype) = crate::parser::read_zip_text(&mut archive, "mimetype") {
+        events.push_back(OdfEvent::Mimetype(mimetype.trim().to_string()));
+    }
+
+    if let Some(xml) = crate::parser::read_zip_text(&mut archive, "meta.xml") {
+        events.push_back(OdfEvent::Meta(crate::parser::parse_meta_xml(&xml)));
+    }
+
+    if let Some(xml) = crate::parser::read_zip_text(&mut archive, "styles.xml") {
+        let mut diags = Vec::new();
+        let (named_styles, page_layouts) = crate::parser::parse_styles_xml(&xml, &mut diags);
+        for style in named_styles {
+            events.push_back(OdfEvent::NamedStyle(style));
+        }
+        for layout in page_layouts {
+            events.push_back(OdfEvent::PageLayout(layout));
+        }
+    }
+
+    // content.xml: automatic styles/list styles, then body content.
     let content_xml = {
         let mut f = match archive.by_name("content.xml") {
             Ok(f) => f,
-            Err(_) => return VecDeque::new(),
+            Err(_) => return events,
         };
         let mut s = String::new();
         if f.read_to_string(&mut s).is_err() {
-            return VecDeque::new();
+            return events;
         }
         s
     };
-
-    let mut events = VecDeque::new();
     parse_content_events(&content_xml, &mut events);
+
+    // Embedded resources — order among themselves is not significant, since
+    // the AST stores them in an unordered `HashMap`.
+    let file_names: Vec<String> = archive.file_names().map(str::to_owned).collect();
+    for name in &file_names {
+        if (name.starts_with("Pictures/") || name.starts_with("media/"))
+            && let Ok(mut f) = archive.by_name(name)
+        {
+            let mut data = Vec::new();
+            if f.read_to_end(&mut data).is_ok() && !data.is_empty() {
+                events.push_back(OdfEvent::EmbeddedImage {
+                    name: name.clone(),
+                    data,
+                });
+            }
+        }
+    }
+
     events
 }
 
@@ -287,6 +371,16 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
             Ok(Event::Start(ref e)) => {
                 let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
                 match name.as_str() {
+                    "office:automatic-styles" => {
+                        let (styles, list_styles) =
+                            crate::parser::parse_auto_styles_block(&mut reader);
+                        for style in styles {
+                            events.push_back(OdfEvent::AutomaticStyle(style));
+                        }
+                        for (style_name, is_ordered) in list_styles {
+                            events.push_back(OdfEvent::ListStyle(style_name, is_ordered));
+                        }
+                    }
                     "office:body" => {
                         in_body = true;
                     }
@@ -309,8 +403,13 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
                 }
             }
             Ok(Event::Empty(ref e)) => {
-                if body_kind != BodyKind::None {
-                    let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
+                if name == "office:text" && in_body && body_kind == BodyKind::None {
+                    // Self-closing `<office:text/>` — mirrors parser.rs's
+                    // `parse_content_xml` handling of the same case.
+                    events.push_back(OdfEvent::StartText);
+                    events.push_back(OdfEvent::EndText);
+                } else if body_kind != BodyKind::None {
                     match name.as_str() {
                         "text:line-break" => events.push_back(OdfEvent::LineBreak),
                         "text:tab" => events.push_back(OdfEvent::Tab),
@@ -464,9 +563,13 @@ fn push_text_start_event(
         "draw:frame" => {
             let frame_name = get_attr(e, b"draw:name").map(Cow::Owned);
             let anchor_type = get_attr(e, b"text:anchor-type").map(Cow::Owned);
+            let width = get_attr(e, b"svg:width").map(Cow::Owned);
+            let height = get_attr(e, b"svg:height").map(Cow::Owned);
             events.push_back(OdfEvent::StartFrame {
                 name: frame_name,
                 anchor_type,
+                width,
+                height,
             });
         }
         "draw:image" => {

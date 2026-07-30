@@ -81,6 +81,13 @@ pub enum Event<'a> {
     UnknownBlock {
         kind: String,
     },
+    /// Document-level metadata entry (e.g. `#+TITLE:`, `#+AUTHOR:`,
+    /// `#+CUSTOM_KEY:` lines). One event per `OrgDoc.metadata` pair, emitted
+    /// in document order before the block content it precedes in the source.
+    Metadata {
+        key: String,
+        value: String,
+    },
 
     // ── Inline events ─────────────────────────────────────────────────────────
     Text(Cow<'a, str>),
@@ -860,6 +867,12 @@ fn handle_event(
                 );
             }
         }
+        // No-op here, not a drop: `collect_doc_from_iter` recovers the same
+        // (key, value) pairs out-of-band via `EventIter::take_metadata()`
+        // after driving this loop to completion (see below), so every
+        // `Metadata` event's payload already reaches the returned
+        // `Vec<(String, String)>` through that channel.
+        Event::Metadata { .. } => {}
     }
 }
 
