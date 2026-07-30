@@ -489,6 +489,21 @@ impl DocBuilder {
                     });
                 }
             }
+            OwnedEvent::LinkDef {
+                label,
+                url,
+                title,
+                id,
+                classes,
+                kv,
+            } => {
+                self.link_defs.push(LinkDef {
+                    label,
+                    url,
+                    title,
+                    attr: Attr { id, classes, kv },
+                });
+            }
 
             // ── Inline events ──────────────────────────────────────────────────
             OwnedEvent::Text(cow) => {
