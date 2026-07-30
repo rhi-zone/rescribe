@@ -1,0 +1,5 @@
+{
+  "description": "a nested unclosed <p> tag (a second <p> opens before the first is closed) followed by a closing tag for an ancestor element does not panic the parser; it recovers best-effort (nesting the rest of the content under the still-open elements) and reports diagnostics for the mismatched end tag",
+  "category": "adversarial",
+  "assertions": []
+}

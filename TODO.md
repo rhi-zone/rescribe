@@ -3961,3 +3961,59 @@ pass + 16 from the wiki-verticals passes), **28** remaining in `NOT_YET_AUDITED`
 (49 − 5 − 16), and **57** total `KNOWN_FAILURES` entries (12 from this pass + 45 from the
 wiki-verticals passes). See `docs/format-audit.md`'s "Merge reconciliation" paragraph for the
 same figures cross-checked against the merged table contents directly.
+
+## docbook/jats/tei `StreamingParser` mismatched/unmatched-end-tag bug — fixed (2026-07-30)
+
+Bug (2) from the "Cross-API harness: docbook/jats/tei, odt, ansi audited" entry above is
+fixed. `StreamingParser::drain()` (`batch.rs`, all three crates) still has to build a fresh
+`quick_xml::Reader` over just the unconsumed tail on every call and disable
+`check_end_names`/`allow_unmatched_ends` on it — that part is architecturally required,
+since that reader never saw the `Start` tag matching an `End` tag consumed by a *previous*
+`drain()` call. What was missing was any *other* mechanism enforcing tag balance in its
+place, so a genuinely mismatched or unmatched end tag was silently accepted with zero
+diagnostics, diverging from `parse()`/`events()`'s default `check_end_names = true` /
+`allow_unmatched_ends = false` convention.
+
+Fix: `StreamingParser` now tracks open-element names itself in a `Vec<String>` field
+(`open_stack`) that persists *across* `drain()` calls — the same "survives multiple
+`feed()` calls" shape `entity_resolver` already had. Every `StartElement` event pushes;
+every `EndElement` event pops and compares. A mismatch, or an `End` against an empty stack,
+pushes a `Diagnostic` (message shape mirrors `parse()`'s own quick-xml-error wrapping,
+`"XML parse error: ..."`) and sets a new `failed` field so draining stops for good — the
+same "fatal diagnostic + stop" behavior `parse()` gets for free from quick-xml's own
+`check_end_names = true` erroring out of `read_event_into`. Deliberately does *not*
+replicate `parse()`'s further "auto-close still-open elements at EOF" recovery step (that
+recovery is AST-shaped — synthetic `EndElement` nodes closing a tree — and doesn't have an
+obvious event-stream analog); simplest option that satisfies "always at least one
+`Diagnostic`, never silently accepted" was chosen, matching what the task's design-fork
+question explicitly allowed.
+
+Applied identically to `docbook-fmt`, `jats-fmt`, `tei-fmt` (confirmed still byte-identical
+in shape via `diff` across all three `batch.rs` files before editing — only doc comments
+and AST/event type names differ).
+
+`CAPABILITIES`/`KNOWN_FAILURES` updated: `docbook`/`tei` `streaming_parser` flipped
+`KnownFailure` → `Wired` (both fully pass `*_streaming_parser_matches_events_under_
+adversarial_chunking`, confirmed via `cargo test`). `jats` stays `KnownFailure`, but the
+description changed: the mismatch/unmatched bug itself is fixed and confirmed (new fixtures
+`adv-mismatched-end-tag`/`adv-unmatched-end-tag` pass), but jats-fmt's own pre-existing
+`adv-malformed-xml` fixture is a *truncated*-input case (`<article ...><body><p>Unterminated
+content`, no closing tags at all, unlike docbook's/tei's mismatched-end-tag versions of the
+same fixture name) that exposes an unrelated, narrower gap once unmasked: the
+adversarial-chunking test's incrementality probe feeds exactly the first half of the input
+bytes (40 of 81) and asserts at least one event was delivered before `finish()`; those 40
+bytes land mid-attribute-value inside the still-open root `<article xmlns:xlink="...">`
+start tag (the attribute value alone is longer than half the file), so zero events is
+correct, spec-conforming behavior for that exact split point — not a `StreamingParser`
+defect, just a fixed-50%-split probe that isn't fixture-shape-aware. Not fixed here (out of
+scope for this task); would need either a smarter incrementality probe or a differently-
+shaped single fixture that doesn't have its very first token straddle the midpoint.
+
+`streaming_writer` entries for all three formats deliberately left untouched (still
+`KnownFailure`) — that's bug (3) above, a separate, still-open gap (`events()` lacking
+`parse()`'s malformed-XML auto-close recovery, which the streaming Writer inherits).
+
+New fixtures: `fixtures/{docbook,tei}/adv-unmatched-end-tag`, `fixtures/jats/adv-unmatched-
+end-tag`, `fixtures/jats/adv-mismatched-end-tag` (jats needed its own mismatch fixture since
+its existing `adv-malformed-xml` never exercised end-tag mismatch at all). `COVERAGE.md`
+updated for all three formats' Adversarial sections.

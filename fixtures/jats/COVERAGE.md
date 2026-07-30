@@ -256,7 +256,13 @@ do not apply here.
 ## Adversarial
 
 - [x] empty document — `adv-empty`
-- [x] malformed XML (unclosed tag) — `adv-malformed-xml`
+- [x] malformed XML (unclosed tag, truncated input) — `adv-malformed-xml`
+- [x] mismatched end tag (nested unclosed `<p>` closed by an ancestor's end
+  tag) — `adv-mismatched-end-tag` (reported as a diagnostic; distinct from
+  `adv-malformed-xml`, which is a truncation case, not a mismatch case)
+- [x] stray closing tag with no matching open tag at all — `adv-unmatched-end-tag`
+  (reported as a diagnostic, not silently accepted; exercised across `parse()`,
+  `events()`, and `StreamingParser` — all three now reject it identically)
 - [x] unknown element (extension) — `adv-unknown-block-element` (block-shaped,
   raw-preserved as a tagged `div`), `adv-unknown-inline-element` (inline-shaped,
   raw-preserved as a tagged `span` in place) — neither is silently dropped

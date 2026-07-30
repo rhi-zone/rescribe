@@ -212,6 +212,9 @@ like docbook-fmt's/jats-fmt's) — all the work is in
 
 - [x] empty document — `adv-empty`
 - [x] malformed XML (unclosed tag) — `adv-malformed-xml`
+- [x] stray closing tag with no matching open tag at all — `adv-unmatched-end-tag`
+  (reported as a diagnostic, not silently accepted; exercised across `parse()`,
+  `events()`, and `StreamingParser` — all three now reject it identically)
 - [x] missing TEI namespace — `adv-no-namespace`
 - [x] unknown element — `adv-unknown-element` (non-block-vocabulary element at
   block-dispatch position, stays a bare span), `adv-unknown-block-element`

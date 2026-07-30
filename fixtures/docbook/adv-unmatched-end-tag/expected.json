@@ -1,0 +1,5 @@
+{
+  "description": "a stray closing tag with no corresponding open tag at all (</para> after the document's own root has already closed) does not panic the parser; it reports a diagnostic rather than being silently accepted",
+  "category": "adversarial",
+  "assertions": []
+}

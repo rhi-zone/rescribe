@@ -518,13 +518,18 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     // docbook-fmt, jats-fmt, tei-fmt are byte-identical in implementation
     // shape (verified via `diff` across batch.rs/writer.rs: only doc
-    // comments and AST/event type names differ), so the same three real bugs
-    // — found by this harness, not present in any prior audit — apply to all
-    // three identically. All three ARE genuinely independent/incremental
+    // comments and AST/event type names differ), so the same bugs — found by
+    // this harness, not present in any prior audit — applied to all three
+    // identically. All three ARE genuinely independent/incremental
     // implementations (events() pulls tokens straight off quick_xml::Reader
     // without building an AST; the streaming Writer calls quick_xml::Writer
     // directly per event with no buffering) — these are logic bugs, not
-    // architectural hollowness.
+    // architectural hollowness. The streaming_parser mismatched/unmatched-
+    // end-tag bug (StreamingParser silently accepting malformed XML that
+    // events() correctly rejects) has since been fixed identically in all
+    // three via a hand-tracked open-element stack in batch.rs; the events()
+    // entity-coalescing gap and the streaming_writer auto-close-recovery gap
+    // remain open.
     FormatCapabilities {
         format: "docbook",
         events: ApiState::KnownFailure(
@@ -535,17 +540,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              via this harness's events()-vs-events_from_doc(&parse()) equivalence check \
              (fixture adv-entity-references, 3/110 docbook fixtures contain entities)",
         ),
-        streaming_parser: ApiState::KnownFailure(
-            "StreamingParser's drain() (batch.rs) sets check_end_names=false and \
-             allow_unmatched_ends=true on its per-drain-call quick_xml::Reader — an \
-             architecturally necessary consequence of only ever seeing the unconsumed tail, \
-             not the full document, on each call (documented in batch.rs's drain() comment) — \
-             so it silently accepts a mismatched end tag (e.g. an unclosed <para> closed by \
-             </article>) that events()'s single continuous Reader (default \
-             check_end_names=true) correctly rejects as a parse error; the two diverge on \
-             malformed input with zero diagnostics from StreamingParser (fixture \
-             adv-malformed-xml) instead of matching events()'s error-and-stop behavior",
-        ),
+        // StreamingParser's drain() (batch.rs) still sets check_end_names=false and
+        // allow_unmatched_ends=true on its per-drain-call quick_xml::Reader — that part is
+        // architecturally necessary, since each drain() call only ever sees the unconsumed
+        // tail, not the full document. But it now tracks open-element names itself in a
+        // `Vec<String>` field that persists across drain() calls (the same "survives
+        // multiple feed() calls" shape as entity_resolver), and validates every End event
+        // against that stack by hand: a mismatch or an End against an empty stack pushes a
+        // Diagnostic and stops draining for good, mirroring parse()'s "fatal diagnostic +
+        // stop" behavior on a genuine XML error. Fixed and confirmed passing (fixtures
+        // adv-malformed-xml, adv-unmatched-end-tag).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "downstream of the events() gap above: parse() has explicit malformed-XML recovery \
              (auto-closes unclosed elements with synthetic EndElement nodes, see parse.rs's \
@@ -565,9 +570,20 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              for the root cause",
         ),
         streaming_parser: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation: StreamingParser's per-drain-call Reader \
-             disables check_end_names/allow_unmatched_ends and so does not detect mismatched \
-             end tags events() catches; see the \"docbook\" streaming_parser KnownFailure",
+            "the mismatched/unmatched-end-tag bug shared with docbook-fmt/tei-fmt (see the \
+             \"docbook\" streaming_parser comment above) is fixed here too (confirmed passing \
+             on fixtures adv-mismatched-end-tag, adv-unmatched-end-tag) — but jats-fmt's own \
+             pre-existing adv-malformed-xml fixture (`<article ...><body><p>Unterminated \
+             content`, no closing tags at all — a truncated-input case, not a mismatched-tag \
+             one, so the fix above doesn't touch it) exposes an unrelated, narrower gap once \
+             unmasked: the adversarial-chunking test's incrementality probe feeds exactly the \
+             first half of the input (40 of 81 bytes) and asserts at least one event was \
+             delivered before finish(); those 40 bytes end mid-attribute-value inside the \
+             still-open root <article ...> start tag (its xmlns:xlink=\"...\" attribute alone \
+             is longer than half the file), so zero events is the correct, spec-conforming \
+             answer for that exact split point, not a StreamingParser defect — but the probe's \
+             fixed 50% split doesn't know that. Not touched here: fixing this needs either a \
+             smarter incrementality probe or a different single-fixture-shape assertion",
         ),
         streaming_writer: ApiState::KnownFailure(
             "shares docbook-fmt's implementation: the streaming Writer inherits events()'s lack \
@@ -672,11 +688,10 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              one Text run the way parse()'s AST does; see the \"docbook\" events KnownFailure \
              for the root cause",
         ),
-        streaming_parser: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation: StreamingParser's per-drain-call Reader \
-             disables check_end_names/allow_unmatched_ends and so does not detect mismatched \
-             end tags events() catches; see the \"docbook\" streaming_parser KnownFailure",
-        ),
+        // Fixed alongside docbook-fmt/jats-fmt (byte-identical batch.rs shape); see the
+        // "docbook" streaming_parser comment above. Confirmed passing (fixture
+        // adv-malformed-xml, adv-unmatched-end-tag).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "shares docbook-fmt's implementation: the streaming Writer inherits events()'s lack \
              of parse()'s malformed-XML auto-close recovery; see the \"docbook\" \
@@ -1353,14 +1368,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     },
     KnownFailure {
         format: "docbook",
-        api: "streaming_parser",
-        description: "StreamingParser's per-drain-call Reader disables \
-                       check_end_names/allow_unmatched_ends (architecturally necessary for only \
-                       seeing the unconsumed tail per call) and so silently accepts mismatched \
-                       end tags that events()'s continuous Reader correctly rejects",
-    },
-    KnownFailure {
-        format: "docbook",
         api: "streaming_writer",
         description: "downstream of the events() gap: parse() auto-closes unclosed elements on \
                        malformed XML but events() has no such recovery, so the streaming Writer \
@@ -1374,7 +1381,14 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "jats",
         api: "streaming_parser",
-        description: "shares docbook-fmt's implementation; same check_end_names-disabled gap",
+        description: "the mismatched/unmatched-end-tag bug shared with docbook-fmt/tei-fmt is \
+                       fixed here too, but jats-fmt's own adv-malformed-xml fixture is a \
+                       truncated-input case (not mismatched-tag), and unmasking it exposes an \
+                       unrelated gap: the adversarial-chunking test's fixed 50%-byte-split \
+                       incrementality probe lands mid-attribute-value inside the still-open \
+                       root start tag for that fixture, so zero events delivered at that split \
+                       point is correct behavior, not a StreamingParser defect — the probe \
+                       itself isn't fixture-shape-aware",
     },
     KnownFailure {
         format: "jats",
@@ -1385,11 +1399,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         format: "tei",
         api: "events",
         description: "shares docbook-fmt's implementation; same entity-Text-coalescing gap",
-    },
-    KnownFailure {
-        format: "tei",
-        api: "streaming_parser",
-        description: "shares docbook-fmt's implementation; same check_end_names-disabled gap",
     },
     KnownFailure {
         format: "tei",
