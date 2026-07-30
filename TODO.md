@@ -4083,3 +4083,51 @@ additionally covered by a fixture.
 **Not touched:** `zimwiki`/`markua`/`vimwiki` `streaming_writer` (architecturally hollow
 buffer-then-`finish()` writers — a separate, still-open, out-of-scope gap) and every other
 crate's own unrelated tracked gaps.
+
+## docbook/jats/tei entity-Text coalescing — fixed in events() and StreamingParser (2026-07-30)
+
+`events()`/`EventIter` (all three crates, byte-identical shape) emitted one `Text` event per
+resolved character/predefined/DTD entity reference (e.g. `&amp;` decoded to its own
+`Text("&")` event) instead of merging it into the surrounding text run the way `parse()`'s
+`current_text` accumulator does — found via this harness's `events()`-vs-`events_from_doc(&
+parse())` equivalence check (fixture `adv-entity-references`).
+
+**Fix:** `EventIter::next()` now accumulates a run of adjacent text-equivalent tokens (`Text`,
+resolved char refs, resolved predefined/DTD entity refs) into a merged `String` before
+dispatching, using a one-token lookahead: since `next()` inevitably has to read one token
+*past* the end of the run to discover the run is over, and a `quick_xml::Reader` token can't
+be "unread," that lookahead token is stashed in a new `pending: Option<Event<'a>>` field and
+returned on the very next `next()` call instead of being re-read. Confirmed via a direct
+check against fixture `adv-entity-references`: `a &amp; b &lt; c &gt; d &apos;e&apos;
+&quot;f&quot;` now yields one `Text("a & b < c > d 'e' \"f\"")` event, not six.
+
+Applied identically to docbook-fmt, jats-fmt, tei-fmt (re-confirmed byte-identical shape via
+`diff` before splicing the fix into all three).
+
+**Fixing `events()` alone broke `StreamingParser`↔`events()` equivalence** (caught
+immediately by the harness's adversarial-chunking check, exactly as designed): `batch.rs`'s
+`StreamingParser::drain()` does its own entity handling and text dispatch, independently of
+`events.rs`, and hadn't been touched, so it kept emitting one `Text` per entity while
+`events()` now merged them. Fixed the same way: a `pending_text: Option<String>` field on
+`StreamingParser` that persists across `drain()`/`feed()` calls (same shape as
+`entity_resolver`), flushed to the handler whenever a non-text event is about to be
+dispatched or at a definite end of input. One follow-up bug surfaced while verifying this
+against fixture `adv-abstract`-shaped inputs (trailing whitespace text after the last closing
+tag): the pre-existing `if self.pending.is_empty() { return; }` early-return at the top of
+`drain()`'s loop didn't flush `pending_text` on `is_final`, silently dropping the final
+merged text run — fixed by flushing there too when `is_final`. Applied identically to all
+three crates.
+
+**No new fixture needed** — the existing `fixtures/{docbook,jats,tei}/adv-entity-references`
+fixture already exercises this via the harness's generic `events()`-vs-`events_from_doc(&
+parse())` equivalence sweep over every fixture in the directory; it now passes.
+
+**`KNOWN_FAILURES` note (not removed, description corrected):** the `events` entries for all
+three formats are still `KnownFailure` — but now for a completely different, already-tracked
+reason. `parse()` auto-closes unclosed elements on malformed XML (synthetic `EndElement`
+nodes) but `events()` has no such recovery, so it diverges from `events_from_doc(&parse())`
+on fixture `adv-malformed-xml` specifically (which contains no entities at all — this is not
+a regression of the entity-coalescing bug, just a second, unrelated cause that happens to
+trip the same equivalence check). This is the same root cause already tracked by the
+`streaming_writer` `KnownFailure` entry for all three formats. Descriptions updated to make
+this explicit instead of citing the now-fixed entity-coalescing reason.

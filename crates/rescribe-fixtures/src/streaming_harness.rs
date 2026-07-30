@@ -528,17 +528,34 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // end-tag bug (StreamingParser silently accepting malformed XML that
     // events() correctly rejects) has since been fixed identically in all
     // three via a hand-tracked open-element stack in batch.rs; the events()
-    // entity-coalescing gap and the streaming_writer auto-close-recovery gap
-    // remain open.
+    // entity-coalescing gap has also since been fixed (see below); the
+    // streaming_writer auto-close-recovery gap remains open.
     FormatCapabilities {
         format: "docbook",
+        // Fixed 2026-07-30: events()/EventIter used to emit one Text event per resolved
+        // character/predefined/DTD entity (e.g. `&amp;` decoded to its own Text("&") event)
+        // instead of merging it into the surrounding text run the way parse()'s AST does
+        // (parse.rs's `current_text` accumulator). EventIter::next() now accumulates a run
+        // of adjacent text-equivalent tokens via a one-token lookahead (`pending` field) and
+        // dispatches one merged Text event, matching parse(); StreamingParser's batch.rs
+        // drain() got the equivalent fix (a `pending_text` field persisting across drain()
+        // calls). Confirmed via fixture adv-entity-references (a &amp; b &lt; c &gt; d &apos;
+        // e&apos; &quot;f&quot; now yields one Text event, not six).
+        //
+        // events is still KnownFailure, though, because a *different*, already-tracked gap
+        // (the streaming_writer entry below: events() lacks parse()'s malformed-XML
+        // auto-close recovery) also surfaces through this same events()-vs-
+        // events_from_doc(&parse()) equivalence check, via fixture adv-malformed-xml — that
+        // fixture has no entities in it at all, so this is not a re-regression of the
+        // entity-coalescing bug, just a second, unrelated cause tripping the same check.
         events: ApiState::KnownFailure(
-            "events()/EventIter emits one Text event per resolved character/predefined entity \
-             (e.g. `&amp;` decodes to its own Text(\"&\") event) instead of merging it into the \
-             surrounding text run the way parse()'s AST does (parse.rs's `current_text` \
-             accumulator, documented in parse.rs's module doc as deliberate coalescing) — found \
-             via this harness's events()-vs-events_from_doc(&parse()) equivalence check \
-             (fixture adv-entity-references, 3/110 docbook fixtures contain entities)",
+            "parse() auto-closes unclosed elements on malformed XML (synthetic EndElement \
+             nodes, see parse.rs's 'unclosed element' diagnostics) but events()/EventIter has \
+             no such recovery — it stops at the genuine XML parse error with no synthetic \
+             close events — so events() diverges from events_from_doc(&parse()) for fixture \
+             adv-malformed-xml specifically (not an entity-coalescing issue: that part is \
+             fixed, see the events field's doc comment above). Same root cause as the \
+             streaming_writer KnownFailure below.",
         ),
         // StreamingParser's drain() (batch.rs) still sets check_end_names=false and
         // allow_unmatched_ends=true on its per-drain-call quick_xml::Reader — that part is
@@ -563,11 +580,14 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "jats",
+        // Fixed alongside docbook-fmt (byte-identical events.rs shape); entity-coalescing is
+        // confirmed working. Still KnownFailure for the same unrelated malformed-XML
+        // auto-close-recovery reason as docbook's events entry above (jats has its own
+        // adv-malformed-xml fixture, a truncated-input case, that trips the same gap).
         events: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation (byte-identical batch.rs/events.rs shape): \
-             events()/EventIter does not coalesce consecutive resolved-entity Text events into \
-             one Text run the way parse()'s AST does; see the \"docbook\" events KnownFailure \
-             for the root cause",
+            "shares docbook-fmt's implementation (byte-identical events.rs shape): events() \
+             lacks parse()'s malformed-XML auto-close recovery, diverging on fixture \
+             adv-malformed-xml; see the \"docbook\" events KnownFailure for the root cause",
         ),
         streaming_parser: ApiState::KnownFailure(
             "the mismatched/unmatched-end-tag bug shared with docbook-fmt/tei-fmt (see the \
@@ -682,11 +702,13 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "tei",
+        // Fixed alongside docbook-fmt (byte-identical events.rs shape); entity-coalescing is
+        // confirmed working. Still KnownFailure for the same unrelated malformed-XML
+        // auto-close-recovery reason as docbook's events entry above.
         events: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation (byte-identical batch.rs/events.rs shape): \
-             events()/EventIter does not coalesce consecutive resolved-entity Text events into \
-             one Text run the way parse()'s AST does; see the \"docbook\" events KnownFailure \
-             for the root cause",
+            "shares docbook-fmt's implementation (byte-identical events.rs shape): events() \
+             lacks parse()'s malformed-XML auto-close recovery, diverging on fixture \
+             adv-malformed-xml; see the \"docbook\" events KnownFailure for the root cause",
         ),
         // Fixed alongside docbook-fmt/jats-fmt (byte-identical batch.rs shape); see the
         // "docbook" streaming_parser comment above. Confirmed passing (fixture
@@ -1341,9 +1363,10 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "docbook",
         api: "events",
-        description: "events()/EventIter emits one Text event per resolved character/predefined \
-                       entity instead of merging it into the surrounding text run the way \
-                       parse()'s AST does",
+        description: "entity-coalescing is fixed (2026-07-30); still fails on fixture \
+                       adv-malformed-xml for the unrelated, still-open reason: events() lacks \
+                       parse()'s malformed-XML auto-close recovery (same root cause as the \
+                       streaming_writer entry below)",
     },
     KnownFailure {
         format: "docbook",
@@ -1355,7 +1378,8 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "jats",
         api: "events",
-        description: "shares docbook-fmt's implementation; same entity-Text-coalescing gap",
+        description: "shares docbook-fmt's implementation; entity-coalescing is fixed, same \
+                       remaining malformed-XML auto-close-recovery gap",
     },
     KnownFailure {
         format: "jats",
@@ -1377,7 +1401,8 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "tei",
         api: "events",
-        description: "shares docbook-fmt's implementation; same entity-Text-coalescing gap",
+        description: "shares docbook-fmt's implementation; entity-coalescing is fixed, same \
+                       remaining malformed-XML auto-close-recovery gap",
     },
     KnownFailure {
         format: "tei",

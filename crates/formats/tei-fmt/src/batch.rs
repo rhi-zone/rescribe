@@ -123,6 +123,14 @@ pub struct StreamingParser<H: Handler> {
     /// so a caller that keeps calling `feed()` after the fatal error
     /// doesn't get any further (possibly-confusing) partial dispatch.
     failed: bool,
+    /// Accumulates a run of adjacent text-equivalent tokens (`Text`,
+    /// resolved char/predefined/DTD entity references) across possibly
+    /// multiple `drain()` calls, so the dispatched `Text` event matches
+    /// `events()`'s coalescing (see `EventIter::next()`'s doc comment in
+    /// events.rs) instead of one `Text` event per resolved entity. Flushed
+    /// (dispatched to the handler) whenever a non-text event is about to be
+    /// dispatched, or at a definite end of input.
+    pending_text: Option<String>,
 }
 
 impl<H: Handler> StreamingParser<H> {
@@ -135,6 +143,15 @@ impl<H: Handler> StreamingParser<H> {
             entity_resolver: EntityResolver::new(DtdEntities::empty()),
             open_stack: Vec::new(),
             failed: false,
+            pending_text: None,
+        }
+    }
+
+    /// Dispatch the accumulated text run (if any) to the handler as one
+    /// `Text` event and clear the accumulator.
+    fn flush_pending_text(&mut self) {
+        if let Some(text) = self.pending_text.take() {
+            self.handler.handle(OwnedEvent::Text(text.into()));
         }
     }
 
@@ -162,6 +179,11 @@ impl<H: Handler> StreamingParser<H> {
         }
         loop {
             if self.pending.is_empty() {
+                // A pending merged text run can only be safely delivered
+                // once we know for certain no more input will extend it.
+                if is_final {
+                    self.flush_pending_text();
+                }
                 return;
             }
 
@@ -188,6 +210,9 @@ impl<H: Handler> StreamingParser<H> {
                         // whitespace) — nothing to report, just drop them.
                         self.pending.clear();
                     }
+                    if is_final {
+                        self.flush_pending_text();
+                    }
                     return;
                 }
                 Ok(XmlEvent::Text(t)) => {
@@ -203,12 +228,33 @@ impl<H: Handler> StreamingParser<H> {
                         .unwrap_or_else(|_| String::from_utf8_lossy(t.as_ref()).into_owned());
                     self.pending.drain(0..consumed);
                     if !content.is_empty() {
-                        self.handler.handle(OwnedEvent::Text(content.into()));
+                        match &mut self.pending_text {
+                            Some(acc) => acc.push_str(&content),
+                            None => self.pending_text = Some(content),
+                        }
                     }
                 }
                 Ok(event) => {
                     let consumed = reader.buffer_position() as usize;
                     let owned = crate::events::owned_event_from_xml(event, &self.entity_resolver);
+
+                    // A resolved entity reference (char ref, predefined, or
+                    // DTD-declared) merges into the pending text run instead
+                    // of dispatching immediately — mirrors events()'s
+                    // coalescing (see EventIter::next()'s doc comment in
+                    // events.rs).
+                    if let Some(OwnedEvent::Text(t)) = &owned {
+                        match &mut self.pending_text {
+                            Some(acc) => acc.push_str(t),
+                            None => self.pending_text = Some(t.to_string()),
+                        }
+                        self.pending.drain(0..consumed);
+                        continue;
+                    }
+
+                    // Any other event ends the current text run: flush it
+                    // first so dispatch order matches events()'s.
+                    self.flush_pending_text();
 
                     // Manual open/close tag-balance check, replacing the
                     // quick-xml check_end_names/allow_unmatched_ends
@@ -272,6 +318,11 @@ impl<H: Handler> StreamingParser<H> {
                 }
                 Err(e) => {
                     if is_final {
+                        // Flush before recording the error, matching
+                        // events()'s "merged text delivered, then done"
+                        // order on a fatal XML error (see EventIter::next()'s
+                        // Err arm in events.rs).
+                        self.flush_pending_text();
                         self.diagnostics.push(Diagnostic {
                             message: format!("XML parse error: {e}"),
                             span: Span::NONE,

@@ -109,6 +109,13 @@ pub struct EventIter<'a> {
     /// any); replaced once a `Doctype` event is produced. See `parse.rs`'s
     /// module docs for why a single forward pass is sufficient.
     entity_resolver: EntityResolver,
+    /// One-token lookahead: when `next()` merges a run of adjacent
+    /// text-equivalent tokens (`Text`, resolved char/predefined/DTD
+    /// entities) into a single `Event::Text`, it inevitably reads one token
+    /// *past* the end of that run to discover the run is over. That token
+    /// can't be "unread" from `quick_xml::Reader`, so it's stashed here and
+    /// returned on the very next `next()` call instead of being read again.
+    pending: Option<Event<'a>>,
 }
 
 impl<'a> EventIter<'a> {
@@ -121,6 +128,7 @@ impl<'a> EventIter<'a> {
             done: false,
             diagnostics: Vec::new(),
             entity_resolver: EntityResolver::new(DtdEntities::empty()),
+            pending: None,
         }
     }
 
@@ -137,6 +145,41 @@ impl<'a> Iterator for EventIter<'a> {
         if self.done {
             return None;
         }
+        // A stashed lookahead token from a previous call (see `pending`'s
+        // doc comment) always takes priority over reading more input.
+        if let Some(ev) = self.pending.take() {
+            return Some(ev);
+        }
+
+        // Accumulates a run of adjacent text-equivalent tokens (`Text`,
+        // resolved char refs, resolved predefined/DTD entity refs) into one
+        // merged run, matching `parse()`'s `current_text` coalescing
+        // (documented in parse.rs's module doc) instead of emitting one
+        // `Text` event per resolved entity.
+        let mut merged_text: Option<String> = None;
+
+        macro_rules! push_text {
+            ($s:expr) => {
+                match &mut merged_text {
+                    Some(acc) => acc.push_str($s),
+                    None => merged_text = Some($s.to_string()),
+                }
+            };
+        }
+
+        // Return `ev` now if no text run is pending; otherwise stash `ev`
+        // as lookahead and return the merged text run first.
+        macro_rules! emit_or_stash {
+            ($ev:expr) => {{
+                let ev = $ev;
+                if let Some(text) = merged_text.take() {
+                    self.pending = Some(ev);
+                    return Some(Event::Text(Cow::Owned(text)));
+                }
+                return Some(ev);
+            }};
+        }
+
         loop {
             self.buf.clear();
             let pos = self.reader.buffer_position() as usize;
@@ -154,7 +197,7 @@ impl<'a> Iterator for EventIter<'a> {
                         .standalone()
                         .and_then(|s| s.ok())
                         .map(|s| String::from_utf8_lossy(&s).into_owned());
-                    return Some(Event::Decl {
+                    emit_or_stash!(Event::Decl {
                         version: Cow::Owned(version),
                         encoding: encoding.map(Cow::Owned),
                         standalone: standalone.map(Cow::Owned),
@@ -173,12 +216,12 @@ impl<'a> Iterator for EventIter<'a> {
                         });
                     }
                     self.entity_resolver = EntityResolver::new(declared);
-                    return Some(Event::Doctype(Cow::Owned(content)));
+                    emit_or_stash!(Event::Doctype(Cow::Owned(content)));
                 }
                 Ok(XmlEvent::PI(pi)) => {
                     let raw = String::from_utf8_lossy(pi.as_ref()).into_owned();
                     let (target, data) = crate::ast::split_pi(&raw);
-                    return Some(Event::ProcessingInstruction {
+                    emit_or_stash!(Event::ProcessingInstruction {
                         target: Cow::Owned(target),
                         data: Cow::Owned(data),
                     });
@@ -186,7 +229,7 @@ impl<'a> Iterator for EventIter<'a> {
                 Ok(XmlEvent::Start(e)) => {
                     let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
                     let attrs = read_attrs_owned(&e);
-                    return Some(Event::StartElement {
+                    emit_or_stash!(Event::StartElement {
                         name: Cow::Owned(name),
                         attrs,
                     });
@@ -194,14 +237,14 @@ impl<'a> Iterator for EventIter<'a> {
                 Ok(XmlEvent::Empty(e)) => {
                     let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
                     let attrs = read_attrs_owned(&e);
-                    return Some(Event::EmptyElement {
+                    emit_or_stash!(Event::EmptyElement {
                         name: Cow::Owned(name),
                         attrs,
                     });
                 }
                 Ok(XmlEvent::End(e)) => {
                     let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
-                    return Some(Event::EndElement {
+                    emit_or_stash!(Event::EndElement {
                         name: Cow::Owned(name),
                     });
                 }
@@ -213,40 +256,45 @@ impl<'a> Iterator for EventIter<'a> {
                     if content.is_empty() {
                         continue;
                     }
-                    return Some(Event::Text(Cow::Owned(content)));
+                    push_text!(&content);
                 }
                 Ok(XmlEvent::GeneralRef(r)) => {
                     if let Ok(Some(ch)) = r.resolve_char_ref() {
-                        return Some(Event::Text(Cow::Owned(ch.to_string())));
+                        push_text!(ch.encode_utf8(&mut [0u8; 4]));
+                        continue;
                     }
                     let name = r
                         .decode()
                         .map(|c| c.into_owned())
                         .unwrap_or_else(|_| String::from_utf8_lossy(r.as_ref()).into_owned());
                     if let Some(ch) = crate::ast::resolve_predefined_entity(&name) {
-                        return Some(Event::Text(Cow::Owned(ch.to_string())));
+                        push_text!(ch.encode_utf8(&mut [0u8; 4]));
+                        continue;
                     }
                     match self.entity_resolver.resolve(&name) {
                         Resolution::Resolved { text, .. } => {
-                            return Some(Event::Text(Cow::Owned(text.into_owned())));
+                            push_text!(&text);
                         }
                         Resolution::ExternalUnresolved { .. } | Resolution::Unknown => {
-                            return Some(Event::EntityRef(Cow::Owned(name)));
+                            emit_or_stash!(Event::EntityRef(Cow::Owned(name)));
                         }
                     }
                 }
                 Ok(XmlEvent::CData(c)) => {
-                    return Some(Event::Cdata(Cow::Owned(
+                    emit_or_stash!(Event::Cdata(Cow::Owned(
                         String::from_utf8_lossy(c.as_ref()).into_owned(),
                     )));
                 }
                 Ok(XmlEvent::Comment(c)) => {
-                    return Some(Event::Comment(Cow::Owned(
+                    emit_or_stash!(Event::Comment(Cow::Owned(
                         String::from_utf8_lossy(c.as_ref()).into_owned(),
                     )));
                 }
                 Ok(XmlEvent::Eof) => {
                     self.done = true;
+                    if let Some(text) = merged_text.take() {
+                        return Some(Event::Text(Cow::Owned(text)));
+                    }
                     return None;
                 }
                 Err(e) => {
@@ -258,6 +306,9 @@ impl<'a> Iterator for EventIter<'a> {
                         },
                     });
                     self.done = true;
+                    if let Some(text) = merged_text.take() {
+                        return Some(Event::Text(Cow::Owned(text)));
+                    }
                     return None;
                 }
             }
