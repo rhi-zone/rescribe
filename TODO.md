@@ -4376,3 +4376,26 @@ for what is now a *different*, pre-existing, genuine reason (`parse()`'s AST dro
 trailing `\x1b[0m` that `events()`/the streaming Writer faithfully preserve — a `parse()`/
 `build()` fidelity gap, not a streaming-API defect) rather than the fixed spurious-ResetStyle
 cause it originally cited.
+
+## Merge note: second bugfix-pass reconciliation (2026-07-30)
+
+The docbook/jats/tei end-tag/entity-coalescing/wiki-`parse_list()`/fountain/ansi pass above
+and the separate org/texinfo/djot/odf/t2t `Event`-vocabulary pass (see the `Event::Metadata`,
+`Event::Title`, `Event::LinkDef`, `OdfEvent`, and `Event::Header` entries earlier in this
+file) were done in parallel worktrees against the same merged-baseline `streaming_harness.rs`
+(the one already reconciled in the "Merge note (2026-07-30)" entry above, 35/28/57). Neither
+branch changed which formats are in `CAPABILITIES` vs. `NOT_YET_AUDITED`, so those two counts
+are unchanged (**35** / **28**). `KNOWN_FAILURES` shrank from 57 to **50**: seven entries were
+deleted because the bug is fixed and the format+API is now `Wired` (docbook/tei/vimwiki/
+zimwiki/markua/fountain `streaming_parser`, org `streaming_writer`); three were narrowed in
+place rather than deleted, because part of what they tracked is fixed but a distinct,
+still-open issue remains (texinfo `streaming_writer`: title-drop fixed, hollow buffer-then-emit
+remains; djot `streaming_writer`: `LinkDef`-drop fixed, hollow buffer-then-emit remains; t2t
+`streaming_parser`/`streaming_writer`: header-misread/title-author-date-drop fixed,
+per-block-reparse/hollow-writer issues remain); odf `streaming_writer` was also narrowed
+(mimetype/meta/styles/images fixed, a much larger body-content `OdfEvent`-vocabulary gap over
+12/66 odt fixtures remains); and ansi's two entries were corrected in place (two of three
+original bugs fixed, the remaining issue in each is a distinct bug, not a subset of the
+original description). See `docs/format-audit.md`'s "Second merge reconciliation" paragraph
+for the same figures cross-checked directly against the merged table contents, and for the
+full per-entry breakdown.
