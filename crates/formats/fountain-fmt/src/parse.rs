@@ -15,6 +15,20 @@ pub fn parse(input: &str) -> (FountainDoc, Vec<Diagnostic>) {
     parser.parse()
 }
 
+/// Parse `input` as screenplay body content only — never attempts title-page
+/// (`key: value`) detection. Used by [`crate::batch::StreamingParser`] for
+/// every accumulated block after the first: Fountain's title page is only
+/// ever valid as the very first thing in a document, but [`parse`] always
+/// runs [`Parser::parse_title_page`] unconditionally, so re-parsing an
+/// isolated *later* block through the normal [`parse`] entry point would
+/// misread a `key: value`-shaped body block (matching one of the 9
+/// recognized title-page field names) as metadata and silently swallow its
+/// content instead of producing block events for it.
+pub(crate) fn parse_screenplay_only(input: &str) -> Vec<Block> {
+    let mut parser = Parser::new(input);
+    parser.parse_screenplay()
+}
+
 // ── Parser ────────────────────────────────────────────────────────────────────
 
 struct Parser<'a> {

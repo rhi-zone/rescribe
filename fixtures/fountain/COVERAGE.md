@@ -73,6 +73,7 @@ Fountain is a plain-text screenplay format. The reference is the Fountain spec
 - [x] note with missing closing bracket — `adv-unclosed-note`
 - [x] title page key with no value — `adv-title-key-no-value`
 - [x] transition not at end of line — `adv-transition-not-eol`
+- [x] a non-first body line shaped like a title-page `key: value` field must not be misread as metadata — `adv-body-line-looks-like-title-field`
 
 ## Pathological
 - [x] screenplay with hundreds of scenes — `path-hundreds-scenes`

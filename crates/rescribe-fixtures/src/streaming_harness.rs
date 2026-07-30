@@ -1101,22 +1101,26 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "fountain",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "fountain_fmt::batch::StreamingParser's emit_block() re-parses each accumulated \
-             block via crate::events::events(&text) and forwards every event it yields — \
-             including that call's own StartDocument/EndDocument pair — straight to the handler \
-             with no filtering (batch.rs's emit_block(): \"for event in \
-             crate::events::events(&text) { self.handler.handle(event); }\"). Bulk events() over \
-             the whole input emits exactly one StartDocument/EndDocument pair; StreamingParser \
-             emits one pair PER accumulated block, diverging on every fixture with more than one \
-             blank-line-separated block — not an edge case, the dominant failure mode. A second, \
-             narrower defect shares the same re-parse-in-isolation root cause: \
-             parse_title_page() (parse.rs:81) runs unconditionally at the start of every parse() \
-             call with no \"is this really the first block\" guard, so a body block matching \
-             `key: value` for one of the 9 recognized title-page field names is misread as \
-             metadata when re-parsed in isolation — the same class already tracked for t2t's \
-             try_parse_header(); see TODO.md",
-        ),
+        // Fixed 2026-07-30 (both bugs, same root fix): emit_block() used to re-parse each
+        // accumulated block via crate::events::events(&text) and forward every event it
+        // yielded — including that call's own StartDocument/EndDocument pair — with no
+        // filtering, so it emitted one such pair PER block instead of one for the whole
+        // document (the dominant failure mode, not an edge case). Separately,
+        // parse_title_page() ran unconditionally on every re-parse with no "is this really
+        // the first block" guard, so a body block matching `key: value` for one of the 9
+        // recognized title-page field names got misread as metadata and its content
+        // silently swallowed (parse_screenplay() never saw those lines at all — the same
+        // defect class as t2t's try_parse_header()).
+        //
+        // Fix: StreamingParser now owns exactly one StartDocument (dispatched in new())/
+        // EndDocument (dispatched in finish()) pair, filtering both out of every per-block
+        // re-parse's forwarded events. Only the first accumulated block is parsed via the
+        // full crate::events::events() (so real title-page metadata is still recognized
+        // there); every later block goes through the new crate::events::events_body(),
+        // which calls the new crate::parse::parse_screenplay_only() — skipping title-page
+        // detection entirely rather than just filtering its output, since filtering alone
+        // can't recover content that parse_title_page() already consumed into metadata.
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "fountain_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
              reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
@@ -1549,16 +1553,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "haddock_fmt::writer::Writer buffers all events and only reconstructs the \
                        AST + calls emit::build() inside finish() — a fake streaming writer per \
                        CLAUDE.md",
-    },
-    KnownFailure {
-        format: "fountain",
-        api: "streaming_parser",
-        description: "fountain_fmt::batch::StreamingParser's emit_block() forwards every event \
-                       from its own re-parse of each block, including that call's \
-                       StartDocument/EndDocument pair, so it emits one such pair per block \
-                       instead of one for the whole document; also parse_title_page() has no \
-                       document-position guard, so a body line matching a title-page field name \
-                       is misread as metadata when re-parsed in isolation",
     },
     KnownFailure {
         format: "fountain",

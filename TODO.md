@@ -4131,3 +4131,43 @@ a regression of the entity-coalescing bug, just a second, unrelated cause that h
 trip the same equivalence check). This is the same root cause already tracked by the
 `streaming_writer` `KnownFailure` entry for all three formats. Descriptions updated to make
 this explicit instead of citing the now-fixed entity-coalescing reason.
+
+## fountain StreamingParser: spurious per-block StartDocument/EndDocument + title-page misread — fixed (2026-07-30)
+
+`fountain_fmt::batch::StreamingParser::emit_block()` re-parsed each accumulated block via
+`crate::events::events(&text)` and forwarded every event it yielded — including that call's
+own `StartDocument`/`EndDocument` pair — straight to the handler with no filtering. Bulk
+`events()` over the whole input emits exactly one `StartDocument`/`EndDocument` pair;
+`StreamingParser` emitted one pair PER accumulated block, diverging on any fixture with more
+than one blank-line-separated block (the dominant case, not an edge case).
+
+A second, narrower defect shared the same re-parse-in-isolation root cause:
+`parse_title_page()` ran unconditionally at the start of every `parse()` call with no "is
+this really the first block of the whole document" guard, so a body block matching
+`key: value` for one of the 9 recognized title-page field names (title/credit/author/
+authors/source/draft date/contact/copyright/notes) got misread as metadata when re-parsed in
+isolation — `parse_screenplay()` never even saw those lines, so the block's content was
+silently dropped entirely (not just mislabeled).
+
+**Fix:**
+- `StreamingParser` now owns exactly one `StartDocument`/`EndDocument` pair for the whole
+  stream: `StartDocument` is dispatched eagerly in `new()` (matching bulk `events()`'s
+  behavior on empty input, which still emits `[StartDocument, EndDocument]`), `EndDocument`
+  in `finish()`. Both are filtered out of every per-block re-parse's forwarded events.
+- Only the first accumulated block is parsed via the full `crate::events::events()` (so real
+  title-page metadata is still recognized when genuinely present at the start of the
+  document). Every later block goes through a new `crate::events::events_body()`, backed by
+  a new `crate::parse::parse_screenplay_only()` that skips `parse_title_page()` entirely —
+  not just filters its output, since filtering alone can't recover content
+  `parse_title_page()` already consumed into the metadata map.
+
+New fixture: `fixtures/fountain/adv-body-line-looks-like-title-field` (a scene heading +
+action block, then a later action-shaped `Source: ...` line) — verified against the ground
+truth via a direct `parse()` call before writing `expected.json`, and confirmed the fixture
+fails without the fix (a body-only regression check, matching the same
+stash-fix-then-rerun methodology used for the wiki-family `parse_list()` fixes above).
+
+**`KNOWN_FAILURES` entry removed:** `fountain`/`streaming_parser` — both bugs it described
+are fixed; `docs/format-audit.md`'s fountain row and `CAPABILITIES`'s comment updated in
+place. `fountain`/`streaming_writer` (architecturally hollow buffer-then-`finish()` writer)
+is untouched — a separate, out-of-scope gap.

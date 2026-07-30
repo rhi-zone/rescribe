@@ -297,6 +297,22 @@ pub fn events(input: &str) -> OwnedEventIter {
     OwnedEventIter::new(doc)
 }
 
+/// Parse `input` as screenplay body content only (no title-page detection,
+/// no `Metadata` events) and return a streaming iterator of its block
+/// events — still wrapped in `StartDocument`/`EndDocument`, same as
+/// [`events`]. See [`crate::parse::parse_screenplay_only`]'s doc comment
+/// for why this exists: [`crate::batch::StreamingParser`] re-parses each
+/// accumulated block in isolation, and only the very first block may ever
+/// be a title page.
+pub(crate) fn events_body(input: &str) -> OwnedEventIter {
+    let blocks = crate::parse::parse_screenplay_only(input);
+    OwnedEventIter::new(FountainDoc {
+        metadata: Default::default(),
+        blocks,
+        span: crate::ast::Span::new(0, 0),
+    })
+}
+
 /// Owned event iterator that owns the document.
 pub struct OwnedEventIter {
     doc: FountainDoc,
