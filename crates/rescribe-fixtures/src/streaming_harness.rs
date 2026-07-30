@@ -210,18 +210,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              (parse_definition_list_direct itself is fine). See TODO.md",
         ),
         streaming_writer: ApiState::KnownFailure(
-            "djot-fmt's Writer drops link-reference definitions (fixture link-reference). Two \
-             confirmed halves: the Event enum has no variant corresponding to LinkDef — \
-             events()/EventIter keeps link defs in iter.link_defs and only surfaces them via \
-             collect_doc_from_iter (events.rs:268), reaching into the iterator's field, a channel \
-             Writer does not have since write_event only receives Event values — and in \
-             writer.rs DocBuilder.link_defs is declared (line 180), initialized to vec![] (188) \
-             and moved into the reconstructed DjotDoc (781) but never pushed to anywhere in the \
-             file, so events_to_doc always returns link_defs: []. Footnotes do NOT have this \
-             problem: StartFootnoteDef/EndFootnoteDef exist and DocBuilder::process handles them \
-             at writer.rs:477-491. Note Writer is also not incrementally streaming — writer.rs's \
-             module docs admit it buffers all events, reconstructs the AST, then emits. See \
-             TODO.md",
+            "djot-fmt's Writer is not incrementally streaming: writer.rs's module docs \
+             self-admit it buffers all events into a Vec<OwnedEvent>, reconstructs the AST via \
+             DocBuilder, then calls emit::emit inside finish() — write_event() delivers zero \
+             bytes to the sink before finish(), confirmed by an incrementality probe (a complete \
+             heading + paragraph produces no pre-finish output). Content correctness — including \
+             link-reference definitions (fixture link-reference) — is no longer at issue: Event \
+             now has a LinkDef variant (mirroring ast::LinkDef field-for-field), emitted by \
+             EventIter::next's None arm once top-level blocks are exhausted (before footnote \
+             defs), and DocBuilder::process pushes it to DocBuilder.link_defs, so events_to_doc \
+             round-trips link_defs correctly. See TODO.md for the hollow-writer performance \
+             rework, tracked alongside org/texinfo/commonmark-fmt's writers with the same defect.",
         ),
     },
     // asciidoc's `events = Wired` is a narrower claim than rst's: `parse()`
@@ -1222,9 +1221,10 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "djot",
         api: "streaming_writer",
-        description: "djot-fmt Event enum has no LinkDef variant and writer.rs's \
-                       DocBuilder.link_defs is never pushed to, so events_to_doc always returns \
-                       link_defs: [] and Writer drops link-reference definitions",
+        description: "djot_fmt::writer::Writer buffers all events and only reconstructs the AST \
+                       + calls emit() inside finish(); zero bytes reach the sink before finish() \
+                       despite content round-tripping correctly (including link-reference \
+                       definitions, now that Event::LinkDef exists and DocBuilder handles it)",
     },
     KnownFailure {
         format: "asciidoc",

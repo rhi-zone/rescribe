@@ -1469,15 +1469,25 @@ mod djot_events_check {
     /// CONTRACT (document level): `DjotDoc` carries `blocks`, `footnotes` and
     /// `link_defs` side by side, and the type definitions alone do not say where
     /// the latter two land in the stream. Resolved against `EventIter::next`'s
-    /// `None` arm: once top-level blocks are exhausted, footnote defs are pushed
-    /// in document order as `StartFootnoteDef`/blocks/`EndFootnoteDef`, i.e. they
-    /// trail the body. `link_defs` never appear as events at all — there is no
-    /// event variant for them, and `collect_doc_from_iter` recovers them from
-    /// `EventIter::link_defs` rather than from the stream.
+    /// `None` arm: once top-level blocks are exhausted, `link_defs` are pushed
+    /// first as `Event::LinkDef` (one per entry, document order), then footnote
+    /// defs as `StartFootnoteDef`/blocks/`EndFootnoteDef` — i.e. link defs land
+    /// right after the body and footnotes trail everything.
     fn dj_ast_to_events(doc: &DjotDoc) -> Vec<OwnedEvent> {
         let mut out = Vec::new();
         for b in &doc.blocks {
             dj_block_events(b, &mut out);
+        }
+        for ld in &doc.link_defs {
+            let (id, classes, kv) = dj_unpack(&ld.attr);
+            out.push(OwnedEvent::LinkDef {
+                label: ld.label.clone(),
+                url: ld.url.clone(),
+                title: ld.title.clone(),
+                id,
+                classes,
+                kv,
+            });
         }
         for f in &doc.footnotes {
             out.push(OwnedEvent::StartFootnoteDef {
@@ -1892,11 +1902,14 @@ fn djot_streaming_parser_matches_events_under_adversarial_chunking() {
 /// The streaming `Writer` driven with `events(input)` must reproduce what
 /// builder `emit()` produces for the AST `parse(input)` returned.
 ///
-/// djot's `Writer` is not incrementally streaming — `writer.rs`'s module docs
-/// say it "buffers all events, reconstructs the AST, then emits", and
-/// `finish()` calls `emit::emit`. The check still exercises `events_to_doc`/
-/// `DocBuilder`, a substantial second AST reconstruction, against `parse()`'s
-/// AST — and that is exactly where it finds the tracked defect.
+/// Content correctness (this loop) is expected to pass now that `Event` has
+/// a `LinkDef` variant and `DocBuilder` handles it (see `Event::LinkDef` in
+/// `events.rs` and its arm in `writer.rs::DocBuilder::process`) — the prior
+/// `link_defs: []` gap is closed. `djot`'s `Writer` is still not
+/// incrementally streaming, though: `writer.rs`'s module docs say it
+/// "buffers all events, reconstructs the AST, then emits", and `finish()`
+/// calls `emit::emit`. That's checked separately below via an incrementality
+/// probe, the same way texinfo/commonmark/bbcode/creole's hollow writers are.
 #[test]
 fn djot_streaming_writer_matches_builder_over_all_fixtures() {
     let root = fixtures_root().join("djot");
@@ -1933,6 +1946,43 @@ fn djot_streaming_writer_matches_builder_over_all_fixtures() {
         checked > 50,
         "expected to check a substantial number of djot fixtures, got {checked}"
     );
+
+    // Incrementality probe: byte-identical final content (checked above)
+    // only proves the *content* is right, not that the writer is genuinely
+    // streaming. Feed a complete heading + paragraph (well short of
+    // finish()) and check whether any bytes have already reached the sink.
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = djot_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(djot_fmt::OwnedEvent::StartHeading {
+            level: 1,
+            id: None,
+            classes: vec![],
+            kv: vec![],
+        });
+        w.write_event(djot_fmt::OwnedEvent::Text("Hello".to_string().into()));
+        w.write_event(djot_fmt::OwnedEvent::EndHeading);
+        w.write_event(djot_fmt::OwnedEvent::StartParagraph {
+            id: None,
+            classes: vec![],
+            kv: vec![],
+        });
+        w.write_event(djot_fmt::OwnedEvent::Text("World".to_string().into()));
+        w.write_event(djot_fmt::OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after 6 complete write_event() calls (a \
+                 full heading + paragraph) and before finish() — djot_fmt::writer::Writer \
+                 buffers all events into a Vec<OwnedEvent> and only reconstructs the AST + \
+                 calls emit() inside finish() (crates/formats/djot-fmt/src/writer.rs), so it \
+                 is not a genuine incremental streaming writer despite content round-tripping \
+                 correctly"
+                    .to_string(),
+            );
+        }
+    }
     assert_or_known_failure("djot", "streaming_writer", result);
 }
 

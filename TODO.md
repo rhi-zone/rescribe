@@ -20,6 +20,46 @@ and not being retracted — only the construct-list-completeness component of it
 
 ---
 
+**2026-07-30: djot-fmt `Event` enum expressiveness gap closed — `Event::LinkDef` added,
+carried through `events()`/`StreamingParser`/the streaming `Writer`.** Fixes the gap named in
+the 2026-07-30 cross-API harness entry below ("djot's `Event` has no `LinkDef` variant, drops
+link-reference definitions"). `Event::LinkDef { label, url, title, id, classes, kv }` mirrors
+`ast::LinkDef` field-for-field (flattening `Attr` the same way every other attribute-carrying
+`Event` variant in `events.rs` does). `EventIter::next`'s `None` arm now emits one `LinkDef`
+event per entry once top-level blocks are exhausted, taking `self.link_defs` at that point —
+landing right after the body and before footnote defs in the stream. `writer.rs::DocBuilder`
+gained a matching arm pushing to `DocBuilder.link_defs` (previously declared, initialized to
+`vec![]`, and never written to — the concrete bug). `collect_doc_from_iter` (`events.rs`) was
+updated to recover `link_defs` from the reconstructed `BlockFrame::Document` (which now
+carries a `link_defs` field, populated via the new `Event::LinkDef` handler in `handle_event`)
+rather than reaching into `EventIter::link_defs` directly — that field is now drained by
+`next()` itself before iteration completes, so the old direct-field read would return empty.
+`crates/rescribe-fixtures/tests/streaming_apis.rs`'s hand-written `dj_ast_to_events` AST→Event
+projection (used to check `events()` against `parse()`'s own AST independently) was updated to
+project `doc.link_defs` into the same `LinkDef` events at the same stream position.
+
+Confirmed **not** fixed (out of scope, tracked separately): djot's `StreamingParser`
+(`batch.rs`) still resolves a `[label]: url` definition to `url: ""` when the definition and
+its reference live in different top-level blocks (fixture `link-reference` is exactly this
+shape) — `emit_block()` re-parses each flushed block in isolation via `crate::events()`, so
+that block's own `pre_scan()` never sees a definition sitting in a sibling block. `Event` now
+being able to carry a `LinkDef` doesn't change that `StreamingParser` never gets to run
+`pre_scan()` over more than one block's text at a time; this is a distinct batch.rs
+cross-block-context bug, still tracked in `streaming_harness::KNOWN_FAILURES` under
+`djot`/`streaming_parser`. Also confirmed **not** fixed: `writer.rs`'s `Writer` is still
+architecturally hollow (buffers all events into a `Vec<OwnedEvent>`, only reconstructs the AST
++ calls `emit()` inside `finish()`) — a separate, still-open concern from the `LinkDef` gap.
+Added an incrementality probe to `djot_streaming_writer_matches_builder_over_all_fixtures`
+(same idiom as texinfo/commonmark/bbcode/creole's writer tests) so this stays a tracked
+`KnownFailure` under `djot`/`streaming_writer` rather than silently going green — the fixture
+content-equivalence half of that test now passes (the `LinkDef` gap was its only cause of
+failure), but the probe still finds zero bytes reach the sink before `finish()`.
+`streaming_harness::CAPABILITIES`/`KNOWN_FAILURES` and `docs/format-audit.md`'s djot row were
+updated accordingly; do not fix the hollow-writer performance rework here, it needs its own
+pass.
+
+---
+
 **2026-07-30: cross-API harness wired for the 4 wiki formats (mediawiki, tikiwiki, twiki,
 vimwiki); 5 new tracked defects found.** Follow-up to the entry below — those 4 formats sat in
 `streaming_harness::NOT_YET_AUDITED`, explicitly named as suspects for the
