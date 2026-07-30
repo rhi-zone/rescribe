@@ -97,6 +97,28 @@ impl<'a> EventIter<'a> {
             pending: Vec::new(),
         }
     }
+
+    /// Construct an iterator that starts from a given running `style`
+    /// instead of `Style::default()` — used by
+    /// [`crate::batch::StreamingParser`] to carry SGR style state across
+    /// `drain_complete()` calls (each of which parses only the
+    /// newly-safe-to-parse prefix of its buffer, in a fresh `EventIter`,
+    /// so without this the running style would silently reset to default
+    /// on every call).
+    pub(crate) fn new_with_style(input: &'a [u8], style: Style) -> Self {
+        EventIter {
+            input,
+            pos: 0,
+            style,
+            pending: Vec::new(),
+        }
+    }
+
+    /// The current running style — read after fully draining the iterator
+    /// to carry state into the next `drain_complete()` call.
+    pub(crate) fn current_style(&self) -> Style {
+        self.style.clone()
+    }
 }
 
 impl<'a> Iterator for EventIter<'a> {
@@ -222,10 +244,14 @@ impl<'a> EventIter<'a> {
 
         match term {
             b'm' => {
-                self.apply_sgr_event(&params);
                 // SGR events don't emit text — recurse to get the next real event,
-                // but first push a SetStyle/ResetStyle event.
-                if self.style.is_empty() && !params.is_empty() {
+                // but first push a SetStyle/ResetStyle event. `saw_reset` distinguishes
+                // "an explicit reset code (`0` or empty) was seen" from "the resulting
+                // style just happens to be empty" — an unrecognized/no-op SGR code
+                // (e.g. `\x1b[999m`) that leaves style unchanged must not be reported
+                // as a reset just because style.is_empty() was already (and stays) true.
+                let saw_reset = self.apply_sgr_event(&params);
+                if saw_reset {
                     Some(Event::ResetStyle)
                 } else {
                     Some(Event::SetStyle(self.style.clone()))
@@ -365,17 +391,26 @@ impl<'a> EventIter<'a> {
         ))))
     }
 
-    fn apply_sgr_event(&mut self, params: &str) {
+    /// Applies the SGR codes to `self.style`, returning `true` iff an
+    /// explicit reset code (`0`, or an empty code between/around `;`
+    /// separators) was among them — as opposed to the resulting style
+    /// simply *happening* to be empty (e.g. every code in the sequence was
+    /// unrecognized and silently skipped, leaving style unchanged).
+    fn apply_sgr_event(&mut self, params: &str) -> bool {
         if params.is_empty() {
             self.style = Style::default();
-            return;
+            return true;
         }
+        let mut saw_reset = false;
         let codes: Vec<&str> = params.split(';').collect();
         let mut i = 0;
         while i < codes.len() {
             let code = codes[i].trim();
             match code {
-                "0" | "" => self.style = Style::default(),
+                "0" | "" => {
+                    self.style = Style::default();
+                    saw_reset = true;
+                }
                 "1" => self.style.bold = true,
                 "2" => self.style.dim = true,
                 "3" => self.style.italic = true,
@@ -442,6 +477,7 @@ impl<'a> EventIter<'a> {
             }
             i += 1;
         }
+        saw_reset
     }
 }
 

@@ -4171,3 +4171,72 @@ stash-fix-then-rerun methodology used for the wiki-family `parse_list()` fixes a
 are fixed; `docs/format-audit.md`'s fountain row and `CAPABILITIES`'s comment updated in
 place. `fountain`/`streaming_writer` (architecturally hollow buffer-then-`finish()` writer)
 is untouched — a separate, out-of-scope gap.
+
+## ansi StreamingParser/events: spurious ResetStyle + cross-chunk style/text loss — two of three bugs fixed, one left open (2026-07-30)
+
+Two bugs were tracked: (1) `events()` emitting a spurious `ResetStyle` event whenever an
+unrecognized/no-op SGR group (e.g. `\x1b[999m`) happened to leave `style` empty, conflating
+"style ended up empty" with "an explicit reset code was seen"; (2) `StreamingParser::
+drain_complete` losing running SGR style state across chunk boundaries, since it built a
+brand-new `EventIter` (`style: Style::default()`) on every drain call.
+
+**Fix (1):** `apply_sgr_event()` now returns whether it actually applied an explicit reset
+code (`0` or an empty code); only that return value triggers `ResetStyle`. A no-op/
+unrecognized SGR group now emits `SetStyle(unchanged style)` instead of a spurious reset —
+still an event (not silently dropped, since parse()'s `AnsiNode` has no representation of a
+no-op SGR group either way — see the `NotYetWired` `events` entry), just no longer
+mislabeled as an explicit reset.
+
+**Fix (2):** `EventIter` gained `new_with_style()`/`current_style()` so `StreamingParser` can
+carry its running `style` field forward across `drain_complete()`/`finish()` calls by hand
+(same shape as docbook-fmt's `entity_resolver` persistence pattern) instead of resetting to
+default every call.
+
+**Fixing (2) uncovered a third, previously-masked bug** (not in the original two-item brief,
+but the same "genuine cross-chunk state" class): since `drain_complete()` built a fresh
+`EventIter` per call regardless, adjacent `Text` events from separate drain calls were never
+merged — fine-grained (e.g. single-byte) chunking fragmented one text run into one `Text`
+event per call, reproducing even with an *unchanging* style throughout (so unrelated to bug
+(2)'s SGR-state-loss mechanism specifically). Fixed via a `pending_text: Option<(String,
+Style)>` accumulator on `StreamingParser`, flushed whenever a non-`Text` event is dispatched,
+the style changes, or at end of input — same shape as the docbook-fmt/jats-fmt/tei-fmt
+entity-coalescing fix.
+
+**A fourth, distinct bug was found and left open** (not attempted — real architecture, not a
+small fix, per the task's own "leave it as a KnownFailure with a sharpened reason" guidance):
+`EventIter::next()` treats an OSC 8 hyperlink as one atomic token, scanning forward within a
+single `next()` call all the way to its *matching closing* OSC 8 sequence
+(`\x1b]8;;\x07`). `find_safe_boundary()` has no concept of this open/close pairing — it only
+asks "is this one escape sequence, by itself, syntactically complete" — so it happily calls a
+complete *opening* OSC 8 sequence a safe boundary on its own. Under fine-grained chunking
+(fixtures `hyperlink`, `rare-hyperlink-uri`; reproduces under `single_byte` and
+`chunks_of_3`, not `whole`), `drain_complete()` then parses just the opening sequence in
+isolation, finds no closer within that truncated slice, and emits a `Hyperlink` event with
+empty text immediately — the link text and the closing sequence then get parsed separately
+(as plain `Text` and a stray `RawEscape`) on a later call. Properly fixing this means teaching
+`find_safe_boundary()` to recognize an opening OSC 8 sequence and hold everything up to its
+matching closer as one unsplittable unit — the same class of "buffer until a semantic close
+is seen" logic `html-fmt`'s `StreamingParser` already needs for HTML5 tree construction, not
+a one-line patch. Left as a `KnownFailure` with a corrected, narrowed description.
+
+Verified no other divergences exist beyond the hyperlink fixtures: wrote a temporary
+scratch test iterating every ansi fixture under `whole`/`single_byte`/`chunks_of_3` chunking
+and diffing bulk `events()` against `StreamingParser` output directly (the harness's own
+equivalence check only records the *first* divergence per run, via `result.is_ok()` gating,
+so it can't by itself rule out additional masked bugs) — only `hyperlink` and
+`rare-hyperlink-uri` diverged, both only under fine-grained chunking, confirming the two
+originally-scoped bugs (and the incidentally-discovered text-coalescing one) are the only
+things actually fixed here, with no further surprises hiding behind them.
+
+**No new fixtures needed** — the existing `fixtures/ansi/adv-unknown-sgr` fixture already
+exercises both fixed bugs via the harness's existing cross-API equivalence checks (it's the
+exact fixture the original bug reports cited).
+
+**`KNOWN_FAILURES` entries not removed, both corrected:** `ansi`/`streaming_parser`'s
+description is narrowed to describe only the remaining hyperlink-span-atomicity gap (the two
+originally-described bugs are noted fixed in a comment above the entry). `ansi`/
+`streaming_writer`'s description is corrected too: it still fails on `adv-unknown-sgr`, but
+for what is now a *different*, pre-existing, genuine reason (`parse()`'s AST drops a real
+trailing `\x1b[0m` that `events()`/the streaming Writer faithfully preserve — a `parse()`/
+`build()` fidelity gap, not a streaming-API defect) rather than the fixed spurious-ResetStyle
+cause it originally cited.

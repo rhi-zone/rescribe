@@ -32,7 +32,7 @@
 //! p.finish();
 //! ```
 
-use crate::ast::{AnsiDoc, Diagnostic};
+use crate::ast::{AnsiDoc, Diagnostic, Style};
 use crate::events::OwnedEvent;
 
 /// Chunk-driven ANSI parser that returns the full AST on finish.
@@ -76,6 +76,26 @@ impl<F: FnMut(OwnedEvent)> Handler for F {
 pub struct StreamingParser<H: Handler> {
     handler: H,
     buf: Vec<u8>,
+    /// Running SGR style, persisted across `drain_complete()`/`finish()`
+    /// calls. `drain_complete()` builds a brand-new `EventIter` over just
+    /// the newly-safe-to-parse prefix on every call, so without carrying
+    /// this forward by hand, the running style would silently reset to
+    /// `Style::default()` on every call — losing color/bold/etc. state
+    /// across a chunk boundary that falls between an SGR sequence and the
+    /// text it colors.
+    style: Style,
+    /// Accumulates a run of adjacent `Text` events (same style) across
+    /// possibly multiple `drain_complete()` calls, flushed as one merged
+    /// `Text` event whenever a non-`Text` event is about to be dispatched,
+    /// the style changes, or at a definite end of input. Without this, a
+    /// fresh `EventIter` per `drain_complete()` call means fine-grained
+    /// chunking (e.g. single-byte) fragments what should be one text run
+    /// into one `Text` event per call — found as a second, previously
+    /// masked bug while fixing the style-persistence one above (both
+    /// reproduce on fixture adv-unknown-sgr under "single_byte" chunking,
+    /// but this one is unrelated to SGR/style at all: it reproduces even
+    /// with an unchanging empty style throughout).
+    pending_text: Option<(String, Style)>,
 }
 
 impl<H: Handler> StreamingParser<H> {
@@ -84,6 +104,8 @@ impl<H: Handler> StreamingParser<H> {
         StreamingParser {
             handler,
             buf: Vec::new(),
+            style: Style::default(),
+            pending_text: None,
         }
     }
 
@@ -103,8 +125,40 @@ impl<H: Handler> StreamingParser<H> {
         }
 
         let to_parse: Vec<u8> = self.buf.drain(..safe_end).collect();
-        for event in crate::events::events(&to_parse) {
-            self.handler.handle(event.into_owned());
+        let mut iter = crate::events::EventIter::new_with_style(&to_parse, self.style.clone());
+        for event in &mut iter {
+            self.dispatch(event.into_owned());
+        }
+        self.style = iter.current_style();
+    }
+
+    /// Dispatch one event, merging it into the pending text run if it's a
+    /// same-style `Text` event, or flushing that run first otherwise.
+    fn dispatch(&mut self, event: OwnedEvent) {
+        if let OwnedEvent::Text { text, style } = &event {
+            match &mut self.pending_text {
+                Some((acc, pending_style)) if *pending_style == *style => {
+                    acc.push_str(text);
+                    return;
+                }
+                _ => {
+                    self.flush_pending_text();
+                    self.pending_text = Some((text.clone().into_owned(), style.clone()));
+                    return;
+                }
+            }
+        }
+        self.flush_pending_text();
+        self.handler.handle(event);
+    }
+
+    /// Dispatch the accumulated text run (if any) as one `Text` event.
+    fn flush_pending_text(&mut self) {
+        if let Some((text, style)) = self.pending_text.take() {
+            self.handler.handle(OwnedEvent::Text {
+                text: text.into(),
+                style,
+            });
         }
     }
 
@@ -112,10 +166,12 @@ impl<H: Handler> StreamingParser<H> {
     pub fn finish(mut self) {
         if !self.buf.is_empty() {
             let remaining = std::mem::take(&mut self.buf);
-            for event in crate::events::events(&remaining) {
-                self.handler.handle(event.into_owned());
+            let mut iter = crate::events::EventIter::new_with_style(&remaining, self.style.clone());
+            for event in &mut iter {
+                self.dispatch(event.into_owned());
             }
         }
+        self.flush_pending_text();
     }
 }
 

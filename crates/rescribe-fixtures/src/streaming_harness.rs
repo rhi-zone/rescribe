@@ -629,32 +629,59 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              unconditionally emits one SetStyle/ResetStyle event per 'm'-terminated CSI group \
              regardless of what follows — the reverse of the usual defect shape (here parse()'s \
              own AST is the lossier side), so there is no way to reconstruct a faithful \
-             ast_to_events projection purely from the AST. Separately, and found via the \
-             streaming_parser/streaming_writer checks below without needing that projection: \
-             events.rs's parse_csi_event 'm' arm emits ResetStyle whenever the resulting style \
-             is empty (`self.style.is_empty() && !params.is_empty()`), conflating \"style ended \
-             up empty\" with \"an explicit reset code was seen\" — an unrecognized/no-op SGR \
-             group (e.g. \\x1b[999m) that leaves style unchanged still emits a spurious \
-             ResetStyle event",
+             ast_to_events projection purely from the AST. Separately: events.rs's \
+             parse_csi_event 'm' arm used to emit ResetStyle whenever the resulting style was \
+             empty, conflating \"style ended up empty\" with \"an explicit reset code was \
+             seen\" — an unrecognized/no-op SGR group (e.g. \\x1b[999m) that left style \
+             unchanged still emitted a spurious ResetStyle event. Fixed 2026-07-30: \
+             apply_sgr_event() now returns whether it actually applied an explicit reset code \
+             (`0` or empty), and only that triggers ResetStyle; a no-op/unrecognized code now \
+             emits SetStyle(unchanged style) instead, never a spurious reset.",
         ),
+        // Two of the three originally-tracked bugs are fixed (2026-07-30): (1)
+        // drain_complete() used to build a brand-new EventIter with style: Style::default()
+        // on every drain, losing running style state across chunk boundaries — now uses
+        // EventIter::new_with_style()/current_style() to carry style forward by hand,
+        // mirroring the docbook-fmt entity_resolver pattern. (2) inherited the
+        // spurious-ResetStyle bug from events() (see the events field above), also fixed.
+        // Fixing (1) uncovered a third, previously-masked, unrelated bug (reproduces even
+        // with an unchanging empty style throughout): drain_complete()'s fresh EventIter per
+        // call also meant adjacent Text events from separate calls were never merged, so
+        // fine-grained (e.g. single-byte) chunking fragmented one text run into one Text
+        // event per call — fixed via a `pending_text` accumulator, same shape as the
+        // docbook-fmt entity-coalescing fix.
         streaming_parser: ApiState::KnownFailure(
-            "two compounding bugs, found via adversarial-chunking equivalence against events(): \
-             (1) StreamingParser::drain_complete (batch.rs) calls crate::events::events(&to_parse) \
-             — a brand-new EventIter with style: Style::default() — on every drain, so the \
-             running style state does not persist across multiple drain_complete() calls; a \
-             chunk boundary between an SGR sequence and the text it colors loses that style \
-             under fine-grained chunking (fixture adv-unknown-sgr fails under \"single_byte\" \
-             chunking specifically, not \"whole\", pinning the cross-call state loss). (2) \
-             inherits events()'s spurious-ResetStyle-on-unrecognized-SGR bug (see the \"ansi\" \
-             events entry)",
+            "after the three fixes above, one genuinely distinct, unfixed bug remains, found \
+             via the same adversarial-chunking equivalence check (fixtures hyperlink, \
+             rare-hyperlink-uri, both only under fine-grained chunking like single_byte or \
+             chunks_of_3 — not under whole-input): EventIter::next() treats an OSC 8 \
+             hyperlink as a single atomic token by scanning forward, within one next() call, \
+             all the way to its matching closing OSC 8 sequence (`\\x1b]8;;\\x07`) — but \
+             find_safe_boundary() (batch.rs) has no concept of this pairing, and calls a \
+             complete, well-formed *opening* OSC 8 sequence a safe boundary on its own. Under \
+             chunking, drain_complete() then parses just that opening sequence in isolation, \
+             finds no closing sequence within the truncated slice, and emits a Hyperlink event \
+             with an empty text field immediately instead of buffering through to the close \
+             — the link \
+             text and the close sequence then get parsed separately (as plain Text and a \
+             stray RawEscape) on a later call. Fixing this needs find_safe_boundary() taught \
+             to recognize an opening OSC 8 hyperlink sequence and treat everything up to its \
+             matching closer as one unsplittable unit (the same kind of \"buffer until a \
+             semantic close is seen\" logic html-fmt's StreamingParser already needs for tree \
+             construction) — a real architectural extension, not a small bug fix, so left open \
+             here rather than guessed at.",
         ),
         streaming_writer: ApiState::KnownFailure(
-            "downstream of events()'s spurious-ResetStyle-on-unrecognized-SGR bug (see the \
-             \"ansi\" events entry): Writer's ResetStyle handler unconditionally writes the \
-             literal \\x1b[0m bytes for every ResetStyle event it receives, so the spurious \
-             event becomes spurious visible output — build() emits \"Text\\n\" for fixture \
-             adv-unknown-sgr (parse()'s AST has no node for the unrecognized SGR at all) while \
-             the streaming Writer emits \"\\x1b[0mText\\x1b[0m\\n\"",
+            "downstream of a *different*, still-open issue than the (now-fixed) spurious- \
+             ResetStyle bug: for fixture adv-unknown-sgr, `\\x1b[999m` (no-op, no ResetStyle) \
+             followed by `\\x1b[0m` (a genuine explicit reset) means events() now correctly \
+             emits exactly one ResetStyle, for the real trailing reset — but parse()'s AST has \
+             no node for either SGR group at all (see the \"ansi\" events entry's first \
+             paragraph), so build() reconstructs \"Text\\n\" while the streaming Writer, fed \
+             by events() and writing every ResetStyle as literal \\x1b[0m bytes, reconstructs \
+             \"Text\\x1b[0m\\n\" — a legitimate escape sequence from the source that parse()'s \
+             AST silently drops with no raw-preservation fallback, not a StreamingParser or \
+             Writer defect",
         ),
     },
     // odf-fmt backs odt/ods/odp. events() is a genuine independent
@@ -1423,17 +1450,25 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "ansi",
         api: "streaming_parser",
-        description: "StreamingParser::drain_complete constructs a fresh EventIter (style: \
-                       default) on every drain, losing running style state across chunk \
-                       boundaries under fine-grained chunking; also inherits events()'s \
-                       spurious-ResetStyle-on-unrecognized-SGR bug",
+        description: "style-loss-across-chunks and inherited spurious-ResetStyle are both fixed \
+                       (2026-07-30); a third, previously-masked bug remains: find_safe_boundary \
+                       calls a complete OSC 8 hyperlink *opening* sequence a safe boundary on \
+                       its own, not knowing EventIter treats the whole open..close span as one \
+                       atomic Hyperlink token, so fine-grained chunking splits it into an \
+                       empty-text Hyperlink plus stray Text/RawEscape (fixtures hyperlink, \
+                       rare-hyperlink-uri) — needs find_safe_boundary taught to await a \
+                       matching OSC 8 closer, a real architectural extension",
     },
     KnownFailure {
         format: "ansi",
         api: "streaming_writer",
-        description: "downstream of events()'s spurious ResetStyle event on an unrecognized SGR \
-                       group: Writer unconditionally writes literal reset bytes for every \
-                       ResetStyle event, turning the spurious event into spurious output",
+        description: "the spurious-ResetStyle bug it depended on is fixed (2026-07-30); still \
+                       fails on fixture adv-unknown-sgr, but now for an unrelated, genuine \
+                       reason: parse()'s AST has no node for an SGR group that changes nothing, \
+                       so build() silently drops a real trailing \\x1b[0m from the source while \
+                       the streaming Writer (fed by events(), which does emit a ResetStyle for \
+                       it) faithfully re-emits it — a parse()/build() fidelity gap, not a \
+                       streaming-API defect",
     },
     KnownFailure {
         format: "bbcode",
