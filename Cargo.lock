@@ -3125,6 +3125,7 @@ dependencies = [
  "asciidoc",
  "bbcode-fmt",
  "commonmark-fmt",
+ "creole",
  "djot-fmt",
  "fb2-fmt",
  "html-fmt",

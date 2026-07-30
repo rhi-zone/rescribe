@@ -311,16 +311,19 @@ audited this format's cross-API status yet" placeholder, not a claim of absence 
 | pptx | KnownFailure: `events()` cannot reach slide text at all (`<p:txBody>` unhandled in `dispatch_start`); shares docx's Text-drop/reversal bug once that's fixed | NotYetWired | NotYetWired |
 | xlsx | Wired | NotYetWired | Wired |
 | bbcode | Wired (`events()` is literally `parse::parse(input)` + a tree walk — same non-independent shape as html's, scoped honestly per the asciidoc precedent rather than declared NotApplicable, since nothing format-structural forces it) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over all 53 bbcode fixtures plus several hand-built adversarial cases | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
+| creole | Wired (`events()` is literally `EventIter::new`'s `parse::parse(input)` + `collect_events(&doc)` tree walk — same non-independent shape as bbcode's/html's, scoped honestly per the bbcode/asciidoc precedent rather than declared NotApplicable) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over all 35 creole fixtures plus an incrementality probe; one inspected edge case (a nowiki block closed by a line with trailing content after `"}}}"`) degrades incrementality but not correctness, verified by hand | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
 
-**Session tally (2026-07-30):** 12 formats moved from `NOT_YET_AUDITED` to a real, audited
+**Session tally (2026-07-30):** 13 formats moved from `NOT_YET_AUDITED` to a real, audited
 `CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark, gfm,
-markdown, bbcode), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the
-harness's initial wiring. 48 formats remain in `NOT_YET_AUDITED`.
-`streaming_harness::KNOWN_FAILURES` now has 22 entries total; 19 are new from this session
+markdown, bbcode, creole), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from
+the harness's initial wiring. 47 formats remain in `NOT_YET_AUDITED`.
+`streaming_harness::KNOWN_FAILURES` now has 23 entries total; 20 are new from this session
 (the other 3 — docx/events, pptx/events, rst/streaming_parser — predate it). None were
 weakened or hidden to make a check pass; every divergence found a real, root-caused, tracked
-`KnownFailure` entry instead. bbcode-fmt is notable as the first format in this table whose
-`StreamingParser` was audited and found to be genuinely, not just nominally, Wired.
+`KnownFailure` entry instead. bbcode-fmt was the first format in this table whose
+`StreamingParser` was audited and found to be genuinely, not just nominally, Wired; creole is
+the second, with an architecturally near-identical `batch.rs` (accumulate-until-blank-line,
+re-parse the block, emit its events).
 
 ### Remaining hand-written formats (crate exists, API not started)
 
@@ -331,7 +334,6 @@ weakened or hidden to make a check pass; every divergence found a real, root-cau
 | markua | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_markua_reader (559K runs) fuzz_markua_roundtrip (759K runs) | – | – |
 | fountain-fmt | ✓ | | ✓ | | ✓ |
 | mediawiki-fmt | | | | | |
-| creole | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_creole_reader (842K runs) fuzz_creole_roundtrip (403K runs) | – | – |
 | dokuwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_dokuwiki_reader (628K runs) fuzz_dokuwiki_roundtrip (378K runs) | – | – |
 | vimwiki-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_vimwiki_reader (610K runs) fuzz_vimwiki_roundtrip (361K runs) | – | – |
 | zimwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_zimwiki_reader (416K runs) fuzz_zimwiki_roundtrip (390K runs) | – | – |

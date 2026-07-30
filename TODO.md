@@ -119,6 +119,53 @@ entry above, picking one more format out of `NOT_YET_AUDITED`. Full breakdown in
 Not fixed here (by design): the streaming-writer `KnownFailure` above was found, not fixed;
 it needs its own fix pass in `bbcode-fmt`. 48 formats remain in `NOT_YET_AUDITED`.
 
+**2026-07-30: cross-API harness wired for creole — the second format (after bbcode) whose
+`StreamingParser` turned out to be genuinely, not just nominally, Wired.** Follow-up to the
+bbcode entry above, picking one more format out of `NOT_YET_AUDITED`. Full breakdown in
+`docs/format-audit.md`'s "Cross-API harness inventory" table; source of truth is
+`streaming_harness::CAPABILITIES`'s new `"creole"` entry.
+
+- **`events()` — Wired, but honestly scoped like bbcode's entry, not an independent parser.**
+  `creole::events::EventIter::new` (`events.rs:123-127`) literally calls
+  `crate::parse::parse(input)` and then walks the resulting `CreoleDoc` via `collect_events` —
+  the same non-independent shape as bbcode-fmt's and html-fmt's `events()`. No format-spec
+  reason forces this (no HTML5-tree-construction equivalent for Creole), so `NotApplicable`
+  would have been the wrong call; wired anyway per the bbcode/asciidoc precedent, since the
+  check still pins the AST↔`Event` correspondence.
+- **`StreamingParser` — Wired, for real, no `KnownFailure` needed.** `batch.rs`'s
+  `StreamingParser` is architecturally near-identical to bbcode's: `feed_line` advances real
+  state and `emit_block()` (which re-parses just the accumulated block text via
+  `crate::events::events()`) flushes to the handler as soon as a blank line or a nowiki
+  block's `}}}` close is seen, not only inside `finish()`. Verified two ways: (1) an
+  incrementality probe (feed a complete `= Hello` heading + blank line + unterminated
+  trailing text, confirm events arrive before `finish()`) passes; (2) the adversarial-chunking
+  equivalence check against `events()` passes over all 35 creole fixtures, both under whole-
+  input and single-byte-at-a-time chunking. One edge case inspected by hand but not exercised
+  by any fixture: `feed_line`'s in-nowiki close test (`batch.rs`, `is_end = line.trim() ==
+  "}}}"`) requires the closing marker to be the *entire* trimmed line, while `parse.rs`'s
+  `parse_nowiki_block` finds `"}}}"` anywhere in the line (silently dropping any trailing text
+  after it, a separate pre-existing `parse()`-level quirk out of scope here). A nowiki block
+  closed by a line like `"tail}}}"` never trips the streaming splitter's boundary, so
+  everything from that opener onward is swept into one oversized block delivered only at
+  `finish()` — confirmed by hand with `"{{{\ncode\nsome}}}\nmore\n"` that this degrades
+  *incrementality*, not *correctness*: the oversized block is still handed whole to
+  `crate::events::events()`, which re-derives the identical block split a bulk `parse()` over
+  that span would produce, so the final event sequence still matched `events()` exactly. Not
+  filed as a `KnownFailure` since nothing observable diverges — noted here in case a future
+  incrementality-specific probe wants to target it directly.
+- **streaming `Writer` — `KnownFailure`, architecturally hollow, same shape as bbcode's.**
+  `write_event()` (`writer.rs:38-40`) only pushes onto a `Vec<OwnedEvent>`; all real work
+  (`events_to_doc` + `crate::emit::build`) happens inside `finish()` (`writer.rs:43-48`).
+  Content still matches `build()` byte-for-byte over all 35 fixtures (`finish()` ultimately
+  drives the same `build()` path), but the incrementality probe (write a complete
+  `StartParagraph`/`StartBold`/`Text`/`EndBold`/`EndParagraph` sequence, check for any bytes
+  reaching the sink before `finish()`) gets zero bytes. Same fix shape as bbcode's writer:
+  rewrite `write_event()` to push into a fixed output window instead of a `Vec`, driven
+  directly off `crate::emit`'s per-node string logic.
+
+Not fixed here (by design): the streaming-writer `KnownFailure` above was found, not fixed;
+it needs its own fix pass in `creole`. 47 formats remain in `NOT_YET_AUDITED`.
+
 ---
 
 **2026-07-29: fixture harness extended to exercise `events()`/`StreamingParser`/streaming

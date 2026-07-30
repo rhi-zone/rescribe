@@ -545,6 +545,34 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              incremental streaming writer",
         ),
     },
+    // creole's events() is `EventIter::new` calling `crate::parse::parse(input)`
+    // then `collect_events(&doc)`, a depth-first AST walk (events.rs:123-127) —
+    // the same non-independent shape as bbcode-fmt's and html-fmt's events(),
+    // but with no format-spec reason forcing it, so per the bbcode/asciidoc
+    // precedent it's still wired rather than NotApplicable. StreamingParser
+    // (batch.rs) is a genuine incremental line-buffered state machine — real
+    // Wired, confirmed by an incrementality probe and an adversarial-chunking
+    // equivalence check that holds over all 35 creole fixtures (one inspected
+    // edge case, a nowiki block closed by a line with trailing content after
+    // "}}}", degrades incrementality but not correctness — see the doc
+    // comment on the streaming_parser test). The streaming Writer is the one
+    // real gap: hollow buffer-then-finish() (writer.rs's own module doc,
+    // write_event() only pushes onto a Vec), so content matches build() but
+    // the incrementality probe fails.
+    FormatCapabilities {
+        format: "creole",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "creole::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST (events_to_doc) + calls crate::emit::build inside finish() \
+             (write_event() at writer.rs:38-40 only pushes onto self.events, all real work \
+             happens in finish() at writer.rs:43-48); content is still byte-identical to \
+             build() over all fixtures since finish() ultimately drives the same build() path, \
+             but zero bytes reach the sink before finish() is called — not a genuine \
+             incremental streaming writer",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -558,7 +586,6 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
 pub const NOT_YET_AUDITED: &[&str] = &[
     "mediawiki",
     "latex",
-    "creole",
     "muse",
     "t2t",
     "tikiwiki",
@@ -778,6 +805,14 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "bbcode_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and \
                        only reconstructs the AST + calls emit() inside finish() (self-admitted \
                        in its own module doc); content matches build() exactly but the writer \
+                       is not incrementally streaming",
+    },
+    KnownFailure {
+        format: "creole",
+        api: "streaming_writer",
+        description: "creole::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+                       reconstructs the AST + calls build() inside finish() (write_event() only \
+                       pushes onto self.events); content matches build() exactly but the writer \
                        is not incrementally streaming",
     },
 ];
