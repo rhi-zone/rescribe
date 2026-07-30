@@ -4399,3 +4399,93 @@ original bugs fixed, the remaining issue in each is a distinct bug, not a subset
 original description). See `docs/format-audit.md`'s "Second merge reconciliation" paragraph
 for the same figures cross-checked directly against the merged table contents, and for the
 full per-entry breakdown.
+
+## Event-vocabulary expressiveness gaps, continued: commonmark-fmt + asciidoc fixed, markua verified clean, ooxml-wml/ooxml-sml fenced (2026-07-30)
+
+Continuation of the survey that produced the five `Event`-vocabulary fixes above (org-fmt
+`Metadata`, texinfo `Title`, djot `LinkDef`, odf seven-variant, t2t `Header`). Five more
+candidates were assigned; two were fixed the same way, one was verified to not be a real gap,
+and two (both OOXML) turned out to need a different, larger kind of fix than "add an `Event`
+variant" — fenced here rather than half-done.
+
+**`commonmark-fmt` — fixed.** `CmDoc.link_defs: Vec<LinkDef>` (reference-style `[label]: url`
+definitions) had no `Event` variant; pulldown-cmark's own event stream never surfaces these at
+all (it silently resolves references to their target inline), so `parse()`'s `collect_link_defs`
+helper (a second, separate `Parser::reference_definitions()` scan) was the only place they
+existed. Direct template: `b745efa497`'s djot-fmt `LinkDef` fix, same shape. Added
+`Event::LinkDef { label, url, title }` (mirrors `ast::LinkDef` field-for-field, same as djot's).
+`collect_link_defs` promoted to `pub(crate)` so `events.rs` can reuse it rather than
+duplicating pulldown-cmark's `reference_definitions()` extraction. `EventIter` computes
+`link_defs` eagerly at construction (same pattern `parse()` already used — a second `Parser`
+instance read via `&self` before `into_offset_iter()` consumes the first one) and drains them
+as `LinkDef` events once the pulldown stream is exhausted, right before `EndDocument` (no
+footnote-defs section to place them before, unlike djot). `StreamingParser` gets this for free
+(finish() calls `events()` on the whole buffered input). `writer.rs`'s `DocBuilder` gained a
+`link_defs: Vec<LinkDef>` field, pushed to by a new `LinkDef` event arm, threaded into
+`CmDoc::link_defs` at `finish()` (previously hardcoded `vec![]`). `gfm`/`markdown` share this
+crate, so this closes all three harness entries' `link_defs`-shaped loss simultaneously. The
+`commonmark`/`events` and `commonmark`/`streaming_writer` `KNOWN_FAILURES` entries were **not**
+touched — both already tracked separate, still-open, unrelated bugs (image alt-text
+Text/StartImage ordering; unmerged-Text-events; the writer's buffer-then-emit hollowness) that
+remain exactly as documented; `link_defs` was never mentioned in either entry's text, so there
+was nothing to narrow. Confirmed via `cargo test -p commonmark-fmt --all-features` (82 tests)
+and `cargo test -p rescribe-fixtures --test streaming_apis` (full 90-test suite, including the
+two commonmark checks) — both still resolve to the same `KnownFailure` states, i.e. no
+regression and no silent flip. Fixture coverage: `fixtures/commonmark/path-many-link-defs` and
+`rare-link-ref-def` already exercised this construct; no new fixture needed.
+
+**`asciidoc` — fixed.** `AsciiDoc.attributes: HashMap<String, String>` (document `:key: value`
+declarations) had no `Event` variant; `StartDocument` carries no payload, and the aggregate map
+was reachable only via `EventIter::take_attributes()`, a `pub(crate)` method called solely by
+`collect_doc_from_iter` (the `parse()`-internal helper) — a caller driving public `events()` as
+an iterator never saw attributes at all. This is the "genuine key/value bag →
+`Event::Metadata{key,value}`" case (org-fmt's precedent), but with a wrinkle org's `Vec<(String,
+String)>`-backed metadata didn't have: AsciiDoc attributes can be declared anywhere in the
+document (not just a header), and `AsciiDoc.attributes` is an unordered `HashMap` — the AST
+itself already discards declaration order/position and keeps only the final value per key.
+Chose position-faithful emission over front-loading: added a parallel `attribute_log:
+Vec<(String, String)>` field to `EventIter`, appended at the exact same `try_parse_block()` call
+site that inserts into `self.attributes`, and the `Iterator::next()`'s block-pulling arm
+snapshots `attribute_log.len()` before/after each `try_parse_block()` call (identical
+before/after-diff shape to org-fmt's `metadata_before`/`self.metadata[metadata_before..]`
+pattern in `parse.rs`), pushing one `Event::Metadata` frame per newly-logged declaration
+immediately before the block it precedes — including the case where only attribute lines were
+consumed with no following block (e.g. trailing declarations at EOF). `StreamingParser` gets
+this for free (its `emit_block()` re-parses each accumulated block via `events()`).
+`writer.rs`'s `DocBuilder` gained an `attributes: HashMap<String, String>` field, updated via
+`insert` on each `Metadata` event (same last-write-wins semantics as `parse()`), threaded into
+`AsciiDoc::attributes` at `finish()` (previously hardcoded `Default::default()`).
+`events::handle_event` (the `collect_doc_from_iter` helper) got a no-op `Metadata` arm since
+that path still reaches into `EventIter`'s private `attributes` field directly rather than
+rebuilding it from events.
+
+The AST's information loss (no position, no duplicates) meant the existing strict
+`asciidoc_events_equals_ast_projection_over_all_fixtures` `assert!` needed a real design
+decision, not just an update: a hand-written AST→events projection *cannot* reproduce
+source-accurate `Metadata` positions from a `HashMap`, because the AST was never given that
+information to begin with. Fix: `ad_ast_to_events` emits one canonical `Metadata` event per
+`doc.attributes` entry, sorted by key, right after `StartDocument`; the test then splits
+`Metadata` events out of both the expected and actual sequences before comparing — non-Metadata
+events still compared with strict positional equality (unchanged rigor), `Metadata` events
+compared as an order-independent, final-value-per-key set (actual-side duplicates from
+`attribute_log` collapsed via `HashMap::insert` in event order, matching `DocBuilder`'s own
+semantics). This is a case where `events()` is now **more** faithful to the source than the AST
+projection can express, not less — documented at length in `ad_ast_to_events`'s doc comment so
+the asymmetry isn't mistaken for a bug later. Existing fixtures (`attribute-def`, `doc-metadata`,
+`path-many-attrs`) already exercise this construct; no new fixture needed. Confirmed via
+`cargo test -p asciidoc --all-features` (40 tests) and
+`cargo test -p rescribe-fixtures --test streaming_apis asciidoc` (3 tests, including the
+strengthened projection check).
+
+**Separate, pre-existing gap found while verifying asciidoc (not fixed, not in scope of this
+pass): `asciidoc::emit::build()` never serializes `AsciiDoc.attributes` back into `:key: value`
+lines at all** — `build()` calls only `build_blocks(&doc.blocks, ...)`; `doc.attributes` is
+never read anywhere in `emit.rs`. This means `parse(emit(parse(input)))` already silently drops
+every document attribute, independent of the streaming layer entirely (both the plain builder
+`build()` and the streaming `Writer` — which also calls `emit::build` internally — lose
+attributes equally, so this pass's fix doesn't regress or improve that specific behavior either
+way). This is a CLAUDE.md losslessness violation in the AST-level emitter, not the event
+vocabulary; needs its own fix (attributes need a defined serialization position in
+`emit::build`'s output — most likely as leading `:key: value` lines before the first block,
+matching where `parse()` accepts them) and its own fixture-driven round-trip check. Tracked
+here, not fixed.

@@ -134,6 +134,21 @@ pub enum Event<'a> {
     Anchor {
         id: String,
     },
+
+    /// A document attribute declaration (`:key: value`), mirroring one entry
+    /// of [`crate::ast::AsciiDoc::attributes`]. AsciiDoc attributes may be
+    /// declared anywhere in the document (not just a document preamble), so
+    /// `EventIter` emits one `Metadata` event at the exact point each `:key:
+    /// value` line is consumed, immediately before the block it precedes
+    /// (mirroring org-fmt's `Event::Metadata`). Note `AsciiDoc.attributes`
+    /// itself is an unordered `HashMap` (last declaration of a given key
+    /// wins) — a caller reconstructing it from a `Metadata` stream should
+    /// apply entries in stream order, the same way `parse()`'s attribute
+    /// HashMap does via repeated `insert`.
+    Metadata {
+        key: String,
+        value: String,
+    },
 }
 
 /// Backwards-compatible alias for batch mode (all text is owned).
@@ -339,6 +354,17 @@ fn handle_event(
     match event {
         Event::StartDocument | Event::EndDocument => {
             // Document frame already managed by collect_doc_from_iter
+        }
+        Event::Metadata { .. } => {
+            // No-op here: collect_doc_from_iter recovers the aggregate
+            // attributes map via iter.take_attributes() after iteration
+            // completes, rather than rebuilding it from Metadata events —
+            // reaching directly into EventIter's private attributes field it
+            // already owns is simpler than threading a HashMap through
+            // block_stack/inline_ctx for this one call site. A caller
+            // driving `events()` as a public iterator (not
+            // collect_doc_from_iter) is the one that needs the Metadata
+            // event payload, and does get it.
         }
 
         // ── Block start events ─────────────────────────────────────────────

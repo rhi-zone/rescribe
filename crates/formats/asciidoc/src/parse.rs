@@ -59,6 +59,13 @@ pub struct EventIter<'a> {
     lines: Vec<&'a str>,
     line_idx: usize,
     pub(crate) attributes: std::collections::HashMap<String, String>,
+    /// Every `:key: value` declaration in source order, including repeats of
+    /// the same key (the aggregate `attributes` map keeps only the final
+    /// value). Used by the `Iterator` impl to emit `Event::Metadata` at the
+    /// point each declaration is consumed — see the doc comment on
+    /// `Event::Metadata`. Not consulted by `parse()`'s direct recursive
+    /// descent, which only needs the aggregate map via `take_attributes()`.
+    attribute_log: Vec<(String, String)>,
     pub(crate) diagnostics: Vec<Diagnostic>,
     /// Pending block id from `[#id]` — applied to the next block and cleared.
     pending_id: Option<String>,
@@ -79,6 +86,7 @@ impl<'a> EventIter<'a> {
             lines,
             line_idx: 0,
             attributes: std::collections::HashMap::new(),
+            attribute_log: Vec::new(),
             diagnostics: Vec::new(),
             pending_id: None,
             pending_role: None,
@@ -124,6 +132,7 @@ impl<'a> EventIter<'a> {
             let line = self.current_line()?;
             if line.starts_with(':') && line.len() > 1 {
                 if let Some((attr, value)) = self.try_parse_attribute(line) {
+                    self.attribute_log.push((attr.clone(), value.clone()));
                     self.attributes.insert(attr, value);
                     self.advance_line();
                     continue;
@@ -1498,10 +1507,30 @@ impl<'a> Iterator for EventIter<'a> {
                         self.iter_done = true;
                         return Some(Event::EndDocument);
                     }
+                    // try_parse_block() may consume one or more `:key: value`
+                    // attribute lines (via self.attribute_log.push) before
+                    // returning the block they precede (or None, if only
+                    // attribute lines were consumed this call). Snapshot the
+                    // length before/after so any newly-logged declarations
+                    // can be surfaced as Event::Metadata — see its doc
+                    // comment. Mirrors org-fmt's identical metadata-snapshot
+                    // pattern in this same match arm shape.
+                    let attr_before = self.attribute_log.len();
                     if let Some(block) = self.try_parse_block() {
                         self.expand_block(block);
                     } else {
                         self.advance_line();
+                    }
+                    // Push metadata events on top of whatever expand_block
+                    // pushed, so they pop (and are emitted) first — matching
+                    // their position before the block in the source.
+                    if self.attribute_log.len() > attr_before {
+                        for (key, value) in self.attribute_log[attr_before..].iter().rev() {
+                            self.frame_stack.push(Frame::Event(OwnedEvent::Metadata {
+                                key: key.clone(),
+                                value: value.clone(),
+                            }));
+                        }
                     }
                     continue;
                 }

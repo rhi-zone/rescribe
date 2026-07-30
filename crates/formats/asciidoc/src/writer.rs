@@ -161,12 +161,14 @@ enum Frame {
 
 struct DocBuilder {
     stack: Vec<Frame>,
+    attributes: std::collections::HashMap<String, String>,
 }
 
 impl DocBuilder {
     fn new() -> Self {
         DocBuilder {
             stack: vec![Frame::Document { blocks: vec![] }],
+            attributes: std::collections::HashMap::new(),
         }
     }
 
@@ -177,6 +179,11 @@ impl DocBuilder {
             OwnedEvent::StartDocument | OwnedEvent::EndDocument => {
                 // StartDocument is a no-op (Document frame already on stack).
                 // EndDocument is a no-op (finish() pops it).
+            }
+            OwnedEvent::Metadata { key, value } => {
+                // Last declaration of a given key wins, matching parse()'s
+                // own HashMap::insert semantics for repeated `:key:` lines.
+                self.attributes.insert(key, value);
             }
 
             // ── Block open/close ──────────────────────────────────────────────
@@ -646,7 +653,7 @@ impl DocBuilder {
         };
         AsciiDoc {
             blocks,
-            attributes: Default::default(),
+            attributes: self.attributes,
             span: Span::NONE,
         }
     }
