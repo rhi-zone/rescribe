@@ -93,6 +93,10 @@ pub struct StreamingParser<H: Handler> {
     /// Complete lines of the block currently being accumulated.
     block_lines: Vec<String>,
     state: BlockState,
+    /// True until the first block has been emitted. The txt2tags document
+    /// header (title/author/date) can only ever be the first block of the
+    /// whole stream, so header detection is only attempted once.
+    at_document_start: bool,
 }
 
 impl<H: Handler> StreamingParser<H> {
@@ -103,6 +107,7 @@ impl<H: Handler> StreamingParser<H> {
             line_buf: Vec::new(),
             block_lines: Vec::new(),
             state: BlockState::Between,
+            at_document_start: true,
         }
     }
 
@@ -182,9 +187,53 @@ impl<H: Handler> StreamingParser<H> {
         }
         let text = self.block_lines.join("\n");
         self.block_lines.clear();
+
+        let was_at_document_start = self.at_document_start;
+        self.at_document_start = false;
+
+        if was_at_document_start && self.try_emit_header(&text) {
+            return;
+        }
+
         for event in crate::events::events(&text) {
             self.handler.handle(event.into_owned());
         }
+    }
+
+    /// If `text` (the first accumulated block of the stream) is a txt2tags
+    /// document header, deliver an `Event::Header` for it — plus events for
+    /// any trailing lines beyond the 3-line header, in the rare case the
+    /// header isn't immediately followed by a blank line — and return
+    /// `true`. Returns `false` (delivering nothing) if `text` is not a
+    /// header, so the caller falls back to parsing it as a normal block.
+    ///
+    /// This mirrors `crate::parse::Parser::try_parse_header` directly rather
+    /// than routing through `crate::events::events()`, which would re-run
+    /// full document parsing on the isolated block and spuriously wrap it in
+    /// its own `StartDocument`/`EndDocument` pair.
+    fn try_emit_header(&mut self, text: &str) -> bool {
+        let mut p = crate::parse::Parser::new(text);
+        let (title, author, date) = p.try_parse_header();
+        if title.is_none() {
+            return false;
+        }
+        self.handler.handle(OwnedEvent::Header {
+            title,
+            author,
+            date,
+        });
+        // try_parse_header() only ever consumes exactly 3 lines (p.pos == 3
+        // here). Anything after that in this block is body content that
+        // normally would have been split off by a blank line; handle it in
+        // case the caller didn't include one.
+        let remaining = &p.lines[p.pos..];
+        if remaining.iter().any(|line| !line.trim().is_empty()) {
+            let remaining_text = remaining.join("\n");
+            for event in crate::events::events(&remaining_text) {
+                self.handler.handle(event.into_owned());
+            }
+        }
+        true
     }
 
     /// Flush any remaining input and deliver final events.
@@ -298,6 +347,31 @@ mod tests {
             assert!(content.contains("line 1"));
             assert!(content.contains("line 2"));
         }
+    }
+
+    #[test]
+    fn test_streaming_parser_document_header() {
+        let input = "My Document Title\nJohn Doe\n2024-01-15\n\nThis is the body text.\n";
+        let mut evs = Vec::new();
+        let mut p = StreamingParser::new(|e: OwnedEvent| evs.push(e));
+        p.feed(input.as_bytes());
+        p.finish();
+        assert_eq!(
+            evs.first(),
+            Some(&OwnedEvent::Header {
+                title: Some("My Document Title".to_string()),
+                author: Some("John Doe".to_string()),
+                date: Some("2024-01-15".to_string()),
+            }),
+            "header should be recognized directly, not lost to an isolated re-parse"
+        );
+        assert!(
+            evs.iter()
+                .filter(|e| matches!(e, OwnedEvent::Header { .. }))
+                .count()
+                == 1,
+            "header should be emitted exactly once"
+        );
     }
 
     #[test]
