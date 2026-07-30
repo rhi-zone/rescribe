@@ -9,6 +9,23 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-07-30: texinfo `@settitle` title-loss gap closed.** One of the two `KnownFailure`s
+tracked against `texinfo/streaming_writer` (see the 2026-07-30 cross-API harness entry below)
+was an `Event`-enum expressiveness gap: `texinfo::events::Event` had no variant carrying
+`TexinfoDoc::title`, so `events_to_doc()` in the streaming writer always reconstructed
+`title: None`, silently dropping `@settitle` (`fixtures/texinfo/settitle-header`). Fixed by
+adding `Event::Title(String)`, emitted by `events()`/`EventIter` (and thus by
+`StreamingParser`, which is `events()`-backed) whenever `TexinfoDoc::title.is_some()`, and
+handled by the streaming `Writer`'s `DocBuilder` to set the reconstructed doc's `title` field.
+The **separate**, still-open half of that `KnownFailure` entry — `texinfo::batch::StreamingParser`
+and `texinfo::writer::Writer` both being architecturally hollow (buffer-all-input/buffer-all-events
+and only parse/emit inside `finish()`, not genuinely incremental) — is untouched; the
+`KNOWN_FAILURES`/`CAPABILITIES` entries for `texinfo/streaming_parser` and
+`texinfo/streaming_writer` in `streaming_harness.rs` remain, with descriptions trimmed to
+reflect only the incrementality gap.
+
+---
+
 **2026-07-28: every "5-Production" / "done" claim below (and in `docs/format-audit.md`,
 `README.md`, crate doc comments, and every `fixtures/*/COVERAGE.md` header) carries an
 unverified construct-completeness caveat.** The hand-written construct checklists these

@@ -126,6 +126,11 @@ pub enum Event<'a> {
         text: Option<String>,
     },
     Symbol(SymbolKind),
+
+    // ── Document metadata ────────────────────────────────────────────────────
+    /// The document's `@settitle` title. Emitted at most once, before any
+    /// block events, only when [`TexinfoDoc::title`] is `Some`.
+    Title(String),
 }
 
 /// Backwards-compatible alias for batch mode (all text is owned).
@@ -329,12 +334,16 @@ fn clone_event(e: &OwnedEvent) -> OwnedEvent {
             text: text.clone(),
         },
         Event::Symbol(kind) => Event::Symbol(kind.clone()),
+        Event::Title(title) => Event::Title(title.clone()),
     }
 }
 
 // ── AST → Events ─────────────────────────────────────────────────────────────
 
 fn emit_doc_events(doc: &TexinfoDoc, out: &mut Vec<OwnedEvent>) {
+    if let Some(title) = &doc.title {
+        out.push(Event::Title(title.clone()));
+    }
     for block in &doc.blocks {
         emit_block_events(block, out);
     }
