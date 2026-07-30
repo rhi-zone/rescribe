@@ -4258,16 +4258,37 @@ fn tei_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
 // builds an `OdfDocument` via `DocBuilder::process` (real per-event work,
 // the same sanctioned shape as ooxml-sml's `SmlWriter` above), only
 // deferring ZIP byte serialization to `finish()` (inherent to ZIP's
-// central-directory-at-end layout, documented in batch.rs). This check found
-// a real, distinct defect: `OdfEvent` has no variant carrying the document's
-// `mimetype`, `meta` (title/author/date), `styles.xml`, or embedded image
-// bytes — `events()` only covers document *body* content (paragraphs,
-// tables, slides, etc.), so `DocBuilder`'s reconstructed `OdfDocument`
-// always has `mimetype: ""` (never set anywhere in batch.rs) and default/
-// empty `meta`/`styles`/`images`, while `parse()`'s AST carries all of them
-// from the ZIP's other parts. This is the same defect class as org-fmt's
-// missing-metadata-variant gap: an `Event` enum expressiveness gap, not a
-// logic bug.
+// central-directory-at-end layout, documented in batch.rs). This check used
+// to find a real, distinct defect: `OdfEvent` had no variant carrying the
+// document's `mimetype`, `meta` (title/author/date), `styles.xml`, or
+// embedded image bytes — `events()` only covered document *body* content
+// (paragraphs, tables, slides, etc.), so `DocBuilder`'s reconstructed
+// `OdfDocument` always had `mimetype: ""` (never set anywhere in batch.rs)
+// and default/empty `meta`/`styles`/`images`, while `parse()`'s AST carried
+// all of them from the ZIP's other parts — the same defect class as
+// org-fmt's missing-metadata-variant gap: an `Event` enum expressiveness
+// gap, not a logic bug. Fixed by adding `OdfEvent::Mimetype`, `Meta`,
+// `AutomaticStyle`, `NamedStyle`, `ListStyle`, `PageLayout`, and
+// `EmbeddedImage` variants (the last named to avoid colliding with the
+// pre-existing inline `Image { href }` body-content event), produced by
+// `events::extract_events` reading `mimetype`/`meta.xml`/`styles.xml`/
+// `content.xml`'s `<office:automatic-styles>`/`Pictures`+`media` via the
+// same free-function helpers `parser::parse` uses (`read_zip_text`,
+// `parse_meta_xml`, `parse_styles_xml`, `parse_auto_styles_block`, now
+// `pub(crate)`), and consumed by `batch::DocBuilder::process`. Fixing that
+// exposed two directly-adjacent bugs blocking its own verification —
+// `StartFrame` had no `width`/`height` (fixture adv-corrupt-image) and
+// self-closing `<office:text/>` wasn't recognized by `events.rs`'s own scan
+// (fixture adv-empty) — both fixed too. The check still fails overall,
+// though: it now surfaces a much larger, pre-existing, and unrelated set of
+// `OdfEvent` vocabulary gaps for inline/block body content (annotations,
+// bookmarks, field elements, soft-hyphen/soft-page-break, table cell
+// col/row-span, footnote/endnote citations, image-caption text-boxes, at
+// least one heading divergence — 12 of 66 odt fixtures), which is a
+// separate, substantially larger body of work than the resource-loss defect
+// this check originally tracked. See `KNOWN_FAILURES["odt"]
+// ["streaming_writer"]` for the current fixture list and TODO.md for the
+// follow-up.
 #[test]
 fn odf_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     let root = fixtures_root().join("odt");

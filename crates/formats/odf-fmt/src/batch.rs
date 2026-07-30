@@ -615,10 +615,17 @@ impl DocBuilder {
                     self.push_inline(Inline::Note(note));
                 }
             }
-            OdfEvent::StartFrame { name, anchor_type } => {
+            OdfEvent::StartFrame {
+                name,
+                anchor_type,
+                width,
+                height,
+            } => {
                 let frame = crate::ast::Frame {
                     name: name.map(|s| s.into_owned()),
                     anchor_type: anchor_type.map(|s| s.into_owned()),
+                    width: width.map(|s| s.into_owned()),
+                    height: height.map(|s| s.into_owned()),
                     ..Default::default()
                 };
                 self.stack.push(BuildFrame::InlineFrame { frame });
@@ -651,6 +658,29 @@ impl DocBuilder {
             }
             OdfEvent::Space { count } => {
                 self.push_inline(Inline::Space { count });
+            }
+
+            // ── Package-level events ──────────────────────────────────────────
+            OdfEvent::Mimetype(mimetype) => {
+                self.doc.mimetype = mimetype;
+            }
+            OdfEvent::Meta(meta) => {
+                self.doc.meta = meta;
+            }
+            OdfEvent::AutomaticStyle(style) => {
+                self.doc.automatic_styles.push(style);
+            }
+            OdfEvent::NamedStyle(style) => {
+                self.doc.named_styles.push(style);
+            }
+            OdfEvent::ListStyle(name, is_ordered) => {
+                self.doc.list_styles.push((name, is_ordered));
+            }
+            OdfEvent::PageLayout(layout) => {
+                self.doc.page_layouts.push(layout);
+            }
+            OdfEvent::EmbeddedImage { name, data } => {
+                self.doc.images.insert(name, data);
             }
 
             OdfEvent::Unknown { .. } => {}
