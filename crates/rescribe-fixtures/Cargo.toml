@@ -94,6 +94,10 @@ mediawiki-fmt = { workspace = true }
 tikiwiki = { workspace = true }
 twiki = { workspace = true }
 vimwiki-fmt = { workspace = true }
+xwiki = { workspace = true }
+zimwiki = { workspace = true }
+markua = { workspace = true }
+muse-fmt = { workspace = true }
 zip = { workspace = true }
 
 # Bidirectional format writer harness tests

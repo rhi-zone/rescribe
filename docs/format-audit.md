@@ -318,11 +318,16 @@ audited this format's cross-API status yet" placeholder, not a claim of absence 
 | tikiwiki | Wired (same narrower claim as mediawiki) | Wired | KnownFailure: same hollow buffer-then-emit pattern as mediawiki |
 | twiki | Wired (same narrower claim; `events()` also has a non-standard signature — it takes `&TwikiDoc`, not raw input, an existing deviation from the vertical-completion contract, tracked in TODO.md) | Wired | KnownFailure: same hollow buffer-then-emit pattern as mediawiki |
 | vimwiki | Wired (same narrower claim) | KnownFailure: diverges from events() even under whole-input (non-adversarial) chunking — parse()/events() merge an unordered list, ordered list, and checklist separated only by blank lines into one `Block::List` with a single `ordered` flag, losing the type distinction for later groups, while `StreamingParser` hard-splits on every blank line and emits three correctly-typed lists | KnownFailure: same hollow buffer-then-emit pattern as mediawiki |
+| xwiki | Wired (`EventIter::next()` is a genuine lazy pull-iterator over `&XwikiDoc`, events.rs:168-385 — not eager materialization like zimwiki/markua/muse below) | KnownFailure: architecturally hollow — `feed()` buffers into a `Vec<u8>`, all parsing happens in `finish()` | KnownFailure: architecturally hollow — `write_event()` buffers into a `Vec<OwnedEvent>`, all emission happens in `finish()` |
+| zimwiki | Wired (validates the AST→event expansion layer; `events()` is parse()+eager-materialize-then-walk) | KnownFailure: `parse_list()` merges a blank-line-separated unordered list immediately followed by an ordered list into one `Block::List` tagged with the first item's `ordered` value (a whole-document `parse()`-level bug, not a streaming-specific one) — `StreamingParser`'s blank-line block splitter hard-splits at that boundary first and does not reproduce the merge | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()` |
+| markua | Wired (validates the AST→event expansion layer; `events()` is parse()+eager-tree-build-then-walk) | KnownFailure: `parse_list()` has the identical structural bug as zimwiki's — merges a blank-line-separated unordered+ordered list pair into one mislabeled list at the whole-document `parse()` level | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()`; separately, `Writer`'s `Figure`/`Caption` reconstruction has a real code bug (wrong child taken as body, caption dropped) but it is unreachable via any fixture since `parse()` never constructs `Block::Figure` |
+| muse | Wired (eagerly materializes a `VecDeque` in `EventIter::new`, but a real independently-checkable walk over `&MuseDoc`) | KnownFailure: architecturally hollow, same buffer-until-`finish()` pattern; crate's own module docs admit it outright | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()`; also a genuine expressiveness gap — `MuseEvent` has no variant for document metadata, so `#title`/`#author`/`#date`/`#desc`/`#keywords` are always dropped on round-trip (reachable via the `document-header` fixture, since unlike markua's dead `title`/`author`/`description` fields, muse-fmt's `parse()` genuinely populates them) |
 
-**Session tally (2026-07-30):** 19 formats moved from `NOT_YET_AUDITED` to a real, audited
+**Session tally (2026-07-30):** 23 formats moved from `NOT_YET_AUDITED` to a real, audited
 `CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark, gfm,
-markdown, bbcode, creole, dokuwiki, jira, mediawiki, tikiwiki, twiki, vimwiki), on top of the 4
-pre-existing entries (rst, docx, pptx, xlsx) from the harness's initial wiring. None were
+markdown, bbcode, creole, dokuwiki, jira, mediawiki, tikiwiki, twiki, vimwiki, xwiki, zimwiki,
+markua, muse), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the harness's
+initial wiring. `streaming_harness::KNOWN_FAILURES` now has 39 entries total. None were
 weakened or hidden to make a check pass; every divergence found a real, root-caused, tracked
 `KnownFailure` entry instead. bbcode-fmt was the first format in this table whose
 `StreamingParser` was audited and found to be genuinely, not just nominally, Wired; creole is
@@ -336,22 +341,25 @@ divergence found on any fixture; all three crates' `events()` are architecturall
 per-variant semantic decisions, so the equivalence check is not circular by construction
 (mirrors asciidoc's narrower-Wired-claim precedent). twiki's `events()` additionally has a
 non-standard signature (`&TwikiDoc` instead of raw input); tracked as a follow-up in TODO.md.
-vimwiki's `StreamingParser` is the one genuine, previously-unknown defect found in this batch: a
+vimwiki's `StreamingParser` is the one genuine, previously-unknown defect found in that batch: a
 list-boundary disagreement between `parse()`/`events()` and `StreamingParser`, not a
-chunk-boundary bug — it reproduces even feeding the whole input in one `feed()` call. All eight
-formats' streaming writers are architecturally hollow buffer-then-emit, confirmed via the
-`ObservableSink` incrementality probe rather than assumed from module docs.
+chunk-boundary bug — it reproduces even feeding the whole input in one `feed()` call. xwiki's
+`events()` is the first genuinely lazy pull-iterator found in this format family, unlike
+zimwiki/markua/muse's eager materialize-then-walk. The xwiki/zimwiki/markua/muse pass
+specifically found a `parse()`-level (not streaming-specific) block-merging bug shared verbatim
+between zimwiki's and markua's independently-written `parse_list()` functions — the same
+structural mistake (accept either bullet or numbered marker in one loop with no
+transition check, skip blank lines instead of breaking) made independently in two crates. All
+twelve formats' streaming writers found in these two batches are architecturally hollow
+buffer-then-emit, confirmed via the `ObservableSink` incrementality probe rather than assumed
+from module docs.
 
 ### Remaining hand-written formats (crate exists, API not started)
 
 | Crate | ast | stream | batch | w-stream | w-build |
 |-------|-----|--------|-------|----------|---------|
-| muse-fmt | ✓ | | | | ✓ |
 | t2t | ✓ | | ✓ | | ✓ |
-| markua | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_markua_reader (559K runs) fuzz_markua_roundtrip (759K runs) | – | – |
 | fountain-fmt | ✓ | | ✓ | | ✓ |
-| zimwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_zimwiki_reader (416K runs) fuzz_zimwiki_roundtrip (390K runs) | – | – |
-| xwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_xwiki_reader (489K runs) fuzz_xwiki_roundtrip (427K runs) | – | – |
 | typst (TBD) | | | | | |
 | texinfo | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed unterminated-command panic + unknown-directive infinite loop | fuzz_texinfo_reader (1.5M runs) fuzz_texinfo_roundtrip (592K runs) | – | – |
 | pod-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_pod_reader (863K runs) fuzz_pod_roundtrip (375K runs) | – | – |

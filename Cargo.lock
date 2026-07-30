@@ -3131,7 +3131,9 @@ dependencies = [
  "fb2-fmt",
  "html-fmt",
  "jira-fmt",
+ "markua",
  "mediawiki-fmt",
+ "muse-fmt",
  "ooxml-pml",
  "ooxml-sml",
  "ooxml-wml",
@@ -3218,6 +3220,8 @@ dependencies = [
  "tikiwiki",
  "twiki",
  "vimwiki-fmt",
+ "xwiki",
+ "zimwiki",
  "zip 7.2.0",
 ]
 
