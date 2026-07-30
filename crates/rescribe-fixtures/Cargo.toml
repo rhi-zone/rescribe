@@ -88,6 +88,7 @@ textile-fmt = { workspace = true }
 commonmark-fmt = { workspace = true, features = ["extensions"] }
 bbcode-fmt = { workspace = true }
 creole = { workspace = true }
+dokuwiki = { workspace = true }
 zip = { workspace = true }
 
 # Bidirectional format writer harness tests

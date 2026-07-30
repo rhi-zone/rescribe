@@ -573,6 +573,38 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              incremental streaming writer",
         ),
     },
+    // dokuwiki's events() is `InputEventIter::new`, which calls
+    // `crate::parse::parse(input)` then walks the resulting `DokuwikiDoc` with
+    // the crate's own lazy `EventIter` (events.rs:705-731) — the same "parse()
+    // then walk the tree" shape as bbcode-fmt's and creole's events(), not two
+    // independent implementations, but per that precedent it's still wired
+    // rather than NotApplicable (nothing in the DokuWiki format forces this
+    // shape). StreamingParser (batch.rs) is a genuine incremental
+    // line-buffered state machine — real Wired, confirmed by an
+    // incrementality probe and an adversarial-chunking equivalence check that
+    // holds over every dokuwiki fixture with no coarser-boundary caveat
+    // needed (unlike bbcode/creole): parse.rs's Parser has no cross-block
+    // state at all (no loose-list joining, no reference resolution), so every
+    // boundary StreamingParser::feed_line flushes on is one parse.rs's own
+    // dispatch loop would also treat as a valid split point. The streaming
+    // Writer is the one real gap: hollow buffer-then-finish() (writer.rs's
+    // own module doc, write_event() only pushes onto a Vec), so content
+    // matches build() but the incrementality probe fails.
+    FormatCapabilities {
+        format: "dokuwiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "dokuwiki::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST (events_to_doc) + calls crate::emit::build inside finish() \
+             (write_event() at writer.rs:27-29 only pushes onto self.events, all real work \
+             happens in finish() at writer.rs:32-37, self-admitted in the module doc \
+             \"Buffers all events, reconstructs the AST, then emits\"); content is still \
+             byte-identical to build() over all fixtures since finish() ultimately drives the \
+             same build() path, but zero bytes reach the sink before finish() is called — not a \
+             genuine incremental streaming writer",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -591,7 +623,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "tikiwiki",
     "twiki",
     "vimwiki",
-    "dokuwiki",
     "jira",
     "haddock",
     "pod",
@@ -814,6 +845,14 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        reconstructs the AST + calls build() inside finish() (write_event() only \
                        pushes onto self.events); content matches build() exactly but the writer \
                        is not incrementally streaming",
+    },
+    KnownFailure {
+        format: "dokuwiki",
+        api: "streaming_writer",
+        description: "dokuwiki::writer::Writer buffers all events into a Vec<OwnedEvent> and \
+                       only reconstructs the AST + calls crate::emit::build inside finish() \
+                       (write_event() at writer.rs:27-29 only pushes onto self.events); content \
+                       matches build() exactly but the writer is not incrementally streaming",
     },
 ];
 

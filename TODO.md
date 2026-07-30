@@ -166,6 +166,55 @@ bbcode entry above, picking one more format out of `NOT_YET_AUDITED`. Full break
 Not fixed here (by design): the streaming-writer `KnownFailure` above was found, not fixed;
 it needs its own fix pass in `creole`. 47 formats remain in `NOT_YET_AUDITED`.
 
+**2026-07-30: cross-API harness wired for dokuwiki — the third format (after bbcode, creole)
+whose `StreamingParser` turned out to be genuinely, not just nominally, Wired, and the first
+of the three with a clean equivalence check needing no coarser-boundary caveat at all.**
+Follow-up to the bbcode/creole entries above, picking one more format out of
+`NOT_YET_AUDITED`. Full breakdown in `docs/format-audit.md`'s "Cross-API harness inventory"
+table; source of truth is `streaming_harness::CAPABILITIES`'s new `"dokuwiki"` entry.
+
+- **`events()` — Wired, but honestly scoped like bbcode's/creole's entry, not an independent
+  parser.** `dokuwiki::events()` (`lib.rs:33-35`, delegating to `events::events`) is
+  `InputEventIter::new`, which calls `crate::parse::parse(input)` and walks the resulting
+  `DokuwikiDoc` with the crate's own lazy `EventIter` (`events.rs:705-731`) — the same
+  non-independent "parse() then walk the tree" shape as bbcode-fmt's and creole's `events()`.
+  No format-spec reason forces this, so `NotApplicable` would have been the wrong call; wired
+  anyway per the bbcode/creole precedent, since the check still pins the AST↔`Event`
+  correspondence. Also confirmed a positive: every `Block`/`Inline` variant and field in
+  `ast.rs` has a corresponding `Event` variant/field in `events.rs` (`FileBlock`'s `filename`,
+  `RawBlock`'s `format`, `Macro`'s `name`, `Image`'s `alt` all round-trip) — no `Event` enum
+  expressiveness gap, unlike org-fmt (no metadata variant) or djot-fmt (no `LinkDef` variant).
+- **`StreamingParser` — Wired, for real, no `KnownFailure` needed, and no caveat needed
+  either.** `batch.rs`'s `StreamingParser` is a genuine incremental line-buffered state
+  machine: `feed_line` advances real per-line state
+  (`BlockState::{Between,Accumulating,InSpecialBlock}`) and `emit_block()` (which re-parses
+  just the accumulated block text via `crate::events::events()`) flushes to the handler as
+  soon as a blank line or a recognized `<code>/<file>/<html>/<php>` block's close is seen, not
+  only inside `finish()`. Verified two ways: (1) an incrementality probe (feed a complete
+  `**Hello**` paragraph + blank line + unterminated trailing text, confirm events arrive
+  before `finish()`) passes; (2) the adversarial-chunking equivalence check against `events()`
+  passes over every dokuwiki fixture, under every chunking in `adversarial_chunkings`
+  (whole/single-byte/chunks-of-3/7/13/mid-UTF-8-char). Unlike bbcode's and creole's entries,
+  no coarser-boundary caveat was needed: `parse.rs`'s `Parser` has *no* cross-block state at
+  all — no loose-list joining across blank lines (`parse_list_items` already stops at any
+  non-`"  "`-prefixed line, which includes blank lines) and no forward/backward reference
+  resolution of any kind — so every boundary `StreamingParser::feed_line` can flush on is one
+  `parse.rs`'s own top-level dispatch loop would also treat as a valid, self-contained block
+  split point.
+- **streaming `Writer` — `KnownFailure`, architecturally hollow, same shape as bbcode's/
+  creole's.** `write_event()` (`writer.rs:27-29`) only pushes onto a `Vec<OwnedEvent>`; all
+  real work (`events_to_doc` + `crate::emit::build`) happens inside `finish()`
+  (`writer.rs:32-37`), self-admitted in the module doc: "Buffers all events, reconstructs the
+  AST, then emits." Content still matches `build()` byte-for-byte over every fixture
+  (`finish()` ultimately drives the same `build()` path), but the incrementality probe (write
+  a complete `StartParagraph`/`StartBold`/`Text`/`EndBold`/`EndParagraph` sequence, check for
+  any bytes reaching the sink before `finish()`) gets zero bytes. Same fix shape as bbcode's/
+  creole's writers: rewrite `write_event()` to push into a fixed output window instead of a
+  `Vec`, driven directly off `crate::emit`'s per-node string logic.
+
+Not fixed here (by design): the streaming-writer `KnownFailure` above was found, not fixed;
+it needs its own fix pass in `dokuwiki`. 46 formats remain in `NOT_YET_AUDITED`.
+
 ---
 
 **2026-07-29: fixture harness extended to exercise `events()`/`StreamingParser`/streaming

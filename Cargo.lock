@@ -3127,6 +3127,7 @@ dependencies = [
  "commonmark-fmt",
  "creole",
  "djot-fmt",
+ "dokuwiki",
  "fb2-fmt",
  "html-fmt",
  "ooxml-pml",
