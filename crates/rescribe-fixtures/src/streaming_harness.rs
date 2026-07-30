@@ -644,18 +644,29 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              calls a true chunked event-delivering parser \"a future StreamingParser\"",
         ),
         streaming_writer: ApiState::KnownFailure(
-            "odf_fmt::batch::Writer::write_event() genuinely builds an OdfDocument \
-             incrementally per event via DocBuilder::process (same sanctioned shape as \
-             ooxml-sml's SmlWriter — real per-event work, only ZIP byte packaging deferred to \
-             finish(), which is inherent to ZIP's central-directory-at-end layout) — but \
-             OdfEvent has no variant carrying the document's mimetype, meta (title/author/\
-             date), styles.xml, or embedded image bytes; events() only covers body content \
-             (paragraphs, tables, slides), so the reconstructed OdfDocument always has \
-             mimetype: \"\" (never set anywhere in batch.rs) and default/empty meta/styles/\
-             images, unlike parse()'s AST which reads all of them from the ZIP's other parts — \
-             an Event-enum expressiveness gap, the same defect class as org-fmt's missing- \
-             metadata-variant gap, found via this harness's byte-identical-to-builder check \
-             (fixture adv-corrupt-image: built 1676 bytes vs streamed 1440 bytes)",
+            "the resource-loss defect this entry originally tracked (OdfEvent had no variant \
+             carrying mimetype/meta/styles/images) is fixed: OdfEvent now has Mimetype, Meta, \
+             AutomaticStyle, NamedStyle, ListStyle, PageLayout, and EmbeddedImage variants, \
+             produced by events::extract_events reading mimetype/meta.xml/styles.xml/ \
+             content.xml's <office:automatic-styles>/Pictures+media (via parser.rs's \
+             read_zip_text/parse_meta_xml/parse_styles_xml/parse_auto_styles_block, now \
+             pub(crate)) and consumed by batch::DocBuilder::process. Two directly-adjacent bugs \
+             that were blocking verification of that fix were fixed alongside it: StartFrame had \
+             no width/height (draw:frame's svg:width/svg:height were silently dropped, found via \
+             fixture adv-corrupt-image) and self-closing <office:text/> was not recognized by \
+             events.rs's own quick_xml scan (found via fixture adv-empty). However, the \
+             byte-identical-to-builder check still fails: it found the OdfEvent vocabulary has \
+             many other, unrelated pre-existing gaps for inline/block body content — \
+             office:annotation, text:bookmark(-start), field elements (text:date, \
+             text:page-number, etc.), text:soft-hyphen, text:soft-page-break, table cell \
+             col-span/row-span, footnote/endnote citations, draw:text-box inside a text-body \
+             draw:frame (image captions), and at least one heading-only divergence — none of \
+             which relate to mimetype/meta/styles/images. 12 of 66 odt fixtures diverge \
+             (annotation, bookmark, colspan-rowspan, endnote, footnote, footnote-formatted, \
+             heading, image-caption, non-breaking-space, path-deeply-nested-table, soft-hyphen, \
+             text-box). Completing OdfEvent's vocabulary to cover all of this is a substantially \
+             larger, separate body of work than the resource-loss defect this entry originally \
+             tracked; see TODO.md",
         ),
     },
     FormatCapabilities {
@@ -1388,9 +1399,15 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "odt",
         api: "streaming_writer",
-        description: "OdfEvent has no variant carrying mimetype/meta/styles/images, so the \
-                       streaming Writer's reconstructed OdfDocument always drops them even \
-                       though it genuinely builds incrementally per event",
+        description: "OdfEvent now carries mimetype/meta/styles/images (the originally-tracked \
+                       resource-loss gap is fixed), but the byte-identical-to-builder check \
+                       still fails on 12 of 66 odt fixtures over unrelated, pre-existing \
+                       OdfEvent gaps for inline/block body content: office:annotation, \
+                       text:bookmark(-start), field elements (text:date, text:page-number, \
+                       etc.), text:soft-hyphen, text:soft-page-break, table cell col-span/ \
+                       row-span, footnote/endnote citations, draw:text-box inside a text-body \
+                       draw:frame (image captions), and at least one heading-only divergence; \
+                       see the matching CAPABILITIES entry for the full fixture list",
     },
     KnownFailure {
         format: "ansi",

@@ -3939,19 +3939,60 @@ Defect classes surfacing again, by name, as the task brief predicted:
   `streaming_harness::KNOWN_FAILURES` for the exact fixture names (`adv-entity-references`,
   `adv-malformed-xml`).
 
-- **Event-enum expressiveness gap** (`odf-fmt`, backing `odt`/`ods`/`odp`): `OdfEvent` has
+- **Event-enum expressiveness gap** (`odf-fmt`, backing `odt`/`ods`/`odp`): `OdfEvent` had
   no variant carrying the document's `mimetype`, `meta` (title/author/date), `styles.xml`
-  content, or embedded image bytes — `events()` only covers document *body* content
+  content, or embedded image bytes — `events()` only covered document *body* content
   (paragraphs, tables, slides). The streaming `Writer` genuinely builds its `OdfDocument`
   incrementally per event (the same sanctioned shape as `ooxml-sml`'s `SmlWriter` — real
   per-event work, ZIP byte packaging deferred to `finish()` only because ZIP's central
   directory lives at the end of the file), so it is not architecturally hollow — but the
-  reconstructed document always has `mimetype: ""` and empty `meta`/`styles`/`images`
+  reconstructed document always had `mimetype: ""` and empty `meta`/`styles`/`images`
   compared to `parse()`'s AST. Same defect class as org-fmt's missing-metadata-variant gap.
   Also confirmed and corrected a prior (wrong) assessment that called `odf-fmt`'s `events()`
   a `parse()`-then-walk fake — it is a genuine independent `quick_xml` scan of
   `content.xml`, just eagerly/fully buffered rather than lazily incremental (self-documented
   in `events.rs`), and no `StreamingParser<H>` exists in the crate yet at all.
+
+  **Fixed (2026-07-30, follow-up session):** added `OdfEvent::Mimetype(String)`,
+  `Meta(OdfMeta)`, `AutomaticStyle(StyleEntry)`, `NamedStyle(StyleEntry)`,
+  `ListStyle(String, bool)`, `PageLayout(PageLayout)`, and `EmbeddedImage { name, data }`
+  (named `EmbeddedImage` rather than `Image` to avoid colliding with the pre-existing inline
+  `Image { href }` body-content event). `events::extract_events` now reads
+  `mimetype`/`meta.xml`/`styles.xml`/`content.xml`'s `<office:automatic-styles>`/
+  `Pictures`+`media` via the same free functions `parser::parse` uses (`read_zip_text`,
+  `parse_meta_xml`, `parse_styles_xml`, `parse_auto_styles_block` — made `pub(crate)` for
+  this), and `batch::DocBuilder::process` now sets/pushes them onto the reconstructed
+  `OdfDocument`. Verifying the fix against `adv-corrupt-image` (the fixture the original
+  `KnownFailure` cited) surfaced a second, directly-adjacent bug in the same fixture:
+  `OdfEvent::StartFrame` had no `width`/`height` fields, so `draw:frame`'s `svg:width`/
+  `svg:height` were silently dropped even though `ast::Frame` has both — fixed by adding
+  them to the variant. Checking `adv-empty` surfaced a third: `events.rs`'s own
+  `content.xml` scan didn't recognize a self-closing `<office:text/>` (only `parser.rs`'s
+  `parse_content_xml` handled that case), so the streaming path always built `OdfBody::Empty`
+  instead of `OdfBody::Text(vec![])` — fixed by mirroring `parser.rs`'s handling in the
+  `Event::Empty` branch.
+
+  **Still open — much larger, separate gap surfaced by the fix above:** once the
+  resource-loss and two adjacent bugs were fixed, the byte-identical-to-builder check still
+  fails: 12 of 66 odt fixtures diverge (`annotation`, `bookmark`, `colspan-rowspan`,
+  `endnote`, `footnote`, `footnote-formatted`, `heading`, `image-caption`,
+  `non-breaking-space`, `path-deeply-nested-table`, `soft-hyphen`, `text-box`) because
+  `OdfEvent` has never covered several `Inline`/structural constructs that `parser.rs`'s
+  unified `parse_inlines` handles: `office:annotation`, `text:bookmark`/`bookmark-start`,
+  field elements (`text:date`, `text:page-number`, `text:author-name`, etc. — 9 element
+  names), `text:soft-hyphen`, `text:soft-page-break`, table cell `col-span`/`row-span`,
+  footnote/endnote `<text:note-citation>` content, and `draw:text-box` inside a *text-body*
+  `draw:frame` (only presentation-body frames get `StartTextBox`/`EndTextBox` today). This
+  is a distinct defect class (or rather, the same class applied to a much larger surface)
+  from the mimetype/meta/styles/images gap this entry originally tracked, and is a
+  substantially larger body of work — closing it means extending `OdfEvent`'s inline
+  vocabulary to match `ast::Inline`'s full surface, plus (for fields/citations) adding
+  small amounts of buffering state to `events.rs`'s otherwise-flat SAX scan, since those
+  need to capture text between a start and end tag into a single event rather than letting
+  it fall through as loose `Text` events into the enclosing paragraph/span. Left as the
+  `streaming_writer` `KnownFailure` for `odt` (updated description, not flipped to `Wired`)
+  rather than attempted in the same pass — out of scope for a task specifically bounded to
+  the resource-loss gap.
 
 - **Logic bugs surfaced by cross-checking, not present in either implementation alone**
   (`ansi-fmt`): `events()`'s `parse_csi_event` 'm' arm emits a `ResetStyle` event whenever

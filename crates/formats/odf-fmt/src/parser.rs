@@ -90,7 +90,7 @@ pub fn parse(input: &[u8]) -> Result<ParseResult<OdfDocument>, Error> {
 
 // ── ZIP helpers ───────────────────────────────────────────────────────────────
 
-fn read_zip_text(archive: &mut ZipArchive<Cursor<&[u8]>>, name: &str) -> Option<String> {
+pub(crate) fn read_zip_text(archive: &mut ZipArchive<Cursor<&[u8]>>, name: &str) -> Option<String> {
     let mut file = archive.by_name(name).ok()?;
     let mut content = String::new();
     file.read_to_string(&mut content).ok()?;
@@ -1366,7 +1366,10 @@ fn parse_note_attrs(
 
 // ── styles.xml ────────────────────────────────────────────────────────────────
 
-fn parse_styles_xml(xml: &str, _diags: &mut Vec<Diagnostic>) -> (Vec<StyleEntry>, Vec<PageLayout>) {
+pub(crate) fn parse_styles_xml(
+    xml: &str,
+    _diags: &mut Vec<Diagnostic>,
+) -> (Vec<StyleEntry>, Vec<PageLayout>) {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(false);
     let mut buf = Vec::new();
@@ -1467,7 +1470,9 @@ fn parse_styles_xml_auto_block(reader: &mut Reader<&[u8]>) -> (Vec<StyleEntry>, 
 /// Parse `<office:automatic-styles>` from content.xml.
 ///
 /// Returns (style_entries, list_styles) where list_styles is (name, is_ordered).
-fn parse_auto_styles_block(reader: &mut Reader<&[u8]>) -> (Vec<StyleEntry>, Vec<(String, bool)>) {
+pub(crate) fn parse_auto_styles_block(
+    reader: &mut Reader<&[u8]>,
+) -> (Vec<StyleEntry>, Vec<(String, bool)>) {
     let mut styles = Vec::new();
     let mut list_styles: Vec<(String, bool)> = Vec::new();
     let mut buf = Vec::new();
@@ -1770,7 +1775,7 @@ fn parse_page_layout_attrs(attrs: &[(String, String)], reader: &mut Reader<&[u8]
 
 // ── meta.xml ─────────────────────────────────────────────────────────────────
 
-fn parse_meta_xml(xml: &str) -> OdfMeta {
+pub(crate) fn parse_meta_xml(xml: &str) -> OdfMeta {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
