@@ -3961,3 +3961,282 @@ pass + 16 from the wiki-verticals passes), **28** remaining in `NOT_YET_AUDITED`
 (49 − 5 − 16), and **57** total `KNOWN_FAILURES` entries (12 from this pass + 45 from the
 wiki-verticals passes). See `docs/format-audit.md`'s "Merge reconciliation" paragraph for the
 same figures cross-checked against the merged table contents directly.
+
+## docbook/jats/tei `StreamingParser` mismatched/unmatched-end-tag bug — fixed (2026-07-30)
+
+Bug (2) from the "Cross-API harness: docbook/jats/tei, odt, ansi audited" entry above is
+fixed. `StreamingParser::drain()` (`batch.rs`, all three crates) still has to build a fresh
+`quick_xml::Reader` over just the unconsumed tail on every call and disable
+`check_end_names`/`allow_unmatched_ends` on it — that part is architecturally required,
+since that reader never saw the `Start` tag matching an `End` tag consumed by a *previous*
+`drain()` call. What was missing was any *other* mechanism enforcing tag balance in its
+place, so a genuinely mismatched or unmatched end tag was silently accepted with zero
+diagnostics, diverging from `parse()`/`events()`'s default `check_end_names = true` /
+`allow_unmatched_ends = false` convention.
+
+Fix: `StreamingParser` now tracks open-element names itself in a `Vec<String>` field
+(`open_stack`) that persists *across* `drain()` calls — the same "survives multiple
+`feed()` calls" shape `entity_resolver` already had. Every `StartElement` event pushes;
+every `EndElement` event pops and compares. A mismatch, or an `End` against an empty stack,
+pushes a `Diagnostic` (message shape mirrors `parse()`'s own quick-xml-error wrapping,
+`"XML parse error: ..."`) and sets a new `failed` field so draining stops for good — the
+same "fatal diagnostic + stop" behavior `parse()` gets for free from quick-xml's own
+`check_end_names = true` erroring out of `read_event_into`. Deliberately does *not*
+replicate `parse()`'s further "auto-close still-open elements at EOF" recovery step (that
+recovery is AST-shaped — synthetic `EndElement` nodes closing a tree — and doesn't have an
+obvious event-stream analog); simplest option that satisfies "always at least one
+`Diagnostic`, never silently accepted" was chosen, matching what the task's design-fork
+question explicitly allowed.
+
+Applied identically to `docbook-fmt`, `jats-fmt`, `tei-fmt` (confirmed still byte-identical
+in shape via `diff` across all three `batch.rs` files before editing — only doc comments
+and AST/event type names differ).
+
+`CAPABILITIES`/`KNOWN_FAILURES` updated: `docbook`/`tei` `streaming_parser` flipped
+`KnownFailure` → `Wired` (both fully pass `*_streaming_parser_matches_events_under_
+adversarial_chunking`, confirmed via `cargo test`). `jats` stays `KnownFailure`, but the
+description changed: the mismatch/unmatched bug itself is fixed and confirmed (new fixtures
+`adv-mismatched-end-tag`/`adv-unmatched-end-tag` pass), but jats-fmt's own pre-existing
+`adv-malformed-xml` fixture is a *truncated*-input case (`<article ...><body><p>Unterminated
+content`, no closing tags at all, unlike docbook's/tei's mismatched-end-tag versions of the
+same fixture name) that exposes an unrelated, narrower gap once unmasked: the
+adversarial-chunking test's incrementality probe feeds exactly the first half of the input
+bytes (40 of 81) and asserts at least one event was delivered before `finish()`; those 40
+bytes land mid-attribute-value inside the still-open root `<article xmlns:xlink="...">`
+start tag (the attribute value alone is longer than half the file), so zero events is
+correct, spec-conforming behavior for that exact split point — not a `StreamingParser`
+defect, just a fixed-50%-split probe that isn't fixture-shape-aware. Not fixed here (out of
+scope for this task); would need either a smarter incrementality probe or a differently-
+shaped single fixture that doesn't have its very first token straddle the midpoint.
+
+`streaming_writer` entries for all three formats deliberately left untouched (still
+`KnownFailure`) — that's bug (3) above, a separate, still-open gap (`events()` lacking
+`parse()`'s malformed-XML auto-close recovery, which the streaming Writer inherits).
+
+New fixtures: `fixtures/{docbook,tei}/adv-unmatched-end-tag`, `fixtures/jats/adv-unmatched-
+end-tag`, `fixtures/jats/adv-mismatched-end-tag` (jats needed its own mismatch fixture since
+its existing `adv-malformed-xml` never exercised end-tag mismatch at all). `COVERAGE.md`
+updated for all three formats' Adversarial sections.
+
+## wiki-family `parse_list()` marker-type-change defect — fixed in 5 crates, surveyed across 11 (2026-07-30)
+
+The cross-API harness's `zimwiki`/`markua` `KNOWN_FAILURES` entries both independently
+described the same shape of bug: `parse_list()`'s loop condition only checked that *some*
+recognized marker matched ("is this a bullet or a numbered item?"), never that the marker
+matched the *specific* list being built (its `ordered` flag, fixed once from the first
+item). A blank-line-separated (or, in some crates, directly adjacent) run of the other
+marker type got silently absorbed into the current list and mislabeled with the first
+group's `ordered` value, instead of ending the list. Given the entries independently
+described identical logic in two unrelated crates, the task was to fix both and check the
+rest of the wiki/lightweight-markup family (`bbcode`, `creole`, `dokuwiki`, `jira`,
+`mediawiki`, `tikiwiki`, `twiki`, `vimwiki`, `xwiki`, `muse`, `t2t`) for the same
+copy-paste-lineage defect, since their fixture suites might simply lack a triggering case.
+
+**Survey result — read every `parse_list`-equivalent function in all 11 crates:**
+
+| Crate | Affected? | Why |
+|---|---|---|
+| `zimwiki` | **Yes — fixed** | `parse.rs`'s `parse_list` accepted `is_bullet \|\| is_numbered` with no check against `ordered`. |
+| `markua` | **Yes — fixed** | Identical shape in `parse.rs`'s `parse_list`. |
+| `vimwiki-fmt` | **Yes — fixed** | Identical shape (plus a third marker class, `#`, also treated as "ordered"); this turned out to be the *exact same root cause* as the already-tracked, separately-worded `vimwiki` `streaming_parser` `KnownFailure` ("StreamingParser and events() disagree on where a list ends") — fixing `parse_list()` here fixed both at once. |
+| `twiki` | **Yes — fixed** | Two copies of the defect (`parse_list` and `parse_nested_list` both have the same same-depth item loop with no marker check) — worse than the others, since the wrong-marker branch of the `if ordered { strip_prefix(...) }` also silently failed and left the raw marker text in the extracted content, not just mislabeling `ordered`. Not previously caught by any fixture. |
+| `dokuwiki` | **Yes — fixed** | `parse_list_items` never threaded `ordered` into its same-depth item loop at all (only nested nested-list recursion computed a fresh `nested_ordered` locally); same-depth items of the wrong marker were silently absorbed. Not previously caught by any fixture. |
+| `tikiwiki` | No | Structurally immune: `line_depth` is counted using only the *fixed* `marker` char decided from the first line, so a differently-marked line always counts as depth 0, which is `< depth` and breaks immediately — the bug can't reach the "same depth, wrong marker" case at all. |
+| `jira-fmt` | No | Explicitly checks `line_marker == marker` before accepting a same-depth item; the `else` branch already breaks on any mismatch. |
+| `mediawiki-fmt` | No | Computes `marker` from `ordered` up front and checks `trimmed.starts_with(marker)` directly; a mismatched marker already breaks the loop. |
+| `xwiki` | No | Same shape as mediawiki-fmt — fixed marker string, `!line.starts_with(marker)` breaks. |
+| `bbcode-fmt` | No | Uses explicit `[list]`/`[/list]`/`[*]` delimiters, not marker-character sniffing — the defect class doesn't apply. |
+| `muse-fmt` | No | Has *separate* `parse_unordered_list`/`parse_ordered_list` functions, each checking its own fixed marker directly with an unconditional break on mismatch — no shared "accept either marker" loop exists. |
+| `t2t` | No | Computes `marker` from `ordered` up front (`"+ "` vs `"- "`) and checks `trimmed.starts_with(marker)` directly, same shape as mediawiki/xwiki. |
+
+**Fix, applied identically to zimwiki/markua/vimwiki-fmt/twiki/dokuwiki:** after determining
+a line matches *some* recognized list marker, additionally check that the marker's
+ordered-ness matches the list's own `ordered` flag; if not, `break` out of the item loop
+(returning control to the block-level dispatcher, which re-detects the marker type on the
+next line and starts a new, correctly-typed list — verified no infinite-loop risk, since
+every affected crate's outer dispatcher independently re-checks the current line's marker
+before calling `parse_list` again).
+
+**Regression-proof methodology:** for each of the 5 fixes, the fix was `git stash`ed out,
+the new fixture re-run to confirm it fails without the fix (proving the fixture actually
+exercises the bug, not just a coincidentally-passing shape), then the fix restored and
+re-verified passing. Two fixtures (`twiki`, `dokuwiki`) needed their input changed from
+blank-line-separated lists to directly-adjacent differently-marked lines after this check
+revealed those two crates' loops have no blank-line-continuation logic at all (a blank line
+already unconditionally ends the list, independent of this bug) — the "blank line" framing
+from the original zimwiki/markua bug reports doesn't apply to every crate's loop shape.
+
+**New fixtures** (added per-crate naming convention — `zimwiki`/`vimwiki`/`twiki` use no
+composition prefix, `markua` uses `comp-`, `dokuwiki` uses `int-`):
+`fixtures/zimwiki/mixed-list-markers`, `fixtures/markua/comp-mixed-list-markers`,
+`fixtures/vimwiki/mixed-list-markers`, `fixtures/twiki/mixed-list-markers`,
+`fixtures/dokuwiki/int-mixed-list-markers`.
+
+**`KNOWN_FAILURES`/`CAPABILITIES` updated:** `zimwiki`/`streaming_parser`,
+`markua`/`streaming_parser`, and `vimwiki`/`streaming_parser` all flip `KnownFailure` →
+`Wired` (all three confirmed passing under `cargo test -p rescribe-fixtures`, including the
+adversarial-chunking equivalence checks). `twiki` and `dokuwiki` had no existing
+`KNOWN_FAILURES` entry for this bug — it was found via the family survey, not the harness —
+so there was nothing to remove there; both were already independently fixed and are now
+additionally covered by a fixture.
+
+**Not touched:** `zimwiki`/`markua`/`vimwiki` `streaming_writer` (architecturally hollow
+buffer-then-`finish()` writers — a separate, still-open, out-of-scope gap) and every other
+crate's own unrelated tracked gaps.
+
+## docbook/jats/tei entity-Text coalescing — fixed in events() and StreamingParser (2026-07-30)
+
+`events()`/`EventIter` (all three crates, byte-identical shape) emitted one `Text` event per
+resolved character/predefined/DTD entity reference (e.g. `&amp;` decoded to its own
+`Text("&")` event) instead of merging it into the surrounding text run the way `parse()`'s
+`current_text` accumulator does — found via this harness's `events()`-vs-`events_from_doc(&
+parse())` equivalence check (fixture `adv-entity-references`).
+
+**Fix:** `EventIter::next()` now accumulates a run of adjacent text-equivalent tokens (`Text`,
+resolved char refs, resolved predefined/DTD entity refs) into a merged `String` before
+dispatching, using a one-token lookahead: since `next()` inevitably has to read one token
+*past* the end of the run to discover the run is over, and a `quick_xml::Reader` token can't
+be "unread," that lookahead token is stashed in a new `pending: Option<Event<'a>>` field and
+returned on the very next `next()` call instead of being re-read. Confirmed via a direct
+check against fixture `adv-entity-references`: `a &amp; b &lt; c &gt; d &apos;e&apos;
+&quot;f&quot;` now yields one `Text("a & b < c > d 'e' \"f\"")` event, not six.
+
+Applied identically to docbook-fmt, jats-fmt, tei-fmt (re-confirmed byte-identical shape via
+`diff` before splicing the fix into all three).
+
+**Fixing `events()` alone broke `StreamingParser`↔`events()` equivalence** (caught
+immediately by the harness's adversarial-chunking check, exactly as designed): `batch.rs`'s
+`StreamingParser::drain()` does its own entity handling and text dispatch, independently of
+`events.rs`, and hadn't been touched, so it kept emitting one `Text` per entity while
+`events()` now merged them. Fixed the same way: a `pending_text: Option<String>` field on
+`StreamingParser` that persists across `drain()`/`feed()` calls (same shape as
+`entity_resolver`), flushed to the handler whenever a non-text event is about to be
+dispatched or at a definite end of input. One follow-up bug surfaced while verifying this
+against fixture `adv-abstract`-shaped inputs (trailing whitespace text after the last closing
+tag): the pre-existing `if self.pending.is_empty() { return; }` early-return at the top of
+`drain()`'s loop didn't flush `pending_text` on `is_final`, silently dropping the final
+merged text run — fixed by flushing there too when `is_final`. Applied identically to all
+three crates.
+
+**No new fixture needed** — the existing `fixtures/{docbook,jats,tei}/adv-entity-references`
+fixture already exercises this via the harness's generic `events()`-vs-`events_from_doc(&
+parse())` equivalence sweep over every fixture in the directory; it now passes.
+
+**`KNOWN_FAILURES` note (not removed, description corrected):** the `events` entries for all
+three formats are still `KnownFailure` — but now for a completely different, already-tracked
+reason. `parse()` auto-closes unclosed elements on malformed XML (synthetic `EndElement`
+nodes) but `events()` has no such recovery, so it diverges from `events_from_doc(&parse())`
+on fixture `adv-malformed-xml` specifically (which contains no entities at all — this is not
+a regression of the entity-coalescing bug, just a second, unrelated cause that happens to
+trip the same equivalence check). This is the same root cause already tracked by the
+`streaming_writer` `KnownFailure` entry for all three formats. Descriptions updated to make
+this explicit instead of citing the now-fixed entity-coalescing reason.
+
+## fountain StreamingParser: spurious per-block StartDocument/EndDocument + title-page misread — fixed (2026-07-30)
+
+`fountain_fmt::batch::StreamingParser::emit_block()` re-parsed each accumulated block via
+`crate::events::events(&text)` and forwarded every event it yielded — including that call's
+own `StartDocument`/`EndDocument` pair — straight to the handler with no filtering. Bulk
+`events()` over the whole input emits exactly one `StartDocument`/`EndDocument` pair;
+`StreamingParser` emitted one pair PER accumulated block, diverging on any fixture with more
+than one blank-line-separated block (the dominant case, not an edge case).
+
+A second, narrower defect shared the same re-parse-in-isolation root cause:
+`parse_title_page()` ran unconditionally at the start of every `parse()` call with no "is
+this really the first block of the whole document" guard, so a body block matching
+`key: value` for one of the 9 recognized title-page field names (title/credit/author/
+authors/source/draft date/contact/copyright/notes) got misread as metadata when re-parsed in
+isolation — `parse_screenplay()` never even saw those lines, so the block's content was
+silently dropped entirely (not just mislabeled).
+
+**Fix:**
+- `StreamingParser` now owns exactly one `StartDocument`/`EndDocument` pair for the whole
+  stream: `StartDocument` is dispatched eagerly in `new()` (matching bulk `events()`'s
+  behavior on empty input, which still emits `[StartDocument, EndDocument]`), `EndDocument`
+  in `finish()`. Both are filtered out of every per-block re-parse's forwarded events.
+- Only the first accumulated block is parsed via the full `crate::events::events()` (so real
+  title-page metadata is still recognized when genuinely present at the start of the
+  document). Every later block goes through a new `crate::events::events_body()`, backed by
+  a new `crate::parse::parse_screenplay_only()` that skips `parse_title_page()` entirely —
+  not just filters its output, since filtering alone can't recover content
+  `parse_title_page()` already consumed into the metadata map.
+
+New fixture: `fixtures/fountain/adv-body-line-looks-like-title-field` (a scene heading +
+action block, then a later action-shaped `Source: ...` line) — verified against the ground
+truth via a direct `parse()` call before writing `expected.json`, and confirmed the fixture
+fails without the fix (a body-only regression check, matching the same
+stash-fix-then-rerun methodology used for the wiki-family `parse_list()` fixes above).
+
+**`KNOWN_FAILURES` entry removed:** `fountain`/`streaming_parser` — both bugs it described
+are fixed; `docs/format-audit.md`'s fountain row and `CAPABILITIES`'s comment updated in
+place. `fountain`/`streaming_writer` (architecturally hollow buffer-then-`finish()` writer)
+is untouched — a separate, out-of-scope gap.
+
+## ansi StreamingParser/events: spurious ResetStyle + cross-chunk style/text loss — two of three bugs fixed, one left open (2026-07-30)
+
+Two bugs were tracked: (1) `events()` emitting a spurious `ResetStyle` event whenever an
+unrecognized/no-op SGR group (e.g. `\x1b[999m`) happened to leave `style` empty, conflating
+"style ended up empty" with "an explicit reset code was seen"; (2) `StreamingParser::
+drain_complete` losing running SGR style state across chunk boundaries, since it built a
+brand-new `EventIter` (`style: Style::default()`) on every drain call.
+
+**Fix (1):** `apply_sgr_event()` now returns whether it actually applied an explicit reset
+code (`0` or an empty code); only that return value triggers `ResetStyle`. A no-op/
+unrecognized SGR group now emits `SetStyle(unchanged style)` instead of a spurious reset —
+still an event (not silently dropped, since parse()'s `AnsiNode` has no representation of a
+no-op SGR group either way — see the `NotYetWired` `events` entry), just no longer
+mislabeled as an explicit reset.
+
+**Fix (2):** `EventIter` gained `new_with_style()`/`current_style()` so `StreamingParser` can
+carry its running `style` field forward across `drain_complete()`/`finish()` calls by hand
+(same shape as docbook-fmt's `entity_resolver` persistence pattern) instead of resetting to
+default every call.
+
+**Fixing (2) uncovered a third, previously-masked bug** (not in the original two-item brief,
+but the same "genuine cross-chunk state" class): since `drain_complete()` built a fresh
+`EventIter` per call regardless, adjacent `Text` events from separate drain calls were never
+merged — fine-grained (e.g. single-byte) chunking fragmented one text run into one `Text`
+event per call, reproducing even with an *unchanging* style throughout (so unrelated to bug
+(2)'s SGR-state-loss mechanism specifically). Fixed via a `pending_text: Option<(String,
+Style)>` accumulator on `StreamingParser`, flushed whenever a non-`Text` event is dispatched,
+the style changes, or at end of input — same shape as the docbook-fmt/jats-fmt/tei-fmt
+entity-coalescing fix.
+
+**A fourth, distinct bug was found and left open** (not attempted — real architecture, not a
+small fix, per the task's own "leave it as a KnownFailure with a sharpened reason" guidance):
+`EventIter::next()` treats an OSC 8 hyperlink as one atomic token, scanning forward within a
+single `next()` call all the way to its *matching closing* OSC 8 sequence
+(`\x1b]8;;\x07`). `find_safe_boundary()` has no concept of this open/close pairing — it only
+asks "is this one escape sequence, by itself, syntactically complete" — so it happily calls a
+complete *opening* OSC 8 sequence a safe boundary on its own. Under fine-grained chunking
+(fixtures `hyperlink`, `rare-hyperlink-uri`; reproduces under `single_byte` and
+`chunks_of_3`, not `whole`), `drain_complete()` then parses just the opening sequence in
+isolation, finds no closer within that truncated slice, and emits a `Hyperlink` event with
+empty text immediately — the link text and the closing sequence then get parsed separately
+(as plain `Text` and a stray `RawEscape`) on a later call. Properly fixing this means teaching
+`find_safe_boundary()` to recognize an opening OSC 8 sequence and hold everything up to its
+matching closer as one unsplittable unit — the same class of "buffer until a semantic close
+is seen" logic `html-fmt`'s `StreamingParser` already needs for HTML5 tree construction, not
+a one-line patch. Left as a `KnownFailure` with a corrected, narrowed description.
+
+Verified no other divergences exist beyond the hyperlink fixtures: wrote a temporary
+scratch test iterating every ansi fixture under `whole`/`single_byte`/`chunks_of_3` chunking
+and diffing bulk `events()` against `StreamingParser` output directly (the harness's own
+equivalence check only records the *first* divergence per run, via `result.is_ok()` gating,
+so it can't by itself rule out additional masked bugs) — only `hyperlink` and
+`rare-hyperlink-uri` diverged, both only under fine-grained chunking, confirming the two
+originally-scoped bugs (and the incidentally-discovered text-coalescing one) are the only
+things actually fixed here, with no further surprises hiding behind them.
+
+**No new fixtures needed** — the existing `fixtures/ansi/adv-unknown-sgr` fixture already
+exercises both fixed bugs via the harness's existing cross-API equivalence checks (it's the
+exact fixture the original bug reports cited).
+
+**`KNOWN_FAILURES` entries not removed, both corrected:** `ansi`/`streaming_parser`'s
+description is narrowed to describe only the remaining hyperlink-span-atomicity gap (the two
+originally-described bugs are noted fixed in a comment above the entry). `ansi`/
+`streaming_writer`'s description is corrected too: it still fails on `adv-unknown-sgr`, but
+for what is now a *different*, pre-existing, genuine reason (`parse()`'s AST drops a real
+trailing `\x1b[0m` that `events()`/the streaming Writer faithfully preserve — a `parse()`/
+`build()` fidelity gap, not a streaming-API defect) rather than the fixed spurious-ResetStyle
+cause it originally cited.

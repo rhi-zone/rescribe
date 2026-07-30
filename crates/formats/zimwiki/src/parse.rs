@@ -212,6 +212,16 @@ impl<'a> Parser<'a> {
                 break;
             }
 
+            // A marker-type change (bullet run followed by a numbered run,
+            // or vice versa) ends *this* list rather than being folded into
+            // it — even across a blank line the loop above already skipped
+            // past. Without this check the loop only verifies "some marker
+            // matched," so a blank-line-separated list of the other type
+            // gets silently merged into this one, mislabeling its items.
+            if is_bullet == ordered || is_numbered != ordered {
+                break;
+            }
+
             let content = if is_bullet {
                 &trimmed[2..]
             } else if let Some(pos) = trimmed.find(". ") {

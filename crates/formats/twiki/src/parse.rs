@@ -488,19 +488,31 @@ fn parse_list(lines: &[&str], start: usize) -> (Block, usize) {
             continue;
         }
 
+        // A marker-type change (bullet line inside an ordered list, or vice
+        // versa) ends this list rather than being folded into it — matching
+        // `ordered`, which was fixed from the *first* line's marker, keeps
+        // the whole list one consistent type instead of silently absorbing
+        // a differently-marked line (and, before this check, mislabeling
+        // its text: `strip_prefix` for the wrong marker would silently fail
+        // and leave the raw marker in the extracted content).
+        if ordered && !trimmed.starts_with("1.") {
+            break;
+        }
+        if !ordered && !trimmed.starts_with('*') {
+            break;
+        }
+
         let text = if ordered {
             trimmed.strip_prefix("1.").unwrap_or(trimmed).trim()
         } else {
             trimmed.strip_prefix('*').unwrap_or(trimmed).trim()
         };
 
-        if trimmed.starts_with('*') || trimmed.starts_with("1.") {
-            items.push(ListItem {
-                inlines: parse_inline(text),
-                children: vec![],
-                span: Span::NONE,
-            });
-        }
+        items.push(ListItem {
+            inlines: parse_inline(text),
+            children: vec![],
+            span: Span::NONE,
+        });
         i += 1;
     }
 
@@ -538,19 +550,25 @@ fn parse_nested_list(lines: &[&str], start: usize, min_indent: usize) -> (Block,
             continue;
         }
 
+        // Same marker-type-change guard as parse_list above.
+        if ordered && !trimmed.starts_with("1.") {
+            break;
+        }
+        if !ordered && !trimmed.starts_with('*') {
+            break;
+        }
+
         let text = if ordered {
             trimmed.strip_prefix("1.").unwrap_or(trimmed).trim()
         } else {
             trimmed.strip_prefix('*').unwrap_or(trimmed).trim()
         };
 
-        if trimmed.starts_with('*') || trimmed.starts_with("1.") {
-            items.push(ListItem {
-                inlines: parse_inline(text),
-                children: vec![],
-                span: Span::NONE,
-            });
-        }
+        items.push(ListItem {
+            inlines: parse_inline(text),
+            children: vec![],
+            span: Span::NONE,
+        });
         i += 1;
     }
 

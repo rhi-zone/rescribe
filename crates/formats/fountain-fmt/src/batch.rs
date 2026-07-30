@@ -92,17 +92,31 @@ pub struct StreamingParser<H: Handler> {
     /// Complete lines of the block currently being accumulated.
     block_lines: Vec<String>,
     state: BlockState,
+    /// Whether the *next* block to be emitted is the first one seen so far.
+    /// Only the first block may ever be a title page — see
+    /// [`crate::events::events_body`]'s doc comment for why every later
+    /// block is parsed through a title-page-blind path instead.
+    is_first_block: bool,
 }
 
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
+    ///
+    /// Dispatches `StartDocument` immediately: bulk `events()` always
+    /// wraps the whole document in exactly one `StartDocument`/`EndDocument`
+    /// pair (even for empty input), and `StreamingParser` owns that single
+    /// pair itself now rather than forwarding one per re-parsed block (see
+    /// `emit_block`'s doc comment).
     pub fn new(handler: H) -> Self {
-        StreamingParser {
+        let mut parser = StreamingParser {
             handler,
             line_buf: Vec::new(),
             block_lines: Vec::new(),
             state: BlockState::Between,
-        }
+            is_first_block: true,
+        };
+        parser.handler.handle(OwnedEvent::StartDocument);
+        parser
     }
 
     /// Feed a chunk of bytes.  May call `handler.handle()` zero or more times.
@@ -163,13 +177,38 @@ impl<H: Handler> StreamingParser<H> {
         self.block_lines.push(line);
     }
 
+    /// Re-parse the accumulated block in isolation and forward its events.
+    ///
+    /// Only the first block seen may be a title page (Fountain's title page
+    /// is only ever valid as the very first thing in a document), so the
+    /// first block is parsed via [`crate::events::events`] (full title-page
+    /// detection); every later block goes through
+    /// [`crate::events::events_body`] instead, which never attempts
+    /// title-page parsing — otherwise a later body block shaped like
+    /// `key: value` for a recognized title-page field name would be
+    /// misread as metadata and its content silently dropped.
+    ///
+    /// Either way, the re-parsed block's own `StartDocument`/`EndDocument`
+    /// pair is filtered out here: `StreamingParser` owns exactly one such
+    /// pair for the whole stream (`StartDocument` dispatched in `new()`,
+    /// `EndDocument` in `finish()`), not one per accumulated block.
     fn emit_block(&mut self) {
         if self.block_lines.is_empty() {
             return;
         }
         let text = self.block_lines.join("\n");
         self.block_lines.clear();
-        for event in crate::events::events(&text) {
+
+        let events: Vec<OwnedEvent> = if self.is_first_block {
+            self.is_first_block = false;
+            crate::events::events(&text).collect()
+        } else {
+            crate::events::events_body(&text).collect()
+        };
+        for event in events {
+            if matches!(event, OwnedEvent::StartDocument | OwnedEvent::EndDocument) {
+                continue;
+            }
             self.handler.handle(event);
         }
     }
@@ -184,6 +223,7 @@ impl<H: Handler> StreamingParser<H> {
             self.feed_line(line);
         }
         self.emit_block();
+        self.handler.handle(OwnedEvent::EndDocument);
     }
 }
 

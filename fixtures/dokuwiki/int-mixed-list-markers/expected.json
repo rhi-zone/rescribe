@@ -1,0 +1,12 @@
+{
+  "description": "An asterisk-bullet list immediately followed (no blank line — dokuwiki's parse_list_items has no blank-line-skip logic, so a blank line already ends the list on its own) by a dash-marker list must parse as two separate list blocks at the same depth, not be merged into one list tagged with the first item's marker type",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 2 },
+    { "path": "/0/0/0", "kind": "text", "props": { "content": "First item" } },
+    { "path": "/0/1/0", "kind": "text", "props": { "content": "Second item" } },
+    { "path": "/1", "kind": "list", "props": { "ordered": true }, "children_count": 2 },
+    { "path": "/1/0/0", "kind": "text", "props": { "content": "First ordered" } },
+    { "path": "/1/1/0", "kind": "text", "props": { "content": "Second ordered" } }
+  ]
+}

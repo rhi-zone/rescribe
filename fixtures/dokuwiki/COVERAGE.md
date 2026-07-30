@@ -64,6 +64,7 @@ DokuWiki syntax reference: https://www.dokuwiki.org/wiki:syntax
 - [x] inline markup inside list items — `int-inline-in-list`
 - [x] blockquote with inline markup — `int-blockquote-inline`
 - [x] multiple paragraphs with mixed inline — `int-mixed-paragraphs`
+- [x] asterisk-bullet list immediately followed by a differently-marked (dash) list — `int-mixed-list-markers`
 
 ## Adversarial
 

@@ -1,0 +1,12 @@
+{
+  "description": "A later block (after the first) that looks like a title-page `key: value` line for a recognized field name (here 'Source:') must still parse as ordinary body content (an action paragraph), not be misread as document metadata — title pages are only ever valid as the very first thing in a document",
+  "category": "adversarial",
+  "metadata": {},
+  "assertions": [
+    { "path": "/0", "kind": "heading", "props": { "fountain:type": "scene_heading" } },
+    { "path": "/1", "kind": "paragraph", "props": { "fountain:type": "action" } },
+    { "path": "/1/0", "kind": "text", "props": { "content": "A customer orders coffee." } },
+    { "path": "/2", "kind": "paragraph", "props": { "fountain:type": "action" } },
+    { "path": "/2/0", "kind": "text", "props": { "content": "Source: adapted from a novel by request." } }
+  ]
+}

@@ -66,6 +66,7 @@ VimWiki syntax reference: https://vimwiki.github.io/vimwikiwiki/VimWiki%20Markup
 - [x] inline markup inside list items — `inline-in-list`
 - [x] task list nested under regular list — `task-nested`
 - [x] blockquote with inline markup — `blockquote-inline`
+- [x] bullet list immediately followed by a differently-marked (hash-ordered) list — `mixed-list-markers`
 
 ## Adversarial
 

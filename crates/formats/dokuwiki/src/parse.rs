@@ -308,7 +308,7 @@ impl<'a> Parser<'a> {
             .and_then(|l| l.trim_start().chars().next());
         let ordered = first_char == Some('-');
 
-        let items = self.parse_list_items(1);
+        let items = self.parse_list_items(1, ordered);
 
         Block::List {
             ordered,
@@ -317,7 +317,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_list_items(&mut self, expected_depth: usize) -> Vec<ListItem> {
+    fn parse_list_items(&mut self, expected_depth: usize, ordered: bool) -> Vec<ListItem> {
         let mut items: Vec<ListItem> = Vec::new();
 
         while let Some(line) = self.current_line() {
@@ -340,7 +340,7 @@ impl<'a> Parser<'a> {
             if depth > expected_depth {
                 // Nested list — parse as children of the last item
                 let nested_ordered = trimmed.starts_with('-');
-                let nested_items = self.parse_list_items(depth);
+                let nested_items = self.parse_list_items(depth, nested_ordered);
                 if let Some(last) = items.last_mut() {
                     last.children.push(Block::List {
                         ordered: nested_ordered,
@@ -349,6 +349,16 @@ impl<'a> Parser<'a> {
                     });
                 }
                 continue;
+            }
+
+            // Same depth: a marker-type change (bullet vs numbered-equivalent
+            // `-`) ends *this* list rather than being folded into it — the
+            // list's `ordered` flag was fixed once from its first line, so a
+            // same-depth item of the other marker type must stop the loop
+            // instead of being silently absorbed and mislabeled.
+            let item_is_ordered = trimmed.starts_with('-');
+            if item_is_ordered != ordered {
+                break;
             }
 
             // Same depth: regular item

@@ -518,34 +518,56 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     // docbook-fmt, jats-fmt, tei-fmt are byte-identical in implementation
     // shape (verified via `diff` across batch.rs/writer.rs: only doc
-    // comments and AST/event type names differ), so the same three real bugs
-    // — found by this harness, not present in any prior audit — apply to all
-    // three identically. All three ARE genuinely independent/incremental
+    // comments and AST/event type names differ), so the same bugs — found by
+    // this harness, not present in any prior audit — applied to all three
+    // identically. All three ARE genuinely independent/incremental
     // implementations (events() pulls tokens straight off quick_xml::Reader
     // without building an AST; the streaming Writer calls quick_xml::Writer
     // directly per event with no buffering) — these are logic bugs, not
-    // architectural hollowness.
+    // architectural hollowness. The streaming_parser mismatched/unmatched-
+    // end-tag bug (StreamingParser silently accepting malformed XML that
+    // events() correctly rejects) has since been fixed identically in all
+    // three via a hand-tracked open-element stack in batch.rs; the events()
+    // entity-coalescing gap has also since been fixed (see below); the
+    // streaming_writer auto-close-recovery gap remains open.
     FormatCapabilities {
         format: "docbook",
+        // Fixed 2026-07-30: events()/EventIter used to emit one Text event per resolved
+        // character/predefined/DTD entity (e.g. `&amp;` decoded to its own Text("&") event)
+        // instead of merging it into the surrounding text run the way parse()'s AST does
+        // (parse.rs's `current_text` accumulator). EventIter::next() now accumulates a run
+        // of adjacent text-equivalent tokens via a one-token lookahead (`pending` field) and
+        // dispatches one merged Text event, matching parse(); StreamingParser's batch.rs
+        // drain() got the equivalent fix (a `pending_text` field persisting across drain()
+        // calls). Confirmed via fixture adv-entity-references (a &amp; b &lt; c &gt; d &apos;
+        // e&apos; &quot;f&quot; now yields one Text event, not six).
+        //
+        // events is still KnownFailure, though, because a *different*, already-tracked gap
+        // (the streaming_writer entry below: events() lacks parse()'s malformed-XML
+        // auto-close recovery) also surfaces through this same events()-vs-
+        // events_from_doc(&parse()) equivalence check, via fixture adv-malformed-xml — that
+        // fixture has no entities in it at all, so this is not a re-regression of the
+        // entity-coalescing bug, just a second, unrelated cause tripping the same check.
         events: ApiState::KnownFailure(
-            "events()/EventIter emits one Text event per resolved character/predefined entity \
-             (e.g. `&amp;` decodes to its own Text(\"&\") event) instead of merging it into the \
-             surrounding text run the way parse()'s AST does (parse.rs's `current_text` \
-             accumulator, documented in parse.rs's module doc as deliberate coalescing) — found \
-             via this harness's events()-vs-events_from_doc(&parse()) equivalence check \
-             (fixture adv-entity-references, 3/110 docbook fixtures contain entities)",
+            "parse() auto-closes unclosed elements on malformed XML (synthetic EndElement \
+             nodes, see parse.rs's 'unclosed element' diagnostics) but events()/EventIter has \
+             no such recovery — it stops at the genuine XML parse error with no synthetic \
+             close events — so events() diverges from events_from_doc(&parse()) for fixture \
+             adv-malformed-xml specifically (not an entity-coalescing issue: that part is \
+             fixed, see the events field's doc comment above). Same root cause as the \
+             streaming_writer KnownFailure below.",
         ),
-        streaming_parser: ApiState::KnownFailure(
-            "StreamingParser's drain() (batch.rs) sets check_end_names=false and \
-             allow_unmatched_ends=true on its per-drain-call quick_xml::Reader — an \
-             architecturally necessary consequence of only ever seeing the unconsumed tail, \
-             not the full document, on each call (documented in batch.rs's drain() comment) — \
-             so it silently accepts a mismatched end tag (e.g. an unclosed <para> closed by \
-             </article>) that events()'s single continuous Reader (default \
-             check_end_names=true) correctly rejects as a parse error; the two diverge on \
-             malformed input with zero diagnostics from StreamingParser (fixture \
-             adv-malformed-xml) instead of matching events()'s error-and-stop behavior",
-        ),
+        // StreamingParser's drain() (batch.rs) still sets check_end_names=false and
+        // allow_unmatched_ends=true on its per-drain-call quick_xml::Reader — that part is
+        // architecturally necessary, since each drain() call only ever sees the unconsumed
+        // tail, not the full document. But it now tracks open-element names itself in a
+        // `Vec<String>` field that persists across drain() calls (the same "survives
+        // multiple feed() calls" shape as entity_resolver), and validates every End event
+        // against that stack by hand: a mismatch or an End against an empty stack pushes a
+        // Diagnostic and stops draining for good, mirroring parse()'s "fatal diagnostic +
+        // stop" behavior on a genuine XML error. Fixed and confirmed passing (fixtures
+        // adv-malformed-xml, adv-unmatched-end-tag).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "downstream of the events() gap above: parse() has explicit malformed-XML recovery \
              (auto-closes unclosed elements with synthetic EndElement nodes, see parse.rs's \
@@ -558,16 +580,30 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "jats",
+        // Fixed alongside docbook-fmt (byte-identical events.rs shape); entity-coalescing is
+        // confirmed working. Still KnownFailure for the same unrelated malformed-XML
+        // auto-close-recovery reason as docbook's events entry above (jats has its own
+        // adv-malformed-xml fixture, a truncated-input case, that trips the same gap).
         events: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation (byte-identical batch.rs/events.rs shape): \
-             events()/EventIter does not coalesce consecutive resolved-entity Text events into \
-             one Text run the way parse()'s AST does; see the \"docbook\" events KnownFailure \
-             for the root cause",
+            "shares docbook-fmt's implementation (byte-identical events.rs shape): events() \
+             lacks parse()'s malformed-XML auto-close recovery, diverging on fixture \
+             adv-malformed-xml; see the \"docbook\" events KnownFailure for the root cause",
         ),
         streaming_parser: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation: StreamingParser's per-drain-call Reader \
-             disables check_end_names/allow_unmatched_ends and so does not detect mismatched \
-             end tags events() catches; see the \"docbook\" streaming_parser KnownFailure",
+            "the mismatched/unmatched-end-tag bug shared with docbook-fmt/tei-fmt (see the \
+             \"docbook\" streaming_parser comment above) is fixed here too (confirmed passing \
+             on fixtures adv-mismatched-end-tag, adv-unmatched-end-tag) — but jats-fmt's own \
+             pre-existing adv-malformed-xml fixture (`<article ...><body><p>Unterminated \
+             content`, no closing tags at all — a truncated-input case, not a mismatched-tag \
+             one, so the fix above doesn't touch it) exposes an unrelated, narrower gap once \
+             unmasked: the adversarial-chunking test's incrementality probe feeds exactly the \
+             first half of the input (40 of 81 bytes) and asserts at least one event was \
+             delivered before finish(); those 40 bytes end mid-attribute-value inside the \
+             still-open root <article ...> start tag (its xmlns:xlink=\"...\" attribute alone \
+             is longer than half the file), so zero events is the correct, spec-conforming \
+             answer for that exact split point, not a StreamingParser defect — but the probe's \
+             fixed 50% split doesn't know that. Not touched here: fixing this needs either a \
+             smarter incrementality probe or a different single-fixture-shape assertion",
         ),
         streaming_writer: ApiState::KnownFailure(
             "shares docbook-fmt's implementation: the streaming Writer inherits events()'s lack \
@@ -593,32 +629,59 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              unconditionally emits one SetStyle/ResetStyle event per 'm'-terminated CSI group \
              regardless of what follows — the reverse of the usual defect shape (here parse()'s \
              own AST is the lossier side), so there is no way to reconstruct a faithful \
-             ast_to_events projection purely from the AST. Separately, and found via the \
-             streaming_parser/streaming_writer checks below without needing that projection: \
-             events.rs's parse_csi_event 'm' arm emits ResetStyle whenever the resulting style \
-             is empty (`self.style.is_empty() && !params.is_empty()`), conflating \"style ended \
-             up empty\" with \"an explicit reset code was seen\" — an unrecognized/no-op SGR \
-             group (e.g. \\x1b[999m) that leaves style unchanged still emits a spurious \
-             ResetStyle event",
+             ast_to_events projection purely from the AST. Separately: events.rs's \
+             parse_csi_event 'm' arm used to emit ResetStyle whenever the resulting style was \
+             empty, conflating \"style ended up empty\" with \"an explicit reset code was \
+             seen\" — an unrecognized/no-op SGR group (e.g. \\x1b[999m) that left style \
+             unchanged still emitted a spurious ResetStyle event. Fixed 2026-07-30: \
+             apply_sgr_event() now returns whether it actually applied an explicit reset code \
+             (`0` or empty), and only that triggers ResetStyle; a no-op/unrecognized code now \
+             emits SetStyle(unchanged style) instead, never a spurious reset.",
         ),
+        // Two of the three originally-tracked bugs are fixed (2026-07-30): (1)
+        // drain_complete() used to build a brand-new EventIter with style: Style::default()
+        // on every drain, losing running style state across chunk boundaries — now uses
+        // EventIter::new_with_style()/current_style() to carry style forward by hand,
+        // mirroring the docbook-fmt entity_resolver pattern. (2) inherited the
+        // spurious-ResetStyle bug from events() (see the events field above), also fixed.
+        // Fixing (1) uncovered a third, previously-masked, unrelated bug (reproduces even
+        // with an unchanging empty style throughout): drain_complete()'s fresh EventIter per
+        // call also meant adjacent Text events from separate calls were never merged, so
+        // fine-grained (e.g. single-byte) chunking fragmented one text run into one Text
+        // event per call — fixed via a `pending_text` accumulator, same shape as the
+        // docbook-fmt entity-coalescing fix.
         streaming_parser: ApiState::KnownFailure(
-            "two compounding bugs, found via adversarial-chunking equivalence against events(): \
-             (1) StreamingParser::drain_complete (batch.rs) calls crate::events::events(&to_parse) \
-             — a brand-new EventIter with style: Style::default() — on every drain, so the \
-             running style state does not persist across multiple drain_complete() calls; a \
-             chunk boundary between an SGR sequence and the text it colors loses that style \
-             under fine-grained chunking (fixture adv-unknown-sgr fails under \"single_byte\" \
-             chunking specifically, not \"whole\", pinning the cross-call state loss). (2) \
-             inherits events()'s spurious-ResetStyle-on-unrecognized-SGR bug (see the \"ansi\" \
-             events entry)",
+            "after the three fixes above, one genuinely distinct, unfixed bug remains, found \
+             via the same adversarial-chunking equivalence check (fixtures hyperlink, \
+             rare-hyperlink-uri, both only under fine-grained chunking like single_byte or \
+             chunks_of_3 — not under whole-input): EventIter::next() treats an OSC 8 \
+             hyperlink as a single atomic token by scanning forward, within one next() call, \
+             all the way to its matching closing OSC 8 sequence (`\\x1b]8;;\\x07`) — but \
+             find_safe_boundary() (batch.rs) has no concept of this pairing, and calls a \
+             complete, well-formed *opening* OSC 8 sequence a safe boundary on its own. Under \
+             chunking, drain_complete() then parses just that opening sequence in isolation, \
+             finds no closing sequence within the truncated slice, and emits a Hyperlink event \
+             with an empty text field immediately instead of buffering through to the close \
+             — the link \
+             text and the close sequence then get parsed separately (as plain Text and a \
+             stray RawEscape) on a later call. Fixing this needs find_safe_boundary() taught \
+             to recognize an opening OSC 8 hyperlink sequence and treat everything up to its \
+             matching closer as one unsplittable unit (the same kind of \"buffer until a \
+             semantic close is seen\" logic html-fmt's StreamingParser already needs for tree \
+             construction) — a real architectural extension, not a small bug fix, so left open \
+             here rather than guessed at.",
         ),
         streaming_writer: ApiState::KnownFailure(
-            "downstream of events()'s spurious-ResetStyle-on-unrecognized-SGR bug (see the \
-             \"ansi\" events entry): Writer's ResetStyle handler unconditionally writes the \
-             literal \\x1b[0m bytes for every ResetStyle event it receives, so the spurious \
-             event becomes spurious visible output — build() emits \"Text\\n\" for fixture \
-             adv-unknown-sgr (parse()'s AST has no node for the unrecognized SGR at all) while \
-             the streaming Writer emits \"\\x1b[0mText\\x1b[0m\\n\"",
+            "downstream of a *different*, still-open issue than the (now-fixed) spurious- \
+             ResetStyle bug: for fixture adv-unknown-sgr, `\\x1b[999m` (no-op, no ResetStyle) \
+             followed by `\\x1b[0m` (a genuine explicit reset) means events() now correctly \
+             emits exactly one ResetStyle, for the real trailing reset — but parse()'s AST has \
+             no node for either SGR group at all (see the \"ansi\" events entry's first \
+             paragraph), so build() reconstructs \"Text\\n\" while the streaming Writer, fed \
+             by events() and writing every ResetStyle as literal \\x1b[0m bytes, reconstructs \
+             \"Text\\x1b[0m\\n\" — a legitimate escape sequence from the source that parse()'s \
+             AST silently drops with no raw-preservation fallback, not a StreamingParser or \
+             Writer defect",
         ),
     },
     // odf-fmt backs odt/ods/odp. events() is a genuine independent
@@ -666,17 +729,18 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "tei",
+        // Fixed alongside docbook-fmt (byte-identical events.rs shape); entity-coalescing is
+        // confirmed working. Still KnownFailure for the same unrelated malformed-XML
+        // auto-close-recovery reason as docbook's events entry above.
         events: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation (byte-identical batch.rs/events.rs shape): \
-             events()/EventIter does not coalesce consecutive resolved-entity Text events into \
-             one Text run the way parse()'s AST does; see the \"docbook\" events KnownFailure \
-             for the root cause",
+            "shares docbook-fmt's implementation (byte-identical events.rs shape): events() \
+             lacks parse()'s malformed-XML auto-close recovery, diverging on fixture \
+             adv-malformed-xml; see the \"docbook\" events KnownFailure for the root cause",
         ),
-        streaming_parser: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation: StreamingParser's per-drain-call Reader \
-             disables check_end_names/allow_unmatched_ends and so does not detect mismatched \
-             end tags events() catches; see the \"docbook\" streaming_parser KnownFailure",
-        ),
+        // Fixed alongside docbook-fmt/jats-fmt (byte-identical batch.rs shape); see the
+        // "docbook" streaming_parser comment above. Confirmed passing (fixture
+        // adv-malformed-xml, adv-unmatched-end-tag).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "shares docbook-fmt's implementation: the streaming Writer inherits events()'s lack \
              of parse()'s malformed-XML auto-close recovery; see the \"docbook\" \
@@ -847,20 +911,19 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "vimwiki",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "vimwiki_fmt's StreamingParser and events() disagree even under the 'whole input, \
-             one feed() call' chunking (fixture 'oracle'), so this is not a chunk-boundary bug: \
-             parse()/events() treat a blank-line-separated run of an unordered list, then an \
-             ordered list, then an unordered checklist (no other content between them) as ONE \
-             Block::List with a single ordered flag for all 8 items -- silently losing the \
-             ordered/unordered distinction for the second and third groups, since Block::List \
-             has one `ordered: bool` for the whole list, not per-item -- while \
-             batch::StreamingParser's emit_block hard-splits on every blank line (batch.rs's \
-             feed_line unconditionally treats a blank line as a block boundary), so it emits \
-             three separate, correctly-typed StartList/EndList pairs. The two implementations \
-             disagree about where one list ends and the next begins, not just about \
-             representing the disagreement identically; see TODO.md",
-        ),
+        // Fixed 2026-07-30: vimwiki_fmt::parse::Parser::parse_list (parse.rs) had the same
+        // "loop condition only checks that some marker matched" defect as zimwiki's/markua's
+        // parse_list (independently discovered here, not chunk-boundary-related — it
+        // reproduced even under the 'whole input, one feed() call' chunking, fixture
+        // 'oracle') — a blank-line-separated unordered list, then ordered list, then
+        // unordered checklist (checklists are list items with a checkbox marker prefix,
+        // using the same bullet/numbered/hash marker detection) got merged by parse()/
+        // events() into ONE Block::List for all 8 items, tagged with the first group's
+        // `ordered` value, while batch::StreamingParser's blank-line block-splitter
+        // correctly emitted three separately-typed lists. Now that parse_list itself stops
+        // at a marker-type change, parse()/events() and StreamingParser agree (fixture
+        // vimwiki/int-mixed-list-markers, confirmed passing under adversarial chunking).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "vimwiki_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
              calls collect_doc_from_events() + build() inside finish() (writer.rs's \
@@ -898,23 +961,18 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "zimwiki",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "zimwiki::parse::Parser::parse_list (parse.rs:190-241) doesn't stop consuming list \
-             items when the marker type changes: its loop condition is `is_bullet || \
-             is_numbered` (line 211-213) with no check that a run of numbered items follows a \
-             run of bulleted ones, and its blank-line arm (line 199-202) skips blank lines \
-             with `continue` instead of breaking — so a blank-line-separated unordered list \
-             immediately followed by an ordered list (fixtures/zimwiki/oracle: '* First item' \
-             .. blank .. '1. Ordered one') gets merged by the *whole-document* parser into ONE \
-             `Block::List` tagged with the FIRST item's `ordered` value, silently discarding \
-             that items 4-5 were numbered. `StreamingParser`'s blank-line block-splitter \
-             (batch.rs) hard-splits at that same blank line BEFORE re-parsing each half in \
-             isolation, so it does NOT reproduce this merge and instead emits two correctly-typed \
-             lists — the two diverge because they disagree on where the block boundary is, not \
-             because StreamingParser lost information the bulk parser had. This is a pre-existing \
-             parse()-level bug independent of streaming, found while wiring this harness's \
-             adversarial-chunking equivalence check; see TODO.md",
-        ),
+        // Fixed 2026-07-30: zimwiki::parse::Parser::parse_list (parse.rs) didn't stop
+        // consuming list items when the marker type changed — its loop condition only
+        // checked "some marker matched," not that it matched the list's own `ordered`
+        // flag, and its blank-line arm skipped blank lines with `continue` instead of
+        // breaking — so a blank-line-separated unordered list immediately followed by an
+        // ordered list got merged by the *whole-document* parser into ONE `Block::List`
+        // tagged with the first item's `ordered` value. `StreamingParser`'s blank-line
+        // block-splitter hard-split at that same boundary and did NOT reproduce the
+        // merge, so the two disagreed. Now that parse_list itself stops at a marker-type
+        // change, parse() and StreamingParser agree (fixture zimwiki/int-mixed-list-markers,
+        // confirmed passing under adversarial chunking).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "zimwiki::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
              reconstructs the AST + calls emit::build() inside finish() (writer.rs:24-34); \
@@ -931,20 +989,15 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "markua",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "markua::parse::Parser::parse_list (parse.rs:379-432) has the identical structural \
-             bug already found in zimwiki's parse_list: its loop condition accepts either \
-             `is_bullet` or `is_numbered` with no check for a marker-type change, so a \
-             blank-line-separated unordered list immediately followed by an ordered list \
-             (fixtures/markua/oracle: '- item one' / '- item two' .. blank .. '1. first' / \
-             '2. second') gets merged by the whole-document parser into ONE `Block::List` \
-             tagged with the first item's `ordered` value, silently mislabeling the numbered \
-             items. `StreamingParser`'s blank-line block-splitter hard-splits at that blank \
-             line before re-parsing each half in isolation, so it correctly emits two \
-             separately-typed lists instead — same root cause and same 'the two block-splitting \
-             passes disagree' shape as zimwiki, found while wiring this harness's \
-             adversarial-chunking equivalence check; see TODO.md",
-        ),
+        // Fixed 2026-07-30, identical shape and cause to zimwiki's fix above:
+        // markua::parse::Parser::parse_list (parse.rs) had the same "loop condition only
+        // checks that some marker matched, never that it matches this list's `ordered`
+        // flag" defect (independently discovered from zimwiki's, but from the same
+        // copy-paste lineage), so a blank-line-separated unordered list immediately
+        // followed by an ordered list got merged into ONE `Block::List` tagged with the
+        // first item's `ordered` value. parse() and StreamingParser now agree (fixture
+        // markua/int-mixed-list-markers, confirmed passing under adversarial chunking).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "markua::writer::Writer buffers all fed events into a Vec<OwnedMarkuaEvent> and \
              only reconstructs the AST + calls emit::emit() inside finish() (writer.rs:40-50); \
@@ -1075,22 +1128,26 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "fountain",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "fountain_fmt::batch::StreamingParser's emit_block() re-parses each accumulated \
-             block via crate::events::events(&text) and forwards every event it yields — \
-             including that call's own StartDocument/EndDocument pair — straight to the handler \
-             with no filtering (batch.rs's emit_block(): \"for event in \
-             crate::events::events(&text) { self.handler.handle(event); }\"). Bulk events() over \
-             the whole input emits exactly one StartDocument/EndDocument pair; StreamingParser \
-             emits one pair PER accumulated block, diverging on every fixture with more than one \
-             blank-line-separated block — not an edge case, the dominant failure mode. A second, \
-             narrower defect shares the same re-parse-in-isolation root cause: \
-             parse_title_page() (parse.rs:81) runs unconditionally at the start of every parse() \
-             call with no \"is this really the first block\" guard, so a body block matching \
-             `key: value` for one of the 9 recognized title-page field names is misread as \
-             metadata when re-parsed in isolation — the same class already tracked for t2t's \
-             try_parse_header(); see TODO.md",
-        ),
+        // Fixed 2026-07-30 (both bugs, same root fix): emit_block() used to re-parse each
+        // accumulated block via crate::events::events(&text) and forward every event it
+        // yielded — including that call's own StartDocument/EndDocument pair — with no
+        // filtering, so it emitted one such pair PER block instead of one for the whole
+        // document (the dominant failure mode, not an edge case). Separately,
+        // parse_title_page() ran unconditionally on every re-parse with no "is this really
+        // the first block" guard, so a body block matching `key: value` for one of the 9
+        // recognized title-page field names got misread as metadata and its content
+        // silently swallowed (parse_screenplay() never saw those lines at all — the same
+        // defect class as t2t's try_parse_header()).
+        //
+        // Fix: StreamingParser now owns exactly one StartDocument (dispatched in new())/
+        // EndDocument (dispatched in finish()) pair, filtering both out of every per-block
+        // re-parse's forwarded events. Only the first accumulated block is parsed via the
+        // full crate::events::events() (so real title-page metadata is still recognized
+        // there); every later block goes through the new crate::events::events_body(),
+        // which calls the new crate::parse::parse_screenplay_only() — skipping title-page
+        // detection entirely rather than just filtering its output, since filtering alone
+        // can't recover content that parse_title_page() already consumed into metadata.
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "fountain_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
              reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
@@ -1180,16 +1237,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "twiki::writer::Writer buffers all events and only reconstructs the AST + \
                        calls build() inside finish(); zero bytes reach the sink before finish() \
                        despite content round-tripping correctly",
-    },
-    KnownFailure {
-        format: "vimwiki",
-        api: "streaming_parser",
-        description: "vimwiki_fmt's StreamingParser and events() disagree on where a list ends: \
-                       parse()/events() merge an unordered list, ordered list, and unordered \
-                       checklist (separated only by blank lines, no other content) into one \
-                       Block::List with a single ordered flag, losing the type distinction for \
-                       later groups, while StreamingParser hard-splits on every blank line and \
-                       emits three separately-typed lists",
     },
     KnownFailure {
         format: "vimwiki",
@@ -1347,17 +1394,10 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "docbook",
         api: "events",
-        description: "events()/EventIter emits one Text event per resolved character/predefined \
-                       entity instead of merging it into the surrounding text run the way \
-                       parse()'s AST does",
-    },
-    KnownFailure {
-        format: "docbook",
-        api: "streaming_parser",
-        description: "StreamingParser's per-drain-call Reader disables \
-                       check_end_names/allow_unmatched_ends (architecturally necessary for only \
-                       seeing the unconsumed tail per call) and so silently accepts mismatched \
-                       end tags that events()'s continuous Reader correctly rejects",
+        description: "entity-coalescing is fixed (2026-07-30); still fails on fixture \
+                       adv-malformed-xml for the unrelated, still-open reason: events() lacks \
+                       parse()'s malformed-XML auto-close recovery (same root cause as the \
+                       streaming_writer entry below)",
     },
     KnownFailure {
         format: "docbook",
@@ -1369,12 +1409,20 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "jats",
         api: "events",
-        description: "shares docbook-fmt's implementation; same entity-Text-coalescing gap",
+        description: "shares docbook-fmt's implementation; entity-coalescing is fixed, same \
+                       remaining malformed-XML auto-close-recovery gap",
     },
     KnownFailure {
         format: "jats",
         api: "streaming_parser",
-        description: "shares docbook-fmt's implementation; same check_end_names-disabled gap",
+        description: "the mismatched/unmatched-end-tag bug shared with docbook-fmt/tei-fmt is \
+                       fixed here too, but jats-fmt's own adv-malformed-xml fixture is a \
+                       truncated-input case (not mismatched-tag), and unmasking it exposes an \
+                       unrelated gap: the adversarial-chunking test's fixed 50%-byte-split \
+                       incrementality probe lands mid-attribute-value inside the still-open \
+                       root start tag for that fixture, so zero events delivered at that split \
+                       point is correct behavior, not a StreamingParser defect — the probe \
+                       itself isn't fixture-shape-aware",
     },
     KnownFailure {
         format: "jats",
@@ -1384,12 +1432,8 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "tei",
         api: "events",
-        description: "shares docbook-fmt's implementation; same entity-Text-coalescing gap",
-    },
-    KnownFailure {
-        format: "tei",
-        api: "streaming_parser",
-        description: "shares docbook-fmt's implementation; same check_end_names-disabled gap",
+        description: "shares docbook-fmt's implementation; entity-coalescing is fixed, same \
+                       remaining malformed-XML auto-close-recovery gap",
     },
     KnownFailure {
         format: "tei",
@@ -1406,17 +1450,25 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "ansi",
         api: "streaming_parser",
-        description: "StreamingParser::drain_complete constructs a fresh EventIter (style: \
-                       default) on every drain, losing running style state across chunk \
-                       boundaries under fine-grained chunking; also inherits events()'s \
-                       spurious-ResetStyle-on-unrecognized-SGR bug",
+        description: "style-loss-across-chunks and inherited spurious-ResetStyle are both fixed \
+                       (2026-07-30); a third, previously-masked bug remains: find_safe_boundary \
+                       calls a complete OSC 8 hyperlink *opening* sequence a safe boundary on \
+                       its own, not knowing EventIter treats the whole open..close span as one \
+                       atomic Hyperlink token, so fine-grained chunking splits it into an \
+                       empty-text Hyperlink plus stray Text/RawEscape (fixtures hyperlink, \
+                       rare-hyperlink-uri) — needs find_safe_boundary taught to await a \
+                       matching OSC 8 closer, a real architectural extension",
     },
     KnownFailure {
         format: "ansi",
         api: "streaming_writer",
-        description: "downstream of events()'s spurious ResetStyle event on an unrecognized SGR \
-                       group: Writer unconditionally writes literal reset bytes for every \
-                       ResetStyle event, turning the spurious event into spurious output",
+        description: "the spurious-ResetStyle bug it depended on is fixed (2026-07-30); still \
+                       fails on fixture adv-unknown-sgr, but now for an unrelated, genuine \
+                       reason: parse()'s AST has no node for an SGR group that changes nothing, \
+                       so build() silently drops a real trailing \\x1b[0m from the source while \
+                       the streaming Writer (fed by events(), which does emit a ResetStyle for \
+                       it) faithfully re-emits it — a parse()/build() fidelity gap, not a \
+                       streaming-API defect",
     },
     KnownFailure {
         format: "bbcode",
@@ -1467,28 +1519,10 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     },
     KnownFailure {
         format: "zimwiki",
-        api: "streaming_parser",
-        description: "zimwiki::parse::Parser::parse_list merges a blank-line-separated \
-                       unordered list immediately followed by an ordered list into one \
-                       Block::List tagged with the first item's `ordered` value (a \
-                       whole-document parse()-level bug); StreamingParser's blank-line block \
-                       splitter hard-splits at that boundary and does not reproduce the merge",
-    },
-    KnownFailure {
-        format: "zimwiki",
         api: "streaming_writer",
         description: "zimwiki::writer::Writer buffers all events and only reconstructs the AST \
                        + emits inside finish(); content round-trips but zero bytes reach the \
                        sink before finish()",
-    },
-    KnownFailure {
-        format: "markua",
-        api: "streaming_parser",
-        description: "markua::parse::Parser::parse_list has the identical structural bug as \
-                       zimwiki's: it merges a blank-line-separated unordered list immediately \
-                       followed by an ordered list into one Block::List tagged with the first \
-                       item's `ordered` value; StreamingParser's blank-line block splitter \
-                       hard-splits at that boundary and does not reproduce the merge",
     },
     KnownFailure {
         format: "markua",
@@ -1554,16 +1588,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "haddock_fmt::writer::Writer buffers all events and only reconstructs the \
                        AST + calls emit::build() inside finish() — a fake streaming writer per \
                        CLAUDE.md",
-    },
-    KnownFailure {
-        format: "fountain",
-        api: "streaming_parser",
-        description: "fountain_fmt::batch::StreamingParser's emit_block() forwards every event \
-                       from its own re-parse of each block, including that call's \
-                       StartDocument/EndDocument pair, so it emits one such pair per block \
-                       instead of one for the whole document; also parse_title_page() has no \
-                       document-position guard, so a body line matching a title-page field name \
-                       is misread as metadata when re-parsed in isolation",
     },
     KnownFailure {
         format: "fountain",

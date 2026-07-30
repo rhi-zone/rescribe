@@ -107,6 +107,30 @@ pub struct StreamingParser<H: Handler> {
     /// `parse.rs`'s module docs for why a single forward pass is
     /// sufficient.
     entity_resolver: EntityResolver,
+    /// Names of elements currently open, tracked by hand across `drain()`
+    /// calls (same "persists across calls" shape as `entity_resolver`).
+    /// Each `drain()` call builds a *fresh* `quick_xml::Reader` over just
+    /// the unconsumed tail, so quick-xml's own `check_end_names`/
+    /// `allow_unmatched_ends` validation has no memory of Start tags
+    /// consumed by a previous call and must stay disabled on that reader
+    /// (see the comment below); this stack is what actually enforces tag
+    /// balance, mirroring `parse()`'s default `check_end_names = true` /
+    /// `allow_unmatched_ends = false` convention by hand.
+    open_stack: Vec<String>,
+    /// Set once a mismatched/unmatched end tag has been reported and
+    /// draining has stopped for good, mirroring `parse()`'s "diagnostic +
+    /// stop" behavior on a fatal XML error. Once true, `drain()` is a no-op
+    /// so a caller that keeps calling `feed()` after the fatal error
+    /// doesn't get any further (possibly-confusing) partial dispatch.
+    failed: bool,
+    /// Accumulates a run of adjacent text-equivalent tokens (`Text`,
+    /// resolved char/predefined/DTD entity references) across possibly
+    /// multiple `drain()` calls, so the dispatched `Text` event matches
+    /// `events()`'s coalescing (see `EventIter::next()`'s doc comment in
+    /// events.rs) instead of one `Text` event per resolved entity. Flushed
+    /// (dispatched to the handler) whenever a non-text event is about to be
+    /// dispatched, or at a definite end of input.
+    pending_text: Option<String>,
 }
 
 impl<H: Handler> StreamingParser<H> {
@@ -117,6 +141,17 @@ impl<H: Handler> StreamingParser<H> {
             pending: Vec::new(),
             diagnostics: Vec::new(),
             entity_resolver: EntityResolver::new(DtdEntities::empty()),
+            open_stack: Vec::new(),
+            failed: false,
+            pending_text: None,
+        }
+    }
+
+    /// Dispatch the accumulated text run (if any) to the handler as one
+    /// `Text` event and clear the accumulator.
+    fn flush_pending_text(&mut self) {
+        if let Some(text) = self.pending_text.take() {
+            self.handler.handle(OwnedEvent::Text(text.into()));
         }
     }
 
@@ -139,8 +174,16 @@ impl<H: Handler> StreamingParser<H> {
     /// `self.pending`, dispatching each to the handler and shrinking the
     /// buffer as tokens are confirmed consumed.
     fn drain(&mut self, is_final: bool) {
+        if self.failed {
+            return;
+        }
         loop {
             if self.pending.is_empty() {
+                // A pending merged text run can only be safely delivered
+                // once we know for certain no more input will extend it.
+                if is_final {
+                    self.flush_pending_text();
+                }
                 return;
             }
 
@@ -151,9 +194,9 @@ impl<H: Handler> StreamingParser<H> {
             // memory bounded — see module docs). That means this reader
             // never sees the `Start` tag matching an `End` tag that was
             // consumed by a *previous* drain() call, so quick-xml's own
-            // start/end name validation must be disabled here; tag
-            // balancing is the adapter/handler's concern at this API layer,
-            // same as any other SAX-style event stream.
+            // start/end name validation must be disabled here. Tag balance
+            // is instead enforced by hand via `self.open_stack` below, which
+            // *does* persist across calls — see the field's doc comment.
             reader.config_mut().check_end_names = false;
             reader.config_mut().allow_unmatched_ends = true;
             let mut buf = Vec::new();
@@ -166,6 +209,9 @@ impl<H: Handler> StreamingParser<H> {
                         // Leftover bytes that parsed as nothing (e.g. only
                         // whitespace) — nothing to report, just drop them.
                         self.pending.clear();
+                    }
+                    if is_final {
+                        self.flush_pending_text();
                     }
                     return;
                 }
@@ -182,12 +228,77 @@ impl<H: Handler> StreamingParser<H> {
                         .unwrap_or_else(|_| String::from_utf8_lossy(t.as_ref()).into_owned());
                     self.pending.drain(0..consumed);
                     if !content.is_empty() {
-                        self.handler.handle(OwnedEvent::Text(content.into()));
+                        match &mut self.pending_text {
+                            Some(acc) => acc.push_str(&content),
+                            None => self.pending_text = Some(content),
+                        }
                     }
                 }
                 Ok(event) => {
                     let consumed = reader.buffer_position() as usize;
                     let owned = crate::events::owned_event_from_xml(event, &self.entity_resolver);
+
+                    // A resolved entity reference (char ref, predefined, or
+                    // DTD-declared) merges into the pending text run instead
+                    // of dispatching immediately — mirrors events()'s
+                    // coalescing (see EventIter::next()'s doc comment in
+                    // events.rs).
+                    if let Some(OwnedEvent::Text(t)) = &owned {
+                        match &mut self.pending_text {
+                            Some(acc) => acc.push_str(t),
+                            None => self.pending_text = Some(t.to_string()),
+                        }
+                        self.pending.drain(0..consumed);
+                        continue;
+                    }
+
+                    // Any other event ends the current text run: flush it
+                    // first so dispatch order matches events()'s.
+                    self.flush_pending_text();
+
+                    // Manual open/close tag-balance check, replacing the
+                    // quick-xml check_end_names/allow_unmatched_ends
+                    // validation disabled above (see open_stack's doc
+                    // comment). Only fires on a fully-formed Start/End event
+                    // — reaching this arm at all already guarantees the
+                    // token is complete, so this can't misfire on a token
+                    // split across a chunk boundary.
+                    if let Some(owned) = &owned {
+                        match owned {
+                            OwnedEvent::StartElement { name, .. } => {
+                                self.open_stack.push(name.to_string());
+                            }
+                            OwnedEvent::EndElement { name } => match self.open_stack.pop() {
+                                Some(expected) if expected == name.as_ref() => {}
+                                Some(expected) => {
+                                    self.diagnostics.push(Diagnostic {
+                                        message: format!(
+                                            "XML parse error: expected `</{expected}>`, but \
+                                             `</{name}>` was found"
+                                        ),
+                                        span: Span::NONE,
+                                    });
+                                    self.pending.clear();
+                                    self.failed = true;
+                                    return;
+                                }
+                                None => {
+                                    self.diagnostics.push(Diagnostic {
+                                        message: format!(
+                                            "XML parse error: close tag `</{name}>` does not \
+                                             match any open tag"
+                                        ),
+                                        span: Span::NONE,
+                                    });
+                                    self.pending.clear();
+                                    self.failed = true;
+                                    return;
+                                }
+                            },
+                            _ => {}
+                        }
+                    }
+
                     self.pending.drain(0..consumed);
                     if let Some(owned) = &owned
                         && let OwnedEvent::Doctype(content) = owned
@@ -207,6 +318,11 @@ impl<H: Handler> StreamingParser<H> {
                 }
                 Err(e) => {
                     if is_final {
+                        // Flush before recording the error, matching
+                        // events()'s "merged text delivered, then done"
+                        // order on a fatal XML error (see EventIter::next()'s
+                        // Err arm in events.rs).
+                        self.flush_pending_text();
                         self.diagnostics.push(Diagnostic {
                             message: format!("XML parse error: {e}"),
                             span: Span::NONE,

@@ -399,6 +399,9 @@ namespace. This section covers the DocBook side only.
 - [x] empty document — `adv-empty`
 - [x] malformed XML (unclosed tag) — `adv-malformed-xml` (recovers best-effort,
   reports diagnostics, never panics)
+- [x] stray closing tag with no matching open tag at all — `adv-unmatched-end-tag`
+  (reported as a diagnostic, not silently accepted; exercised across `parse()`,
+  `events()`, and `StreamingParser` — all three now reject it identically)
 - [x] unknown DocBook element — `adv-unknown-block-element` (block-shaped,
   raw-preserved as a tagged `div`), `adv-unknown-inline-element`
   (inline-shaped, raw-preserved as a tagged `span` in place) — neither is
