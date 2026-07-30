@@ -391,10 +391,9 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
             "texinfo::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
              reconstructs the AST + calls emit() inside finish() (see crates/formats/texinfo/src/\
              writer.rs's own module doc, \"buffers all events, reconstructs the AST, then \
-             emits\"); additionally, texinfo::events::Event has no variant carrying \
-             TexinfoDoc::title, so events_to_doc() always reconstructs title: None, silently \
-             dropping @settitle (see fixtures/texinfo/settitle-header) when content round-trips \
-             through the streaming writer",
+             emits\"); zero bytes reach the sink before finish() despite content round-tripping \
+             correctly (including @settitle, now carried via events::Event::Title — see \
+             fixtures/texinfo/settitle-header)",
         ),
     },
     FormatCapabilities {
@@ -1256,8 +1255,9 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         format: "texinfo",
         api: "streaming_writer",
         description: "texinfo::writer::Writer buffers all events and only emits inside finish(); \
-                       also, Event has no variant for TexinfoDoc::title, so @settitle is always \
-                       dropped when round-tripped through the streaming writer",
+                       zero bytes reach the sink before finish() despite content \
+                       round-tripping correctly (including @settitle, now carried via \
+                       events::Event::Title)",
     },
     KnownFailure {
         format: "fb2",

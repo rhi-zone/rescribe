@@ -2290,16 +2290,23 @@ fn sml_streaming_writer_preserves_row_and_cell_attributes() {
 }
 
 // ---------------------------------------------------------------------------
-// texinfo: events() vs parse(), real and passing. StreamingParser and the
-// streaming Writer are both buffer-until-finish wrappers (see their own
+// texinfo: events() vs parse(), real and passing (including Event::Title for
+// @settitle — see crates/formats/texinfo/src/events.rs). StreamingParser and
+// the streaming Writer are both buffer-until-finish wrappers (see their own
 // module docs in crates/formats/texinfo/src/batch.rs and writer.rs, which
 // self-report "Memory usage is O(full input)" / "buffers all events,
 // reconstructs the AST, then emits") rather than genuine incremental
-// implementations; tracked as KnownFailure entries.
+// implementations; tracked as KnownFailure entries. (The @settitle-dropping
+// bug that used to additionally afflict the streaming writer is fixed:
+// Event::Title now carries the title through events()/StreamingParser/
+// Writer; only the buffer-until-finish incrementality gap remains open.)
 // ---------------------------------------------------------------------------
 
 fn texinfo_ast_to_events(doc: &texinfo::TexinfoDoc) -> Vec<texinfo::events::Event<'static>> {
     let mut out = Vec::new();
+    if let Some(title) = &doc.title {
+        out.push(texinfo::events::Event::Title(title.clone()));
+    }
     for b in &doc.blocks {
         texinfo_block_events(b, &mut out);
     }
@@ -2671,12 +2678,10 @@ fn texinfo_streaming_parser_matches_events_and_is_incremental() {
 /// reconstructs the AST and calls `emit()` inside `finish()` (see
 /// `crates/formats/texinfo/src/writer.rs`'s own module doc, "This
 /// implementation buffers all events, reconstructs the AST, then emits").
-/// Content-wise this still round-trips correctly for most fixtures (since
-/// finish() ends up calling the same `emit()` the builder path uses) with one
-/// exception this check found: the `Event` enum has no representation for
-/// `TexinfoDoc::title` (no `@settitle`-carrying event exists), so
-/// `events_to_doc()` always reconstructs a document with `title: None`,
-/// silently dropping `@settitle` for any fixture that has one.
+/// Content-wise this round-trips correctly for all fixtures, including
+/// `@settitle` (carried via `Event::Title`, handled by `DocBuilder`) — the
+/// remaining, still-open defect this check surfaces is purely the
+/// incrementality probe below: no bytes reach the sink before `finish()`.
 #[test]
 fn texinfo_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     let root = fixtures_root().join("texinfo");
