@@ -315,61 +315,74 @@ audited this format's cross-API status yet" placeholder, not a claim of absence 
 | tei | KnownFailure: shares docbook-fmt's implementation; same entity-coalescing gap | KnownFailure: same `check_end_names`-disabled gap | KnownFailure: same malformed-XML recovery gap |
 | odt (`odf-fmt`) | NotYetWired: `events()` is a genuine independent quick_xml scan of `content.xml` (not a `parse()`-then-walk fake — corrects a prior assessment), but eagerly buffers every event before the first `next()` call (not memory-bounded); a faithful `ast_to_events` projection spanning odt/ods/odp body shapes is substantial follow-up work | NotYetWired: no `StreamingParser<H>` type exists in the crate at all yet (`batch.rs` calls it "future" work) | KnownFailure: the streaming `Writer` genuinely builds its AST incrementally per event (same sanctioned shape as `ooxml-sml`'s `SmlWriter`), but `OdfEvent` has no variant for mimetype/meta/styles/images, so round-tripping through it always drops them — an `Event`-enum expressiveness gap, the same class as org-fmt's missing-metadata-variant gap |
 | ansi | NotYetWired: `parse()`'s `AnsiNode` has no variant for a bare SGR sequence at all (folded into a running `style` var, no node emitted), the reverse of the usual defect shape, so no faithful `ast_to_events` projection exists; a real, distinct bug was found independently via the checks below (`events()` emits a spurious `ResetStyle` whenever an unrecognized/no-op SGR group happens to leave style empty) | KnownFailure: `StreamingParser::drain_complete` constructs a fresh `EventIter` (default style) on every drain, losing running style state across chunk boundaries under fine-grained chunking; also inherits the spurious-`ResetStyle` bug | KnownFailure: downstream of the spurious-`ResetStyle` bug — `Writer` unconditionally writes literal reset bytes for every `ResetStyle` event it receives |
+| bbcode | Wired (`events()` is literally `parse::parse(input)` + a tree walk — same non-independent shape as html's, scoped honestly per the asciidoc precedent rather than declared NotApplicable, since nothing format-structural forces it) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over all 53 bbcode fixtures plus several hand-built adversarial cases | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
+| creole | Wired (`events()` is literally `EventIter::new`'s `parse::parse(input)` + `collect_events(&doc)` tree walk — same non-independent shape as bbcode's/html's, scoped honestly per the bbcode/asciidoc precedent rather than declared NotApplicable) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over all 35 creole fixtures plus an incrementality probe; one inspected edge case (a nowiki block closed by a line with trailing content after `"}}}"`) degrades incrementality but not correctness, verified by hand | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
+| dokuwiki | Wired (`events()` is literally `InputEventIter::new`'s `parse::parse(input)` + `EventIter` tree walk — same non-independent shape as bbcode's/creole's, scoped honestly per that precedent rather than declared NotApplicable) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over every dokuwiki fixture plus an incrementality probe, with no coarser-boundary caveat needed (unlike bbcode/creole) since `parse.rs`'s `Parser` has no cross-block state at all | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
+| jira | Wired (`events()` is literally `crate::parse::parse(input)` + `emit_doc_events` tree walk — same non-independent shape as bbcode's/creole's/dokuwiki's, scoped honestly per that precedent rather than declared NotApplicable; `Event` carries every field every `Block`/`Inline` variant holds, no expressiveness gap found) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over every jira fixture plus an incrementality probe, with no coarser-boundary caveat needed (like dokuwiki) since `parse.rs`'s `Parser` has no cross-block state and no decorator-line-preceding-a-fence construct (`{code:lang}`/`{panel:title=...}` params are on the fence line itself) | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
+| mediawiki | Wired (validates the AST→event walk layer; `events()` is architecturally `parse()`-then-walk, like html, but unlike html's generic tree walk it makes real per-`Block`/`Inline`-variant mapping decisions, so the check has teeth) | Wired | KnownFailure: architecturally hollow — `Writer` buffers all events into a `Vec` and only reconstructs the AST + calls `emit()` in `finish()`; zero bytes reach the sink before `finish()` |
+| tikiwiki | Wired (same narrower claim as mediawiki) | Wired | KnownFailure: same hollow buffer-then-emit pattern as mediawiki |
+| twiki | Wired (same narrower claim; `events()` also has a non-standard signature — it takes `&TwikiDoc`, not raw input, an existing deviation from the vertical-completion contract, tracked in TODO.md) | Wired | KnownFailure: same hollow buffer-then-emit pattern as mediawiki |
+| vimwiki | Wired (same narrower claim) | KnownFailure: diverges from events() even under whole-input (non-adversarial) chunking — parse()/events() merge an unordered list, ordered list, and checklist separated only by blank lines into one `Block::List` with a single `ordered` flag, losing the type distinction for later groups, while `StreamingParser` hard-splits on every blank line and emits three correctly-typed lists | KnownFailure: same hollow buffer-then-emit pattern as mediawiki |
+| xwiki | Wired (`EventIter::next()` is a genuine lazy pull-iterator over `&XwikiDoc`, events.rs:168-385 — not eager materialization like zimwiki/markua/muse below) | KnownFailure: architecturally hollow — `feed()` buffers into a `Vec<u8>`, all parsing happens in `finish()` | KnownFailure: architecturally hollow — `write_event()` buffers into a `Vec<OwnedEvent>`, all emission happens in `finish()` |
+| zimwiki | Wired (validates the AST→event expansion layer; `events()` is parse()+eager-materialize-then-walk) | KnownFailure: `parse_list()` merges a blank-line-separated unordered list immediately followed by an ordered list into one `Block::List` tagged with the first item's `ordered` value (a whole-document `parse()`-level bug, not a streaming-specific one) — `StreamingParser`'s blank-line block splitter hard-splits at that boundary first and does not reproduce the merge | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()` |
+| markua | Wired (validates the AST→event expansion layer; `events()` is parse()+eager-tree-build-then-walk) | KnownFailure: `parse_list()` has the identical structural bug as zimwiki's — merges a blank-line-separated unordered+ordered list pair into one mislabeled list at the whole-document `parse()` level | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()`; separately, `Writer`'s `Figure`/`Caption` reconstruction has a real code bug (wrong child taken as body, caption dropped) but it is unreachable via any fixture since `parse()` never constructs `Block::Figure` |
+| muse | Wired (eagerly materializes a `VecDeque` in `EventIter::new`, but a real independently-checkable walk over `&MuseDoc`) | KnownFailure: architecturally hollow, same buffer-until-`finish()` pattern; crate's own module docs admit it outright | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()`; also a genuine expressiveness gap — `MuseEvent` has no variant for document metadata, so `#title`/`#author`/`#date`/`#desc`/`#keywords` are always dropped on round-trip (reachable via the `document-header` fixture, since unlike markua's dead `title`/`author`/`description` fields, muse-fmt's `parse()` genuinely populates them) |
+| t2t | Wired (validates the AST→event expansion layer; `events()` is `parse()`+lazy-frame-stack-walk) | KnownFailure: `emit_block()` re-parses each block in isolation — splits a multi-item `DefinitionList` into one list per item, and spuriously re-triggers `try_parse_header()` on any 3+ line block that looks like a header out of context | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()`; also always drops `title`/`author`/`date` since `Event` has no variant carrying them |
+| pod | Wired (validates the AST→event expansion layer) | KnownFailure: explicitly self-documented buffer-then-finish (`batch.rs`: "POD documents are always small enough to buffer fully"); does NOT diverge from `events()` under adversarial chunking (finish() parses the whole buffered input the same way, no per-block re-parse) — only the incrementality probe fails | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()`; content round-trips correctly, only the incrementality probe fails |
+| haddock | Wired (validates the AST→event expansion layer) | Wired — genuinely incremental with no divergence found: every block-termination rule in `parse.rs` depends only on the block's own content, never cross-block state, so isolated re-parse recovers the same boundaries | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()` |
+| fountain | Wired (validates the AST→event expansion layer; `events()` returns `OwnedEventIter`) | KnownFailure: `emit_block()` forwards every event from its own re-parse of each block, including that call's own `StartDocument`/`EndDocument` pair, so it emits one such pair per block instead of one for the whole document — diverges on the majority of fixtures; also `parse_title_page()` has no document-position guard, so a body line matching a title-page field name is misread as metadata when re-parsed in isolation | KnownFailure: architecturally hollow, buffers all events, only emits in `finish()` |
 
-**Session tally (2026-07-30, first pass):** 11 formats moved from `NOT_YET_AUDITED` to a real,
-audited `CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark,
-gfm, markdown), on top of the 4 pre-existing entries (rst, docx, pptx, xlsx) from the harness's
-initial wiring. `streaming_harness::KNOWN_FAILURES` had 21 entries; 18 new from that session.
+**Session tally (2026-07-30):** 26 formats moved from `NOT_YET_AUDITED` to a real, audited
+`CAPABILITIES` entry across three passes this session — org, html, asciidoc, djot, texinfo,
+fb2, textile, commonmark, gfm, markdown in the first pass; bbcode, creole, dokuwiki, jira,
+mediawiki, tikiwiki, twiki, vimwiki, xwiki, zimwiki, markua, muse in a second, wiki-verticals
+pass; then t2t, pod, haddock, fountain in a third follow-up pass — on top of the 4
+pre-existing entries (rst, docx, pptx, xlsx) from the harness's initial wiring. 30 formats now
+have a `CAPABILITIES` row and 33 remain in `NOT_YET_AUDITED`. `streaming_harness::KNOWN_FAILURES`
+now has 45 entries total. None were weakened or hidden to make a check pass; every divergence
+found a real, root-caused, tracked `KnownFailure` entry instead.
 
-**Session tally (2026-07-30, second pass — document/markup/data formats):** 5 more formats
-moved out of `NOT_YET_AUDITED`: docbook, jats, tei (all `Wired` for all three APIs, but each
-carries 3 `KnownFailure`s — the byte-identical `docbook-fmt`/`jats-fmt`/`tei-fmt` shape means
-the same bugs repeat across all three), odt (`streaming_writer` wired as `KnownFailure`;
-`events`/`streaming_parser` left `NotYetWired` — see table above for why), and ansi
-(`streaming_parser`/`streaming_writer` wired as `KnownFailure`; `events` left `NotYetWired`).
-12 new `KnownFailure` entries this pass (`streaming_harness::KNOWN_FAILURES` now 33 total).
-`latex` was investigated but left `NOT_YET_AUDITED`: no `latex-fmt` crate exists at all (an
-895-line hand-rolled XML-free parser lives directly in the `rescribe-read-latex` adapter),
-which is itself a CLAUDE.md "adapter must not contain parsing logic" violation tracked in
-TODO.md, not merely a harness gap — see TODO.md for the follow-up. `rtf`'s claimed
-"5-Production" state was spot-checked (not fully audited): `rtf-fmt`'s `events()`
-(`sem_events.rs`) is explicitly self-documented as parsing the full input into an `RtfDoc`
-before yielding the first event ("the document is fully parsed... Events are then streamed
-lazily from the AST"), and its `StreamingParser<H>` (`batch.rs`) buffers all fed bytes and only
-calls `sem_events::events()` inside `finish()` — both look like the same
-architecturally-hollow pattern already tracked for texinfo/fb2/textile, but classifying
-`events()` correctly (`KnownFailure` vs. a genuine html5-style `NotApplicable`) needs more
-scrutiny of whether RTF's font/color-table-before-body constraint is a provable impossibility
-or an implementation choice; left `NOT_YET_AUDITED` rather than guess. 44 formats remain in
-`NOT_YET_AUDITED` after this pass. Across both passes, none of the checks written were
-weakened or hidden to make a failure pass — every divergence found a real, root-caused,
-tracked `KnownFailure` entry instead.
+Headline findings across the second and third passes: bbcode-fmt was the first format in this
+table whose `StreamingParser` was audited and found to be genuinely, not just nominally,
+Wired; creole, dokuwiki, and jira followed the same pattern, with dokuwiki/jira additionally
+having no cross-block parser state at all, so their adversarial-chunking equivalence check
+needed no coarser-boundary caveat. mediawiki, tikiwiki, and twiki's `events()`/`StreamingParser`
+were also Wired with no divergence found on any fixture; twiki's `events()` has a non-standard
+signature (`&TwikiDoc` instead of raw input), tracked as a follow-up in TODO.md. vimwiki's
+`StreamingParser` genuinely diverges from `events()` even feeding the whole input in one
+`feed()` call — a list-boundary disagreement, not a chunk-boundary bug. xwiki's `events()` is
+the first genuinely lazy pull-iterator found in this format family, unlike
+zimwiki/markua/muse's eager materialize-then-walk. zimwiki and markua independently share an
+identical `parse()`-level (not streaming-specific) block-merging bug in their `parse_list()`
+functions — both accept either bullet or numbered marker in one loop with no transition check,
+and skip blank lines instead of breaking. haddock's `streaming_parser` is the one fully `Wired`
+(no `KnownFailure`) result found in the third pass — unlike t2t/fountain, every haddock
+block-termination rule depends only on the block's own content, never cross-block state, so its
+per-block isolated re-parse recovers the same boundaries `events()` finds inline. All sixteen
+formats' streaming writers found across these three passes are architecturally hollow
+buffer-then-emit, confirmed via the `ObservableSink` incrementality probe rather than assumed
+from module docs.
+
+**Merge reconciliation:** the two tallies immediately above were computed independently in
+parallel worktrees against the same 49-entry `NOT_YET_AUDITED` baseline — one session covering
+docbook/jats/tei/odt/ansi (5 formats, 12 `KnownFailure` entries), the other covering the 16
+bbcode..fountain wiki/lightweight-markup formats (45 `KnownFailure` entries) — so their
+"44 remain" / "33 remain" figures are each correct only against their own single-session diff,
+not against the merged result. Recomputed directly from the merged
+`streaming_harness::CAPABILITIES` / `NOT_YET_AUDITED` / `KNOWN_FAILURES` tables after merging
+both branches: **35** formats now have a `CAPABILITIES` row (14 pre-existing + 5 + 16), **28**
+remain in `NOT_YET_AUDITED` (49 − 5 − 16), and `KNOWN_FAILURES` has **57** entries total
+(12 + 45). No format appears in both `CAPABILITIES` and `NOT_YET_AUDITED`, and every
+`KnownFailure` refers to a format present in `CAPABILITIES` — verified programmatically, not
+just asserted.
 
 ### Remaining hand-written formats (crate exists, API not started)
 
 | Crate | ast | stream | batch | w-stream | w-build |
 |-------|-----|--------|-------|----------|---------|
-| muse-fmt | ✓ | | | | ✓ |
-| t2t | ✓ | | ✓ | | ✓ |
-| markua | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_markua_reader (559K runs) fuzz_markua_roundtrip (759K runs) | – | – |
-| fountain-fmt | ✓ | | ✓ | | ✓ |
-| mediawiki-fmt | | | | | |
-| creole | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_creole_reader (842K runs) fuzz_creole_roundtrip (403K runs) | – | – |
-| dokuwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_dokuwiki_reader (628K runs) fuzz_dokuwiki_roundtrip (378K runs) | – | – |
-| vimwiki-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_vimwiki_reader (610K runs) fuzz_vimwiki_roundtrip (361K runs) | – | – |
-| zimwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_zimwiki_reader (416K runs) fuzz_zimwiki_roundtrip (390K runs) | – | – |
-| xwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_xwiki_reader (489K runs) fuzz_xwiki_roundtrip (427K runs) | – | – |
-| twiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_twiki_reader (1017K runs) fuzz_twiki_roundtrip (442K runs) | – | – |
-| tikiwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_tikiwiki_reader (429K runs) fuzz_tikiwiki_roundtrip (425K runs) | – | – |
-| jira-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_jira_reader (416K runs) fuzz_jira_roundtrip (333K runs) | – | – |
 | typst (TBD) | | | | | |
-| texinfo | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed unterminated-command panic + unknown-directive infinite loop | fuzz_texinfo_reader (1.5M runs) fuzz_texinfo_roundtrip (592K runs) | – | – |
-| bbcode-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_bbcode_reader (1.3M runs) fuzz_bbcode_roundtrip (348K runs) | – | – |
-| pod-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_pod_reader (863K runs) fuzz_pod_roundtrip (375K runs) | – | – |
-| haddock-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_haddock_reader (1.1M runs) fuzz_haddock_roundtrip (415K runs) | – | – |
 | ansi-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_ansi_reader + fuzz_ansi_roundtrip | – | – |
 | man-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse | fuzz_man_reader (2M runs) fuzz_man_roundtrip (855K runs) | – | – |
-| mediawiki-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated | fuzz_mediawiki_reader (1.5M runs) fuzz_mediawiki_roundtrip (850K runs) | – | – |
 | csv-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated | fuzz_csv_reader (807K runs) fuzz_csv_roundtrip (clean) | – | – |
 | tsv-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); adapter crates updated; fixed whitespace-only row filter | fuzz_tsv_reader (1.1M runs) fuzz_tsv_roundtrip (670K runs) | – | – |
 | ris | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed char-boundary panic on multi-byte tag chars | fuzz_ris_reader (1.1M runs) fuzz_ris_roundtrip (241K runs) | – | – |

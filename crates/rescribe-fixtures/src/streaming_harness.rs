@@ -683,6 +683,422 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              streaming_writer KnownFailure",
         ),
     },
+    // bbcode-fmt: events() is `parse::parse(input)` followed by a tree walk
+    // (events.rs's `events()` literally calls `crate::parse::parse(input)`
+    // then walks the resulting `BbcodeDoc`) — the same non-independent shape
+    // as html-fmt's `events_from_doc`, but with no format-spec reason
+    // forcing it, so (per the asciidoc precedent) it's still wired rather
+    // than NotApplicable. StreamingParser (batch.rs) is a genuine
+    // incremental line-buffered state machine — real Wired, confirmed by an
+    // incrementality probe and an adversarial-chunking equivalence check
+    // that holds over all 53 bbcode fixtures plus several hand-built
+    // adversarial cases (nested same-tag quotes, a same-line-closed block
+    // tag immediately followed by more text, a blank line inside an
+    // InBlock quote) tried while auditing it. The streaming Writer is the
+    // one real gap: hollow buffer-then-finish() (writer.rs's own module
+    // doc), so content matches build() but the incrementality probe fails.
+    FormatCapabilities {
+        format: "bbcode",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "bbcode_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST (events_to_doc) + calls emit() inside finish() (see \
+             crates/formats/bbcode-fmt/src/writer.rs's own module doc, \"This implementation \
+             buffers all events, reconstructs the AST, then emits\" — write_event() at \
+             writer.rs:42-44 only pushes onto self.events); content is still byte-identical to \
+             build() over all fixtures since finish() ultimately drives the same emit() path, \
+             but zero bytes reach the sink before finish() is called — not a genuine \
+             incremental streaming writer",
+        ),
+    },
+    // creole's events() is `EventIter::new` calling `crate::parse::parse(input)`
+    // then `collect_events(&doc)`, a depth-first AST walk (events.rs:123-127) —
+    // the same non-independent shape as bbcode-fmt's and html-fmt's events(),
+    // but with no format-spec reason forcing it, so per the bbcode/asciidoc
+    // precedent it's still wired rather than NotApplicable. StreamingParser
+    // (batch.rs) is a genuine incremental line-buffered state machine — real
+    // Wired, confirmed by an incrementality probe and an adversarial-chunking
+    // equivalence check that holds over all 35 creole fixtures (one inspected
+    // edge case, a nowiki block closed by a line with trailing content after
+    // "}}}", degrades incrementality but not correctness — see the doc
+    // comment on the streaming_parser test). The streaming Writer is the one
+    // real gap: hollow buffer-then-finish() (writer.rs's own module doc,
+    // write_event() only pushes onto a Vec), so content matches build() but
+    // the incrementality probe fails.
+    FormatCapabilities {
+        format: "creole",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "creole::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST (events_to_doc) + calls crate::emit::build inside finish() \
+             (write_event() at writer.rs:38-40 only pushes onto self.events, all real work \
+             happens in finish() at writer.rs:43-48); content is still byte-identical to \
+             build() over all fixtures since finish() ultimately drives the same build() path, \
+             but zero bytes reach the sink before finish() is called — not a genuine \
+             incremental streaming writer",
+        ),
+    },
+    // dokuwiki's events() is `InputEventIter::new`, which calls
+    // `crate::parse::parse(input)` then walks the resulting `DokuwikiDoc` with
+    // the crate's own lazy `EventIter` (events.rs:705-731) — the same "parse()
+    // then walk the tree" shape as bbcode-fmt's and creole's events(), not two
+    // independent implementations, but per that precedent it's still wired
+    // rather than NotApplicable (nothing in the DokuWiki format forces this
+    // shape). StreamingParser (batch.rs) is a genuine incremental
+    // line-buffered state machine — real Wired, confirmed by an
+    // incrementality probe and an adversarial-chunking equivalence check that
+    // holds over every dokuwiki fixture with no coarser-boundary caveat
+    // needed (unlike bbcode/creole): parse.rs's Parser has no cross-block
+    // state at all (no loose-list joining, no reference resolution), so every
+    // boundary StreamingParser::feed_line flushes on is one parse.rs's own
+    // dispatch loop would also treat as a valid split point. The streaming
+    // Writer is the one real gap: hollow buffer-then-finish() (writer.rs's
+    // own module doc, write_event() only pushes onto a Vec), so content
+    // matches build() but the incrementality probe fails.
+    FormatCapabilities {
+        format: "dokuwiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "dokuwiki::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST (events_to_doc) + calls crate::emit::build inside finish() \
+             (write_event() at writer.rs:27-29 only pushes onto self.events, all real work \
+             happens in finish() at writer.rs:32-37, self-admitted in the module doc \
+             \"Buffers all events, reconstructs the AST, then emits\"); content is still \
+             byte-identical to build() over all fixtures since finish() ultimately drives the \
+             same build() path, but zero bytes reach the sink before finish() is called — not a \
+             genuine incremental streaming writer",
+        ),
+    },
+    // jira-fmt's events() is `crate::parse::parse(input)` followed by a full
+    // walk of the resulting `JiraDoc` (events.rs's `events()`/
+    // `emit_doc_events`) — the same "parse() then walk the tree" shape as
+    // bbcode-fmt's, creole's, and dokuwiki's events(), not two independent
+    // implementations, but per that precedent it's still wired rather than
+    // NotApplicable (nothing in the Jira wiki markup grammar forces this
+    // shape). StreamingParser (batch.rs) is a genuine incremental
+    // line-buffered state machine — real Wired, confirmed by an
+    // incrementality probe and an adversarial-chunking equivalence check
+    // that holds over every jira fixture with no coarser-boundary caveat
+    // needed (unlike bbcode/creole): parse.rs's Parser has no cross-block
+    // state (no loose-list joining, no reference resolution, and no
+    // decorator-line-preceding-a-fence construct — {code:lang} and
+    // {panel:title=...} both encode their parameters on the fence line
+    // itself), so every boundary StreamingParser::feed_line flushes on is
+    // one parse.rs's own block-stop conditions would also treat as a valid
+    // split point. The streaming Writer is the one real gap: hollow
+    // buffer-then-finish() (writer.rs's own module doc, write_event() only
+    // pushes onto a Vec), so content matches build() but the incrementality
+    // probe fails.
+    FormatCapabilities {
+        format: "jira",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "jira_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST (events_to_doc) + calls crate::emit::build inside finish() \
+             (write_event() at writer.rs:40-42 only pushes onto self.events, all real work \
+             happens in finish() at writer.rs:45-50, self-admitted in the module doc \"this \
+             implementation buffers all events, reconstructs the AST, then emits\"); content is \
+             still byte-identical to build() over all fixtures since finish() ultimately drives \
+             the same build() path, but zero bytes reach the sink before finish() is called — \
+             not a genuine incremental streaming writer",
+        ),
+    },
+    FormatCapabilities {
+        format: "mediawiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "mediawiki_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit() inside finish() (writer.rs's Writer::finish); \
+             content round-trips correctly on every fixture, but the incrementality probe (a \
+             complete StartParagraph/Text/EndParagraph sequence, checked for any bytes reaching \
+             an ObservableSink before finish()) writes zero bytes, confirming this is a fake \
+             streaming writer per CLAUDE.md, not just architecturally described as one",
+        ),
+    },
+    FormatCapabilities {
+        format: "tikiwiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "tikiwiki::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls build() inside finish() (writer.rs's Writer::finish); \
+             content round-trips correctly on every fixture, but the incrementality probe \
+             writes zero bytes before finish(), confirming this is a fake streaming writer per \
+             CLAUDE.md",
+        ),
+    },
+    FormatCapabilities {
+        format: "twiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "twiki::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls build() inside finish() (writer.rs's Writer::finish); \
+             content round-trips correctly on every fixture, but the incrementality probe \
+             writes zero bytes before finish(), confirming this is a fake streaming writer per \
+             CLAUDE.md",
+        ),
+    },
+    FormatCapabilities {
+        format: "vimwiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "vimwiki_fmt's StreamingParser and events() disagree even under the 'whole input, \
+             one feed() call' chunking (fixture 'oracle'), so this is not a chunk-boundary bug: \
+             parse()/events() treat a blank-line-separated run of an unordered list, then an \
+             ordered list, then an unordered checklist (no other content between them) as ONE \
+             Block::List with a single ordered flag for all 8 items -- silently losing the \
+             ordered/unordered distinction for the second and third groups, since Block::List \
+             has one `ordered: bool` for the whole list, not per-item -- while \
+             batch::StreamingParser's emit_block hard-splits on every blank line (batch.rs's \
+             feed_line unconditionally treats a blank line as a block boundary), so it emits \
+             three separate, correctly-typed StartList/EndList pairs. The two implementations \
+             disagree about where one list ends and the next begins, not just about \
+             representing the disagreement identically; see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "vimwiki_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+             calls collect_doc_from_events() + build() inside finish() (writer.rs's \
+             Writer::finish); content round-trips correctly on every fixture, but the \
+             incrementality probe writes zero bytes before finish(), confirming this is a fake \
+             streaming writer per CLAUDE.md",
+        ),
+    },
+    // xwiki's events() is a genuinely lazy pull-iterator over &XwikiDoc
+    // (EventIter::next() walks a frame stack on demand, events.rs:168-385),
+    // unlike zimwiki/markua/muse-fmt below which eagerly materialize a
+    // Vec/VecDeque before iteration begins.
+    FormatCapabilities {
+        format: "xwiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "xwiki::batch::StreamingParser buffers all fed bytes into a Vec<u8> and only \
+             parses + delivers events inside finish() (batch.rs:61-72); feed() never advances \
+             real parser state, so no events reach the handler until finish() is called — \
+             found while wiring this harness's incrementality probe",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "xwiki::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit::build() inside finish() (writer.rs:39-49); \
+             content round-trips correctly but zero bytes reach the sink before finish() — \
+             found while wiring this harness's incrementality probe",
+        ),
+    },
+    // zimwiki's events() is parse()+eager-materialize-then-walk (EventIter::new
+    // calls parse::parse(input) then walks into a Vec before returning any
+    // event, events.rs:94-102) — the same narrower "Wired" claim as asciidoc.
+    // StreamingParser, unlike xwiki/muse-fmt, is REAL incremental (feed_line
+    // tracks verbatim-block/blank-line boundaries and calls emit_block()
+    // during feed(), batch.rs:93-152).
+    FormatCapabilities {
+        format: "zimwiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "zimwiki::parse::Parser::parse_list (parse.rs:190-241) doesn't stop consuming list \
+             items when the marker type changes: its loop condition is `is_bullet || \
+             is_numbered` (line 211-213) with no check that a run of numbered items follows a \
+             run of bulleted ones, and its blank-line arm (line 199-202) skips blank lines \
+             with `continue` instead of breaking — so a blank-line-separated unordered list \
+             immediately followed by an ordered list (fixtures/zimwiki/oracle: '* First item' \
+             .. blank .. '1. Ordered one') gets merged by the *whole-document* parser into ONE \
+             `Block::List` tagged with the FIRST item's `ordered` value, silently discarding \
+             that items 4-5 were numbered. `StreamingParser`'s blank-line block-splitter \
+             (batch.rs) hard-splits at that same blank line BEFORE re-parsing each half in \
+             isolation, so it does NOT reproduce this merge and instead emits two correctly-typed \
+             lists — the two diverge because they disagree on where the block boundary is, not \
+             because StreamingParser lost information the bulk parser had. This is a pre-existing \
+             parse()-level bug independent of streaming, found while wiring this harness's \
+             adversarial-chunking equivalence check; see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "zimwiki::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit::build() inside finish() (writer.rs:24-34); \
+             content round-trips correctly but zero bytes reach the sink before finish() — \
+             found while wiring this harness's incrementality probe",
+        ),
+    },
+    // markua's events() is parse()+eager-tree-build-then-walk (EventIter::new,
+    // re-exported from parse.rs not events.rs, runs the full recursive-descent
+    // Parser::parse() before any event is returned, parse.rs:969-985) — the
+    // same narrower "Wired" claim as asciidoc/zimwiki. StreamingParser, unlike
+    // xwiki/muse-fmt, is REAL incremental block-boundary segmentation
+    // (fenced-code-aware feed_line, batch.rs:108-152).
+    FormatCapabilities {
+        format: "markua",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "markua::parse::Parser::parse_list (parse.rs:379-432) has the identical structural \
+             bug already found in zimwiki's parse_list: its loop condition accepts either \
+             `is_bullet` or `is_numbered` with no check for a marker-type change, so a \
+             blank-line-separated unordered list immediately followed by an ordered list \
+             (fixtures/markua/oracle: '- item one' / '- item two' .. blank .. '1. first' / \
+             '2. second') gets merged by the whole-document parser into ONE `Block::List` \
+             tagged with the first item's `ordered` value, silently mislabeling the numbered \
+             items. `StreamingParser`'s blank-line block-splitter hard-splits at that blank \
+             line before re-parsing each half in isolation, so it correctly emits two \
+             separately-typed lists instead — same root cause and same 'the two block-splitting \
+             passes disagree' shape as zimwiki, found while wiring this harness's \
+             adversarial-chunking equivalence check; see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "markua::writer::Writer buffers all fed events into a Vec<OwnedMarkuaEvent> and \
+             only reconstructs the AST + calls emit::emit() inside finish() (writer.rs:40-50); \
+             content round-trips correctly but zero bytes reach the sink before finish() — \
+             found while wiring this harness's incrementality probe. Separately (not caught by \
+             this harness's fixture loop, since parse() never constructs it): MarkuaDoc::title/ \
+             author/description are permanently None because parse() never populates them from \
+             any Markua syntax, and Block::Figure is never constructed by parse() either, so the \
+             Writer's own Figure/Caption reconstruction bug (EndFigure takes the wrong child as \
+             body and drops the caption, writer.rs:315-330) is unreachable via fixtures",
+        ),
+    },
+    // muse-fmt's events() takes &MuseDoc (like xwiki) but eagerly materializes
+    // a VecDeque in EventIter::new (events.rs:211-220) rather than pulling
+    // lazily.
+    FormatCapabilities {
+        format: "muse",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "muse_fmt::batch::StreamingParser buffers all fed bytes into a Vec<u8> and only \
+             parses + delivers events inside finish() (batch.rs:94-105); the crate's own module \
+             docs admit this outright (\"Muse's block-level structure makes true incremental \
+             parsing difficult without a dedicated state machine\", batch.rs:11-13) — found \
+             while wiring this harness's incrementality probe",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "muse_fmt::writer::Writer buffers all fed events into a Vec<OwnedMuseEvent> and \
+             only reconstructs the AST + calls emit::build() inside finish() (writer.rs:47-52) \
+             — a fake streaming writer per CLAUDE.md, found via this harness's incrementality \
+             probe. Also a genuine expressiveness gap independent of the buffering: MuseEvent \
+             has no variant carrying document metadata at all (events.rs:27-114), so \
+             DocBuilder::finish always reconstructs `MuseDoc { ..Default::default() }` \
+             (writer.rs:499-504), permanently dropping #title/#author/#date/#desc/#keywords — \
+             reachable via the document-header fixture, unlike markua's equivalent gap, since \
+             muse-fmt's parse() genuinely populates these fields (parse.rs:240-249)",
+        ),
+    },
+    // t2t's events() is `EventIter::new(parse(input).0)` (src/events.rs) — a
+    // lazy frame-stack walk of the AST parse() already built, not an
+    // independently implemented reader. Per the asciidoc precedent above,
+    // the ast_to_events-vs-events() check validates the AST->event expansion
+    // layer, not two independent parsers. See the comment above the check in
+    // tests/streaming_apis.rs.
+    FormatCapabilities {
+        format: "t2t",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "t2t::batch::StreamingParser genuinely flushes events per accumulated block as fed \
+             (not only at finish()), but emit_block() re-parses each block's text in isolation \
+             via crate::events::events(&text) — the same \"re-parse each block alone, lose \
+             cross-block context\" root cause already tracked for org-fmt/asciidoc. Two \
+             distinct fixtures expose it: definition-list, where the blank line between items \
+             (batch.rs's feed_line blank-line branch, batch.rs:143-150) ends the accumulated \
+             block, splitting one multi-item DefinitionList into two DefinitionList event pairs \
+             (the same bug class already tracked for rst/org); and document-header, where the \
+             isolated re-parse of the 3-line header block re-triggers try_parse_header() \
+             (parse.rs:70, requires >=3 lines and a non-heading/list/table/comment first line), \
+             which any 3+ line block satisfies purely by looking like a header out of context, \
+             producing a spurious extra StartDocument/EndDocument pair (Event has no metadata \
+             variant to carry the consumed header text) that events() over the whole document \
+             never produces; see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "t2t::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
+             \"This implementation buffers all events, reconstructs the AST, then emits\") — the \
+             same fake-streaming-writer pattern as textile/commonmark/org/texinfo. It also drops \
+             doc.title/author/date on every fixture with a document header: emit::emit() always \
+             writes the 3-line header verbatim from T2tDoc.title/author/date (emit.rs:9-16), but \
+             t2t::Event has no variant carrying those fields, so writer.rs's DocBuilder::finish \
+             (writer.rs:400-404) always reconstructs title: None/author: None/date: None — an \
+             Event-enum expressiveness gap, not a one-line logic bug, exposed by the \
+             document-header fixture; see TODO.md",
+        ),
+    },
+    // pod-fmt's events() is `pod_fmt::events()` (src/lib.rs) — `parse(input)`
+    // then an eager `.collect()` of a lazy frame-stack `EventIter` walk of
+    // the AST parse() already built, not an independently implemented
+    // reader (same pattern as t2t/asciidoc above). See the comment above the
+    // check in tests/streaming_apis.rs.
+    FormatCapabilities {
+        format: "pod",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "pod_fmt::batch::StreamingParser is explicitly self-documented buffer-then-finish \
+             (batch.rs's own module doc: \"POD documents are always small enough to buffer \
+             fully, so this implementation accumulates all input and parses on finish()\"); \
+             feed() only extends an internal Vec<u8>, all parsing and event delivery happen in \
+             finish(). Unlike t2t/org/asciidoc this does NOT diverge from events() under \
+             adversarial chunking (finish() parses the whole buffered input the same way bulk \
+             events() does, no per-block re-parse-in-isolation to disagree with) — the defect is \
+             purely architectural non-incrementality, pinned via the feed()-before-finish() \
+             probe. pod-fmt's own docstring rationale is not a CLAUDE.md-sanctioned exemption \
+             (only commonmark-fmt's pulldown-cmark wrapping is); see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "pod_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit::build() inside finish() (writer.rs's finish(): \
+             events_to_doc(...) then crate::emit::build(&doc)) — the same fake-streaming-writer \
+             pattern as t2t/textile/commonmark/org/texinfo. Content is not lost (PodDoc has no \
+             document-level metadata field pod::Event could be missing, unlike t2t), so the \
+             byte-identical-to-builder check passes; only the incrementality probe fails; see \
+             TODO.md",
+        ),
+    },
+    // haddock-fmt's events() is `parse(input)` then a lazy frame-stack
+    // EventIter walk of the AST — not an independently implemented reader
+    // (same pattern as t2t/pod/asciidoc above). See the comment above the
+    // check in tests/streaming_apis.rs.
+    FormatCapabilities {
+        format: "haddock",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "haddock_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit::build() inside finish() (writer.rs's own module \
+             doc: \"This implementation buffers all events, reconstructs the AST, then emits\") \
+             — the same fake-streaming-writer pattern as t2t/pod/textile/commonmark/org/texinfo; \
+             see TODO.md",
+        ),
+    },
+    // fountain-fmt's events() is `parse(input)` then a lazy AST walk via
+    // events::OwnedEventIter — not an independently implemented reader
+    // (same pattern as t2t/pod/haddock/asciidoc above). See the comment
+    // above the check in tests/streaming_apis.rs, which also notes a
+    // separate, out-of-scope bug in the crate's un-exported borrowed
+    // `EventIter<'a>` type (not what `events()` returns).
+    FormatCapabilities {
+        format: "fountain",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "fountain_fmt::batch::StreamingParser's emit_block() re-parses each accumulated \
+             block via crate::events::events(&text) and forwards every event it yields — \
+             including that call's own StartDocument/EndDocument pair — straight to the handler \
+             with no filtering (batch.rs's emit_block(): \"for event in \
+             crate::events::events(&text) { self.handler.handle(event); }\"). Bulk events() over \
+             the whole input emits exactly one StartDocument/EndDocument pair; StreamingParser \
+             emits one pair PER accumulated block, diverging on every fixture with more than one \
+             blank-line-separated block — not an edge case, the dominant failure mode. A second, \
+             narrower defect shares the same re-parse-in-isolation root cause: \
+             parse_title_page() (parse.rs:81) runs unconditionally at the start of every parse() \
+             call with no \"is this really the first block\" guard, so a body block matching \
+             `key: value` for one of the 9 recognized title-page field names is misread as \
+             metadata when re-parsed in isolation — the same class already tracked for t2t's \
+             try_parse_header(); see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "fountain_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
+             \"This implementation buffers all events, reconstructs the AST, then emits\") — the \
+             same fake-streaming-writer pattern as t2t/pod/haddock/textile/commonmark/org/\
+             texinfo; see TODO.md",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -694,24 +1110,8 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
 /// absence from the table. See the task report / TODO.md for the plan to
 /// retire entries from this list into real `CAPABILITIES` rows.
 pub const NOT_YET_AUDITED: &[&str] = &[
-    "mediawiki",
     "latex",
-    "creole",
-    "muse",
-    "t2t",
-    "tikiwiki",
-    "twiki",
-    "vimwiki",
-    "dokuwiki",
-    "jira",
-    "haddock",
-    "pod",
     "man",
-    "xwiki",
-    "zimwiki",
-    "bbcode",
-    "markua",
-    "fountain",
     "csl-json",
     "native",
     "pandoc-json",
@@ -760,6 +1160,44 @@ pub struct KnownFailure {
 }
 
 pub const KNOWN_FAILURES: &[KnownFailure] = &[
+    KnownFailure {
+        format: "mediawiki",
+        api: "streaming_writer",
+        description: "mediawiki_fmt::writer::Writer buffers all events and only reconstructs \
+                       the AST + emits inside finish(); zero bytes reach the sink before \
+                       finish() despite content round-tripping correctly",
+    },
+    KnownFailure {
+        format: "tikiwiki",
+        api: "streaming_writer",
+        description: "tikiwiki::writer::Writer buffers all events and only reconstructs the \
+                       AST + calls build() inside finish(); zero bytes reach the sink before \
+                       finish() despite content round-tripping correctly",
+    },
+    KnownFailure {
+        format: "twiki",
+        api: "streaming_writer",
+        description: "twiki::writer::Writer buffers all events and only reconstructs the AST + \
+                       calls build() inside finish(); zero bytes reach the sink before finish() \
+                       despite content round-tripping correctly",
+    },
+    KnownFailure {
+        format: "vimwiki",
+        api: "streaming_parser",
+        description: "vimwiki_fmt's StreamingParser and events() disagree on where a list ends: \
+                       parse()/events() merge an unordered list, ordered list, and unordered \
+                       checklist (separated only by blank lines, no other content) into one \
+                       Block::List with a single ordered flag, losing the type distinction for \
+                       later groups, while StreamingParser hard-splits on every blank line and \
+                       emits three separately-typed lists",
+    },
+    KnownFailure {
+        format: "vimwiki",
+        api: "streaming_writer",
+        description: "vimwiki_fmt::writer::Writer buffers all events and only calls \
+                       collect_doc_from_events() + build() inside finish(); zero bytes reach \
+                       the sink before finish() despite content round-tripping correctly",
+    },
     KnownFailure {
         format: "docx",
         api: "events",
@@ -979,6 +1417,160 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "downstream of events()'s spurious ResetStyle event on an unrecognized SGR \
                        group: Writer unconditionally writes literal reset bytes for every \
                        ResetStyle event, turning the spurious event into spurious output",
+    },
+    KnownFailure {
+        format: "bbcode",
+        api: "streaming_writer",
+        description: "bbcode_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and \
+                       only reconstructs the AST + calls emit() inside finish() (self-admitted \
+                       in its own module doc); content matches build() exactly but the writer \
+                       is not incrementally streaming",
+    },
+    KnownFailure {
+        format: "creole",
+        api: "streaming_writer",
+        description: "creole::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+                       reconstructs the AST + calls build() inside finish() (write_event() only \
+                       pushes onto self.events); content matches build() exactly but the writer \
+                       is not incrementally streaming",
+    },
+    KnownFailure {
+        format: "dokuwiki",
+        api: "streaming_writer",
+        description: "dokuwiki::writer::Writer buffers all events into a Vec<OwnedEvent> and \
+                       only reconstructs the AST + calls crate::emit::build inside finish() \
+                       (write_event() at writer.rs:27-29 only pushes onto self.events); content \
+                       matches build() exactly but the writer is not incrementally streaming",
+    },
+    KnownFailure {
+        format: "jira",
+        api: "streaming_writer",
+        description: "jira_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and \
+                       only reconstructs the AST (events_to_doc) + calls crate::emit::build \
+                       inside finish() (write_event() at writer.rs:40-42 only pushes onto \
+                       self.events); content matches build() exactly but the writer is not \
+                       incrementally streaming",
+    },
+    KnownFailure {
+        format: "xwiki",
+        api: "streaming_parser",
+        description: "xwiki::batch::StreamingParser buffers all fed bytes and only parses + \
+                       delivers events inside finish(); feed() delivers zero events before \
+                       finish() is called",
+    },
+    KnownFailure {
+        format: "xwiki",
+        api: "streaming_writer",
+        description: "xwiki::writer::Writer buffers all events and only reconstructs the AST + \
+                       emits inside finish(); content round-trips but zero bytes reach the sink \
+                       before finish()",
+    },
+    KnownFailure {
+        format: "zimwiki",
+        api: "streaming_parser",
+        description: "zimwiki::parse::Parser::parse_list merges a blank-line-separated \
+                       unordered list immediately followed by an ordered list into one \
+                       Block::List tagged with the first item's `ordered` value (a \
+                       whole-document parse()-level bug); StreamingParser's blank-line block \
+                       splitter hard-splits at that boundary and does not reproduce the merge",
+    },
+    KnownFailure {
+        format: "zimwiki",
+        api: "streaming_writer",
+        description: "zimwiki::writer::Writer buffers all events and only reconstructs the AST \
+                       + emits inside finish(); content round-trips but zero bytes reach the \
+                       sink before finish()",
+    },
+    KnownFailure {
+        format: "markua",
+        api: "streaming_parser",
+        description: "markua::parse::Parser::parse_list has the identical structural bug as \
+                       zimwiki's: it merges a blank-line-separated unordered list immediately \
+                       followed by an ordered list into one Block::List tagged with the first \
+                       item's `ordered` value; StreamingParser's blank-line block splitter \
+                       hard-splits at that boundary and does not reproduce the merge",
+    },
+    KnownFailure {
+        format: "markua",
+        api: "streaming_writer",
+        description: "markua::writer::Writer buffers all events and only reconstructs the AST + \
+                       emits inside finish(); content round-trips but zero bytes reach the sink \
+                       before finish(). Separately, the Writer's Figure/Caption reconstruction \
+                       (EndFigure takes the wrong child as body and drops the caption) is a real \
+                       code bug but unreachable via fixtures since parse() never constructs \
+                       Block::Figure",
+    },
+    KnownFailure {
+        format: "muse",
+        api: "streaming_parser",
+        description: "muse_fmt::batch::StreamingParser buffers all fed bytes and only parses + \
+                       delivers events inside finish(); the crate's own module docs admit this \
+                       outright",
+    },
+    KnownFailure {
+        format: "muse",
+        api: "streaming_writer",
+        description: "muse_fmt::writer::Writer buffers all events and only reconstructs the AST \
+                       + emits inside finish() (a fake streaming writer per CLAUDE.md); also \
+                       MuseEvent has no variant for document metadata, so #title/#author/#date/ \
+                       #desc/#keywords are always dropped on round-trip through the streaming \
+                       writer (reachable via the document-header fixture)",
+    },
+    KnownFailure {
+        format: "t2t",
+        api: "streaming_parser",
+        description: "t2t::batch::StreamingParser's emit_block() re-parses each accumulated \
+                       block in isolation: a blank line splits a multi-item DefinitionList into \
+                       one StartDefinitionList/EndDefinitionList pair per item, and an isolated \
+                       3+ line block that looks like a document header re-triggers \
+                       try_parse_header(), producing a spurious extra StartDocument/EndDocument \
+                       pair events() over the whole document never produces",
+    },
+    KnownFailure {
+        format: "t2t",
+        api: "streaming_writer",
+        description: "t2t::writer::Writer buffers all events and only reconstructs the AST + \
+                       emits inside finish() — a fake streaming writer per CLAUDE.md; it also \
+                       always drops doc.title/author/date since t2t::Event has no variant \
+                       carrying them",
+    },
+    KnownFailure {
+        format: "pod",
+        api: "streaming_parser",
+        description: "pod_fmt::batch::StreamingParser self-documents as buffer-then-finish; \
+                       feed() only extends a Vec<u8>, all parsing and event delivery happen in \
+                       finish() — not incremental despite implementing the feed/finish contract",
+    },
+    KnownFailure {
+        format: "pod",
+        api: "streaming_writer",
+        description: "pod_fmt::writer::Writer buffers all events and only reconstructs the AST \
+                       + calls emit::build() inside finish() — a fake streaming writer per \
+                       CLAUDE.md",
+    },
+    KnownFailure {
+        format: "haddock",
+        api: "streaming_writer",
+        description: "haddock_fmt::writer::Writer buffers all events and only reconstructs the \
+                       AST + calls emit::build() inside finish() — a fake streaming writer per \
+                       CLAUDE.md",
+    },
+    KnownFailure {
+        format: "fountain",
+        api: "streaming_parser",
+        description: "fountain_fmt::batch::StreamingParser's emit_block() forwards every event \
+                       from its own re-parse of each block, including that call's \
+                       StartDocument/EndDocument pair, so it emits one such pair per block \
+                       instead of one for the whole document; also parse_title_page() has no \
+                       document-position guard, so a body line matching a title-page field name \
+                       is misread as metadata when re-parsed in isolation",
+    },
+    KnownFailure {
+        format: "fountain",
+        api: "streaming_writer",
+        description: "fountain_fmt::writer::Writer buffers all events and only reconstructs the \
+                       AST + calls emit() inside finish() — a fake streaming writer per \
+                       CLAUDE.md",
     },
 ];
 

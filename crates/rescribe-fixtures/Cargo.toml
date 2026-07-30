@@ -91,6 +91,22 @@ jats-fmt = { workspace = true }
 tei-fmt = { workspace = true }
 odf-fmt = { workspace = true }
 ansi-fmt = { workspace = true }
+bbcode-fmt = { workspace = true }
+creole = { workspace = true }
+dokuwiki = { workspace = true }
+jira-fmt = { workspace = true }
+mediawiki-fmt = { workspace = true }
+tikiwiki = { workspace = true }
+twiki = { workspace = true }
+vimwiki-fmt = { workspace = true }
+xwiki = { workspace = true }
+zimwiki = { workspace = true }
+markua = { workspace = true }
+muse-fmt = { workspace = true }
+t2t = { workspace = true }
+pod-fmt = { workspace = true }
+haddock-fmt = { workspace = true }
+fountain-fmt = { workspace = true }
 zip = { workspace = true }
 
 # Bidirectional format writer harness tests

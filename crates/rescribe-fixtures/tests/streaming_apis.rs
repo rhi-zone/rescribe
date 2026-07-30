@@ -4446,3 +4446,5567 @@ fn ansi_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     }
     assert_or_known_failure("ansi", "streaming_writer", result);
 }
+
+// ---------------------------------------------------------------------------
+// bbcode-fmt: events() is `parse::parse(input)` followed by a tree walk (see
+// crates/formats/bbcode-fmt/src/events.rs's `events()`, which literally
+// calls `crate::parse::parse(input)` before walking the resulting
+// `BbcodeDoc`) — the same "walk the tree parse() already built" shape as
+// html-fmt's `events_from_doc(&parse(input).0)`, not an independent
+// incremental reader. Unlike html-fmt, there is no format-spec reason
+// (foster parenting, adoption agency, etc.) forcing that shape here — it's
+// an implementation choice, not a structural absence — so per this task's
+// brief the check is wired (like asciidoc's honestly-scoped entry) rather
+// than declared `NotApplicable`: it still pins the current AST<->Event
+// correspondence and would catch a field silently dropped or reordered by
+// the walk, even though it cannot demonstrate two independent parsers.
+// `StreamingParser` (batch.rs), by contrast, *is* a genuine incremental
+// line-buffered state machine — feed() advances real parser state and calls
+// emit_block() (and therefore the handler) as soon as a block boundary
+// (blank line, or a recognized block tag's close line) is recognized, not
+// only inside finish(). Both the incrementality probe and the
+// adversarial-chunking equivalence check against events() pass for real,
+// over all 53 bbcode fixtures plus several hand-built adversarial cases
+// tried while auditing this (same-line-closed block tag immediately
+// followed by more content with no blank line; a blank line inside an
+// InBlock quote; nested same-tag quotes) — every case converges because
+// StreamingParser's own block-boundary detection only ever needs to be
+// *coarser than or equal to* parse()'s, never finer: whatever text it
+// accumulates into one flushed chunk gets handed to `crate::events::events()`
+// (i.e. a fresh `parse::parse()` call), which re-derives the exact same
+// fine-grained block/inline structure the bulk parser would have for that
+// span. The streaming `Writer` self-admits (module doc, writer.rs:3) it
+// buffers all events and only reconstructs the AST + calls emit() inside
+// finish() — the same hollow pattern as texinfo/commonmark's writers; its
+// *content* still matches build() exactly (same reason: finish() ends up
+// calling the same emit()), so only the incrementality probe fails.
+// ---------------------------------------------------------------------------
+
+/// Reconstruct the exact [`bbcode_fmt::events::Event`] sequence `events()`
+/// must produce for `doc`, directly from the AST `parse()` returned. Mirrors
+/// `bbcode_fmt::events::{emit_block_events, emit_inline_events}` structurally
+/// (unavoidable, since bbcode-fmt's `Event` enum is a direct 1:1 mirror of
+/// `Block`/`Inline` — see the module comment above for why that means this
+/// check pins the AST<->Event correspondence rather than proving two
+/// independent implementations agree).
+fn bbcode_ast_to_events(doc: &bbcode_fmt::BbcodeDoc) -> Vec<bbcode_fmt::OwnedEvent> {
+    let mut out = Vec::new();
+    for block in &doc.blocks {
+        bbcode_block_events(block, &mut out);
+    }
+    out
+}
+
+fn bbcode_block_events(block: &bbcode_fmt::ast::Block, out: &mut Vec<bbcode_fmt::OwnedEvent>) {
+    use bbcode_fmt::Event;
+    use bbcode_fmt::ast::Block;
+    use std::borrow::Cow;
+    match block {
+        Block::Paragraph { inlines, .. } => {
+            out.push(Event::StartParagraph);
+            for inline in inlines {
+                bbcode_inline_events(inline, out);
+            }
+            out.push(Event::EndParagraph);
+        }
+        Block::CodeBlock {
+            language, content, ..
+        } => {
+            out.push(Event::CodeBlock {
+                language: language.clone(),
+                content: Cow::Owned(content.clone()),
+            });
+        }
+        Block::Blockquote {
+            author, children, ..
+        } => {
+            out.push(Event::StartBlockquote {
+                author: author.clone(),
+            });
+            for child in children {
+                bbcode_block_events(child, out);
+            }
+            out.push(Event::EndBlockquote);
+        }
+        Block::List { ordered, items, .. } => {
+            out.push(Event::StartList { ordered: *ordered });
+            for item in items {
+                out.push(Event::StartListItem);
+                for inline in item {
+                    bbcode_inline_events(inline, out);
+                }
+                out.push(Event::EndListItem);
+            }
+            out.push(Event::EndList);
+        }
+        Block::Table { rows, .. } => {
+            out.push(Event::StartTable);
+            for row in rows {
+                out.push(Event::StartTableRow);
+                for (is_header, inlines) in &row.cells {
+                    out.push(Event::StartTableCell {
+                        is_header: *is_header,
+                    });
+                    for inline in inlines {
+                        bbcode_inline_events(inline, out);
+                    }
+                    out.push(Event::EndTableCell);
+                }
+                out.push(Event::EndTableRow);
+            }
+            out.push(Event::EndTable);
+        }
+        Block::HorizontalRule { .. } => {
+            out.push(Event::HorizontalRule);
+        }
+        Block::Heading {
+            level, children, ..
+        } => {
+            out.push(Event::StartHeading { level: *level });
+            for inline in children {
+                bbcode_inline_events(inline, out);
+            }
+            out.push(Event::EndHeading);
+        }
+        Block::Alignment { kind, children, .. } => {
+            out.push(Event::StartAlignment { kind: *kind });
+            for child in children {
+                bbcode_block_events(child, out);
+            }
+            out.push(Event::EndAlignment);
+        }
+        Block::Spoiler { children, .. } => {
+            out.push(Event::StartSpoiler);
+            for child in children {
+                bbcode_block_events(child, out);
+            }
+            out.push(Event::EndSpoiler);
+        }
+        Block::Preformatted { content, .. } => {
+            out.push(Event::Preformatted {
+                content: Cow::Owned(content.clone()),
+            });
+        }
+        Block::Indent { children, .. } => {
+            out.push(Event::StartIndent);
+            for child in children {
+                bbcode_block_events(child, out);
+            }
+            out.push(Event::EndIndent);
+        }
+    }
+}
+
+fn bbcode_inline_events(inline: &bbcode_fmt::ast::Inline, out: &mut Vec<bbcode_fmt::OwnedEvent>) {
+    use bbcode_fmt::Event;
+    use bbcode_fmt::ast::Inline;
+    use std::borrow::Cow;
+    match inline {
+        Inline::Text(s, _) => {
+            out.push(Event::Text(Cow::Owned(s.clone())));
+        }
+        Inline::Bold(children, _) => {
+            out.push(Event::StartBold);
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndBold);
+        }
+        Inline::Italic(children, _) => {
+            out.push(Event::StartItalic);
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndItalic);
+        }
+        Inline::Underline(children, _) => {
+            out.push(Event::StartUnderline);
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndUnderline);
+        }
+        Inline::Strikethrough(children, _) => {
+            out.push(Event::StartStrikethrough);
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndStrikethrough);
+        }
+        Inline::Code(s, _) => {
+            out.push(Event::InlineCode(Cow::Owned(s.clone())));
+        }
+        Inline::Link { url, children, .. } => {
+            out.push(Event::StartLink { url: url.clone() });
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndLink);
+        }
+        Inline::Image {
+            url, width, height, ..
+        } => {
+            out.push(Event::InlineImage {
+                url: url.clone(),
+                width: *width,
+                height: *height,
+            });
+        }
+        Inline::Subscript(children, _) => {
+            out.push(Event::StartSubscript);
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndSubscript);
+        }
+        Inline::Superscript(children, _) => {
+            out.push(Event::StartSuperscript);
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndSuperscript);
+        }
+        Inline::Color {
+            value, children, ..
+        } => {
+            out.push(Event::StartColor {
+                value: value.clone(),
+            });
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndColor);
+        }
+        Inline::Size {
+            value, children, ..
+        } => {
+            out.push(Event::StartSize {
+                value: value.clone(),
+            });
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndSize);
+        }
+        Inline::Font { name, children, .. } => {
+            out.push(Event::StartFont { name: name.clone() });
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndFont);
+        }
+        Inline::Email { addr, children, .. } => {
+            out.push(Event::StartEmail { addr: addr.clone() });
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndEmail);
+        }
+        Inline::Noparse(s, _) => {
+            out.push(Event::Noparse(Cow::Owned(s.clone())));
+        }
+        Inline::Span {
+            attr,
+            value,
+            children,
+            ..
+        } => {
+            out.push(Event::StartSpan {
+                attr: attr.clone(),
+                value: value.clone(),
+            });
+            for child in children {
+                bbcode_inline_events(child, out);
+            }
+            out.push(Event::EndSpan);
+        }
+    }
+}
+
+#[test]
+fn bbcode_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("bbcode");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/bbcode dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = bbcode_fmt::parse(&input);
+        let expected = bbcode_ast_to_events(&doc);
+        let actual: Vec<_> = bbcode_fmt::events(&input)
+            .map(bbcode_fmt::Event::into_owned)
+            .collect();
+        checked += 1;
+        if expected != actual && result.is_ok() {
+            result = Err(format!(
+                "events() diverged from the AST projection for fixture {name}:\n  \
+                 ast-derived: {expected:?}\n  events():    {actual:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of bbcode fixtures, got {checked}"
+    );
+    assert_or_known_failure("bbcode", "events", result);
+}
+
+/// `bbcode_fmt::batch::StreamingParser` accumulates lines into blocks and
+/// calls `emit_block()` (which re-parses just the accumulated block text via
+/// `crate::events::events()`) as soon as a block boundary is recognized —
+/// see `crates/formats/bbcode-fmt/src/batch.rs`'s `feed_line`/`emit_block` —
+/// so unlike texinfo/fb2/textile's `StreamingParser` it is not a hollow
+/// buffer-then-`finish()` stub. Both halves of this check pass for real:
+/// the adversarial-chunking equivalence check against `events()` holds over
+/// every bbcode fixture, and the incrementality probe below confirms
+/// `feed()` alone delivers events before `finish()` is ever called.
+/// `detect_block_tag` (batch.rs:200-224) is coarser than `parse.rs`'s
+/// `is_block_start` — it is missing heading/`[hr]` tags entirely and
+/// returns `None` (no boundary at all) whenever a recognized block tag's
+/// close appears on the same line (batch.rs:217-219) — but this never
+/// causes a *visible* divergence: everywhere the streaming splitter is
+/// coarser, it only accumulates more text into one flushed chunk, and that
+/// chunk is handed to a fresh `crate::events::events()` call, which
+/// re-derives the identical fine-grained block/inline structure a bulk
+/// `parse()` over that span would have produced. Confirmed by hand against
+/// several adversarial cases beyond the fixture suite (same-line-closed
+/// tag immediately followed by more content, a blank line inside an
+/// `InBlock` quote, nested same-tag quotes) in addition to all 53 fixtures
+/// under every chunking in [`adversarial_chunkings`].
+#[test]
+fn bbcode_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("bbcode");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/bbcode dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<bbcode_fmt::OwnedEvent> = bbcode_fmt::events(input_str)
+            .map(bbcode_fmt::Event::into_owned)
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                bbcode_fmt::StreamingParser::new(|e: bbcode_fmt::OwnedEvent| streamed.push(e));
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}:\n  events():        {bulk:?}\n  StreamingParser: \
+                     {streamed:?}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of bbcode fixtures, got {checked}"
+    );
+
+    // Incrementality probe: most individual fixtures are a single block (no
+    // internal blank-line boundary), so nothing would legitimately flush
+    // before finish() even under a fully incremental implementation — that
+    // is not evidence of hollowness (see fixture adv-deeply-nested-unclosed,
+    // one unterminated paragraph, found while first drafting this probe as
+    // a per-fixture check). Use one hand-built input with an internal block
+    // boundary (a completed bold paragraph, a blank line, then unterminated
+    // trailing content) instead, and confirm the completed block's events
+    // reach the handler before finish() is ever called.
+    if result.is_ok() {
+        let probe_input = b"[b]Hello[/b]\n\nUnterminated tail with no blank line after it";
+        let mut delivered: Vec<bbcode_fmt::OwnedEvent> = Vec::new();
+        let mut parser = bbcode_fmt::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(probe_input);
+        if delivered.is_empty() {
+            result = Err(
+                "StreamingParser delivered zero events to the handler after feed() with a \
+                 complete `[b]Hello[/b]` paragraph followed by a blank line and unterminated \
+                 trailing text, and before finish() was called — expected the completed first \
+                 block to have been flushed as soon as its terminating blank line arrived"
+                    .to_string(),
+            );
+        }
+        // `parser` intentionally dropped without `finish()`: this probe only
+        // needs to observe pre-finish handler state.
+    }
+    assert_or_known_failure("bbcode", "streaming_parser", result);
+}
+
+/// `bbcode_fmt::writer::Writer` self-admits (module doc, writer.rs:3) that
+/// "this implementation buffers all events, reconstructs the AST, then
+/// emits" — `write_event()` (writer.rs:42-44) only pushes onto an internal
+/// `Vec<OwnedEvent>`, and all real work (`events_to_doc` + `emit::emit`)
+/// happens inside `finish()`. Checked the same way as texinfo/commonmark's
+/// writers: byte-identical-to-builder content correctness (expected to
+/// pass, since `finish()` ultimately drives the same `emit()` the builder
+/// path uses) plus an incrementality probe.
+#[test]
+fn bbcode_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("bbcode");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/bbcode dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = bbcode_fmt::parse(&input);
+        let built = bbcode_fmt::emit(&doc);
+
+        let mut w = bbcode_fmt::Writer::new(Vec::<u8>::new());
+        for e in bbcode_fmt::events(&input).map(bbcode_fmt::Event::into_owned) {
+            w.write_event(e);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+        checked += 1;
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of bbcode fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = bbcode_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(bbcode_fmt::OwnedEvent::StartParagraph);
+        w.write_event(bbcode_fmt::OwnedEvent::StartBold);
+        w.write_event(bbcode_fmt::OwnedEvent::Text("Hello".to_string().into()));
+        w.write_event(bbcode_fmt::OwnedEvent::EndBold);
+        w.write_event(bbcode_fmt::OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err("Writer wrote zero bytes to the sink after a complete \
+                 StartParagraph/StartBold/Text/EndBold/EndParagraph sequence and before \
+                 finish() — bbcode_fmt::writer::Writer buffers all events into a \
+                 Vec<OwnedEvent> and only reconstructs the AST + calls emit() inside finish() \
+                 (crates/formats/bbcode-fmt/src/writer.rs, self-admitted in its own module doc), \
+                 so it is not a genuine incremental streaming writer despite content \
+                 round-tripping correctly"
+                .to_string());
+        }
+    }
+    assert_or_known_failure("bbcode", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// creole: events() vs. an AST projection, StreamingParser adversarial
+// chunking, streaming writer vs. builder
+// ---------------------------------------------------------------------------
+
+/// Reconstruct the exact [`creole::Event`] sequence `events()` must produce
+/// for `doc`, directly from the AST `parse()` returned. Mirrors
+/// `creole::events::{collect_block_events, collect_inline_events}`
+/// structurally (unavoidable: `creole::events::EventIter::new` is literally
+/// `crate::parse::parse(input)` followed by `collect_events(&doc)`, a
+/// depth-first walk over the AST — see `crates/formats/creole/src/events.rs`
+/// lines 123-127 — the same non-independent shape as bbcode-fmt's and
+/// html-fmt's `events()`. Per the bbcode/asciidoc precedent this is still
+/// wired as `Wired` rather than `NotApplicable`, since nothing in the
+/// Creole format itself forces the coupling (unlike html5ever's tree
+/// construction) — it is an implementation choice, not a structural
+/// necessity. This check therefore pins the AST<->Event correspondence
+/// (and would catch a `collect_events` that dropped or reordered a field)
+/// rather than proving two independent implementations agree; the `Event`
+/// enum's own `PartialEq` gives exact equality, not merely a lossy shape
+/// comparison.
+fn creole_ast_to_events(doc: &creole::CreoleDoc) -> Vec<creole::OwnedEvent> {
+    let mut out = Vec::new();
+    for block in &doc.blocks {
+        creole_block_events(block, &mut out);
+    }
+    out
+}
+
+fn creole_block_events(block: &creole::Block, out: &mut Vec<creole::OwnedEvent>) {
+    use creole::Block;
+    use creole::Event;
+    use std::borrow::Cow;
+    match block {
+        Block::Paragraph { inlines, .. } => {
+            out.push(Event::StartParagraph);
+            creole_inline_events(inlines, out);
+            out.push(Event::EndParagraph);
+        }
+        Block::Heading { level, inlines, .. } => {
+            out.push(Event::StartHeading { level: *level });
+            creole_inline_events(inlines, out);
+            out.push(Event::EndHeading);
+        }
+        Block::CodeBlock { content, .. } => {
+            out.push(Event::CodeBlock {
+                content: Cow::Owned(content.clone()),
+            });
+        }
+        Block::Blockquote { children, .. } => {
+            out.push(Event::StartBlockquote);
+            for child in children {
+                creole_block_events(child, out);
+            }
+            out.push(Event::EndBlockquote);
+        }
+        Block::List { ordered, items, .. } => {
+            out.push(Event::StartList { ordered: *ordered });
+            for item in items {
+                out.push(Event::StartListItem);
+                for child in item {
+                    creole_block_events(child, out);
+                }
+                out.push(Event::EndListItem);
+            }
+            out.push(Event::EndList);
+        }
+        Block::Table { rows, .. } => {
+            out.push(Event::StartTable);
+            for row in rows {
+                out.push(Event::StartTableRow);
+                for cell in &row.cells {
+                    out.push(Event::StartTableCell {
+                        is_header: cell.is_header,
+                    });
+                    creole_inline_events(&cell.inlines, out);
+                    out.push(Event::EndTableCell);
+                }
+                out.push(Event::EndTableRow);
+            }
+            out.push(Event::EndTable);
+        }
+        Block::DefinitionList { items, .. } => {
+            out.push(Event::StartDefinitionList);
+            for item in items {
+                out.push(Event::StartDefinitionTerm);
+                creole_inline_events(&item.term, out);
+                out.push(Event::EndDefinitionTerm);
+                out.push(Event::StartDefinitionDesc);
+                creole_inline_events(&item.desc, out);
+                out.push(Event::EndDefinitionDesc);
+            }
+            out.push(Event::EndDefinitionList);
+        }
+        Block::HorizontalRule(_) => {
+            out.push(Event::HorizontalRule);
+        }
+    }
+}
+
+fn creole_inline_events(inlines: &[creole::Inline], out: &mut Vec<creole::OwnedEvent>) {
+    use creole::Event;
+    use creole::Inline;
+    use std::borrow::Cow;
+    for inline in inlines {
+        match inline {
+            Inline::Text(s, _) => {
+                out.push(Event::Text(Cow::Owned(s.clone())));
+            }
+            Inline::LineBreak(_) => {
+                out.push(Event::LineBreak);
+            }
+            Inline::Code(s, _) => {
+                out.push(Event::InlineCode(Cow::Owned(s.clone())));
+            }
+            Inline::Bold(children, _) => {
+                out.push(Event::StartBold);
+                creole_inline_events(children, out);
+                out.push(Event::EndBold);
+            }
+            Inline::Italic(children, _) => {
+                out.push(Event::StartItalic);
+                creole_inline_events(children, out);
+                out.push(Event::EndItalic);
+            }
+            Inline::Link { url, children, .. } => {
+                out.push(Event::StartLink { url: url.clone() });
+                creole_inline_events(children, out);
+                out.push(Event::EndLink);
+            }
+            Inline::Image { url, alt, .. } => {
+                out.push(Event::InlineImage {
+                    url: url.clone(),
+                    alt: alt.clone(),
+                });
+            }
+        }
+    }
+}
+
+#[test]
+fn creole_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("creole");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/creole dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = creole::parse(&input);
+        let expected = creole_ast_to_events(&doc);
+        let actual: Vec<_> = creole::events(&input).collect();
+        checked += 1;
+        if expected != actual && result.is_ok() {
+            result = Err(format!(
+                "events() diverged from the AST projection for fixture {name}:\n  \
+                 ast-derived: {expected:?}\n  events():    {actual:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of creole fixtures, got {checked}"
+    );
+    assert_or_known_failure("creole", "events", result);
+}
+
+/// `creole::batch::StreamingParser` accumulates lines into blocks and calls
+/// `emit_block()` (which re-parses just the accumulated block text via
+/// `crate::events::events()`) as soon as a block boundary is recognized —
+/// see `crates/formats/creole/src/batch.rs`'s `feed_line`/`emit_block` — so
+/// unlike texinfo/fb2/textile's `StreamingParser` it is not a hollow
+/// buffer-then-`finish()` stub. Both halves of this check pass for real:
+/// the adversarial-chunking equivalence check against `events()` holds over
+/// every creole fixture, and a hand-built probe (see the incrementality
+/// check inline below) confirms `feed()` alone delivers events before
+/// `finish()` is ever called. One inspected-but-unobserved edge case:
+/// `feed_line`'s in-nowiki close test (batch.rs, `is_end = line.trim() ==
+/// "}}}"`) requires the closing marker to be the *entire* trimmed line,
+/// while `parse.rs`'s `parse_nowiki_block` finds `"}}}"` anywhere in the
+/// line (dropping any trailing text after it) — so a nowiki block closed by
+/// a line like `"tail}}}"` never trips the streaming splitter's boundary
+/// and everything from that opener onward is swept into one oversized
+/// block, delivered only at `finish()`. Verified by hand
+/// (`{{{\ncode\nsome}}}\nmore\n`) that this degrades *incrementality*, not
+/// *correctness*: the oversized block is still handed whole to
+/// `crate::events::events()`, which re-derives the identical block split a
+/// bulk `parse()` over that span would produce, so the final event sequence
+/// still matches `events()` exactly — not a tracked `KnownFailure`, since
+/// nothing observable diverges.
+#[test]
+fn creole_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("creole");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/creole dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<creole::OwnedEvent> = creole::events(input_str).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                creole::batch::StreamingParser::new(|e: creole::OwnedEvent| streamed.push(e));
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}:\n  events():        {bulk:?}\n  StreamingParser: \
+                     {streamed:?}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of creole fixtures, got {checked}"
+    );
+
+    // Incrementality probe: confirm the completed first block's events reach
+    // the handler before finish() is ever called, for a multi-block input
+    // (a completed heading, a blank line, then unterminated trailing text).
+    if result.is_ok() {
+        let probe_input = b"= Hello\n\nUnterminated tail with no blank line after it";
+        let mut delivered: Vec<creole::OwnedEvent> = Vec::new();
+        let mut parser = creole::batch::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(probe_input);
+        if delivered.is_empty() {
+            result = Err(
+                "StreamingParser delivered zero events to the handler after feed() with a \
+                 complete `= Hello` heading followed by a blank line and unterminated trailing \
+                 text, and before finish() was called — expected the completed first block to \
+                 have been flushed as soon as its terminating blank line arrived"
+                    .to_string(),
+            );
+        }
+        // `parser` intentionally dropped without `finish()`: this probe only
+        // needs to observe pre-finish handler state.
+    }
+    assert_or_known_failure("creole", "streaming_parser", result);
+}
+
+/// `creole::writer::Writer` buffers all fed events into an internal
+/// `Vec<OwnedEvent>` (`write_event()`, writer.rs:38-40, only pushes) and
+/// only reconstructs the AST (`events_to_doc`) + calls `crate::emit::build`
+/// inside `finish()` (writer.rs:43-48) — a hollow buffer-then-finish
+/// implementation, not a genuine incremental streaming writer. Checked the
+/// same way as bbcode/textile/commonmark's writers: byte-identical-to-builder
+/// content correctness (expected to pass, since `finish()` ultimately drives
+/// the same `build()` the builder path uses) plus an incrementality probe.
+#[test]
+fn creole_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("creole");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/creole dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = creole::parse(&input);
+        let built = creole::build(&doc);
+
+        let mut w = creole::writer::Writer::new(Vec::<u8>::new());
+        for e in creole::events(&input) {
+            w.write_event(e);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+        checked += 1;
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of creole fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = creole::writer::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(creole::OwnedEvent::StartParagraph);
+        w.write_event(creole::OwnedEvent::StartBold);
+        w.write_event(creole::OwnedEvent::Text("Hello".to_string().into()));
+        w.write_event(creole::OwnedEvent::EndBold);
+        w.write_event(creole::OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err("Writer wrote zero bytes to the sink after a complete \
+                 StartParagraph/StartBold/Text/EndBold/EndParagraph sequence and before \
+                 finish() — creole::writer::Writer buffers all events into a Vec<OwnedEvent> \
+                 and only reconstructs the AST + calls build() inside finish() \
+                 (crates/formats/creole/src/writer.rs), so it is not a genuine incremental \
+                 streaming writer despite content round-tripping correctly"
+                .to_string());
+        }
+    }
+    assert_or_known_failure("creole", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// dokuwiki: events() vs. an AST projection, StreamingParser adversarial
+// chunking, streaming writer vs. builder
+// ---------------------------------------------------------------------------
+
+// dokuwiki's `events()` (`crate::events::events`, re-exported at the crate
+// root, `lib.rs:33-35`) is `InputEventIter::new`, which calls
+// `crate::parse::parse(input)` to build a `DokuwikiDoc`, walks it with the
+// crate's own lazy `EventIter` (a genuine O(depth) stack-machine walker over
+// the already-owned tree — see `events.rs`'s `Frame`/`Iterator::next`), and
+// eagerly collects the result into an owned `Vec` before returning
+// (`events.rs:705-731`, self-documented: "not a genuine streaming parser...
+// Memory use is therefore O(full document), not O(depth)"). That is the same
+// "parse() then walk the tree" shape as bbcode-fmt's and creole's `events()`
+// (and html-fmt's `events_from_doc`), not two independent implementations —
+// but as with those two, nothing in the DokuWiki format forces this shape,
+// so per the bbcode/creole/asciidoc precedent it is wired here rather than
+// declared `NotApplicable`: the check still pins the exact AST<->Event
+// correspondence and would catch a field silently dropped or reordered by
+// the walk. `StreamingParser` (`batch.rs`), by contrast, is a genuine
+// incremental line-buffered state machine: `feed()` advances real per-line
+// state (`BlockState::{Between,Accumulating,InSpecialBlock}`) and calls
+// `emit_block()` (which re-parses just the accumulated block text via
+// `crate::events::events()`, i.e. a fresh `parse::parse()` call) as soon as
+// a blank line or a recognized `<code>/<file>/<html>/<php>` block boundary
+// is seen — not only inside `finish()`. Unlike org-fmt/rst-fmt/djot-fmt's
+// batch parsers, dokuwiki's `Parser` (`parse.rs`) has *no* cross-block
+// state at all (no loose-list joining across blank lines — `parse_list_items`
+// already stops at a non-`"  "`-prefixed line, which includes blank lines —
+// and no forward/backward reference resolution), so every block boundary
+// `StreamingParser` can pick is one `parse.rs`'s own top-level dispatch loop
+// would also treat as a valid block split point; re-parsing each flushed
+// chunk in isolation re-derives the identical block/inline structure a bulk
+// `parse()` over the whole input would. Confirmed here over every dokuwiki
+// fixture under every chunking in [`adversarial_chunkings`] plus the
+// incrementality probe below. The streaming `Writer` (`writer.rs`)
+// self-admits (module doc, `writer.rs:3`, "Buffers all events, reconstructs
+// the AST, then emits") that `write_event()` only pushes onto an internal
+// `Vec<OwnedEvent>` (`writer.rs:27-29`) and all real work happens inside
+// `finish()` (`writer.rs:32-37`) — the same hollow pattern as
+// bbcode/creole/texinfo/commonmark's writers. Its *content* still matches
+// `build()` exactly (same reason: `finish()` ends up calling the same
+// `crate::emit::build`), so only the incrementality probe fails.
+//
+// Event-enum expressiveness: every `Block`/`Inline` variant and field in
+// `ast.rs` has a corresponding `Event` variant/field in `events.rs` (block
+// metadata such as `FileBlock`'s `filename`, `RawBlock`'s `format`,
+// `Macro`'s `name`, and `Image`'s `alt` all round-trip) — no expressiveness
+// gap was found for this crate, unlike org-fmt (no metadata variant) or
+// djot-fmt (no `LinkDef` variant).
+// ---------------------------------------------------------------------------
+
+/// Reconstruct the exact [`dokuwiki::Event`] sequence `events()` must produce
+/// for `doc`, directly from the AST `parse()` returned. Mirrors
+/// `dokuwiki::events::{EventIter, emit_inline}` structurally (unavoidable:
+/// `events()` is `parse()` + a walk over the resulting `DokuwikiDoc` — see
+/// the module comment above for why that means this check pins the
+/// AST<->Event correspondence rather than proving two independent
+/// implementations agree).
+fn dokuwiki_ast_to_events(doc: &dokuwiki::DokuwikiDoc) -> Vec<dokuwiki::OwnedEvent> {
+    let mut out = Vec::new();
+    for block in &doc.blocks {
+        dokuwiki_block_events(block, &mut out);
+    }
+    out
+}
+
+fn dokuwiki_block_events(block: &dokuwiki::Block, out: &mut Vec<dokuwiki::OwnedEvent>) {
+    use dokuwiki::Block;
+    use dokuwiki::Event;
+    use std::borrow::Cow;
+    match block {
+        Block::Paragraph { inlines, .. } => {
+            out.push(Event::StartParagraph);
+            for inline in inlines {
+                dokuwiki_inline_events(inline, out);
+            }
+            out.push(Event::EndParagraph);
+        }
+        Block::Heading { level, inlines, .. } => {
+            out.push(Event::StartHeading { level: *level });
+            for inline in inlines {
+                dokuwiki_inline_events(inline, out);
+            }
+            out.push(Event::EndHeading);
+        }
+        Block::CodeBlock {
+            language, content, ..
+        } => {
+            out.push(Event::CodeBlock {
+                language: language.clone(),
+                content: Cow::Owned(content.clone()),
+            });
+        }
+        Block::FileBlock {
+            language,
+            filename,
+            content,
+            ..
+        } => {
+            out.push(Event::FileBlock {
+                language: language.clone(),
+                filename: filename.clone(),
+                content: Cow::Owned(content.clone()),
+            });
+        }
+        Block::Blockquote { children, .. } => {
+            out.push(Event::StartBlockquote);
+            for child in children {
+                dokuwiki_block_events(child, out);
+            }
+            out.push(Event::EndBlockquote);
+        }
+        Block::List { ordered, items, .. } => {
+            out.push(Event::StartList { ordered: *ordered });
+            for item in items {
+                out.push(Event::StartListItem);
+                for inline in &item.inlines {
+                    dokuwiki_inline_events(inline, out);
+                }
+                for child in &item.children {
+                    dokuwiki_block_events(child, out);
+                }
+                out.push(Event::EndListItem);
+            }
+            out.push(Event::EndList);
+        }
+        Block::Table { rows, .. } => {
+            out.push(Event::StartTable);
+            for row in rows {
+                out.push(Event::StartTableRow {
+                    is_header: row.is_header,
+                });
+                for cell in &row.cells {
+                    out.push(Event::StartTableCell);
+                    for inline in &cell.inlines {
+                        dokuwiki_inline_events(inline, out);
+                    }
+                    out.push(Event::EndTableCell);
+                }
+                out.push(Event::EndTableRow);
+            }
+            out.push(Event::EndTable);
+        }
+        Block::DefinitionList { items, .. } => {
+            out.push(Event::StartDefinitionList);
+            for item in items {
+                out.push(Event::StartDefinitionTerm);
+                for inline in &item.term {
+                    dokuwiki_inline_events(inline, out);
+                }
+                out.push(Event::EndDefinitionTerm);
+                out.push(Event::StartDefinitionDesc);
+                for inline in &item.desc {
+                    dokuwiki_inline_events(inline, out);
+                }
+                out.push(Event::EndDefinitionDesc);
+            }
+            out.push(Event::EndDefinitionList);
+        }
+        Block::HorizontalRule(_) => {
+            out.push(Event::HorizontalRule);
+        }
+        Block::RawBlock {
+            format, content, ..
+        } => {
+            out.push(Event::RawBlock {
+                format: format.clone(),
+                content: content.clone(),
+            });
+        }
+        Block::Macro { name, .. } => {
+            out.push(Event::Macro { name: name.clone() });
+        }
+    }
+}
+
+fn dokuwiki_inline_events(inline: &dokuwiki::Inline, out: &mut Vec<dokuwiki::OwnedEvent>) {
+    use dokuwiki::Event;
+    use dokuwiki::Inline;
+    use std::borrow::Cow;
+    match inline {
+        Inline::Text(s, _) => {
+            out.push(Event::Text(Cow::Owned(s.clone())));
+        }
+        Inline::Bold(children, _) => {
+            out.push(Event::StartBold);
+            for child in children {
+                dokuwiki_inline_events(child, out);
+            }
+            out.push(Event::EndBold);
+        }
+        Inline::Italic(children, _) => {
+            out.push(Event::StartItalic);
+            for child in children {
+                dokuwiki_inline_events(child, out);
+            }
+            out.push(Event::EndItalic);
+        }
+        Inline::Underline(children, _) => {
+            out.push(Event::StartUnderline);
+            for child in children {
+                dokuwiki_inline_events(child, out);
+            }
+            out.push(Event::EndUnderline);
+        }
+        Inline::Strikethrough(children, _) => {
+            out.push(Event::StartStrikethrough);
+            for child in children {
+                dokuwiki_inline_events(child, out);
+            }
+            out.push(Event::EndStrikethrough);
+        }
+        Inline::Superscript(children, _) => {
+            out.push(Event::StartSuperscript);
+            for child in children {
+                dokuwiki_inline_events(child, out);
+            }
+            out.push(Event::EndSuperscript);
+        }
+        Inline::Subscript(children, _) => {
+            out.push(Event::StartSubscript);
+            for child in children {
+                dokuwiki_inline_events(child, out);
+            }
+            out.push(Event::EndSubscript);
+        }
+        Inline::Code(s, _) => {
+            out.push(Event::InlineCode(Cow::Owned(s.clone())));
+        }
+        Inline::Nowiki(s, _) => {
+            out.push(Event::Nowiki(Cow::Owned(s.clone())));
+        }
+        Inline::Link { url, children, .. } => {
+            out.push(Event::StartLink { url: url.clone() });
+            for child in children {
+                dokuwiki_inline_events(child, out);
+            }
+            out.push(Event::EndLink);
+        }
+        Inline::Image { url, alt, .. } => {
+            out.push(Event::InlineImage {
+                url: url.clone(),
+                alt: alt.clone(),
+            });
+        }
+        Inline::FootnoteRef { content, .. } => {
+            out.push(Event::FootnoteRef {
+                content: content.clone(),
+            });
+        }
+        Inline::LineBreak(_) => {
+            out.push(Event::LineBreak);
+        }
+        Inline::SoftBreak(_) => {
+            out.push(Event::SoftBreak);
+        }
+    }
+}
+
+#[test]
+fn dokuwiki_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("dokuwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/dokuwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = dokuwiki::parse(&input);
+        let expected = dokuwiki_ast_to_events(&doc);
+        let actual: Vec<_> = dokuwiki::events(&input)
+            .map(dokuwiki::Event::into_owned)
+            .collect();
+        checked += 1;
+        if expected != actual && result.is_ok() {
+            result = Err(format!(
+                "events() diverged from the AST projection for fixture {name}:\n  \
+                 ast-derived: {expected:?}\n  events():    {actual:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of dokuwiki fixtures, got {checked}"
+    );
+    assert_or_known_failure("dokuwiki", "events", result);
+}
+
+/// `dokuwiki::StreamingParser` accumulates lines into blocks and calls
+/// `emit_block()` (which re-parses just the accumulated block text via
+/// `crate::events::events()`) as soon as a blank line or a recognized
+/// `<code>/<file>/<html>/<php>` block boundary is seen — see `batch.rs`'s
+/// `feed_line`/`emit_block` — so unlike texinfo/fb2/textile's
+/// `StreamingParser` it is not a hollow buffer-then-`finish()` stub. Both
+/// halves of this check pass for real: the adversarial-chunking equivalence
+/// check against `events()` holds over every dokuwiki fixture, and the
+/// incrementality probe below confirms `feed()` alone delivers events before
+/// `finish()` is ever called. This holds cleanly (no coarser-boundary caveat
+/// needed, unlike bbcode/creole's `detect_block_tag`) because `parse.rs`'s
+/// `Parser` has no cross-block state: every block type's own consumption
+/// loop (`parse_list_items`, `parse_table`, `parse_definition_list`,
+/// `parse_blockquote`, `parse_paragraph`) already stops at the same
+/// boundaries `StreamingParser::feed_line` flushes on (a blank line, or a
+/// `<code>/<file>/<html>/<php>` tag), so re-parsing a flushed chunk in
+/// isolation always reproduces the identical block/inline structure a bulk
+/// `parse()` over that span would.
+#[test]
+fn dokuwiki_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("dokuwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/dokuwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<dokuwiki::OwnedEvent> = dokuwiki::events(input_str)
+            .map(dokuwiki::Event::into_owned)
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                dokuwiki::StreamingParser::new(|e: dokuwiki::OwnedEvent| streamed.push(e));
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}:\n  events():        {bulk:?}\n  StreamingParser: \
+                     {streamed:?}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of dokuwiki fixtures, got {checked}"
+    );
+
+    // Incrementality probe: confirm a completed block's events reach the
+    // handler as soon as its terminating blank line arrives, before
+    // finish() is ever called.
+    if result.is_ok() {
+        let probe_input = b"**Hello**\n\nUnterminated tail with no blank line after it";
+        let mut delivered: Vec<dokuwiki::OwnedEvent> = Vec::new();
+        let mut parser = dokuwiki::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(probe_input);
+        if delivered.is_empty() {
+            result = Err(
+                "StreamingParser delivered zero events to the handler after feed() with a \
+                 complete `**Hello**` paragraph followed by a blank line and unterminated \
+                 trailing text, and before finish() was called — expected the completed first \
+                 block to have been flushed as soon as its terminating blank line arrived"
+                    .to_string(),
+            );
+        }
+        // `parser` intentionally dropped without `finish()`: this probe only
+        // needs to observe pre-finish handler state.
+    }
+    assert_or_known_failure("dokuwiki", "streaming_parser", result);
+}
+
+/// `dokuwiki::writer::Writer` self-admits (module doc, `writer.rs:3`) that
+/// "Buffers all events, reconstructs the AST, then emits" — `write_event()`
+/// (`writer.rs:27-29`) only pushes onto an internal `Vec<OwnedEvent>`, and
+/// all real work (`events_to_doc` + `crate::emit::build`) happens inside
+/// `finish()` (`writer.rs:32-37`). Checked the same way as
+/// bbcode/creole/texinfo/commonmark's writers: byte-identical-to-builder
+/// content correctness (expected to pass, since `finish()` ultimately drives
+/// the same `build()` the builder path uses) plus an incrementality probe.
+#[test]
+fn dokuwiki_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("dokuwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/dokuwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = dokuwiki::parse(&input);
+        let built = dokuwiki::build(&doc);
+
+        let mut w = dokuwiki::Writer::new(Vec::<u8>::new());
+        for e in dokuwiki::events(&input).map(dokuwiki::Event::into_owned) {
+            w.write_event(e);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+        checked += 1;
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of dokuwiki fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = dokuwiki::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(dokuwiki::OwnedEvent::StartParagraph);
+        w.write_event(dokuwiki::OwnedEvent::StartBold);
+        w.write_event(dokuwiki::OwnedEvent::Text("Hello".to_string().into()));
+        w.write_event(dokuwiki::OwnedEvent::EndBold);
+        w.write_event(dokuwiki::OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err("Writer wrote zero bytes to the sink after a complete \
+                 StartParagraph/StartBold/Text/EndBold/EndParagraph sequence and before \
+                 finish() — dokuwiki::writer::Writer buffers all events into a Vec<OwnedEvent> \
+                 and only reconstructs the AST + calls crate::emit::build inside finish() \
+                 (crates/formats/dokuwiki/src/writer.rs, self-admitted in its own module doc), \
+                 so it is not a genuine incremental streaming writer despite content \
+                 round-tripping correctly"
+                .to_string());
+        }
+    }
+    assert_or_known_failure("dokuwiki", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// jira-fmt: events() vs AST projection, StreamingParser vs events(),
+// streaming Writer vs build()
+// ---------------------------------------------------------------------------
+//
+// jira-fmt's `events()` (`crates/formats/jira-fmt/src/events.rs::events`) is
+// `crate::parse::parse(input)` followed by a full walk of the resulting
+// `JiraDoc` into a `Vec<OwnedEvent>` (`emit_doc_events`/`emit_block_events`/
+// `emit_inline_events`) — the same "parse() then walk the tree" shape as
+// bbcode-fmt's, creole's, and dokuwiki's `events()`, not two independent
+// implementations. Nothing in the Jira wiki markup format forces this shape,
+// but per the bbcode/creole/dokuwiki precedent established earlier in this
+// file it is still wired as `Wired` rather than `NotApplicable` — the check
+// below still pins the real AST<->Event correspondence (a hand-written
+// projection built independently from `ast.rs`, not by calling the crate's
+// own private `emit_*_events` helpers). `jira_fmt::Event` has a variant
+// carrying every field every `Block`/`Inline` variant holds (checked by
+// exhaustive match below) — no expressiveness gap was found for this crate.
+//
+// `jira_fmt::batch::StreamingParser` (`batch.rs`) is a genuine incremental
+// line-buffered state machine, not a hollow buffer-then-`finish()` stub:
+// `feed_line` dispatches per line into `{code:.../{quote}/{noformat}/{panel`
+// delimited-block accumulation or blank-line-terminated block accumulation,
+// and `emit_block()` re-parses just the accumulated block text via
+// `crate::events::events()` as soon as a boundary is seen — real `Wired`,
+// confirmed below by an adversarial-chunking equivalence check against
+// `events()` over every jira fixture plus an incrementality probe. This
+// holds with no coarser-boundary caveat (unlike bbcode/creole's
+// `detect_block_tag`): `parse.rs`'s `Parser` has no state that spans a blank
+// line or a delimited-block boundary (no loose-list joining, no reference
+// resolution, no title/attribute line preceding a fence — the `{code:lang}`
+// language and `{panel:title=...}` title are both encoded on the fence line
+// itself, so there is no "flush a decorator line away from its target"
+// construct for this format's grammar to trigger the class of bug found in
+// org-fmt/asciidoc/djot-fmt), so every boundary `feed_line` flushes on is
+// one `parse.rs`'s own `parse_paragraph`/`parse_list_at_depth`/`parse_table`
+// stop conditions would also treat as a block boundary — re-parsing a
+// flushed chunk in isolation always reproduces the identical block/inline
+// structure a bulk `parse()` over that span would.
+//
+// `jira_fmt::writer::Writer` self-admits (module doc, `writer.rs:1-3`)
+// "This implementation buffers all events, reconstructs the AST, then
+// emits" — `write_event()` (`writer.rs:40-42`) only pushes onto an internal
+// `Vec<OwnedEvent>`, and all real work (`events_to_doc` + `crate::emit::
+// build`) happens inside `finish()` (`writer.rs:45-50`). Checked the same
+// way as bbcode/creole/dokuwiki's writers: byte-identical-to-builder content
+// correctness (expected to pass, since `finish()` ultimately drives the same
+// `build()` path the builder uses) plus an incrementality probe that is
+// expected to fail (zero bytes reach the sink before `finish()`).
+// ---------------------------------------------------------------------------
+
+/// Reconstruct the exact [`jira_fmt::OwnedEvent`] sequence `events()` must
+/// produce for `doc`, directly from the AST `parse()` returned. Mirrors
+/// `jira_fmt::events::{emit_block_events, emit_inline_events}` structurally
+/// (unavoidable: `events()` is `parse()` + a walk over the resulting
+/// `JiraDoc` — see the module comment above for why that means this check
+/// pins the AST<->Event correspondence rather than proving two independent
+/// implementations agree), but built independently from `jira_fmt::ast`
+/// rather than by calling those private crate-internal helpers.
+fn jira_ast_to_events(doc: &jira_fmt::JiraDoc) -> Vec<jira_fmt::OwnedEvent> {
+    let mut out = Vec::new();
+    for block in &doc.blocks {
+        jira_block_events(block, &mut out);
+    }
+    out
+}
+
+fn jira_block_events(block: &jira_fmt::Block, out: &mut Vec<jira_fmt::OwnedEvent>) {
+    use jira_fmt::Block;
+    use jira_fmt::Event;
+    use jira_fmt::ListItemContent;
+    use std::borrow::Cow;
+    match block {
+        Block::Paragraph { inlines, .. } => {
+            out.push(Event::StartParagraph);
+            jira_inline_events_all(inlines, out);
+            out.push(Event::EndParagraph);
+        }
+        Block::Heading { level, inlines, .. } => {
+            out.push(Event::StartHeading { level: *level });
+            jira_inline_events_all(inlines, out);
+            out.push(Event::EndHeading);
+        }
+        Block::CodeBlock {
+            content, language, ..
+        } => {
+            out.push(Event::CodeBlock {
+                language: language.clone(),
+                content: Cow::Owned(content.clone()),
+            });
+        }
+        Block::Noformat { content, .. } => {
+            out.push(Event::Noformat {
+                content: Cow::Owned(content.clone()),
+            });
+        }
+        Block::Blockquote { children, .. } => {
+            out.push(Event::StartBlockquote);
+            for child in children {
+                jira_block_events(child, out);
+            }
+            out.push(Event::EndBlockquote);
+        }
+        Block::Panel {
+            title, children, ..
+        } => {
+            out.push(Event::StartPanel {
+                title: title.clone(),
+            });
+            for child in children {
+                jira_block_events(child, out);
+            }
+            out.push(Event::EndPanel);
+        }
+        Block::List { ordered, items, .. } => {
+            out.push(Event::StartList { ordered: *ordered });
+            for item in items {
+                out.push(Event::StartListItem);
+                for content in &item.children {
+                    match content {
+                        ListItemContent::Inline(inlines) => {
+                            out.push(Event::StartParagraph);
+                            jira_inline_events_all(inlines, out);
+                            out.push(Event::EndParagraph);
+                        }
+                        ListItemContent::NestedList(nested) => {
+                            jira_block_events(nested, out);
+                        }
+                    }
+                }
+                out.push(Event::EndListItem);
+            }
+            out.push(Event::EndList);
+        }
+        Block::Table { rows, .. } => {
+            out.push(Event::StartTable);
+            for row in rows {
+                out.push(Event::StartTableRow);
+                for cell in &row.cells {
+                    out.push(Event::StartTableCell {
+                        is_header: cell.is_header,
+                    });
+                    jira_inline_events_all(&cell.inlines, out);
+                    out.push(Event::EndTableCell);
+                }
+                out.push(Event::EndTableRow);
+            }
+            out.push(Event::EndTable);
+        }
+        Block::HorizontalRule { .. } => {
+            out.push(Event::HorizontalRule);
+        }
+    }
+}
+
+fn jira_inline_events_all(inlines: &[jira_fmt::Inline], out: &mut Vec<jira_fmt::OwnedEvent>) {
+    for inline in inlines {
+        jira_inline_events(inline, out);
+    }
+}
+
+fn jira_inline_events(inline: &jira_fmt::Inline, out: &mut Vec<jira_fmt::OwnedEvent>) {
+    use jira_fmt::Event;
+    use jira_fmt::Inline;
+    use std::borrow::Cow;
+    match inline {
+        Inline::Text(s, _) => {
+            out.push(Event::Text(Cow::Owned(s.clone())));
+        }
+        Inline::Bold(children, _) => {
+            out.push(Event::StartBold);
+            jira_inline_events_all(children, out);
+            out.push(Event::EndBold);
+        }
+        Inline::Italic(children, _) => {
+            out.push(Event::StartItalic);
+            jira_inline_events_all(children, out);
+            out.push(Event::EndItalic);
+        }
+        Inline::Underline(children, _) => {
+            out.push(Event::StartUnderline);
+            jira_inline_events_all(children, out);
+            out.push(Event::EndUnderline);
+        }
+        Inline::Strikethrough(children, _) => {
+            out.push(Event::StartStrikethrough);
+            jira_inline_events_all(children, out);
+            out.push(Event::EndStrikethrough);
+        }
+        Inline::Code(s, _) => {
+            out.push(Event::InlineCode(Cow::Owned(s.clone())));
+        }
+        Inline::Link { url, children, .. } => {
+            out.push(Event::StartLink { url: url.clone() });
+            jira_inline_events_all(children, out);
+            out.push(Event::EndLink);
+        }
+        Inline::Image { url, alt, .. } => {
+            out.push(Event::InlineImage {
+                url: url.clone(),
+                alt: alt.clone(),
+            });
+        }
+        Inline::Superscript(children, _) => {
+            out.push(Event::StartSuperscript);
+            jira_inline_events_all(children, out);
+            out.push(Event::EndSuperscript);
+        }
+        Inline::Subscript(children, _) => {
+            out.push(Event::StartSubscript);
+            jira_inline_events_all(children, out);
+            out.push(Event::EndSubscript);
+        }
+        Inline::ColorSpan {
+            color, children, ..
+        } => {
+            out.push(Event::StartColorSpan {
+                color: color.clone(),
+            });
+            jira_inline_events_all(children, out);
+            out.push(Event::EndColorSpan);
+        }
+        Inline::Mention(name, _) => {
+            out.push(Event::Mention(Cow::Owned(name.clone())));
+        }
+    }
+}
+
+#[test]
+fn jira_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("jira");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/jira dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = jira_fmt::parse(&input);
+        let expected = jira_ast_to_events(&doc);
+        let actual: Vec<_> = jira_fmt::events(&input).collect();
+        checked += 1;
+        if expected != actual && result.is_ok() {
+            result = Err(format!(
+                "events() diverged from the AST projection for fixture {name}:\n  \
+                 ast-derived: {expected:?}\n  events():    {actual:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of jira fixtures, got {checked}"
+    );
+    assert_or_known_failure("jira", "events", result);
+}
+
+#[test]
+fn jira_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("jira");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/jira dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<jira_fmt::OwnedEvent> = jira_fmt::events(input_str).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                jira_fmt::StreamingParser::new(|e: jira_fmt::OwnedEvent| streamed.push(e));
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}:\n  events():        {bulk:?}\n  StreamingParser: \
+                     {streamed:?}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of jira fixtures, got {checked}"
+    );
+
+    // Incrementality probe: confirm a completed block's events reach the
+    // handler as soon as its terminating blank line arrives, before
+    // finish() is ever called.
+    if result.is_ok() {
+        let probe_input = b"*Hello*\n\nUnterminated tail with no blank line after it";
+        let mut delivered: Vec<jira_fmt::OwnedEvent> = Vec::new();
+        let mut parser = jira_fmt::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(probe_input);
+        if delivered.is_empty() {
+            result = Err(
+                "StreamingParser delivered zero events to the handler after feed() with a \
+                 complete `*Hello*` paragraph followed by a blank line and unterminated \
+                 trailing text, and before finish() was called — expected the completed first \
+                 block to have been flushed as soon as its terminating blank line arrived"
+                    .to_string(),
+            );
+        }
+        // `parser` intentionally dropped without `finish()`: this probe only
+        // needs to observe pre-finish handler state.
+    }
+    assert_or_known_failure("jira", "streaming_parser", result);
+}
+
+/// `jira_fmt::writer::Writer` self-admits (module doc, `writer.rs:1-3`) that
+/// "this implementation buffers all events, reconstructs the AST, then
+/// emits" — `write_event()` (`writer.rs:40-42`) only pushes onto an internal
+/// `Vec<OwnedEvent>`, and all real work (`events_to_doc` + `crate::emit::
+/// build`) happens inside `finish()` (`writer.rs:45-50`). Checked the same
+/// way as bbcode/creole/dokuwiki's writers: byte-identical-to-builder
+/// content correctness (expected to pass, since `finish()` ultimately drives
+/// the same `build()` path the builder uses) plus an incrementality probe.
+#[test]
+fn jira_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("jira");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/jira dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = jira_fmt::parse(&input);
+        let built = jira_fmt::build(&doc);
+
+        let mut w = jira_fmt::Writer::new(Vec::<u8>::new());
+        for e in jira_fmt::events(&input) {
+            w.write_event(e);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+        checked += 1;
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of jira fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = jira_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(jira_fmt::OwnedEvent::StartParagraph);
+        w.write_event(jira_fmt::OwnedEvent::StartBold);
+        w.write_event(jira_fmt::OwnedEvent::Text("Hello".to_string().into()));
+        w.write_event(jira_fmt::OwnedEvent::EndBold);
+        w.write_event(jira_fmt::OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err("Writer wrote zero bytes to the sink after a complete \
+                 StartParagraph/StartBold/Text/EndBold/EndParagraph sequence and before \
+                 finish() — jira_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> \
+                 and only reconstructs the AST + calls crate::emit::build inside finish() \
+                 (crates/formats/jira-fmt/src/writer.rs, self-admitted in its own module doc), \
+                 so it is not a genuine incremental streaming writer despite content \
+                 round-tripping correctly"
+                .to_string());
+        }
+    }
+    assert_or_known_failure("jira", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// mediawiki-fmt: events() vs parse(), StreamingParser vs events(), streaming
+// writer vs build() -- all fully wired
+// ---------------------------------------------------------------------------
+//
+// mediawiki-fmt's `events()` (`EventIter::new`, events.rs) is architecturally
+// parse()-then-walk: it calls `crate::parse::parse(input)` and then walks the
+// resulting tree with `emit_doc_events`/`emit_block_events`/
+// `emit_inline_events`. Unlike html-fmt's `events_from_doc` (a generic,
+// structure-free depth-first walk over an html5ever DOM -- see the `html`
+// `CAPABILITIES` entry), mediawiki-fmt's walk makes real per-variant semantic
+// decisions (one arm per `Block`/`Inline` variant, e.g. `Inline::Link`
+// unpacks into `StartLink`/`Text`/`EndLink`), so an independently-derived
+// projection from the AST can and does diverge from the walk when the walk
+// has a real mapping bug -- it is not guaranteed to pass by construction the
+// way html's would be. This mirrors asciidoc's narrower-than-rst "Wired"
+// claim (see the comment above `asciidoc_events_check`): it validates the
+// AST->event projection layer, not two independent parsers, because both
+// `events()` and this check's `mw_ast_to_events` start from the same
+// `parse()` output.
+mod mediawiki_events_check {
+    use super::{assert_or_known_failure, find_input, fixtures_root};
+    use mediawiki_fmt::ast::{Block, Inline, MediawikiDoc};
+    use mediawiki_fmt::events::OwnedEvent;
+    use std::borrow::Cow;
+    type Event = OwnedEvent;
+
+    fn mw_ast_to_events(doc: &MediawikiDoc) -> Vec<Event> {
+        let mut out = Vec::new();
+        for b in &doc.blocks {
+            mw_block_events(b, &mut out);
+        }
+        out
+    }
+
+    fn mw_block_events(b: &Block, out: &mut Vec<Event>) {
+        match b {
+            Block::Paragraph { inlines, .. } => {
+                out.push(Event::StartParagraph);
+                mw_inline_events(inlines, out);
+                out.push(Event::EndParagraph);
+            }
+            Block::Heading { level, inlines, .. } => {
+                out.push(Event::StartHeading { level: *level });
+                mw_inline_events(inlines, out);
+                out.push(Event::EndHeading);
+            }
+            Block::CodeBlock {
+                language, content, ..
+            } => {
+                out.push(Event::CodeBlock {
+                    language: language.clone(),
+                    content: Cow::Owned(content.clone()),
+                });
+            }
+            Block::List { ordered, items, .. } => {
+                out.push(Event::StartList { ordered: *ordered });
+                for item_blocks in items {
+                    out.push(Event::StartListItem);
+                    for b in item_blocks {
+                        mw_block_events(b, out);
+                    }
+                    out.push(Event::EndListItem);
+                }
+                out.push(Event::EndList);
+            }
+            Block::DefinitionList { items, .. } => {
+                out.push(Event::StartDefinitionList);
+                for item in items {
+                    out.push(Event::StartDefinitionTerm);
+                    mw_inline_events(&item.term, out);
+                    out.push(Event::EndDefinitionTerm);
+                    out.push(Event::StartDefinitionDesc);
+                    mw_inline_events(&item.desc, out);
+                    out.push(Event::EndDefinitionDesc);
+                }
+                out.push(Event::EndDefinitionList);
+            }
+            Block::HorizontalRule => out.push(Event::HorizontalRule),
+            Block::Table { rows, caption, .. } => {
+                out.push(Event::StartTable {
+                    caption: caption.clone(),
+                });
+                for row in rows {
+                    out.push(Event::StartTableRow);
+                    for cell in &row.cells {
+                        out.push(Event::StartTableCell {
+                            is_header: cell.is_header,
+                        });
+                        mw_inline_events(&cell.inlines, out);
+                        out.push(Event::EndTableCell);
+                    }
+                    out.push(Event::EndTableRow);
+                }
+                out.push(Event::EndTable);
+            }
+            Block::Blockquote { children, .. } => {
+                out.push(Event::StartBlockquote);
+                for child in children {
+                    mw_block_events(child, out);
+                }
+                out.push(Event::EndBlockquote);
+            }
+            Block::PreBlock { content, .. } => {
+                out.push(Event::PreBlock {
+                    content: Cow::Owned(content.clone()),
+                });
+            }
+            Block::RawBlock { content, .. } => {
+                out.push(Event::RawBlock {
+                    content: Cow::Owned(content.clone()),
+                });
+            }
+        }
+    }
+
+    fn mw_inline_events(inlines: &[Inline], out: &mut Vec<Event>) {
+        for i in inlines {
+            match i {
+                Inline::Text(s) => out.push(Event::Text(Cow::Owned(s.clone()))),
+                Inline::Bold(children) => {
+                    out.push(Event::StartBold);
+                    mw_inline_events(children, out);
+                    out.push(Event::EndBold);
+                }
+                Inline::Italic(children) => {
+                    out.push(Event::StartItalic);
+                    mw_inline_events(children, out);
+                    out.push(Event::EndItalic);
+                }
+                Inline::Code(s) => out.push(Event::InlineCode(Cow::Owned(s.clone()))),
+                Inline::Link { url, text } => {
+                    out.push(Event::StartLink { url: url.clone() });
+                    out.push(Event::Text(Cow::Owned(text.clone())));
+                    out.push(Event::EndLink);
+                }
+                Inline::Image { url, alt } => out.push(Event::InlineImage {
+                    url: url.clone(),
+                    alt: alt.clone(),
+                }),
+                Inline::LineBreak => out.push(Event::LineBreak),
+                Inline::Strikeout(children) => {
+                    out.push(Event::StartStrikethrough);
+                    mw_inline_events(children, out);
+                    out.push(Event::EndStrikethrough);
+                }
+                Inline::Underline(children) => {
+                    out.push(Event::StartUnderline);
+                    mw_inline_events(children, out);
+                    out.push(Event::EndUnderline);
+                }
+                Inline::Subscript(children) => {
+                    out.push(Event::StartSubscript);
+                    mw_inline_events(children, out);
+                    out.push(Event::EndSubscript);
+                }
+                Inline::Superscript(children) => {
+                    out.push(Event::StartSuperscript);
+                    mw_inline_events(children, out);
+                    out.push(Event::EndSuperscript);
+                }
+                Inline::FootnoteRef { label, content } => out.push(Event::FootnoteRef {
+                    label: label.clone(),
+                    content: content.clone(),
+                }),
+                Inline::MathInline { source } => out.push(Event::MathInline {
+                    source: source.clone(),
+                }),
+                Inline::Template { content } => out.push(Event::Template {
+                    content: content.clone(),
+                }),
+                Inline::Nowiki { content } => out.push(Event::Nowiki {
+                    content: content.clone(),
+                }),
+            }
+        }
+    }
+
+    #[test]
+    fn mediawiki_events_equals_ast_projection_over_all_fixtures() {
+        let root = fixtures_root().join("mediawiki");
+        let mut checked = 0;
+        let mut result: Result<(), String> = Ok(());
+        for entry in std::fs::read_dir(&root).expect("fixtures/mediawiki dir") {
+            let path = entry.unwrap().path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let Some(input_path) = find_input(&path) else {
+                continue;
+            };
+            let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+            let (doc, _diags) = mediawiki_fmt::parse::parse(&input);
+            let expected = mw_ast_to_events(&doc);
+            let actual: Vec<OwnedEvent> = mediawiki_fmt::events(&input)
+                .map(|e| e.into_owned())
+                .collect();
+            checked += 1;
+            if expected != actual && result.is_ok() {
+                result = Err(format!(
+                    "events() diverged from the AST projection for fixture {name}:\n  \
+                     ast-derived: {expected:?}\n  events():    {actual:?}"
+                ));
+            }
+        }
+        assert!(
+            checked > 20,
+            "expected to check a substantial number of mediawiki fixtures, got {checked}"
+        );
+        assert_or_known_failure("mediawiki", "events", result);
+    }
+}
+
+/// `StreamingParser` fed a mediawiki fixture under an adversarial chunking
+/// must deliver the same event sequence `events()` delivers over the whole
+/// input.
+///
+/// `mediawiki_fmt::batch::StreamingParser::emit_block` re-parses each
+/// accumulated block in isolation via `crate::events::events(&text)`
+/// (batch.rs) -- the same "re-parse each block" architecture already found to
+/// split cross-block constructs for rst/org/asciidoc's `StreamingParser`s.
+#[test]
+fn mediawiki_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("mediawiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/mediawiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<mediawiki_fmt::OwnedEvent> = mediawiki_fmt::events(input_str)
+            .map(|e| e.into_owned())
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser = mediawiki_fmt::StreamingParser::new(|e: mediawiki_fmt::OwnedEvent| {
+                streamed.push(e)
+            });
+            for chunk in chunks {
+                parser.feed(&chunk);
+            }
+            parser.finish();
+            if bulk != streamed {
+                if result.is_ok() {
+                    result = Err(format!(
+                        "StreamingParser diverged from events() for fixture {name} under \
+                         chunking {chunking_name}:\n  events():         {bulk:?}\n  \
+                         StreamingParser: {streamed:?}"
+                    ));
+                }
+                break;
+            }
+        }
+    }
+    assert!(
+        checked > 20,
+        "expected to check a substantial number of mediawiki fixtures, got {checked}"
+    );
+    assert_or_known_failure("mediawiki", "streaming_parser", result);
+}
+
+/// The streaming `Writer` driven with `events(input)` must reproduce what
+/// `emit()` produces for the AST `parse(input)` returned. Also probes for
+/// genuine incrementality: `Writer::write_event` (writer.rs) only pushes onto
+/// an internal `Vec<OwnedEvent>`; `finish()` reconstructs the AST via
+/// `events_to_doc` and calls `crate::emit::emit` -- a buffer-then-emit
+/// architecture, not incremental streaming, per CLAUDE.md.
+#[test]
+fn mediawiki_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("mediawiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/mediawiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _) = mediawiki_fmt::parse(&input);
+        let built = mediawiki_fmt::emit(&doc);
+
+        let mut w = mediawiki_fmt::Writer::new(Vec::<u8>::new());
+        for e in mediawiki_fmt::events(&input) {
+            w.write_event(e.into_owned());
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        checked += 1;
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from emit() for fixture {}:\n  emit():  {built:?}\n  \
+                 Writer(): {streamed:?}",
+                path.display()
+            ));
+        }
+    }
+    assert!(
+        checked > 20,
+        "expected to check a substantial number of mediawiki fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        use mediawiki_fmt::OwnedEvent;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = mediawiki_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(OwnedEvent::StartParagraph);
+        w.write_event(OwnedEvent::Text("Hello world".to_string().into()));
+        w.write_event(OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err("Writer wrote zero bytes to the sink after a complete \
+                 StartParagraph/Text/EndParagraph sequence and before finish() -- \
+                 mediawiki_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and \
+                 only reconstructs the AST + calls emit() inside finish(), so it is not a \
+                 genuine incremental streaming writer despite content round-tripping correctly"
+                .to_string());
+        }
+    }
+    assert_or_known_failure("mediawiki", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// tikiwiki: events() vs parse(), StreamingParser vs events(), streaming
+// writer vs build() -- all fully wired
+// ---------------------------------------------------------------------------
+//
+// Same architecture and same narrower-Wired-claim caveat as mediawiki-fmt
+// above: `tikiwiki::tikiwiki_events` (`EventIter::new`, events.rs) calls
+// `crate::parse::parse(input)` then walks the tree with `emit_block`/
+// `emit_inlines`, so this check validates the AST->event projection layer,
+// not two independent parsers.
+mod tikiwiki_events_check {
+    use super::{assert_or_known_failure, find_input, fixtures_root};
+    use std::borrow::Cow;
+    use tikiwiki::ast::{Block, Inline, TikiwikiDoc};
+    use tikiwiki::events::OwnedEvent;
+    type Event = OwnedEvent;
+
+    fn tw_ast_to_events(doc: &TikiwikiDoc) -> Vec<Event> {
+        let mut out = Vec::new();
+        for b in &doc.blocks {
+            tw_block_events(b, &mut out);
+        }
+        out
+    }
+
+    fn tw_block_events(b: &Block, out: &mut Vec<Event>) {
+        match b {
+            Block::Paragraph { inlines, .. } => {
+                out.push(Event::StartParagraph);
+                tw_inline_events(inlines, out);
+                out.push(Event::EndParagraph);
+            }
+            Block::Heading { level, inlines, .. } => {
+                out.push(Event::StartHeading { level: *level });
+                tw_inline_events(inlines, out);
+                out.push(Event::EndHeading);
+            }
+            Block::CodeBlock {
+                content, language, ..
+            } => {
+                out.push(Event::CodeBlock {
+                    language: language.clone(),
+                    content: Cow::Owned(content.clone()),
+                });
+            }
+            Block::Blockquote { blocks, .. } => {
+                out.push(Event::StartBlockquote);
+                for b in blocks {
+                    tw_block_events(b, out);
+                }
+                out.push(Event::EndBlockquote);
+            }
+            Block::List { ordered, items, .. } => {
+                out.push(Event::StartList { ordered: *ordered });
+                for item in items {
+                    out.push(Event::StartListItem);
+                    tw_inline_events(&item.inlines, out);
+                    for child in &item.children {
+                        tw_block_events(child, out);
+                    }
+                    out.push(Event::EndListItem);
+                }
+                out.push(Event::EndList);
+            }
+            Block::Table { rows, .. } => {
+                out.push(Event::StartTable);
+                for row in rows {
+                    out.push(Event::StartTableRow {
+                        is_header: row.is_header,
+                    });
+                    for cell in &row.cells {
+                        out.push(Event::StartTableCell);
+                        tw_inline_events(&cell.inlines, out);
+                        out.push(Event::EndTableCell);
+                    }
+                    out.push(Event::EndTableRow);
+                }
+                out.push(Event::EndTable);
+            }
+            Block::HorizontalRule { .. } => out.push(Event::HorizontalRule),
+        }
+    }
+
+    fn tw_inline_events(inlines: &[Inline], out: &mut Vec<Event>) {
+        for i in inlines {
+            match i {
+                Inline::Text(s, _) => out.push(Event::Text(Cow::Owned(s.clone()))),
+                Inline::Bold(c, _) => {
+                    out.push(Event::StartBold);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndBold);
+                }
+                Inline::Italic(c, _) => {
+                    out.push(Event::StartItalic);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndItalic);
+                }
+                Inline::Underline(c, _) => {
+                    out.push(Event::StartUnderline);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndUnderline);
+                }
+                Inline::Strikethrough(c, _) => {
+                    out.push(Event::StartStrikethrough);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndStrikethrough);
+                }
+                Inline::Superscript(c, _) => {
+                    out.push(Event::StartSuperscript);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndSuperscript);
+                }
+                Inline::Subscript(c, _) => {
+                    out.push(Event::StartSubscript);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndSubscript);
+                }
+                Inline::Code(s, _) => out.push(Event::InlineCode(Cow::Owned(s.clone()))),
+                Inline::Nowiki(s, _) => out.push(Event::Nowiki(Cow::Owned(s.clone()))),
+                Inline::Link { url, children, .. } => {
+                    out.push(Event::StartLink { url: url.clone() });
+                    tw_inline_events(children, out);
+                    out.push(Event::EndLink);
+                }
+                Inline::WikiLink { page, children, .. } => {
+                    out.push(Event::StartWikiLink { page: page.clone() });
+                    tw_inline_events(children, out);
+                    out.push(Event::EndWikiLink);
+                }
+                Inline::Image { url, alt, .. } => out.push(Event::InlineImage {
+                    url: url.clone(),
+                    alt: alt.clone(),
+                }),
+                Inline::LineBreak { .. } => out.push(Event::LineBreak),
+            }
+        }
+    }
+
+    #[test]
+    fn tikiwiki_events_equals_ast_projection_over_all_fixtures() {
+        let root = fixtures_root().join("tikiwiki");
+        let mut checked = 0;
+        let mut result: Result<(), String> = Ok(());
+        for entry in std::fs::read_dir(&root).expect("fixtures/tikiwiki dir") {
+            let path = entry.unwrap().path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let Some(input_path) = find_input(&path) else {
+                continue;
+            };
+            let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+            let (doc, _diags) = tikiwiki::parse::parse(&input);
+            let expected = tw_ast_to_events(&doc);
+            let actual: Vec<OwnedEvent> = tikiwiki::tikiwiki_events(&input)
+                .map(|e| e.into_owned())
+                .collect();
+            checked += 1;
+            if expected != actual && result.is_ok() {
+                result = Err(format!(
+                    "events() diverged from the AST projection for fixture {name}:\n  \
+                     ast-derived: {expected:?}\n  events():    {actual:?}"
+                ));
+            }
+        }
+        assert!(
+            checked > 15,
+            "expected to check a substantial number of tikiwiki fixtures, got {checked}"
+        );
+        assert_or_known_failure("tikiwiki", "events", result);
+    }
+}
+
+/// `StreamingParser` fed a tikiwiki fixture under an adversarial chunking
+/// must deliver the same event sequence `events()` delivers over the whole
+/// input. `tikiwiki::batch::StreamingParser::emit_block` re-parses each
+/// accumulated block in isolation via `crate::events::events(&text)`.
+#[test]
+fn tikiwiki_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("tikiwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/tikiwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<tikiwiki::OwnedEvent> = tikiwiki::tikiwiki_events(input_str)
+            .map(|e| e.into_owned())
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                tikiwiki::StreamingParser::new(|e: tikiwiki::OwnedEvent| streamed.push(e));
+            for chunk in chunks {
+                parser.feed(&chunk);
+            }
+            parser.finish();
+            if bulk != streamed {
+                if result.is_ok() {
+                    result = Err(format!(
+                        "StreamingParser diverged from events() for fixture {name} under \
+                         chunking {chunking_name}:\n  events():         {bulk:?}\n  \
+                         StreamingParser: {streamed:?}"
+                    ));
+                }
+                break;
+            }
+        }
+    }
+    assert!(
+        checked > 15,
+        "expected to check a substantial number of tikiwiki fixtures, got {checked}"
+    );
+    assert_or_known_failure("tikiwiki", "streaming_parser", result);
+}
+
+/// The streaming `Writer` driven with `events(input)` must reproduce what
+/// `build()` produces for the AST `parse(input)` returned, plus an
+/// incrementality probe (`Writer::write_event` only pushes onto an internal
+/// `Vec`; `finish()` reconstructs the AST and calls `crate::emit::build`).
+#[test]
+fn tikiwiki_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("tikiwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/tikiwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _) = tikiwiki::parse(&input);
+        let built = tikiwiki::build(&doc);
+
+        let mut w = tikiwiki::Writer::new(Vec::<u8>::new());
+        for e in tikiwiki::tikiwiki_events(&input) {
+            w.write_event(e.into_owned());
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        checked += 1;
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {}:\n  build():  \
+                 {built:?}\n  Writer(): {streamed:?}",
+                path.display()
+            ));
+        }
+    }
+    assert!(
+        checked > 15,
+        "expected to check a substantial number of tikiwiki fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        use tikiwiki::OwnedEvent;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = tikiwiki::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(OwnedEvent::StartParagraph);
+        w.write_event(OwnedEvent::Text("Hello world".to_string().into()));
+        w.write_event(OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err("Writer wrote zero bytes to the sink after a complete \
+                 StartParagraph/Text/EndParagraph sequence and before finish() -- \
+                 tikiwiki::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+                 reconstructs the AST + calls build() inside finish(), so it is not a genuine \
+                 incremental streaming writer despite content round-tripping correctly"
+                .to_string());
+        }
+    }
+    assert_or_known_failure("tikiwiki", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// twiki: events() vs parse(), StreamingParser vs events(), streaming
+// writer vs build() -- all fully wired
+// ---------------------------------------------------------------------------
+//
+// twiki's `events()` (`twiki::events::events`) has a narrower signature than
+// every other format checked in this file: `fn events(doc: &TwikiDoc) ->
+// EventIter<'_>` takes an already-parsed AST, not raw input -- a caller must
+// call `parse()` first. This is a real deviation from the vertical
+// completion checklist's `events(input: &[u8]) -> impl Iterator<Item =
+// Event>` contract (CLAUDE.md), tracked as a follow-up in TODO.md, not fixed
+// here. It does not block wiring this check: `EventIter::new(doc)` still
+// walks the tree with `emit_block`/`emit_inlines`, making real per-variant
+// mapping decisions, so an independently-derived projection can and does
+// diverge from the walk on a genuine bug (same narrower-Wired-claim caveat
+// as mediawiki-fmt/tikiwiki above).
+mod twiki_events_check {
+    use super::{assert_or_known_failure, find_input, fixtures_root};
+    use std::borrow::Cow;
+    use twiki::ast::{Block, Inline, TwikiDoc};
+    use twiki::events::OwnedEvent;
+    type Event = OwnedEvent;
+
+    fn tw_ast_to_events(doc: &TwikiDoc) -> Vec<Event> {
+        let mut out = Vec::new();
+        for b in &doc.blocks {
+            tw_block_events(b, &mut out);
+        }
+        out
+    }
+
+    fn tw_block_events(b: &Block, out: &mut Vec<Event>) {
+        match b {
+            Block::Paragraph { inlines, .. } => {
+                out.push(Event::StartParagraph);
+                tw_inline_events(inlines, out);
+                out.push(Event::EndParagraph);
+            }
+            Block::Heading { level, inlines, .. } => {
+                out.push(Event::StartHeading { level: *level });
+                tw_inline_events(inlines, out);
+                out.push(Event::EndHeading);
+            }
+            Block::CodeBlock { content, .. } => {
+                out.push(Event::CodeBlock {
+                    content: Cow::Owned(content.clone()),
+                });
+            }
+            Block::List { ordered, items, .. } => {
+                out.push(Event::StartList { ordered: *ordered });
+                for item in items {
+                    out.push(Event::StartListItem);
+                    tw_inline_events(&item.inlines, out);
+                    for child in &item.children {
+                        tw_block_events(child, out);
+                    }
+                    out.push(Event::EndListItem);
+                }
+                out.push(Event::EndList);
+            }
+            Block::Table { rows, .. } => {
+                out.push(Event::StartTable);
+                for row in rows {
+                    out.push(Event::StartTableRow);
+                    for cell in &row.cells {
+                        out.push(Event::StartTableCell {
+                            is_header: cell.is_header,
+                        });
+                        tw_inline_events(&cell.inlines, out);
+                        out.push(Event::EndTableCell);
+                    }
+                    out.push(Event::EndTableRow);
+                }
+                out.push(Event::EndTable);
+            }
+            Block::HorizontalRule { .. } => out.push(Event::HorizontalRule),
+            Block::RawBlock { content, .. } => {
+                out.push(Event::RawBlock {
+                    content: Cow::Owned(content.clone()),
+                });
+            }
+            Block::DefinitionList { items, .. } => {
+                out.push(Event::StartDefinitionList);
+                for item in items {
+                    out.push(Event::StartDefinitionTerm);
+                    tw_inline_events(&item.term, out);
+                    out.push(Event::EndDefinitionTerm);
+                    out.push(Event::StartDefinitionDesc);
+                    tw_inline_events(&item.desc, out);
+                    out.push(Event::EndDefinitionDesc);
+                }
+                out.push(Event::EndDefinitionList);
+            }
+            Block::Blockquote { children, .. } => {
+                out.push(Event::StartBlockquote);
+                for child in children {
+                    tw_block_events(child, out);
+                }
+                out.push(Event::EndBlockquote);
+            }
+        }
+    }
+
+    fn tw_inline_events(inlines: &[Inline], out: &mut Vec<Event>) {
+        for i in inlines {
+            match i {
+                Inline::Text(s, _) => out.push(Event::Text(Cow::Owned(s.clone()))),
+                Inline::Bold(c, _) => {
+                    out.push(Event::StartBold);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndBold);
+                }
+                Inline::Italic(c, _) => {
+                    out.push(Event::StartItalic);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndItalic);
+                }
+                Inline::BoldItalic(c, _) => {
+                    out.push(Event::StartBoldItalic);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndBoldItalic);
+                }
+                Inline::Code(s, _) => out.push(Event::InlineCode(Cow::Owned(s.clone()))),
+                Inline::BoldCode(c, _) => {
+                    out.push(Event::StartBoldCode);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndBoldCode);
+                }
+                Inline::Link { url, label, .. } => {
+                    out.push(Event::StartLink { url: url.clone() });
+                    out.push(Event::Text(Cow::Owned(label.clone())));
+                    out.push(Event::EndLink);
+                }
+                Inline::LineBreak { .. } => out.push(Event::LineBreak),
+                Inline::Strikethrough(c, _) => {
+                    out.push(Event::StartStrikethrough);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndStrikethrough);
+                }
+                Inline::Superscript(c, _) => {
+                    out.push(Event::StartSuperscript);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndSuperscript);
+                }
+                Inline::Subscript(c, _) => {
+                    out.push(Event::StartSubscript);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndSubscript);
+                }
+                Inline::Underline(c, _) => {
+                    out.push(Event::StartUnderline);
+                    tw_inline_events(c, out);
+                    out.push(Event::EndUnderline);
+                }
+                Inline::Image { url, alt, .. } => out.push(Event::Image {
+                    url: url.clone(),
+                    alt: alt.clone(),
+                }),
+                Inline::RawInline { content, .. } => out.push(Event::RawInline {
+                    content: content.clone(),
+                }),
+                Inline::WikiWord { word, .. } => out.push(Event::WikiWord { word: word.clone() }),
+            }
+        }
+    }
+
+    #[test]
+    fn twiki_events_equals_ast_projection_over_all_fixtures() {
+        let root = fixtures_root().join("twiki");
+        let mut checked = 0;
+        let mut result: Result<(), String> = Ok(());
+        for entry in std::fs::read_dir(&root).expect("fixtures/twiki dir") {
+            let path = entry.unwrap().path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let Some(input_path) = find_input(&path) else {
+                continue;
+            };
+            let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+            let (doc, _diags) = twiki::parse::parse(&input);
+            let expected = tw_ast_to_events(&doc);
+            let actual: Vec<OwnedEvent> = twiki::events::events(&doc)
+                .map(|e| e.into_owned())
+                .collect();
+            checked += 1;
+            if expected != actual && result.is_ok() {
+                result = Err(format!(
+                    "events() diverged from the AST projection for fixture {name}:\n  \
+                     ast-derived: {expected:?}\n  events():    {actual:?}"
+                ));
+            }
+        }
+        assert!(
+            checked > 15,
+            "expected to check a substantial number of twiki fixtures, got {checked}"
+        );
+        assert_or_known_failure("twiki", "events", result);
+    }
+}
+
+/// `StreamingParser` fed a twiki fixture under an adversarial chunking must
+/// deliver the same event sequence `events()` delivers over the whole input.
+/// `twiki::batch::StreamingParser::emit_block` re-parses each accumulated
+/// block in isolation via `crate::parse::parse(&text)` followed by
+/// `crate::events::events(&doc)`.
+#[test]
+fn twiki_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("twiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/twiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let (bulk_doc, _) = twiki::parse::parse(input_str);
+        let bulk: Vec<twiki::OwnedEvent> = twiki::events::events(&bulk_doc)
+            .map(|e| e.into_owned())
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser = twiki::StreamingParser::new(|e: twiki::OwnedEvent| streamed.push(e));
+            for chunk in chunks {
+                parser.feed(&chunk);
+            }
+            parser.finish();
+            if bulk != streamed {
+                if result.is_ok() {
+                    result = Err(format!(
+                        "StreamingParser diverged from events() for fixture {name} under \
+                         chunking {chunking_name}:\n  events():         {bulk:?}\n  \
+                         StreamingParser: {streamed:?}"
+                    ));
+                }
+                break;
+            }
+        }
+    }
+    assert!(
+        checked > 15,
+        "expected to check a substantial number of twiki fixtures, got {checked}"
+    );
+    assert_or_known_failure("twiki", "streaming_parser", result);
+}
+
+/// The streaming `Writer` driven with `events(&doc)` must reproduce what
+/// `build()` produces for the same AST, plus an incrementality probe.
+#[test]
+fn twiki_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("twiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/twiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _) = twiki::parse(&input);
+        let built = twiki::build(&doc);
+
+        let mut w = twiki::Writer::new(Vec::<u8>::new());
+        for e in twiki::events::events(&doc) {
+            w.write_event(e.into_owned());
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        checked += 1;
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {}:\n  build():  \
+                 {built:?}\n  Writer(): {streamed:?}",
+                path.display()
+            ));
+        }
+    }
+    assert!(
+        checked > 15,
+        "expected to check a substantial number of twiki fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        use twiki::OwnedEvent;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = twiki::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(OwnedEvent::StartParagraph);
+        w.write_event(OwnedEvent::Text("Hello world".to_string().into()));
+        w.write_event(OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err("Writer wrote zero bytes to the sink after a complete \
+                 StartParagraph/Text/EndParagraph sequence and before finish() -- \
+                 twiki::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+                 reconstructs the AST + calls build() inside finish(), so it is not a genuine \
+                 incremental streaming writer despite content round-tripping correctly"
+                .to_string());
+        }
+    }
+    assert_or_known_failure("twiki", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// vimwiki-fmt: events() vs parse(), StreamingParser vs events(), streaming
+// writer vs build() -- all fully wired
+// ---------------------------------------------------------------------------
+//
+// Same architecture and narrower-Wired-claim caveat as mediawiki-fmt/
+// tikiwiki/twiki above: `vimwiki_fmt::events::EventIter::new` calls
+// `crate::parse::parse(input)` then walks the tree with `emit_doc_events`/
+// `emit_block_events`/`emit_inline_events`.
+mod vimwiki_events_check {
+    use super::{assert_or_known_failure, find_input, fixtures_root};
+    use std::borrow::Cow;
+    use vimwiki_fmt::ast::{Block, Inline, VimwikiDoc};
+    use vimwiki_fmt::events::OwnedEvent;
+    type Event = OwnedEvent;
+
+    fn vw_ast_to_events(doc: &VimwikiDoc) -> Vec<Event> {
+        let mut out = Vec::new();
+        for b in &doc.blocks {
+            vw_block_events(b, &mut out);
+        }
+        out
+    }
+
+    fn vw_block_events(b: &Block, out: &mut Vec<Event>) {
+        match b {
+            Block::Paragraph { inlines, .. } => {
+                out.push(Event::StartParagraph);
+                vw_inline_events(inlines, out);
+                out.push(Event::EndParagraph);
+            }
+            Block::Heading { level, inlines, .. } => {
+                out.push(Event::StartHeading { level: *level });
+                vw_inline_events(inlines, out);
+                out.push(Event::EndHeading);
+            }
+            Block::CodeBlock {
+                language, content, ..
+            } => {
+                out.push(Event::CodeBlock {
+                    language: language.clone(),
+                    content: Cow::Owned(content.clone()),
+                });
+            }
+            // events.rs's `emit_block_events` wraps a vimwiki blockquote's flat
+            // `inlines` in a synthetic StartParagraph/EndParagraph pair inside
+            // the blockquote (blockquotes hold inlines directly in the AST, not
+            // a nested paragraph block) -- mirrored here, not simplified away,
+            // since the projection must match what events() actually emits.
+            Block::Blockquote { inlines, .. } => {
+                out.push(Event::StartBlockquote);
+                out.push(Event::StartParagraph);
+                vw_inline_events(inlines, out);
+                out.push(Event::EndParagraph);
+                out.push(Event::EndBlockquote);
+            }
+            Block::List { ordered, items, .. } => {
+                out.push(Event::StartList { ordered: *ordered });
+                for item in items {
+                    out.push(Event::StartListItem {
+                        checked: item.checked,
+                    });
+                    vw_inline_events(&item.inlines, out);
+                    out.push(Event::EndListItem);
+                }
+                out.push(Event::EndList);
+            }
+            Block::Table { rows, .. } => {
+                out.push(Event::StartTable);
+                for row in rows {
+                    out.push(Event::StartTableRow);
+                    for cell in &row.cells {
+                        out.push(Event::StartTableCell);
+                        vw_inline_events(cell, out);
+                        out.push(Event::EndTableCell);
+                    }
+                    out.push(Event::EndTableRow);
+                }
+                out.push(Event::EndTable);
+            }
+            Block::HorizontalRule { .. } => out.push(Event::HorizontalRule),
+            Block::DefinitionList { items, .. } => {
+                out.push(Event::StartDefinitionList);
+                for item in items {
+                    out.push(Event::StartDefinitionTerm);
+                    vw_inline_events(&item.term, out);
+                    out.push(Event::EndDefinitionTerm);
+                    out.push(Event::StartDefinitionDesc);
+                    vw_inline_events(&item.desc, out);
+                    out.push(Event::EndDefinitionDesc);
+                }
+                out.push(Event::EndDefinitionList);
+            }
+        }
+    }
+
+    fn vw_inline_events(inlines: &[Inline], out: &mut Vec<Event>) {
+        for i in inlines {
+            match i {
+                Inline::Text(s, _) => out.push(Event::Text(Cow::Owned(s.clone()))),
+                Inline::Bold(c, _) => {
+                    out.push(Event::StartBold);
+                    vw_inline_events(c, out);
+                    out.push(Event::EndBold);
+                }
+                Inline::Italic(c, _) => {
+                    out.push(Event::StartItalic);
+                    vw_inline_events(c, out);
+                    out.push(Event::EndItalic);
+                }
+                Inline::Strikethrough(c, _) => {
+                    out.push(Event::StartStrikethrough);
+                    vw_inline_events(c, out);
+                    out.push(Event::EndStrikethrough);
+                }
+                Inline::Superscript(c, _) => {
+                    out.push(Event::StartSuperscript);
+                    vw_inline_events(c, out);
+                    out.push(Event::EndSuperscript);
+                }
+                Inline::Subscript(c, _) => {
+                    out.push(Event::StartSubscript);
+                    vw_inline_events(c, out);
+                    out.push(Event::EndSubscript);
+                }
+                Inline::Code(s, _) => out.push(Event::InlineCode(Cow::Owned(s.clone()))),
+                Inline::Link { url, label, .. } => {
+                    out.push(Event::StartLink { url: url.clone() });
+                    out.push(Event::Text(Cow::Owned(label.clone())));
+                    out.push(Event::EndLink);
+                }
+                Inline::Image {
+                    url, alt, style, ..
+                } => out.push(Event::InlineImage {
+                    url: url.clone(),
+                    alt: alt.clone(),
+                    style: style.clone(),
+                }),
+            }
+        }
+    }
+
+    #[test]
+    fn vimwiki_events_equals_ast_projection_over_all_fixtures() {
+        let root = fixtures_root().join("vimwiki");
+        let mut checked = 0;
+        let mut result: Result<(), String> = Ok(());
+        for entry in std::fs::read_dir(&root).expect("fixtures/vimwiki dir") {
+            let path = entry.unwrap().path();
+            if !path.is_dir() {
+                continue;
+            }
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let Some(input_path) = find_input(&path) else {
+                continue;
+            };
+            let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+            let (doc, _diags) = vimwiki_fmt::parse::parse(&input);
+            let expected = vw_ast_to_events(&doc);
+            let actual: Vec<OwnedEvent> = vimwiki_fmt::events(&input)
+                .map(|e| e.into_owned())
+                .collect();
+            checked += 1;
+            if expected != actual && result.is_ok() {
+                result = Err(format!(
+                    "events() diverged from the AST projection for fixture {name}:\n  \
+                     ast-derived: {expected:?}\n  events():    {actual:?}"
+                ));
+            }
+        }
+        assert!(
+            checked > 15,
+            "expected to check a substantial number of vimwiki fixtures, got {checked}"
+        );
+        assert_or_known_failure("vimwiki", "events", result);
+    }
+}
+
+/// `StreamingParser` fed a vimwiki fixture under an adversarial chunking must
+/// deliver the same event sequence `events()` delivers over the whole input.
+/// `vimwiki_fmt::batch::StreamingParser::emit_block` re-parses each
+/// accumulated block in isolation via `crate::events::events(&text)`. The
+/// crate's own `test_streaming_matches_bulk` (batch.rs) already exercises
+/// one hand-picked heading+2-paragraph input under 7-byte chunking; this
+/// generalizes that self-check to the full adversarial-chunking suite (whole
+/// input, single-byte, 3/7/13-byte chunks, mid-UTF-8-char split) over every
+/// `fixtures/vimwiki/` fixture.
+#[test]
+fn vimwiki_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("vimwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/vimwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<vimwiki_fmt::OwnedEvent> = vimwiki_fmt::events(input_str)
+            .map(|e| e.into_owned())
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                vimwiki_fmt::StreamingParser::new(|e: vimwiki_fmt::OwnedEvent| streamed.push(e));
+            for chunk in chunks {
+                parser.feed(&chunk);
+            }
+            parser.finish();
+            if bulk != streamed {
+                if result.is_ok() {
+                    result = Err(format!(
+                        "StreamingParser diverged from events() for fixture {name} under \
+                         chunking {chunking_name}:\n  events():         {bulk:?}\n  \
+                         StreamingParser: {streamed:?}"
+                    ));
+                }
+                break;
+            }
+        }
+    }
+    assert!(
+        checked > 15,
+        "expected to check a substantial number of vimwiki fixtures, got {checked}"
+    );
+    assert_or_known_failure("vimwiki", "streaming_parser", result);
+}
+
+/// The streaming `Writer` driven with `events(input)` must reproduce what
+/// `build()` produces for the AST `parse(input)` returned, plus an
+/// incrementality probe. `Writer::write_event` (writer.rs) only pushes onto
+/// an internal `Vec<OwnedEvent>`; `finish()` calls
+/// `crate::events::collect_doc_from_events` then `crate::emit::build`.
+#[test]
+fn vimwiki_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("vimwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/vimwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _) = vimwiki_fmt::parse(&input);
+        let built = vimwiki_fmt::build(&doc);
+
+        let mut w = vimwiki_fmt::Writer::new(Vec::<u8>::new());
+        for e in vimwiki_fmt::events(&input) {
+            w.write_event(e.into_owned());
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        checked += 1;
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {}:\n  build():  \
+                 {built:?}\n  Writer(): {streamed:?}",
+                path.display()
+            ));
+        }
+    }
+    assert!(
+        checked > 15,
+        "expected to check a substantial number of vimwiki fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        use vimwiki_fmt::OwnedEvent;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = vimwiki_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(OwnedEvent::StartParagraph);
+        w.write_event(OwnedEvent::Text("Hello world".to_string().into()));
+        w.write_event(OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err("Writer wrote zero bytes to the sink after a complete \
+                 StartParagraph/Text/EndParagraph sequence and before finish() -- \
+                 vimwiki_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+                 reconstructs the AST + calls build() inside finish(), so it is not a genuine \
+                 incremental streaming writer despite content round-tripping correctly"
+                .to_string());
+        }
+    }
+    assert_or_known_failure("vimwiki", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// xwiki: events() is a genuine lazy pull-iterator over &XwikiDoc (unlike
+// zimwiki/markua/muse-fmt below, which eagerly materialize a Vec/VecDeque of
+// events before iteration begins). StreamingParser and Writer are both
+// confirmed-fake buffer-then-finish wrappers.
+// ---------------------------------------------------------------------------
+//
+// xwiki::events::events() takes `&XwikiDoc`, not `&str` — EventIter::next()
+// (crates/formats/xwiki/src/events.rs:168-385) is a true frame-stack walker
+// pulled on demand, so this check validates that walk directly against an
+// independently hand-written projection.
+mod xwiki_events_check {
+    use super::{find_input, fixtures_root};
+    use std::borrow::Cow;
+    use xwiki::{Block, Event, Inline, XwikiDoc};
+
+    /// Reconstruct the exact [`xwiki::Event`] sequence `events()` must produce
+    /// for `doc`.
+    ///
+    /// One non-obvious mapping: `Inline::Link { url, label, .. }` stores `label`
+    /// as a plain `String` (not nested inlines), but the event vocabulary only
+    /// has `StartLink`/`EndLink` with no leaf "link text" event — confirmed by
+    /// reading `EventIter::next()`'s `Inline::Link` arm (events.rs:361-368),
+    /// which emits `StartLink`, queues a single `Text(label)` as `self.pending`,
+    /// and closes with `EndLink`. The projection below mirrors that exactly.
+    fn xwiki_ast_to_events(doc: &XwikiDoc) -> Vec<Event<'_>> {
+        let mut out = Vec::new();
+        for b in &doc.blocks {
+            xwiki_block_events(b, &mut out);
+        }
+        out
+    }
+
+    fn xwiki_block_events<'a>(b: &'a Block, out: &mut Vec<Event<'a>>) {
+        match b {
+            Block::Heading { level, inlines, .. } => {
+                out.push(Event::StartHeading { level: *level });
+                xwiki_inline_events(inlines, out);
+                out.push(Event::EndHeading);
+            }
+            Block::Paragraph { inlines, .. } => {
+                out.push(Event::StartParagraph);
+                xwiki_inline_events(inlines, out);
+                out.push(Event::EndParagraph);
+            }
+            Block::CodeBlock {
+                content, language, ..
+            } => out.push(Event::CodeBlock {
+                language: language.clone(),
+                content: Cow::Borrowed(content),
+            }),
+            Block::Table { rows, .. } => {
+                out.push(Event::StartTable);
+                for row in rows {
+                    out.push(Event::StartTableRow);
+                    for cell in &row.cells {
+                        out.push(Event::StartTableCell {
+                            is_header: cell.is_header,
+                        });
+                        xwiki_inline_events(&cell.inlines, out);
+                        out.push(Event::EndTableCell);
+                    }
+                    out.push(Event::EndTableRow);
+                }
+                out.push(Event::EndTable);
+            }
+            Block::List { ordered, items, .. } => {
+                out.push(Event::StartList { ordered: *ordered });
+                for item in items {
+                    out.push(Event::StartListItem);
+                    for c in item {
+                        xwiki_block_events(c, out);
+                    }
+                    out.push(Event::EndListItem);
+                }
+                out.push(Event::EndList);
+            }
+            Block::HorizontalRule { .. } => out.push(Event::HorizontalRule),
+            Block::Blockquote { children, .. } => {
+                out.push(Event::StartBlockquote);
+                for c in children {
+                    xwiki_block_events(c, out);
+                }
+                out.push(Event::EndBlockquote);
+            }
+            Block::MacroBlock {
+                name,
+                params,
+                content,
+                ..
+            } => out.push(Event::MacroBlock {
+                name: name.clone(),
+                params: params.clone(),
+                content: content.clone(),
+            }),
+            Block::MacroInline { name, params, .. } => out.push(Event::MacroInline {
+                name: name.clone(),
+                params: params.clone(),
+            }),
+        }
+    }
+
+    fn xwiki_inline_events<'a>(inlines: &'a [Inline], out: &mut Vec<Event<'a>>) {
+        for i in inlines {
+            match i {
+                Inline::Text(s, _) => out.push(Event::Text(Cow::Borrowed(s))),
+                Inline::Bold(c, _) => {
+                    out.push(Event::StartBold);
+                    xwiki_inline_events(c, out);
+                    out.push(Event::EndBold);
+                }
+                Inline::Italic(c, _) => {
+                    out.push(Event::StartItalic);
+                    xwiki_inline_events(c, out);
+                    out.push(Event::EndItalic);
+                }
+                Inline::Underline(c, _) => {
+                    out.push(Event::StartUnderline);
+                    xwiki_inline_events(c, out);
+                    out.push(Event::EndUnderline);
+                }
+                Inline::Strikeout(c, _) => {
+                    out.push(Event::StartStrikeout);
+                    xwiki_inline_events(c, out);
+                    out.push(Event::EndStrikeout);
+                }
+                Inline::Superscript(c, _) => {
+                    out.push(Event::StartSuperscript);
+                    xwiki_inline_events(c, out);
+                    out.push(Event::EndSuperscript);
+                }
+                Inline::Subscript(c, _) => {
+                    out.push(Event::StartSubscript);
+                    xwiki_inline_events(c, out);
+                    out.push(Event::EndSubscript);
+                }
+                Inline::Code(s, _) => out.push(Event::InlineCode(Cow::Borrowed(s))),
+                Inline::Link { url, label, .. } => {
+                    out.push(Event::StartLink { url: url.clone() });
+                    out.push(Event::Text(Cow::Borrowed(label)));
+                    out.push(Event::EndLink);
+                }
+                Inline::Image {
+                    url, alt, params, ..
+                } => out.push(Event::InlineImage {
+                    url: url.clone(),
+                    alt: alt.clone(),
+                    params: params.clone(),
+                }),
+                Inline::LineBreak { .. } => out.push(Event::LineBreak),
+                Inline::SoftBreak { .. } => out.push(Event::SoftBreak),
+            }
+        }
+    }
+
+    #[test]
+    fn xwiki_events_equals_ast_projection_over_all_fixtures() {
+        let root = fixtures_root().join("xwiki");
+        let mut checked = 0;
+        let mut failures: Vec<String> = Vec::new();
+        for entry in std::fs::read_dir(&root).expect("fixtures/xwiki dir") {
+            let path = entry.unwrap().path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Some(input_path) = find_input(&path) else {
+                continue;
+            };
+            let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+            let (doc, _diags) = xwiki::parse(&input);
+            let expected = xwiki_ast_to_events(&doc);
+            let actual: Vec<_> = xwiki::events::events(&doc).collect();
+            checked += 1;
+            if expected != actual {
+                let at = expected
+                    .iter()
+                    .zip(actual.iter())
+                    .position(|(a, b)| a != b)
+                    .unwrap_or(expected.len().min(actual.len()));
+                failures.push(format!(
+                    "{}: first divergence at event #{at} (expected len {}, actual len {})",
+                    path.file_name().unwrap().to_string_lossy(),
+                    expected.len(),
+                    actual.len(),
+                ));
+            }
+        }
+        assert!(
+            checked > 20,
+            "expected to check a substantial number of xwiki fixtures, got {checked}"
+        );
+        assert!(
+            failures.is_empty(),
+            "events() diverged from the AST projection for {}/{checked} xwiki fixtures:\n\n{}",
+            failures.len(),
+            failures.join("\n\n")
+        );
+    }
+}
+
+/// `xwiki::batch::StreamingParser::feed()` is a bare `buf.extend_from_slice`
+/// (crates/formats/xwiki/src/batch.rs:61-63); all parsing happens in
+/// `finish()` (batch.rs:66-72), which calls `parse::parse` then walks the
+/// result with `events::events`. So the adversarial-chunking equivalence
+/// check below is expected to pass trivially (finish() always reproduces
+/// exactly what `events()` computes over the reassembled buffer) — the real
+/// defect this check is built to catch is architectural, not a content
+/// mismatch: does `feed()` deliver any events before `finish()` is called?
+/// It does not.
+#[test]
+fn xwiki_streaming_parser_matches_events_and_is_incremental() {
+    let root = fixtures_root().join("xwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/xwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let (doc, _diags) = xwiki::parse(input_str);
+        let bulk: Vec<xwiki::OwnedEvent> = xwiki::events::events(&doc)
+            .map(|e| e.into_owned())
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                xwiki::batch::StreamingParser::new(|e: xwiki::OwnedEvent| streamed.push(e));
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+
+        if input.len() > 32 && !bulk.is_empty() {
+            let mid = input.len() / 2;
+            let mut delivered: Vec<xwiki::OwnedEvent> = Vec::new();
+            let mut parser = xwiki::batch::StreamingParser::new(|e| delivered.push(e));
+            parser.feed(&input[..mid]);
+            if delivered.is_empty() && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser delivered zero events to the handler after feed() with \
+                     half of fixture {name} ({mid} bytes) and before finish() — \
+                     xwiki::batch::StreamingParser buffers all input into a Vec<u8> \
+                     (crates/formats/xwiki/src/batch.rs:61-63) and only parses and delivers \
+                     events inside finish() (batch.rs:66-72), so feed() never advances real \
+                     incremental parser state"
+                ));
+            }
+            // `parser` intentionally dropped without calling finish(): this probe
+            // only needs to observe pre-finish handler state.
+        }
+    }
+    assert!(
+        checked > 20,
+        "expected to check a substantial number of xwiki fixtures, got {checked}"
+    );
+    assert_or_known_failure("xwiki", "streaming_parser", result);
+}
+
+/// `xwiki::writer::Writer::write_event()` only pushes to a `Vec`
+/// (crates/formats/xwiki/src/writer.rs:39-41); `finish()` reconstructs the
+/// AST via `collect_doc_from_events` and calls `emit::build` once
+/// (writer.rs:44-49). Content-wise this round-trips correctly (checked
+/// below), but an incrementality probe shows zero bytes reach the sink
+/// before `finish()`.
+#[test]
+fn xwiki_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
+    let root = fixtures_root().join("xwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/xwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = xwiki::parse(&input);
+        let built = xwiki::build(&doc);
+
+        let mut w = xwiki::Writer::new(Vec::<u8>::new());
+        for e in xwiki::events::events(&doc) {
+            w.write_event(e.into_owned());
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+        checked += 1;
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 20,
+        "expected to check a substantial number of xwiki fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = xwiki::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(xwiki::OwnedEvent::StartHeading { level: 1 });
+        w.write_event(xwiki::OwnedEvent::Text("Hello".to_string().into()));
+        w.write_event(xwiki::OwnedEvent::EndHeading);
+        w.write_event(xwiki::OwnedEvent::StartParagraph);
+        w.write_event(xwiki::OwnedEvent::Text("World".to_string().into()));
+        w.write_event(xwiki::OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after 6 complete write_event() calls (a \
+                 full heading + paragraph) and before finish() — xwiki::writer::Writer buffers \
+                 all events into a Vec<OwnedEvent> and only reconstructs the AST + calls \
+                 emit::build() inside finish() (crates/formats/xwiki/src/writer.rs:39-49), so it \
+                 is not a genuine incremental streaming writer despite content round-tripping \
+                 correctly"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("xwiki", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// zimwiki: events() is parse()+eager-materialize-then-walk (EventIter::new
+// calls parse::parse(input), then walks the resulting tree into a Vec before
+// any event is returned — see events.rs:94-102) — a narrower claim than
+// xwiki's genuinely lazy walker, in the same spirit as asciidoc's narrower
+// "Wired" claim: the equivalence check validates the AST->event expansion
+// layer (emit_block/emit_inline), not two independent parsers.
+// StreamingParser here, unlike xwiki/muse-fmt, is REAL incremental: feed_line
+// tracks verbatim-block boundaries and blank-line block termination and calls
+// emit_block() during feed(), not deferred to finish() (batch.rs:93-152).
+// ---------------------------------------------------------------------------
+mod zimwiki_events_check {
+    use super::{find_input, fixtures_root};
+    use std::borrow::Cow;
+    use zimwiki::{Block, Inline, OwnedEvent, ZimwikiDoc};
+
+    /// Reconstruct the exact [`zimwiki::OwnedEvent`] sequence `events()` must
+    /// produce for `doc`.
+    fn zimwiki_ast_to_events(doc: &ZimwikiDoc) -> Vec<OwnedEvent> {
+        let mut out = Vec::new();
+        for b in &doc.blocks {
+            zimwiki_block_events(b, &mut out);
+        }
+        out
+    }
+
+    fn zimwiki_block_events(b: &Block, out: &mut Vec<OwnedEvent>) {
+        match b {
+            Block::Paragraph { inlines, .. } => {
+                out.push(OwnedEvent::StartParagraph);
+                zimwiki_inline_events(inlines, out);
+                out.push(OwnedEvent::EndParagraph);
+            }
+            Block::Heading { level, inlines, .. } => {
+                out.push(OwnedEvent::StartHeading { level: *level });
+                zimwiki_inline_events(inlines, out);
+                out.push(OwnedEvent::EndHeading);
+            }
+            Block::CodeBlock { content, .. } => out.push(OwnedEvent::CodeBlock {
+                content: Cow::Owned(content.clone()),
+            }),
+            Block::Blockquote { children, .. } => {
+                out.push(OwnedEvent::StartBlockquote);
+                for c in children {
+                    zimwiki_block_events(c, out);
+                }
+                out.push(OwnedEvent::EndBlockquote);
+            }
+            Block::List { ordered, items, .. } => {
+                out.push(OwnedEvent::StartList { ordered: *ordered });
+                for item in items {
+                    out.push(OwnedEvent::StartListItem {
+                        checked: item.checked,
+                    });
+                    for c in &item.children {
+                        zimwiki_block_events(c, out);
+                    }
+                    out.push(OwnedEvent::EndListItem);
+                }
+                out.push(OwnedEvent::EndList);
+            }
+            Block::Table { rows, .. } => {
+                out.push(OwnedEvent::StartTable);
+                for row in rows {
+                    out.push(OwnedEvent::StartTableRow);
+                    for cell in &row.cells {
+                        out.push(OwnedEvent::StartTableCell);
+                        zimwiki_inline_events(cell, out);
+                        out.push(OwnedEvent::EndTableCell);
+                    }
+                    out.push(OwnedEvent::EndTableRow);
+                }
+                out.push(OwnedEvent::EndTable);
+            }
+            Block::HorizontalRule { .. } => out.push(OwnedEvent::HorizontalRule),
+        }
+    }
+
+    fn zimwiki_inline_events(inlines: &[Inline], out: &mut Vec<OwnedEvent>) {
+        for i in inlines {
+            match i {
+                Inline::Text(s, _) => out.push(OwnedEvent::Text(Cow::Owned(s.clone()))),
+                Inline::Bold(c, _) => {
+                    out.push(OwnedEvent::StartBold);
+                    zimwiki_inline_events(c, out);
+                    out.push(OwnedEvent::EndBold);
+                }
+                Inline::Italic(c, _) => {
+                    out.push(OwnedEvent::StartItalic);
+                    zimwiki_inline_events(c, out);
+                    out.push(OwnedEvent::EndItalic);
+                }
+                Inline::Underline(c, _) => {
+                    out.push(OwnedEvent::StartUnderline);
+                    zimwiki_inline_events(c, out);
+                    out.push(OwnedEvent::EndUnderline);
+                }
+                Inline::Strikethrough(c, _) => {
+                    out.push(OwnedEvent::StartStrikethrough);
+                    zimwiki_inline_events(c, out);
+                    out.push(OwnedEvent::EndStrikethrough);
+                }
+                Inline::Subscript(c, _) => {
+                    out.push(OwnedEvent::StartSubscript);
+                    zimwiki_inline_events(c, out);
+                    out.push(OwnedEvent::EndSubscript);
+                }
+                Inline::Superscript(c, _) => {
+                    out.push(OwnedEvent::StartSuperscript);
+                    zimwiki_inline_events(c, out);
+                    out.push(OwnedEvent::EndSuperscript);
+                }
+                Inline::Code(s, _) => out.push(OwnedEvent::InlineCode(Cow::Owned(s.clone()))),
+                Inline::Link { url, children, .. } => {
+                    out.push(OwnedEvent::StartLink { url: url.clone() });
+                    zimwiki_inline_events(children, out);
+                    out.push(OwnedEvent::EndLink);
+                }
+                Inline::Image { url, .. } => out.push(OwnedEvent::InlineImage { url: url.clone() }),
+                Inline::LineBreak { .. } => out.push(OwnedEvent::LineBreak),
+                Inline::SoftBreak { .. } => out.push(OwnedEvent::SoftBreak),
+            }
+        }
+    }
+
+    #[test]
+    fn zimwiki_events_equals_ast_projection_over_all_fixtures() {
+        let root = fixtures_root().join("zimwiki");
+        let mut checked = 0;
+        let mut failures: Vec<String> = Vec::new();
+        for entry in std::fs::read_dir(&root).expect("fixtures/zimwiki dir") {
+            let path = entry.unwrap().path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Some(input_path) = find_input(&path) else {
+                continue;
+            };
+            let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+            let (doc, _diags) = zimwiki::parse(&input);
+            let expected = zimwiki_ast_to_events(&doc);
+            let actual: Vec<OwnedEvent> = zimwiki::events(&input).collect();
+            checked += 1;
+            if expected != actual {
+                let at = expected
+                    .iter()
+                    .zip(actual.iter())
+                    .position(|(a, b)| a != b)
+                    .unwrap_or(expected.len().min(actual.len()));
+                failures.push(format!(
+                    "{}: first divergence at event #{at} (expected len {}, actual len {})",
+                    path.file_name().unwrap().to_string_lossy(),
+                    expected.len(),
+                    actual.len(),
+                ));
+            }
+        }
+        assert!(
+            checked > 20,
+            "expected to check a substantial number of zimwiki fixtures, got {checked}"
+        );
+        assert!(
+            failures.is_empty(),
+            "events() diverged from the AST projection for {}/{checked} zimwiki fixtures:\n\n{}",
+            failures.len(),
+            failures.join("\n\n")
+        );
+    }
+}
+
+/// `StreamingParser` fed a zimwiki fixture under an adversarial chunking must
+/// deliver the same event sequence `events()` delivers over the whole input.
+/// Unlike xwiki/muse-fmt, `zimwiki::batch::StreamingParser::feed()` really is
+/// incremental — it tracks verbatim-block (`'''`) boundaries and blank-line
+/// block termination line-by-line and calls `emit_block()` during `feed()`
+/// (batch.rs:93-152) — so divergences found here are genuine block-boundary
+/// bugs, the same bug class already tracked for org/rst/asciidoc
+/// (`emit_block()` re-parses each accumulated block in isolation via
+/// `crate::events::events()`, so cross-block context such as a loose list's
+/// blank-line-separated items is lost).
+#[test]
+fn zimwiki_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("zimwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/zimwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<zimwiki::OwnedEvent> = zimwiki::events(input_str).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                zimwiki::batch::StreamingParser::new(|e: zimwiki::OwnedEvent| streamed.push(e));
+            for chunk in chunks {
+                parser.feed(&chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}:\n  events():         {bulk:?}\n  StreamingParser: \
+                     {streamed:?}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 20,
+        "expected to check a substantial number of zimwiki fixtures, got {checked}"
+    );
+    assert_or_known_failure("zimwiki", "streaming_parser", result);
+}
+
+/// `zimwiki::writer::Writer::write_event()` only pushes to a `Vec`
+/// (crates/formats/zimwiki/src/writer.rs:24-26); `finish()` reconstructs the
+/// AST via `collect_doc_from_events` and calls `emit::build` once
+/// (writer.rs:29-34). Content round-trips correctly (checked below), but an
+/// incrementality probe shows zero bytes reach the sink before `finish()`.
+#[test]
+fn zimwiki_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
+    let root = fixtures_root().join("zimwiki");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/zimwiki dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = zimwiki::parse(&input);
+        let built = zimwiki::build(&doc);
+
+        let mut w = zimwiki::Writer::new(Vec::<u8>::new());
+        for e in zimwiki::events(&input) {
+            w.write_event(e);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+        checked += 1;
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 20,
+        "expected to check a substantial number of zimwiki fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = zimwiki::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(zimwiki::OwnedEvent::StartHeading { level: 1 });
+        w.write_event(zimwiki::OwnedEvent::Text("Hello".to_string().into()));
+        w.write_event(zimwiki::OwnedEvent::EndHeading);
+        w.write_event(zimwiki::OwnedEvent::StartParagraph);
+        w.write_event(zimwiki::OwnedEvent::Text("World".to_string().into()));
+        w.write_event(zimwiki::OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after 6 complete write_event() calls (a \
+                 full heading + paragraph) and before finish() — zimwiki::writer::Writer buffers \
+                 all events into a Vec<OwnedEvent> and only reconstructs the AST + calls \
+                 emit::build() inside finish() (crates/formats/zimwiki/src/writer.rs:24-34), so \
+                 it is not a genuine incremental streaming writer despite content round-tripping \
+                 correctly"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("zimwiki", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// markua: events() is parse()+eager-tree-build-then-walk. `EventIter::new`
+// (re-exported from parse.rs, not events.rs) runs the full recursive-descent
+// `Parser::parse()` before any event is returned (parse.rs:969-985); only the
+// subsequent `Iterator::next()` pull over `expand_block`/`expand_inline` is
+// lazy. So this is the same narrower "Wired" claim as asciidoc/zimwiki: the
+// check validates the AST->event expansion layer.
+// ---------------------------------------------------------------------------
+mod markua_events_check {
+    use super::{find_input, fixtures_root};
+    use markua::{Block, Inline, MarkuaDoc, OwnedMarkuaEvent};
+    use std::borrow::Cow;
+
+    /// Reconstruct the exact [`markua::OwnedMarkuaEvent`] sequence `events()`
+    /// must produce for `doc`.
+    ///
+    /// `Block::Figure`/`Inline::FootnoteRef` etc. are handled for
+    /// completeness (an exhaustive match, so a new AST variant breaks the
+    /// build), but `Block::Figure` is never constructed by `parse()` —
+    /// confirmed by reading `crates/formats/markua/src/parse.rs` and
+    /// `emit.rs`, neither of which has any code path building a `Figure`
+    /// from Markua syntax — so it is unreachable via any fixture in this
+    /// check and its ordering (caption before body, settled from
+    /// `expand_block`'s `Block::Figure` arm, parse.rs:1071-1082) is untested
+    /// here.
+    fn markua_ast_to_events(doc: &MarkuaDoc) -> Vec<OwnedMarkuaEvent> {
+        let mut out = Vec::new();
+        for b in &doc.blocks {
+            markua_block_events(b, &mut out);
+        }
+        out
+    }
+
+    fn markua_block_events(b: &Block, out: &mut Vec<OwnedMarkuaEvent>) {
+        match b {
+            Block::Paragraph { inlines, .. } => {
+                out.push(OwnedMarkuaEvent::StartParagraph);
+                markua_inline_events(inlines, out);
+                out.push(OwnedMarkuaEvent::EndParagraph);
+            }
+            Block::Heading { level, inlines, .. } => {
+                out.push(OwnedMarkuaEvent::StartHeading { level: *level });
+                markua_inline_events(inlines, out);
+                out.push(OwnedMarkuaEvent::EndHeading);
+            }
+            Block::CodeBlock {
+                content, language, ..
+            } => out.push(OwnedMarkuaEvent::CodeBlock {
+                language: language.clone(),
+                content: Cow::Owned(content.clone()),
+            }),
+            Block::Blockquote { children, .. } => {
+                out.push(OwnedMarkuaEvent::StartBlockquote);
+                for c in children {
+                    markua_block_events(c, out);
+                }
+                out.push(OwnedMarkuaEvent::EndBlockquote);
+            }
+            Block::List { ordered, items, .. } => {
+                out.push(OwnedMarkuaEvent::StartList { ordered: *ordered });
+                for item in items {
+                    out.push(OwnedMarkuaEvent::StartListItem);
+                    for c in item {
+                        markua_block_events(c, out);
+                    }
+                    out.push(OwnedMarkuaEvent::EndListItem);
+                }
+                out.push(OwnedMarkuaEvent::EndList);
+            }
+            Block::Table { rows, .. } => {
+                out.push(OwnedMarkuaEvent::StartTable);
+                for row in rows {
+                    out.push(OwnedMarkuaEvent::StartTableRow);
+                    for cell in &row.cells {
+                        out.push(OwnedMarkuaEvent::StartTableCell);
+                        markua_inline_events(cell, out);
+                        out.push(OwnedMarkuaEvent::EndTableCell);
+                    }
+                    out.push(OwnedMarkuaEvent::EndTableRow);
+                }
+                out.push(OwnedMarkuaEvent::EndTable);
+            }
+            Block::HorizontalRule { .. } => out.push(OwnedMarkuaEvent::HorizontalRule),
+            Block::SpecialBlock {
+                block_type,
+                children,
+                ..
+            } => {
+                out.push(OwnedMarkuaEvent::StartSpecialBlock {
+                    kind: block_type.clone(),
+                });
+                for c in children {
+                    markua_block_events(c, out);
+                }
+                out.push(OwnedMarkuaEvent::EndSpecialBlock);
+            }
+            Block::DefinitionList { items, .. } => {
+                out.push(OwnedMarkuaEvent::StartDefinitionList);
+                for (term, desc) in items {
+                    out.push(OwnedMarkuaEvent::StartDefinitionTerm);
+                    markua_inline_events(term, out);
+                    out.push(OwnedMarkuaEvent::EndDefinitionTerm);
+                    out.push(OwnedMarkuaEvent::StartDefinitionDesc);
+                    for b in desc {
+                        markua_block_events(b, out);
+                    }
+                    out.push(OwnedMarkuaEvent::EndDefinitionDesc);
+                }
+                out.push(OwnedMarkuaEvent::EndDefinitionList);
+            }
+            Block::PageBreak { .. } => out.push(OwnedMarkuaEvent::PageBreak),
+            Block::Figure { caption, body, .. } => {
+                out.push(OwnedMarkuaEvent::StartFigure);
+                if !caption.is_empty() {
+                    out.push(OwnedMarkuaEvent::StartCaption);
+                    markua_inline_events(caption, out);
+                    out.push(OwnedMarkuaEvent::EndCaption);
+                }
+                markua_block_events(body, out);
+                out.push(OwnedMarkuaEvent::EndFigure);
+            }
+        }
+    }
+
+    fn markua_inline_events(inlines: &[Inline], out: &mut Vec<OwnedMarkuaEvent>) {
+        for i in inlines {
+            match i {
+                Inline::Text(s, _) => out.push(OwnedMarkuaEvent::Text(Cow::Owned(s.clone()))),
+                Inline::Strong(c, _) => {
+                    out.push(OwnedMarkuaEvent::StartStrong);
+                    markua_inline_events(c, out);
+                    out.push(OwnedMarkuaEvent::EndStrong);
+                }
+                Inline::Emphasis(c, _) => {
+                    out.push(OwnedMarkuaEvent::StartEmphasis);
+                    markua_inline_events(c, out);
+                    out.push(OwnedMarkuaEvent::EndEmphasis);
+                }
+                Inline::Strikethrough(c, _) => {
+                    out.push(OwnedMarkuaEvent::StartStrikethrough);
+                    markua_inline_events(c, out);
+                    out.push(OwnedMarkuaEvent::EndStrikethrough);
+                }
+                Inline::Subscript(c, _) => {
+                    out.push(OwnedMarkuaEvent::StartSubscript);
+                    markua_inline_events(c, out);
+                    out.push(OwnedMarkuaEvent::EndSubscript);
+                }
+                Inline::Superscript(c, _) => {
+                    out.push(OwnedMarkuaEvent::StartSuperscript);
+                    markua_inline_events(c, out);
+                    out.push(OwnedMarkuaEvent::EndSuperscript);
+                }
+                Inline::Underline(c, _) => {
+                    out.push(OwnedMarkuaEvent::StartUnderline);
+                    markua_inline_events(c, out);
+                    out.push(OwnedMarkuaEvent::EndUnderline);
+                }
+                Inline::SmallCaps(c, _) => {
+                    out.push(OwnedMarkuaEvent::StartSmallCaps);
+                    markua_inline_events(c, out);
+                    out.push(OwnedMarkuaEvent::EndSmallCaps);
+                }
+                Inline::Code(s, _) => out.push(OwnedMarkuaEvent::InlineCode(Cow::Owned(s.clone()))),
+                Inline::Link { url, children, .. } => {
+                    out.push(OwnedMarkuaEvent::StartLink { url: url.clone() });
+                    markua_inline_events(children, out);
+                    out.push(OwnedMarkuaEvent::EndLink);
+                }
+                Inline::Image { url, alt, .. } => out.push(OwnedMarkuaEvent::Image {
+                    url: url.clone(),
+                    alt: alt.clone(),
+                }),
+                Inline::LineBreak(_) => out.push(OwnedMarkuaEvent::LineBreak),
+                Inline::SoftBreak(_) => out.push(OwnedMarkuaEvent::SoftBreak),
+                Inline::FootnoteRef { content, .. } => {
+                    out.push(OwnedMarkuaEvent::StartFootnoteRef);
+                    markua_inline_events(content, out);
+                    out.push(OwnedMarkuaEvent::EndFootnoteRef);
+                }
+                Inline::IndexTerm { term, .. } => {
+                    out.push(OwnedMarkuaEvent::IndexTerm { term: term.clone() })
+                }
+                Inline::MathInline { content, .. } => out.push(OwnedMarkuaEvent::MathInline {
+                    content: content.clone(),
+                }),
+            }
+        }
+    }
+
+    #[test]
+    fn markua_events_equals_ast_projection_over_all_fixtures() {
+        let root = fixtures_root().join("markua");
+        let mut checked = 0;
+        let mut failures: Vec<String> = Vec::new();
+        for entry in std::fs::read_dir(&root).expect("fixtures/markua dir") {
+            let path = entry.unwrap().path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Some(input_path) = find_input(&path) else {
+                continue;
+            };
+            let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+            let (doc, _diags) = markua::parse(&input);
+            let expected = markua_ast_to_events(&doc);
+            let actual: Vec<OwnedMarkuaEvent> =
+                markua::events(&input).map(|e| e.into_owned()).collect();
+            checked += 1;
+            if expected != actual {
+                let at = expected
+                    .iter()
+                    .zip(actual.iter())
+                    .position(|(a, b)| a != b)
+                    .unwrap_or(expected.len().min(actual.len()));
+                failures.push(format!(
+                    "{}: first divergence at event #{at} (expected len {}, actual len {})",
+                    path.file_name().unwrap().to_string_lossy(),
+                    expected.len(),
+                    actual.len(),
+                ));
+            }
+        }
+        assert!(
+            checked > 20,
+            "expected to check a substantial number of markua fixtures, got {checked}"
+        );
+        assert!(
+            failures.is_empty(),
+            "events() diverged from the AST projection for {}/{checked} markua fixtures:\n\n{}",
+            failures.len(),
+            failures.join("\n\n")
+        );
+    }
+}
+
+/// `StreamingParser` fed a markua fixture under an adversarial chunking must
+/// deliver the same event sequence `events()` delivers over the whole input.
+/// `markua::batch::StreamingParser::feed()` is REAL incremental
+/// block-boundary segmentation (fenced-code-aware `feed_line`, batch.rs:108-
+/// 152), unlike xwiki/muse-fmt — `emit_block()` re-parses each accumulated
+/// block via `crate::events::events()`, the same architecture (and bug
+/// class) already tracked for org/rst/asciidoc/zimwiki.
+#[test]
+fn markua_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("markua");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/markua dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<markua::OwnedMarkuaEvent> =
+            markua::events(input_str).map(|e| e.into_owned()).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                markua::batch::StreamingParser::new(|e: markua::OwnedMarkuaEvent| streamed.push(e));
+            for chunk in chunks {
+                parser.feed(&chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}:\n  events():         {bulk:?}\n  StreamingParser: \
+                     {streamed:?}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 20,
+        "expected to check a substantial number of markua fixtures, got {checked}"
+    );
+    assert_or_known_failure("markua", "streaming_parser", result);
+}
+
+/// `markua::writer::Writer::write_event()` only pushes to a `Vec`
+/// (crates/formats/markua/src/writer.rs:40-42); `finish()` reconstructs the
+/// AST via `events_to_doc`/`DocBuilder` and calls `emit::emit` once
+/// (writer.rs:45-50). Content round-trips correctly for every fixture
+/// (checked below — `MarkuaDoc::title`/`author`/`description` are always
+/// `None` regardless of path: `parse()` itself never populates them from any
+/// Markua syntax, confirmed by reading `parse.rs`'s `pub fn parse`, which
+/// hardcodes `title: None, author: None, description: None` unconditionally
+/// — so the `DocBuilder::finish` hardcoding the same is not a reachable
+/// divergence via any fixture). An incrementality probe shows zero bytes
+/// reach the sink before `finish()`.
+#[test]
+fn markua_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
+    let root = fixtures_root().join("markua");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/markua dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = markua::parse(&input);
+        let built = markua::build(&doc);
+
+        let mut w = markua::Writer::new(Vec::<u8>::new());
+        for e in markua::events(&input) {
+            w.write_event(e.into_owned());
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+        checked += 1;
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 20,
+        "expected to check a substantial number of markua fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = markua::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(markua::OwnedMarkuaEvent::StartHeading { level: 1 });
+        w.write_event(markua::OwnedMarkuaEvent::Text("Hello".to_string().into()));
+        w.write_event(markua::OwnedMarkuaEvent::EndHeading);
+        w.write_event(markua::OwnedMarkuaEvent::StartParagraph);
+        w.write_event(markua::OwnedMarkuaEvent::Text("World".to_string().into()));
+        w.write_event(markua::OwnedMarkuaEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after 6 complete write_event() calls (a \
+                 full heading + paragraph) and before finish() — markua::writer::Writer buffers \
+                 all events into a Vec<OwnedMarkuaEvent> and only reconstructs the AST + calls \
+                 emit::emit() inside finish() (crates/formats/markua/src/writer.rs:40-50), so it \
+                 is not a genuine incremental streaming writer despite content round-tripping \
+                 correctly"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("markua", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// muse: events() takes &MuseDoc (like xwiki), but eagerly materializes a
+// VecDeque in EventIter::new (events.rs:211-220) rather than pulling lazily —
+// still a real, independently hand-checkable walk. StreamingParser and Writer
+// are both confirmed-fake buffer-then-finish wrappers, and the crate's own
+// module docs for StreamingParser admit it outright ("Muse's block-level
+// structure makes true incremental parsing difficult without a dedicated
+// state machine", batch.rs:11-13).
+// ---------------------------------------------------------------------------
+mod muse_events_check {
+    use super::{find_input, fixtures_root};
+    use muse_fmt::{Block, Inline, MuseDoc, OwnedMuseEvent};
+    use std::borrow::Cow;
+
+    /// Reconstruct the exact [`muse_fmt::OwnedMuseEvent`] sequence `events()`
+    /// must produce for `doc`, including the `StartDocument`/`EndDocument`
+    /// wrapper pair `EventIter::new` always emits (events.rs:213-219).
+    fn muse_ast_to_events(doc: &MuseDoc) -> Vec<OwnedMuseEvent> {
+        let mut out = vec![OwnedMuseEvent::StartDocument];
+        for b in &doc.blocks {
+            muse_block_events(b, &mut out);
+        }
+        out.push(OwnedMuseEvent::EndDocument);
+        out
+    }
+
+    fn muse_block_events(b: &Block, out: &mut Vec<OwnedMuseEvent>) {
+        match b {
+            Block::Paragraph { inlines, .. } => {
+                out.push(OwnedMuseEvent::StartParagraph);
+                muse_inline_events(inlines, out);
+                out.push(OwnedMuseEvent::EndParagraph);
+            }
+            Block::Heading { level, inlines, .. } => {
+                out.push(OwnedMuseEvent::StartHeading { level: *level });
+                muse_inline_events(inlines, out);
+                out.push(OwnedMuseEvent::EndHeading);
+            }
+            Block::CodeBlock { content, .. } => out.push(OwnedMuseEvent::CodeBlock {
+                content: Cow::Owned(content.clone()),
+            }),
+            Block::Blockquote { children, .. } => {
+                out.push(OwnedMuseEvent::StartBlockquote);
+                for c in children {
+                    muse_block_events(c, out);
+                }
+                out.push(OwnedMuseEvent::EndBlockquote);
+            }
+            Block::List { ordered, items, .. } => {
+                out.push(OwnedMuseEvent::StartList { ordered: *ordered });
+                for item in items {
+                    out.push(OwnedMuseEvent::StartListItem);
+                    for c in item {
+                        muse_block_events(c, out);
+                    }
+                    out.push(OwnedMuseEvent::EndListItem);
+                }
+                out.push(OwnedMuseEvent::EndList);
+            }
+            Block::DefinitionList { items, .. } => {
+                out.push(OwnedMuseEvent::StartDefinitionList);
+                for (term, desc) in items {
+                    out.push(OwnedMuseEvent::StartDefinitionTerm);
+                    muse_inline_events(term, out);
+                    out.push(OwnedMuseEvent::EndDefinitionTerm);
+                    out.push(OwnedMuseEvent::StartDefinitionDesc);
+                    for b in desc {
+                        muse_block_events(b, out);
+                    }
+                    out.push(OwnedMuseEvent::EndDefinitionDesc);
+                }
+                out.push(OwnedMuseEvent::EndDefinitionList);
+            }
+            Block::HorizontalRule { .. } => out.push(OwnedMuseEvent::HorizontalRule),
+            Block::Verse { children, .. } => {
+                out.push(OwnedMuseEvent::StartVerse);
+                for c in children {
+                    muse_block_events(c, out);
+                }
+                out.push(OwnedMuseEvent::EndVerse);
+            }
+            Block::CenteredBlock { children, .. } => {
+                out.push(OwnedMuseEvent::StartCenteredBlock);
+                for c in children {
+                    muse_block_events(c, out);
+                }
+                out.push(OwnedMuseEvent::EndCenteredBlock);
+            }
+            Block::RightBlock { children, .. } => {
+                out.push(OwnedMuseEvent::StartRightBlock);
+                for c in children {
+                    muse_block_events(c, out);
+                }
+                out.push(OwnedMuseEvent::EndRightBlock);
+            }
+            Block::LiteralBlock { content, .. } => out.push(OwnedMuseEvent::LiteralBlock {
+                content: Cow::Owned(content.clone()),
+            }),
+            Block::SrcBlock { lang, content, .. } => out.push(OwnedMuseEvent::SrcBlock {
+                lang: lang.clone().map(Cow::Owned),
+                content: Cow::Owned(content.clone()),
+            }),
+            Block::Comment { content, .. } => out.push(OwnedMuseEvent::Comment {
+                content: Cow::Owned(content.clone()),
+            }),
+            Block::Table { rows, .. } => {
+                out.push(OwnedMuseEvent::StartTable);
+                for row in rows {
+                    out.push(OwnedMuseEvent::StartTableRow { header: row.header });
+                    for cell in &row.cells {
+                        out.push(OwnedMuseEvent::StartTableCell);
+                        muse_inline_events(cell, out);
+                        out.push(OwnedMuseEvent::EndTableCell);
+                    }
+                    out.push(OwnedMuseEvent::EndTableRow);
+                }
+                out.push(OwnedMuseEvent::EndTable);
+            }
+            Block::FootnoteDef { label, content, .. } => {
+                out.push(OwnedMuseEvent::StartFootnoteDef {
+                    label: Cow::Owned(label.clone()),
+                });
+                muse_inline_events(content, out);
+                out.push(OwnedMuseEvent::EndFootnoteDef);
+            }
+        }
+    }
+
+    fn muse_inline_events(inlines: &[Inline], out: &mut Vec<OwnedMuseEvent>) {
+        for i in inlines {
+            match i {
+                Inline::Text(s, _) => out.push(OwnedMuseEvent::Text(Cow::Owned(s.clone()))),
+                Inline::Bold(c, _) => {
+                    out.push(OwnedMuseEvent::StartBold);
+                    muse_inline_events(c, out);
+                    out.push(OwnedMuseEvent::EndBold);
+                }
+                Inline::Italic(c, _) => {
+                    out.push(OwnedMuseEvent::StartItalic);
+                    muse_inline_events(c, out);
+                    out.push(OwnedMuseEvent::EndItalic);
+                }
+                Inline::Code(s, _) => out.push(OwnedMuseEvent::Code(Cow::Owned(s.clone()))),
+                Inline::Link { url, children, .. } => {
+                    out.push(OwnedMuseEvent::StartLink {
+                        url: Cow::Owned(url.clone()),
+                    });
+                    muse_inline_events(children, out);
+                    out.push(OwnedMuseEvent::EndLink);
+                }
+                Inline::Underline(c, _) => {
+                    out.push(OwnedMuseEvent::StartUnderline);
+                    muse_inline_events(c, out);
+                    out.push(OwnedMuseEvent::EndUnderline);
+                }
+                Inline::Strikethrough(c, _) => {
+                    out.push(OwnedMuseEvent::StartStrikethrough);
+                    muse_inline_events(c, out);
+                    out.push(OwnedMuseEvent::EndStrikethrough);
+                }
+                Inline::Superscript(c, _) => {
+                    out.push(OwnedMuseEvent::StartSuperscript);
+                    muse_inline_events(c, out);
+                    out.push(OwnedMuseEvent::EndSuperscript);
+                }
+                Inline::Subscript(c, _) => {
+                    out.push(OwnedMuseEvent::StartSubscript);
+                    muse_inline_events(c, out);
+                    out.push(OwnedMuseEvent::EndSubscript);
+                }
+                Inline::FootnoteRef { label, .. } => out.push(OwnedMuseEvent::FootnoteRef {
+                    label: Cow::Owned(label.clone()),
+                }),
+                Inline::LineBreak(_) => out.push(OwnedMuseEvent::LineBreak),
+                Inline::Anchor { name, .. } => out.push(OwnedMuseEvent::Anchor {
+                    name: Cow::Owned(name.clone()),
+                }),
+                Inline::Image { src, alt, .. } => out.push(OwnedMuseEvent::Image {
+                    src: Cow::Owned(src.clone()),
+                    alt: alt.clone().map(Cow::Owned),
+                }),
+            }
+        }
+    }
+
+    #[test]
+    fn muse_events_equals_ast_projection_over_all_fixtures() {
+        let root = fixtures_root().join("muse");
+        let mut checked = 0;
+        let mut failures: Vec<String> = Vec::new();
+        for entry in std::fs::read_dir(&root).expect("fixtures/muse dir") {
+            let path = entry.unwrap().path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Some(input_path) = find_input(&path) else {
+                continue;
+            };
+            let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+            let (doc, _diags) = muse_fmt::parse(&input);
+            let expected = muse_ast_to_events(&doc);
+            let actual: Vec<OwnedMuseEvent> = muse_fmt::events::events(&doc)
+                .map(|e| e.into_owned())
+                .collect();
+            checked += 1;
+            if expected != actual {
+                let at = expected
+                    .iter()
+                    .zip(actual.iter())
+                    .position(|(a, b)| a != b)
+                    .unwrap_or(expected.len().min(actual.len()));
+                failures.push(format!(
+                    "{}: first divergence at event #{at} (expected len {}, actual len {})",
+                    path.file_name().unwrap().to_string_lossy(),
+                    expected.len(),
+                    actual.len(),
+                ));
+            }
+        }
+        assert!(
+            checked > 20,
+            "expected to check a substantial number of muse fixtures, got {checked}"
+        );
+        assert!(
+            failures.is_empty(),
+            "events() diverged from the AST projection for {}/{checked} muse fixtures:\n\n{}",
+            failures.len(),
+            failures.join("\n\n")
+        );
+    }
+}
+
+/// `muse_fmt::batch::StreamingParser::feed()` is a bare `buf.extend_from_slice`
+/// (crates/formats/muse-fmt/src/batch.rs:94-96); all parsing happens in
+/// `finish()` (batch.rs:98-105), which calls `parse::parse` then walks the
+/// result with `events::events`. The crate's own module docs admit this
+/// outright ("Muse's block-level structure makes true incremental parsing
+/// difficult without a dedicated state machine", batch.rs:11-13). So the
+/// content-equivalence half of this check is expected to pass trivially; the
+/// incrementality probe is the real test.
+#[test]
+fn muse_streaming_parser_matches_events_and_is_incremental() {
+    let root = fixtures_root().join("muse");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/muse dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let (doc, _diags) = muse_fmt::parse(input_str);
+        let bulk: Vec<muse_fmt::OwnedMuseEvent> = muse_fmt::events::events(&doc)
+            .map(|e| e.into_owned())
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                muse_fmt::batch::StreamingParser::new(|e: muse_fmt::OwnedMuseEvent| {
+                    streamed.push(e)
+                });
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+
+        if input.len() > 32 && !bulk.is_empty() {
+            let mid = input.len() / 2;
+            let mut delivered: Vec<muse_fmt::OwnedMuseEvent> = Vec::new();
+            let mut parser = muse_fmt::batch::StreamingParser::new(|e| delivered.push(e));
+            parser.feed(&input[..mid]);
+            if delivered.is_empty() && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser delivered zero events to the handler after feed() with \
+                     half of fixture {name} ({mid} bytes) and before finish() — \
+                     muse_fmt::batch::StreamingParser buffers all input into a Vec<u8> \
+                     (crates/formats/muse-fmt/src/batch.rs:94-96) and only parses and delivers \
+                     events inside finish() (batch.rs:98-105), so feed() never advances real \
+                     incremental parser state"
+                ));
+            }
+            // `parser` intentionally dropped without calling finish(): this probe
+            // only needs to observe pre-finish handler state.
+        }
+    }
+    assert!(
+        checked > 20,
+        "expected to check a substantial number of muse fixtures, got {checked}"
+    );
+    assert_or_known_failure("muse", "streaming_parser", result);
+}
+
+/// `muse_fmt::writer::Writer::write_event()` only pushes to a `Vec`
+/// (crates/formats/muse-fmt/src/writer.rs:42-44); `finish()` reconstructs the
+/// AST via `events_to_doc`/`DocBuilder` and calls `emit::build` once
+/// (writer.rs:47-52). Unlike xwiki/zimwiki/markua, this is NOT purely an
+/// architectural finding: `DocBuilder::finish` builds `MuseDoc { blocks,
+/// span: Span::NONE, ..Default::default() }` (writer.rs:494-504), so
+/// `title`/`author`/`date`/`description`/`keywords` always come back `None`
+/// — and unlike markua, muse-fmt's `parse()` genuinely does populate these
+/// fields from `#title`/`#author`/`#date`/`#desc`/`#keywords` directives
+/// (parse.rs:240-249), reachable via the `document-header` fixture. The
+/// `MuseEvent` enum has no variant carrying document metadata at all
+/// (confirmed by reading the full enum, events.rs:27-114), so this is the
+/// same expressiveness-gap bug class already tracked for org-fmt/texinfo.
+#[test]
+fn muse_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
+    let root = fixtures_root().join("muse");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/muse dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = muse_fmt::parse(&input);
+        let built = muse_fmt::build(&doc);
+
+        let mut w = muse_fmt::Writer::new(Vec::<u8>::new());
+        for e in muse_fmt::events::events(&doc) {
+            w.write_event(e.into_owned());
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+        checked += 1;
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+    }
+    assert!(
+        checked > 20,
+        "expected to check a substantial number of muse fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = muse_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(muse_fmt::OwnedMuseEvent::StartDocument);
+        w.write_event(muse_fmt::OwnedMuseEvent::StartHeading { level: 1 });
+        w.write_event(muse_fmt::OwnedMuseEvent::Text("Hello".to_string().into()));
+        w.write_event(muse_fmt::OwnedMuseEvent::EndHeading);
+        w.write_event(muse_fmt::OwnedMuseEvent::StartParagraph);
+        w.write_event(muse_fmt::OwnedMuseEvent::Text("World".to_string().into()));
+        w.write_event(muse_fmt::OwnedMuseEvent::EndParagraph);
+        w.write_event(muse_fmt::OwnedMuseEvent::EndDocument);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after 8 complete write_event() calls (a \
+                 full heading + paragraph) and before finish() — muse_fmt::writer::Writer \
+                 buffers all events into a Vec<OwnedMuseEvent> and only reconstructs the AST + \
+                 calls emit::build() inside finish() (crates/formats/muse-fmt/src/writer.rs:42- \
+                 52), so it is not a genuine incremental streaming writer despite content \
+                 round-tripping correctly for fixtures without document metadata"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("muse", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// t2t: events() is `EventIter::new(parse(input).0)` (src/events.rs's public
+// `events()` fn) — a lazy frame-stack walk of the AST `parse()` already
+// built, not an independently-implemented reader. Per the asciidoc precedent
+// above, the ast_to_events-vs-events() check below is real and passes, but
+// it validates the AST->event expansion layer (push_block/push_inline's
+// frame-stack walk), not two independent parsers — the check would pass by
+// construction even if `events()`'s only bug were "doesn't match its own
+// AST", since both sides start from the same `T2tDoc`.
+//
+// StreamingParser is a genuine per-block incremental parser (batch.rs's
+// feed_line/BlockState machine flushes each accumulated block via
+// emit_block() as soon as a blank line or fence boundary is seen, not only
+// at finish()) but emit_block() re-parses each block's text in isolation via
+// crate::events::events(&text) — the same "re-parse each block alone, lose
+// cross-block context" root cause already documented for org-fmt/asciidoc's
+// StreamingParsers. Two distinct fixtures expose it here: the definition-list
+// fixture, where the blank line between items ends the accumulated block
+// (see feed_line's blank-line branch, batch.rs:143-150), splitting one
+// multi-item DefinitionList into two DefinitionList event pairs (the same bug
+// class already tracked for rst/org); and document-header, where the
+// isolated re-parse of the header's own three lines re-triggers
+// `try_parse_header()` (parse.rs:70), which requires >=3 lines and a
+// non-heading/list/table/comment first line — a condition any 3+ line
+// document-header-shaped block satisfies purely by looking like one out of
+// context, producing a spurious extra StartDocument/EndDocument pair (since
+// Event has no metadata variant to carry the consumed header text) that
+// events() over the whole document never produces.
+//
+// Writer buffers all events into a Vec<OwnedEvent> and only reconstructs the
+// AST + calls emit() inside finish() (writer.rs's own module doc: "This
+// implementation buffers all events, reconstructs the AST, then emits") —
+// the same fake-streaming-writer pattern as textile/commonmark/org/texinfo.
+// It also drops doc.title/author/date on every fixture with a document
+// header: emit::emit() always writes the 3-line header verbatim from
+// T2tDoc.title/author/date (emit.rs:9-16), but t2t::Event has no variant
+// carrying those fields, so writer.rs's DocBuilder::finish (T2tDoc {
+// blocks, ..Default::default() }, writer.rs:400-404) always reconstructs
+// title: None/author: None/date: None — an Event-enum expressiveness gap,
+// not a one-line logic bug, exposed by the document-header fixture.
+// ---------------------------------------------------------------------------
+
+fn t2t_ast_to_events(doc: &t2t::T2tDoc) -> Vec<t2t::Event<'static>> {
+    let mut out = vec![t2t::Event::StartDocument];
+    for b in &doc.blocks {
+        t2t_block_events(b, &mut out);
+    }
+    out.push(t2t::Event::EndDocument);
+    out
+}
+
+fn t2t_block_events(b: &t2t::Block, out: &mut Vec<t2t::Event<'static>>) {
+    use std::borrow::Cow;
+    use t2t::{Block, Event};
+    match b {
+        Block::Paragraph { inlines, .. } => {
+            out.push(Event::StartParagraph);
+            for i in inlines {
+                t2t_inline_events(i, out);
+            }
+            out.push(Event::EndParagraph);
+        }
+        Block::Heading {
+            level,
+            numbered,
+            inlines,
+            ..
+        } => {
+            out.push(Event::StartHeading {
+                level: *level,
+                numbered: *numbered,
+            });
+            for i in inlines {
+                t2t_inline_events(i, out);
+            }
+            out.push(Event::EndHeading);
+        }
+        Block::CodeBlock { content, .. } => out.push(Event::CodeBlock {
+            content: Cow::Owned(content.clone()),
+        }),
+        Block::RawBlock { content, .. } => out.push(Event::RawBlock {
+            content: Cow::Owned(content.clone()),
+        }),
+        Block::Blockquote { children, .. } => {
+            out.push(Event::StartBlockquote);
+            for c in children {
+                t2t_block_events(c, out);
+            }
+            out.push(Event::EndBlockquote);
+        }
+        Block::List { ordered, items, .. } => {
+            out.push(Event::StartList { ordered: *ordered });
+            for item_blocks in items {
+                out.push(Event::StartListItem);
+                for b in item_blocks {
+                    t2t_block_events(b, out);
+                }
+                out.push(Event::EndListItem);
+            }
+            out.push(Event::EndList);
+        }
+        Block::Table { rows, .. } => {
+            out.push(Event::StartTable);
+            for row in rows {
+                out.push(Event::StartTableRow {
+                    header: row.is_header,
+                });
+                for cell in &row.cells {
+                    out.push(Event::StartTableCell);
+                    for i in cell {
+                        t2t_inline_events(i, out);
+                    }
+                    out.push(Event::EndTableCell);
+                }
+                out.push(Event::EndTableRow);
+            }
+            out.push(Event::EndTable);
+        }
+        Block::HorizontalRule { .. } => out.push(Event::HorizontalRule),
+        Block::DefinitionList { items, .. } => {
+            out.push(Event::StartDefinitionList);
+            for (term, desc) in items {
+                out.push(Event::StartDefinitionTerm);
+                for i in term {
+                    t2t_inline_events(i, out);
+                }
+                out.push(Event::EndDefinitionTerm);
+                out.push(Event::StartDefinitionDesc);
+                for b in desc {
+                    t2t_block_events(b, out);
+                }
+                out.push(Event::EndDefinitionDesc);
+            }
+            out.push(Event::EndDefinitionList);
+        }
+    }
+}
+
+fn t2t_inline_events(i: &t2t::Inline, out: &mut Vec<t2t::Event<'static>>) {
+    use std::borrow::Cow;
+    use t2t::{Event, Inline};
+    match i {
+        Inline::Text(s, _) => out.push(Event::Text(Cow::Owned(s.clone()))),
+        Inline::Bold(children, _) => {
+            out.push(Event::StartBold);
+            for c in children {
+                t2t_inline_events(c, out);
+            }
+            out.push(Event::EndBold);
+        }
+        Inline::Italic(children, _) => {
+            out.push(Event::StartItalic);
+            for c in children {
+                t2t_inline_events(c, out);
+            }
+            out.push(Event::EndItalic);
+        }
+        Inline::Underline(children, _) => {
+            out.push(Event::StartUnderline);
+            for c in children {
+                t2t_inline_events(c, out);
+            }
+            out.push(Event::EndUnderline);
+        }
+        Inline::Strikethrough(children, _) => {
+            out.push(Event::StartStrikethrough);
+            for c in children {
+                t2t_inline_events(c, out);
+            }
+            out.push(Event::EndStrikethrough);
+        }
+        Inline::Code(s, _) => out.push(Event::Code(Cow::Owned(s.clone()))),
+        Inline::Link { url, children, .. } => {
+            out.push(Event::StartLink {
+                url: Cow::Owned(url.clone()),
+            });
+            for c in children {
+                t2t_inline_events(c, out);
+            }
+            out.push(Event::EndLink);
+        }
+        Inline::Image { url, .. } => out.push(Event::Image {
+            src: Cow::Owned(url.clone()),
+        }),
+        Inline::LineBreak(_) => out.push(Event::LineBreak),
+        Inline::SoftBreak(_) => out.push(Event::SoftBreak),
+        Inline::Verbatim(s, _) => out.push(Event::Verbatim(Cow::Owned(s.clone()))),
+        Inline::Tagged(s, _) => out.push(Event::Tagged(Cow::Owned(s.clone()))),
+    }
+}
+
+#[test]
+fn t2t_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("t2t");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&root).expect("fixtures/t2t dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = t2t::parse::parse(&input);
+        let expected = t2t_ast_to_events(&doc);
+        let actual: Vec<_> = t2t::events(&input).collect();
+        assert_eq!(
+            expected,
+            actual,
+            "events() diverged from the AST projection for fixture {}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of t2t fixtures, got {checked}"
+    );
+}
+
+/// `StreamingParser` genuinely flushes events per accumulated block as it's
+/// fed (not only at `finish()`) but re-parses each block's text in isolation
+/// via `crate::events::events()`, losing cross-block context. Checked via
+/// adversarial-chunking equivalence against `events()` over the whole input.
+#[test]
+fn t2t_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("t2t");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/t2t dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<t2t::OwnedEvent> = t2t::events(input_str).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser = t2t::batch::StreamingParser::new(|e: t2t::OwnedEvent| {
+                streamed.push(e);
+            });
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of t2t fixtures, got {checked}"
+    );
+    assert_or_known_failure("t2t", "streaming_parser", result);
+}
+
+/// `Writer` buffers all fed events into a `Vec<OwnedEvent>` and only
+/// reconstructs the AST + calls `emit()` inside `finish()` (see
+/// `crates/formats/t2t/src/writer.rs`'s own module doc). Checked via
+/// byte-identical comparison against the builder path, plus an
+/// incrementality probe.
+#[test]
+fn t2t_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("t2t");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/t2t dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = t2t::parse::parse(&input);
+        let built = t2t::emit::emit(&doc);
+
+        let mut w = t2t::writer::Writer::new(Vec::<u8>::new());
+        for e in t2t::events(&input) {
+            w.write_event(e);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of t2t fixtures, got {checked}"
+    );
+
+    // Incrementality probe: byte-identical final content (checked above)
+    // only proves correctness, not genuine streaming.
+    if result.is_ok() {
+        use t2t::Event;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = t2t::writer::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(Event::StartParagraph);
+        w.write_event(Event::Text("Hello world".to_string().into()));
+        w.write_event(Event::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after a full StartParagraph/Text/\
+                 EndParagraph sequence and before finish() — t2t::writer::Writer buffers all \
+                 events into a Vec<OwnedEvent> and only reconstructs the AST + calls emit() \
+                 inside finish() (crates/formats/t2t/src/writer.rs), so it is not a genuine \
+                 incremental streaming writer despite content round-tripping correctly"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("t2t", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// pod-fmt: top-level `pod_fmt::events()` (src/lib.rs) is `parse(input)` then
+// an eager `.collect()` of `events::EventIter::new(&doc)` — a lazy
+// frame-stack walk of the AST parse() already built (the same
+// events()-is-parse()+AST-walk pattern already documented for t2t/asciidoc
+// above), not an independently-implemented reader. The ast_to_events-vs-
+// events() check below is real and passes, but validates the AST->event
+// expansion layer, not two independent parsers.
+//
+// StreamingParser is explicitly self-documented buffer-then-finish: its own
+// doc comment reads "POD documents are always small enough to buffer fully,
+// so this implementation accumulates all input and parses on finish(). The
+// chunk API is provided for interface consistency with other format
+// crates." feed() only does `self.buf.extend_from_slice(chunk)`; all
+// parsing and event delivery happens in finish() via
+// `crate::events::EventIter::new(&doc)` over the *whole* buffered input (not
+// per-isolated-block), so — unlike t2t/org/asciidoc — there is no
+// re-parse-in-isolation divergence from events(): the adversarial-chunking
+// equivalence check is expected to (and does) pass. The real defect is
+// purely architectural non-incrementality, per CLAUDE.md's "the 'buffer all
+// input until finish()' stub is explicitly rejected for hand-rolled
+// parsers" — pod-fmt's own docstring rationale does not make this a
+// sanctioned exemption (only commonmark-fmt's pulldown-cmark wrapping is);
+// pinned via the incrementality probe.
+//
+// Writer buffers all fed events into a Vec<OwnedEvent> and only reconstructs
+// the AST + calls emit::build() inside finish() (writer.rs's `finish()`:
+// `events_to_doc(...)` then `crate::emit::build(&doc)`) — the same
+// fake-streaming-writer pattern as t2t/textile/commonmark/org/texinfo. Since
+// PodDoc has no document-level metadata field pod::Event could plausibly be
+// missing (unlike t2t's title/author/date), the byte-identical-to-builder
+// check is expected to (and does) pass; only the incrementality probe fails.
+// ---------------------------------------------------------------------------
+
+fn pod_ast_to_events(doc: &pod_fmt::PodDoc) -> Vec<pod_fmt::OwnedEvent> {
+    let mut out = Vec::new();
+    for b in &doc.blocks {
+        pod_block_events(b, &mut out);
+    }
+    out
+}
+
+fn pod_block_events(b: &pod_fmt::Block, out: &mut Vec<pod_fmt::OwnedEvent>) {
+    use pod_fmt::{Block, Event};
+    match b {
+        Block::Heading { level, inlines, .. } => {
+            out.push(Event::StartHeading { level: *level });
+            for i in inlines {
+                pod_inline_events(i, out);
+            }
+            out.push(Event::EndHeading);
+        }
+        Block::Paragraph { inlines, .. } => {
+            out.push(Event::StartParagraph);
+            for i in inlines {
+                pod_inline_events(i, out);
+            }
+            out.push(Event::EndParagraph);
+        }
+        Block::CodeBlock { content, .. } => out.push(Event::CodeBlock {
+            content: content.clone().into(),
+        }),
+        Block::List { ordered, items, .. } => {
+            out.push(Event::StartList { ordered: *ordered });
+            for item_blocks in items {
+                out.push(Event::StartListItem);
+                for b in item_blocks {
+                    pod_block_events(b, out);
+                }
+                out.push(Event::EndListItem);
+            }
+            out.push(Event::EndList);
+        }
+        Block::DefinitionList { items, .. } => {
+            out.push(Event::StartDefinitionList);
+            for item in items {
+                out.push(Event::StartDefinitionTerm);
+                for i in &item.term {
+                    pod_inline_events(i, out);
+                }
+                out.push(Event::EndDefinitionTerm);
+                out.push(Event::StartDefinitionDesc);
+                for b in &item.desc {
+                    pod_block_events(b, out);
+                }
+                out.push(Event::EndDefinitionDesc);
+            }
+            out.push(Event::EndDefinitionList);
+        }
+        Block::RawBlock {
+            format, content, ..
+        } => out.push(Event::RawBlock {
+            format: format.clone(),
+            content: content.clone(),
+        }),
+        Block::ForBlock {
+            format, content, ..
+        } => out.push(Event::ForBlock {
+            format: format.clone(),
+            content: content.clone(),
+        }),
+        Block::Encoding { encoding, .. } => out.push(Event::Encoding {
+            encoding: encoding.clone(),
+        }),
+    }
+}
+
+fn pod_inline_events(i: &pod_fmt::Inline, out: &mut Vec<pod_fmt::OwnedEvent>) {
+    use pod_fmt::{Event, Inline};
+    match i {
+        Inline::Text(s, _) => out.push(Event::Text(s.clone().into())),
+        Inline::Bold(children, _) => {
+            out.push(Event::StartBold);
+            for c in children {
+                pod_inline_events(c, out);
+            }
+            out.push(Event::EndBold);
+        }
+        Inline::Italic(children, _) => {
+            out.push(Event::StartItalic);
+            for c in children {
+                pod_inline_events(c, out);
+            }
+            out.push(Event::EndItalic);
+        }
+        Inline::Underline(children, _) => {
+            out.push(Event::StartUnderline);
+            for c in children {
+                pod_inline_events(c, out);
+            }
+            out.push(Event::EndUnderline);
+        }
+        Inline::Code(s, _) => out.push(Event::InlineCode(s.clone().into())),
+        Inline::Link { url, label, .. } => {
+            out.push(Event::StartLink {
+                url: url.clone(),
+                label: label.clone(),
+            });
+            out.push(Event::EndLink);
+        }
+        Inline::Filename(children, _) => {
+            out.push(Event::StartFilename);
+            for c in children {
+                pod_inline_events(c, out);
+            }
+            out.push(Event::EndFilename);
+        }
+        Inline::NonBreaking(children, _) => {
+            out.push(Event::StartNonBreaking);
+            for c in children {
+                pod_inline_events(c, out);
+            }
+            out.push(Event::EndNonBreaking);
+        }
+        Inline::IndexEntry(s, _) => out.push(Event::IndexEntry(s.clone())),
+        Inline::Null(_) => out.push(Event::Null),
+        Inline::Entity(s, _) => out.push(Event::Entity(s.clone())),
+    }
+}
+
+#[test]
+fn pod_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("pod");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&root).expect("fixtures/pod dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = pod_fmt::parse(&input);
+        let expected = pod_ast_to_events(&doc);
+        let actual: Vec<_> = pod_fmt::events(&input).collect();
+        assert_eq!(
+            expected,
+            actual,
+            "events() diverged from the AST projection for fixture {}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of pod fixtures, got {checked}"
+    );
+}
+
+/// `StreamingParser` is explicitly self-documented buffer-then-finish (see
+/// `crates/formats/pod-fmt/src/batch.rs`'s own module doc). Checks (1)
+/// equivalence with `events()` under adversarial chunking (expected to hold,
+/// since finish() parses the whole buffered input the same way bulk
+/// `events()` does — no per-block re-parse to diverge) and (2) incremental
+/// delivery (feed() alone, before finish(), should deliver some events for
+/// large-enough input) — (2) fails, the real defect this check surfaces.
+#[test]
+fn pod_streaming_parser_matches_events_and_is_incremental() {
+    let root = fixtures_root().join("pod");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/pod dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<pod_fmt::OwnedEvent> = pod_fmt::events(input_str).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser = pod_fmt::batch::StreamingParser::new(|e: pod_fmt::OwnedEvent| {
+                streamed.push(e);
+            });
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+
+        if input.len() > 32 && !bulk.is_empty() {
+            let mid = input.len() / 2;
+            let mut delivered: Vec<pod_fmt::OwnedEvent> = Vec::new();
+            let mut parser = pod_fmt::batch::StreamingParser::new(|e| delivered.push(e));
+            parser.feed(&input[..mid]);
+            if delivered.is_empty() && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser delivered zero events to the handler after feed() with \
+                     half of fixture {name} ({mid} bytes) and before finish() — \
+                     pod_fmt::batch::StreamingParser buffers all input into a Vec<u8> (self- \
+                     documented in crates/formats/pod-fmt/src/batch.rs's module doc) and only \
+                     parses and delivers events inside finish()"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of pod fixtures, got {checked}"
+    );
+    assert_or_known_failure("pod", "streaming_parser", result);
+}
+
+/// `Writer` buffers all fed events into a `Vec<OwnedEvent>` and only
+/// reconstructs the AST + calls `emit::build()` inside `finish()` (see
+/// `crates/formats/pod-fmt/src/writer.rs`). Checked via byte-identical
+/// comparison against the builder path, plus an incrementality probe.
+#[test]
+fn pod_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("pod");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/pod dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = pod_fmt::parse(&input);
+        let built = pod_fmt::build(&doc);
+
+        let mut w = pod_fmt::Writer::new(Vec::<u8>::new());
+        for e in pod_fmt::events(&input) {
+            w.write_event(e);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of pod fixtures, got {checked}"
+    );
+
+    // Incrementality probe: byte-identical final content (checked above)
+    // only proves correctness, not genuine streaming.
+    if result.is_ok() {
+        use pod_fmt::Event;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = pod_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(Event::StartParagraph);
+        w.write_event(Event::Text("Hello world".to_string().into()));
+        w.write_event(Event::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after a full StartParagraph/Text/\
+                 EndParagraph sequence and before finish() — pod_fmt::writer::Writer buffers all \
+                 events into a Vec<OwnedEvent> and only reconstructs the AST + calls \
+                 emit::build() inside finish() (crates/formats/pod-fmt/src/writer.rs), so it is \
+                 not a genuine incremental streaming writer despite content round-tripping \
+                 correctly"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("pod", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// haddock-fmt: `haddock_fmt::events()` (src/lib.rs) is `events::events(input)`
+// which is `parse(input)` then a lazy frame-stack `EventIter::expand_block`
+// walk of the AST parse() already built — the same events()-is-parse()+
+// AST-walk pattern already documented for t2t/pod/asciidoc above, not an
+// independently-implemented reader. The ast_to_events-vs-events() check
+// below is real and passes, but validates the AST->event expansion layer.
+//
+// StreamingParser (batch.rs) genuinely flushes events per accumulated block
+// as fed (blank line or EOF triggers emit_block(), which re-parses just
+// that block's text via crate::events::events()) — architecturally the same
+// "re-parse each block alone" shape as t2t/org/asciidoc's StreamingParsers.
+// Unlike those, every haddock block-termination rule in parse.rs (heading,
+// paragraph, code block, @-code block, doctest, lists, definition list,
+// property) depends only on the content of lines within the block being
+// scanned — never on cross-block state or document position (no
+// document-start-only special case the way t2t's 3-line header lookahead
+// is) — so re-parsing an isolated block's text from scratch recovers
+// exactly the same block boundaries parse() would find inline. This harness
+// found no fixture where StreamingParser disagrees with events() under
+// adversarial chunking, so streaming_parser is Wired, not KnownFailure.
+//
+// Writer buffers all fed events into a Vec<OwnedEvent> and only
+// reconstructs the AST + calls emit::build() inside finish() (writer.rs's
+// own module doc: "This implementation buffers all events, reconstructs the
+// AST, then emits") — the same fake-streaming-writer pattern as
+// t2t/pod/textile/commonmark/org/texinfo.
+// ---------------------------------------------------------------------------
+
+fn haddock_ast_to_events(doc: &haddock_fmt::HaddockDoc) -> Vec<haddock_fmt::OwnedEvent> {
+    let mut out = Vec::new();
+    for b in &doc.blocks {
+        haddock_block_events(b, &mut out);
+    }
+    out
+}
+
+fn haddock_block_events(b: &haddock_fmt::Block, out: &mut Vec<haddock_fmt::OwnedEvent>) {
+    use haddock_fmt::{Block, Event};
+    match b {
+        Block::Heading { level, inlines, .. } => {
+            out.push(Event::StartHeading { level: *level });
+            for i in inlines {
+                haddock_inline_events(i, out);
+            }
+            out.push(Event::EndHeading);
+        }
+        Block::Paragraph { inlines, .. } => {
+            out.push(Event::StartParagraph);
+            for i in inlines {
+                haddock_inline_events(i, out);
+            }
+            out.push(Event::EndParagraph);
+        }
+        Block::CodeBlock { content, .. } => out.push(Event::CodeBlock {
+            content: content.clone().into(),
+        }),
+        Block::AtCodeBlock { content, .. } => out.push(Event::AtCodeBlock {
+            content: content.clone().into(),
+        }),
+        Block::UnorderedList { items, .. } => {
+            out.push(Event::StartUnorderedList);
+            for item in items {
+                out.push(Event::StartListItem);
+                for i in item {
+                    haddock_inline_events(i, out);
+                }
+                out.push(Event::EndListItem);
+            }
+            out.push(Event::EndUnorderedList);
+        }
+        Block::OrderedList { items, .. } => {
+            out.push(Event::StartOrderedList);
+            for item in items {
+                out.push(Event::StartListItem);
+                for i in item {
+                    haddock_inline_events(i, out);
+                }
+                out.push(Event::EndListItem);
+            }
+            out.push(Event::EndOrderedList);
+        }
+        Block::DefinitionList { items, .. } => {
+            out.push(Event::StartDefinitionList);
+            for (term, desc) in items {
+                out.push(Event::StartDefinitionTerm);
+                for i in term {
+                    haddock_inline_events(i, out);
+                }
+                out.push(Event::EndDefinitionTerm);
+                out.push(Event::StartDefinitionDesc);
+                for i in desc {
+                    haddock_inline_events(i, out);
+                }
+                out.push(Event::EndDefinitionDesc);
+            }
+            out.push(Event::EndDefinitionList);
+        }
+        Block::DocTest {
+            expression, result, ..
+        } => out.push(Event::DocTest {
+            expression: expression.clone().into(),
+            result: result.clone().map(Into::into),
+        }),
+        Block::Blockquote { inlines, .. } => {
+            out.push(Event::StartBlockquote);
+            for i in inlines {
+                haddock_inline_events(i, out);
+            }
+            out.push(Event::EndBlockquote);
+        }
+        Block::Property {
+            key,
+            name,
+            description,
+            ..
+        } => {
+            out.push(Event::Property {
+                key: key.clone().into(),
+                name: name.clone().map(Into::into),
+            });
+            for i in description {
+                haddock_inline_events(i, out);
+            }
+            out.push(Event::EndProperty);
+        }
+    }
+}
+
+fn haddock_inline_events(i: &haddock_fmt::Inline, out: &mut Vec<haddock_fmt::OwnedEvent>) {
+    use haddock_fmt::{Event, Inline};
+    match i {
+        Inline::Text(s, _) => out.push(Event::Text(s.clone().into())),
+        Inline::Code(s, _) => out.push(Event::InlineCode(s.clone().into())),
+        Inline::Strong(children, _) => {
+            out.push(Event::StartStrong);
+            for c in children {
+                haddock_inline_events(c, out);
+            }
+            out.push(Event::EndStrong);
+        }
+        Inline::Emphasis(children, _) => {
+            out.push(Event::StartEmphasis);
+            for c in children {
+                haddock_inline_events(c, out);
+            }
+            out.push(Event::EndEmphasis);
+        }
+        Inline::Link { url, text, .. } => {
+            out.push(Event::StartLink {
+                url: url.clone(),
+                text: text.clone(),
+            });
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndLink);
+        }
+        Inline::ModuleLink { module, .. } => out.push(Event::ModuleLink {
+            module: module.clone(),
+        }),
+    }
+}
+
+#[test]
+fn haddock_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("haddock");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&root).expect("fixtures/haddock dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = haddock_fmt::parse(&input);
+        let expected = haddock_ast_to_events(&doc);
+        let actual: Vec<_> = haddock_fmt::events(&input)
+            .map(|e| e.into_owned())
+            .collect();
+        assert_eq!(
+            expected,
+            actual,
+            "events() diverged from the AST projection for fixture {}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of haddock fixtures, got {checked}"
+    );
+}
+
+/// `StreamingParser` flushes events per accumulated block as fed, re-parsing
+/// each block's text in isolation via `crate::events::events()`. Checked via
+/// adversarial-chunking equivalence against `events()` over the whole input.
+#[test]
+fn haddock_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("haddock");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/haddock dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<haddock_fmt::OwnedEvent> = haddock_fmt::events(input_str)
+            .map(|e| e.into_owned())
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                haddock_fmt::batch::StreamingParser::new(|e: haddock_fmt::OwnedEvent| {
+                    streamed.push(e);
+                });
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of haddock fixtures, got {checked}"
+    );
+    assert_or_known_failure("haddock", "streaming_parser", result);
+}
+
+/// `Writer` buffers all fed events into a `Vec<OwnedEvent>` and only
+/// reconstructs the AST + calls `emit::build()` inside `finish()` (see
+/// `crates/formats/haddock-fmt/src/writer.rs`'s own module doc). Checked via
+/// byte-identical comparison against the builder path, plus an
+/// incrementality probe.
+#[test]
+fn haddock_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("haddock");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/haddock dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = haddock_fmt::parse(&input);
+        let built = haddock_fmt::build(&doc);
+
+        let mut w = haddock_fmt::Writer::new(Vec::<u8>::new());
+        for e in haddock_fmt::events(&input) {
+            w.write_event(e.into_owned());
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of haddock fixtures, got {checked}"
+    );
+
+    // Incrementality probe: byte-identical final content (checked above)
+    // only proves correctness, not genuine streaming.
+    if result.is_ok() {
+        use haddock_fmt::Event;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = haddock_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(Event::StartParagraph);
+        w.write_event(Event::Text("Hello world".to_string().into()));
+        w.write_event(Event::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after a full StartParagraph/Text/\
+                 EndParagraph sequence and before finish() — haddock_fmt::writer::Writer \
+                 buffers all events into a Vec<OwnedEvent> and only reconstructs the AST + \
+                 calls emit::build() inside finish() (crates/formats/haddock-fmt/src/writer.rs, \
+                 self-admitted in its own module doc), so it is not a genuine incremental \
+                 streaming writer despite content round-tripping correctly"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("haddock", "streaming_writer", result);
+}
+
+// ---------------------------------------------------------------------------
+// fountain-fmt: `fountain_fmt::events()` (src/lib.rs) returns
+// `events::OwnedEventIter`, which is `parse(input)` then a lazy walk of the
+// AST already built — the same events()-is-parse()+AST-walk pattern already
+// documented for t2t/pod/haddock/asciidoc above. (Note: events.rs also
+// defines a second, *borrowed* `EventIter<'a>` with its own `pub fn
+// new(doc: &'a FountainDoc)` — but it is not re-exported from lib.rs and is
+// not what `events()` returns, so it is out of scope for this harness; it
+// independently appears to double-emit `Event::PageBreak` and never emit a
+// `Text` event for any non-Character/Dialogue/Parenthetical block, per a
+// direct reading of its `Blocks`-phase match arms, which is worth a
+// follow-up look but is not part of the `events()` API this harness checks.)
+// The ast_to_events-vs-events() check below is real and passes, but
+// validates the AST->event expansion layer, not two independent parsers.
+//
+// StreamingParser (batch.rs) flushes events per accumulated block as fed
+// (blank line, boneyard close, or EOF triggers emit_block()), but
+// emit_block() re-parses the block's text via `crate::events::events(&text)`
+// and forwards *every* event it yields — including that call's own
+// StartDocument/EndDocument pair — straight to the handler with no
+// filtering (batch.rs: `for event in crate::events::events(&text) {
+// self.handler.handle(event); }`). Since bulk `events()` over the whole
+// input emits exactly one StartDocument/EndDocument pair spanning the
+// document, but StreamingParser emits one such pair *per accumulated
+// block*, this diverges on every fixture with more than one
+// blank-line-separated block — the majority of the suite, not an edge case
+// the way t2t's header-lookahead bug was. A second, narrower defect shares
+// the same root cause: `parse_title_page()` (parse.rs:81) runs
+// unconditionally at the start of every `parse()` call with no "is this
+// really the first block of the document" guard, so a body block that
+// happens to match `key: value` for one of the 9 recognized title-page
+// field names (title/credit/author/authors/source/draft date/contact/
+// copyright/notes) gets misread as metadata when it is re-parsed in
+// isolation, the same class of bug already tracked for t2t's
+// try_parse_header().
+//
+// Writer buffers all fed events into a Vec<OwnedEvent> and only
+// reconstructs the AST + calls emit() inside finish() (writer.rs's own
+// module doc: "This implementation buffers all events, reconstructs the
+// AST, then emits") — the same fake-streaming-writer pattern as
+// t2t/pod/haddock/textile/commonmark/org/texinfo.
+// ---------------------------------------------------------------------------
+
+fn fountain_ast_to_events(doc: &fountain_fmt::FountainDoc) -> Vec<fountain_fmt::OwnedEvent> {
+    use fountain_fmt::Block;
+    use fountain_fmt::events::Event;
+
+    let mut out = vec![Event::StartDocument];
+    for (key, value) in &doc.metadata {
+        out.push(Event::Metadata {
+            key: key.clone().into(),
+            value: value.clone().into(),
+        });
+    }
+
+    let blocks = &doc.blocks;
+    let mut i = 0;
+    while i < blocks.len() {
+        if let Block::Character { name, dual, .. } = &blocks[i] {
+            out.push(Event::StartDialogueBlock);
+            out.push(Event::StartCharacter { dual: *dual });
+            out.push(Event::Text(name.clone().into()));
+            out.push(Event::EndCharacter);
+            i += 1;
+            while i < blocks.len()
+                && matches!(
+                    blocks[i],
+                    Block::Dialogue { .. } | Block::Parenthetical { .. }
+                )
+            {
+                fountain_leaf_block_events(&blocks[i], &mut out);
+                i += 1;
+            }
+            out.push(Event::EndDialogueBlock);
+        } else {
+            fountain_leaf_block_events(&blocks[i], &mut out);
+            i += 1;
+        }
+    }
+
+    out.push(Event::EndDocument);
+    out
+}
+
+fn fountain_leaf_block_events(b: &fountain_fmt::Block, out: &mut Vec<fountain_fmt::OwnedEvent>) {
+    use fountain_fmt::Block;
+    use fountain_fmt::events::Event;
+    match b {
+        Block::SceneHeading { text, .. } => {
+            out.push(Event::StartSceneHeading);
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndSceneHeading);
+        }
+        Block::Action { text, .. } => {
+            out.push(Event::StartAction);
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndAction);
+        }
+        Block::Character { name, dual, .. } => {
+            // Only reached for a Character with no following dialogue at
+            // document end, since the caller special-cases the common path.
+            out.push(Event::StartCharacter { dual: *dual });
+            out.push(Event::Text(name.clone().into()));
+            out.push(Event::EndCharacter);
+        }
+        Block::Dialogue { text, .. } => {
+            out.push(Event::StartDialogue);
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndDialogue);
+        }
+        Block::Parenthetical { text, .. } => {
+            out.push(Event::StartParenthetical);
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndParenthetical);
+        }
+        Block::Transition { text, .. } => {
+            out.push(Event::StartTransition);
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndTransition);
+        }
+        Block::Centered { text, .. } => {
+            out.push(Event::StartCentered);
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndCentered);
+        }
+        Block::Lyric { text, .. } => {
+            out.push(Event::StartLyric);
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndLyric);
+        }
+        Block::Note { text, .. } => {
+            out.push(Event::StartNote);
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndNote);
+        }
+        Block::Synopsis { text, .. } => {
+            out.push(Event::StartSynopsis);
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndSynopsis);
+        }
+        Block::Section { level, text, .. } => {
+            out.push(Event::StartSection { level: *level });
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndSection);
+        }
+        Block::PageBreak { .. } => out.push(Event::PageBreak),
+        Block::Boneyard { text, .. } => {
+            out.push(Event::StartBoneyard);
+            out.push(Event::Text(text.clone().into()));
+            out.push(Event::EndBoneyard);
+        }
+    }
+}
+
+#[test]
+fn fountain_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("fountain");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&root).expect("fixtures/fountain dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = fountain_fmt::parse(&input);
+        let expected = fountain_ast_to_events(&doc);
+        let actual: Vec<_> = fountain_fmt::events(&input).collect();
+        assert_eq!(
+            expected,
+            actual,
+            "events() diverged from the AST projection for fixture {}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of fountain fixtures, got {checked}"
+    );
+}
+
+/// `StreamingParser` re-parses each accumulated block via
+/// `crate::events::events()` and forwards that call's events verbatim,
+/// including its own StartDocument/EndDocument pair — so bulk `events()`'s
+/// single document-boundary pair vs. one pair per block is expected to (and
+/// does) diverge on any fixture with more than one block. Checked via
+/// adversarial-chunking equivalence against `events()` over the whole input.
+#[test]
+fn fountain_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("fountain");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/fountain dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<fountain_fmt::OwnedEvent> = fountain_fmt::events(input_str).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                fountain_fmt::batch::StreamingParser::new(|e: fountain_fmt::OwnedEvent| {
+                    streamed.push(e);
+                });
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of fountain fixtures, got {checked}"
+    );
+    assert_or_known_failure("fountain", "streaming_parser", result);
+}
+
+/// `Writer` buffers all fed events into a `Vec<OwnedEvent>` and only
+/// reconstructs the AST + calls `emit()` inside `finish()` (see
+/// `crates/formats/fountain-fmt/src/writer.rs`'s own module doc). Checked
+/// via byte-identical comparison against the builder path, plus an
+/// incrementality probe.
+#[test]
+fn fountain_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("fountain");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/fountain dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = fountain_fmt::parse(&input);
+        let built = fountain_fmt::build(&doc);
+
+        let mut w = fountain_fmt::Writer::new(Vec::<u8>::new());
+        for e in fountain_fmt::events(&input) {
+            w.write_event(e);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of fountain fixtures, got {checked}"
+    );
+
+    // Incrementality probe: byte-identical final content (checked above)
+    // only proves correctness, not genuine streaming.
+    if result.is_ok() {
+        use fountain_fmt::OwnedEvent;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = fountain_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(OwnedEvent::StartDocument);
+        w.write_event(OwnedEvent::StartAction);
+        w.write_event(OwnedEvent::Text("Hello world".to_string().into()));
+        w.write_event(OwnedEvent::EndAction);
+        w.write_event(OwnedEvent::EndDocument);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after a full StartDocument/StartAction/\
+                 Text/EndAction/EndDocument sequence and before finish() — \
+                 fountain_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+                 reconstructs the AST + calls emit() inside finish() \
+                 (crates/formats/fountain-fmt/src/writer.rs, self-admitted in its own module \
+                 doc), so it is not a genuine incremental streaming writer despite content \
+                 round-tripping correctly"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("fountain", "streaming_writer", result);
+}
