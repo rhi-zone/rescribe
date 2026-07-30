@@ -815,6 +815,123 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              muse-fmt's parse() genuinely populates these fields (parse.rs:240-249)",
         ),
     },
+    // t2t's events() is `EventIter::new(parse(input).0)` (src/events.rs) — a
+    // lazy frame-stack walk of the AST parse() already built, not an
+    // independently implemented reader. Per the asciidoc precedent above,
+    // the ast_to_events-vs-events() check validates the AST->event expansion
+    // layer, not two independent parsers. See the comment above the check in
+    // tests/streaming_apis.rs.
+    FormatCapabilities {
+        format: "t2t",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "t2t::batch::StreamingParser genuinely flushes events per accumulated block as fed \
+             (not only at finish()), but emit_block() re-parses each block's text in isolation \
+             via crate::events::events(&text) — the same \"re-parse each block alone, lose \
+             cross-block context\" root cause already tracked for org-fmt/asciidoc. Two \
+             distinct fixtures expose it: definition-list, where the blank line between items \
+             (batch.rs's feed_line blank-line branch, batch.rs:143-150) ends the accumulated \
+             block, splitting one multi-item DefinitionList into two DefinitionList event pairs \
+             (the same bug class already tracked for rst/org); and document-header, where the \
+             isolated re-parse of the 3-line header block re-triggers try_parse_header() \
+             (parse.rs:70, requires >=3 lines and a non-heading/list/table/comment first line), \
+             which any 3+ line block satisfies purely by looking like a header out of context, \
+             producing a spurious extra StartDocument/EndDocument pair (Event has no metadata \
+             variant to carry the consumed header text) that events() over the whole document \
+             never produces; see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "t2t::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
+             \"This implementation buffers all events, reconstructs the AST, then emits\") — the \
+             same fake-streaming-writer pattern as textile/commonmark/org/texinfo. It also drops \
+             doc.title/author/date on every fixture with a document header: emit::emit() always \
+             writes the 3-line header verbatim from T2tDoc.title/author/date (emit.rs:9-16), but \
+             t2t::Event has no variant carrying those fields, so writer.rs's DocBuilder::finish \
+             (writer.rs:400-404) always reconstructs title: None/author: None/date: None — an \
+             Event-enum expressiveness gap, not a one-line logic bug, exposed by the \
+             document-header fixture; see TODO.md",
+        ),
+    },
+    // pod-fmt's events() is `pod_fmt::events()` (src/lib.rs) — `parse(input)`
+    // then an eager `.collect()` of a lazy frame-stack `EventIter` walk of
+    // the AST parse() already built, not an independently implemented
+    // reader (same pattern as t2t/asciidoc above). See the comment above the
+    // check in tests/streaming_apis.rs.
+    FormatCapabilities {
+        format: "pod",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "pod_fmt::batch::StreamingParser is explicitly self-documented buffer-then-finish \
+             (batch.rs's own module doc: \"POD documents are always small enough to buffer \
+             fully, so this implementation accumulates all input and parses on finish()\"); \
+             feed() only extends an internal Vec<u8>, all parsing and event delivery happen in \
+             finish(). Unlike t2t/org/asciidoc this does NOT diverge from events() under \
+             adversarial chunking (finish() parses the whole buffered input the same way bulk \
+             events() does, no per-block re-parse-in-isolation to disagree with) — the defect is \
+             purely architectural non-incrementality, pinned via the feed()-before-finish() \
+             probe. pod-fmt's own docstring rationale is not a CLAUDE.md-sanctioned exemption \
+             (only commonmark-fmt's pulldown-cmark wrapping is); see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "pod_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit::build() inside finish() (writer.rs's finish(): \
+             events_to_doc(...) then crate::emit::build(&doc)) — the same fake-streaming-writer \
+             pattern as t2t/textile/commonmark/org/texinfo. Content is not lost (PodDoc has no \
+             document-level metadata field pod::Event could be missing, unlike t2t), so the \
+             byte-identical-to-builder check passes; only the incrementality probe fails; see \
+             TODO.md",
+        ),
+    },
+    // haddock-fmt's events() is `parse(input)` then a lazy frame-stack
+    // EventIter walk of the AST — not an independently implemented reader
+    // (same pattern as t2t/pod/asciidoc above). See the comment above the
+    // check in tests/streaming_apis.rs.
+    FormatCapabilities {
+        format: "haddock",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "haddock_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit::build() inside finish() (writer.rs's own module \
+             doc: \"This implementation buffers all events, reconstructs the AST, then emits\") \
+             — the same fake-streaming-writer pattern as t2t/pod/textile/commonmark/org/texinfo; \
+             see TODO.md",
+        ),
+    },
+    // fountain-fmt's events() is `parse(input)` then a lazy AST walk via
+    // events::OwnedEventIter — not an independently implemented reader
+    // (same pattern as t2t/pod/haddock/asciidoc above). See the comment
+    // above the check in tests/streaming_apis.rs, which also notes a
+    // separate, out-of-scope bug in the crate's un-exported borrowed
+    // `EventIter<'a>` type (not what `events()` returns).
+    FormatCapabilities {
+        format: "fountain",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "fountain_fmt::batch::StreamingParser's emit_block() re-parses each accumulated \
+             block via crate::events::events(&text) and forwards every event it yields — \
+             including that call's own StartDocument/EndDocument pair — straight to the handler \
+             with no filtering (batch.rs's emit_block(): \"for event in \
+             crate::events::events(&text) { self.handler.handle(event); }\"). Bulk events() over \
+             the whole input emits exactly one StartDocument/EndDocument pair; StreamingParser \
+             emits one pair PER accumulated block, diverging on every fixture with more than one \
+             blank-line-separated block — not an edge case, the dominant failure mode. A second, \
+             narrower defect shares the same re-parse-in-isolation root cause: \
+             parse_title_page() (parse.rs:81) runs unconditionally at the start of every parse() \
+             call with no \"is this really the first block\" guard, so a body block matching \
+             `key: value` for one of the 9 recognized title-page field names is misread as \
+             metadata when re-parsed in isolation — the same class already tracked for t2t's \
+             try_parse_header(); see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "fountain_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
+             \"This implementation buffers all events, reconstructs the AST, then emits\") — the \
+             same fake-streaming-writer pattern as t2t/pod/haddock/textile/commonmark/org/\
+             texinfo; see TODO.md",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -827,11 +944,7 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
 /// retire entries from this list into real `CAPABILITIES` rows.
 pub const NOT_YET_AUDITED: &[&str] = &[
     "latex",
-    "t2t",
-    "haddock",
-    "pod",
     "man",
-    "fountain",
     "ansi",
     "csl-json",
     "native",
@@ -1166,6 +1279,62 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        MuseEvent has no variant for document metadata, so #title/#author/#date/ \
                        #desc/#keywords are always dropped on round-trip through the streaming \
                        writer (reachable via the document-header fixture)",
+    },
+    KnownFailure {
+        format: "t2t",
+        api: "streaming_parser",
+        description: "t2t::batch::StreamingParser's emit_block() re-parses each accumulated \
+                       block in isolation: a blank line splits a multi-item DefinitionList into \
+                       one StartDefinitionList/EndDefinitionList pair per item, and an isolated \
+                       3+ line block that looks like a document header re-triggers \
+                       try_parse_header(), producing a spurious extra StartDocument/EndDocument \
+                       pair events() over the whole document never produces",
+    },
+    KnownFailure {
+        format: "t2t",
+        api: "streaming_writer",
+        description: "t2t::writer::Writer buffers all events and only reconstructs the AST + \
+                       emits inside finish() — a fake streaming writer per CLAUDE.md; it also \
+                       always drops doc.title/author/date since t2t::Event has no variant \
+                       carrying them",
+    },
+    KnownFailure {
+        format: "pod",
+        api: "streaming_parser",
+        description: "pod_fmt::batch::StreamingParser self-documents as buffer-then-finish; \
+                       feed() only extends a Vec<u8>, all parsing and event delivery happen in \
+                       finish() — not incremental despite implementing the feed/finish contract",
+    },
+    KnownFailure {
+        format: "pod",
+        api: "streaming_writer",
+        description: "pod_fmt::writer::Writer buffers all events and only reconstructs the AST \
+                       + calls emit::build() inside finish() — a fake streaming writer per \
+                       CLAUDE.md",
+    },
+    KnownFailure {
+        format: "haddock",
+        api: "streaming_writer",
+        description: "haddock_fmt::writer::Writer buffers all events and only reconstructs the \
+                       AST + calls emit::build() inside finish() — a fake streaming writer per \
+                       CLAUDE.md",
+    },
+    KnownFailure {
+        format: "fountain",
+        api: "streaming_parser",
+        description: "fountain_fmt::batch::StreamingParser's emit_block() forwards every event \
+                       from its own re-parse of each block, including that call's \
+                       StartDocument/EndDocument pair, so it emits one such pair per block \
+                       instead of one for the whole document; also parse_title_page() has no \
+                       document-position guard, so a body line matching a title-page field name \
+                       is misread as metadata when re-parsed in isolation",
+    },
+    KnownFailure {
+        format: "fountain",
+        api: "streaming_writer",
+        description: "fountain_fmt::writer::Writer buffers all events and only reconstructs the \
+                       AST + calls emit() inside finish() — a fake streaming writer per \
+                       CLAUDE.md",
     },
 ];
 

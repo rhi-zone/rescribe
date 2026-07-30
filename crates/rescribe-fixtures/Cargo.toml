@@ -98,6 +98,10 @@ xwiki = { workspace = true }
 zimwiki = { workspace = true }
 markua = { workspace = true }
 muse-fmt = { workspace = true }
+t2t = { workspace = true }
+pod-fmt = { workspace = true }
+haddock-fmt = { workspace = true }
+fountain-fmt = { workspace = true }
 zip = { workspace = true }
 
 # Bidirectional format writer harness tests
