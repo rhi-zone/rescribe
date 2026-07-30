@@ -90,6 +90,10 @@ bbcode-fmt = { workspace = true }
 creole = { workspace = true }
 dokuwiki = { workspace = true }
 jira-fmt = { workspace = true }
+mediawiki-fmt = { workspace = true }
+tikiwiki = { workspace = true }
+twiki = { workspace = true }
+vimwiki-fmt = { workspace = true }
 zip = { workspace = true }
 
 # Bidirectional format writer harness tests

@@ -640,6 +640,68 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              not a genuine incremental streaming writer",
         ),
     },
+    FormatCapabilities {
+        format: "mediawiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "mediawiki_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls emit() inside finish() (writer.rs's Writer::finish); \
+             content round-trips correctly on every fixture, but the incrementality probe (a \
+             complete StartParagraph/Text/EndParagraph sequence, checked for any bytes reaching \
+             an ObservableSink before finish()) writes zero bytes, confirming this is a fake \
+             streaming writer per CLAUDE.md, not just architecturally described as one",
+        ),
+    },
+    FormatCapabilities {
+        format: "tikiwiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "tikiwiki::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls build() inside finish() (writer.rs's Writer::finish); \
+             content round-trips correctly on every fixture, but the incrementality probe \
+             writes zero bytes before finish(), confirming this is a fake streaming writer per \
+             CLAUDE.md",
+        ),
+    },
+    FormatCapabilities {
+        format: "twiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "twiki::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+             reconstructs the AST + calls build() inside finish() (writer.rs's Writer::finish); \
+             content round-trips correctly on every fixture, but the incrementality probe \
+             writes zero bytes before finish(), confirming this is a fake streaming writer per \
+             CLAUDE.md",
+        ),
+    },
+    FormatCapabilities {
+        format: "vimwiki",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "vimwiki_fmt's StreamingParser and events() disagree even under the 'whole input, \
+             one feed() call' chunking (fixture 'oracle'), so this is not a chunk-boundary bug: \
+             parse()/events() treat a blank-line-separated run of an unordered list, then an \
+             ordered list, then an unordered checklist (no other content between them) as ONE \
+             Block::List with a single ordered flag for all 8 items -- silently losing the \
+             ordered/unordered distinction for the second and third groups, since Block::List \
+             has one `ordered: bool` for the whole list, not per-item -- while \
+             batch::StreamingParser's emit_block hard-splits on every blank line (batch.rs's \
+             feed_line unconditionally treats a blank line as a block boundary), so it emits \
+             three separate, correctly-typed StartList/EndList pairs. The two implementations \
+             disagree about where one list ends and the next begins, not just about \
+             representing the disagreement identically; see TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "vimwiki_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
+             calls collect_doc_from_events() + build() inside finish() (writer.rs's \
+             Writer::finish); content round-trips correctly on every fixture, but the \
+             incrementality probe writes zero bytes before finish(), confirming this is a fake \
+             streaming writer per CLAUDE.md",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -651,13 +713,9 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
 /// absence from the table. See the task report / TODO.md for the plan to
 /// retire entries from this list into real `CAPABILITIES` rows.
 pub const NOT_YET_AUDITED: &[&str] = &[
-    "mediawiki",
     "latex",
     "muse",
     "t2t",
-    "tikiwiki",
-    "twiki",
-    "vimwiki",
     "haddock",
     "pod",
     "man",
@@ -718,6 +776,44 @@ pub struct KnownFailure {
 }
 
 pub const KNOWN_FAILURES: &[KnownFailure] = &[
+    KnownFailure {
+        format: "mediawiki",
+        api: "streaming_writer",
+        description: "mediawiki_fmt::writer::Writer buffers all events and only reconstructs \
+                       the AST + emits inside finish(); zero bytes reach the sink before \
+                       finish() despite content round-tripping correctly",
+    },
+    KnownFailure {
+        format: "tikiwiki",
+        api: "streaming_writer",
+        description: "tikiwiki::writer::Writer buffers all events and only reconstructs the \
+                       AST + calls build() inside finish(); zero bytes reach the sink before \
+                       finish() despite content round-tripping correctly",
+    },
+    KnownFailure {
+        format: "twiki",
+        api: "streaming_writer",
+        description: "twiki::writer::Writer buffers all events and only reconstructs the AST + \
+                       calls build() inside finish(); zero bytes reach the sink before finish() \
+                       despite content round-tripping correctly",
+    },
+    KnownFailure {
+        format: "vimwiki",
+        api: "streaming_parser",
+        description: "vimwiki_fmt's StreamingParser and events() disagree on where a list ends: \
+                       parse()/events() merge an unordered list, ordered list, and unordered \
+                       checklist (separated only by blank lines, no other content) into one \
+                       Block::List with a single ordered flag, losing the type distinction for \
+                       later groups, while StreamingParser hard-splits on every blank line and \
+                       emits three separately-typed lists",
+    },
+    KnownFailure {
+        format: "vimwiki",
+        api: "streaming_writer",
+        description: "vimwiki_fmt::writer::Writer buffers all events and only calls \
+                       collect_doc_from_events() + build() inside finish(); zero bytes reach \
+                       the sink before finish() despite content round-tripping correctly",
+    },
     KnownFailure {
         format: "docx",
         api: "events",

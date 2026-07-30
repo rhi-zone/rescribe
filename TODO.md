@@ -20,6 +20,60 @@ and not being retracted — only the construct-list-completeness component of it
 
 ---
 
+**2026-07-30: cross-API harness wired for the 4 wiki formats (mediawiki, tikiwiki, twiki,
+vimwiki); 5 new tracked defects found.** Follow-up to the entry below — those 4 formats sat in
+`streaming_harness::NOT_YET_AUDITED`, explicitly named as suspects for the
+"`events()` implemented as `parse()`-then-tree-walk" pattern. Confirmed true for all four
+(`EventIter::new`/`events()` calls `crate::parse::parse` then walks the result), but — like
+asciidoc's narrower-Wired-claim precedent, and unlike html-fmt's `events_from_doc` (a generic,
+structure-free tree walk) — each crate's walk makes real per-`Block`/`Inline`-variant mapping
+decisions, so an independently-derived `ast_to_events` projection is not guaranteed to pass by
+construction and the equivalence check has real teeth. Full per-format, per-API breakdown is in
+`docs/format-audit.md`'s "Cross-API harness inventory" table; the executable source of truth is
+`crates/rescribe-fixtures/src/streaming_harness.rs::CAPABILITIES`/`KNOWN_FAILURES` (26 entries
+total, 5 new this session).
+
+Results:
+- **`events()` and `StreamingParser`: Wired, no divergence found**, for all of mediawiki,
+  tikiwiki, and twiki, over their full fixture suites (50/37/48 fixtures respectively) including
+  adversarial chunking (whole input, single-byte, 3/7/13-byte chunks, mid-UTF-8-char split).
+  Despite all three `StreamingParser`s re-parsing each accumulated block in isolation via
+  `crate::events::events(&text)` (the same "re-parse per block" architecture that split
+  cross-block constructs for rst/org/asciidoc), no fixture in any of these three formats'
+  suites exercises a cross-block construct that the isolation actually breaks.
+- **twiki's `events()` has a non-standard signature**: `fn events(doc: &TwikiDoc) ->
+  EventIter<'_>` takes an already-parsed AST, not raw input (`&str`/`&[u8]`) — a real deviation
+  from the vertical-completion checklist's `events(input: &[u8]) -> impl Iterator<Item =
+  Event>` contract (CLAUDE.md). Not fixed here; a caller must call `parse()` first, unlike
+  every other format checked in this harness.
+- **`vimwiki`'s `StreamingParser` genuinely diverges from `events()`**, and not from a
+  chunk-boundary issue: it reproduces even feeding the whole input as a single `feed()` call
+  (fixture `oracle`). Root cause: `parse()`/`events()` treat a blank-line-separated run of an
+  unordered list, then an ordered list, then an unordered checklist (no other content between
+  them) as **one** `Block::List` with a single `ordered: bool` for all 8 items — silently
+  losing the ordered/unordered distinction for the second and third groups, since `Block::List`
+  has one `ordered` flag for the whole list, not per-item. `StreamingParser`'s `emit_block`
+  hard-splits on every blank line (batch.rs's `feed_line`), so it instead emits three separate,
+  correctly-typed `StartList`/`EndList` pairs. The two implementations disagree about where one
+  list ends and the next begins — arguably `StreamingParser`'s behavior is the *more* correct
+  one here, but that's a call for whoever fixes `parse()`'s list-continuation logic, not this
+  audit pass. Tracked as `KnownFailure { format: "vimwiki", api: "streaming_parser" }`.
+- **All four formats' streaming writers are architecturally hollow buffer-then-emit**,
+  confirmed via the harness's `ObservableSink` incrementality probe (a complete
+  `StartParagraph`/`Text`/`EndParagraph` sequence writes zero bytes to the sink before
+  `finish()`), not merely inferred from module docs (none of these four crates' writer.rs
+  module docs self-admit this the way org/djot/commonmark-fmt's do). Content round-trips
+  correctly against `build()`/`emit()` on every fixture in all four formats — this is purely an
+  incrementality defect, not a content-correctness one. Tracked as `KnownFailure` for
+  `mediawiki`/`tikiwiki`/`twiki`/`vimwiki` `streaming_writer`.
+
+Not fixed here (by design — this was a wiring/audit pass, not a fix pass): none of the 5 new
+`KnownFailure`s were fixed; each needs its own fix pass in its crate. No new fixtures were
+needed — the existing suites already exercised the divergences found. 45 formats remain in
+`NOT_YET_AUDITED`.
+
+---
+
 **2026-07-30: cross-API harness wired for 11 more formats (org, html, asciidoc, djot,
 texinfo, fb2, textile, commonmark, gfm, markdown); 18 new tracked defects found.** Follow-up
 to the 2026-07-29 entry below — that session left ~55 formats in

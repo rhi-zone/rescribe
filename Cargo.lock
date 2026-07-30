@@ -3131,6 +3131,7 @@ dependencies = [
  "fb2-fmt",
  "html-fmt",
  "jira-fmt",
+ "mediawiki-fmt",
  "ooxml-pml",
  "ooxml-sml",
  "ooxml-wml",
@@ -3214,6 +3215,9 @@ dependencies = [
  "serde_json",
  "texinfo",
  "textile-fmt",
+ "tikiwiki",
+ "twiki",
+ "vimwiki-fmt",
  "zip 7.2.0",
 ]
 
