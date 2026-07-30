@@ -313,12 +313,13 @@ audited this format's cross-API status yet" placeholder, not a claim of absence 
 | bbcode | Wired (`events()` is literally `parse::parse(input)` + a tree walk — same non-independent shape as html's, scoped honestly per the asciidoc precedent rather than declared NotApplicable, since nothing format-structural forces it) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over all 53 bbcode fixtures plus several hand-built adversarial cases | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
 | creole | Wired (`events()` is literally `EventIter::new`'s `parse::parse(input)` + `collect_events(&doc)` tree walk — same non-independent shape as bbcode's/html's, scoped honestly per the bbcode/asciidoc precedent rather than declared NotApplicable) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over all 35 creole fixtures plus an incrementality probe; one inspected edge case (a nowiki block closed by a line with trailing content after `"}}}"`) degrades incrementality but not correctness, verified by hand | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
 | dokuwiki | Wired (`events()` is literally `InputEventIter::new`'s `parse::parse(input)` + `EventIter` tree walk — same non-independent shape as bbcode's/creole's, scoped honestly per that precedent rather than declared NotApplicable) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over every dokuwiki fixture plus an incrementality probe, with no coarser-boundary caveat needed (unlike bbcode/creole) since `parse.rs`'s `Parser` has no cross-block state at all | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
+| jira | Wired (`events()` is literally `crate::parse::parse(input)` + `emit_doc_events` tree walk — same non-independent shape as bbcode's/creole's/dokuwiki's, scoped honestly per that precedent rather than declared NotApplicable; `Event` carries every field every `Block`/`Inline` variant holds, no expressiveness gap found) | Wired — genuine incremental line-buffered state machine (`batch.rs`'s `feed_line`/`emit_block`), confirmed equivalent to `events()` over every jira fixture plus an incrementality probe, with no coarser-boundary caveat needed (like dokuwiki) since `parse.rs`'s `Parser` has no cross-block state and no decorator-line-preceding-a-fence construct (`{code:lang}`/`{panel:title=...}` params are on the fence line itself) | KnownFailure: architecturally hollow — `write_event()` only pushes onto a `Vec<OwnedEvent>`, all real work happens in `finish()` (writer.rs's own module doc); content still byte-identical to `build()` |
 
-**Session tally (2026-07-30):** 14 formats moved from `NOT_YET_AUDITED` to a real, audited
+**Session tally (2026-07-30):** 15 formats moved from `NOT_YET_AUDITED` to a real, audited
 `CAPABILITIES` entry (org, html, asciidoc, djot, texinfo, fb2, textile, commonmark, gfm,
-markdown, bbcode, creole, dokuwiki), on top of the 4 pre-existing entries (rst, docx, pptx,
-xlsx) from the harness's initial wiring. 46 formats remain in `NOT_YET_AUDITED`.
-`streaming_harness::KNOWN_FAILURES` now has 24 entries total; 21 are new from this session
+markdown, bbcode, creole, dokuwiki, jira), on top of the 4 pre-existing entries (rst, docx,
+pptx, xlsx) from the harness's initial wiring. 45 formats remain in `NOT_YET_AUDITED`.
+`streaming_harness::KNOWN_FAILURES` now has 25 entries total; 22 are new from this session
 (the other 3 — docx/events, pptx/events, rst/streaming_parser — predate it). None were
 weakened or hidden to make a check pass; every divergence found a real, root-caused, tracked
 `KnownFailure` entry instead. bbcode-fmt was the first format in this table whose
@@ -326,7 +327,8 @@ weakened or hidden to make a check pass; every divergence found a real, root-cau
 the second, with an architecturally near-identical `batch.rs` (accumulate-until-blank-line,
 re-parse the block, emit its events); dokuwiki is the third, and the first of the three whose
 `Parser` has no cross-block state, so the adversarial-chunking equivalence check needed no
-coarser-boundary caveat at all.
+coarser-boundary caveat at all; jira is the fourth, sharing dokuwiki's no-cross-block-state
+property.
 
 ### Remaining hand-written formats (crate exists, API not started)
 
@@ -342,7 +344,6 @@ coarser-boundary caveat at all.
 | xwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_xwiki_reader (489K runs) fuzz_xwiki_roundtrip (427K runs) | – | – |
 | twiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_twiki_reader (1017K runs) fuzz_twiki_roundtrip (442K runs) | – | – |
 | tikiwiki | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_tikiwiki_reader (429K runs) fuzz_tikiwiki_roundtrip (425K runs) | – | – |
-| jira-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_jira_reader (416K runs) fuzz_jira_roundtrip (333K runs) | – | – |
 | typst (TBD) | | | | | |
 | texinfo | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans(); fixed unterminated-command panic + unknown-directive infinite loop | fuzz_texinfo_reader (1.5M runs) fuzz_texinfo_roundtrip (592K runs) | – | – |
 | pod-fmt | ast.rs parse.rs emit.rs | Span+Diagnostic; infallible parse; strip_spans() | fuzz_pod_reader (863K runs) fuzz_pod_roundtrip (375K runs) | – | – |

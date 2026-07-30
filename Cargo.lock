@@ -3130,6 +3130,7 @@ dependencies = [
  "dokuwiki",
  "fb2-fmt",
  "html-fmt",
+ "jira-fmt",
  "ooxml-pml",
  "ooxml-sml",
  "ooxml-wml",

@@ -215,6 +215,60 @@ table; source of truth is `streaming_harness::CAPABILITIES`'s new `"dokuwiki"` e
 Not fixed here (by design): the streaming-writer `KnownFailure` above was found, not fixed;
 it needs its own fix pass in `dokuwiki`. 46 formats remain in `NOT_YET_AUDITED`.
 
+**2026-07-30: cross-API harness wired for jira-fmt — the fourth format (after bbcode, creole,
+dokuwiki) whose `StreamingParser` turned out to be genuinely, not just nominally, Wired, and
+the second (after dokuwiki) with a clean equivalence check needing no coarser-boundary caveat
+at all.** Follow-up to the bbcode/creole/dokuwiki entries above, picking one more format out
+of `NOT_YET_AUDITED`. Full breakdown in `docs/format-audit.md`'s "Cross-API harness inventory"
+table; source of truth is `streaming_harness::CAPABILITIES`'s new `"jira"` entry.
+
+- **`events()` — Wired, but honestly scoped like bbcode's/creole's/dokuwiki's entry, not an
+  independent parser.** `jira_fmt::events()` (`lib.rs:24-26`, delegating to `events::events`)
+  calls `crate::parse::parse(input)` and walks the resulting `JiraDoc` with
+  `emit_doc_events`/`emit_block_events`/`emit_inline_events` (`events.rs:141-149`) — the same
+  non-independent "parse() then walk the tree" shape as bbcode-fmt's/creole's/dokuwiki's
+  `events()`. No format-spec reason forces this, so `NotApplicable` would have been the wrong
+  call; wired anyway per that precedent, since the check still pins the AST↔`Event`
+  correspondence. Also confirmed a positive: every `Block`/`Inline` variant and field in
+  `ast.rs` has a corresponding `Event` variant/field in `events.rs` — no `Event` enum
+  expressiveness gap, unlike org-fmt (no metadata variant) or djot-fmt (no `LinkDef` variant).
+- **`StreamingParser` — Wired, for real, no `KnownFailure` needed, and no caveat needed
+  either.** `batch.rs`'s `StreamingParser` is a genuine incremental line-buffered state
+  machine: `feed_line` advances real per-line state (`BlockState::{Between,Accumulating,
+  InDelimitedBlock}`) and `emit_block()` (which re-parses just the accumulated block text via
+  `crate::events::events()`) flushes to the handler as soon as a blank line or a
+  `{code.../{quote}/{noformat}/{panel...` delimited block's close is seen, not only inside
+  `finish()`. Verified two ways: (1) an incrementality probe (feed a complete `*Hello*`
+  paragraph + blank line + unterminated trailing text, confirm events arrive before
+  `finish()`) passes; (2) the adversarial-chunking equivalence check against `events()` passes
+  over every jira fixture, under every chunking in `adversarial_chunkings`
+  (whole/single-byte/chunks-of-3/7/13/mid-UTF-8-char). Like dokuwiki's entry, no
+  coarser-boundary caveat was needed: `parse.rs`'s `Parser` has no cross-block state at all —
+  no loose-list joining across blank lines (`parse_list_at_depth` already breaks on any
+  non-`*`/`#` line, which includes blank lines), no reference resolution, and critically no
+  decorator-line-preceding-a-fence construct of the kind that caused real bugs in org-fmt
+  (`#+NAME:` before `#+BEGIN_`) and asciidoc (`[source,...]`/`.Title` before a delimited
+  block): Jira's `{code:lang}` language and `{panel:title=...}` title are both encoded on the
+  fence line itself, so `feed_line`'s "flush pending content before starting a delimited
+  block" step (`batch.rs`, the four `{code/{quote}/{noformat}/{panel` branches) never has
+  anything decorator-shaped to strand. Every boundary `StreamingParser::feed_line` can flush
+  on is one `parse.rs`'s own `parse_paragraph`/`parse_list_at_depth`/`parse_table` stop
+  conditions would also treat as a valid, self-contained block split point.
+- **streaming `Writer` — `KnownFailure`, architecturally hollow, same shape as bbcode's/
+  creole's/dokuwiki's.** `write_event()` (`writer.rs:40-42`) only pushes onto a
+  `Vec<OwnedEvent>`; all real work (`events_to_doc` + `crate::emit::build`) happens inside
+  `finish()` (`writer.rs:45-50`), self-admitted in the module doc: "this implementation
+  buffers all events, reconstructs the AST, then emits." Content still matches `build()`
+  byte-for-byte over every fixture (`finish()` ultimately drives the same `build()` path), but
+  the incrementality probe (write a complete `StartParagraph`/`StartBold`/`Text`/`EndBold`/
+  `EndParagraph` sequence, check for any bytes reaching the sink before `finish()`) gets zero
+  bytes. Same fix shape as bbcode's/creole's/dokuwiki's writers: rewrite `write_event()` to
+  push into a fixed output window instead of a `Vec`, driven directly off `crate::emit`'s
+  per-node string logic.
+
+Not fixed here (by design): the streaming-writer `KnownFailure` above was found, not fixed;
+it needs its own fix pass in `jira-fmt`. 45 formats remain in `NOT_YET_AUDITED`.
+
 ---
 
 **2026-07-29: fixture harness extended to exercise `events()`/`StreamingParser`/streaming

@@ -605,6 +605,41 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              genuine incremental streaming writer",
         ),
     },
+    // jira-fmt's events() is `crate::parse::parse(input)` followed by a full
+    // walk of the resulting `JiraDoc` (events.rs's `events()`/
+    // `emit_doc_events`) — the same "parse() then walk the tree" shape as
+    // bbcode-fmt's, creole's, and dokuwiki's events(), not two independent
+    // implementations, but per that precedent it's still wired rather than
+    // NotApplicable (nothing in the Jira wiki markup grammar forces this
+    // shape). StreamingParser (batch.rs) is a genuine incremental
+    // line-buffered state machine — real Wired, confirmed by an
+    // incrementality probe and an adversarial-chunking equivalence check
+    // that holds over every jira fixture with no coarser-boundary caveat
+    // needed (unlike bbcode/creole): parse.rs's Parser has no cross-block
+    // state (no loose-list joining, no reference resolution, and no
+    // decorator-line-preceding-a-fence construct — {code:lang} and
+    // {panel:title=...} both encode their parameters on the fence line
+    // itself), so every boundary StreamingParser::feed_line flushes on is
+    // one parse.rs's own block-stop conditions would also treat as a valid
+    // split point. The streaming Writer is the one real gap: hollow
+    // buffer-then-finish() (writer.rs's own module doc, write_event() only
+    // pushes onto a Vec), so content matches build() but the incrementality
+    // probe fails.
+    FormatCapabilities {
+        format: "jira",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::KnownFailure(
+            "jira_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
+             reconstructs the AST (events_to_doc) + calls crate::emit::build inside finish() \
+             (write_event() at writer.rs:40-42 only pushes onto self.events, all real work \
+             happens in finish() at writer.rs:45-50, self-admitted in the module doc \"this \
+             implementation buffers all events, reconstructs the AST, then emits\"); content is \
+             still byte-identical to build() over all fixtures since finish() ultimately drives \
+             the same build() path, but zero bytes reach the sink before finish() is called — \
+             not a genuine incremental streaming writer",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -623,7 +658,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "tikiwiki",
     "twiki",
     "vimwiki",
-    "jira",
     "haddock",
     "pod",
     "man",
@@ -853,6 +887,15 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        only reconstructs the AST + calls crate::emit::build inside finish() \
                        (write_event() at writer.rs:27-29 only pushes onto self.events); content \
                        matches build() exactly but the writer is not incrementally streaming",
+    },
+    KnownFailure {
+        format: "jira",
+        api: "streaming_writer",
+        description: "jira_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and \
+                       only reconstructs the AST (events_to_doc) + calls crate::emit::build \
+                       inside finish() (write_event() at writer.rs:40-42 only pushes onto \
+                       self.events); content matches build() exactly but the writer is not \
+                       incrementally streaming",
     },
 ];
 
