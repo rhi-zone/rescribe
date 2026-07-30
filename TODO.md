@@ -4489,3 +4489,61 @@ vocabulary; needs its own fix (attributes need a defined serialization position 
 `emit::build`'s output — most likely as leading `:key: value` lines before the first block,
 matching where `parse()` accepts them) and its own fixture-driven round-trip check. Tracked
 here, not fixed.
+
+**`markua` — verified, not a real gap.** The task's shallow spot-check flagged
+`MarkuaDoc.title`/`author`/`description` as inaccessible via `StartDocument`. Verified against
+`crates/formats/markua/src/parse.rs:13`, the crate's only production `MarkuaDoc` construction
+site: `title`/`author`/`description` are hardcoded `None` unconditionally, and no other code
+path in the crate ever assigns them (confirmed via `grep -rn "title\|author\|description"` over
+`parse.rs`, `lib.rs`, `writer.rs` — the only other hits are `writer.rs`'s own hardcoded `None`s
+and an unrelated in-heading `title` local variable at `parse.rs:163`, which is Markdown heading
+text, not document metadata). There is no data for `events()`/`StreamingParser`/the streaming
+writer to lose, because `parse()` never produces any to begin with. The existing
+`markua`/`streaming_writer` `KNOWN_FAILURES` entry already states this precisely ("MarkuaDoc::
+title/author/description are permanently None because parse() never populates them from any
+Markua syntax... unreachable via fixtures") — left unchanged, since it was already correct. No
+code change made.
+
+**`ooxml-wml` (docx) and `ooxml-sml` (xlsx) — fenced, not fixed; this is a different, larger
+class of gap than the other four in this pass.** The task named `core_properties`/
+`app_properties`/`gen_styles` (wml) and `styles: Stylesheet` (sml). Verified both are real: on
+`ooxml-wml`, `Document<R>` (`document.rs`) — the package-level struct that resolves the zip's
+relationships and reads `docProps/core.xml`/`docProps/app.xml`/`word/styles.xml` as separate
+parts — carries `core_properties: Option<CoreProperties>`, `app_properties:
+Option<AppProperties>`, `gen_styles: types::Styles`, none of which `WmlEvent` has a variant for.
+Same shape on `ooxml-sml`: `Workbook<R>` (`workbook.rs`) carries `styles: crate::types::
+Stylesheet`, resolved from `xl/styles.xml`, with no `SmlEvent` variant.
+
+The reason this isn't a same-shaped fix as commonmark/asciidoc: **`events(bytes: &[u8])` on
+both crates is explicitly scoped to a single already-extracted XML part, not the zip package.**
+`ooxml-wml/src/events.rs`'s own doc comment: "`bytes` should be the raw content of
+`word/document.xml` extracted from the DOCX zip." `ooxml-sml/src/events.rs`: "`bytes` should be
+the raw content of `xl/worksheets/sheet1.xml` (or similar)." Neither `WmlEventIter` nor
+`SmlEventIter` ever opens a zip, resolves a relationship, or sees any other part — there is
+structurally no code path today that could ever produce a `CoreProperties`/`AppProperties`/
+`Styles` event, because the reader never touches those parts. This is confirmed independently
+on the writer side, and self-documented already: `ooxml-sml/src/streaming.rs`'s own module doc
+states outright that "styles, charts, comments, pivot tables, and merged cells are
+`WorkbookBuilder`-only features with no `SmlEvent` representation, so they are out of scope for
+this writer, not deferred by it" — `SmlWriter` has a `set_shared_strings()` side-channel setter
+(same pattern as `register_image` in wml) but no equivalent for styles. `WmlWriter` has no
+side-channel for `core_properties`/`app_properties`/`gen_styles` either, and — unlike
+`register_image`, which the crate did think to add a side-channel for — nothing analogous
+exists for these three fields at all.
+
+Closing this gap for real needs a **new, package-level streaming reader entry point** — something
+that opens the zip, walks `_rels`, and emits `CoreProperties`/`AppProperties`/`Styles` (wml) or
+`Styles` (sml) as their own leaf events before/around the existing per-part `document.xml`/
+`sheetN.xml` event stream — not an additional `Event` variant bolted onto the current
+part-scoped `events()`. That is squarely the "ooxml-fmt rework... most important streaming work
+in the queue" milestone CLAUDE.md already names as the priority OOXML target, and is
+substantially bigger than this pass's other four items. Not attempted here.
+
+No code changes made to `ooxml-wml`/`ooxml-sml`. No `CAPABILITIES`/`KNOWN_FAILURES` entries
+were touched for `docx`/`xlsx`: neither crate's harness checks currently exercise
+`core_properties`/`app_properties`/`gen_styles`/`styles` at all (`docx`'s `events` `KnownFailure`
+is the pre-existing, unrelated Text-drop/End-tag-reversal bug; `docx` `streaming_parser`/
+`streaming_writer` and `xlsx` `streaming_parser` are `NotYetWired`; `xlsx` `events`/
+`streaming_writer` are `Wired` for what they do check, which doesn't include styles) — so there
+was nothing stale to narrow or remove. This finding is new information, not a correction of an
+existing claim.
