@@ -991,8 +991,32 @@ mod asciidoc_events_check {
     ///
     /// Every `Block` and `Inline` variant of the crate's AST is covered; a new
     /// variant added to either enum makes this fail to compile, which is the point.
+    /// Note on `Event::Metadata` (document `:key: value` attributes): unlike
+    /// every other projected event, this one cannot be positioned faithfully
+    /// from `doc` alone. `AsciiDoc.attributes` is a `HashMap<String, String>`
+    /// with no source-position or duplicate-declaration information — by the
+    /// time `parse()` builds it, that's already gone (last declaration of a
+    /// key wins, order is not tracked). `events()` itself is strictly more
+    /// faithful here: `EventIter` emits one `Metadata` event at the exact
+    /// source line each `:key: value` declaration is consumed (see
+    /// `Event::Metadata`'s doc comment in `crates/formats/asciidoc/src/
+    /// events.rs`), which the AST cannot reconstruct. So this projection
+    /// emits a canonical, deterministic stand-in — one `Metadata` event per
+    /// `doc.attributes` entry, sorted by key, right after `StartDocument` —
+    /// and `asciidoc_events_equals_ast_projection_over_all_fixtures` compares
+    /// `Metadata` events separately from the rest (as an order-independent
+    /// set), not as part of the strict positional sequence, precisely
+    /// because this one field is not something the AST is ground truth for.
     fn ad_ast_to_events(doc: &AsciiDoc) -> Vec<OwnedEvent> {
         let mut out = vec![OwnedEvent::StartDocument];
+        let mut attrs: Vec<(&String, &String)> = doc.attributes.iter().collect();
+        attrs.sort_by(|a, b| a.0.cmp(b.0));
+        for (key, value) in attrs {
+            out.push(OwnedEvent::Metadata {
+                key: key.clone(),
+                value: value.clone(),
+            });
+        }
         for b in &doc.blocks {
             ad_block_events(b, &mut out);
         }
@@ -1290,6 +1314,7 @@ mod asciidoc_events_check {
         let root = fixtures_root().join("asciidoc");
         let mut checked = 0;
         let mut failures: Vec<String> = Vec::new();
+        let mut metadata_failures: Vec<String> = Vec::new();
         let mut dirs: Vec<PathBuf> = std::fs::read_dir(&root)
             .expect("fixtures/asciidoc dir")
             .map(|e| e.unwrap().path())
@@ -1309,6 +1334,47 @@ mod asciidoc_events_check {
             let actual: Vec<OwnedEvent> =
                 asciidoc::events(&input).map(|e| e.into_owned()).collect();
             checked += 1;
+
+            // Metadata events are compared separately, as an order-independent
+            // set — see ad_ast_to_events's doc comment on why the AST cannot be
+            // ground truth for their stream position (events() places them at
+            // their real source line; the AST's HashMap tracks none of that).
+            fn split_metadata(evs: Vec<OwnedEvent>) -> (Vec<OwnedEvent>, Vec<(String, String)>) {
+                let mut rest = Vec::new();
+                let mut meta = Vec::new();
+                for e in evs {
+                    match e {
+                        OwnedEvent::Metadata { key, value } => meta.push((key, value)),
+                        other => rest.push(other),
+                    }
+                }
+                (rest, meta)
+            }
+            let (expected, expected_meta_raw) = split_metadata(expected);
+            let (actual, actual_meta_raw) = split_metadata(actual);
+            // Duplicate declarations of the same key in source order all reach
+            // events() (attribute_log records every declaration), but
+            // doc.attributes keeps only the final value — dedupe actual's
+            // Metadata events down to "final value per key" to match,
+            // applying HashMap::insert semantics in declaration order (the
+            // same rule DocBuilder::process uses in writer.rs).
+            let mut final_actual: std::collections::HashMap<String, String> =
+                std::collections::HashMap::new();
+            for (k, v) in actual_meta_raw {
+                final_actual.insert(k, v);
+            }
+            let mut actual_meta: Vec<(String, String)> = final_actual.into_iter().collect();
+            actual_meta.sort();
+            let mut expected_meta = expected_meta_raw;
+            expected_meta.sort();
+            if expected_meta != actual_meta {
+                metadata_failures.push(format!(
+                    "fixture {}: Metadata events diverged from doc.attributes\n  \
+                     expected (from AST): {expected_meta:?}\n  actual (from events()): \
+                     {actual_meta:?}",
+                    path.file_name().unwrap().to_string_lossy(),
+                ));
+            }
 
             if expected != actual {
                 let at = expected
@@ -1339,6 +1405,13 @@ mod asciidoc_events_check {
             "events() diverged from the AST projection for {} of {checked} fixtures:\n\n{}",
             failures.len(),
             failures.join("\n\n")
+        );
+        assert!(
+            metadata_failures.is_empty(),
+            "events() Metadata events diverged from doc.attributes for {} of {checked} \
+             fixtures:\n\n{}",
+            metadata_failures.len(),
+            metadata_failures.join("\n\n")
         );
     }
 }
@@ -3543,6 +3616,15 @@ fn commonmark_ast_to_events(
     }
     for b in &doc.blocks {
         commonmark_block_events(b, &mut out);
+    }
+    // link_defs land after the body, before EndDocument — see
+    // commonmark_fmt::events::Event::LinkDef's doc comment.
+    for def in &doc.link_defs {
+        out.push(Event::LinkDef {
+            label: std::borrow::Cow::Owned(def.label.clone()),
+            url: std::borrow::Cow::Owned(def.url.clone()),
+            title: def.title.clone().map(std::borrow::Cow::Owned),
+        });
     }
     out.push(Event::EndDocument);
     out

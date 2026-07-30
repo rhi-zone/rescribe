@@ -87,6 +87,20 @@ pub enum Event<'a> {
         content: Cow<'a, str>,
     },
 
+    /// A reference-style link definition (`[label]: url "title"`), mirroring
+    /// [`crate::ast::LinkDef`] field-for-field. pulldown-cmark's own event
+    /// stream never surfaces these — it resolves reference links to their
+    /// target inline, silently — so `EventIter` computes them the same way
+    /// `parse()` does (via `Parser::reference_definitions()`) and emits one
+    /// event per definition after the document body, before `EndDocument`
+    /// (there is no footnote-defs section in CommonMark to place them
+    /// before, unlike djot).
+    LinkDef {
+        label: Cow<'a, str>,
+        url: Cow<'a, str>,
+        title: Option<Cow<'a, str>>,
+    },
+
     // ── Inline open/close ────────────────────────────────────────────────────
     StartEmphasis,
     EndEmphasis,
@@ -178,6 +192,11 @@ impl<'a> Event<'a> {
                 kind,
                 content: Cow::Owned(content.into_owned()),
             },
+            Event::LinkDef { label, url, title } => Event::LinkDef {
+                label: Cow::Owned(label.into_owned()),
+                url: Cow::Owned(url.into_owned()),
+                title: title.map(|t| Cow::Owned(t.into_owned())),
+            },
             Event::StartEmphasis => Event::StartEmphasis,
             Event::EndEmphasis => Event::EndEmphasis,
             Event::StartStrong => Event::StartStrong,
@@ -253,6 +272,12 @@ pub struct EventIter<'a> {
     started: bool,
     /// Whether `EndDocument` has been emitted yet.
     ended: bool,
+    /// Reference-style link definitions, computed eagerly at construction
+    /// (mirrors `parse()`'s `collect_link_defs` — pulldown-cmark's event
+    /// stream never surfaces them). Drained into `pending` as `LinkDef`
+    /// events once the pulldown stream is exhausted, right before
+    /// `EndDocument`. `None` once drained.
+    link_defs: Option<Vec<crate::ast::LinkDef>>,
 }
 
 impl<'a> EventIter<'a> {
@@ -260,6 +285,9 @@ impl<'a> EventIter<'a> {
     pub fn new(input: &'a str) -> Self {
         use pulldown_cmark::Parser;
         let opts = crate::options::build_options();
+        // Reference definitions must be read off `Parser` (via a shared
+        // reference) before `into_offset_iter()` consumes it.
+        let link_defs = crate::parse::collect_link_defs(input);
         let inner = Parser::new_ext(input, opts).into_offset_iter();
         EventIter {
             inner,
@@ -270,6 +298,7 @@ impl<'a> EventIter<'a> {
             list_stack: Vec::new(),
             started: false,
             ended: false,
+            link_defs: Some(link_defs),
         }
     }
 
@@ -300,7 +329,20 @@ impl<'a> Iterator for EventIter<'a> {
             let (pd_event, _range) = match self.next_pd() {
                 Some(pair) => pair,
                 None => {
-                    // Pulldown stream exhausted.
+                    // Pulldown stream exhausted. Drain link_defs (computed
+                    // eagerly at construction) as their own leaf events
+                    // before EndDocument, mirroring CmDoc.link_defs's
+                    // placement outside doc.blocks.
+                    if let Some(defs) = self.link_defs.take() {
+                        for def in defs {
+                            self.pending.push_back(Event::LinkDef {
+                                label: Cow::Owned(def.label),
+                                url: Cow::Owned(def.url),
+                                title: def.title.map(Cow::Owned),
+                            });
+                        }
+                        continue;
+                    }
                     if !self.ended {
                         self.ended = true;
                         return Some(Event::EndDocument);

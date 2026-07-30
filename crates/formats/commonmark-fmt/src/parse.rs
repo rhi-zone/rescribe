@@ -857,7 +857,11 @@ fn heading_level_to_u8(level: HeadingLevel) -> u8 {
 /// Collect reference link definitions from the input string.
 ///
 /// pulldown-cmark exposes these through [`Parser::reference_definitions`].
-fn collect_link_defs(input: &str) -> Vec<LinkDef> {
+/// `pub(crate)` so `events.rs` can reuse the exact same extraction (and
+/// deterministic sort order) rather than duplicating it — `events()` needs
+/// the same `Vec<LinkDef>` `parse()` builds, since pulldown-cmark's event
+/// stream itself never surfaces reference definitions.
+pub(crate) fn collect_link_defs(input: &str) -> Vec<LinkDef> {
     let opts = build_options();
     let parser = Parser::new_ext(input, opts);
     let defs = parser.reference_definitions();

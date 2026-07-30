@@ -131,6 +131,7 @@ enum Frame {
 
 struct DocBuilder {
     stack: Vec<Frame>,
+    link_defs: Vec<LinkDef>,
     #[cfg(feature = "frontmatter")]
     frontmatter: Option<FrontMatter>,
 }
@@ -139,6 +140,7 @@ impl DocBuilder {
     fn new() -> Self {
         DocBuilder {
             stack: vec![Frame::Document { blocks: vec![] }],
+            link_defs: vec![],
             #[cfg(feature = "frontmatter")]
             frontmatter: None,
         }
@@ -283,6 +285,13 @@ impl DocBuilder {
                     kind,
                     content: content.into_owned(),
                     span: Span::NONE,
+                });
+            }
+            OwnedEvent::LinkDef { label, url, title } => {
+                self.link_defs.push(LinkDef {
+                    label: label.into_owned(),
+                    url: url.into_owned(),
+                    title: title.map(|t| t.into_owned()),
                 });
             }
             #[cfg(feature = "tables")]
@@ -495,7 +504,7 @@ impl DocBuilder {
         };
         CmDoc {
             blocks,
-            link_defs: vec![],
+            link_defs: self.link_defs,
             #[cfg(feature = "frontmatter")]
             frontmatter: self.frontmatter,
         }
