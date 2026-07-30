@@ -77,6 +77,44 @@ pass.
 
 ---
 
+**2026-07-30: t2t-fmt — `Event::Header` closes the title/author/date expressiveness gap.**
+Fix pass on the `t2t` `KnownFailure`s from the follow-up-pass entry below. Added
+`Event::Header { title: Option<String>, author: Option<String>, date: Option<String> }` to
+`crates/formats/t2t/src/events.rs` (one dedicated variant, not three, mirroring `T2tDoc`'s own
+fixed 3-field header shape) and wired it through all three reader APIs plus the streaming
+writer:
+- `events()`/`EventIter` emits it right after `StartDocument` when any of title/author/date is
+  `Some`.
+- `StreamingParser` (`batch.rs`'s new `try_emit_header`) recognizes the header directly via
+  `Parser::try_parse_header` on the stream's first accumulated block, instead of falling
+  through to the generic `crate::events::events(&text)` re-parse path that used to
+  spuriously re-trigger `try_parse_header()` on an isolated block and produce an extra *empty*
+  `StartDocument`/`EndDocument` pair with the header silently dropped. This closes the
+  document-header-specific half of the `streaming_parser` `KnownFailure`.
+- The streaming `Writer`/`DocBuilder` (`writer.rs`) now tracks `title`/`author`/`date` fields,
+  set by a new `Event::Header` arm in `process()` and threaded through `finish()`, so
+  `t2t_streaming_writer_matches_builder_over_all_fixtures`'s content-equality check now passes
+  on every fixture including `document-header`.
+
+What's still open, deliberately not touched by this pass (out of scope — different defect
+class): the **general per-block `StartDocument`/`EndDocument` duplication** in
+`StreamingParser` (bulk `events()` emits one pair for the whole document, `StreamingParser`
+emits one per accumulated block since `emit_block()` re-parses each block via
+`crate::events::events()`, which always wraps its own pair) — this is much broader than the
+two fixtures originally named in the `KnownFailure` text (definition-list and document-header);
+it also reproduces on heading-h2, horizontal-rule, path-many-sections, comp-heading-list, and
+any other multi-block fixture. The `definition-list` fixture's blank-line-splits-a-multi-item-
+list symptom is one instance of this general issue and remains tracked. Also untouched: the
+streaming `Writer`'s **buffer-then-emit-in-`finish()` non-incrementality** (the "hollow writer
+performance" concern) — content is now correct but the writer still isn't a genuine incremental
+streamer; `t2t_streaming_writer_matches_builder_over_all_fixtures`'s incrementality probe still
+(correctly) fails on this and remains tracked in `KNOWN_FAILURES`.
+`streaming_harness::KNOWN_FAILURES` entries for `t2t`/`streaming_parser` and
+`t2t`/`streaming_writer` were both updated (not removed — both `Err` results persist for the
+reasons above) to describe only the now-narrower remaining defects.
+
+---
+
 **2026-07-30: cross-API harness wired for the 4 wiki formats (mediawiki, tikiwiki, twiki,
 vimwiki); 5 new tracked defects found.** Follow-up to the entry below — those 4 formats sat in
 `streaming_harness::NOT_YET_AUDITED`, explicitly named as suspects for the

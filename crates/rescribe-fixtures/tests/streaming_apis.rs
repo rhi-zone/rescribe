@@ -8832,36 +8832,63 @@ fn muse_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
 // feed_line/BlockState machine flushes each accumulated block via
 // emit_block() as soon as a blank line or fence boundary is seen, not only
 // at finish()) but emit_block() re-parses each block's text in isolation via
-// crate::events::events(&text) — the same "re-parse each block alone, lose
-// cross-block context" root cause already documented for org-fmt/asciidoc's
-// StreamingParsers. Two distinct fixtures expose it here: the definition-list
-// fixture, where the blank line between items ends the accumulated block
-// (see feed_line's blank-line branch, batch.rs:143-150), splitting one
-// multi-item DefinitionList into two DefinitionList event pairs (the same bug
-// class already tracked for rst/org); and document-header, where the
-// isolated re-parse of the header's own three lines re-triggers
-// `try_parse_header()` (parse.rs:70), which requires >=3 lines and a
-// non-heading/list/table/comment first line — a condition any 3+ line
-// document-header-shaped block satisfies purely by looking like one out of
-// context, producing a spurious extra StartDocument/EndDocument pair (since
-// Event has no metadata variant to carry the consumed header text) that
-// events() over the whole document never produces.
+// crate::events::events(&text), and events() always wraps its output in its
+// own StartDocument/EndDocument pair — so bulk events() over the whole
+// document emits exactly one such pair, but StreamingParser emits one PER
+// accumulated block, diverging on every fixture with more than one top-level
+// block (heading-h2, horizontal-rule, path-many-sections, comp-heading-list,
+// definition-list, etc. — not just the two fixtures originally called out
+// here). This is the same "re-parse each block alone, lose cross-block
+// context" root cause already documented for org-fmt/asciidoc/fountain's
+// StreamingParsers; the definition-list fixture is one instance of it (the
+// blank line between items ends the accumulated block, see feed_line's
+// blank-line branch, batch.rs:143-150, splitting one multi-item
+// DefinitionList into two DefinitionList event pairs).
 //
-// Writer buffers all events into a Vec<OwnedEvent> and only reconstructs the
-// AST + calls emit() inside finish() (writer.rs's own module doc: "This
-// implementation buffers all events, reconstructs the AST, then emits") —
-// the same fake-streaming-writer pattern as textile/commonmark/org/texinfo.
-// It also drops doc.title/author/date on every fixture with a document
-// header: emit::emit() always writes the 3-line header verbatim from
-// T2tDoc.title/author/date (emit.rs:9-16), but t2t::Event has no variant
-// carrying those fields, so writer.rs's DocBuilder::finish (T2tDoc {
-// blocks, ..Default::default() }, writer.rs:400-404) always reconstructs
-// title: None/author: None/date: None — an Event-enum expressiveness gap,
-// not a one-line logic bug, exposed by the document-header fixture.
+// The document-header-specific defect that used to live alongside the above
+// — an isolated re-parse of the header's own three lines re-triggering
+// `try_parse_header()` (parse.rs:70) and producing a spurious *empty*
+// StartDocument/EndDocument pair with the header's title/author/date
+// silently dropped (Event had no variant to carry them) — is now fixed:
+// `Event::Header { title, author, date }` was added, and StreamingParser
+// (batch.rs's `try_emit_header`) recognizes the first block of the stream
+// directly via `Parser::try_parse_header` instead of falling through to the
+// generic re-parse-via-events() path, so the header round-trips and no
+// longer produces a spurious empty pair. The still-open general per-block
+// StartDocument/EndDocument duplication (above) is unrelated to headers and
+// remains the reason `t2t_streaming_parser_matches_events_under_adversarial_chunking`
+// still fails overall — see `document-header`'s own streamed output for
+// confirmation the header itself is now carried correctly.
+//
+// Writer used to buffer all events into a Vec<OwnedEvent> and only
+// reconstruct the AST + call emit() inside finish() (writer.rs's own module
+// doc: "This implementation buffers all events, reconstructs the AST, then
+// emits") — the same fake-streaming-writer pattern as
+// textile/commonmark/org/texinfo — and separately always dropped
+// doc.title/author/date on every fixture with a document header, since
+// t2t::Event had no variant carrying those fields, so writer.rs's
+// DocBuilder::finish (writer.rs:400-404) always reconstructed
+// title: None/author: None/date: None. The title/author/date-dropping half
+// is now fixed: `DocBuilder` tracks title/author/date fields, set by the new
+// `Event::Header` arm in `process()` and threaded through in `finish()`, so
+// the byte-identical-to-builder content check now passes on every fixture,
+// including document-header. The buffering/non-incrementality half (writer
+// writes zero bytes to the sink until finish()) is a separate, still-open
+// concern — CLAUDE.md's "fake streaming writer" / hollow-writer performance
+// rework — unrelated to Event expressiveness, and is what
+// `t2t_streaming_writer_matches_builder_over_all_fixtures`'s incrementality
+// probe still (correctly) fails on.
 // ---------------------------------------------------------------------------
 
 fn t2t_ast_to_events(doc: &t2t::T2tDoc) -> Vec<t2t::Event<'static>> {
     let mut out = vec![t2t::Event::StartDocument];
+    if doc.title.is_some() || doc.author.is_some() || doc.date.is_some() {
+        out.push(t2t::Event::Header {
+            title: doc.title.clone(),
+            author: doc.author.clone(),
+            date: doc.date.clone(),
+        });
+    }
     for b in &doc.blocks {
         t2t_block_events(b, &mut out);
     }
