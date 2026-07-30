@@ -66,6 +66,7 @@ Markua spec (Peter Armstrong, 2016-2021).
 - [x] nested inline formatting — `comp-nested-inline`
 - [x] link with formatted label — `comp-link-formatted`
 - [x] heading with inline code — `comp-heading-with-code`
+- [x] bullet list immediately followed by a differently-marked (ordered) list — `comp-mixed-list-markers`
 
 ## Adversarial
 - [x] empty document — `adv-empty`

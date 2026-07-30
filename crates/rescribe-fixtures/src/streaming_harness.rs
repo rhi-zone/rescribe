@@ -862,20 +862,19 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "vimwiki",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "vimwiki_fmt's StreamingParser and events() disagree even under the 'whole input, \
-             one feed() call' chunking (fixture 'oracle'), so this is not a chunk-boundary bug: \
-             parse()/events() treat a blank-line-separated run of an unordered list, then an \
-             ordered list, then an unordered checklist (no other content between them) as ONE \
-             Block::List with a single ordered flag for all 8 items -- silently losing the \
-             ordered/unordered distinction for the second and third groups, since Block::List \
-             has one `ordered: bool` for the whole list, not per-item -- while \
-             batch::StreamingParser's emit_block hard-splits on every blank line (batch.rs's \
-             feed_line unconditionally treats a blank line as a block boundary), so it emits \
-             three separate, correctly-typed StartList/EndList pairs. The two implementations \
-             disagree about where one list ends and the next begins, not just about \
-             representing the disagreement identically; see TODO.md",
-        ),
+        // Fixed 2026-07-30: vimwiki_fmt::parse::Parser::parse_list (parse.rs) had the same
+        // "loop condition only checks that some marker matched" defect as zimwiki's/markua's
+        // parse_list (independently discovered here, not chunk-boundary-related — it
+        // reproduced even under the 'whole input, one feed() call' chunking, fixture
+        // 'oracle') — a blank-line-separated unordered list, then ordered list, then
+        // unordered checklist (checklists are list items with a checkbox marker prefix,
+        // using the same bullet/numbered/hash marker detection) got merged by parse()/
+        // events() into ONE Block::List for all 8 items, tagged with the first group's
+        // `ordered` value, while batch::StreamingParser's blank-line block-splitter
+        // correctly emitted three separately-typed lists. Now that parse_list itself stops
+        // at a marker-type change, parse()/events() and StreamingParser agree (fixture
+        // vimwiki/int-mixed-list-markers, confirmed passing under adversarial chunking).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "vimwiki_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
              calls collect_doc_from_events() + build() inside finish() (writer.rs's \
@@ -913,23 +912,18 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "zimwiki",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "zimwiki::parse::Parser::parse_list (parse.rs:190-241) doesn't stop consuming list \
-             items when the marker type changes: its loop condition is `is_bullet || \
-             is_numbered` (line 211-213) with no check that a run of numbered items follows a \
-             run of bulleted ones, and its blank-line arm (line 199-202) skips blank lines \
-             with `continue` instead of breaking — so a blank-line-separated unordered list \
-             immediately followed by an ordered list (fixtures/zimwiki/oracle: '* First item' \
-             .. blank .. '1. Ordered one') gets merged by the *whole-document* parser into ONE \
-             `Block::List` tagged with the FIRST item's `ordered` value, silently discarding \
-             that items 4-5 were numbered. `StreamingParser`'s blank-line block-splitter \
-             (batch.rs) hard-splits at that same blank line BEFORE re-parsing each half in \
-             isolation, so it does NOT reproduce this merge and instead emits two correctly-typed \
-             lists — the two diverge because they disagree on where the block boundary is, not \
-             because StreamingParser lost information the bulk parser had. This is a pre-existing \
-             parse()-level bug independent of streaming, found while wiring this harness's \
-             adversarial-chunking equivalence check; see TODO.md",
-        ),
+        // Fixed 2026-07-30: zimwiki::parse::Parser::parse_list (parse.rs) didn't stop
+        // consuming list items when the marker type changed — its loop condition only
+        // checked "some marker matched," not that it matched the list's own `ordered`
+        // flag, and its blank-line arm skipped blank lines with `continue` instead of
+        // breaking — so a blank-line-separated unordered list immediately followed by an
+        // ordered list got merged by the *whole-document* parser into ONE `Block::List`
+        // tagged with the first item's `ordered` value. `StreamingParser`'s blank-line
+        // block-splitter hard-split at that same boundary and did NOT reproduce the
+        // merge, so the two disagreed. Now that parse_list itself stops at a marker-type
+        // change, parse() and StreamingParser agree (fixture zimwiki/int-mixed-list-markers,
+        // confirmed passing under adversarial chunking).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "zimwiki::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
              reconstructs the AST + calls emit::build() inside finish() (writer.rs:24-34); \
@@ -946,20 +940,15 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "markua",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "markua::parse::Parser::parse_list (parse.rs:379-432) has the identical structural \
-             bug already found in zimwiki's parse_list: its loop condition accepts either \
-             `is_bullet` or `is_numbered` with no check for a marker-type change, so a \
-             blank-line-separated unordered list immediately followed by an ordered list \
-             (fixtures/markua/oracle: '- item one' / '- item two' .. blank .. '1. first' / \
-             '2. second') gets merged by the whole-document parser into ONE `Block::List` \
-             tagged with the first item's `ordered` value, silently mislabeling the numbered \
-             items. `StreamingParser`'s blank-line block-splitter hard-splits at that blank \
-             line before re-parsing each half in isolation, so it correctly emits two \
-             separately-typed lists instead — same root cause and same 'the two block-splitting \
-             passes disagree' shape as zimwiki, found while wiring this harness's \
-             adversarial-chunking equivalence check; see TODO.md",
-        ),
+        // Fixed 2026-07-30, identical shape and cause to zimwiki's fix above:
+        // markua::parse::Parser::parse_list (parse.rs) had the same "loop condition only
+        // checks that some marker matched, never that it matches this list's `ordered`
+        // flag" defect (independently discovered from zimwiki's, but from the same
+        // copy-paste lineage), so a blank-line-separated unordered list immediately
+        // followed by an ordered list got merged into ONE `Block::List` tagged with the
+        // first item's `ordered` value. parse() and StreamingParser now agree (fixture
+        // markua/int-mixed-list-markers, confirmed passing under adversarial chunking).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "markua::writer::Writer buffers all fed events into a Vec<OwnedMarkuaEvent> and \
              only reconstructs the AST + calls emit::emit() inside finish() (writer.rs:40-50); \
@@ -1195,16 +1184,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "twiki::writer::Writer buffers all events and only reconstructs the AST + \
                        calls build() inside finish(); zero bytes reach the sink before finish() \
                        despite content round-tripping correctly",
-    },
-    KnownFailure {
-        format: "vimwiki",
-        api: "streaming_parser",
-        description: "vimwiki_fmt's StreamingParser and events() disagree on where a list ends: \
-                       parse()/events() merge an unordered list, ordered list, and unordered \
-                       checklist (separated only by blank lines, no other content) into one \
-                       Block::List with a single ordered flag, losing the type distinction for \
-                       later groups, while StreamingParser hard-splits on every blank line and \
-                       emits three separately-typed lists",
     },
     KnownFailure {
         format: "vimwiki",
@@ -1476,28 +1455,10 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     },
     KnownFailure {
         format: "zimwiki",
-        api: "streaming_parser",
-        description: "zimwiki::parse::Parser::parse_list merges a blank-line-separated \
-                       unordered list immediately followed by an ordered list into one \
-                       Block::List tagged with the first item's `ordered` value (a \
-                       whole-document parse()-level bug); StreamingParser's blank-line block \
-                       splitter hard-splits at that boundary and does not reproduce the merge",
-    },
-    KnownFailure {
-        format: "zimwiki",
         api: "streaming_writer",
         description: "zimwiki::writer::Writer buffers all events and only reconstructs the AST \
                        + emits inside finish(); content round-trips but zero bytes reach the \
                        sink before finish()",
-    },
-    KnownFailure {
-        format: "markua",
-        api: "streaming_parser",
-        description: "markua::parse::Parser::parse_list has the identical structural bug as \
-                       zimwiki's: it merges a blank-line-separated unordered list immediately \
-                       followed by an ordered list into one Block::List tagged with the first \
-                       item's `ordered` value; StreamingParser's blank-line block splitter \
-                       hard-splits at that boundary and does not reproduce the merge",
     },
     KnownFailure {
         format: "markua",

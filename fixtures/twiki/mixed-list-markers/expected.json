@@ -1,0 +1,14 @@
+{
+  "description": "A bullet list immediately followed (no blank line — twiki's parse_list has no blank-line-skip logic, so a blank line already ends the list on its own) by a numbered list must parse as two separate list blocks, not be merged into one list tagged with the first item's marker type",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "Apple" } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Banana" } },
+    { "path": "/0", "children_count": 2 },
+    { "path": "/1", "kind": "list", "props": { "ordered": true } },
+    { "path": "/1/0/0/0", "kind": "text", "props": { "content": "First" } },
+    { "path": "/1/1/0/0", "kind": "text", "props": { "content": "Second" } },
+    { "path": "/1", "children_count": 2 }
+  ]
+}

@@ -67,6 +67,7 @@ TWiki markup reference: https://twiki.org/cgi-bin/view/TWiki/TextFormattingRules
 - [x] inline markup inside table cells — `inline-in-table`
 - [x] inline markup inside list items — `inline-in-list`
 - [x] verbatim block inside table cell — `verbatim-in-table`
+- [x] bullet list immediately followed by a differently-marked (ordered) list — `mixed-list-markers`
 
 ## Adversarial
 

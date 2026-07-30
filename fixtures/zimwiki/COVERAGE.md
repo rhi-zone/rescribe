@@ -61,6 +61,7 @@ Zim wiki markup reference: https://zim-wiki.org/manual/Help/Wiki_Syntax.html
 - [x] inline markup inside table cells — `inline-in-table`
 - [x] inline markup inside list items — `inline-in-list`
 - [x] image inside paragraph with text — `image-in-paragraph`
+- [x] bullet list immediately followed by a differently-marked (ordered) list — `mixed-list-markers`
 
 ## Adversarial
 

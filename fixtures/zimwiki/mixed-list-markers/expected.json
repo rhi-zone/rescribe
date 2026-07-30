@@ -1,0 +1,15 @@
+{
+  "description": "A bullet list immediately followed (across a blank line) by a numbered list must parse as two separate list blocks, not be merged into one list tagged with the first item's marker type",
+  "category": "integration",
+  "assertions": [
+    { "path": "/", "kind": "document" },
+    { "path": "/0", "kind": "list", "props": { "ordered": false } },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "First item" } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Second item" } },
+    { "path": "/0", "children_count": 2 },
+    { "path": "/1", "kind": "list", "props": { "ordered": true } },
+    { "path": "/1/0/0/0", "kind": "text", "props": { "content": "Ordered one" } },
+    { "path": "/1/1/0/0", "kind": "text", "props": { "content": "Ordered two" } },
+    { "path": "/1", "children_count": 2 }
+  ]
+}

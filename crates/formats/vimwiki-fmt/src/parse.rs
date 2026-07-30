@@ -231,6 +231,17 @@ impl<'a> Parser<'a> {
                 break;
             }
 
+            // A marker-type change (bullet run followed by a numbered/hash
+            // run, or vice versa) ends *this* list rather than being folded
+            // into it — even across a blank line the loop above already
+            // skipped past. `#` and digit/letter markers both count as
+            // "ordered" here, matching the dispatcher above that routes
+            // both to `parse_list(true)`.
+            let marker_is_ordered = is_numbered || is_hash;
+            if marker_is_ordered != ordered {
+                break;
+            }
+
             // Extract item content
             let content = if is_bullet || is_hash {
                 &trimmed[2..]

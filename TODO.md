@@ -4017,3 +4017,69 @@ New fixtures: `fixtures/{docbook,tei}/adv-unmatched-end-tag`, `fixtures/jats/adv
 end-tag`, `fixtures/jats/adv-mismatched-end-tag` (jats needed its own mismatch fixture since
 its existing `adv-malformed-xml` never exercised end-tag mismatch at all). `COVERAGE.md`
 updated for all three formats' Adversarial sections.
+
+## wiki-family `parse_list()` marker-type-change defect — fixed in 5 crates, surveyed across 11 (2026-07-30)
+
+The cross-API harness's `zimwiki`/`markua` `KNOWN_FAILURES` entries both independently
+described the same shape of bug: `parse_list()`'s loop condition only checked that *some*
+recognized marker matched ("is this a bullet or a numbered item?"), never that the marker
+matched the *specific* list being built (its `ordered` flag, fixed once from the first
+item). A blank-line-separated (or, in some crates, directly adjacent) run of the other
+marker type got silently absorbed into the current list and mislabeled with the first
+group's `ordered` value, instead of ending the list. Given the entries independently
+described identical logic in two unrelated crates, the task was to fix both and check the
+rest of the wiki/lightweight-markup family (`bbcode`, `creole`, `dokuwiki`, `jira`,
+`mediawiki`, `tikiwiki`, `twiki`, `vimwiki`, `xwiki`, `muse`, `t2t`) for the same
+copy-paste-lineage defect, since their fixture suites might simply lack a triggering case.
+
+**Survey result — read every `parse_list`-equivalent function in all 11 crates:**
+
+| Crate | Affected? | Why |
+|---|---|---|
+| `zimwiki` | **Yes — fixed** | `parse.rs`'s `parse_list` accepted `is_bullet \|\| is_numbered` with no check against `ordered`. |
+| `markua` | **Yes — fixed** | Identical shape in `parse.rs`'s `parse_list`. |
+| `vimwiki-fmt` | **Yes — fixed** | Identical shape (plus a third marker class, `#`, also treated as "ordered"); this turned out to be the *exact same root cause* as the already-tracked, separately-worded `vimwiki` `streaming_parser` `KnownFailure` ("StreamingParser and events() disagree on where a list ends") — fixing `parse_list()` here fixed both at once. |
+| `twiki` | **Yes — fixed** | Two copies of the defect (`parse_list` and `parse_nested_list` both have the same same-depth item loop with no marker check) — worse than the others, since the wrong-marker branch of the `if ordered { strip_prefix(...) }` also silently failed and left the raw marker text in the extracted content, not just mislabeling `ordered`. Not previously caught by any fixture. |
+| `dokuwiki` | **Yes — fixed** | `parse_list_items` never threaded `ordered` into its same-depth item loop at all (only nested nested-list recursion computed a fresh `nested_ordered` locally); same-depth items of the wrong marker were silently absorbed. Not previously caught by any fixture. |
+| `tikiwiki` | No | Structurally immune: `line_depth` is counted using only the *fixed* `marker` char decided from the first line, so a differently-marked line always counts as depth 0, which is `< depth` and breaks immediately — the bug can't reach the "same depth, wrong marker" case at all. |
+| `jira-fmt` | No | Explicitly checks `line_marker == marker` before accepting a same-depth item; the `else` branch already breaks on any mismatch. |
+| `mediawiki-fmt` | No | Computes `marker` from `ordered` up front and checks `trimmed.starts_with(marker)` directly; a mismatched marker already breaks the loop. |
+| `xwiki` | No | Same shape as mediawiki-fmt — fixed marker string, `!line.starts_with(marker)` breaks. |
+| `bbcode-fmt` | No | Uses explicit `[list]`/`[/list]`/`[*]` delimiters, not marker-character sniffing — the defect class doesn't apply. |
+| `muse-fmt` | No | Has *separate* `parse_unordered_list`/`parse_ordered_list` functions, each checking its own fixed marker directly with an unconditional break on mismatch — no shared "accept either marker" loop exists. |
+| `t2t` | No | Computes `marker` from `ordered` up front (`"+ "` vs `"- "`) and checks `trimmed.starts_with(marker)` directly, same shape as mediawiki/xwiki. |
+
+**Fix, applied identically to zimwiki/markua/vimwiki-fmt/twiki/dokuwiki:** after determining
+a line matches *some* recognized list marker, additionally check that the marker's
+ordered-ness matches the list's own `ordered` flag; if not, `break` out of the item loop
+(returning control to the block-level dispatcher, which re-detects the marker type on the
+next line and starts a new, correctly-typed list — verified no infinite-loop risk, since
+every affected crate's outer dispatcher independently re-checks the current line's marker
+before calling `parse_list` again).
+
+**Regression-proof methodology:** for each of the 5 fixes, the fix was `git stash`ed out,
+the new fixture re-run to confirm it fails without the fix (proving the fixture actually
+exercises the bug, not just a coincidentally-passing shape), then the fix restored and
+re-verified passing. Two fixtures (`twiki`, `dokuwiki`) needed their input changed from
+blank-line-separated lists to directly-adjacent differently-marked lines after this check
+revealed those two crates' loops have no blank-line-continuation logic at all (a blank line
+already unconditionally ends the list, independent of this bug) — the "blank line" framing
+from the original zimwiki/markua bug reports doesn't apply to every crate's loop shape.
+
+**New fixtures** (added per-crate naming convention — `zimwiki`/`vimwiki`/`twiki` use no
+composition prefix, `markua` uses `comp-`, `dokuwiki` uses `int-`):
+`fixtures/zimwiki/mixed-list-markers`, `fixtures/markua/comp-mixed-list-markers`,
+`fixtures/vimwiki/mixed-list-markers`, `fixtures/twiki/mixed-list-markers`,
+`fixtures/dokuwiki/int-mixed-list-markers`.
+
+**`KNOWN_FAILURES`/`CAPABILITIES` updated:** `zimwiki`/`streaming_parser`,
+`markua`/`streaming_parser`, and `vimwiki`/`streaming_parser` all flip `KnownFailure` →
+`Wired` (all three confirmed passing under `cargo test -p rescribe-fixtures`, including the
+adversarial-chunking equivalence checks). `twiki` and `dokuwiki` had no existing
+`KNOWN_FAILURES` entry for this bug — it was found via the family survey, not the harness —
+so there was nothing to remove there; both were already independently fixed and are now
+additionally covered by a fixture.
+
+**Not touched:** `zimwiki`/`markua`/`vimwiki` `streaming_writer` (architecturally hollow
+buffer-then-`finish()` writers — a separate, still-open, out-of-scope gap) and every other
+crate's own unrelated tracked gaps.

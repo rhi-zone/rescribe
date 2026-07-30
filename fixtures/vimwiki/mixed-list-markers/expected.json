@@ -1,0 +1,12 @@
+{
+  "description": "A dash-bullet list immediately followed (across a blank line) by a hash-marker ordered list must parse as two separate list blocks, not be merged into one list tagged with the first item's marker type; also exercises the third `#` marker class alongside digit/letter-dot markers",
+  "category": "integration",
+  "assertions": [
+    { "path": "/0", "kind": "list", "props": { "ordered": false }, "children_count": 2 },
+    { "path": "/0/0/0/0", "kind": "text", "props": { "content": "First item" } },
+    { "path": "/0/1/0/0", "kind": "text", "props": { "content": "Second item" } },
+    { "path": "/1", "kind": "list", "props": { "ordered": true }, "children_count": 2 },
+    { "path": "/1/0/0/0", "kind": "text", "props": { "content": "Ordered one" } },
+    { "path": "/1/1/0/0", "kind": "text", "props": { "content": "Ordered two" } }
+  ]
+}
