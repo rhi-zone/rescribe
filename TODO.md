@@ -9,6 +9,66 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-07-31: texinfo `StreamingParser` hollow-reader defect fixed (reader-side counterpart to
+the `texinfo` `streaming_writer` fix documented further below in this file, dated
+2026-07-30/2026-07-31).** `texinfo::batch::StreamingParser::feed()`
+(`crates/formats/texinfo/src/batch.rs`) used to just `self.buf.extend_from_slice(chunk)` and
+only call `crate::events::events(&s)` inside `finish()` — implementing the feed/finish contract
+while being architecturally O(full input), exactly the "buffer all input until finish()" pattern
+CLAUDE.md explicitly rejects for hand-rolled parsers. The module's own doc comment claimed this
+was required because "Texinfo requires the full input for correct parsing (forward references,
+@set/@value, etc.)" — false: `@set`/`@value` are not implemented anywhere in `parse.rs` (grep
+confirms `@set ` is a plain skip, no variable substitution ever happens), so that rationale did
+not hold up.
+
+Fix: `StreamingParser` now line-buffers input and splits it into top-level units — a paragraph,
+a heading, or an `@directive ... @end directive`-delimited environment (list, definition list,
+multitable, code block, quotation, menu, float, conditional block) — flushing each unit (via a
+fresh `crate::events::events()` call on just that unit's text) to the handler as soon as its
+boundary is confirmed by the input seen so far. Memory is O(largest unit), not O(full input).
+`@settitle` (document-level metadata; `events()` always emits one `Title` event before all block
+events, regardless of where `@settitle` appears in the source) is handled specially: buffered
+and emitted once, immediately before the first content-producing flush — correct for the
+universal case (and Texinfo's own authoring convention) where `@settitle` precedes all content,
+which is the only pattern present in the fixture suite (one occurrence, always the first line).
+
+Investigation finding, not fixed here (out of scope for this task): `parse.rs` itself has zero
+nesting awareness for `@itemize`/`@enumerate`/etc. — nesting a same-type environment inside
+itself (e.g. `@itemize` inside `@itemize`) causes the *outer* scan to stop at the *first* `@end
+itemize`, whichever one that is, silently dropping the remaining content. Confirmed directly:
+parsing `@itemize\n@item outer one\n@itemize\n@item inner one\n@end itemize\n@item outer
+two\n@end itemize\n` produces one three-item list (with the inner `@itemize` line itself
+misparsed as a malformed `@item` reading "ize") and silently drops `@item outer two` and the
+final `@end itemize` entirely. The streaming splitter deliberately mirrors this exact flat
+(non-nesting) boundary detection rather than second-guessing it with a proper nesting-depth
+stack (the fix org-fmt's sibling `batch.rs` bug used) — a depth-aware splitter would produce
+*different* top-level unit boundaries than a full-document `parse()` call does for nested
+environments, which would make `StreamingParser` diverge from `events()` on such input: the
+opposite of "genuinely incremental but behaviorally identical." Fixing nested-environment
+parsing is a separate, larger `parse.rs` change (all 8 scanner functions), tracked here as a
+known gap, not attempted in this fix.
+
+Verified via: (1) `crates/rescribe-fixtures/tests/streaming_apis.rs`'s
+`texinfo_streaming_parser_matches_events_under_adversarial_chunking` — `StreamingParser` under
+whole/single-byte/chunk-of-N/mid-UTF-8-split chunking matches `events()` byte-for-byte over the
+full `fixtures/texinfo/` suite (73 fixtures, including `comp-nested-lists`, which exercises the
+flat-nesting behavior above); (2) a new deterministic
+`texinfo_streaming_parser_delivers_events_incrementally` test proving `feed()` delivers a
+completed unit's events before `finish()` is called, and that a second, still-incomplete unit
+fed afterward does not retroactively change what was already delivered; (3) a new
+`crates/formats/texinfo/tests/streaming_parser_memory.rs` peak-live-heap guard (thread-unique
+`#[global_allocator]`, same pattern as `tikiwiki/tests/streaming_writer_memory.rs`) feeding a
+synthetic multi-section document in 61-byte chunks. Measured peak live heap above baseline for a
+10x increase in synthetic-document size (50 → 500 sections, 10,870 → 109,320 input bytes):
+**before fix: 357,456 B → 3,117,042 B (8.72x — O(full input), confirmed by reverting to the old
+implementation via `git stash`)**; **after fix: 3,429 B → 3,429 B (1.00x — flat, O(largest
+unit))**. `streaming_harness.rs`'s `KNOWN_FAILURES` entry for `texinfo`/`streaming_parser` was
+removed and `CAPABILITIES`' `streaming_parser` promoted to `ApiState::Wired`; `BatchParser` and
+`BatchSink` are unchanged (both remain deliberate buffer-then-`finish()` shims per their own doc
+comments, matching `org-fmt`/`rst-fmt`'s sibling `BatchParser`/`BatchSink`).
+
+---
+
 **2026-07-31: xwiki `streaming_parser` hollow-reader defect fixed (reader-side counterpart to
 the writer fix below).** `xwiki::batch::StreamingParser::feed()` was a bare
 `self.buf.extend_from_slice(chunk)`; all parsing happened inside `finish()`, which called
@@ -125,69 +185,6 @@ different, still-open defect (`events()` silently drops `Metadata` for input lac
 `<description>` element), unrelated to this fix.
 
 ---
-=======
-**2026-07-31: xwiki `streaming_parser` hollow-reader defect fixed (reader-side counterpart to
-the writer fix below).** `xwiki::batch::StreamingParser::feed()` was a bare
-`self.buf.extend_from_slice(chunk)`; all parsing happened inside `finish()`, which called
-`parse::parse` over the full reassembled buffer then walked it with `events::events` — the
-"buffer all input until finish()" shape CLAUDE.md explicitly rejects for hand-rolled parsers.
-Tracked as a `KnownFailure` (format: "xwiki", api: "streaming_parser") in
-`crates/rescribe-fixtures/src/streaming_harness.rs`.
-
-Rewrote `StreamingParser` (`crates/formats/xwiki/src/batch.rs`) to a line-buffered,
-block-boundary-aware state machine mirroring the boundaries `xwiki::parse::Parser::parse`'s own
-dispatch loop uses: one top-level block at a time (paragraph, heading, horizontal rule, list,
-table, code block, `{{quote}}`/`{{name}}` macro block, self-closing macro). `feed()` accumulates
-lines until a block's boundary is confirmed, then flushes it — reparsed in isolation via
-`parse::parse` and walked with `events::events`, forwarding every event to the handler — before
-the next block starts accumulating. Only the current incomplete trailing block is buffered, not
-the whole document. `BlockState::MacroBlock(String)`/`CodeBlock`/`QuoteBlock` track macro/code
-bodies as an explicit state (not a boolean flag), so a blank line inside a multi-line macro body
-doesn't cause a premature flush — matching `try_parse_block_macro_start`/
-`try_parse_self_closing_macro`, both changed from private to `pub(crate)` so `batch.rs` could
-reuse them instead of duplicating detection logic. XWiki's own recursive-descent parser doesn't
-track macro nesting depth either (it closes on the first line containing the matching
-`{{/name}}`, regardless of nested same-name macros), so the streaming parser intentionally
-matches that exact behavior rather than introducing a depth counter that would diverge from
-`parse()`/`events()`. Confirmed no cross-block state exists in xwiki's grammar (no
-reference-style link definitions or similar forward references), so reparsing one block at a
-time is safe.
-
-Measured (test-local `thread_local!` tracking allocator, shared with `writer.rs`'s existing
-`alloc_guard` module since only one `#[global_allocator]` may exist per test binary; 5000-section
-~490KB synthetic document fed in 64-byte chunks, vs. 500 sections as baseline): peak memory
-**1,969 bytes flat regardless of document size** (500 sections and 5000 sections both measured
-exactly 1,969 bytes above baseline) for the new `StreamingParser`, vs. the old
-buffer-then-finish implementation's **1,296,864 bytes at 500 sections → 12,738,976 bytes at
-5000 sections** (~9.8x growth, near-linear with input size, confirming `O(full document)`).
-
-Adversarial-chunking tests (whole input, single-byte, 3/7/16/64-byte chunks, and a dedicated
-mid-UTF-8-character case) added to `xwiki`'s own test module (`batch.rs`), covering every
-top-level construct including a macro/quote block with an internal blank line — all pass
-byte-for-byte identical to `events()` on the whole input. No formatting or block-boundary bugs
-were surfaced (unlike the org/asciidoc/djot/t2t/fountain-fmt streaming-writer rewrites earlier
-this session, which each found at least one real bug); xwiki's parser dispatch logic ported
-over cleanly to line-by-line boundary detection on the first attempt.
-
-Updated `crates/rescribe-fixtures/src/streaming_harness.rs`: promoted xwiki's
-`streaming_parser` from `ApiState::KnownFailure(...)` to `ApiState::Wired`, removed the matching
-`KnownFailure { format: "xwiki", api: "streaming_parser", ... }` entry, and updated four stale
-"unlike xwiki/muse-fmt" comparison comments (zimwiki/markua capability comments and their
-matching `streaming_apis.rs` doc-comments) that had cited xwiki alongside muse-fmt as a
-buffer-then-finish counter-example — now correctly say "like xwiki's (fixed 2026-07-31) but
-unlike muse-fmt's." Also replaced `xwiki_streaming_parser_matches_events_and_is_incremental`'s
-old per-fixture mid-input-cutoff incrementality probe (which fed exactly the first half of every
-fixture's bytes and asserted at least one event delivered) with a probe against a dedicated
-synthetic two-block document: the old per-fixture version had a structural false-positive risk
-that surfaced immediately — the real `blockquote` fixture is a single indivisible `{{quote}}`
-block spanning its entire ~39-byte file, so its first half necessarily lands mid-body before the
-closing `{{/quote}}` is seen, and zero events at that point is correct (the block genuinely
-isn't finished yet), not a buffer-then-finish defect. This mirrors the same fixture-shape caveat
-already documented for the jats-fmt entry above. The adversarial-chunking correctness loop
-(comparing `StreamingParser` output to `events()` over the whole fixture suite) is retained
-unchanged and now exercises real per-block state transitions rather than passing trivially by
-construction.
->>>>>>> 9ab6dc3425 (fix(xwiki): make StreamingParser genuinely incremental, not buffer-then-finish)
 
 **2026-07-31: org-fmt `streaming_writer` hollow-writer defect fixed (and this harness's own
 Wired claim corrected).** Before this fix, `streaming_harness.rs`'s `CAPABILITIES` table

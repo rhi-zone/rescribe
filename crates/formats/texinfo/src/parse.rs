@@ -199,7 +199,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn try_heading(line: &str) -> Option<(u8, HeadingKind, &str)> {
+pub(crate) fn try_heading(line: &str) -> Option<(u8, HeadingKind, &str)> {
     let heading_cmds: &[(&str, u8, HeadingKind)] = &[
         ("@chapter ", 1, HeadingKind::Numbered),
         ("@unnumbered ", 1, HeadingKind::Unnumbered),
@@ -222,7 +222,7 @@ fn try_heading(line: &str) -> Option<(u8, HeadingKind, &str)> {
     None
 }
 
-fn try_code_block_start(line: &str) -> Option<CodeBlockVariant> {
+pub(crate) fn try_code_block_start(line: &str) -> Option<CodeBlockVariant> {
     if line.starts_with("@example") {
         Some(CodeBlockVariant::Example)
     } else if line.starts_with("@smallexample") {
@@ -240,7 +240,7 @@ fn try_code_block_start(line: &str) -> Option<CodeBlockVariant> {
     }
 }
 
-fn code_block_end_marker(variant: &CodeBlockVariant) -> String {
+pub(crate) fn code_block_end_marker(variant: &CodeBlockVariant) -> String {
     match variant {
         CodeBlockVariant::Example => "@end example".to_string(),
         CodeBlockVariant::SmallExample => "@end smallexample".to_string(),
@@ -251,7 +251,7 @@ fn code_block_end_marker(variant: &CodeBlockVariant) -> String {
     }
 }
 
-fn try_conditional_start(line: &str) -> Option<String> {
+pub(crate) fn try_conditional_start(line: &str) -> Option<String> {
     let conditionals = &[
         "@iftex",
         "@ifhtml",
@@ -295,7 +295,7 @@ fn collect_paragraph<'b>(lines: &[&'b str], start: usize) -> (Vec<&'b str>, usiz
 }
 
 /// Returns true if the line starts with an inline @-command (not a block command).
-fn is_inline_command_at_start(line: &str) -> bool {
+pub(crate) fn is_inline_command_at_start(line: &str) -> bool {
     let inline_prefixes = &[
         "@code{",
         "@emph{",

@@ -381,14 +381,18 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "texinfo",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "texinfo::batch::StreamingParser buffers all fed bytes into a Vec<u8> and only \
-             parses + delivers events inside finish() (see crates/formats/texinfo/src/batch.rs's \
-             own module doc, \"Memory usage is O(full input)\"); feed() never advances real \
-             parser state, so no events reach the handler until finish() is called — not \
-             incremental streaming despite implementing the feed/finish contract; found while \
-             wiring this harness's incrementality probe",
-        ),
+        // Fixed: texinfo::batch::StreamingParser now processes input in logical
+        // top-level units (paragraph, heading, or an @directive...@end directive
+        // environment), flushing each unit to the handler as soon as its boundary
+        // is confirmed, instead of buffering all fed bytes into a Vec<u8> and only
+        // parsing + delivering events inside finish(). Confirmed via the
+        // matches-events()-under-adversarial-chunking check over all fixtures plus
+        // a deterministic pre-finish incrementality probe (see
+        // texinfo_streaming_parser_delivers_events_incrementally in
+        // crates/rescribe-fixtures/tests/streaming_apis.rs and the crate's own
+        // test_streaming_parser_delivers_before_finish in
+        // crates/formats/texinfo/src/batch.rs).
+        streaming_parser: ApiState::Wired,
         // Fixed: texinfo::writer::Writer now writes straight through to a single shared
         // buffer per event (mirroring rst-fmt's Writer design) instead of buffering all
         // events and reconstructing the AST in finish(). Confirmed via the
@@ -1265,13 +1269,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "rst-fmt StreamingParser splits a multi-item DefinitionList into one \
                        StartDefinitionList/EndDefinitionList pair per item instead of one list \
                        spanning all items",
-    },
-    KnownFailure {
-        format: "texinfo",
-        api: "streaming_parser",
-        description: "texinfo::batch::StreamingParser buffers all fed bytes and only parses + \
-                       delivers events inside finish(); feed() delivers zero events before \
-                       finish() is called",
     },
     KnownFailure {
         format: "fb2",

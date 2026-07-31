@@ -2753,17 +2753,28 @@ fn texinfo_events_equals_ast_projection_over_all_fixtures() {
     );
 }
 
-/// `StreamingParser` buffers all fed bytes and only parses+delivers events
-/// inside `finish()` (see `crates/formats/texinfo/src/batch.rs`), so this
-/// check verifies two things: (1) the final event sequence still matches
-/// `events()` under adversarial chunking (expected to hold, since finish()
-/// just calls `events()` on the reassembled buffer), and (2) `feed()` alone,
-/// without `finish()`, actually delivers events incrementally as input
-/// arrives — which it does not, because all parsing is deferred to
-/// `finish()`. (2) is the real, previously-undocumented defect this check
-/// surfaces.
+/// `StreamingParser` now processes input in logical top-level units (a
+/// paragraph, heading, or `@directive ... @end directive` environment —
+/// see `crates/formats/texinfo/src/batch.rs`'s module docs), flushing each
+/// unit to the handler as soon as its boundary is confirmed, rather than
+/// buffering the whole document until `finish()`. This check verifies the
+/// final event sequence still matches `events()` under adversarial chunking
+/// over the whole fixture suite.
+///
+/// The separate "does `feed()` alone deliver anything before `finish()`"
+/// incrementality probe that used to live in this function was removed: it
+/// asserted non-empty delivery after feeding half of *every* fixture's
+/// bytes, which is not actually a valid general property — a fixture that
+/// is a single short paragraph (no blank line, no directive) legitimately
+/// delivers nothing until its one unit completes, same as `rst-fmt` and
+/// `org-fmt`'s equivalent per-block streaming parsers. That probe is
+/// replaced by `texinfo_streaming_parser_delivers_events_incrementally`
+/// below, a deterministic synthetic-input check (not fixture-dependent, same
+/// pattern as the crate's own `test_streaming_parser_delivers_before_finish`
+/// unit test) that feeds a *complete* leading unit and checks it is
+/// delivered before `finish()`.
 #[test]
-fn texinfo_streaming_parser_matches_events_and_is_incremental() {
+fn texinfo_streaming_parser_matches_events_under_adversarial_chunking() {
     let root = fixtures_root().join("texinfo");
     let mut checked = 0;
     let mut result: Result<(), String> = Ok(());
@@ -2798,31 +2809,59 @@ fn texinfo_streaming_parser_matches_events_and_is_incremental() {
                 ));
             }
         }
-
-        if input.len() > 32 && !bulk.is_empty() {
-            let mid = input.len() / 2;
-            let mut delivered: Vec<texinfo::OwnedEvent> = Vec::new();
-            let mut parser = texinfo::StreamingParser::new(|e| delivered.push(e));
-            parser.feed(&input[..mid]);
-            if delivered.is_empty() && result.is_ok() {
-                result = Err(format!(
-                    "StreamingParser delivered zero events to the handler after feed() with \
-                     half of fixture {name} ({mid} bytes) and before finish() — \
-                     texinfo::batch::StreamingParser buffers all input into a Vec<u8> (see \
-                     crates/formats/texinfo/src/batch.rs's own module doc, \"Memory usage is \
-                     O(full input)\") and only parses and delivers events inside finish(), so \
-                     feed() never advances real incremental parser state"
-                ));
-            }
-            // `parser` is intentionally dropped here without calling finish(): this
-            // probe only needs to observe pre-finish handler state.
-        }
     }
     assert!(
         checked > 5,
         "expected to check several texinfo fixtures, got {checked}"
     );
     assert_or_known_failure("texinfo", "streaming_parser", result);
+}
+
+/// Deterministic incrementality probe: feeding a complete leading unit (a
+/// heading followed by its terminating blank line) must deliver its events
+/// to the handler before `finish()` is ever called, and before the second,
+/// much larger paragraph that follows is fed at all. This proves `feed()`
+/// advances real per-unit parser state rather than buffering the whole
+/// input — the defect the pre-fix `texinfo::batch::StreamingParser` had
+/// (buffering into a `Vec<u8>` and only calling `events()` inside
+/// `finish()`).
+#[test]
+fn texinfo_streaming_parser_delivers_events_incrementally() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let delivered: Rc<RefCell<Vec<texinfo::OwnedEvent>>> = Rc::new(RefCell::new(Vec::new()));
+    let sink = Rc::clone(&delivered);
+    let mut parser = texinfo::StreamingParser::new(move |e| sink.borrow_mut().push(e));
+
+    parser.feed(b"@chapter Hello\n\n");
+    assert!(
+        !delivered.borrow().is_empty(),
+        "StreamingParser delivered zero events after feed() with one complete unit (a heading) \
+         and before finish() was ever called — feed() must advance real incremental parser \
+         state, not buffer input until finish()"
+    );
+    assert!(
+        delivered
+            .borrow()
+            .iter()
+            .any(|e| matches!(e, texinfo::OwnedEvent::StartHeading { .. }))
+    );
+
+    // A second, much larger unit fed afterward — but not yet completed by a
+    // terminating blank line — must not retroactively change what was
+    // already delivered for the first.
+    let before = delivered.borrow().len();
+    parser.feed(&"word ".repeat(10_000).into_bytes());
+    assert_eq!(
+        delivered.borrow().len(),
+        before,
+        "feeding more bytes of a still-incomplete second paragraph must not change what was \
+         already delivered for the completed first unit"
+    );
+    parser.feed(b"\n\n");
+    parser.finish();
+    assert!(delivered.borrow().len() > before);
 }
 
 /// `Writer` writes straight through to a single shared output buffer per
