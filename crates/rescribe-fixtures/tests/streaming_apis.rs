@@ -1988,14 +1988,13 @@ fn djot_streaming_parser_matches_events_under_adversarial_chunking() {
 /// The streaming `Writer` driven with `events(input)` must reproduce what
 /// builder `emit()` produces for the AST `parse(input)` returned.
 ///
-/// Content correctness (this loop) is expected to pass now that `Event` has
-/// a `LinkDef` variant and `DocBuilder` handles it (see `Event::LinkDef` in
-/// `events.rs` and its arm in `writer.rs::DocBuilder::process`) — the prior
-/// `link_defs: []` gap is closed. `djot`'s `Writer` is still not
-/// incrementally streaming, though: `writer.rs`'s module docs say it
-/// "buffers all events, reconstructs the AST, then emits", and `finish()`
-/// calls `emit::emit`. That's checked separately below via an incrementality
-/// probe, the same way texinfo/commonmark/bbcode/creole's hollow writers are.
+/// `djot_fmt::writer::Writer` writes straight through to a single shared
+/// output buffer per event (mirroring `rst-fmt`'s `Writer` design — see
+/// `crates/formats/djot-fmt/src/writer.rs`'s module doc), not a
+/// buffer-then-reconstruct-the-AST fake streaming writer. This checks
+/// content is byte-identical to `emit()` over all fixtures, including
+/// link-reference definitions (`Event::LinkDef`) and table captions
+/// (`Event::TableCaption`), and that bytes reach the sink before `finish()`.
 #[test]
 fn djot_streaming_writer_matches_builder_over_all_fixtures() {
     let root = fixtures_root().join("djot");

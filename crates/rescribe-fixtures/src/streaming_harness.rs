@@ -209,19 +209,16 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              tracked for rst-fmt, though here only the top-level blank-line boundary is at fault \
              (parse_definition_list_direct itself is fine). See TODO.md",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "djot-fmt's Writer is not incrementally streaming: writer.rs's module docs \
-             self-admit it buffers all events into a Vec<OwnedEvent>, reconstructs the AST via \
-             DocBuilder, then calls emit::emit inside finish() — write_event() delivers zero \
-             bytes to the sink before finish(), confirmed by an incrementality probe (a complete \
-             heading + paragraph produces no pre-finish output). Content correctness — including \
-             link-reference definitions (fixture link-reference) — is no longer at issue: Event \
-             now has a LinkDef variant (mirroring ast::LinkDef field-for-field), emitted by \
-             EventIter::next's None arm once top-level blocks are exhausted (before footnote \
-             defs), and DocBuilder::process pushes it to DocBuilder.link_defs, so events_to_doc \
-             round-trips link_defs correctly. See TODO.md for the hollow-writer performance \
-             rework, tracked alongside org/texinfo/commonmark-fmt's writers with the same defect.",
-        ),
+        // Fixed 2026-07-31: djot_fmt::writer::Writer rewritten from
+        // buffer-all-events-then-reconstruct-the-AST to a single shared-buffer
+        // write-straight-through design (mirroring rst-fmt's Writer), with three
+        // deferred per-line re-indent constructs (Blockquote, DefinitionDesc,
+        // ListItem/FootnoteDef — see writer.rs's module doc) and Table collecting
+        // rows to compute the header separator's column count/alignments.
+        // Byte-identical to emit() over all fixtures, including link-reference
+        // definitions (Event::LinkDef, fixture link-reference) and table captions
+        // (Event::TableCaption); bytes reach the sink before finish().
+        streaming_writer: ApiState::Wired,
     },
     // asciidoc's `events = Wired` is a narrower claim than rst's: `parse()`
     // (parse.rs:15) drives the same `try_parse_block()` loop `events()` does, so
@@ -1273,14 +1270,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        invisible to the per-block pre_scan, a pending {.attr} line is flushed \
                        away from the fence it decorates, and the blank-line boundary splits a \
                        multi-item definition list",
-    },
-    KnownFailure {
-        format: "djot",
-        api: "streaming_writer",
-        description: "djot_fmt::writer::Writer buffers all events and only reconstructs the AST \
-                       + calls emit() inside finish(); zero bytes reach the sink before finish() \
-                       despite content round-tripping correctly (including link-reference \
-                       definitions, now that Event::LinkDef exists and DocBuilder handles it)",
     },
     KnownFailure {
         format: "asciidoc",

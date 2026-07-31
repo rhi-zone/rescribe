@@ -9,6 +9,48 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-07-31: djot-fmt `streaming_writer` hollow-writer defect fixed.**
+`djot_fmt::writer::Writer` (`crates/formats/djot-fmt/src/writer.rs`) was rewritten from
+buffer-all-events-into-`Vec<OwnedEvent>`-then-`events_to_doc()`-then-`emit()` to a single
+shared `String` output buffer, mirroring `rst-fmt`'s `Writer` (and the texinfo rewrite
+immediately below). Construct classification (see the module's doc comment for the full
+writeup): most constructs are write-straight-through; `Blockquote`/`DefinitionDesc` (uniform
+per-line `"> "`/`"  "` prefix) and `ListItem`/`FootnoteDef` (per-line `"  "` prefix on every
+line but the first, which continues the marker/label line) are deferred per-line
+re-indentation via a pooled scratch buffer; `Table` is genuinely content-dependent (the header
+separator's column count/alignments need every row seen first), so rows collect
+already-*formatted* cell markup (captured under a mark and sliced out, since Djot cells can
+hold inline spans, not just plain text) and render at `EndTable`. `Div` turned out to be
+write-through, not deferred, on inspection of `emit.rs` — unlike `Blockquote`, its children
+are written directly via `emit_blocks`, no sub-emitter/re-indentation. `Event::TableCaption`
+carries an atomic `Vec<Inline>` payload (not streamed sub-events, by `events()`'s own design),
+so rendering it needed one small independent AST-fragment-to-markup helper
+(`render_inlines_ast`) — documented in the module doc as the one deliberate exception to
+"never reconstruct via the tree/emit path," forced by the event vocabulary's shape.
+
+Two real bugs surfaced and were fixed while getting the byte-identity check to pass (not
+content bugs in the *old* buffer-then-emit writer, which round-tripped correctly by
+construction — bugs in getting the *new* write-through design to match `emit()` exactly):
+(1) `ListItem`'s between-items separator was double-counted (writing an unconditional `"\n"`
+before both the marker's own newline logic and the reindented content's own trailing newline),
+producing a blank line between list items where `emit()` uses exactly one newline — fixed by
+popping the reindented content's trailing newline (matching `emit.rs`'s explicit
+`if buf.ends_with('\n') { buf.pop(); }`) and letting the *next* item's marker write the sole
+separating newline. (2) `Div`'s closing `":::"` fence needs a blank line before it even when
+the last child already ended with its own single trailing newline (`emit.rs` writes an
+unconditional extra `newline()` there) — the streaming writer initially only ensured a single
+trailing newline. Both are pinned by `test_writer_byte_identical_to_builder` in `writer.rs`.
+
+Verified byte-identical to `emit()` over every djot fixture (`djot_streaming_writer_matches_\
+builder_over_all_fixtures` in `rescribe-fixtures/tests/streaming_apis.rs`), including
+link-reference definitions and table captions, with bytes reaching the sink before `finish()`.
+Measured (test-local tracking allocator, release build, 5000-section ~760KB synthetic
+document, discarding sink): peak memory 4,469 bytes for the streaming Writer vs 1,720,320
+bytes for `parse()`+`emit()` (385x smaller), 1.68x faster throughput. The `djot/streaming_writer`
+`KNOWN_FAILURES` entry is removed; `CAPABILITIES` now declares `streaming_writer: ApiState::Wired`.
+
+---
+
 **2026-07-31: texinfo `streaming_writer` hollow-writer defect fixed.** The remaining half of
 the `texinfo/streaming_writer` `KnownFailure` (see the 2026-07-30 entry immediately below —
 title-loss was already fixed; the buffer-then-reconstruct architecture was not) is closed.
