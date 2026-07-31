@@ -432,13 +432,13 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              O(full input)\"); feed() never advances real parser state, so no events reach the \
              handler until finish() is called",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "textile_fmt::writer::Writer buffers all fed events into a Vec<TextileEvent> and \
-             only reconstructs the AST + calls emit() inside finish() (see \
-             crates/formats/textile-fmt/src/writer.rs's own module doc, \"buffers all events, \
-             reconstructs the AST, then emits\") — a fake streaming writer per CLAUDE.md, not an \
-             independent incremental implementation",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event (shared output
+        // buffer, O(nesting depth) frame stack) instead of buffering into a Vec<TextileEvent>
+        // and delegating to emit::build() inside finish(). Byte-identical-to-builder confirmed
+        // across fixtures. One pre-existing quirk replicated exactly, not "fixed": a Paragraph
+        // directly inside a Blockquote or list item silently ignores its own align/attrs (an
+        // O(1) parent-frame lookup, ~4.4x faster than build()).
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "commonmark",
@@ -770,16 +770,11 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         format: "bbcode",
         events: ApiState::Wired,
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "bbcode_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST (events_to_doc) + calls emit() inside finish() (see \
-             crates/formats/bbcode-fmt/src/writer.rs's own module doc, \"This implementation \
-             buffers all events, reconstructs the AST, then emits\" — write_event() at \
-             writer.rs:42-44 only pushes onto self.events); content is still byte-identical to \
-             build() over all fixtures since finish() ultimately drives the same emit() path, \
-             but zero bytes reach the sink before finish() is called — not a genuine \
-             incremental streaming writer",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to emit() inside finish(). Fully
+        // write-through, no deferred constructs found. Byte-identical-to-builder confirmed;
+        // ~2.4-4.3x faster and ~1000x lower peak memory than the old buffer-then-emit path.
+        streaming_writer: ApiState::Wired,
     },
     // creole's events() is `EventIter::new` calling `crate::parse::parse(input)`
     // then `collect_events(&doc)`, a depth-first AST walk (events.rs:123-127) —
@@ -799,15 +794,11 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         format: "creole",
         events: ApiState::Wired,
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "creole::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST (events_to_doc) + calls crate::emit::build inside finish() \
-             (write_event() at writer.rs:38-40 only pushes onto self.events, all real work \
-             happens in finish() at writer.rs:43-48); content is still byte-identical to \
-             build() over all fixtures since finish() ultimately drives the same build() path, \
-             but zero bytes reach the sink before finish() is called — not a genuine \
-             incremental streaming writer",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to build() inside finish(). Fully
+        // write-through, no deferred constructs found. Byte-identical-to-builder confirmed;
+        // ~2.4-4.3x faster and ~1000x lower peak memory than the old buffer-then-emit path.
+        streaming_writer: ApiState::Wired,
     },
     // dokuwiki's events() is `InputEventIter::new`, which calls
     // `crate::parse::parse(input)` then walks the resulting `DokuwikiDoc` with
@@ -830,16 +821,11 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         format: "dokuwiki",
         events: ApiState::Wired,
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "dokuwiki::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST (events_to_doc) + calls crate::emit::build inside finish() \
-             (write_event() at writer.rs:27-29 only pushes onto self.events, all real work \
-             happens in finish() at writer.rs:32-37, self-admitted in the module doc \
-             \"Buffers all events, reconstructs the AST, then emits\"); content is still \
-             byte-identical to build() over all fixtures since finish() ultimately drives the \
-             same build() path, but zero bytes reach the sink before finish() is called — not a \
-             genuine incremental streaming writer",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to build() inside finish(). Fully
+        // write-through, no deferred constructs found. Byte-identical-to-builder confirmed;
+        // ~2.4-4.3x faster and ~1000x lower peak memory than the old buffer-then-emit path.
+        streaming_writer: ApiState::Wired,
     },
     // jira-fmt's events() is `crate::parse::parse(input)` followed by a full
     // walk of the resulting `JiraDoc` (events.rs's `events()`/
@@ -865,53 +851,50 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         format: "jira",
         events: ApiState::Wired,
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "jira_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST (events_to_doc) + calls crate::emit::build inside finish() \
-             (write_event() at writer.rs:40-42 only pushes onto self.events, all real work \
-             happens in finish() at writer.rs:45-50, self-admitted in the module doc \"this \
-             implementation buffers all events, reconstructs the AST, then emits\"); content is \
-             still byte-identical to build() over all fixtures since finish() ultimately drives \
-             the same build() path, but zero bytes reach the sink before finish() is called — \
-             not a genuine incremental streaming writer",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to build() inside finish(). Nearly
+        // all write-through; one O(1) deferred piece: a table row's closing ||/| depends on
+        // whether its first cell was a header cell, tracked as Option<bool>, not buffered.
+        // Byte-identical-to-builder confirmed; ~1.9-2.5x faster, peak memory 176MB -> 4.2KB
+        // (~41,700x) on a 50,000-section synthetic doc.
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "mediawiki",
         events: ApiState::Wired,
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "mediawiki_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls emit() inside finish() (writer.rs's Writer::finish); \
-             content round-trips correctly on every fixture, but the incrementality probe (a \
-             complete StartParagraph/Text/EndParagraph sequence, checked for any bytes reaching \
-             an ObservableSink before finish()) writes zero bytes, confirming this is a fake \
-             streaming writer per CLAUDE.md, not just architecturally described as one",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to emit() inside finish(). Mostly
+        // write-through with two genuine deferrals: (1) Link text is only the top-level Text
+        // children (nested Bold/Italic contribute nothing per the AST's own build_inline
+        // logic), accumulated into a small owned String and rendered once at EndLink; (2) the
+        // document-level trailing-whitespace collapse (emit() does trim_end() + "\n" once) is
+        // approximated by holding back the trailing-whitespace run at flush() and always
+        // emitting exactly one final "\n" at finish(). Byte-identical-to-builder confirmed;
+        // ~1.66x faster, peak memory 176MB -> 4.3KB (~40,700x) on a 50,000-section doc.
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "tikiwiki",
         events: ApiState::Wired,
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "tikiwiki::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls build() inside finish() (writer.rs's Writer::finish); \
-             content round-trips correctly on every fixture, but the incrementality probe \
-             writes zero bytes before finish(), confirming this is a fake streaming writer per \
-             CLAUDE.md",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to build() inside finish(). Fully
+        // write-through, no deferred constructs found. Byte-identical-to-builder confirmed.
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "twiki",
         events: ApiState::Wired,
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "twiki::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls build() inside finish() (writer.rs's Writer::finish); \
-             content round-trips correctly on every fixture, but the incrementality probe \
-             writes zero bytes before finish(), confirming this is a fake streaming writer per \
-             CLAUDE.md",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to build() inside finish(). Fully
+        // write-through except Link (plain-text label buffer, since the label strips
+        // formatting). The byte-identical test caught a real, previously-latent ordering bug
+        // independent of the rewrite itself: build_list_items wrote an item's own newline
+        // before recursing into nested lists instead of after; fixed with a wrote_own_line
+        // flag. ~3.9x faster (122->483 MB/s).
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "vimwiki",
@@ -929,13 +912,13 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // at a marker-type change, parse()/events() and StreamingParser agree (fixture
         // vimwiki/int-mixed-list-markers, confirmed passing under adversarial chunking).
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "vimwiki_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
-             calls collect_doc_from_events() + build() inside finish() (writer.rs's \
-             Writer::finish); content round-trips correctly on every fixture, but the \
-             incrementality probe writes zero bytes before finish(), confirming this is a fake \
-             streaming writer per CLAUDE.md",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to collect_doc_from_events() +
+        // build() inside finish(). Fully write-through except Blockquote (dissolves/merges
+        // paragraph children, drops other block kinds — replicated exactly) and Link
+        // (equality-based separator). Byte-identical-to-builder confirmed; ~5.4x faster
+        // (83->447 MB/s).
+        streaming_writer: ApiState::Wired,
     },
     // xwiki's events() is a genuinely lazy pull-iterator over &XwikiDoc
     // (EventIter::next() walks a frame stack on demand, events.rs:168-385),
@@ -950,12 +933,13 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              real parser state, so no events reach the handler until finish() is called — \
              found while wiring this harness's incrementality probe",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "xwiki::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls emit::build() inside finish() (writer.rs:39-49); \
-             content round-trips correctly but zero bytes reach the sink before finish() — \
-             found while wiring this harness's incrementality probe",
-        ),
+        // Fixed 2026-07-31 (writer only — the streaming_parser KnownFailure above is separate
+        // and untouched): Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to emit::build() inside finish().
+        // Fully write-through except Link, which needed genuine reordering ([[label>>url]] —
+        // label before url, url known first) via holding url on the frame.
+        // Byte-identical-to-builder confirmed; ~6.4x faster (59->382 MB/s).
+        streaming_writer: ApiState::Wired,
     },
     // zimwiki's events() is parse()+eager-materialize-then-walk (EventIter::new
     // calls parse::parse(input) then walks into a Vec before returning any
@@ -978,12 +962,11 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // change, parse() and StreamingParser agree (fixture zimwiki/int-mixed-list-markers,
         // confirmed passing under adversarial chunking).
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "zimwiki::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls emit::build() inside finish() (writer.rs:24-34); \
-             content round-trips correctly but zero bytes reach the sink before finish() — \
-             found while wiring this harness's incrementality probe",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to emit::build() inside finish().
+        // Fully write-through except the link "|" separator (in-place insert).
+        // Byte-identical-to-builder confirmed; ~5.7x faster (75->432 MB/s).
+        streaming_writer: ApiState::Wired,
     },
     // markua's events() is parse()+eager-tree-build-then-walk (EventIter::new,
     // re-exported from parse.rs not events.rs, runs the full recursive-descent
@@ -1003,17 +986,16 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // first item's `ordered` value. parse() and StreamingParser now agree (fixture
         // markua/int-mixed-list-markers, confirmed passing under adversarial chunking).
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "markua::writer::Writer buffers all fed events into a Vec<OwnedMarkuaEvent> and \
-             only reconstructs the AST + calls emit::emit() inside finish() (writer.rs:40-50); \
-             content round-trips correctly but zero bytes reach the sink before finish() — \
-             found while wiring this harness's incrementality probe. Separately (not caught by \
-             this harness's fixture loop, since parse() never constructs it): MarkuaDoc::title/ \
-             author/description are permanently None because parse() never populates them from \
-             any Markua syntax, and Block::Figure is never constructed by parse() either, so the \
-             Writer's own Figure/Caption reconstruction bug (EndFigure takes the wrong child as \
-             body and drops the caption, writer.rs:315-330) is unreachable via fixtures",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to the rst-fmt pattern (shared output buffer +
+        // frame stack, in-place inserts for figure captions) instead of buffering into a
+        // Vec<OwnedMarkuaEvent> and delegating to emit::emit() inside finish(). Found and
+        // fixed a real, independent bug in the process: the old writer's EndFigure always
+        // built caption: vec![], silently dropping captions — the new writer carries the
+        // caption correctly. ~4-7x faster on a 640k-event synthetic doc. Separately (not
+        // caught by this harness's fixture loop, since parse() never constructs it):
+        // MarkuaDoc::title/author/description are permanently None because parse() never
+        // populates them from any Markua syntax — a reader-side gap, out of scope here.
+        streaming_writer: ApiState::Wired,
     },
     // muse-fmt's events() takes &MuseDoc (like xwiki) but eagerly materializes
     // a VecDeque in EventIter::new (events.rs:211-220) rather than pulling
@@ -1028,17 +1010,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              parsing difficult without a dedicated state machine\", batch.rs:11-13) — found \
              while wiring this harness's incrementality probe",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "muse_fmt::writer::Writer buffers all fed events into a Vec<OwnedMuseEvent> and \
-             only reconstructs the AST + calls emit::build() inside finish() (writer.rs:47-52) \
-             — a fake streaming writer per CLAUDE.md, found via this harness's incrementality \
-             probe. Also a genuine expressiveness gap independent of the buffering: MuseEvent \
-             has no variant carrying document metadata at all (events.rs:27-114), so \
-             DocBuilder::finish always reconstructs `MuseDoc { ..Default::default() }` \
-             (writer.rs:499-504), permanently dropping #title/#author/#date/#desc/#keywords — \
-             reachable via the document-header fixture, unlike markua's equivalent gap, since \
-             muse-fmt's parse() genuinely populates these fields (parse.rs:240-249)",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedMuseEvent> and delegating to emit::build() inside
+        // finish(). Straight-through except Paragraph's O(1) parent-lookup terminator and
+        // O(field-count) metadata buffering. The previously-tracked expressiveness gap is
+        // also fixed: MuseEvent now has a Metadata variant (events.rs), added because
+        // parse() genuinely populates title/author/date/desc/keywords from real Muse syntax,
+        // and both batch.rs consumers pick it up. NOTE: this added a Metadata variant that
+        // crates/rescribe-fixtures/tests/streaming_apis.rs's hand-rolled muse_ast_to_events()
+        // does not yet emit, so muse_events_equals_ast_projection_over_all_fixtures needs a
+        // matching update (tracked separately, see that test). ~1.8x faster.
+        streaming_writer: ApiState::Wired,
     },
     // t2t's events() is `EventIter::new(parse(input).0)` (src/events.rs) — a
     // lazy frame-stack walk of the AST parse() already built, not an
@@ -1103,15 +1085,11 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              probe. pod-fmt's own docstring rationale is not a CLAUDE.md-sanctioned exemption \
              (only commonmark-fmt's pulldown-cmark wrapping is); see TODO.md",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "pod_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls emit::build() inside finish() (writer.rs's finish(): \
-             events_to_doc(...) then crate::emit::build(&doc)) — the same fake-streaming-writer \
-             pattern as t2t/textile/commonmark/org/texinfo. Content is not lost (PodDoc has no \
-             document-level metadata field pod::Event could be missing, unlike t2t), so the \
-             byte-identical-to-builder check passes; only the incrementality probe fails; see \
-             TODO.md",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to emit::build() inside finish().
+        // Entirely write-straight-through — POD has no computed prefixes and Link/verbatim
+        // blocks are self-contained. Byte-identical-to-builder confirmed; ~3.3x faster.
+        streaming_writer: ApiState::Wired,
     },
     // haddock-fmt's events() is `parse(input)` then a lazy frame-stack
     // EventIter walk of the AST — not an independently implemented reader
@@ -1121,13 +1099,13 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         format: "haddock",
         events: ApiState::Wired,
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "haddock_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls emit::build() inside finish() (writer.rs's own module \
-             doc: \"This implementation buffers all events, reconstructs the AST, then emits\") \
-             — the same fake-streaming-writer pattern as t2t/pod/textile/commonmark/org/texinfo; \
-             see TODO.md",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to emit::build() inside finish().
+        // Straight-through except Property's lazy description-separator space (O(1) bool
+        // flag). The byte-identical test caught a real, independent bug: events() emits a
+        // redundant Text child inside Link that the builder never reads — fixed by
+        // suppressing it via a dedicated frame. ~2.9x faster.
+        streaming_writer: ApiState::Wired,
     },
     // fountain-fmt's events() is `parse(input)` then a lazy AST walk via
     // events::OwnedEventIter — not an independently implemented reader
@@ -1158,13 +1136,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // detection entirely rather than just filtering its output, since filtering alone
         // can't recover content that parse_title_page() already consumed into metadata.
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "fountain_fmt::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
-             \"This implementation buffers all events, reconstructs the AST, then emits\") — the \
-             same fake-streaming-writer pattern as t2t/pod/haddock/textile/commonmark/org/\
-             texinfo; see TODO.md",
-        ),
+        // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
+        // buffering into a Vec<OwnedEvent> and delegating to emit() inside finish(). Mostly
+        // straight-through; Character/Transition need bounded per-block text buffering
+        // (uppercase transform), ensure_blank_line needs a persistent O(1) trailing-newline
+        // tracker (out gets cleared between flushes), and title-page metadata needs
+        // O(field-count) buffering. The byte-identical test caught a real, independent bug:
+        // flush_metadata_if_pending fired on StartDocument itself, permanently discarding
+        // metadata before it arrived — fixed. ~1.33x faster than the old buffer-then-emit
+        // writer, though still slower than the plain builder (789us vs 357us/iter) — noted
+        // honestly rather than chased further.
+        streaming_writer: ApiState::Wired,
     },
 ];
 
@@ -1227,34 +1209,6 @@ pub struct KnownFailure {
 }
 
 pub const KNOWN_FAILURES: &[KnownFailure] = &[
-    KnownFailure {
-        format: "mediawiki",
-        api: "streaming_writer",
-        description: "mediawiki_fmt::writer::Writer buffers all events and only reconstructs \
-                       the AST + emits inside finish(); zero bytes reach the sink before \
-                       finish() despite content round-tripping correctly",
-    },
-    KnownFailure {
-        format: "tikiwiki",
-        api: "streaming_writer",
-        description: "tikiwiki::writer::Writer buffers all events and only reconstructs the \
-                       AST + calls build() inside finish(); zero bytes reach the sink before \
-                       finish() despite content round-tripping correctly",
-    },
-    KnownFailure {
-        format: "twiki",
-        api: "streaming_writer",
-        description: "twiki::writer::Writer buffers all events and only reconstructs the AST + \
-                       calls build() inside finish(); zero bytes reach the sink before finish() \
-                       despite content round-tripping correctly",
-    },
-    KnownFailure {
-        format: "vimwiki",
-        api: "streaming_writer",
-        description: "vimwiki_fmt::writer::Writer buffers all events and only calls \
-                       collect_doc_from_events() + build() inside finish(); zero bytes reach \
-                       the sink before finish() despite content round-tripping correctly",
-    },
     KnownFailure {
         format: "docx",
         api: "events",
@@ -1350,12 +1304,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "textile_fmt::batch::StreamingParser buffers all fed bytes and only parses \
                        + delivers events inside finish(); feed() delivers zero events before \
                        finish() is called",
-    },
-    KnownFailure {
-        format: "textile",
-        api: "streaming_writer",
-        description: "textile_fmt::writer::Writer buffers all events and only reconstructs the \
-                       AST + emits inside finish() — a fake streaming writer per CLAUDE.md",
     },
     KnownFailure {
         format: "commonmark",
@@ -1482,39 +1430,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        streaming-API defect",
     },
     KnownFailure {
-        format: "bbcode",
-        api: "streaming_writer",
-        description: "bbcode_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and \
-                       only reconstructs the AST + calls emit() inside finish() (self-admitted \
-                       in its own module doc); content matches build() exactly but the writer \
-                       is not incrementally streaming",
-    },
-    KnownFailure {
-        format: "creole",
-        api: "streaming_writer",
-        description: "creole::writer::Writer buffers all events into a Vec<OwnedEvent> and only \
-                       reconstructs the AST + calls build() inside finish() (write_event() only \
-                       pushes onto self.events); content matches build() exactly but the writer \
-                       is not incrementally streaming",
-    },
-    KnownFailure {
-        format: "dokuwiki",
-        api: "streaming_writer",
-        description: "dokuwiki::writer::Writer buffers all events into a Vec<OwnedEvent> and \
-                       only reconstructs the AST + calls crate::emit::build inside finish() \
-                       (write_event() at writer.rs:27-29 only pushes onto self.events); content \
-                       matches build() exactly but the writer is not incrementally streaming",
-    },
-    KnownFailure {
-        format: "jira",
-        api: "streaming_writer",
-        description: "jira_fmt::writer::Writer buffers all events into a Vec<OwnedEvent> and \
-                       only reconstructs the AST (events_to_doc) + calls crate::emit::build \
-                       inside finish() (write_event() at writer.rs:40-42 only pushes onto \
-                       self.events); content matches build() exactly but the writer is not \
-                       incrementally streaming",
-    },
-    KnownFailure {
         format: "xwiki",
         api: "streaming_parser",
         description: "xwiki::batch::StreamingParser buffers all fed bytes and only parses + \
@@ -1522,44 +1437,11 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        finish() is called",
     },
     KnownFailure {
-        format: "xwiki",
-        api: "streaming_writer",
-        description: "xwiki::writer::Writer buffers all events and only reconstructs the AST + \
-                       emits inside finish(); content round-trips but zero bytes reach the sink \
-                       before finish()",
-    },
-    KnownFailure {
-        format: "zimwiki",
-        api: "streaming_writer",
-        description: "zimwiki::writer::Writer buffers all events and only reconstructs the AST \
-                       + emits inside finish(); content round-trips but zero bytes reach the \
-                       sink before finish()",
-    },
-    KnownFailure {
-        format: "markua",
-        api: "streaming_writer",
-        description: "markua::writer::Writer buffers all events and only reconstructs the AST + \
-                       emits inside finish(); content round-trips but zero bytes reach the sink \
-                       before finish(). Separately, the Writer's Figure/Caption reconstruction \
-                       (EndFigure takes the wrong child as body and drops the caption) is a real \
-                       code bug but unreachable via fixtures since parse() never constructs \
-                       Block::Figure",
-    },
-    KnownFailure {
         format: "muse",
         api: "streaming_parser",
         description: "muse_fmt::batch::StreamingParser buffers all fed bytes and only parses + \
                        delivers events inside finish(); the crate's own module docs admit this \
                        outright",
-    },
-    KnownFailure {
-        format: "muse",
-        api: "streaming_writer",
-        description: "muse_fmt::writer::Writer buffers all events and only reconstructs the AST \
-                       + emits inside finish() (a fake streaming writer per CLAUDE.md); also \
-                       MuseEvent has no variant for document metadata, so #title/#author/#date/ \
-                       #desc/#keywords are always dropped on round-trip through the streaming \
-                       writer (reachable via the document-header fixture)",
     },
     KnownFailure {
         format: "t2t",
@@ -1589,27 +1471,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "pod_fmt::batch::StreamingParser self-documents as buffer-then-finish; \
                        feed() only extends a Vec<u8>, all parsing and event delivery happen in \
                        finish() — not incremental despite implementing the feed/finish contract",
-    },
-    KnownFailure {
-        format: "pod",
-        api: "streaming_writer",
-        description: "pod_fmt::writer::Writer buffers all events and only reconstructs the AST \
-                       + calls emit::build() inside finish() — a fake streaming writer per \
-                       CLAUDE.md",
-    },
-    KnownFailure {
-        format: "haddock",
-        api: "streaming_writer",
-        description: "haddock_fmt::writer::Writer buffers all events and only reconstructs the \
-                       AST + calls emit::build() inside finish() — a fake streaming writer per \
-                       CLAUDE.md",
-    },
-    KnownFailure {
-        format: "fountain",
-        api: "streaming_writer",
-        description: "fountain_fmt::writer::Writer buffers all events and only reconstructs the \
-                       AST + calls emit() inside finish() — a fake streaming writer per \
-                       CLAUDE.md",
     },
 ];
 
