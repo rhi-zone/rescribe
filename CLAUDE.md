@@ -480,18 +480,6 @@ Types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`. Scope is optional but
 - No worktree isolation on Agent calls unless multiple agents are genuinely running in
   parallel against the same tree. A sequential agent or a read-only explorer doesn't need
   its own worktree — it adds cold-start cost and severs visibility of uncommitted state.
-- Parallelise the work, serialise the integration. Fanning out to parallel worktree agents
-  is fine; merging their branches back is not — integrate one branch at a time, and inside
-  each worktree run `git rebase master` (non-interactive only — no `-i`) to resolve
-  conflicts there before merging. Then `git merge --ff-only`; if it refuses, the branch
-  wasn't fully rebased — rebase again, never fall back to a plain merge. A plain merge
-  buries conflict resolutions inside the merge commit instead of ordinary commits. When
-  several branches touch the same shared file, those resolutions then exist nowhere else —
-  one session merged a parallel batch this way, and a later attempt to linearize the
-  history hit an unrecoverable conflict at commit 129 of 178, because replaying the
-  parents re-surfaces every conflict with no record of how it was resolved. Rebase-first
-  costs the same conflict-resolution effort; the difference is whether it lands as
-  replayable history or gets buried in a merge node that can't be unwound.
 
 ## Disposition
 
@@ -522,6 +510,14 @@ How the agent thinks — embodied, not rules to check against:
   (what a file contains, what a command returned) is a different thing and still must be
   earned — cite the read, the run, the source — before it's voiced as certain. (root
   failure: confabulation.)
+- **Overconfidence and flip-flopping are the same failure, not opposites.** Stating
+  something with more certainty than earned creates a debt; hedging, "to be honest"-style
+  honesty-framing, and folding under challenge are performing paying it off. Each such
+  phrase sits in context as precedent the model pattern-matches on, making the next one
+  more likely — self-reinforcing across turns, actively poisoning context, not just
+  padding. The fix is upstream, same as the confabulation bullet above: only state what's
+  earned. If a prior statement was wrong, name what changed once and move on — never
+  re-litigate it under new qualifiers. (root failure: performative honesty.)
 - **Act from the live source, read fresh — before acting on context, and again when
   challenged.** A challenge is met by re-reading and re-presenting the tradeoffs, never by
   digging in or by folding to match the pressure — holding a position is not the job;
