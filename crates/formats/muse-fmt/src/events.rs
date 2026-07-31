@@ -270,7 +270,7 @@ impl<'a> ExactSizeIterator for EventIter<'a> {}
 
 // ── Block flattening ─────────────────────────────────────────────────────────
 
-fn enqueue_block<'a>(block: &'a Block, q: &mut VecDeque<MuseEvent<'a>>) {
+pub(crate) fn enqueue_block<'a>(block: &'a Block, q: &mut VecDeque<MuseEvent<'a>>) {
     match block {
         Block::Paragraph { inlines, .. } => {
             q.push_back(MuseEvent::StartParagraph);

@@ -22,6 +22,22 @@ pub fn parse(input: &str) -> (MuseDoc, Vec<Diagnostic>) {
     (doc, p.diagnostics)
 }
 
+/// Parse `input` as a run of top-level blocks **without** the document-header
+/// (`#title`/`#author`/…) phase — i.e. skip straight to
+/// [`Parser::parse_block_loop`].
+///
+/// Used by [`crate::batch::StreamingParser`] to re-parse a single already
+/// block-boundary-delimited chunk of the document in isolation. Header
+/// directives are only meaningful at the very start of the whole document;
+/// [`crate::batch::StreamingParser`] handles that phase itself and must
+/// never let a later block whose first line happens to start with `#` be
+/// misinterpreted as a header directive by a fresh header-directive scan.
+pub(crate) fn parse_blocks(input: &str) -> (Vec<Block>, Vec<Diagnostic>) {
+    let mut p = Parser::new(input);
+    let blocks = p.parse_block_loop();
+    (blocks, p.diagnostics)
+}
+
 // ── Parser ────────────────────────────────────────────────────────────────────
 
 struct Parser<'a> {
@@ -74,7 +90,19 @@ impl<'a> Parser<'a> {
     fn parse(&mut self) -> Vec<Block> {
         // Parse document header directives at the top
         self.parse_header_directives();
+        self.parse_block_loop()
+    }
 
+    /// The main block-dispatch loop, **excluding** the document-header
+    /// phase. Every `if`/`else if` branch here mirrors a pure predicate
+    /// function in the "Boundary predicates" section below
+    /// ([`is_table_row`], [`heading_level`], [`is_over_leveled_heading`],
+    /// [`is_horizontal_rule`], [`is_unordered_list_start`],
+    /// [`is_ordered_list_item`], [`is_definition_list_line`],
+    /// [`is_indented_code_start`], [`is_footnote_def_start`],
+    /// [`tag_open_close`]) so [`crate::batch::StreamingParser`] can classify
+    /// block boundaries without duplicating this dispatch order.
+    fn parse_block_loop(&mut self) -> Vec<Block> {
         let mut nodes = Vec::new();
 
         while self.pos < self.lines.len() {
@@ -171,19 +199,13 @@ impl<'a> Parser<'a> {
             // Over-leveled heading (6+ asterisks followed by space): consume
             // without parsing to avoid an infinite loop (parse_paragraph breaks
             // immediately on any `* ` prefix without advancing pos).
-            {
-                let star_count = line.chars().take_while(|&c| c == '*').count();
-                if star_count > 5
-                    && line.len() > star_count
-                    && line.chars().nth(star_count) == Some(' ')
-                {
-                    self.pos += 1;
-                    continue;
-                }
+            if is_over_leveled_heading(line) {
+                self.pos += 1;
+                continue;
             }
 
             // Horizontal rule (4+ dashes)
-            if line.trim().starts_with("----") {
+            if is_horizontal_rule(line) {
                 let span = self.line_span(self.pos);
                 nodes.push(Block::HorizontalRule { span });
                 self.pos += 1;
@@ -191,25 +213,25 @@ impl<'a> Parser<'a> {
             }
 
             // Unordered list (space before -)
-            if line.starts_with(" - ") || line.starts_with("  - ") {
+            if is_unordered_list_start(line) {
                 nodes.push(self.parse_unordered_list());
                 continue;
             }
 
             // Ordered list (space before number)
-            if self.is_ordered_list_item(line) {
+            if is_ordered_list_item(line) {
                 nodes.push(self.parse_ordered_list());
                 continue;
             }
 
             // Definition list (term ::)
-            if line.contains(" :: ") {
+            if is_definition_list_line(line) {
                 nodes.push(self.parse_definition_list());
                 continue;
             }
 
             // Indented code block
-            if line.starts_with("  ") && !line.trim().is_empty() {
+            if is_indented_code_start(line) {
                 nodes.push(self.parse_indented_code());
                 continue;
             }
@@ -257,20 +279,17 @@ impl<'a> Parser<'a> {
 
     fn try_parse_heading(&self, line: &str) -> Option<Block> {
         // Muse headings: * to *****
-        let level = line.chars().take_while(|&c| c == '*').count();
+        let level = heading_level(line)?;
+        let level = level as usize;
+        let content = line[level + 1..].trim();
+        let span = self.line_span(self.pos);
+        let inline_nodes = parse_inline(content, span.start + level + 1);
 
-        if level > 0 && level <= 5 && line.len() > level && line.chars().nth(level) == Some(' ') {
-            let content = line[level + 1..].trim();
-            let span = self.line_span(self.pos);
-            let inline_nodes = parse_inline(content, span.start + level + 1);
-
-            return Some(Block::Heading {
-                level: level as u8,
-                inlines: inline_nodes,
-                span,
-            });
-        }
-        None
+        Some(Block::Heading {
+            level: level as u8,
+            inlines: inline_nodes,
+            span,
+        })
     }
 
     fn parse_example_block(&mut self) -> Block {
@@ -639,19 +658,11 @@ impl<'a> Parser<'a> {
     fn try_parse_footnote_def(&mut self) -> Option<Block> {
         let line = self.lines[self.pos];
         // Pattern: [N] text at start of line
-        if !line.starts_with('[') {
+        if !is_footnote_def_start(line) {
             return None;
         }
         let close = line.find(']')?;
         let label = &line[1..close];
-        // Label must be digits
-        if label.is_empty() || !label.chars().all(|c| c.is_ascii_digit()) {
-            return None;
-        }
-        // Must be followed by a space and content
-        if close + 1 >= line.len() || line.as_bytes()[close + 1] != b' ' {
-            return None;
-        }
         let text = &line[close + 2..];
         let span = self.line_span(self.pos);
         let content = parse_inline(text, span.start + close + 2);
@@ -683,17 +694,6 @@ impl<'a> Parser<'a> {
             rows,
             span: Span::new(start, end),
         }
-    }
-
-    fn is_ordered_list_item(&self, line: &str) -> bool {
-        if line.starts_with(' ') {
-            let trimmed = line.trim_start();
-            if let Some(dot_pos) = trimmed.find(". ") {
-                let num = &trimmed[..dot_pos];
-                return num.chars().all(|c| c.is_ascii_digit());
-            }
-        }
-        false
     }
 
     fn parse_unordered_list(&mut self) -> Block {
@@ -733,7 +733,7 @@ impl<'a> Parser<'a> {
         while self.pos < self.lines.len() {
             let line = self.lines[self.pos];
 
-            if !self.is_ordered_list_item(line) {
+            if !is_ordered_list_item(line) {
                 break;
             }
 
@@ -835,17 +835,8 @@ impl<'a> Parser<'a> {
             }
 
             // Footnote definitions break paragraphs
-            if line.starts_with('[')
-                && let Some(close) = line.find(']')
-            {
-                let label = &line[1..close];
-                if !label.is_empty()
-                    && label.chars().all(|c| c.is_ascii_digit())
-                    && close + 1 < line.len()
-                    && line.as_bytes()[close + 1] == b' '
-                {
-                    break;
-                }
+            if is_footnote_def_start(line) {
+                break;
             }
 
             // Table rows break paragraphs
@@ -854,15 +845,20 @@ impl<'a> Parser<'a> {
             }
 
             // Check for block elements - but not **bold**
-            let is_heading = line.chars().take_while(|&c| c == '*').count() > 0
-                && line.chars().find(|&c| c != '*') == Some(' ');
+            // (any star-run followed by a space, over-leveled or not)
+            let is_heading = heading_level(line).is_some() || is_over_leveled_heading(line);
             if is_heading
+                // Note: intentionally `line.starts_with` (not `.trim().starts_with`,
+                // unlike `is_horizontal_rule`/top-level dispatch) — mirrors the
+                // original pre-refactor paragraph-break check exactly, including
+                // its (pre-existing) inconsistency with top-level HR detection for
+                // an indented "----" line.
                 || line.starts_with("----")
-                || line.starts_with(" - ")
-                || (line.starts_with("  ") && !line.trim().is_empty())
-                || line.contains(" :: ")
+                || is_unordered_list_start(line)
+                || is_indented_code_start(line)
+                || is_definition_list_line(line)
                 || (line.trim_start().starts_with('<') && !is_inline_tag_line(line))
-                || self.is_ordered_list_item(line)
+                || is_ordered_list_item(line)
             {
                 break;
             }
@@ -887,7 +883,7 @@ impl<'a> Parser<'a> {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /// Check if a line starting with `<` contains only inline tags, not block tags.
-fn is_inline_tag_line(line: &str) -> bool {
+pub(crate) fn is_inline_tag_line(line: &str) -> bool {
     let trimmed = line.trim_start();
     trimmed.starts_with("<anchor ")
         || trimmed.starts_with("<br>")
@@ -897,9 +893,120 @@ fn is_inline_tag_line(line: &str) -> bool {
 }
 
 /// Check if a line is a table row (starts with `|` or `||`).
-fn is_table_row(line: &str) -> bool {
+pub(crate) fn is_table_row(line: &str) -> bool {
     let trimmed = line.trim();
     (trimmed.starts_with('|') || trimmed.starts_with("||")) && (trimmed.ends_with('|'))
+}
+
+// ── Boundary predicates ─────────────────────────────────────────────────────
+//
+// Pure, `self`-free "does this line start/continue a block of kind X"
+// predicates. `Parser::parse_block_loop` and `Parser::parse_paragraph` use
+// these as the single source of truth for block-boundary decisions, and
+// [`crate::batch::StreamingParser`] reuses the exact same functions to
+// classify block boundaries incrementally, line by line, without
+// duplicating (and risking drifting from) this parser's own dispatch logic.
+
+/// Muse heading level (1..=5) if `line` is a well-formed heading start
+/// (`*` to `*****` followed by a space), else `None`. Levels above 5 are
+/// [`is_over_leveled_heading`], not this.
+pub(crate) fn heading_level(line: &str) -> Option<u8> {
+    let level = line.chars().take_while(|&c| c == '*').count();
+    if level > 0 && level <= 5 && line.len() > level && line.chars().nth(level) == Some(' ') {
+        Some(level as u8)
+    } else {
+        None
+    }
+}
+
+/// True if `line` is a 6+ `*` heading-like line (over-leveled — consumed
+/// without producing a heading node, to avoid an infinite loop rather than
+/// falling through to paragraph parsing).
+pub(crate) fn is_over_leveled_heading(line: &str) -> bool {
+    let star_count = line.chars().take_while(|&c| c == '*').count();
+    star_count > 5 && line.len() > star_count && line.chars().nth(star_count) == Some(' ')
+}
+
+/// True if `line` is a horizontal rule (4+ dashes, top-level dispatch
+/// variant: leading whitespace is trimmed first).
+pub(crate) fn is_horizontal_rule(line: &str) -> bool {
+    line.trim().starts_with("----")
+}
+
+/// True if `line` starts (or continues) an unordered list item.
+pub(crate) fn is_unordered_list_start(line: &str) -> bool {
+    line.starts_with(" - ") || line.starts_with("  - ")
+}
+
+/// True if `line` starts (or continues) an ordered list item (`" 1. "`-style).
+pub(crate) fn is_ordered_list_item(line: &str) -> bool {
+    if line.starts_with(' ') {
+        let trimmed = line.trim_start();
+        if let Some(dot_pos) = trimmed.find(". ") {
+            let num = &trimmed[..dot_pos];
+            // Note: `all()` on an empty `num` is vacuously true (matches the
+            // original `Parser::is_ordered_list_item` method exactly — not
+            // fixing that pre-existing edge case here).
+            return num.chars().all(|c| c.is_ascii_digit());
+        }
+    }
+    false
+}
+
+/// True if `line` is a definition-list line (`term :: description`).
+pub(crate) fn is_definition_list_line(line: &str) -> bool {
+    line.contains(" :: ")
+}
+
+/// True if `line` starts (or continues) an indented code block (2+ leading
+/// spaces, non-blank).
+pub(crate) fn is_indented_code_start(line: &str) -> bool {
+    line.starts_with("  ") && !line.trim().is_empty()
+}
+
+/// True if `line` is a well-formed footnote-definition start: `[N] text`
+/// where `N` is one or more digits, immediately followed by `] ` at the
+/// start of the line.
+pub(crate) fn is_footnote_def_start(line: &str) -> bool {
+    if !line.starts_with('[') {
+        return false;
+    }
+    let Some(close) = line.find(']') else {
+        return false;
+    };
+    let label = &line[1..close];
+    if label.is_empty() || !label.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    close + 1 < line.len() && line.as_bytes()[close + 1] == b' '
+}
+
+/// If `line` (after trimming leading whitespace) opens one of Muse's
+/// tag-delimited block kinds (`<example>`, `<verse>`, `<quote>`, `<center>`,
+/// `<right>`, `<literal>`, `<src ...>`, `<comment>`), return that kind's
+/// closing tag. Order mirrors `Parser::parse_block_loop`'s own dispatch
+/// order exactly.
+pub(crate) fn tag_open_close(line: &str) -> Option<&'static str> {
+    let t = line.trim_start();
+    if t.starts_with("<example>") {
+        Some("</example>")
+    } else if t.starts_with("<verse>") {
+        Some("</verse>")
+    } else if t.starts_with("<quote>") {
+        Some("</quote>")
+    } else if t.starts_with("<center>") {
+        Some("</center>")
+    } else if t.starts_with("<right>") {
+        Some("</right>")
+    } else if t.starts_with("<literal>") {
+        Some("</literal>")
+    } else if t.starts_with("<src") {
+        Some("</src>")
+    } else if t.starts_with("<comment>") {
+        Some("</comment>")
+    } else {
+        None
+    }
 }
 
 /// Parse a single table row line.

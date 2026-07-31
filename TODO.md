@@ -186,6 +186,78 @@ different, still-open defect (`events()` silently drops `Metadata` for input lac
 
 ---
 
+**2026-07-31: muse-fmt `streaming_parser` hollow-reader defect fixed.** `muse_fmt::batch::
+StreamingParser::feed()` was a bare `buf.extend_from_slice()`; all parsing happened in
+`finish()`, which called `parse::parse()` then walked the result with `events::events()` — the
+crate's own module docs admitted this outright ("Muse's block-level structure makes true
+incremental parsing difficult without a dedicated state machine"). That claim did not hold up:
+Muse's top-level grammar (headings, paragraphs, lists, tables, definition lists, indented code,
+footnote defs, comments, and `<example>`/`<verse>`/`<quote>`/`<center>`/`<right>`/`<literal>`/
+`<src ...>`/`<comment>` tag blocks) has **no cross-block state** — every `parse_*` method in
+`parse.rs` only ever looks at its own block's lines, never references anything before or after
+it (footnote *references* don't resolve against footnote *definitions* either — `events()`
+just emits the label). The only genuine document-wide state is the `#title`/`#author`/`#date`/
+`#desc`/`#keywords` header, which is only meaningful at the very start of the document.
+
+Rewrote `StreamingParser::feed()` into a genuine line-buffered block splitter: it accumulates
+lines only until a top-level block boundary is confirmed (a blank line, a line starting a
+different kind of block, a tag block's own closing tag, or a single-line construct like a
+heading/comment/footnote-def/horizontal-rule), then immediately re-parses just that block's
+text via a new `crate::parse::parse_blocks` — which runs `Parser::parse_block_loop` *without*
+the document-header phase, so a `#`-led line appearing mid-document (not at the true start) is
+never misread as a header directive by the isolated re-parse — and forwards its events to the
+handler, before `finish()` is ever called. The document header itself is handled by a small
+dedicated state in `StreamingParser` (accumulating `#`-directive lines, skipping blanks,
+ending on the first non-matching line) that emits exactly one `Metadata` event, matching
+`events()`'s single always-present `Metadata` event.
+
+To keep the splitter's block-boundary decisions from drifting out of sync with `Parser::
+parse_block_loop`'s own dispatch order, extracted the dispatch's `if`/`else if` conditions into
+shared pure predicate functions in `parse.rs` (`heading_level`, `is_over_leveled_heading`,
+`is_horizontal_rule`, `is_unordered_list_start`, `is_ordered_list_item`,
+`is_definition_list_line`, `is_indented_code_start`, `is_footnote_def_start`,
+`tag_open_close`, plus `is_table_row`/`is_inline_tag_line` promoted to `pub(crate)`) and
+refactored `Parser::parse_block_loop`/`parse_paragraph`/`try_parse_heading`/
+`try_parse_footnote_def` to call them instead of duplicating the conditions inline — so both
+the parser's own dispatch and the streaming splitter's boundary classification are now the
+*same* function calls, not two hand-copied implementations that could silently diverge. (Two
+existing inconsistencies in the original code were deliberately preserved rather than "fixed"
+during this refactor, since fixing them wasn't in scope: `parse_paragraph`'s horizontal-rule
+break check used `line.starts_with("----")`, not the trimmed `is_horizontal_rule`; and its
+unordered-list break check only covered `" - "`, not `"  - "` — both are documented inline at
+the call site, and neither changes behavior since indented-code's own break check already
+subsumes the `"  - "` case.) Muse's tag blocks do not support nesting in `parse()` itself
+(each looks for the *first* occurrence of its own closing tag, regardless of any nested
+same-tag open) — `StreamingParser` intentionally reproduces that rather than "fixing" it, to
+stay aligned with `events()`.
+
+Verified via adversarial chunking (whole input, single-byte, chunks-of-7, chunks-of-37,
+mid-UTF-8-character, mid-tag-block, header-only, and a `#`-led non-header line mid-document) —
+`StreamingParser` output matches `events()` byte-for-byte in every case, including this
+harness's own fixture-suite incrementality probe (`crates/rescribe-fixtures/tests/
+streaming_apis.rs::muse_streaming_parser_matches_events_and_is_incremental`, 87 fixtures).
+Peak memory (test-local `thread_local!` tracking allocator, feeding 64-byte chunks of a
+synthetic multi-block document, discarding sink): **before** (buffer-then-finish) 624,826
+bytes at a ~11KB (50-section) input growing to 5,684,358 bytes at a ~113KB (500-section, 10x)
+input — scaling almost exactly linearly with input size, confirming O(full document); **after**
+(this fix) 7,680 bytes at *both* sizes — flat regardless of document size, confirming
+O(largest block). That's roughly an 81x reduction at the smaller size and ~740x at the larger
+one.
+
+`crates/rescribe-fixtures/src/streaming_harness.rs`'s `CAPABILITIES` table flips muse's
+`streaming_parser` from `ApiState::KnownFailure` to `ApiState::Wired`; the matching
+`KNOWN_FAILURES` entry was removed. `crates/rescribe-fixtures/tests/streaming_apis.rs`'s
+doc comments and in-test descriptions referencing muse-fmt's (formerly fake) `StreamingParser`
+— including three other formats' comparison comments ("unlike xwiki/muse-fmt") — were updated
+to reflect that muse-fmt's `StreamingParser` is now also genuinely incremental.
+`docs/format-audit.md`'s muse row `streaming_parser` column was updated to match. Verified
+`cargo clippy -p muse-fmt --all-targets --all-features -- -D warnings`,
+`cargo test -p muse-fmt -q`, `cargo test -p rescribe-fixtures -q`, `cargo fmt --check -p
+muse-fmt`, and the full workspace `cargo clippy --all-targets --all-features -- -D warnings &&
+cargo test -q && cargo fmt --check` all pass clean.
+
+---
+
 **2026-07-31: org-fmt `streaming_writer` hollow-writer defect fixed (and this harness's own
 Wired claim corrected).** Before this fix, `streaming_harness.rs`'s `CAPABILITIES` table
 declared `org`'s `streaming_writer` as `ApiState::Wired`, but its own adjacent comment admitted

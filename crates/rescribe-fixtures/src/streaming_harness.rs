@@ -1020,23 +1020,38 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "muse",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "muse_fmt::batch::StreamingParser buffers all fed bytes into a Vec<u8> and only \
-             parses + delivers events inside finish() (batch.rs:94-105); the crate's own module \
-             docs admit this outright (\"Muse's block-level structure makes true incremental \
-             parsing difficult without a dedicated state machine\", batch.rs:11-13) — found \
-             while wiring this harness's incrementality probe",
-        ),
+        // Fixed 2026-07-31: StreamingParser rewritten to a genuinely incremental
+        // line-buffered block splitter (batch.rs) instead of buffer-then-finish. feed()
+        // accumulates lines only until a top-level block boundary is confirmed (blank
+        // line, a line starting a different block kind, a tag block's own closing tag,
+        // or a single-line construct), then immediately re-parses just that block's text
+        // via the new crate::parse::parse_blocks (parse.rs — runs Parser::parse_block_loop
+        // without the document-header phase, so a '#'-led line mid-document is never
+        // misread as a header directive) and forwards its events — before finish() is ever
+        // called. Boundary classification reuses pure predicate functions
+        // (heading_level/is_over_leveled_heading/is_horizontal_rule/
+        // is_unordered_list_start/is_ordered_list_item/is_definition_list_line/
+        // is_indented_code_start/is_footnote_def_start/tag_open_close, all now pub(crate)
+        // in parse.rs) that Parser::parse_block_loop itself now also calls, so the
+        // splitter's boundary decisions cannot drift from the parser's own dispatch order.
+        // Memory: O(largest block), confirmed by a thread_local!-allocator peak-memory
+        // guard (10x paragraph count -> peak ratio stayed well under 4x, vs the old
+        // O(full document) buffering). Muse's own tag blocks do not support nesting in
+        // parse() itself (each stops at the *first* occurrence of its own closing tag);
+        // StreamingParser intentionally reproduces that, not "fixes" it, to stay aligned
+        // with events(). See crates/formats/muse-fmt/src/batch.rs's adversarial
+        // (whole/single-byte/chunk-of-N/mid-UTF-8-char) tests.
+        streaming_parser: ApiState::Wired,
         // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
         // buffering into a Vec<OwnedMuseEvent> and delegating to emit::build() inside
         // finish(). Straight-through except Paragraph's O(1) parent-lookup terminator and
         // O(field-count) metadata buffering. The previously-tracked expressiveness gap is
         // also fixed: MuseEvent now has a Metadata variant (events.rs), added because
         // parse() genuinely populates title/author/date/desc/keywords from real Muse syntax,
-        // and both batch.rs consumers pick it up. NOTE: this added a Metadata variant that
+        // and both batch.rs consumers pick it up.
         // crates/rescribe-fixtures/tests/streaming_apis.rs's hand-rolled muse_ast_to_events()
-        // does not yet emit, so muse_events_equals_ast_projection_over_all_fixtures needs a
-        // matching update (tracked separately, see that test). ~1.8x faster.
+        // was updated to emit the matching Metadata event, so
+        // muse_events_equals_ast_projection_over_all_fixtures already covers it. ~1.8x faster.
         streaming_writer: ApiState::Wired,
     },
     // t2t's events() is `EventIter::new(parse(input).0)` (src/events.rs) — a
@@ -1414,13 +1429,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        the streaming Writer (fed by events(), which does emit a ResetStyle for \
                        it) faithfully re-emits it — a parse()/build() fidelity gap, not a \
                        streaming-API defect",
-    },
-    KnownFailure {
-        format: "muse",
-        api: "streaming_parser",
-        description: "muse_fmt::batch::StreamingParser buffers all fed bytes and only parses + \
-                       delivers events inside finish(); the crate's own module docs admit this \
-                       outright",
     },
     KnownFailure {
         format: "t2t",

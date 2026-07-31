@@ -3,6 +3,8 @@
 //! Standalone crate with no rescribe dependency.
 //! Used by `rescribe-read-muse` and `rescribe-write-muse` as thin adapter layers.
 
+#[cfg(test)]
+mod alloc_probe;
 pub mod ast;
 pub mod batch;
 pub mod emit;

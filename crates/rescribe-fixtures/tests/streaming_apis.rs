@@ -7964,7 +7964,7 @@ fn xwiki_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
 // xwiki's genuinely lazy walker, in the same spirit as asciidoc's narrower
 // "Wired" claim: the equivalence check validates the AST->event expansion
 // layer (emit_block/emit_inline), not two independent parsers.
-// StreamingParser here, like xwiki's (fixed 2026-07-31) but unlike muse-fmt's,
+// StreamingParser here, like xwiki's and muse-fmt's (both fixed 2026-07-31),
 // is REAL incremental: feed_line tracks verbatim-block boundaries and
 // blank-line block termination and calls emit_block() during feed(), not
 // deferred to finish() (batch.rs:93-152).
@@ -8130,7 +8130,7 @@ mod zimwiki_events_check {
 
 /// `StreamingParser` fed a zimwiki fixture under an adversarial chunking must
 /// deliver the same event sequence `events()` delivers over the whole input.
-/// Like xwiki's (fixed 2026-07-31) but unlike muse-fmt's,
+/// Like xwiki's and muse-fmt's (both fixed 2026-07-31),
 /// `zimwiki::batch::StreamingParser::feed()` really is
 /// incremental — it tracks verbatim-block (`'''`) boundaries and blank-line
 /// block termination line-by-line and calls `emit_block()` during `feed()`
@@ -8492,7 +8492,7 @@ mod markua_events_check {
 /// deliver the same event sequence `events()` delivers over the whole input.
 /// `markua::batch::StreamingParser::feed()` is REAL incremental
 /// block-boundary segmentation (fenced-code-aware `feed_line`, batch.rs:108-
-/// 152), like xwiki's (fixed 2026-07-31) but unlike muse-fmt's —
+/// 152), like xwiki's and muse-fmt's (both fixed 2026-07-31) —
 /// `emit_block()` re-parses each accumulated block via `crate::events::events()`,
 /// the same architecture (and bug class) already tracked for
 /// org/rst/asciidoc/zimwiki.
@@ -8619,11 +8619,11 @@ fn markua_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
 // ---------------------------------------------------------------------------
 // muse: events() takes &MuseDoc (like xwiki), but eagerly materializes a
 // VecDeque in EventIter::new (events.rs:211-220) rather than pulling lazily —
-// still a real, independently hand-checkable walk. StreamingParser and Writer
-// are both confirmed-fake buffer-then-finish wrappers, and the crate's own
-// module docs for StreamingParser admit it outright ("Muse's block-level
-// structure makes true incremental parsing difficult without a dedicated
-// state machine", batch.rs:11-13).
+// still a real, independently hand-checkable walk. StreamingParser and
+// Writer were both confirmed-fake buffer-then-finish wrappers as of
+// 2026-07-31's harness wiring; both have since been rewritten to genuinely
+// incremental implementations (batch.rs's line-buffered block splitter and
+// writer.rs's per-event streaming writer, respectively).
 // ---------------------------------------------------------------------------
 mod muse_events_check {
     use super::{find_input, fixtures_root};
@@ -8857,14 +8857,13 @@ mod muse_events_check {
     }
 }
 
-/// `muse_fmt::batch::StreamingParser::feed()` is a bare `buf.extend_from_slice`
-/// (crates/formats/muse-fmt/src/batch.rs:94-96); all parsing happens in
-/// `finish()` (batch.rs:98-105), which calls `parse::parse` then walks the
-/// result with `events::events`. The crate's own module docs admit this
-/// outright ("Muse's block-level structure makes true incremental parsing
-/// difficult without a dedicated state machine", batch.rs:11-13). So the
-/// content-equivalence half of this check is expected to pass trivially; the
-/// incrementality probe is the real test.
+/// `muse_fmt::batch::StreamingParser::feed()` is a genuinely incremental
+/// line-buffered block splitter (crates/formats/muse-fmt/src/batch.rs):
+/// it accumulates lines only until a top-level block boundary is confirmed,
+/// then immediately re-parses just that block's text via the crate's new
+/// `parse::parse_blocks` and forwards its events to the handler — before
+/// `finish()` is ever called. Both the content-equivalence check and the
+/// incrementality probe below are expected to pass.
 #[test]
 fn muse_streaming_parser_matches_events_and_is_incremental() {
     let root = fixtures_root().join("muse");
@@ -8915,11 +8914,10 @@ fn muse_streaming_parser_matches_events_and_is_incremental() {
             if delivered.is_empty() && result.is_ok() {
                 result = Err(format!(
                     "StreamingParser delivered zero events to the handler after feed() with \
-                     half of fixture {name} ({mid} bytes) and before finish() — \
-                     muse_fmt::batch::StreamingParser buffers all input into a Vec<u8> \
-                     (crates/formats/muse-fmt/src/batch.rs:94-96) and only parses and delivers \
-                     events inside finish() (batch.rs:98-105), so feed() never advances real \
-                     incremental parser state"
+                     half of fixture {name} ({mid} bytes) and before finish() — expected at \
+                     least one complete top-level block to have been confirmed and flushed by \
+                     the line-buffered block splitter in crates/formats/muse-fmt/src/batch.rs; \
+                     a regression back to buffer-then-finish would reproduce this"
                 ));
             }
             // `parser` intentionally dropped without calling finish(): this probe
