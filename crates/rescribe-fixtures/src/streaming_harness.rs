@@ -209,19 +209,16 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              tracked for rst-fmt, though here only the top-level blank-line boundary is at fault \
              (parse_definition_list_direct itself is fine). See TODO.md",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "djot-fmt's Writer is not incrementally streaming: writer.rs's module docs \
-             self-admit it buffers all events into a Vec<OwnedEvent>, reconstructs the AST via \
-             DocBuilder, then calls emit::emit inside finish() — write_event() delivers zero \
-             bytes to the sink before finish(), confirmed by an incrementality probe (a complete \
-             heading + paragraph produces no pre-finish output). Content correctness — including \
-             link-reference definitions (fixture link-reference) — is no longer at issue: Event \
-             now has a LinkDef variant (mirroring ast::LinkDef field-for-field), emitted by \
-             EventIter::next's None arm once top-level blocks are exhausted (before footnote \
-             defs), and DocBuilder::process pushes it to DocBuilder.link_defs, so events_to_doc \
-             round-trips link_defs correctly. See TODO.md for the hollow-writer performance \
-             rework, tracked alongside org/texinfo/commonmark-fmt's writers with the same defect.",
-        ),
+        // Fixed 2026-07-31: djot_fmt::writer::Writer rewritten from
+        // buffer-all-events-then-reconstruct-the-AST to a single shared-buffer
+        // write-straight-through design (mirroring rst-fmt's Writer), with three
+        // deferred per-line re-indent constructs (Blockquote, DefinitionDesc,
+        // ListItem/FootnoteDef — see writer.rs's module doc) and Table collecting
+        // rows to compute the header separator's column count/alignments.
+        // Byte-identical to emit() over all fixtures, including link-reference
+        // definitions (Event::LinkDef, fixture link-reference) and table captions
+        // (Event::TableCaption); bytes reach the sink before finish().
+        streaming_writer: ApiState::Wired,
     },
     // asciidoc's `events = Wired` is a narrower claim than rst's: `parse()`
     // (parse.rs:15) drives the same `try_parse_block()` loop `events()` does, so
@@ -279,16 +276,22 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              three are downstream of emit_block() (batch.rs:190) re-parsing each accumulated \
              block in isolation; see TODO.md",
         ),
-        // streaming_writer was KnownFailure: Event had no document-metadata
-        // variant, so events() couldn't carry #+TITLE:/#+AUTHOR:/#+CUSTOM_KEY:
-        // lines and writer.rs's DocBuilder::finish hardcoded `metadata:
-        // vec![]`, dropping every leading keyword line (fixtures metadata,
-        // keyword-line). Fixed by adding `Event::Metadata { key, value }`,
-        // emitted by EventIter::next() (parse.rs) alongside the block it
-        // precedes, and handled by DocBuilder::process/finish (writer.rs).
-        // Note Writer is still not incrementally streaming — writer.rs's
-        // module docs state it buffers all events, reconstructs the AST,
-        // then calls emit::build.
+        // streaming_writer was previously content-correct (Event::Metadata carries
+        // #+TITLE:/#+AUTHOR:/#+CUSTOM_KEY: lines) but architecturally hollow
+        // (buffer-all-events-then-reconstruct-the-AST) with no incrementality probe
+        // wired to catch it — CAPABILITIES claimed Wired while the writer.rs module
+        // doc admitted otherwise. Fixed 2026-07-31: rewritten to a single
+        // shared-buffer write-straight-through design (mirroring rst-fmt's Writer).
+        // Document metadata (Event::Metadata) is a documented, deliberate partial
+        // divergence from build()'s exact semantics — build() always moves *all*
+        // metadata to the document's very top regardless of source position, which
+        // a genuinely incremental writer cannot losslessly replicate without
+        // unbounded lookahead; this Writer instead emits each Metadata line
+        // write-through, wherever it arrives. Unobservable in the current fixture
+        // suite (no fixture has metadata after body content starts) — see
+        // writer.rs's module doc and TODO.md. Byte-identical to build() over all
+        // fixtures; the incrementality probe (previously missing from this
+        // harness) now confirms bytes reach the sink before finish().
         streaming_writer: ApiState::Wired,
     },
     // html-fmt is html5ever-backed. CLAUDE.md puts third-party-library-backed
@@ -386,14 +389,12 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              incremental streaming despite implementing the feed/finish contract; found while \
              wiring this harness's incrementality probe",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "texinfo::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls emit() inside finish() (see crates/formats/texinfo/src/\
-             writer.rs's own module doc, \"buffers all events, reconstructs the AST, then \
-             emits\"); zero bytes reach the sink before finish() despite content round-tripping \
-             correctly (including @settitle, now carried via events::Event::Title — see \
-             fixtures/texinfo/settitle-header)",
-        ),
+        // Fixed: texinfo::writer::Writer now writes straight through to a single shared
+        // buffer per event (mirroring rst-fmt's Writer design) instead of buffering all
+        // events and reconstructing the AST in finish(). Confirmed via the
+        // byte-identical-to-builder check over all fixtures plus a pre-finish
+        // incrementality probe.
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "fb2",
@@ -1069,19 +1070,19 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              first block directly via Parser::try_parse_header instead of falling through to \
              the generic re-parse path; see TODO.md",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "t2t::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
-             \"This implementation buffers all events, reconstructs the AST, then emits\") — the \
-             same fake-streaming-writer pattern as textile/commonmark/org/texinfo; this \
-             non-incrementality is the only remaining failure (the incrementality probe writes \
-             zero bytes to the sink before finish()). The separate defect this entry used to \
-             also cover — Event had no variant carrying doc.title/author/date, so \
-             DocBuilder::finish always reconstructed title: None/author: None/date: None — is \
-             fixed: Event::Header now carries those fields, DocBuilder tracks and threads them \
-             through finish(), and the byte-identical-to-builder content check passes on every \
-             fixture including document-header; see TODO.md",
-        ),
+        // Fixed 2026-07-31: t2t::writer::Writer rewritten from
+        // buffer-all-events-then-reconstruct-the-AST to a single shared-buffer
+        // write-straight-through design (mirroring rst-fmt's Writer). Every t2t
+        // construct turned out to be write-straight-through with no generic
+        // "blank line between siblings" rule needed at all — each block variant's
+        // own emit.rs arm already writes its complete trailing whitespace, so
+        // consecutive children just concatenate (see writer.rs's module doc for
+        // the full writeup, including the three different framings a Paragraph
+        // gets depending on whether its parent is Blockquote/ListItem/
+        // DefinitionDesc/anything else). Byte-identical to emit() over all
+        // fixtures including document-header (Event::Header), with bytes
+        // reaching the sink before finish().
+        streaming_writer: ApiState::Wired,
     },
     // pod-fmt's events() is `pod_fmt::events()` (src/lib.rs) — `parse(input)`
     // then an eager `.collect()` of a lazy frame-stack `EventIter` walk of
@@ -1277,14 +1278,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        multi-item definition list",
     },
     KnownFailure {
-        format: "djot",
-        api: "streaming_writer",
-        description: "djot_fmt::writer::Writer buffers all events and only reconstructs the AST \
-                       + calls emit() inside finish(); zero bytes reach the sink before finish() \
-                       despite content round-tripping correctly (including link-reference \
-                       definitions, now that Event::LinkDef exists and DocBuilder handles it)",
-    },
-    KnownFailure {
         format: "asciidoc",
         api: "streaming_parser",
         description: "asciidoc StreamingParser: three distinct batch.rs bugs — feed_line \
@@ -1313,14 +1306,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "texinfo::batch::StreamingParser buffers all fed bytes and only parses + \
                        delivers events inside finish(); feed() delivers zero events before \
                        finish() is called",
-    },
-    KnownFailure {
-        format: "texinfo",
-        api: "streaming_writer",
-        description: "texinfo::writer::Writer buffers all events and only emits inside finish(); \
-                       zero bytes reach the sink before finish() despite content \
-                       round-tripping correctly (including @settitle, now carried via \
-                       events::Event::Title)",
     },
     KnownFailure {
         format: "fb2",
@@ -1574,14 +1559,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        isolated re-parse of the header's own 3 lines mis-triggering \
                        try_parse_header() and silently dropping title/author/date — is fixed via \
                        the new Event::Header variant.)",
-    },
-    KnownFailure {
-        format: "t2t",
-        api: "streaming_writer",
-        description: "t2t::writer::Writer buffers all events and only reconstructs the AST + \
-                       emits inside finish() — a fake streaming writer per CLAUDE.md; content \
-                       (including doc.title/author/date, now carried via Event::Header) is \
-                       byte-identical to the builder path, only the incrementality probe fails",
     },
     KnownFailure {
         format: "pod",

@@ -911,16 +911,12 @@ fn org_streaming_parser_matches_events_under_adversarial_chunking() {
 /// The streaming `Writer` driven with `events(input)` must reproduce what
 /// builder `build()` produces for the AST `parse(input)` returned.
 ///
-/// org-fmt's `Writer` is not incrementally streaming — `writer.rs`'s own
-/// module docs say "This implementation buffers all events, reconstructs the
-/// AST, then emits", and `finish()` calls `emit::build` on the reconstructed
-/// doc. That makes this check meaningful anyway: it exercises `events_to_doc`
-/// / `DocBuilder`, a substantial second reconstruction of the AST from the
-/// event stream, against the AST `parse()` built directly.
-///
-/// It fails on three fixtures against a genuine expressiveness gap in the
-/// `Event` enum rather than a `DocBuilder` logic error — see the
-/// `KnownFailure` entry.
+/// `org_fmt::writer::Writer` writes straight through to a single shared
+/// output buffer per event (mirroring `rst-fmt`'s `Writer` design — see
+/// `crates/formats/org-fmt/src/writer.rs`'s module doc), not a
+/// buffer-then-reconstruct-the-AST fake streaming writer. This checks
+/// content is byte-identical to `build()` over all fixtures, and that bytes
+/// reach the sink before `finish()`.
 #[test]
 fn org_streaming_writer_matches_builder_over_all_fixtures() {
     let root = fixtures_root().join("org");
@@ -957,6 +953,39 @@ fn org_streaming_writer_matches_builder_over_all_fixtures() {
         checked > 50,
         "expected to check a substantial number of org fixtures, got {checked}"
     );
+
+    // Incrementality probe: a byte-identical final result (checked above)
+    // only proves the *content* is right, not that the writer is genuinely
+    // streaming. Feed several complete events (well short of finish()) and
+    // check whether any bytes have already reached the sink.
+    if result.is_ok() {
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = org_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(org_fmt::OwnedEvent::StartHeading {
+            level: 1,
+            todo: None,
+            priority: None,
+            tags: vec![],
+            properties: vec![],
+            scheduled: None,
+            deadline: None,
+        });
+        w.write_event(org_fmt::OwnedEvent::Text("Hello".to_string().into()));
+        w.write_event(org_fmt::OwnedEvent::EndHeading);
+        w.write_event(org_fmt::OwnedEvent::StartParagraph);
+        w.write_event(org_fmt::OwnedEvent::Text("World".to_string().into()));
+        w.write_event(org_fmt::OwnedEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after 6 complete write_event() calls (a \
+                 full heading + paragraph) and before finish() — org_fmt::writer::Writer is not \
+                 a genuine incremental streaming writer despite content round-tripping correctly"
+                    .to_string(),
+            );
+        }
+    }
     assert_or_known_failure("org", "streaming_writer", result);
 }
 
@@ -1988,14 +2017,13 @@ fn djot_streaming_parser_matches_events_under_adversarial_chunking() {
 /// The streaming `Writer` driven with `events(input)` must reproduce what
 /// builder `emit()` produces for the AST `parse(input)` returned.
 ///
-/// Content correctness (this loop) is expected to pass now that `Event` has
-/// a `LinkDef` variant and `DocBuilder` handles it (see `Event::LinkDef` in
-/// `events.rs` and its arm in `writer.rs::DocBuilder::process`) — the prior
-/// `link_defs: []` gap is closed. `djot`'s `Writer` is still not
-/// incrementally streaming, though: `writer.rs`'s module docs say it
-/// "buffers all events, reconstructs the AST, then emits", and `finish()`
-/// calls `emit::emit`. That's checked separately below via an incrementality
-/// probe, the same way texinfo/commonmark/bbcode/creole's hollow writers are.
+/// `djot_fmt::writer::Writer` writes straight through to a single shared
+/// output buffer per event (mirroring `rst-fmt`'s `Writer` design — see
+/// `crates/formats/djot-fmt/src/writer.rs`'s module doc), not a
+/// buffer-then-reconstruct-the-AST fake streaming writer. This checks
+/// content is byte-identical to `emit()` over all fixtures, including
+/// link-reference definitions (`Event::LinkDef`) and table captions
+/// (`Event::TableCaption`), and that bytes reach the sink before `finish()`.
 #[test]
 fn djot_streaming_writer_matches_builder_over_all_fixtures() {
     let root = fixtures_root().join("djot");
@@ -2797,14 +2825,13 @@ fn texinfo_streaming_parser_matches_events_and_is_incremental() {
     assert_or_known_failure("texinfo", "streaming_parser", result);
 }
 
-/// `Writer` buffers all fed events into a `Vec<OwnedEvent>` and only
-/// reconstructs the AST and calls `emit()` inside `finish()` (see
-/// `crates/formats/texinfo/src/writer.rs`'s own module doc, "This
-/// implementation buffers all events, reconstructs the AST, then emits").
-/// Content-wise this round-trips correctly for all fixtures, including
-/// `@settitle` (carried via `Event::Title`, handled by `DocBuilder`) — the
-/// remaining, still-open defect this check surfaces is purely the
-/// incrementality probe below: no bytes reach the sink before `finish()`.
+/// `Writer` writes straight through to a single shared output buffer per
+/// event (mirroring `rst-fmt`'s `Writer` design — see
+/// `crates/formats/texinfo/src/writer.rs`'s module doc), not a
+/// buffer-then-reconstruct-the-AST fake streaming writer. This checks
+/// content is byte-identical to `emit()` over all fixtures, including
+/// `@settitle` (carried via `Event::Title`), and that bytes reach the sink
+/// before `finish()` is called.
 #[test]
 fn texinfo_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     let root = fixtures_root().join("texinfo");
@@ -9197,9 +9224,10 @@ fn t2t_streaming_parser_matches_events_under_adversarial_chunking() {
     assert_or_known_failure("t2t", "streaming_parser", result);
 }
 
-/// `Writer` buffers all fed events into a `Vec<OwnedEvent>` and only
-/// reconstructs the AST + calls `emit()` inside `finish()` (see
-/// `crates/formats/t2t/src/writer.rs`'s own module doc). Checked via
+/// `Writer` writes straight through to a single shared output buffer per
+/// event (mirroring `rst-fmt`'s `Writer` design — see
+/// `crates/formats/t2t/src/writer.rs`'s module doc), not a
+/// buffer-then-reconstruct-the-AST fake streaming writer. Checked via
 /// byte-identical comparison against the builder path, plus an
 /// incrementality probe.
 #[test]

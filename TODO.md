@@ -9,6 +9,184 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-07-31: org-fmt `streaming_writer` hollow-writer defect fixed (and this harness's own
+Wired claim corrected).** Before this fix, `streaming_harness.rs`'s `CAPABILITIES` table
+declared `org`'s `streaming_writer` as `ApiState::Wired`, but its own adjacent comment admitted
+"Writer is still not incrementally streaming" — a documentation-accuracy gap that existed
+because the harness's `org_streaming_writer_matches_builder_over_all_fixtures` test only ever
+checked byte-identical *content*, never wiring the same incrementality probe djot/texinfo/t2t's
+equivalent tests already had. Both problems are fixed together: `org_fmt::writer::Writer`
+(`crates/formats/org-fmt/src/writer.rs`) was rewritten from buffer-all-events-then-reconstruct
+to a single shared `String` output buffer (mirroring `rst-fmt`'s `Writer`), and the missing
+incrementality probe was added to the fixture-suite test in
+`rescribe-fixtures/tests/streaming_apis.rs`.
+
+Construct classification (see the module's doc comment for the full writeup): most constructs
+are write-straight-through, using `emit.rs`'s own two idempotent tail operations
+(`ensure_newline`/`ensure_blank_line`, both operating on the *whole* buffer tail, not a scoped
+span — `emit.rs` itself has no per-construct sub-buffers except `Table`'s cell-width
+measurement) ported directly onto `Writer::out`. This forced a genuinely different
+invalid-context strategy than the other three rewrites: since `ensure_blank_line`'s
+`trim_end()` isn't scoped to a mark, the usual "write speculatively, truncate on invalid
+parent" pattern could incorrectly eat trailing whitespace belonging to earlier, valid content.
+Instead, `accepts_blocks()`/`accepts_inline()` are checked *before* writing anything, pushing a
+`Frame::Discard` marker (which itself doesn't accept blocks/inlines, cascading discard to
+descendants) rather than a real frame when invalid. `List`/`ListItem` need a `list_depth`
+counter (mirroring `BuildContext::list_depth`) plus per-child position/type dispatch (mirroring
+`build_list_item`'s `first`/`Paragraph`/`List`/other match, including a bare-inline-run case
+for list items with no `StartParagraph` wrapper — `events()` emits this for
+`ListItemContent::Inline`). `Table` is genuinely content-dependent (column widths from every
+cell's trimmed formatted-markup length), collecting cells the same way `rst-fmt` captures
+heading plain text.
+
+**Document metadata (`Event::Metadata`) is a documented, deliberate partial divergence from
+`build()`'s exact semantics — not an oversight.** `build()` always moves *all* `OrgDoc.metadata`
+to the very top of the document regardless of where in the source it appeared (confirmed via
+`parse.rs`: `parse_next_block` can pick up a `#+KEY: value` line at any point in the document,
+not just the start). A genuinely incremental writer cannot losslessly replicate "move
+everything to the top" without unbounded lookahead (metadata could appear immediately before
+the *last* block), so this `Writer` instead emits each `Metadata` line write-through, wherever
+it arrives, with the single blank-line-before-next-block rule applied once metadata stops.
+Audited every org fixture for this: none currently has generic metadata after body content
+starts (two apparent counterexamples, `dynamic-block`'s `#+BEGIN:` and `figure`'s
+`#+CAPTION:`/`#+NAME:`, both go through dedicated non-generic-metadata code paths in
+`parse.rs`), so the divergence is currently unobservable in the byte-identical-to-builder
+check — documented rather than silently assumed safe.
+
+Verified byte-identical to `build()` over all 89 org fixtures on the first implementation
+attempt (no formatting bugs found, unlike djot-fmt's two), with the newly-added incrementality
+probe confirming bytes reach the sink before `finish()`. Measured (test-local tracking
+allocator, release build, 5000-section ~759KB synthetic document, discarding sink): peak memory
+4,480 bytes for the streaming Writer vs 1,720,320 bytes for `parse()`+`build()` (384x smaller),
+but throughput went the other way (2.40ms vs 1.33ms, streaming ~1.8x slower) — the same
+per-event-dispatch-overhead-vs-lightweight-builder tradeoff shape found for t2t, not a harness
+artifact (events/AST both built outside the timed window). `CAPABILITIES`'s `org`
+`streaming_writer` comment is corrected to state the fix accurately instead of contradicting
+its own `ApiState::Wired` value.
+
+---
+
+**2026-07-31: t2t `streaming_writer` hollow-writer defect fixed.**
+`t2t::writer::Writer` (`crates/formats/t2t/src/writer.rs`) was rewritten from
+buffer-all-events-then-reconstruct-the-AST to a single shared `String` output buffer,
+mirroring `rst-fmt`'s `Writer`. Every t2t construct turned out to be write-straight-through —
+reading `emit.rs` end to end found no content-dependent prefix anywhere (heading rule width is
+fixed by `level.min(5)`, not text length; table cells get no column-width padding at all) —
+and, unlike RST/djot, there is no generic "blank line between siblings" rule to implement
+either: every block variant's own `emit.rs` arm already writes its complete trailing
+whitespace, so consecutive children simply concatenate with zero separator logic. The one real
+subtlety: `Paragraph` gets three *different* framings depending on its parent's type (plain
+top-level `"\n\n"`; a `"\t"` prefix + single `"\n"` inside `Blockquote`; no prefix and *no*
+trailing newline at all inside `ListItem`, since `emit.rs`'s item loop concatenates all of an
+item's blocks and writes exactly one `"\n"` after the whole item; no prefix + single `"\n"`
+inside `DefinitionDesc`) — decided at `Paragraph`'s own `Start`/`End` events purely by
+inspecting the parent frame, the same "known at open, applied at close" shape as `rst-fmt`'s
+list-item dispatch. Non-`Paragraph` children of `Blockquote`/`ListItem`/`DefinitionDesc` (a
+nested `List`, `Table`, etc.) get their own *unmodified* top-level formatting — confirmed by
+reading `emit.rs`'s `else { build_block(child, ctx) }` branch, not assumed by analogy with
+RST/djot's blockquotes (which *do* re-indent their full subtree; t2t deliberately does not).
+
+Passed the byte-identity check against `emit()` over every fixture on the first implementation
+attempt — no formatting bugs surfaced during this rewrite (unlike djot-fmt's two). Verified via
+`t2t_streaming_writer_matches_builder_over_all_fixtures` in
+`rescribe-fixtures/tests/streaming_apis.rs`, including the document header (`Event::Header`),
+with bytes reaching the sink before `finish()`. Measured (test-local tracking allocator,
+release build, 5000-section ~769KB synthetic document, discarding sink): peak memory 4,244
+bytes for the streaming Writer vs 1,179,648 bytes for `parse()`+`emit()` (278x smaller) — but
+throughput went the *other* way: 1.78ms streaming vs 0.64ms builder (streaming ~2.8x *slower*).
+Both events and the AST were built outside the timed window (same discipline as
+texinfo/djot-fmt's benchmarks), so this isn't the same harness artifact caught earlier — it's
+architecture: t2t's builder (`build_block`) is an unusually lightweight direct tree recursion
+with almost no per-node work, while the streaming Writer pays a `match` over ~30 event variants
+plus `accepts_blocks()`/`accepts_inline()` frame-stack lookups per *event*, and t2t's event
+granularity (~17 events per synthetic section) is much finer than its block granularity (~5
+blocks per section) — so the per-event dispatch constant factor dominates for this
+particular, very cheap-to-build format. A genuine memory/throughput tradeoff, not a defect —
+noted here rather than silently reported as an unambiguous win. The `t2t/streaming_writer`
+`KNOWN_FAILURES` entry is removed; `CAPABILITIES` now declares
+`streaming_writer: ApiState::Wired`.
+
+---
+
+**2026-07-31: djot-fmt `streaming_writer` hollow-writer defect fixed.**
+`djot_fmt::writer::Writer` (`crates/formats/djot-fmt/src/writer.rs`) was rewritten from
+buffer-all-events-into-`Vec<OwnedEvent>`-then-`events_to_doc()`-then-`emit()` to a single
+shared `String` output buffer, mirroring `rst-fmt`'s `Writer` (and the texinfo rewrite
+immediately below). Construct classification (see the module's doc comment for the full
+writeup): most constructs are write-straight-through; `Blockquote`/`DefinitionDesc` (uniform
+per-line `"> "`/`"  "` prefix) and `ListItem`/`FootnoteDef` (per-line `"  "` prefix on every
+line but the first, which continues the marker/label line) are deferred per-line
+re-indentation via a pooled scratch buffer; `Table` is genuinely content-dependent (the header
+separator's column count/alignments need every row seen first), so rows collect
+already-*formatted* cell markup (captured under a mark and sliced out, since Djot cells can
+hold inline spans, not just plain text) and render at `EndTable`. `Div` turned out to be
+write-through, not deferred, on inspection of `emit.rs` — unlike `Blockquote`, its children
+are written directly via `emit_blocks`, no sub-emitter/re-indentation. `Event::TableCaption`
+carries an atomic `Vec<Inline>` payload (not streamed sub-events, by `events()`'s own design),
+so rendering it needed one small independent AST-fragment-to-markup helper
+(`render_inlines_ast`) — documented in the module doc as the one deliberate exception to
+"never reconstruct via the tree/emit path," forced by the event vocabulary's shape.
+
+Two real bugs surfaced and were fixed while getting the byte-identity check to pass (not
+content bugs in the *old* buffer-then-emit writer, which round-tripped correctly by
+construction — bugs in getting the *new* write-through design to match `emit()` exactly):
+(1) `ListItem`'s between-items separator was double-counted (writing an unconditional `"\n"`
+before both the marker's own newline logic and the reindented content's own trailing newline),
+producing a blank line between list items where `emit()` uses exactly one newline — fixed by
+popping the reindented content's trailing newline (matching `emit.rs`'s explicit
+`if buf.ends_with('\n') { buf.pop(); }`) and letting the *next* item's marker write the sole
+separating newline. (2) `Div`'s closing `":::"` fence needs a blank line before it even when
+the last child already ended with its own single trailing newline (`emit.rs` writes an
+unconditional extra `newline()` there) — the streaming writer initially only ensured a single
+trailing newline. Both are pinned by `test_writer_byte_identical_to_builder` in `writer.rs`.
+
+Verified byte-identical to `emit()` over every djot fixture (`djot_streaming_writer_matches_\
+builder_over_all_fixtures` in `rescribe-fixtures/tests/streaming_apis.rs`), including
+link-reference definitions and table captions, with bytes reaching the sink before `finish()`.
+Measured (test-local tracking allocator, release build, 5000-section ~760KB synthetic
+document, discarding sink): peak memory 4,469 bytes for the streaming Writer vs 1,720,320
+bytes for `parse()`+`emit()` (385x smaller), 1.68x faster throughput. The `djot/streaming_writer`
+`KNOWN_FAILURES` entry is removed; `CAPABILITIES` now declares `streaming_writer: ApiState::Wired`.
+
+---
+
+**2026-07-31: texinfo `streaming_writer` hollow-writer defect fixed.** The remaining half of
+the `texinfo/streaming_writer` `KnownFailure` (see the 2026-07-30 entry immediately below —
+title-loss was already fixed; the buffer-then-reconstruct architecture was not) is closed.
+`texinfo::writer::Writer` (`crates/formats/texinfo/src/writer.rs`) was rewritten from
+buffer-all-events-into-`Vec<OwnedEvent>`-then-`events_to_doc()`-then-`emit()` to a single
+shared `String` output buffer written straight through per event, mirroring `rst-fmt`'s
+`Writer` design (`f87b3d62ef`, `de67174ddd`). Construct classification: every Texinfo
+construct turned out to be write-straight-through — no heading-underline-width or
+table-column-width style deferred prefix exists anywhere in `emit.rs` (unlike RST). The three
+subtleties (invalid-context discard via write-then-truncate-on-close, `TableCell`'s `" @tab "`
+separator via a `cell_count` scalar on the parent frame, `Link`'s lazy `", "` before optional
+link text via a `wrote_any` flag) are documented in the module's doc comment. Frame stack is
+`O(nesting depth)`; each top-level block flushes to the sink and clears the shared buffer
+(capacity retained) as soon as the frame stack empties. Verified via
+`texinfo_streaming_writer_byte_identical_to_builder_over_all_fixtures` (byte-identical to
+`emit()` over every fixture) plus its incrementality probe (bytes reach the sink before
+`finish()`), both now passing — the `texinfo`/`streaming_writer` `KnownFailure` entry and its
+matching `KNOWN_FAILURES` array entry are removed from `streaming_harness.rs`; `CAPABILITIES`
+now declares `texinfo` `streaming_writer: ApiState::Wired`. Measured (test-local tracking
+allocator, `test_writer_peak_memory_and_throughput_report` in `writer.rs`, `#[ignore]`d,
+release build, 5000-section ~1MB synthetic document, discarding sink to avoid attributing the
+caller's own output-retention choice to the Writer): peak memory 4,180 bytes for the streaming
+Writer vs 1,966,080 bytes for `parse()`+`emit()` (470x smaller — the streaming Writer's peak is
+now bounded by the largest top-level block, not the whole document), 1.54x faster throughput.
+An earlier version of this benchmark fed the Writer via `events()` and a `Vec<u8>` sink inside
+the timed/tracked window, which produced a misleadingly *worse* number for the Writer (higher
+peak, slower) — a harness artifact from two unrelated sources: (a) `texinfo::events()` itself
+eagerly parses the full document into an AST and materializes the complete `Vec<OwnedEvent>`
+before yielding the first event (a separate, pre-existing non-incremental `events()` gap, out
+of scope for this writer-only change — `CAPABILITIES`'s `texinfo` `events` field is still
+`ApiState::Wired` with no caveat, which is arguably now inaccurate and worth a follow-up
+audit), and (b) a `Vec<u8>` sink retains the whole flushed output regardless of how the Writer
+itself buffers internally. Both were corrected (event vec built before the tracked window,
+discarding sink) before trusting the final numbers.
+
+---
+
 **2026-07-30: texinfo `@settitle` title-loss gap closed.** One of the two `KnownFailure`s
 tracked against `texinfo/streaming_writer` (see the 2026-07-30 cross-API harness entry below)
 was an `Event`-enum expressiveness gap: `texinfo::events::Event` had no variant carrying
