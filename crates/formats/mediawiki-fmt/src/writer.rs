@@ -1019,32 +1019,47 @@ After the transition.
     // one `#[global_allocator]` per binary, so both tests below share this
     // one rather than each defining their own.
     use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct TrackingAlloc;
     static ALLOCS: AtomicUsize = AtomicUsize::new(0);
-    static CURRENT: AtomicUsize = AtomicUsize::new(0);
-    static PEAK: AtomicUsize = AtomicUsize::new(0);
+    // current/peak bytes are tracked per-thread (`thread_local!`, not a
+    // shared `AtomicUsize`): the allocator is process-wide, and `cargo test`
+    // runs other tests concurrently on other threads by default, so a
+    // shared counter lets an unrelated test's allocations inflate this
+    // measurement — confirmed as a real flake in this batch's `pod-fmt`
+    // sibling (a spurious 407x ratio under full-workspace `cargo test -q`,
+    // passing cleanly under `--test-threads=1`). Thread-local counters make
+    // the measurement immune to what other threads in the same binary do,
+    // so the `ALLOC_TEST_GUARD` mutex this file used to serialize just the
+    // two instrumented tests against each other is no longer needed.
+    thread_local! {
+        static CURRENT: Cell<usize> = const { Cell::new(0) };
+        static PEAK: Cell<usize> = const { Cell::new(0) };
+    }
     unsafe impl GlobalAlloc for TrackingAlloc {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             ALLOCS.fetch_add(1, Ordering::Relaxed);
-            let prev = CURRENT.fetch_add(layout.size(), Ordering::SeqCst);
-            PEAK.fetch_max(prev + layout.size(), Ordering::SeqCst);
+            let cur = CURRENT.with(|c| {
+                let v = c.get() + layout.size();
+                c.set(v);
+                v
+            });
+            PEAK.with(|p| {
+                if cur > p.get() {
+                    p.set(cur);
+                }
+            });
             unsafe { System.alloc(layout) }
         }
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-            CURRENT.fetch_sub(layout.size(), Ordering::SeqCst);
+            CURRENT.with(|c| c.set(c.get().saturating_sub(layout.size())));
             unsafe { System.dealloc(ptr, layout) }
         }
     }
     #[global_allocator]
     static GLOBAL: TrackingAlloc = TrackingAlloc;
-    /// `cargo test` runs this crate's other tests concurrently with these
-    /// two allocator-instrumented ones by default, and they all share the
-    /// one process-wide `TrackingAlloc`. Serializing just these two against
-    /// *each other* removes the dominant source of cross-test interference
-    /// without needing `--test-threads=1` for the whole binary.
-    static ALLOC_TEST_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     /// Regression guard against reintroducing per-block `Block`/`Inline`
     /// subtree reconstruction. A large, deeply-nested event stream must
@@ -1052,8 +1067,6 @@ After the transition.
     /// event count, not blow up the way tree materialization would.
     #[test]
     fn test_writer_no_subtree_reconstruction_blowup() {
-        let _guard = ALLOC_TEST_GUARD.lock().unwrap();
-
         fn events_for(n: usize) -> Vec<OwnedEvent> {
             use std::borrow::Cow;
             let mut evs = Vec::new();
@@ -1120,11 +1133,9 @@ After the transition.
     /// byte threshold is noisy under `cargo test`'s parallel execution).
     #[test]
     fn test_writer_peak_memory_bounded() {
-        let _guard = ALLOC_TEST_GUARD.lock().unwrap();
-
         fn run(n: usize) -> usize {
-            let baseline = CURRENT.load(Ordering::SeqCst);
-            PEAK.store(baseline, Ordering::SeqCst);
+            let baseline = CURRENT.with(|c| c.get());
+            PEAK.with(|p| p.set(baseline));
             {
                 let mut w = Writer::new(std::io::sink());
                 for i in 0..n {
@@ -1136,7 +1147,7 @@ After the transition.
                 }
                 w.finish();
             }
-            PEAK.load(Ordering::SeqCst).saturating_sub(baseline).max(1)
+            PEAK.with(|p| p.get()).saturating_sub(baseline).max(1)
         }
 
         let small = run(2_000);

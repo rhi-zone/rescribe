@@ -540,29 +540,44 @@ impl<W: Write> Writer<W> {
 #[cfg(test)]
 mod alloc_guard {
     use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     pub(super) static ALLOCS: AtomicUsize = AtomicUsize::new(0);
-    pub(super) static CURRENT: AtomicUsize = AtomicUsize::new(0);
-    pub(super) static PEAK: AtomicUsize = AtomicUsize::new(0);
-
-    /// The two memory-guard tests below both read process-wide allocator
-    /// counters, so they must not run concurrently with each other (cargo
-    /// test runs test functions in parallel threads by default) — each
-    /// would pollute the other's counts.
-    pub(super) static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    // current/peak bytes are tracked per-thread (`thread_local!`, not a
+    // shared `AtomicUsize`): the allocator is process-wide, and `cargo
+    // test` runs other tests concurrently on other threads by default, so a
+    // shared counter lets an unrelated test's allocations inflate this
+    // measurement — confirmed as a real flake in this batch's `pod-fmt`
+    // sibling (a spurious 407x ratio under full-workspace `cargo test -q`,
+    // passing cleanly under `--test-threads=1`). Thread-local counters make
+    // the measurement immune to what other threads in the same binary do,
+    // so the `TEST_LOCK` mutex this file used to serialize just the two
+    // memory-guard tests against each other is no longer needed.
+    thread_local! {
+        pub(super) static CURRENT: Cell<usize> = const { Cell::new(0) };
+        pub(super) static PEAK: Cell<usize> = const { Cell::new(0) };
+    }
 
     pub(super) struct InstrumentedAlloc;
 
     unsafe impl GlobalAlloc for InstrumentedAlloc {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             ALLOCS.fetch_add(1, Ordering::Relaxed);
-            let cur = CURRENT.fetch_add(layout.size(), Ordering::SeqCst) + layout.size();
-            PEAK.fetch_max(cur, Ordering::SeqCst);
+            let cur = CURRENT.with(|c| {
+                let v = c.get() + layout.size();
+                c.set(v);
+                v
+            });
+            PEAK.with(|p| {
+                if cur > p.get() {
+                    p.set(cur);
+                }
+            });
             unsafe { System.alloc(layout) }
         }
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-            CURRENT.fetch_sub(layout.size(), Ordering::SeqCst);
+            CURRENT.with(|c| c.set(c.get().saturating_sub(layout.size())));
             unsafe { System.dealloc(ptr, layout) }
         }
     }
@@ -574,7 +589,7 @@ static ALLOC_GUARD: alloc_guard::InstrumentedAlloc = alloc_guard::InstrumentedAl
 
 #[cfg(test)]
 mod tests {
-    use super::alloc_guard::{ALLOCS, CURRENT, PEAK, TEST_LOCK};
+    use super::alloc_guard::{ALLOCS, CURRENT, PEAK};
     use super::*;
 
     #[test]
@@ -686,8 +701,6 @@ mod tests {
         use std::borrow::Cow;
         use std::sync::atomic::Ordering;
 
-        let _guard = TEST_LOCK.lock().unwrap();
-
         fn build_events(n: usize) -> Vec<Event<'static>> {
             let mut evs = Vec::new();
             for i in 0..n {
@@ -746,9 +759,6 @@ mod tests {
     #[test]
     fn test_writer_peak_memory_bounded() {
         use std::borrow::Cow;
-        use std::sync::atomic::Ordering;
-
-        let _guard = TEST_LOCK.lock().unwrap();
 
         /// A sink that counts written bytes without retaining them — using
         /// `Vec<u8>` as the sink would conflate the sink's own inevitable
@@ -767,12 +777,11 @@ mod tests {
 
         const N: usize = 20_000;
 
-        // Never reset `CURRENT` — it tracks every live allocation in the
-        // whole test binary. Resetting it to 0 would make an unrelated
-        // later `dealloc` of pre-existing memory underflow the counter.
-        // Instead take a baseline and measure the *rise* above it.
-        let baseline = CURRENT.load(Ordering::SeqCst);
-        PEAK.store(baseline, Ordering::SeqCst);
+        // `CURRENT`/`PEAK` are thread-local, so resetting `PEAK` to this
+        // thread's own current baseline is safe — no other thread's live
+        // allocations are counted into this thread's cell.
+        let baseline = CURRENT.with(|c| c.get());
+        PEAK.with(|p| p.set(baseline));
 
         let mut w = Writer::new(CountingSink(0));
         for i in 0..N {
@@ -785,7 +794,7 @@ mod tests {
         let sink = w.finish();
         std::hint::black_box(&sink);
 
-        let peak = PEAK.load(Ordering::SeqCst).saturating_sub(baseline);
+        let peak = PEAK.with(|p| p.get()).saturating_sub(baseline);
         let total_doc_bytes = sink.0;
 
         assert!(

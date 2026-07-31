@@ -555,29 +555,45 @@ mod tests {
     // this single allocator instead of each defining their own.
     mod alloc_probe {
         use std::alloc::{GlobalAlloc, Layout, System};
-        use std::sync::Mutex;
+        use std::cell::Cell;
         use std::sync::atomic::{AtomicUsize, Ordering};
 
         pub static ALLOCS: AtomicUsize = AtomicUsize::new(0);
-        pub static CURRENT: AtomicUsize = AtomicUsize::new(0);
-        pub static PEAK: AtomicUsize = AtomicUsize::new(0);
-        /// Held for the duration of each instrumented test's measurement
-        /// window, so the two large-allocation guards below don't
-        /// contaminate each other's counts by running concurrently on
-        /// separate threads (the allocator is process-wide, not
-        /// per-thread).
-        pub static PROBE_LOCK: Mutex<()> = Mutex::new(());
+        // current/peak bytes are tracked per-thread (`thread_local!`, not a
+        // shared `AtomicUsize`): the allocator is process-wide, and `cargo
+        // test` runs other tests concurrently on other threads by default,
+        // so a shared counter lets an unrelated test's allocations inflate
+        // this measurement — confirmed as a real flake in this batch's
+        // `pod-fmt` sibling (a spurious 407x ratio under full-workspace
+        // `cargo test -q`, passing cleanly under `--test-threads=1`).
+        // Thread-local counters make the measurement immune to what other
+        // threads in the same binary do, so the `PROBE_LOCK` mutex this
+        // file used to serialize just the two instrumented tests against
+        // each other is no longer needed — it never protected against
+        // interference from this file's *other* tests anyway.
+        thread_local! {
+            pub static CURRENT: Cell<usize> = const { Cell::new(0) };
+            pub static PEAK: Cell<usize> = const { Cell::new(0) };
+        }
 
         pub struct InstrumentedAlloc;
         unsafe impl GlobalAlloc for InstrumentedAlloc {
             unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
                 ALLOCS.fetch_add(1, Ordering::Relaxed);
-                let cur = CURRENT.fetch_add(layout.size(), Ordering::Relaxed) + layout.size();
-                PEAK.fetch_max(cur, Ordering::Relaxed);
+                let cur = CURRENT.with(|c| {
+                    let v = c.get() + layout.size();
+                    c.set(v);
+                    v
+                });
+                PEAK.with(|p| {
+                    if cur > p.get() {
+                        p.set(cur);
+                    }
+                });
                 unsafe { System.alloc(layout) }
             }
             unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-                CURRENT.fetch_sub(layout.size(), Ordering::Relaxed);
+                CURRENT.with(|c| c.set(c.get().saturating_sub(layout.size())));
                 unsafe { System.dealloc(ptr, layout) }
             }
         }
@@ -784,10 +800,8 @@ After the rule.
     /// event count, not blow up the way tree materialization would.
     #[test]
     fn test_writer_no_subtree_reconstruction_blowup() {
-        use alloc_probe::{ALLOCS, PROBE_LOCK};
+        use alloc_probe::ALLOCS;
         use std::sync::atomic::Ordering;
-
-        let _guard = PROBE_LOCK.lock().unwrap();
 
         fn events_for(n: usize) -> Vec<OwnedEvent> {
             let mut evs = Vec::new();
@@ -860,10 +874,7 @@ After the rule.
     /// fixed-byte-ceiling assertion would not.
     #[test]
     fn test_writer_peak_memory_bounded() {
-        use alloc_probe::{CURRENT, PEAK, PROBE_LOCK};
-        use std::sync::atomic::Ordering;
-
-        let _guard = PROBE_LOCK.lock().unwrap();
+        use alloc_probe::{CURRENT, PEAK};
 
         struct DevNull;
         impl Write for DevNull {
@@ -877,15 +888,13 @@ After the rule.
         }
 
         // Peak-above-baseline for feeding `n` synthetic paragraphs through
-        // `Writer`. Does NOT reset `CURRENT`/`PEAK`: this allocator is
-        // process-wide, and other tests may hold live allocations already
-        // counted into `CURRENT` — zeroing it out from under them would
-        // make their later `dealloc`s underflow the counter. Reading a
-        // baseline before and after instead is safe under concurrency.
+        // `Writer`. `CURRENT`/`PEAK` are now thread-local, so resetting
+        // `PEAK` to this thread's own current baseline is safe — no other
+        // thread's live allocations are counted into this thread's cell.
         fn run(n: usize) -> usize {
             let paragraph_text = "word ".repeat(20); // ~100 bytes/paragraph
-            let baseline_current = CURRENT.load(Ordering::Relaxed);
-            let baseline_peak = PEAK.load(Ordering::Relaxed);
+            let baseline_current = CURRENT.with(|c| c.get());
+            PEAK.with(|p| p.set(baseline_current));
 
             let mut w = Writer::new(DevNull);
             for i in 0..n {
@@ -895,8 +904,7 @@ After the rule.
             }
             w.finish();
 
-            PEAK.load(Ordering::Relaxed)
-                .saturating_sub(baseline_current.min(baseline_peak))
+            PEAK.with(|p| p.get()).saturating_sub(baseline_current)
         }
 
         let small = run(500).max(1);
