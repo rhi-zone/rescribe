@@ -9,6 +9,59 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-07-31: fb2-fmt `StreamingParser` rewritten from buffer-everything to true incremental
+XML draining (reader-side counterpart of the streaming-writer sweep).** `StreamingParser::feed`
+used to just `extend_from_slice` into a `Vec<u8>` and parse the whole thing in `finish()` —
+`O(full input)` memory despite the crate's own `events()`/`EventIter` already being a genuine
+incremental `quick_xml` pull parser underneath. Fixed by splitting the semantic dispatch logic
+(`crates/formats/fb2-fmt/src/events.rs`) out of `XmlEventIter` (which still holds a whole-slice
+`Reader`, used by `events()`) into a reusable `SemanticState::dispatch(&XmlEvent)` that consumes
+one already-decoded token at a time with no dependency on how its bytes were obtained.
+`StreamingParser::drain` then reuses `SemanticState` while rebuilding a fresh `quick_xml::Reader`
+over only the unconsumed tail of its byte buffer on each call — the same "rebuild over the tail,
+`Err(Syntax)` means wait for more bytes" technique `docbook-fmt::batch::StreamingParser`
+pioneered, including the same ambiguous-trailing-text handling (plain text terminates at either
+`<` or genuine EOF, indistinguishable from a slice-bounded reader, so a text run consuming every
+currently-buffered byte waits for confirmation via a later `feed()`/`finish()` call).
+
+One real bug surfaced by the adversarial-chunking fixture test during this rewrite: disabling
+quick-xml's own `check_end_names`/`allow_unmatched_ends` (architecturally required — each
+`drain()`'s fresh `Reader` has no memory of Start tags consumed by a previous call) silently
+dropped the tag-balance validation `events()` gets for free from its single long-lived `Reader`,
+so `StreamingParser` continued past a mismatched end tag that `events()` correctly treats as
+fatal and stops on (fixture `adv-malformed-xml`: an unterminated `<FictionBook xmlns="..."`
+start tag swallows the following `<body>` open tag, leaving `</body>`/`</FictionBook>` as
+unmatched closes) — producing a spurious extra `EndFictionBook` event `events()` never emits.
+Fixed via a hand-tracked `open_stack: Vec<String>` + `failed` flag replicating quick-xml's
+validation by hand, same shape as docbook-fmt's own `open_stack`.
+
+A second real defect was found in the *test*, not the production code: the harness's original
+incrementality probe fed an arbitrary 50%-byte split of each real fixture and asserted at least
+one event was delivered — but a 50% split of `fixtures/fb2/adv-empty` (138 bytes) lands
+mid-attribute-value inside the still-open root `<FictionBook xmlns="...` start tag, so zero
+events at that exact split point is the correct, spec-conforming answer, not a defect (the same
+probe-naivety class already documented for jats-fmt). Replaced with a hand-built probe input
+with a guaranteed unambiguous complete-prefix boundary (a complete
+StartFictionBook/StartBody/StartSection/StartParagraph/Inline/EndParagraph sequence followed by
+deliberately unterminated trailing tags), matching the pattern bbcode-fmt's equivalent probe
+already used.
+
+Confirmed via a new adversarial-chunking test in `events.rs` (whole/single-byte/chunks-of-3/7/13/
+mid-UTF-8-character-split, byte-for-byte equal to `events()` on a synthetic multi-section
+document) and a new peak-memory guard using the `thread_local!` allocator-tracking pattern
+(per-thread, not a shared `AtomicUsize`, so a concurrently-running unrelated test on another
+thread can't inflate the measurement): peak allocated bytes stayed flat (~3090 bytes @200
+synthetic sections vs ~3091 bytes @2000 sections, a 10x input-size increase) — confirming
+`O(largest token)`, not `O(full input)`.
+
+`streaming_harness::KNOWN_FAILURES`'s `fb2`/`streaming_parser` entry removed;
+`CAPABILITIES.fb2.streaming_parser` promoted to `Wired`. `fb2`/`events` and
+`fb2`/`streaming_writer` KnownFailure entries are untouched — both are downstream of a
+different, still-open defect (`events()` silently drops `Metadata` for input lacking a literal
+`<description>` element), unrelated to this fix.
+
+---
+
 **2026-07-31: org-fmt `streaming_writer` hollow-writer defect fixed (and this harness's own
 Wired claim corrected).** Before this fix, `streaming_harness.rs`'s `CAPABILITIES` table
 declared `org`'s `streaming_writer` as `ApiState::Wired`, but its own adjacent comment admitted

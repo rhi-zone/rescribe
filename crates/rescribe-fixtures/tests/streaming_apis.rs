@@ -3099,14 +3099,15 @@ fn fb2_events_equals_ast_projection_over_all_fixtures() {
     assert_or_known_failure("fb2", "events", result);
 }
 
-/// `StreamingParser` buffers all fed bytes into a `Vec<u8>` and only builds
-/// the pull iterator over the reassembled buffer inside `finish()` (see
-/// `crates/formats/fb2-fmt/src/events.rs`'s `StreamingParser::finish`), even
-/// though `events()`/`EventIter` is a genuine incremental `quick_xml` pull
-/// parser underneath. So: (1) the final sequence still matches `events()`
-/// under adversarial chunking (expected, since finish() re-derives it from
-/// the reassembled buffer), but (2) `feed()` alone never delivers events —
-/// the real, previously-undocumented defect this check surfaces.
+/// `StreamingParser` now drains incrementally (see events.rs's
+/// `StreamingParser::drain`): each `feed()` call rebuilds a `quick_xml`
+/// `Reader` over just the unconsumed tail and dispatches every event it can
+/// prove complete to the handler immediately, reusing the same
+/// `SemanticState` machine `events()`/`EventIter` already used internally.
+/// This check confirms both (1) the final sequence matches `events()` under
+/// adversarial chunking, and (2) `feed()` alone (before `finish()`) actually
+/// delivers events for a half-fed fixture — the property that used to fail
+/// when `feed()` only extended a `Vec<u8>`.
 #[test]
 fn fb2_streaming_parser_matches_events_and_is_incremental() {
     let root = fixtures_root().join("fb2");
@@ -3140,28 +3141,46 @@ fn fb2_streaming_parser_matches_events_and_is_incremental() {
             }
         }
 
-        if input.len() > 32 && !bulk.is_empty() {
-            let mid = input.len() / 2;
-            let mut delivered: Vec<fb2_fmt::Event> = Vec::new();
-            let mut parser = fb2_fmt::StreamingParser::new(|e| delivered.push(e));
-            parser.feed(&input[..mid]);
-            if delivered.is_empty() && result.is_ok() {
-                result = Err(format!(
-                    "StreamingParser delivered zero events to the handler after feed() with \
-                     half of fixture {name} ({mid} bytes) and before finish() — \
-                     fb2_fmt::StreamingParser accumulates fed bytes into a Vec<u8> and only \
-                     constructs the pull iterator over the reassembled buffer inside finish() \
-                     (crates/formats/fb2-fmt/src/events.rs), so feed() never advances real \
-                     incremental parser state despite events()/EventIter being genuinely \
-                     incremental"
-                ));
-            }
-        }
+        // Deliberately NOT probed here: an arbitrary 50%-byte split of each
+        // real fixture. That was this check's original design and it is
+        // fixture-shape-unaware in exactly the way jats-fmt's own
+        // streaming_parser KnownFailure documents: a 50% split of
+        // fixtures/fb2/adv-empty (138 bytes) lands mid-attribute-value
+        // inside the still-open root `<FictionBook xmlns="...` start tag,
+        // so zero events delivered at that exact split point is the
+        // correct, spec-conforming answer, not a StreamingParser defect.
+        // See the hand-built probe below instead, which guarantees an
+        // unambiguous complete-prefix boundary.
     }
     assert!(
         checked > 5,
         "expected to check several fb2 fixtures, got {checked}"
     );
+
+    // Incrementality probe: a hand-built input with a definite complete
+    // prefix (StartFictionBook/StartBody/StartSection/StartParagraph/
+    // Inline/EndParagraph are all provably complete tokens) followed by
+    // deliberately unterminated trailing tags (no `</section>`, `</body>`,
+    // `</FictionBook>`). Confirms events reach the handler after feed()
+    // alone, before finish() is ever called — the property that failed
+    // when StreamingParser only extended a Vec<u8> and parsed in finish().
+    if result.is_ok() {
+        let probe_input = b"<?xml version=\"1.0\"?>\
+            <FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">\
+            <body><section><p>Hello</p>";
+        let mut delivered: Vec<fb2_fmt::Event> = Vec::new();
+        let mut parser = fb2_fmt::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(probe_input);
+        if delivered.is_empty() {
+            result = Err(
+                "StreamingParser delivered zero events to the handler after feed() with a \
+                 complete StartFictionBook/StartBody/StartSection/StartParagraph/Inline/ \
+                 EndParagraph prefix (deliberately followed by unterminated trailing tags) \
+                 and before finish() was called"
+                    .to_string(),
+            );
+        }
+    }
     assert_or_known_failure("fb2", "streaming_parser", result);
 }
 

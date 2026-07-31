@@ -406,14 +406,21 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              affects the majority of single-construct fb2 fixtures, which omit <description> \
              for brevity — found via this harness's ast_to_events projection check",
         ),
-        streaming_parser: ApiState::KnownFailure(
-            "fb2_fmt::StreamingParser buffers all fed bytes into a Vec<u8> and only parses + \
-             delivers events inside finish() (see crates/formats/fb2-fmt/src/events.rs's \
-             StreamingParser::finish, which calls events(&self.buf) — feed() itself just \
-             extends the buffer); despite the crate's own events()/EventIter being a genuine \
-             incremental quick_xml pull parser, StreamingParser does not reuse that \
-             incrementality — feed() delivers zero events to the handler before finish()",
-        ),
+        // Fixed 2026-07-31: StreamingParser rewritten from buffer-all-fed-bytes-then-
+        // parse-in-finish() to a true incremental drain, reusing the same SemanticState
+        // dispatch machine events()/EventIter already used internally (see events.rs's
+        // module doc and StreamingParser::drain's doc comment) — the same
+        // "rebuild a Reader over just the unconsumed tail, Err(Syntax) means wait for
+        // more bytes" technique docbook-fmt's StreamingParser pioneered. The one
+        // XML-generic wrinkle (plain text terminates at either `<` or genuine EOF,
+        // indistinguishable from a slice-bounded reader) is handled the same way
+        // docbook-fmt handles it: a text token that consumes every currently-buffered
+        // byte is held back until more input confirms it's actually complete. Confirmed
+        // via a synthetic multi-section document under whole/single-byte/chunks-of-N/
+        // mid-UTF-8-character-split adversarial chunking, byte-for-byte equal to
+        // events() on the whole input; peak memory measured flat (~3.09KB) across a
+        // 10x input-size increase (200 vs 2000 sections), not O(full input).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "the streaming Writer itself is genuinely incremental (write_event() writes \
              straight to the underlying quick_xml::Writer<W>), but it is fed by events(), which \
@@ -1267,14 +1274,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "fb2_fmt events()/EventIter silently drops Event::Metadata for input \
                        lacking a literal <description> element, unlike parse()'s AST which \
                        always carries a (possibly-default) description",
-    },
-    KnownFailure {
-        format: "fb2",
-        api: "streaming_parser",
-        description: "fb2_fmt::StreamingParser buffers all fed bytes and only parses + delivers \
-                       events inside finish(), even though the crate's own events()/EventIter is \
-                       a genuine incremental quick_xml pull parser — StreamingParser does not \
-                       reuse that incrementality",
     },
     KnownFailure {
         format: "fb2",

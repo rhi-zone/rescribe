@@ -9,11 +9,16 @@
 //!
 //! # Memory note
 //!
-//! FB2 is XML; `quick_xml` requires the full document in memory to resolve
-//! entity references correctly.  `EventIter` holds a slice reference and
-//! `StreamingParser` buffers all input before delivering events — memory is
-//! O(full input).  This is an inherent property of the XML format, not an
-//! implementation limitation.
+//! `EventIter` (returned by [`events`]) holds a `quick_xml::Reader` over the
+//! *whole* input slice — it needs the full document in memory, same as any
+//! `&[u8]`-based reader.
+//!
+//! [`StreamingParser`], however, is genuinely incremental: `feed()` rebuilds
+//! a fresh `quick_xml::Reader` over only the unconsumed tail of its internal
+//! buffer on each call and dispatches every event it can prove complete
+//! immediately (the same technique `docbook-fmt::batch::StreamingParser`
+//! uses). Memory is O(largest in-progress token), not O(full input) — see
+//! [`StreamingParser`]'s own doc comment for the full rationale.
 
 use std::collections::HashMap;
 
@@ -153,35 +158,165 @@ impl<F: FnMut(Event)> Handler for F {
     }
 }
 
-/// Chunk-driven FB2 parser delivering semantic events to a [`Handler`].
+/// Chunk-driven FB2 parser delivering semantic events to a [`Handler`] as
+/// soon as they are provably complete.
 ///
 /// # Memory note
 ///
-/// FB2 is XML; this implementation buffers the **full document** before
-/// delivering any events (see [module-level docs](self) for details).
+/// Unlike the module's earlier "buffer everything, parse in `finish()`"
+/// implementation, this drives the same [`SemanticState`] machine
+/// [`EventIter`] uses, but rebuilds a fresh `quick_xml::Reader` over only
+/// the unconsumed tail of `byte_buf` on each drain iteration (the same
+/// technique `docbook-fmt::batch::StreamingParser` uses — see that module's
+/// doc comment for the full rationale): XML tokens are unambiguously
+/// complete or incomplete on their own except for plain text, which
+/// terminates at either `<` or end-of-input and so must wait for
+/// confirmation via a subsequent `feed()`/`finish()` call before being
+/// dispatched. `byte_buf` therefore holds only the bytes of the
+/// longest in-progress token (or ambiguous trailing text run), not the
+/// whole document — memory is O(largest token), not O(full input).
 pub struct StreamingParser<H: Handler> {
-    buf: Vec<u8>,
     handler: H,
+    byte_buf: Vec<u8>,
+    state: SemanticState,
+    /// Names of elements currently open, tracked by hand across `drain()`
+    /// calls. Each `drain()` call builds a *fresh* `quick_xml::Reader` over
+    /// just the unconsumed tail, so quick-xml's own `check_end_names`/
+    /// `allow_unmatched_ends` validation has no memory of Start tags
+    /// consumed by a previous call and must stay disabled on that reader
+    /// (see `drain`'s comment) — this stack replicates that validation by
+    /// hand, matching what the whole-slice `events()`/`EventIter` gets for
+    /// free from a single long-lived `Reader` (default `check_end_names =
+    /// true`). Same shape as `docbook-fmt::batch::StreamingParser`'s
+    /// `open_stack`.
+    open_stack: Vec<String>,
+    /// Set once a mismatched/unmatched end tag is seen, mirroring
+    /// `events()`'s own behavior on malformed XML: `quick_xml` returns a
+    /// fatal `Err` from `read_event_into` the moment `check_end_names`
+    /// trips, which sets `XmlEventIter::done = true` and stops the pull
+    /// iterator for good (see `XmlEventIter::step`) — no further tokens are
+    /// dispatched, even ones that would otherwise parse fine. `failed`
+    /// reproduces that "stop for good" behavior here.
+    failed: bool,
 }
 
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` delivering events to `handler`.
     pub fn new(handler: H) -> Self {
         StreamingParser {
-            buf: Vec::new(),
             handler,
+            byte_buf: Vec::new(),
+            state: SemanticState::default(),
+            open_stack: Vec::new(),
+            failed: false,
         }
     }
 
-    /// Feed a chunk of input bytes.
+    /// Feed a chunk of input bytes, dispatching every event that can be
+    /// proven complete from the bytes seen so far.
     pub fn feed(&mut self, chunk: &[u8]) {
-        self.buf.extend_from_slice(chunk);
+        self.byte_buf.extend_from_slice(chunk);
+        self.drain(false);
     }
 
-    /// Finish: parse all buffered input and deliver events to the handler.
+    /// Signal that no more input is coming: drain any remaining buffered
+    /// bytes, resolving ambiguous trailing text.
     pub fn finish(mut self) {
-        for ev in events(&self.buf) {
-            self.handler.handle(ev);
+        self.drain(true);
+    }
+
+    /// Attempt to drain as many complete XML tokens as possible from
+    /// `self.byte_buf`, dispatching every semantic event they produce to
+    /// the handler immediately and shrinking the buffer as tokens are
+    /// confirmed consumed.
+    fn drain(&mut self, is_final: bool) {
+        if self.failed {
+            return;
+        }
+        loop {
+            if self.byte_buf.is_empty() {
+                return;
+            }
+
+            let mut reader = Reader::from_reader(&self.byte_buf[..]);
+            // Each drain() call builds a fresh Reader over just the
+            // unconsumed tail (already-consumed prefixes are dropped to
+            // keep memory bounded), so this reader never sees the Start tag
+            // matching an End tag consumed by a previous drain() call —
+            // quick-xml's own start/end name validation must stay disabled
+            // here, mirroring docbook-fmt's StreamingParser. FB2's own
+            // semantic dispatch (handle_end) doesn't validate tag names
+            // against a stack either (it pops positionally off
+            // `SemanticState::stack`), so this is not a regression relative
+            // to the whole-slice EventIter's own leniency.
+            reader.config_mut().check_end_names = false;
+            reader.config_mut().allow_unmatched_ends = true;
+            let mut buf = Vec::new();
+            let total_len = self.byte_buf.len();
+
+            match reader.read_event_into(&mut buf) {
+                Ok(XmlEvent::Eof) => {
+                    if is_final {
+                        self.byte_buf.clear();
+                    }
+                    return;
+                }
+                Ok(ev) => {
+                    let consumed = reader.buffer_position() as usize;
+                    if let XmlEvent::Text(_) = &ev {
+                        // Text terminates at either `<` or genuine EOF —
+                        // those look identical from a slice-bounded reader,
+                        // so a text run that consumed every currently
+                        // buffered byte must wait for more input (or
+                        // `finish()`) before we can be sure it's complete.
+                        let ambiguous_eof = consumed == total_len;
+                        if ambiguous_eof && !is_final {
+                            return;
+                        }
+                    }
+
+                    // Manual open/close tag-balance check, replacing the
+                    // quick-xml check_end_names/allow_unmatched_ends
+                    // validation disabled above (see open_stack's doc
+                    // comment). Only fires on a fully-formed Start/End
+                    // event — reaching this arm at all already guarantees
+                    // the token is complete, so this can't misfire on a
+                    // token split across a chunk boundary.
+                    match &ev {
+                        XmlEvent::Start(e) => {
+                            let name = local_name_str(e.local_name().as_ref());
+                            self.open_stack.push(name);
+                        }
+                        XmlEvent::End(e) => {
+                            let name = local_name_str(e.local_name().as_ref());
+                            match self.open_stack.pop() {
+                                Some(expected) if expected == name => {}
+                                _ => {
+                                    self.failed = true;
+                                    self.byte_buf.clear();
+                                    return;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    self.state.dispatch(&ev);
+                    self.byte_buf.drain(0..consumed);
+                    while let Some(sem_ev) = self.state.pending.pop_front() {
+                        self.handler.handle(sem_ev);
+                    }
+                }
+                Err(_) => {
+                    // Truncated token (unterminated tag/comment/CDATA/
+                    // entity reference/etc.) spanning the chunk boundary —
+                    // wait for more data, unless this really is the end.
+                    if is_final {
+                        self.byte_buf.clear();
+                    }
+                    return;
+                }
+            }
         }
     }
 }
@@ -191,9 +326,28 @@ impl<H: Handler> StreamingParser<H> {
 // ---------------------------------------------------------------------------
 
 /// Internal state machine that drives incremental XML → Event conversion.
+///
+/// Holds a `quick_xml::Reader` over the *entire* input slice, so it always
+/// has the full document in memory — used by the whole-slice pull iterator
+/// [`events`]/[`EventIter`]. [`StreamingParser`] instead drives the shared
+/// [`SemanticState`] machine token-by-token via its own incremental,
+/// tail-only `Reader`; see `StreamingParser::drain`'s doc comment.
 struct XmlEventIter<'a> {
     reader: Reader<&'a [u8]>,
     buf: Vec<u8>,
+    state: SemanticState,
+    done: bool,
+}
+
+/// The semantic XML→[`Event`] dispatch machine, shared by [`XmlEventIter`]
+/// (whole-slice) and [`StreamingParser`] (chunked). Contains no reference to
+/// any `quick_xml::Reader` or byte buffer — [`SemanticState::dispatch`]
+/// consumes one already-decoded `quick_xml::events::Event` token at a time,
+/// so it works identically whether that token came from a reader over the
+/// whole input or from a reader rebuilt fresh over just the unconsumed tail
+/// of a growing chunk buffer.
+#[derive(Default)]
+struct SemanticState {
     /// Pending semantic events to yield before reading more XML.
     pending: std::collections::VecDeque<Event>,
     /// Parser state stack.
@@ -206,7 +360,6 @@ struct XmlEventIter<'a> {
     current_table: Option<Table>,
     current_table_row: Option<TableRow>,
     current_table_cell: Option<TableCell>,
-    done: bool,
 }
 
 /// The description-building sub-state (analogous to the full parse.rs TitleInfo etc.)
@@ -322,13 +475,7 @@ impl<'a> XmlEventIter<'a> {
         XmlEventIter {
             reader: Reader::from_reader(input),
             buf: Vec::new(),
-            pending: std::collections::VecDeque::new(),
-            stack: Vec::new(),
-            current_text: String::new(),
-            desc: DescState::default(),
-            current_table: None,
-            current_table_row: None,
-            current_table_cell: None,
+            state: SemanticState::default(),
             done: false,
         }
     }
@@ -336,41 +483,63 @@ impl<'a> XmlEventIter<'a> {
     /// Advance the XML reader until one or more semantic events are queued,
     /// then return the first queued event.
     fn next_event(&mut self) -> Option<Event> {
-        while self.pending.is_empty() && !self.done {
+        while self.state.pending.is_empty() && !self.done {
             self.step();
         }
-        self.pending.pop_front()
+        self.state.pending.pop_front()
     }
 
     fn step(&mut self) {
         self.buf.clear();
         match self.reader.read_event_into(&mut self.buf) {
-            Ok(XmlEvent::Start(ref e)) => {
+            Ok(XmlEvent::Eof) => {
+                self.done = true;
+            }
+            Ok(ev) => {
+                self.state.dispatch(&ev);
+            }
+            Err(_) => {
+                self.done = true;
+            }
+        }
+    }
+}
+
+impl SemanticState {
+    /// Consume one already-decoded `quick_xml` token, updating parser state
+    /// and enqueueing any resulting semantic [`Event`]s onto `self.pending`.
+    ///
+    /// Shared verbatim by [`XmlEventIter::step`] (whole-slice reader) and
+    /// `StreamingParser::drain` (chunked, tail-only reader) — the dispatch
+    /// logic has no dependency on how the token's bytes were obtained.
+    fn dispatch(&mut self, ev: &XmlEvent<'_>) {
+        match ev {
+            XmlEvent::Start(e) => {
                 let name = local_name_str(e.local_name().as_ref());
                 let attrs = collect_attrs(e);
                 self.flush_text_if_needed(&name, false);
                 self.handle_start(&name, attrs);
             }
-            Ok(XmlEvent::Empty(ref e)) => {
+            XmlEvent::Empty(e) => {
                 let name = local_name_str(e.local_name().as_ref());
                 let attrs = collect_attrs(e);
                 self.flush_text_if_needed(&name, false);
                 self.handle_empty(&name, attrs);
             }
-            Ok(XmlEvent::End(ref e)) => {
+            XmlEvent::End(e) => {
                 let name = local_name_str(e.local_name().as_ref());
                 self.flush_text_if_needed(&name, true);
                 self.handle_end(&name);
             }
-            Ok(XmlEvent::Text(ref e)) => {
+            XmlEvent::Text(e) => {
                 self.current_text
                     .push_str(&String::from_utf8_lossy(e.as_ref()));
             }
-            Ok(XmlEvent::CData(ref e)) => {
+            XmlEvent::CData(e) => {
                 self.current_text
                     .push_str(&String::from_utf8_lossy(e.as_ref()));
             }
-            Ok(XmlEvent::GeneralRef(ref e)) => {
+            XmlEvent::GeneralRef(e) => {
                 let n = String::from_utf8_lossy(e);
                 match n.as_ref() {
                     "amp" => self.current_text.push('&'),
@@ -392,13 +561,8 @@ impl<'a> XmlEventIter<'a> {
                     _ => {}
                 }
             }
-            Ok(XmlEvent::Eof) => {
-                self.done = true;
-            }
-            Ok(_) => {}
-            Err(_) => {
-                self.done = true;
-            }
+            XmlEvent::Eof => {}
+            _ => {}
         }
     }
 
@@ -1571,5 +1735,156 @@ mod tests {
         let evts1: Vec<Event> = events(input).collect();
         let evts2: Vec<Event> = events(&emitted).collect();
         assert_eq!(evts1, evts2, "events on original and re-emitted must match");
+    }
+
+    // ── Adversarial chunking: StreamingParser must equal events() ──────────
+
+    fn synthetic_fb2(sections: usize) -> String {
+        let mut body = String::new();
+        for i in 0..sections {
+            body.push_str(&format!(
+                "<section id=\"s{i}\"><title><p>Section {i}</p></title>\
+                 <p>Paragraph text with <emphasis>emphasis</emphasis> and \
+                 <strong>strong</strong> for section {i}, café \u{1F980}.</p>\
+                 <empty-line/></section>"
+            ));
+        }
+        format!(
+            "<?xml version=\"1.0\"?>\n\
+             <FictionBook xmlns=\"http://www.gribuser.ru/xml/fictionbook/2.0\">\
+             <description><title-info><book-title>Synthetic</book-title><lang>en</lang>\
+             </title-info></description><body>{body}</body></FictionBook>"
+        )
+    }
+
+    /// Split `input` several adversarial ways (whole, single-byte, small
+    /// fixed-size chunks, and a chunk boundary landing mid-UTF-8-character)
+    /// and assert `StreamingParser` produces exactly the same event sequence
+    /// as `events()` on the whole input for every split.
+    #[test]
+    fn test_streaming_parser_matches_events_under_adversarial_chunking() {
+        let input = synthetic_fb2(5);
+        let bytes = input.as_bytes();
+        let expected: Vec<Event> = events(bytes).collect();
+        assert!(!expected.is_empty());
+
+        let mut chunkings: Vec<(&str, Vec<&[u8]>)> = vec![
+            ("whole", vec![bytes]),
+            (
+                "single_byte",
+                bytes.iter().map(std::slice::from_ref).collect(),
+            ),
+        ];
+        for (name, n) in [
+            ("chunks_of_3", 3usize),
+            ("chunks_of_7", 7),
+            ("chunks_of_13", 13),
+        ] {
+            chunkings.push((name, bytes.chunks(n).collect()));
+        }
+        // A chunk boundary landing inside the 4-byte crab emoji's UTF-8
+        // encoding (café's é is 2 bytes; the crab is 4).
+        if let Some(pos) = bytes
+            .iter()
+            .position(|&b| (0b1000_0000..0b1100_0000).contains(&b))
+        {
+            chunkings.push(("mid_utf8_char", vec![&bytes[..pos], &bytes[pos..]]));
+        }
+
+        for (name, chunks) in chunkings {
+            let mut collected = Vec::new();
+            let mut sp = StreamingParser::new(|ev: Event| collected.push(ev));
+            for chunk in chunks {
+                sp.feed(chunk);
+            }
+            sp.finish();
+            assert_eq!(
+                collected, expected,
+                "chunking {name} diverged from events() on the whole input"
+            );
+        }
+    }
+
+    // ── Shared instrumented allocator ───────────────────────────────────
+    //
+    // See creole's writer.rs test module for the full rationale: per-thread
+    // (not shared-atomic) current/peak tracking so a concurrently-running
+    // unrelated test on another thread can't inflate this measurement.
+    mod alloc_probe {
+        use std::alloc::{GlobalAlloc, Layout, System};
+        use std::cell::Cell;
+
+        thread_local! {
+            pub static CURRENT: Cell<usize> = const { Cell::new(0) };
+            pub static PEAK: Cell<usize> = const { Cell::new(0) };
+        }
+
+        pub struct InstrumentedAlloc;
+        unsafe impl GlobalAlloc for InstrumentedAlloc {
+            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+                let cur = CURRENT.with(|c| {
+                    let v = c.get() + layout.size();
+                    c.set(v);
+                    v
+                });
+                PEAK.with(|p| {
+                    if cur > p.get() {
+                        p.set(cur);
+                    }
+                });
+                unsafe { System.alloc(layout) }
+            }
+            unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+                CURRENT.with(|c| c.set(c.get().saturating_sub(layout.size())));
+                unsafe { System.dealloc(ptr, layout) }
+            }
+        }
+    }
+    #[global_allocator]
+    static GLOBAL: alloc_probe::InstrumentedAlloc = alloc_probe::InstrumentedAlloc;
+
+    /// Memory-guard: feeding a large synthetic FB2 document through
+    /// `StreamingParser` in small chunks must keep peak allocated bytes
+    /// within a small constant multiple of a single section's size, not
+    /// grow with the whole document. The old implementation buffered every
+    /// fed byte into a `Vec<u8>` and only parsed the whole thing in
+    /// `finish()` — `O(full input)`. Measured as a scaling comparison (peak
+    /// at 10x the section count vs baseline), not an absolute byte
+    /// threshold, since the allocator is process-wide and shared with
+    /// concurrently-running tests on other threads.
+    #[test]
+    fn test_streaming_parser_peak_memory_bounded() {
+        use alloc_probe::{CURRENT, PEAK};
+
+        fn run(sections: usize) -> usize {
+            let input = synthetic_fb2(sections);
+            let baseline = CURRENT.with(|c| c.get());
+            PEAK.with(|p| p.set(baseline));
+
+            let mut count = 0usize;
+            let mut sp = StreamingParser::new(|ev: Event| {
+                std::hint::black_box(&ev);
+                count += 1;
+            });
+            for chunk in input.as_bytes().chunks(64) {
+                sp.feed(chunk);
+            }
+            sp.finish();
+            std::hint::black_box(count);
+
+            PEAK.with(|p| p.get()).saturating_sub(baseline)
+        }
+
+        let small = run(200).max(1);
+        let large = run(2000); // 10x the sections
+
+        let ratio = large as f64 / small as f64;
+        assert!(
+            ratio < 6.0,
+            "peak allocated bytes above baseline did not stay flat under 10x the sections: \
+             {small} bytes @200 sections -> {large} bytes @2000 sections (ratio {ratio:.2}); \
+             this suggests StreamingParser is retaining O(full input) memory instead of \
+             draining each token as it completes"
+        );
     }
 }
