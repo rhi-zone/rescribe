@@ -9,6 +9,43 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-07-31: texinfo `streaming_writer` hollow-writer defect fixed.** The remaining half of
+the `texinfo/streaming_writer` `KnownFailure` (see the 2026-07-30 entry immediately below —
+title-loss was already fixed; the buffer-then-reconstruct architecture was not) is closed.
+`texinfo::writer::Writer` (`crates/formats/texinfo/src/writer.rs`) was rewritten from
+buffer-all-events-into-`Vec<OwnedEvent>`-then-`events_to_doc()`-then-`emit()` to a single
+shared `String` output buffer written straight through per event, mirroring `rst-fmt`'s
+`Writer` design (`f87b3d62ef`, `de67174ddd`). Construct classification: every Texinfo
+construct turned out to be write-straight-through — no heading-underline-width or
+table-column-width style deferred prefix exists anywhere in `emit.rs` (unlike RST). The three
+subtleties (invalid-context discard via write-then-truncate-on-close, `TableCell`'s `" @tab "`
+separator via a `cell_count` scalar on the parent frame, `Link`'s lazy `", "` before optional
+link text via a `wrote_any` flag) are documented in the module's doc comment. Frame stack is
+`O(nesting depth)`; each top-level block flushes to the sink and clears the shared buffer
+(capacity retained) as soon as the frame stack empties. Verified via
+`texinfo_streaming_writer_byte_identical_to_builder_over_all_fixtures` (byte-identical to
+`emit()` over every fixture) plus its incrementality probe (bytes reach the sink before
+`finish()`), both now passing — the `texinfo`/`streaming_writer` `KnownFailure` entry and its
+matching `KNOWN_FAILURES` array entry are removed from `streaming_harness.rs`; `CAPABILITIES`
+now declares `texinfo` `streaming_writer: ApiState::Wired`. Measured (test-local tracking
+allocator, `test_writer_peak_memory_and_throughput_report` in `writer.rs`, `#[ignore]`d,
+release build, 5000-section ~1MB synthetic document, discarding sink to avoid attributing the
+caller's own output-retention choice to the Writer): peak memory 4,180 bytes for the streaming
+Writer vs 1,966,080 bytes for `parse()`+`emit()` (470x smaller — the streaming Writer's peak is
+now bounded by the largest top-level block, not the whole document), 1.54x faster throughput.
+An earlier version of this benchmark fed the Writer via `events()` and a `Vec<u8>` sink inside
+the timed/tracked window, which produced a misleadingly *worse* number for the Writer (higher
+peak, slower) — a harness artifact from two unrelated sources: (a) `texinfo::events()` itself
+eagerly parses the full document into an AST and materializes the complete `Vec<OwnedEvent>`
+before yielding the first event (a separate, pre-existing non-incremental `events()` gap, out
+of scope for this writer-only change — `CAPABILITIES`'s `texinfo` `events` field is still
+`ApiState::Wired` with no caveat, which is arguably now inaccurate and worth a follow-up
+audit), and (b) a `Vec<u8>` sink retains the whole flushed output regardless of how the Writer
+itself buffers internally. Both were corrected (event vec built before the tracked window,
+discarding sink) before trusting the final numbers.
+
+---
+
 **2026-07-30: texinfo `@settitle` title-loss gap closed.** One of the two `KnownFailure`s
 tracked against `texinfo/streaming_writer` (see the 2026-07-30 cross-API harness entry below)
 was an `Event`-enum expressiveness gap: `texinfo::events::Event` had no variant carrying

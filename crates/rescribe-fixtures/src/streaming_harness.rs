@@ -386,14 +386,12 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              incremental streaming despite implementing the feed/finish contract; found while \
              wiring this harness's incrementality probe",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "texinfo::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls emit() inside finish() (see crates/formats/texinfo/src/\
-             writer.rs's own module doc, \"buffers all events, reconstructs the AST, then \
-             emits\"); zero bytes reach the sink before finish() despite content round-tripping \
-             correctly (including @settitle, now carried via events::Event::Title — see \
-             fixtures/texinfo/settitle-header)",
-        ),
+        // Fixed: texinfo::writer::Writer now writes straight through to a single shared
+        // buffer per event (mirroring rst-fmt's Writer design) instead of buffering all
+        // events and reconstructing the AST in finish(). Confirmed via the
+        // byte-identical-to-builder check over all fixtures plus a pre-finish
+        // incrementality probe.
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "fb2",
@@ -1313,14 +1311,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "texinfo::batch::StreamingParser buffers all fed bytes and only parses + \
                        delivers events inside finish(); feed() delivers zero events before \
                        finish() is called",
-    },
-    KnownFailure {
-        format: "texinfo",
-        api: "streaming_writer",
-        description: "texinfo::writer::Writer buffers all events and only emits inside finish(); \
-                       zero bytes reach the sink before finish() despite content \
-                       round-tripping correctly (including @settitle, now carried via \
-                       events::Event::Title)",
     },
     KnownFailure {
         format: "fb2",

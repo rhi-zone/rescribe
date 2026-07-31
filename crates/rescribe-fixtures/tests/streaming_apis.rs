@@ -2797,14 +2797,13 @@ fn texinfo_streaming_parser_matches_events_and_is_incremental() {
     assert_or_known_failure("texinfo", "streaming_parser", result);
 }
 
-/// `Writer` buffers all fed events into a `Vec<OwnedEvent>` and only
-/// reconstructs the AST and calls `emit()` inside `finish()` (see
-/// `crates/formats/texinfo/src/writer.rs`'s own module doc, "This
-/// implementation buffers all events, reconstructs the AST, then emits").
-/// Content-wise this round-trips correctly for all fixtures, including
-/// `@settitle` (carried via `Event::Title`, handled by `DocBuilder`) — the
-/// remaining, still-open defect this check surfaces is purely the
-/// incrementality probe below: no bytes reach the sink before `finish()`.
+/// `Writer` writes straight through to a single shared output buffer per
+/// event (mirroring `rst-fmt`'s `Writer` design — see
+/// `crates/formats/texinfo/src/writer.rs`'s module doc), not a
+/// buffer-then-reconstruct-the-AST fake streaming writer. This checks
+/// content is byte-identical to `emit()` over all fixtures, including
+/// `@settitle` (carried via `Event::Title`), and that bytes reach the sink
+/// before `finish()` is called.
 #[test]
 fn texinfo_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     let root = fixtures_root().join("texinfo");
