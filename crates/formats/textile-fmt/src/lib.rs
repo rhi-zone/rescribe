@@ -20,6 +20,89 @@ pub use emit::emit;
 pub use events::{EventIter, TextileEvent, events};
 pub use parse::parse;
 
+// ── Test-only shared allocation probe ────────────────────────────────────────
+
+/// Shared allocation-tracking allocator for `writer.rs`'s and `batch.rs`'s
+/// peak-memory regression tests. A process may only register one
+/// `#[global_allocator]`, so this lives in exactly one place and both test
+/// modules read its `thread_local!` counters instead of each declaring
+/// their own `TrackingAlloc`.
+///
+/// `thread_local!`, not a shared `AtomicUsize`: the allocator is
+/// process-wide and `cargo test` runs other tests concurrently on other
+/// threads by default, so a shared counter lets unrelated tests inflate the
+/// measurement — confirmed as a real flake in this batch's `pod-fmt`
+/// sibling crate (a spurious 407x ratio under full-workspace `cargo test
+/// -q`, passing cleanly under `--test-threads=1`).
+#[cfg(test)]
+pub(crate) mod alloc_probe {
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
+
+    struct TrackingAlloc;
+
+    // All counters are `thread_local!`, not shared `AtomicUsize`s: the
+    // allocator is process-wide and `cargo test` runs other tests
+    // concurrently on other threads by default, so a shared counter lets an
+    // unrelated test's allocations inflate any measurement taken from it —
+    // confirmed as a real flake in this batch's `pod-fmt` sibling crate (a
+    // spurious 407x ratio under full-workspace `cargo test -q`, passing
+    // cleanly under `--test-threads=1`) and reproduced directly in this
+    // crate once `batch.rs` gained its own allocation-heavy test running
+    // concurrently with `writer.rs`'s (an early version of this module used
+    // a shared `AtomicUsize` for the allocation *count*, which then flaked
+    // under full-suite `cargo test -q`).
+    thread_local! {
+        static ALLOC_COUNT: Cell<usize> = const { Cell::new(0) };
+        static CURRENT_BYTES: Cell<usize> = const { Cell::new(0) };
+        static PEAK_BYTES: Cell<usize> = const { Cell::new(0) };
+    }
+
+    unsafe impl GlobalAlloc for TrackingAlloc {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            ALLOC_COUNT.with(|c| c.set(c.get() + 1));
+            let cur = CURRENT_BYTES.with(|c| {
+                let v = c.get() + layout.size();
+                c.set(v);
+                v
+            });
+            PEAK_BYTES.with(|p| {
+                if cur > p.get() {
+                    p.set(cur);
+                }
+            });
+            unsafe { System.alloc(layout) }
+        }
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            CURRENT_BYTES.with(|c| c.set(c.get().saturating_sub(layout.size())));
+            unsafe { System.dealloc(ptr, layout) }
+        }
+    }
+
+    #[global_allocator]
+    static GLOBAL: TrackingAlloc = TrackingAlloc;
+
+    /// Reset this thread's peak counter to its current level, returning that level.
+    pub(crate) fn reset_peak() -> usize {
+        let cur = CURRENT_BYTES.with(std::cell::Cell::get);
+        PEAK_BYTES.with(|p| p.set(cur));
+        cur
+    }
+
+    /// This thread's peak bytes allocated since the last [`reset_peak`], relative
+    /// to the baseline captured at that reset.
+    pub(crate) fn peak_since_reset(baseline: usize) -> usize {
+        PEAK_BYTES
+            .with(std::cell::Cell::get)
+            .saturating_sub(baseline)
+    }
+
+    /// This thread's total `alloc()` calls so far.
+    pub(crate) fn alloc_count() -> usize {
+        ALLOC_COUNT.with(std::cell::Cell::get)
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

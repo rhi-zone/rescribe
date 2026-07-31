@@ -153,7 +153,7 @@ impl Iterator for EventIter {
 
 // ── AST → event helpers ───────────────────────────────────────────────────────
 
-fn push_block_events(block: &Block, out: &mut Vec<TextileEvent>) {
+pub(crate) fn push_block_events(block: &Block, out: &mut Vec<TextileEvent>) {
     match block {
         Block::Paragraph {
             inlines,

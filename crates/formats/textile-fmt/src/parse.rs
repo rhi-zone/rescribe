@@ -65,7 +65,24 @@ impl<'a> Parser<'a> {
 
     fn parse_blocks(&mut self) -> Vec<Block> {
         let mut nodes = Vec::new();
+        while let Some(block) = self.parse_next_block() {
+            nodes.push(block);
+        }
+        nodes
+    }
 
+    /// Parse exactly one top-level block starting at the current position,
+    /// skipping any leading blank lines first. Returns `None` once only
+    /// blank lines / end of input remain.
+    ///
+    /// This is the single source of block-boundary truth: [`parse_blocks`]
+    /// (used by [`parse`]/[`crate::events::events`]) simply loops this to
+    /// EOF, and [`crate::batch::StreamingParser`] calls it incrementally
+    /// over a growing line buffer — a block is "confirmed complete" the
+    /// moment this returns with `self.pos` short of the buffered line
+    /// count, since every arm below only ever inspects lines up to and
+    /// including the one it stops on, never further ahead.
+    fn parse_next_block(&mut self) -> Option<Block> {
         while self.pos < self.lines.len() {
             let line = self.lines[self.pos];
 
@@ -76,20 +93,17 @@ impl<'a> Parser<'a> {
 
             // Block code bc. or bc..
             if line.starts_with("bc") && has_block_prefix_after(line, 2) {
-                nodes.push(self.parse_code_block());
-                continue;
+                return Some(self.parse_code_block());
             }
 
             // Blockquote bq.
             if line.starts_with("bq.") {
-                nodes.push(self.parse_blockquote());
-                continue;
+                return Some(self.parse_blockquote());
             }
 
             // Pre block pre.
             if line.starts_with("pre.") {
-                nodes.push(self.parse_pre_block());
-                continue;
+                return Some(self.parse_pre_block());
             }
 
             // Notextile block: notextile. content
@@ -98,24 +112,21 @@ impl<'a> Parser<'a> {
                 let le = self.line_end(self.pos);
                 let content = rest.trim().to_string();
                 self.pos += 1;
-                nodes.push(Block::Raw {
+                return Some(Block::Raw {
                     content,
                     span: Span::new(ls, le),
                 });
-                continue;
             }
 
             // Heading h1. to h6.
             if let Some(node) = self.try_parse_heading(line) {
-                nodes.push(node);
                 self.pos += 1;
-                continue;
+                return Some(node);
             }
 
             // Table: starts with '|' or with row attributes prefix (e.g. `{style}. |`)
             if line.trim_start().starts_with('|') || is_table_row_with_attrs(line.trim_start()) {
-                nodes.push(self.parse_table());
-                continue;
+                return Some(self.parse_table());
             }
 
             // List
@@ -124,8 +135,7 @@ impl<'a> Parser<'a> {
                 || line.trim_start().starts_with("** ")
                 || line.trim_start().starts_with("## ")
             {
-                nodes.push(self.parse_list());
-                continue;
+                return Some(self.parse_list());
             }
 
             // Horizontal rule ---
@@ -133,30 +143,26 @@ impl<'a> Parser<'a> {
                 let ls = self.line_start(self.pos);
                 let le = self.line_end(self.pos);
                 self.pos += 1;
-                nodes.push(Block::HorizontalRule {
+                return Some(Block::HorizontalRule {
                     span: Span::new(ls, le),
                 });
-                continue;
             }
 
             // Footnote definition fn1. fn2. etc.
             if let Some(node) = self.try_parse_footnote_def(line) {
-                nodes.push(node);
                 self.pos += 1;
-                continue;
+                return Some(node);
             }
 
             // Definition list — starts with ; (term) or : (definition)
             if line.starts_with(';') || line.starts_with(':') {
-                nodes.push(self.parse_definition_list());
-                continue;
+                return Some(self.parse_definition_list());
             }
 
             // Regular paragraph p. or just text
-            nodes.push(self.parse_paragraph());
+            return Some(self.parse_paragraph());
         }
-
-        nodes
+        None
     }
 
     fn try_parse_heading(&self, line: &str) -> Option<Block> {
@@ -646,6 +652,40 @@ impl<'a> Parser<'a> {
             items,
             span: Span::new(block_start, block_end),
         }
+    }
+}
+
+// ── Incremental block cursor (for StreamingParser) ──────────────────────────────
+
+/// Parses one top-level block at a time from a fixed text buffer, exposing
+/// the line-position bookkeeping [`crate::batch::StreamingParser`] needs to
+/// tell a "confirmed complete" block (more buffered lines exist past it)
+/// from one that still might grow (parse ran up to the buffered text's end).
+pub(crate) struct BlockCursor<'a> {
+    parser: Parser<'a>,
+}
+
+impl<'a> BlockCursor<'a> {
+    pub(crate) fn new(text: &'a str) -> Self {
+        BlockCursor {
+            parser: Parser::new(text),
+        }
+    }
+
+    /// Number of buffered lines (i.e. `text.split('\n').count()`).
+    pub(crate) fn line_count(&self) -> usize {
+        self.parser.lines.len()
+    }
+
+    /// Current line position (lines fully consumed so far).
+    pub(crate) fn pos(&self) -> usize {
+        self.parser.pos
+    }
+
+    /// Parse the next top-level block, or `None` if only blank lines / EOF
+    /// remain in the buffer.
+    pub(crate) fn next_block(&mut self) -> Option<Block> {
+        self.parser.parse_next_block()
     }
 }
 

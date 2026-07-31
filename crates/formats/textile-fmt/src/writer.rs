@@ -846,47 +846,7 @@ mod tests {
     /// the two runs).
     #[test]
     fn test_writer_no_subtree_reconstruction_blowup() {
-        use std::alloc::{GlobalAlloc, Layout, System};
-        use std::cell::Cell;
-        use std::sync::atomic::{AtomicUsize, Ordering};
-
-        struct TrackingAlloc;
-        static ALLOCS: AtomicUsize = AtomicUsize::new(0);
-        // current/peak bytes are tracked per-thread (`thread_local!`, not a
-        // shared `AtomicUsize`): the allocator is process-wide, and `cargo
-        // test` runs other tests concurrently on other threads by default,
-        // so a shared counter lets an unrelated test's allocations inflate
-        // this measurement — confirmed as a real flake in this batch's
-        // `pod-fmt` sibling (a spurious 407x ratio under full-workspace
-        // `cargo test -q`, passing cleanly under `--test-threads=1`).
-        // Thread-local counters make the measurement immune to what other
-        // threads in the same binary do.
-        thread_local! {
-            static CURRENT_BYTES: Cell<usize> = const { Cell::new(0) };
-            static PEAK_BYTES: Cell<usize> = const { Cell::new(0) };
-        }
-        unsafe impl GlobalAlloc for TrackingAlloc {
-            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-                ALLOCS.fetch_add(1, Ordering::Relaxed);
-                let cur = CURRENT_BYTES.with(|c| {
-                    let v = c.get() + layout.size();
-                    c.set(v);
-                    v
-                });
-                PEAK_BYTES.with(|p| {
-                    if cur > p.get() {
-                        p.set(cur);
-                    }
-                });
-                unsafe { System.alloc(layout) }
-            }
-            unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-                CURRENT_BYTES.with(|c| c.set(c.get().saturating_sub(layout.size())));
-                unsafe { System.dealloc(ptr, layout) }
-            }
-        }
-        #[global_allocator]
-        static GLOBAL: TrackingAlloc = TrackingAlloc;
+        use crate::alloc_probe;
 
         fn events_for(n: usize) -> Vec<TextileEvent> {
             let mut evs = Vec::new();
@@ -918,9 +878,9 @@ mod tests {
         }
 
         fn run(n: usize) -> usize {
-            let before = ALLOCS.load(Ordering::Relaxed);
+            let before = alloc_probe::alloc_count();
             let evs = events_for(n);
-            let after_build = ALLOCS.load(Ordering::Relaxed);
+            let after_build = alloc_probe::alloc_count();
             let mut out = Vec::new();
             {
                 let mut w = Writer::new(&mut out);
@@ -929,7 +889,7 @@ mod tests {
                 }
                 w.finish();
             }
-            let after = ALLOCS.load(Ordering::Relaxed);
+            let after = alloc_probe::alloc_count();
             std::hint::black_box(&out);
             after - after_build.max(before)
         }
@@ -945,8 +905,7 @@ mod tests {
         );
 
         fn run_peak(n: usize) -> usize {
-            let before = CURRENT_BYTES.with(|c| c.get());
-            PEAK_BYTES.with(|p| p.set(before));
+            let before = alloc_probe::reset_peak();
             let evs = events_for(n);
             let mut out = Vec::new();
             {
@@ -957,7 +916,7 @@ mod tests {
                 w.finish();
             }
             std::hint::black_box(&out);
-            PEAK_BYTES.with(|p| p.get()).saturating_sub(before)
+            alloc_probe::peak_since_reset(before)
         }
 
         let small_peak = run_peak(500).max(1);

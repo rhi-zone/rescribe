@@ -3528,12 +3528,13 @@ fn textile_events_equals_ast_projection_over_all_fixtures() {
     );
 }
 
-/// `StreamingParser` buffers all fed bytes and only parses + delivers events
-/// inside `finish()` (see `crates/formats/textile-fmt/src/batch.rs`'s own
-/// module doc). Checks (1) equivalence with `events()` under adversarial
-/// chunking (expected to hold) and (2) incremental delivery (feed() alone,
-/// before finish(), should deliver some events for large-enough input) —
-/// (2) fails, the real defect this check surfaces.
+/// `StreamingParser` is genuinely incremental (see
+/// `crates/formats/textile-fmt/src/batch.rs`): it flushes a top-level block
+/// to the handler as soon as a later buffered line proves the block's
+/// boundary decision can't change, rather than buffering all input until
+/// `finish()`. Checks (1) equivalence with `events()` under adversarial
+/// chunking, per fixture, and (2) incremental delivery via a hand-built
+/// probe below.
 #[test]
 fn textile_streaming_parser_matches_events_and_is_incremental() {
     let root = fixtures_root().join("textile");
@@ -3573,26 +3574,48 @@ fn textile_streaming_parser_matches_events_and_is_incremental() {
             }
         }
 
-        if input.len() > 32 && !bulk.is_empty() {
-            let mid = input.len() / 2;
-            let mut delivered: Vec<textile_fmt::TextileEvent> = Vec::new();
-            let mut parser = textile_fmt::batch::StreamingParser::new(|e| delivered.push(e));
-            parser.feed(&input[..mid]);
-            if delivered.is_empty() && result.is_ok() {
-                result = Err(format!(
-                    "StreamingParser delivered zero events to the handler after feed() with \
-                     half of fixture {name} ({mid} bytes) and before finish() — \
-                     textile_fmt::batch::StreamingParser buffers all input into a Vec<u8> (see \
-                     crates/formats/textile-fmt/src/batch.rs) and only parses and delivers \
-                     events inside finish()"
-                ));
-            }
-        }
+        // Deliberately NOT probed here: an arbitrary 50%-byte split of each
+        // real fixture. textile's streaming granularity is one top-level
+        // block, so for a single-block fixture whose first line alone
+        // exceeds half the file (e.g. `acronym`: a 66-byte first line of 124
+        // total bytes) not even one complete line exists at the halfway
+        // point — zero events delivered there is the correct answer for a
+        // line-oriented block parser, not a buffer-then-finish defect. See
+        // the hand-built probe below, which guarantees an unambiguous
+        // complete-block boundary.
     }
     assert!(
         checked > 5,
         "expected to check several textile fixtures, got {checked}"
     );
+
+    // Incrementality probe: a hand-built input with a definite complete
+    // prefix (an `h1.` heading and an `h2.` heading, each a single-line block
+    // that flushes on its own newline, plus a full ordinary paragraph that
+    // flushes on the blank line after it) followed by deliberately
+    // unterminated trailing content (a partial line with no trailing newline
+    // at all, so it never reaches feed_line and stays buffered). Confirms
+    // events reach the handler after feed() alone, before finish() is ever
+    // called — the property that failed when feed() only extended a Vec<u8>.
+    if result.is_ok() {
+        let probe_input = b"h1. Title\n\nFirst paragraph.\n\nh2. Sub\n\n\
+                             Unterminated trailing paragraph with no closing newline";
+        let mut delivered: Vec<textile_fmt::TextileEvent> = Vec::new();
+        let mut parser = textile_fmt::batch::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(probe_input);
+        if delivered.is_empty() {
+            result = Err(
+                "StreamingParser delivered zero events to the handler after feed() with a \
+                 complete StartHeading/EndHeading + StartParagraph/Text/EndParagraph prefix \
+                 (deliberately followed by an unterminated trailing paragraph with no closing \
+                 newline) and before finish() was called"
+                    .to_string(),
+            );
+        }
+        // `parser` intentionally dropped without calling finish(): this probe
+        // only needs to observe pre-finish handler state.
+    }
+
     assert_or_known_failure("textile", "streaming_parser", result);
 }
 

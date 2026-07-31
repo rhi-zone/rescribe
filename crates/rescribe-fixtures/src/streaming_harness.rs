@@ -437,13 +437,14 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "textile",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "textile_fmt::batch::StreamingParser buffers all fed bytes into a Vec<u8> and only \
-             parses + delivers events inside finish() (see crates/formats/textile-fmt/src/\
-             batch.rs's own module doc, \"It also buffers all input ... so memory is likewise \
-             O(full input)\"); feed() never advances real parser state, so no events reach the \
-             handler until finish() is called",
-        ),
+        // Fixed 2026-07-31: StreamingParser rewritten to be genuinely incremental. feed()
+        // accumulates lines into a small pending buffer and re-runs the same block-boundary
+        // logic parse()/events() use (parse::BlockCursor, extracted from the shared
+        // parse_next_block() step function) over just that pending tail; a block is flushed to
+        // the handler the moment a later buffered line proves its boundary can't change, and
+        // only the still-open block's lines stay buffered. Memory: O(largest block), not
+        // O(full input).
+        streaming_parser: ApiState::Wired,
         // Fixed 2026-07-31: Writer rewritten to emit incrementally per event (shared output
         // buffer, O(nesting depth) frame stack) instead of buffering into a Vec<TextileEvent>
         // and delegating to emit::build() inside finish(). Byte-identical-to-builder confirmed
@@ -1325,13 +1326,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "downstream of the fb2/events KnownFailure: the streaming Writer never \
                        receives Metadata for input lacking <description>, so it never emits a \
                        <description> element, while the AST builder path always writes one",
-    },
-    KnownFailure {
-        format: "textile",
-        api: "streaming_parser",
-        description: "textile_fmt::batch::StreamingParser buffers all fed bytes and only parses \
-                       + delivers events inside finish(); feed() delivers zero events before \
-                       finish() is called",
     },
     KnownFailure {
         format: "commonmark",

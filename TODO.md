@@ -365,6 +365,86 @@ removed.
 
 ---
 
+**2026-07-31: textile-fmt `StreamingParser` (reader side) rewritten to be genuinely
+incremental — the counterpart to the same-day `Writer` streaming fix.** Before this fix,
+`textile_fmt::batch::StreamingParser::feed()` just appended to a `Vec<u8>` and did all real
+parsing inside `finish()` (the crate's own module doc admitted this: "It also buffers all
+input ... so memory is likewise O(full input)"), tracked as a `KnownFailure` in
+`streaming_harness::KNOWN_FAILURES` (format: "textile", api: "streaming_parser").
+
+Design: `parse.rs`'s block dispatch loop (`parse_blocks()`) was refactored into a step
+function, `Parser::parse_next_block()`, that parses exactly one top-level block starting at
+the current line position (or returns `None` once only blank lines/EOF remain) — `parse_blocks`
+now just loops it to EOF, unchanged in behavior. A new `pub(crate) parse::BlockCursor` wraps
+it for `batch.rs`'s use. `StreamingParser::feed()` accumulates complete lines (buffering
+partial trailing bytes and mid-UTF-8-character splits internally, RST-batch.rs-style) into a
+small `pending_lines` buffer, and after every new line re-runs `BlockCursor` over just that
+pending tail: a block is "confirmed complete" — and its events flushed to the handler — the
+moment the cursor's parse stops short of the buffered tail's end, since every block-parsing arm
+in `parse_next_block()` only ever inspects lines up to and including the one it stops on, never
+further ahead (proved by inspection of every arm: paragraph/list/table/definition-list/code-
+block/pre-block all break out of their own `while self.pos < self.lines.len()` loop on the
+first line that doesn't belong, without reading past it; `bq..`'s extended blockquote — the one
+construct whose boundary isn't decidable from blank lines alone, since it swallows
+blank-line-separated paragraphs until an explicit block-start line — behaves identically,
+just with a later boundary line). Only the still-open block's lines remain buffered, so memory
+is O(largest block), not O(full input). `finish()` runs the real `parse()` once over whatever
+small tail remains pending, reusing the exact same grammar rather than a duplicated state
+machine (avoiding the bug class hit by several other crates' streaming-parser rewrites this
+session — see the org/asciidoc/djot/t2t `KNOWN_FAILURES`/fixed-comments for cross-block-context
+and duplicate-document-wrapper pitfalls; textile's `TextileEvent` has no `StartDocument`/
+`EndDocument` pair and no cross-block state like link-reference resolution, so per-block
+re-derivation is safe here).
+
+Measured peak memory (synthetic multi-block documents, fed in 64-byte chunks, `thread_local!`
+allocator probe — see `crates/formats/textile-fmt/src/lib.rs`'s new shared `alloc_probe`
+module, reused by both `writer.rs`'s and `batch.rs`'s memory-guard tests since a process may
+only register one `#[global_allocator]`):
+
+| sections | doc bytes | before (buffer-then-`finish()`) peak | after (incremental) peak | ratio |
+|----------|-----------|---------------------------------------|----------------------------|-------|
+| 20       | 2,280     | 377,495 bytes                          | 13,597 bytes               | 27.8x |
+| 200      | 23,180    | 3,385,324 bytes                        | 59,258 bytes                | 57.1x |
+| 2,000    | 235,780   | 29,556,929 bytes                       | 473,088 bytes               | 62.5x |
+
+The "after" peak still grows somewhat with document size — inspection shows this is the test
+harness's own `synthetic_doc(n)` input-construction cost (an O(n) `String`/`Vec<u8>` built
+before feeding), not the parser: the parser itself only ever holds one block's lines pending.
+
+Added adversarial-chunking tests (whole/single-byte/chunks-of-N/mid-UTF-8-character-split,
+including one exercising `bq..`'s cross-blank-line boundary specifically) and a peak-memory
+regression guard (ratio < 20x across a 10x section-count increase) to
+`crates/formats/textile-fmt/src/batch.rs`'s own test module. Updated
+`crates/rescribe-fixtures/tests/streaming_apis.rs`'s
+`textile_streaming_parser_matches_events_and_is_incremental`: its incrementality probe used to
+require *every* qualifying fixture (>32 bytes) to show partial delivery at exactly the halfway
+byte offset, which is structurally impossible for a block-granular streaming parser (matching
+every other hand-rolled line-oriented crate in this codebase — `rst-fmt`, `org-fmt`, etc.) when
+a fixture's first block/line alone exceeds half the file's byte length (the `acronym` fixture:
+first line is 66 of 124 bytes) — that's an inherent property of block granularity, not a bug.
+
+Replaced it with the **hand-built synthetic-document probe** that fb2-fmt, xwiki, texinfo,
+muse-fmt and pod-fmt all independently converged on for this identical defect (textile is the
+sixth and last of that set): the per-fixture 50%-split check is dropped from the fixture loop
+entirely (with a comment recording *why* it can't work here), and a single probe runs once
+after the loop, feeding a hand-built input whose prefix is provably complete (`h1.` and `h2.`
+headings — single-line blocks that flush on their own newline — plus a full paragraph that
+flushes on its following blank line) followed by deliberately unterminated trailing content
+(a partial line with no trailing newline, so it never reaches `feed_line` and stays buffered).
+That guarantees an unambiguous complete-block boundary, so the probe tests the parser rather
+than the fixture corpus's shape. It passes. `streaming_harness::CAPABILITIES`'s `textile` row
+promotes `streaming_parser` from `ApiState::KnownFailure` to `ApiState::Wired`; the matching
+`KNOWN_FAILURES` entry is removed. `docs/format-audit.md`'s textile row (`batch`, `w-stream`
+columns) and cross-API harness inventory entry updated to match — the `w-stream` column had
+also gone stale (writer already fixed same-day, table not updated until now).
+
+Follow-up (deliberately *not* done here, queued centrally): the six inline copies of this
+hand-built probe should collapse into one shared helper taking a per-format sample document.
+textile's copy is intentionally left in the same shape as the other five so that extraction is
+mechanical.
+
+---
+
 **2026-07-31: org-fmt `streaming_writer` hollow-writer defect fixed (and this harness's own
 Wired claim corrected).** Before this fix, `streaming_harness.rs`'s `CAPABILITIES` table
 declared `org`'s `streaming_writer` as `ApiState::Wired`, but its own adjacent comment admitted
