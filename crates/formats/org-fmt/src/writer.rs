@@ -968,39 +968,55 @@ mod tests {
     // may be declared at most once for the whole test binary) — see
     // texinfo::writer's identically-shaped test module for the rationale.
     use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct TrackingAlloc;
     static ALLOCS: AtomicUsize = AtomicUsize::new(0);
-    static CURRENT_BYTES: AtomicUsize = AtomicUsize::new(0);
-    static PEAK_BYTES: AtomicUsize = AtomicUsize::new(0);
+    // current/peak bytes are tracked per-thread (`thread_local!`, not a
+    // shared `AtomicUsize`): `cargo test` runs this crate's other tests
+    // concurrently with these two allocator-instrumented ones by default,
+    // and a shared counter lets an unrelated concurrently-running test's
+    // allocations inflate this test's measured peak — confirmed as a real
+    // flake in the wiki-format streaming-writer sweep's `pod-fmt` sibling (a
+    // spurious 407x ratio under full-workspace `cargo test -q`, passing
+    // cleanly under `--test-threads=1`). Thread-local counters make the
+    // measurement immune to what other threads in the same binary do, so
+    // the `ALLOC_TRACKING_LOCK` mutex this file used to serialize just the
+    // two allocator-instrumented tests against each other is no longer
+    // needed.
+    thread_local! {
+        static CURRENT: Cell<usize> = const { Cell::new(0) };
+        static PEAK: Cell<usize> = const { Cell::new(0) };
+    }
     unsafe impl GlobalAlloc for TrackingAlloc {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             ALLOCS.fetch_add(1, Ordering::Relaxed);
-            let cur = CURRENT_BYTES.fetch_add(layout.size(), Ordering::Relaxed) + layout.size();
-            PEAK_BYTES.fetch_max(cur, Ordering::Relaxed);
+            let cur = CURRENT.with(|c| {
+                let v = c.get() + layout.size();
+                c.set(v);
+                v
+            });
+            PEAK.with(|p| {
+                if cur > p.get() {
+                    p.set(cur);
+                }
+            });
             unsafe { System.alloc(layout) }
         }
         unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-            CURRENT_BYTES.fetch_sub(layout.size(), Ordering::Relaxed);
+            CURRENT.with(|c| c.set(c.get().saturating_sub(layout.size())));
             unsafe { System.dealloc(ptr, layout) }
         }
     }
     #[global_allocator]
     static GLOBAL: TrackingAlloc = TrackingAlloc;
 
-    /// Serializes the two tests below that share the module-level
-    /// `ALLOCS`/`CURRENT_BYTES`/`PEAK_BYTES` atomics, since `cargo test`
-    /// runs tests concurrently by default.
-    static ALLOC_TRACKING_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     /// Regression guard: an incremental writer must not reintroduce
     /// per-block subtree reconstruction. Allocation count for feeding N
     /// events through `Writer` must stay near-linear in N.
     #[test]
     fn test_writer_no_subtree_reconstruction_blowup() {
-        let _guard = ALLOC_TRACKING_LOCK.lock().unwrap();
-
         fn events_for(n: usize) -> Vec<Event<'static>> {
             use std::borrow::Cow;
             let mut evs = Vec::new();
@@ -1074,8 +1090,6 @@ mod tests {
     #[test]
     #[ignore]
     fn test_writer_peak_memory_and_throughput_report() {
-        let _guard = ALLOC_TRACKING_LOCK.lock().unwrap();
-
         /// Discards written bytes instead of retaining them, so peak memory
         /// reflects the Writer's own internal state, not a `Vec<u8>` sink
         /// re-accumulating the whole document.
@@ -1108,8 +1122,8 @@ mod tests {
         let events: Vec<Event<'static>> = crate::events(&input).map(Event::into_owned).collect();
         let (doc, _diags) = crate::parse::parse(&input);
 
-        let baseline = CURRENT_BYTES.load(Ordering::Relaxed);
-        PEAK_BYTES.store(baseline, Ordering::Relaxed);
+        let baseline = CURRENT.with(|c| c.get());
+        PEAK.with(|p| p.set(baseline));
         let start = std::time::Instant::now();
         let sink = DiscardSink(0);
         let bytes_written = {
@@ -1120,15 +1134,15 @@ mod tests {
             w.finish().0
         };
         let streaming_elapsed = start.elapsed();
-        let streaming_peak = PEAK_BYTES.load(Ordering::Relaxed).saturating_sub(baseline);
+        let streaming_peak = PEAK.with(|p| p.get()).saturating_sub(baseline);
         std::hint::black_box(bytes_written);
 
-        let baseline = CURRENT_BYTES.load(Ordering::Relaxed);
-        PEAK_BYTES.store(baseline, Ordering::Relaxed);
+        let baseline = CURRENT.with(|c| c.get());
+        PEAK.with(|p| p.set(baseline));
         let start = std::time::Instant::now();
         let built = crate::emit::build(std::hint::black_box(&doc));
         let builder_elapsed = start.elapsed();
-        let builder_peak = PEAK_BYTES.load(Ordering::Relaxed).saturating_sub(baseline);
+        let builder_peak = PEAK.with(|p| p.get()).saturating_sub(baseline);
         std::hint::black_box(&built);
 
         eprintln!(

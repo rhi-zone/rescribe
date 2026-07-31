@@ -143,8 +143,24 @@ fn build_inlines(inlines: &[Inline], ctx: &mut BuildContext) {
 fn build_inline(inline: &Inline, ctx: &mut BuildContext) {
     match inline {
         Inline::Text(s, _) => {
-            // Escape < and > in plain text
-            let escaped = s.replace('<', "E<lt>").replace('>', "E<gt>");
+            // Escape < and > in plain text. Must be done char-by-char, not via two
+            // sequential String::replace calls: replacing '<' with "E<lt>" first
+            // introduces new '<'/'>' characters (from the literal "E<lt>" text),
+            // which a second, unconditional `.replace('>', "E<gt>")` pass would
+            // then also rewrite, corrupting the escape it just produced (e.g. a
+            // lone '<' became "E<lt>", then that '>' got replaced again into
+            // "E<ltE<gt>" instead of staying "E<lt>" — found via the streaming
+            // Writer's byte-identical-to-builder check on fixture
+            // adv-unclosed-format, since writer.rs's char-by-char escaping never
+            // had this bug).
+            let mut escaped = String::with_capacity(s.len());
+            for c in s.chars() {
+                match c {
+                    '<' => escaped.push_str("E<lt>"),
+                    '>' => escaped.push_str("E<gt>"),
+                    _ => escaped.push(c),
+                }
+            }
             ctx.write(&escaped);
         }
 

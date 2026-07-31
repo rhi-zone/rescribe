@@ -1,6 +1,32 @@
-//! Streaming Jira wiki markup writer — converts a stream of events to Jira text.
+//! Streaming Jira wiki markup writer — converts a stream of events directly
+//! to Jira text.
 //!
-//! This implementation buffers all events, reconstructs the AST, then emits.
+//! # Memory model
+//!
+//! [`Writer`] never constructs a [`crate::ast::Block`]/[`crate::ast::Inline`]
+//! value and never calls [`crate::emit::build`]. It is a second, independent
+//! emission path from the tree-based `parse()`/`build()` functions, not a
+//! thin wrapper around them.
+//!
+//! There is exactly **one** growing output buffer (`Writer::out`) for the
+//! whole document. The frame stack (`O(nesting depth)`) holds only small
+//! metadata — a `usize` mark into `out`, a bool/enum, occasionally a short
+//! owned `String` for a link URL — never a copy of accumulated child
+//! content. Children write **straight through** into `out`.
+//!
+//! Every Jira construct's *prefix* is knowable at its `Start*`/leaf event:
+//! heading level, list marker/ordering, panel title, code fence language,
+//! link URL, table cell header-ness. None of Jira wiki markup's constructs
+//! need a byte count, width, or other content-derived prefix the way RST's
+//! heading underlines or column-padded tables do — the **one** exception is
+//! a table row's closing `||`/`|` delimiter, which `build_table` derives
+//! from the row's *first* cell's header-ness. That is tracked as a single
+//! `Option<bool>` set once per row (the first `StartTableCell`), not
+//! buffered content — still `O(1)` per row, not `O(row size)`.
+//!
+//! Each top-level block is flushed to the sink and `out` is cleared (keeping
+//! its capacity) as soon as the frame stack empties. Memory is
+//! `O(largest top-level block + nesting depth)`, not `O(full document)`.
 //!
 //! # Example
 //! ```no_run
@@ -14,441 +40,521 @@
 //! let bytes = w.finish();
 //! ```
 
-use crate::ast::*;
 use crate::events::OwnedEvent;
 use std::io::Write;
 
 /// Streaming Jira wiki markup writer.
 ///
-/// Feed events with [`write_event`](Writer::write_event), then call
-/// [`finish`](Writer::finish) to flush Jira text to the underlying sink and
-/// recover it.
+/// Feed events with [`write_event`](Writer::write_event); each top-level
+/// block is emitted to the sink as soon as it closes. Call
+/// [`finish`](Writer::finish) to recover the sink once all events have been
+/// fed.
 pub struct Writer<W: Write> {
     sink: W,
-    events: Vec<OwnedEvent>,
+    /// The single shared output buffer. Every construct writes here
+    /// directly; frames record marks into it. Cleared (capacity retained)
+    /// after each top-level block is flushed.
+    out: String,
+    /// Frame stack for the block/inline construct currently being
+    /// assembled. Empty at top level — a block closing with an empty stack
+    /// is flushed to the sink immediately.
+    stack: Vec<Frame>,
+    /// Mirrors `BuildContext::list_depth`: incremented when a `List` frame
+    /// is pushed (`StartList`), decremented when it is popped (`EndList`).
+    list_depth: usize,
 }
+
+/// Default capacity reserved for `Writer::out`. Skips the first several
+/// geometric-growth doublings (pure overhead below any realistic block
+/// size) without committing to a document-specific guess.
+const DEFAULT_OUT_CAPACITY: usize = 4096;
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
         Writer {
             sink,
-            events: Vec::new(),
+            out: String::with_capacity(DEFAULT_OUT_CAPACITY),
+            stack: Vec::new(),
+            list_depth: 0,
         }
     }
 
-    /// Feed one event to the writer.
+    /// Feed one event to the writer. May write bytes to the sink immediately
+    /// if this event completes a top-level block.
     pub fn write_event(&mut self, event: OwnedEvent) {
-        self.events.push(event);
+        self.process(event);
     }
 
-    /// Flush all buffered events as Jira text and return the sink.
-    pub fn finish(mut self) -> W {
-        let doc = events_to_doc(std::mem::take(&mut self.events));
-        let text = crate::emit::build(&doc);
-        let _ = self.sink.write_all(text.as_bytes());
+    /// Recover the underlying sink. Does not write anything — every
+    /// completed top-level block was already flushed by `write_event`.
+    pub fn finish(self) -> W {
         self.sink
     }
-}
 
-// ── Event → AST reconstruction ────────────────────────────────────────────────
+    // ── Buffer primitives ───────────────────────────────────────────────
 
-fn events_to_doc(events: Vec<OwnedEvent>) -> JiraDoc {
-    let mut builder = DocBuilder::new();
-    for event in events {
-        builder.process(event);
+    fn push_out(&mut self, s: &str) {
+        self.out.push_str(s);
     }
-    builder.finish()
-}
 
-enum Frame {
-    Document {
-        blocks: Vec<Block>,
-    },
-    Paragraph {
-        inlines: Vec<Inline>,
-    },
-    Heading {
-        level: u8,
-        inlines: Vec<Inline>,
-    },
-    Blockquote {
-        blocks: Vec<Block>,
-    },
-    Panel {
-        title: Option<String>,
-        blocks: Vec<Block>,
-    },
-    List {
-        ordered: bool,
-        items: Vec<ListItem>,
-    },
-    ListItem {
-        children: Vec<ListItemContent>,
-        current_inlines: Option<Vec<Inline>>,
-    },
-    Table {
-        rows: Vec<TableRow>,
-    },
-    TableRow {
-        cells: Vec<TableCell>,
-    },
-    TableCell {
-        is_header: bool,
-        inlines: Vec<Inline>,
-    },
-    // Inline spans
-    Bold {
-        inlines: Vec<Inline>,
-    },
-    Italic {
-        inlines: Vec<Inline>,
-    },
-    Underline {
-        inlines: Vec<Inline>,
-    },
-    Strikethrough {
-        inlines: Vec<Inline>,
-    },
-    Superscript {
-        inlines: Vec<Inline>,
-    },
-    Subscript {
-        inlines: Vec<Inline>,
-    },
-    Link {
-        url: String,
-        inlines: Vec<Inline>,
-    },
-    ColorSpan {
-        color: String,
-        inlines: Vec<Inline>,
-    },
-}
-
-struct DocBuilder {
-    stack: Vec<Frame>,
-}
-
-impl DocBuilder {
-    fn new() -> Self {
-        DocBuilder {
-            stack: vec![Frame::Document { blocks: vec![] }],
+    /// Flush the completed top-level block to the sink and reset the
+    /// buffer, keeping its capacity so the document only ever grows one
+    /// buffer.
+    fn flush(&mut self) {
+        if !self.out.is_empty() {
+            let _ = self.sink.write_all(self.out.as_bytes());
+            self.out.clear();
         }
     }
 
+    /// Whether the top-of-stack frame accepts block children directly
+    /// (`Block::Blockquote`/`Block::Panel`, or the document root). `List`,
+    /// `Table`, `TableRow`, `TableCell`, and every inline span are not valid
+    /// block parents. `ListItem` is handled separately at each call site
+    /// (it "accepts" every block kind, but with the special
+    /// paragraph-becomes-inline demotion `build_block`'s
+    /// `push_block`/`ListItemContent` does).
+    fn block_accepts(&self) -> bool {
+        matches!(
+            self.stack.last(),
+            None | Some(Frame::Blockquote { .. }) | Some(Frame::Panel { .. })
+        )
+    }
+
+    fn in_list_item(&self) -> bool {
+        matches!(self.stack.last(), Some(Frame::ListItem { .. }))
+    }
+
+    fn inline_accepts(&self) -> bool {
+        matches!(
+            self.stack.last(),
+            Some(
+                Frame::Paragraph { .. }
+                    | Frame::Heading { .. }
+                    | Frame::Bold { .. }
+                    | Frame::Italic { .. }
+                    | Frame::Underline { .. }
+                    | Frame::Strikethrough { .. }
+                    | Frame::Superscript { .. }
+                    | Frame::Subscript { .. }
+                    | Frame::Link { .. }
+                    | Frame::ColorSpan { .. }
+                    | Frame::TableCell { .. }
+            )
+        )
+    }
+
+    /// Close a block-shaped construct written unconditionally at `mark..`:
+    /// keep it (and flush if this just emptied the stack) if the enclosing
+    /// frame accepts blocks (directly, or via `ListItem`'s "any block is a
+    /// `NestedList`" rule), otherwise discard the whole thing.
+    fn block_end(&mut self, mark: usize) {
+        if self.block_accepts() || self.in_list_item() {
+            if self.stack.is_empty() {
+                self.flush();
+            }
+        } else {
+            self.out.truncate(mark);
+        }
+    }
+
+    /// Open an inline span: write the opening delimiter unconditionally
+    /// (removed again at close if the context turns out invalid) and return
+    /// the mark to truncate back to.
+    fn open_span(&mut self, open: &str) -> usize {
+        let mark = self.out.len();
+        self.out.push_str(open);
+        mark
+    }
+
+    /// Close an inline span: write the closing delimiter, then discard the
+    /// whole `mark..` region (open + content + close) if the enclosing
+    /// frame does not accept inline children.
+    fn close_span(&mut self, mark: usize, close: &str) {
+        self.out.push_str(close);
+        if !self.inline_accepts() {
+            self.out.truncate(mark);
+        }
+    }
+
+    /// Every non-`Paragraph` block construct opening as a child of a
+    /// `ListItem` gets a leading `"\n"` — mirrors `build_block`'s
+    /// `ListItemContent::NestedList` arm (`ctx.write("\n"); build_block(...)`).
+    /// `Paragraph` is exempt: `ListItemContent::Inline` has no such prefix,
+    /// since it is not treated as a nested block at all.
+    fn nested_list_item_prefix(&mut self) {
+        if self.in_list_item() {
+            self.push_out("\n");
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
     fn process(&mut self, event: OwnedEvent) {
         match event {
-            // ── Block open/close ───────────────────────────────────────────────
+            // ── Block open/close ─────────────────────────────────────────
             OwnedEvent::StartParagraph => {
-                self.stack.push(Frame::Paragraph { inlines: vec![] });
+                let mark = self.out.len();
+                self.stack.push(Frame::Paragraph { mark });
             }
             OwnedEvent::EndParagraph => {
-                if let Some(Frame::Paragraph { inlines }) = self.stack.pop() {
-                    self.push_block(Block::Paragraph {
-                        inlines,
-                        span: Span::NONE,
-                    });
+                if let Some(Frame::Paragraph { mark }) = self.stack.pop() {
+                    if self.in_list_item() {
+                        // `ListItemContent::Inline`: no "\n\n" separator,
+                        // content stays exactly as written.
+                    } else if self.block_accepts() {
+                        self.push_out("\n\n");
+                        if self.stack.is_empty() {
+                            self.flush();
+                        }
+                    } else {
+                        self.out.truncate(mark);
+                    }
                 }
             }
             OwnedEvent::StartHeading { level } => {
-                self.stack.push(Frame::Heading {
-                    level,
-                    inlines: vec![],
-                });
+                let mark = self.out.len();
+                self.nested_list_item_prefix();
+                self.push_out(&format!("h{level}. "));
+                self.stack.push(Frame::Heading { mark });
             }
             OwnedEvent::EndHeading => {
-                if let Some(Frame::Heading { level, inlines }) = self.stack.pop() {
-                    self.push_block(Block::Heading {
-                        level,
-                        inlines,
-                        span: Span::NONE,
-                    });
+                if let Some(Frame::Heading { mark }) = self.stack.pop() {
+                    self.push_out("\n\n");
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartBlockquote => {
-                self.stack.push(Frame::Blockquote { blocks: vec![] });
+                let mark = self.out.len();
+                self.nested_list_item_prefix();
+                self.push_out("{quote}\n");
+                self.stack.push(Frame::Blockquote { mark });
             }
             OwnedEvent::EndBlockquote => {
-                if let Some(Frame::Blockquote { blocks }) = self.stack.pop() {
-                    self.push_block(Block::Blockquote {
-                        children: blocks,
-                        span: Span::NONE,
-                    });
+                if let Some(Frame::Blockquote { mark }) = self.stack.pop() {
+                    self.push_out("{quote}\n\n");
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartPanel { title } => {
-                self.stack.push(Frame::Panel {
-                    title,
-                    blocks: vec![],
-                });
+                let mark = self.out.len();
+                self.nested_list_item_prefix();
+                if let Some(t) = &title {
+                    self.push_out("{panel:title=");
+                    self.push_out(t);
+                    self.push_out("}\n");
+                } else {
+                    self.push_out("{panel}\n");
+                }
+                self.stack.push(Frame::Panel { mark });
             }
             OwnedEvent::EndPanel => {
-                if let Some(Frame::Panel { title, blocks }) = self.stack.pop() {
-                    self.push_block(Block::Panel {
-                        title,
-                        children: blocks,
-                        span: Span::NONE,
-                    });
+                if let Some(Frame::Panel { mark }) = self.stack.pop() {
+                    self.push_out("{panel}\n\n");
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartList { ordered } => {
-                self.stack.push(Frame::List {
-                    ordered,
-                    items: vec![],
-                });
+                let mark = self.out.len();
+                self.nested_list_item_prefix();
+                self.list_depth += 1;
+                self.stack.push(Frame::List { mark, ordered });
             }
             OwnedEvent::EndList => {
-                if let Some(Frame::List { ordered, items }) = self.stack.pop() {
-                    self.push_block(Block::List {
-                        ordered,
-                        items,
-                        span: Span::NONE,
-                    });
+                if let Some(Frame::List { mark, .. }) = self.stack.pop() {
+                    self.list_depth -= 1;
+                    if self.list_depth == 0 {
+                        self.push_out("\n");
+                    }
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartListItem => {
-                self.stack.push(Frame::ListItem {
-                    children: vec![],
-                    current_inlines: None,
-                });
+                let mark = self.out.len();
+                if let Some(Frame::List { ordered, .. }) = self.stack.last() {
+                    let marker = if *ordered { '#' } else { '*' };
+                    for _ in 0..self.list_depth {
+                        self.out.push(marker);
+                    }
+                    self.push_out(" ");
+                }
+                self.stack.push(Frame::ListItem { mark });
             }
             OwnedEvent::EndListItem => {
-                if let Some(Frame::ListItem {
-                    mut children,
-                    current_inlines,
-                }) = self.stack.pop()
-                {
-                    if let Some(inlines) = current_inlines
-                        && !inlines.is_empty()
-                    {
-                        children.push(ListItemContent::Inline(inlines));
-                    }
-                    if let Some(Frame::List { items, .. }) = self.stack.last_mut() {
-                        items.push(ListItem { children });
+                if let Some(Frame::ListItem { mark }) = self.stack.pop() {
+                    self.push_out("\n");
+                    if !matches!(self.stack.last(), Some(Frame::List { .. })) {
+                        self.out.truncate(mark);
                     }
                 }
             }
             OwnedEvent::CodeBlock { language, content } => {
-                self.push_block(Block::CodeBlock {
-                    content: content.into_owned(),
-                    language,
-                    span: Span::NONE,
-                });
+                let mark = self.out.len();
+                self.nested_list_item_prefix();
+                if let Some(lang) = &language {
+                    self.push_out("{code:");
+                    self.push_out(lang);
+                    self.push_out("}\n");
+                } else {
+                    self.push_out("{code}\n");
+                }
+                self.push_out(&content);
+                if !content.ends_with('\n') {
+                    self.push_out("\n");
+                }
+                self.push_out("{code}\n\n");
+                self.block_end(mark);
             }
             OwnedEvent::Noformat { content } => {
-                self.push_block(Block::Noformat {
-                    content: content.into_owned(),
-                    span: Span::NONE,
-                });
+                let mark = self.out.len();
+                self.nested_list_item_prefix();
+                self.push_out("{noformat}\n");
+                self.push_out(&content);
+                if !content.ends_with('\n') {
+                    self.push_out("\n");
+                }
+                self.push_out("{noformat}\n\n");
+                self.block_end(mark);
             }
             OwnedEvent::HorizontalRule => {
-                self.push_block(Block::HorizontalRule { span: Span::NONE });
+                let mark = self.out.len();
+                self.nested_list_item_prefix();
+                self.push_out("----\n\n");
+                self.block_end(mark);
             }
             OwnedEvent::StartTable => {
-                self.stack.push(Frame::Table { rows: vec![] });
+                let mark = self.out.len();
+                self.nested_list_item_prefix();
+                self.stack.push(Frame::Table { mark });
             }
             OwnedEvent::EndTable => {
-                if let Some(Frame::Table { rows }) = self.stack.pop() {
-                    self.push_block(Block::Table {
-                        rows,
-                        span: Span::NONE,
-                    });
+                if let Some(Frame::Table { mark }) = self.stack.pop() {
+                    self.push_out("\n");
+                    self.block_end(mark);
                 }
             }
             OwnedEvent::StartTableRow => {
-                self.stack.push(Frame::TableRow { cells: vec![] });
+                let mark = self.out.len();
+                self.stack.push(Frame::TableRow {
+                    mark,
+                    row_is_header: None,
+                });
             }
             OwnedEvent::EndTableRow => {
-                if let Some(Frame::TableRow { cells }) = self.stack.pop()
-                    && let Some(Frame::Table { rows }) = self.stack.last_mut()
+                if let Some(Frame::TableRow {
+                    mark,
+                    row_is_header,
+                }) = self.stack.pop()
                 {
-                    rows.push(TableRow {
-                        cells,
-                        span: Span::NONE,
+                    self.push_out(if row_is_header.unwrap_or(false) {
+                        "||\n"
+                    } else {
+                        "|\n"
                     });
+                    if !matches!(self.stack.last(), Some(Frame::Table { .. })) {
+                        self.out.truncate(mark);
+                    }
                 }
             }
             OwnedEvent::StartTableCell { is_header } => {
-                self.stack.push(Frame::TableCell {
-                    is_header,
-                    inlines: vec![],
-                });
+                let mark = self.out.len();
+                let in_row = matches!(self.stack.last(), Some(Frame::TableRow { .. }));
+                if let Some(Frame::TableRow { row_is_header, .. }) = self.stack.last_mut()
+                    && row_is_header.is_none()
+                {
+                    *row_is_header = Some(is_header);
+                }
+                if in_row {
+                    self.push_out(if is_header { "||" } else { "|" });
+                }
+                self.stack.push(Frame::TableCell { mark });
             }
             OwnedEvent::EndTableCell => {
-                if let Some(Frame::TableCell { is_header, inlines }) = self.stack.pop()
-                    && let Some(Frame::TableRow { cells }) = self.stack.last_mut()
+                if let Some(Frame::TableCell { mark }) = self.stack.pop()
+                    && !matches!(self.stack.last(), Some(Frame::TableRow { .. }))
                 {
-                    cells.push(TableCell {
-                        is_header,
-                        inlines,
-                        span: Span::NONE,
-                    });
+                    self.out.truncate(mark);
                 }
             }
 
-            // ── Inline events ──────────────────────────────────────────────────
+            // ── Inline events ────────────────────────────────────────────
             OwnedEvent::Text(cow) => {
-                self.push_inline(Inline::Text(cow.into_owned(), Span::NONE));
+                if self.inline_accepts() {
+                    self.push_out(&cow);
+                }
             }
             OwnedEvent::StartBold => {
-                self.stack.push(Frame::Bold { inlines: vec![] });
+                let mark = self.open_span("*");
+                self.stack.push(Frame::Bold { mark });
             }
             OwnedEvent::EndBold => {
-                if let Some(Frame::Bold { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Bold(inlines, Span::NONE));
+                if let Some(Frame::Bold { mark }) = self.stack.pop() {
+                    self.close_span(mark, "*");
                 }
             }
             OwnedEvent::StartItalic => {
-                self.stack.push(Frame::Italic { inlines: vec![] });
+                let mark = self.open_span("_");
+                self.stack.push(Frame::Italic { mark });
             }
             OwnedEvent::EndItalic => {
-                if let Some(Frame::Italic { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Italic(inlines, Span::NONE));
+                if let Some(Frame::Italic { mark }) = self.stack.pop() {
+                    self.close_span(mark, "_");
                 }
             }
             OwnedEvent::StartUnderline => {
-                self.stack.push(Frame::Underline { inlines: vec![] });
+                let mark = self.open_span("+");
+                self.stack.push(Frame::Underline { mark });
             }
             OwnedEvent::EndUnderline => {
-                if let Some(Frame::Underline { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Underline(inlines, Span::NONE));
+                if let Some(Frame::Underline { mark }) = self.stack.pop() {
+                    self.close_span(mark, "+");
                 }
             }
             OwnedEvent::StartStrikethrough => {
-                self.stack.push(Frame::Strikethrough { inlines: vec![] });
+                let mark = self.open_span("-");
+                self.stack.push(Frame::Strikethrough { mark });
             }
             OwnedEvent::EndStrikethrough => {
-                if let Some(Frame::Strikethrough { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Strikethrough(inlines, Span::NONE));
+                if let Some(Frame::Strikethrough { mark }) = self.stack.pop() {
+                    self.close_span(mark, "-");
                 }
             }
             OwnedEvent::StartSuperscript => {
-                self.stack.push(Frame::Superscript { inlines: vec![] });
+                let mark = self.open_span("^");
+                self.stack.push(Frame::Superscript { mark });
             }
             OwnedEvent::EndSuperscript => {
-                if let Some(Frame::Superscript { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Superscript(inlines, Span::NONE));
+                if let Some(Frame::Superscript { mark }) = self.stack.pop() {
+                    self.close_span(mark, "^");
                 }
             }
             OwnedEvent::StartSubscript => {
-                self.stack.push(Frame::Subscript { inlines: vec![] });
+                let mark = self.open_span("~");
+                self.stack.push(Frame::Subscript { mark });
             }
             OwnedEvent::EndSubscript => {
-                if let Some(Frame::Subscript { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Subscript(inlines, Span::NONE));
+                if let Some(Frame::Subscript { mark }) = self.stack.pop() {
+                    self.close_span(mark, "~");
                 }
             }
             OwnedEvent::InlineCode(cow) => {
-                self.push_inline(Inline::Code(cow.into_owned(), Span::NONE));
+                if self.inline_accepts() {
+                    self.push_out("{{");
+                    self.push_out(&cow);
+                    self.push_out("}}");
+                }
             }
             OwnedEvent::StartLink { url } => {
-                self.stack.push(Frame::Link {
-                    url,
-                    inlines: vec![],
-                });
+                let mark = self.out.len();
+                self.push_out("[");
+                self.stack.push(Frame::Link { mark, url });
             }
             OwnedEvent::EndLink => {
-                if let Some(Frame::Link { url, inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Link {
-                        url,
-                        children: inlines,
-                        span: Span::NONE,
-                    });
+                if let Some(Frame::Link { mark, url }) = self.stack.pop() {
+                    self.push_out("|");
+                    self.push_out(&url);
+                    self.push_out("]");
+                    if !self.inline_accepts() {
+                        self.out.truncate(mark);
+                    }
                 }
             }
             OwnedEvent::InlineImage { url, alt } => {
-                self.push_inline(Inline::Image {
-                    url,
-                    alt,
-                    span: Span::NONE,
-                });
+                if self.inline_accepts() {
+                    self.push_out("!");
+                    self.push_out(&url);
+                    if let Some(a) = &alt {
+                        self.push_out("|");
+                        self.push_out(a);
+                    }
+                    self.push_out("!");
+                }
             }
             OwnedEvent::StartColorSpan { color } => {
-                self.stack.push(Frame::ColorSpan {
-                    color,
-                    inlines: vec![],
-                });
+                let mark = self.out.len();
+                self.push_out("{color:");
+                self.push_out(&color);
+                self.push_out("}");
+                self.stack.push(Frame::ColorSpan { mark });
             }
             OwnedEvent::EndColorSpan => {
-                if let Some(Frame::ColorSpan { color, inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::ColorSpan {
-                        color,
-                        children: inlines,
-                        span: Span::NONE,
-                    });
+                if let Some(Frame::ColorSpan { mark }) = self.stack.pop() {
+                    self.close_span(mark, "{color}");
                 }
             }
             OwnedEvent::Mention(cow) => {
-                self.push_inline(Inline::Mention(cow.into_owned(), Span::NONE));
-            }
-        }
-    }
-
-    fn push_block(&mut self, block: Block) {
-        match self.stack.last_mut() {
-            Some(Frame::Document { blocks }) => blocks.push(block),
-            Some(Frame::Blockquote { blocks }) => blocks.push(block),
-            Some(Frame::Panel { blocks, .. }) => blocks.push(block),
-            Some(Frame::ListItem {
-                children,
-                current_inlines,
-                ..
-            }) => {
-                if let Some(inlines) = current_inlines.take()
-                    && !inlines.is_empty()
-                {
-                    children.push(ListItemContent::Inline(inlines));
-                }
-                // A Paragraph inside a list item is stored as inline content,
-                // not as a nested block, to preserve list structure on roundtrip.
-                match block {
-                    Block::Paragraph { inlines, .. } => {
-                        children.push(ListItemContent::Inline(inlines));
-                    }
-                    other => {
-                        children.push(ListItemContent::NestedList(other));
-                    }
+                if self.inline_accepts() {
+                    self.push_out("@");
+                    self.push_out(&cow);
                 }
             }
-            _ => {}
         }
     }
+}
 
-    fn push_inline(&mut self, inline: Inline) {
-        match self.stack.last_mut() {
-            Some(Frame::Paragraph { inlines }) => inlines.push(inline),
-            Some(Frame::Heading { inlines, .. }) => inlines.push(inline),
-            Some(Frame::Bold { inlines }) => inlines.push(inline),
-            Some(Frame::Italic { inlines }) => inlines.push(inline),
-            Some(Frame::Underline { inlines }) => inlines.push(inline),
-            Some(Frame::Strikethrough { inlines }) => inlines.push(inline),
-            Some(Frame::Superscript { inlines }) => inlines.push(inline),
-            Some(Frame::Subscript { inlines }) => inlines.push(inline),
-            Some(Frame::Link { inlines, .. }) => inlines.push(inline),
-            Some(Frame::TableCell { inlines, .. }) => inlines.push(inline),
-            Some(Frame::ColorSpan { inlines, .. }) => inlines.push(inline),
-            Some(Frame::ListItem {
-                current_inlines, ..
-            }) => {
-                if current_inlines.is_none() {
-                    *current_inlines = Some(vec![]);
-                }
-                current_inlines.as_mut().unwrap().push(inline);
-            }
-            _ => {}
-        }
-    }
-
-    fn finish(mut self) -> JiraDoc {
-        let blocks = match self.stack.pop() {
-            Some(Frame::Document { blocks }) => blocks,
-            _ => vec![],
-        };
-        JiraDoc {
-            blocks,
-            span: Span::NONE,
-        }
-    }
+/// Frames carry only a mark into the shared buffer and tiny scalars — never
+/// accumulated content.
+enum Frame {
+    Paragraph {
+        mark: usize,
+    },
+    Heading {
+        mark: usize,
+    },
+    Blockquote {
+        mark: usize,
+    },
+    Panel {
+        mark: usize,
+    },
+    List {
+        mark: usize,
+        ordered: bool,
+    },
+    ListItem {
+        mark: usize,
+    },
+    Table {
+        mark: usize,
+    },
+    /// `row_is_header` mirrors `build_table`'s `row_is_header` local: set
+    /// once, from the row's *first* cell, and read back at `EndTableRow` to
+    /// choose the closing `"||"`/`"|"`. `O(1)` per row, not a buffered copy
+    /// of the row's cells.
+    TableRow {
+        mark: usize,
+        row_is_header: Option<bool>,
+    },
+    TableCell {
+        mark: usize,
+    },
+    Bold {
+        mark: usize,
+    },
+    Italic {
+        mark: usize,
+    },
+    Underline {
+        mark: usize,
+    },
+    Strikethrough {
+        mark: usize,
+    },
+    Superscript {
+        mark: usize,
+    },
+    Subscript {
+        mark: usize,
+    },
+    /// The one inline span whose closing text depends on data carried by
+    /// the frame (the URL, moved out of the opening event — not a content
+    /// buffer).
+    Link {
+        mark: usize,
+        url: String,
+    },
+    ColorSpan {
+        mark: usize,
+    },
 }
 
 #[cfg(test)]
@@ -497,6 +603,314 @@ mod tests {
             doc_orig.blocks.len(),
             doc_emit.blocks.len(),
             "writer roundtrip block count mismatch"
+        );
+    }
+
+    /// The streaming `Writer` must produce *byte-identical* output to the
+    /// tree-based `build()` for the same document — the guard that keeps
+    /// the two independent emission paths honest, including the one
+    /// content-dependent construct (a table row's closing `||`/`|`).
+    #[test]
+    fn test_writer_byte_identical_to_builder() {
+        let inputs = [
+            "h1. Title\n\nIntro paragraph with *bold* and _italic_ and {{code}}.\n",
+            "h2. Sub\n\ntext with +underline+, -strike-, ^sup^, ~sub~.\n",
+            "* bullet one\n* bullet two\n\n** nested a\n** nested b\n",
+            "# ordered one\n# ordered two\n",
+            "{code:java}\nint x = 1;\nint y = 2;\n{code}\n",
+            "{noformat}\nliteral block\n{noformat}\n",
+            "{quote}\nA quoted paragraph.\n\nSecond para of quote.\n{quote}\n",
+            "{panel:title=Note}\nSome panel body.\n{panel}\n",
+            "{panel}\nAnonymous panel body.\n{panel}\n",
+            "||A||B||\n|Cell 1|Cell 2|\n",
+            "|A|B|\n|Cell 1|Cell 2|\n",
+            "----\n\nAfter the transition.\n",
+            "A paragraph with a [link|http://example.com/] and an image !img.png|alt text!.\n",
+            "A paragraph mentioning @someone and {color:red}red text{color}.\n",
+            "* item\n** nested item\n* item two\n\n# nested ordered\n# more\n",
+            "A para\n\n* item\n\ncontinued paragraph\n",
+        ];
+        for input in inputs {
+            let (doc, _) = crate::parse::parse(input);
+            let built = crate::emit::build(&doc);
+
+            let mut w = Writer::new(Vec::<u8>::new());
+            for e in crate::events::events(input) {
+                w.write_event(e);
+            }
+            let streamed = String::from_utf8(w.finish()).unwrap();
+
+            assert_eq!(
+                built, streamed,
+                "streaming Writer diverged from build() for input:\n{input}\n\
+                 build():\n{built:?}\nWriter:\n{streamed:?}"
+            );
+        }
+    }
+
+    /// Round-trip a broader construct mix entirely through
+    /// `events() -> Writer`, proving the incremental per-top-level-block
+    /// flush handles every construct `parse()` produces.
+    #[test]
+    fn test_writer_roundtrip_full_construct_mix() {
+        let input = "\
+h1. Title
+
+Intro paragraph with *bold* and {{code}}.
+
+{quote}
+A block quote.
+{quote}
+
+* bullet one
+* bullet two
+
+# ordered one
+# ordered two
+
+{code:rust}
+let x = 1;
+{code}
+
+||A||B||
+|Cell 1|Cell 2|
+
+----
+
+After the transition.
+";
+        let (doc, _) = crate::parse::parse(input);
+        assert!(
+            doc.blocks.len() >= 7,
+            "expected a rich construct mix, got {:?}",
+            doc.blocks
+        );
+
+        let mut w = Writer::new(Vec::<u8>::new());
+        for e in crate::events::events(input) {
+            w.write_event(e);
+        }
+        let bytes = w.finish();
+        let emitted_text = String::from_utf8(bytes).unwrap();
+
+        let (doc2, _) = crate::parse::parse(&emitted_text);
+        assert_eq!(
+            doc.blocks.len(),
+            doc2.blocks.len(),
+            "writer roundtrip block count mismatch\ninput blocks: {:#?}\nemitted text: \
+             {emitted_text}\nreparsed blocks: {:#?}",
+            doc.blocks,
+            doc2.blocks,
+        );
+    }
+
+    /// Nested lists (bullet-in-bullet) are the trickiest path in the
+    /// streaming rewrite: `list_depth` bookkeeping happens on `Writer`
+    /// itself (bracketing `StartList`/`EndList`), and each nested list's
+    /// marker is written straight into the shared buffer at
+    /// `StartListItem`. This asserts the streaming `Writer` matches
+    /// `crate::emit::build()` byte-for-byte for a nested-list document —
+    /// *not* that the emitted text re-parses back to the same block count.
+    /// It doesn't: `build_block`'s `List` arm unconditionally writes a
+    /// trailing `"\n"` after each item's `item.children` loop, including
+    /// when the item's last child was itself a nested list (whose own last
+    /// item already wrote its own trailing `"\n"`) — that stacks into a
+    /// blank line, which `parse()` reads as the list ending. This is a
+    /// pre-existing `build()`/`parse()` round-trip defect (reproduced here:
+    /// `crate::emit::build(&crate::parse::parse(input).0)` loses the nested
+    /// list on re-parse too), independent of streaming vs. non-streaming —
+    /// out of scope for this pass, which is about `Writer` incrementality,
+    /// not `build()`'s own construct coverage. Tracked in TODO.md by the
+    /// process that owns cross-cutting fidelity gaps.
+    #[test]
+    fn test_writer_roundtrip_nested_lists_matches_builder() {
+        let input = "\
+* outer one
+* outer two
+** inner a
+** inner b
+* outer three
+";
+        let (doc, _) = crate::parse::parse(input);
+        let built = crate::emit::build(&doc);
+
+        let mut w = Writer::new(Vec::<u8>::new());
+        for e in crate::events::events(input) {
+            w.write_event(e);
+        }
+        let emitted_text = String::from_utf8(w.finish()).unwrap();
+
+        assert_eq!(
+            built, emitted_text,
+            "streaming Writer diverged from build() for nested-list input"
+        );
+    }
+
+    // A single process-wide `#[global_allocator]` tracks both allocation
+    // count (for the no-subtree-reconstruction-blowup guard) and
+    // current/peak bytes (for the peak-memory guard) — Rust allows only one
+    // `#[global_allocator]` per binary, so both tests below share this one
+    // rather than each defining their own.
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct TrackingAlloc;
+    static ALLOCS: AtomicUsize = AtomicUsize::new(0);
+    // current/peak bytes are tracked per-thread (`thread_local!`, not a
+    // shared `AtomicUsize`): `cargo test` runs this crate's other tests
+    // concurrently with these two allocator-instrumented ones by default,
+    // and a shared counter lets an unrelated concurrently-running test's
+    // allocations inflate this test's measured peak — confirmed as a real
+    // flake in this batch's `pod-fmt` sibling (a spurious 407x ratio under
+    // full-workspace `cargo test -q`, passing cleanly under
+    // `--test-threads=1`). Thread-local counters make the measurement
+    // immune to what other threads in the same binary do, so the
+    // `ALLOC_TEST_GUARD` mutex this file used to serialize just the two
+    // allocator-instrumented tests against each other is no longer needed —
+    // it never protected against interference from the ~40 *other* tests in
+    // this file anyway.
+    thread_local! {
+        static CURRENT: Cell<usize> = const { Cell::new(0) };
+        static PEAK: Cell<usize> = const { Cell::new(0) };
+    }
+    unsafe impl GlobalAlloc for TrackingAlloc {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            ALLOCS.fetch_add(1, Ordering::Relaxed);
+            let cur = CURRENT.with(|c| {
+                let v = c.get() + layout.size();
+                c.set(v);
+                v
+            });
+            PEAK.with(|p| {
+                if cur > p.get() {
+                    p.set(cur);
+                }
+            });
+            unsafe { System.alloc(layout) }
+        }
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            CURRENT.with(|c| c.set(c.get().saturating_sub(layout.size())));
+            unsafe { System.dealloc(ptr, layout) }
+        }
+    }
+    #[global_allocator]
+    static GLOBAL: TrackingAlloc = TrackingAlloc;
+
+    /// Regression guard against reintroducing per-block `Block`/`Inline`
+    /// subtree reconstruction. A large, deeply-nested event stream must
+    /// complete with an allocation count that stays close to linear in
+    /// event count, not blow up the way tree materialization would.
+    #[test]
+    fn test_writer_no_subtree_reconstruction_blowup() {
+        fn events_for(n: usize) -> Vec<OwnedEvent> {
+            use std::borrow::Cow;
+            let mut evs = Vec::new();
+            for i in 0..n {
+                evs.push(OwnedEvent::StartHeading { level: 2 });
+                evs.push(OwnedEvent::Text(Cow::Owned(format!("Section {i}"))));
+                evs.push(OwnedEvent::EndHeading);
+                evs.push(OwnedEvent::StartParagraph);
+                evs.push(OwnedEvent::Text(Cow::Owned("plain ".to_string())));
+                evs.push(OwnedEvent::StartBold);
+                evs.push(OwnedEvent::Text(Cow::Owned("bold".to_string())));
+                evs.push(OwnedEvent::EndBold);
+                evs.push(OwnedEvent::EndParagraph);
+                evs.push(OwnedEvent::StartList { ordered: false });
+                for j in 0..2 {
+                    evs.push(OwnedEvent::StartListItem);
+                    evs.push(OwnedEvent::StartParagraph);
+                    evs.push(OwnedEvent::Text(Cow::Owned(format!("item {j}"))));
+                    evs.push(OwnedEvent::EndParagraph);
+                    evs.push(OwnedEvent::EndListItem);
+                }
+                evs.push(OwnedEvent::EndList);
+            }
+            evs
+        }
+
+        fn run(n: usize) -> usize {
+            let before = ALLOCS.load(Ordering::Relaxed);
+            let evs = events_for(n);
+            let after_build = ALLOCS.load(Ordering::Relaxed);
+            let mut out = Vec::new();
+            {
+                let mut w = Writer::new(&mut out);
+                for e in evs {
+                    w.write_event(e);
+                }
+                w.finish();
+            }
+            let after = ALLOCS.load(Ordering::Relaxed);
+            std::hint::black_box(&out);
+            after - after_build.max(before)
+        }
+
+        let small = run(200).max(1);
+        let large = run(2000); // 10x the sections
+
+        let ratio = large as f64 / small as f64;
+        assert!(
+            ratio < 20.0,
+            "allocation count did not scale near-linearly: {small} allocs @200 sections -> \
+             {large} allocs @2000 sections (ratio {ratio:.2}); this suggests reintroduced \
+             per-block subtree reconstruction"
+        );
+    }
+
+    /// Peak memory must stay near-flat as document size grows, not
+    /// `O(full document)` — the direct proof the writer doesn't buffer the
+    /// whole document before emitting. Uses `std::io::sink()` (discards
+    /// bytes immediately, retains nothing) rather than a `Vec<u8>` sink —
+    /// with a growing `Vec<u8>` sink, the *sink itself* would retain the
+    /// full output regardless of how incremental `Writer`'s own internal
+    /// state is, defeating the point of the measurement.
+    ///
+    /// This compares peak growth (relative to a baseline snapshot taken
+    /// immediately before each run — `PEAK`/`CURRENT` are process-wide
+    /// statics shared with the allocation-count guard above, since only one
+    /// `#[global_allocator]` is allowed per binary) across a 100x increase
+    /// in document size, the same relative-comparison shape as
+    /// `test_writer_no_subtree_reconstruction_blowup` above and for the same
+    /// reason: `cargo test` runs other tests concurrently in the same
+    /// process, so an absolute byte threshold is noisy, but a writer whose
+    /// peak memory is `O(largest top-level block)` should show peak growth
+    /// essentially *flat* against a 100x input increase (both runs are a
+    /// stream of same-sized single-paragraph top-level blocks), while a
+    /// buffer-then-build writer's peak would scale with document size.
+    #[test]
+    fn test_writer_peak_memory_bounded() {
+        fn run(n: usize) -> usize {
+            let baseline = CURRENT.with(|c| c.get());
+            PEAK.with(|p| p.set(baseline));
+            {
+                let mut w = Writer::new(std::io::sink());
+                for i in 0..n {
+                    w.write_event(OwnedEvent::StartParagraph);
+                    w.write_event(OwnedEvent::Text(std::borrow::Cow::Owned(format!(
+                        "Paragraph number {i} with representative body text to pad it out."
+                    ))));
+                    w.write_event(OwnedEvent::EndParagraph);
+                }
+                w.finish();
+            }
+            PEAK.with(|p| p.get()).saturating_sub(baseline).max(1)
+        }
+
+        let small = run(2_000);
+        let large = run(200_000); // 100x the paragraphs
+
+        // A buffer-then-build writer would show peak growth scaling
+        // ~linearly with paragraph count (100x in, ~100x peak out). A
+        // bounded writer's peak is dominated by the shared `out` buffer's
+        // single-paragraph high-water mark plus fixed overhead, so growth
+        // stays well under a 10x ratio even under concurrent-test noise.
+        let ratio = large as f64 / small as f64;
+        assert!(
+            ratio < 10.0,
+            "peak memory growth did not stay bounded: {small} bytes @2_000 paragraphs -> \
+             {large} bytes @200_000 paragraphs (ratio {ratio:.2}); this suggests the writer is \
+             buffering the whole document instead of flushing per top-level block"
         );
     }
 }

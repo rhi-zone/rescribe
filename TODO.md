@@ -187,6 +187,23 @@ discarding sink) before trusting the final numbers.
 
 ---
 
+**2026-07-31: merged the texinfo/djot-fmt/t2t/org-fmt streaming-writer sweep (above) with the
+16-format wiki/lightweight-markup streaming-writer sweep** (see the "Central bookkeeping" entry
+further below covering bbcode..fountain). The two sweeps were done in parallel worktrees against
+the same 50-entry `streaming_harness::KNOWN_FAILURES` baseline and touched disjoint format sets,
+so both sides' removals apply cleanly: 3 `streaming_writer` entries removed by the first sweep
+(texinfo, djot, t2t — org-fmt's `streaming_writer` entry had already been deleted in an earlier,
+pre-existing fix, so there was nothing left for this sweep to remove; it added the missing
+incrementality probe instead) plus 16 removed by the second, leaving **31** entries (50 − 3 −
+16, not the naively-expected 30). `CAPABILITIES` and `NOT_YET_AUDITED` are unaffected in size
+(still 35 / 28) since both sweeps only flipped `ApiState` on existing rows. Post-merge
+table self-consistency (every format in exactly one of `CAPABILITIES`/`NOT_YET_AUDITED`, every
+`KNOWN_FAILURES` entry matching a `CAPABILITIES` row, 1:1 correspondence with
+`ApiState::KnownFailure(_)` occurrences) reverified via `streaming_harness`'s own test. See
+`docs/format-audit.md`'s "Third merge reconciliation" note for the full writeup.
+
+---
+
 **2026-07-30: texinfo `@settitle` title-loss gap closed.** One of the two `KnownFailure`s
 tracked against `texinfo/streaming_writer` (see the 2026-07-30 cross-API harness entry below)
 was an `Event`-enum expressiveness gap: `texinfo::events::Event` had no variant carrying
@@ -4725,3 +4742,103 @@ is the pre-existing, unrelated Text-drop/End-tag-reversal bug; `docx` `streaming
 `streaming_writer` are `Wired` for what they do check, which doesn't include styles) — so there
 was nothing stale to narrow or remove. This finding is new information, not a correction of an
 existing claim.
+
+## Streaming-writer incrementality sweep: 16 wiki/lightweight-markup formats — fixed (2026-07-31)
+
+Per CLAUDE.md's "-fmt crates are not rescribe internals" section, all 16 wiki/lightweight-markup
+crates' streaming `Writer`s — `bbcode-fmt`, `creole`, `dokuwiki`, `jira-fmt`, `mediawiki-fmt`,
+`tikiwiki`, `twiki`, `vimwiki-fmt`, `xwiki`, `zimwiki`, `markua`, `muse-fmt`, `textile-fmt`,
+`pod-fmt`, `haddock-fmt`, `fountain-fmt` — were confirmed architecturally hollow across the
+2026-07-30 audit passes above (`ObservableSink` incrementality probe: zero bytes reach the sink
+before `finish()`). All 16 are now rewritten to genuinely incremental per-event writers,
+following the `rst-fmt`/`ooxml-wml`/`ooxml-sml` template: a single shared output buffer plus
+offset marks instead of per-frame buffers, a compact O(nesting-depth) frame stack, deferral only
+for constructs whose prefix depends on content not yet seen. Work was split across three
+parallel worktrees (roughly 5/5/6 crates each), then merged and reconciled centrally.
+
+**Classification was close to uniform across the family**, confirming the task's prediction
+that wiki markup would need less deferral than RST: the large majority of every format's
+constructs are write-straight-through. The genuine deferrals found, all small and local:
+- O(1) bool/`Option` flags: jira's table-row header-ness, mediawiki's link-text accumulation,
+  haddock's lazy description separator, muse's paragraph terminator.
+- O(1) parent-frame lookups: textile's blockquote/list-item paragraph attribute suppression.
+- O(depth) counters: list/blockquote nesting depth (several crates).
+- One genuine *reordering* case: xwiki's `[[label>>url]]` syntax needs the label written before
+  the url, but the url is known first in event order — solved by holding `url` on the frame.
+- O(field-count) buffering: fountain's title-page fields, muse's new `Metadata` event.
+- One in-place insert: markua's figure captions (same technique as rst-fmt's headings).
+
+No format in this family needed true unbounded buffering.
+
+**Five previously-unknown, independent content bugs were found and fixed** by the
+byte-identical-to-builder checks each rewrite required (the same category of finding
+CLAUDE.md's vertical-completion checklist calls out: "this check is what caught ooxml-sml
+silently dropping cell style indices"):
+- **markua**: `EndFigure` always built `caption: vec![]`, silently dropping figure captions on
+  every round-trip through the old writer.
+- **twiki**: `build_list_items` wrote an item's own newline *before* recursing into nested
+  lists instead of after — an ordering bug independent of the incrementality rewrite, caught
+  because the new writer's byte-identical test was the first-ever exercise of this code path.
+- **haddock-fmt**: `events()` emits a redundant `Text` child inside `Link` that the AST builder
+  never reads; fixed in the new writer by suppressing it via a dedicated frame (an `events()`
+  bug, not touched at the source — tracked here since fixing `events()` itself was out of scope
+  for a writer-focused pass).
+- **fountain-fmt**: `flush_metadata_if_pending` fired on `StartDocument` itself, permanently
+  discarding title-page metadata (`Title:`/`Author:`/etc.) before it ever arrived.
+- **pod-fmt**: `emit.rs`'s `build_inline` escaped `<`/`>` via two sequential `String::replace`
+  calls — `s.replace('<', "E<lt>").replace('>', "E<gt>")` — which corrupts its own output: the
+  first pass's replacement text `"E<lt>"` contains a literal `>`, which the second,
+  unconditional pass then rewrites again, turning a lone `<` into `"E<ltE<gt>"` instead of
+  `"E<lt>"` (fixture `adv-unclosed-format`). This is a bug in the pre-existing AST builder path
+  (`emit.rs`), not something the rewrite introduced — the streaming writer's own char-by-char
+  escaping never had it, which is what exposed the divergence. Fixed by rewriting the escape to
+  be char-by-char in `emit.rs` too.
+
+**A separate, real test-infrastructure bug was found and fixed alongside this work**: 12 of the
+16 crates' new peak-memory regression tests (added per this pass's requirements) tracked
+current/peak allocated bytes via a `static AtomicUsize` pair inside a test-local
+`#[global_allocator]`. Since `cargo test` runs a crate's tests on multiple threads sharing one
+process-wide allocator, an unrelated test running concurrently on another thread during the
+measured window added its own allocations into the same counters. This is not hypothetical —
+`pod-fmt`'s peak-memory test failed with a spurious 407x ratio under full-workspace
+`cargo test -q`, but passed cleanly under `--test-threads=1`. Fixed in all 12 affected crates
+(`pod-fmt`, `jira-fmt`, `creole`, `mediawiki-fmt`, `twiki`, `xwiki`, `zimwiki`, `vimwiki-fmt`,
+`fountain-fmt`, `muse-fmt`, `haddock-fmt`, `textile-fmt`) by converting to
+`thread_local! { static ...: Cell<usize> }`, which also let several crates drop a
+`Mutex`-based `TEST_LOCK`/`ALLOC_TEST_GUARD`/`PROBE_LOCK` that only ever serialized the two
+memory-guard tests against each other and never protected against the crate's *other* tests.
+`bbcode-fmt`, `dokuwiki`, `tikiwiki`, and `markua` already used a different (non-flaky)
+measurement technique (a counting `Write` sink) and needed no change.
+
+Measured before/after throughput gains: roughly 1.3x-7x depending on format (fountain-fmt was
+the outlier, at ~1.33x and still slower than its own plain builder — its per-block metadata/
+uppercase-transform buffering has more inherent overhead than the other formats' writers; not
+chased further here since it's still a real incrementality win, just a smaller speed one). Peak
+memory reductions ranged roughly 1,000x-40,000x on large synthetic documents (50,000-section or
+20,000-paragraph documents, format-dependent) where a peak-memory regression test was practical
+to write against a discarding/counting sink.
+
+**Central bookkeeping**: `crates/rescribe-fixtures/src/streaming_harness.rs`'s `CAPABILITIES`
+table flips `streaming_writer` from `ApiState::KnownFailure` to `ApiState::Wired` for all 16
+formats; the matching `KNOWN_FAILURES` entries were removed (not narrowed — all 16 are fully
+fixed), taking the table from 50 to 34 entries. `crates/rescribe-fixtures/tests/
+streaming_apis.rs`'s hand-rolled `muse_ast_to_events()` parity helper was updated to emit the
+new `MuseEvent::Metadata` event (added alongside the writer rewrite, since `parse()` already
+populated title/author/date/desc/keywords but no event carried them), keeping
+`muse_events_equals_ast_projection_over_all_fixtures` accurate. `docs/format-audit.md`'s
+per-format streaming-writer column and session-tally narrative were updated to match.
+
+**Explicitly not touched** (out of scope for this writer-focused pass, all pre-existing and
+independently tracked): `xwiki`'s and `muse-fmt`'s `streaming_parser` `KnownFailure` entries
+(buffer-then-finish batch parsers); `pod-fmt`'s `streaming_parser` `KnownFailure` (explicitly
+self-documented buffer-then-finish); `textile-fmt`'s `streaming_parser` `KnownFailure`; and
+every other format's `events()`/`streaming_parser` gaps tracked in the sections above. Also not
+touched, per the task's explicit fence: `texinfo`, `djot-fmt`, `t2t`, `org-fmt`,
+`NOT_YET_AUDITED` formats, and the OOXML package-level streaming reader work.
+
+Verification: `cargo clippy --all-targets --all-features -- -D warnings`,
+`cargo fmt --check`, and `cargo test -q --workspace --exclude ooxml-codegen` (the exclusion is
+for a pre-existing, unrelated failure — `ooxml-codegen`'s `test_generate_wml`/
+`test_eg_definitions` read an external `spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc` file
+not present in this environment, confirmed pre-existing via `git log` on that test file) all
+pass clean: 418 test binaries, 0 failures.

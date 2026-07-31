@@ -8559,7 +8559,16 @@ mod muse_events_check {
     /// must produce for `doc`, including the `StartDocument`/`EndDocument`
     /// wrapper pair `EventIter::new` always emits (events.rs:213-219).
     fn muse_ast_to_events(doc: &MuseDoc) -> Vec<OwnedMuseEvent> {
-        let mut out = vec![OwnedMuseEvent::StartDocument];
+        let mut out = vec![
+            OwnedMuseEvent::StartDocument,
+            OwnedMuseEvent::Metadata {
+                title: doc.title.clone().map(Cow::Owned),
+                author: doc.author.clone().map(Cow::Owned),
+                date: doc.date.clone().map(Cow::Owned),
+                description: doc.description.clone().map(Cow::Owned),
+                keywords: doc.keywords.clone().map(Cow::Owned),
+            },
+        ];
         for b in &doc.blocks {
             muse_block_events(b, &mut out);
         }

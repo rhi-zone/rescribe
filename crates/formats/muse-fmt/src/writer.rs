@@ -1,7 +1,33 @@
 //! Streaming Muse writer — converts a stream of events to Muse text.
 //!
-//! This implementation buffers all events, reconstructs the AST, then emits
-//! using [`crate::emit::build`].
+//! Construct classification:
+//!
+//! - **Write-straight-through**: every block/inline wrapper whose markup is
+//!   fixed text known at `Start*` (headings' `*` run, `<quote>`/`<verse>`/
+//!   `<center>`/`<right>` wrappers, list-item ` - `/` N. ` prefixes, table
+//!   row/cell delimiters, definition-list ` :: ` separator, footnote `[label]
+//!   `, all inline spans, `Link` (its url is known at `StartLink`, and
+//!   unlike pod-fmt/haddock-fmt's link, Muse's `[[url][children]]` genuinely
+//!   renders its children — but the url still doesn't need to wait for
+//!   them)) and every self-contained leaf event (`CodeBlock`, `SrcBlock`,
+//!   `LiteralBlock`, `Comment`, `HorizontalRule`, `FootnoteRef`, `LineBreak`,
+//!   `Anchor`, `Image`, `Code`) — content already fully in hand.
+//! - **Genuinely deferred, O(1) parent lookup, not a buffer**: `Paragraph`'s
+//!   closing separator depends on *which frame encloses it* — `"\n\n"` at
+//!   document top level, a single `"\n"` inside `Blockquote`/`Verse`/
+//!   `CenteredBlock`/`RightBlock`, or nothing at all inside `ListItem`/
+//!   `DefinitionDesc` (whose own `"\n"` comes once, after all of the item's
+//!   blocks close) — mirroring `emit::build_block`'s per-container match
+//!   arms exactly. This is answered by peeking at the frame stack's new top
+//!   after popping `Paragraph`, not by buffering anything.
+//! - **Genuinely deferred, O(metadata field count)**: the new `Metadata`
+//!   event (see `events.rs`) carries the five `#title`/`#author`/`#date`/
+//!   `#desc`/`#keywords` directive values, but `emit::build`'s trailing
+//!   blank line after them is conditional on whether *any* blocks follow
+//!   (`has_directives && !doc.blocks.is_empty()`) — unknowable at the moment
+//!   the `Metadata` event arrives. The five formatted lines (bounded, not
+//!   O(document)) are held until the first subsequent event decides whether
+//!   a blank line follows them.
 //!
 //! # Example
 //! ```no_run
@@ -16,490 +42,483 @@
 //! let bytes = w.finish();
 //! ```
 
-use crate::ast::*;
 use crate::events::OwnedMuseEvent;
 use std::io::Write;
 
 /// Streaming Muse writer.
 ///
-/// Feed events with [`write_event`](Writer::write_event), then call
-/// [`finish`](Writer::finish) to flush Muse text to the underlying sink and
-/// recover it.
+/// Feed events with [`write_event`](Writer::write_event); each top-level
+/// construct is emitted to the sink as soon as it closes. Call
+/// [`finish`](Writer::finish) to flush any remainder and recover the sink.
 pub struct Writer<W: Write> {
     sink: W,
-    events: Vec<OwnedMuseEvent>,
-}
-
-impl<W: Write> Writer<W> {
-    pub fn new(sink: W) -> Self {
-        Writer {
-            sink,
-            events: Vec::new(),
-        }
-    }
-
-    /// Feed one event to the writer.
-    pub fn write_event(&mut self, event: OwnedMuseEvent) {
-        self.events.push(event);
-    }
-
-    /// Flush all buffered events as Muse text and return the sink.
-    pub fn finish(mut self) -> W {
-        let doc = events_to_doc(std::mem::take(&mut self.events));
-        let text = crate::emit::build(&doc);
-        let _ = self.sink.write_all(text.as_bytes());
-        self.sink
-    }
-}
-
-// ── Event -> AST reconstruction ──────────────────────────────────────────────
-
-fn events_to_doc(events: Vec<OwnedMuseEvent>) -> MuseDoc {
-    let mut builder = DocBuilder::new();
-    for event in events {
-        builder.process(event);
-    }
-    builder.finish()
+    /// Shared output buffer. Cleared (capacity retained) after each
+    /// top-level block is flushed.
+    out: String,
+    /// Frame stack for the block/inline construct currently being
+    /// assembled. Empty at top level — closing a construct with an empty
+    /// stack flushes.
+    stack: Vec<Frame>,
+    /// Buffered, pre-formatted title-page directive lines, awaiting the
+    /// decision (made by the next event) of whether a trailing blank line
+    /// follows. See the module doc's O(metadata field count) note.
+    metadata_text: Option<String>,
 }
 
 enum Frame {
-    Document {
-        blocks: Vec<Block>,
-    },
-    Paragraph {
-        inlines: Vec<Inline>,
-    },
-    Heading {
-        level: u8,
-        inlines: Vec<Inline>,
-    },
-    Blockquote {
-        blocks: Vec<Block>,
-    },
-    Verse {
-        blocks: Vec<Block>,
-    },
-    CenteredBlock {
-        blocks: Vec<Block>,
-    },
-    RightBlock {
-        blocks: Vec<Block>,
-    },
-    List {
-        ordered: bool,
-        items: Vec<Vec<Block>>,
-    },
-    ListItem {
-        blocks: Vec<Block>,
-    },
-    DefinitionList {
-        items: Vec<(Vec<Inline>, Vec<Block>)>,
-    },
-    DefinitionTerm {
-        inlines: Vec<Inline>,
-    },
-    DefinitionDesc {
-        blocks: Vec<Block>,
-    },
-    Table {
-        rows: Vec<TableRow>,
-    },
-    TableRow {
-        header: bool,
-        cells: Vec<Vec<Inline>>,
-    },
-    TableCell {
-        inlines: Vec<Inline>,
-    },
-    FootnoteDef {
-        label: String,
-        inlines: Vec<Inline>,
-    },
-    // Inline span frames
-    Bold {
-        inlines: Vec<Inline>,
-    },
-    Italic {
-        inlines: Vec<Inline>,
-    },
-    Underline {
-        inlines: Vec<Inline>,
-    },
-    Strikethrough {
-        inlines: Vec<Inline>,
-    },
-    Superscript {
-        inlines: Vec<Inline>,
-    },
-    Subscript {
-        inlines: Vec<Inline>,
-    },
-    Link {
-        url: String,
-        inlines: Vec<Inline>,
-    },
+    Paragraph,
+    Heading,
+    Blockquote,
+    Verse,
+    CenteredBlock,
+    RightBlock,
+    List { ordered: bool, num: u32 },
+    ListItem,
+    DefinitionList,
+    DefinitionTerm,
+    DefinitionDesc,
+    Table,
+    TableRow { header: bool, cell_idx: u32 },
+    TableCell,
+    FootnoteDef,
+    Bold,
+    Italic,
+    Underline,
+    Strikethrough,
+    Superscript,
+    Subscript,
+    Link,
 }
 
-struct DocBuilder {
-    stack: Vec<Frame>,
-}
+const DEFAULT_OUT_CAPACITY: usize = 4096;
 
-impl DocBuilder {
-    fn new() -> Self {
-        DocBuilder {
-            stack: vec![Frame::Document { blocks: vec![] }],
+impl<W: Write> Writer<W> {
+    pub fn new(sink: W) -> Self {
+        Self::with_capacity(sink, DEFAULT_OUT_CAPACITY)
+    }
+
+    /// Like [`Writer::new`], but reserves `out_capacity` bytes up front.
+    pub fn with_capacity(sink: W, out_capacity: usize) -> Self {
+        Writer {
+            sink,
+            out: String::with_capacity(out_capacity),
+            stack: Vec::new(),
+            metadata_text: None,
+        }
+    }
+
+    /// Feed one event to the writer. Writes bytes to the sink immediately
+    /// whenever this event completes a top-level construct.
+    pub fn write_event(&mut self, event: OwnedMuseEvent) {
+        match &event {
+            OwnedMuseEvent::Metadata {
+                title,
+                author,
+                date,
+                description,
+                keywords,
+            } => {
+                let mut text = String::new();
+                for (prefix, value) in [
+                    ("#title ", title),
+                    ("#author ", author),
+                    ("#date ", date),
+                    ("#desc ", description),
+                    ("#keywords ", keywords),
+                ] {
+                    if let Some(v) = value {
+                        text.push_str(prefix);
+                        text.push_str(v);
+                        text.push('\n');
+                    }
+                }
+                self.metadata_text = Some(text);
+                return;
+            }
+            OwnedMuseEvent::StartDocument => {}
+            // `StartDocument` always precedes `Metadata` (see events.rs), so
+            // it must not trigger the flush — that would take (and discard)
+            // the not-yet-populated metadata slot.
+            OwnedMuseEvent::EndDocument => self.flush_metadata_if_pending(false),
+            _ => self.flush_metadata_if_pending(true),
+        }
+        self.process(event);
+        self.maybe_flush();
+    }
+
+    /// Flush any remaining buffered bytes and recover the sink.
+    pub fn finish(mut self) -> W {
+        self.flush_metadata_if_pending(false);
+        self.flush();
+        self.sink
+    }
+
+    fn flush(&mut self) {
+        if !self.out.is_empty() {
+            let _ = self.sink.write_all(self.out.as_bytes());
+            self.out.clear();
+        }
+    }
+
+    fn maybe_flush(&mut self) {
+        if self.stack.is_empty() {
+            self.flush();
+        }
+    }
+
+    fn push(&mut self, s: &str) {
+        self.out.push_str(s);
+    }
+
+    fn flush_metadata_if_pending(&mut self, more_content_follows: bool) {
+        if let Some(text) = self.metadata_text.take()
+            && !text.is_empty()
+        {
+            self.push(&text);
+            if more_content_follows {
+                self.push("\n");
+            }
+        }
+    }
+
+    /// Whether the current innermost frame accepts inline text/markup.
+    fn accepts_inline(&self) -> bool {
+        matches!(
+            self.stack.last(),
+            Some(
+                Frame::Paragraph
+                    | Frame::Heading
+                    | Frame::Bold
+                    | Frame::Italic
+                    | Frame::Underline
+                    | Frame::Strikethrough
+                    | Frame::Superscript
+                    | Frame::Subscript
+                    | Frame::Link
+                    | Frame::TableCell
+                    | Frame::DefinitionTerm
+                    | Frame::FootnoteDef
+            )
+        )
+    }
+
+    /// Mirrors `emit::build_block`'s per-container handling of a `Paragraph`
+    /// child: called with the stack already popped back to the parent
+    /// frame, so `self.stack.last()` is that parent.
+    fn paragraph_terminator(&self) -> &'static str {
+        match self.stack.last() {
+            Some(Frame::ListItem | Frame::DefinitionDesc) => "",
+            Some(Frame::Blockquote | Frame::Verse | Frame::CenteredBlock | Frame::RightBlock) => {
+                "\n"
+            }
+            _ => "\n\n",
         }
     }
 
     #[allow(clippy::too_many_lines)]
     fn process(&mut self, event: OwnedMuseEvent) {
         match event {
-            // ── Document wrapper (ignored for reconstruction) ─────────────
             OwnedMuseEvent::StartDocument | OwnedMuseEvent::EndDocument => {}
+            OwnedMuseEvent::Metadata { .. } => unreachable!("handled in write_event"),
 
-            // ── Block open ────────────────────────────────────────────────
-            OwnedMuseEvent::StartParagraph => {
-                self.stack.push(Frame::Paragraph { inlines: vec![] });
-            }
+            OwnedMuseEvent::StartParagraph => self.stack.push(Frame::Paragraph),
             OwnedMuseEvent::EndParagraph => {
-                if let Some(Frame::Paragraph { inlines }) = self.stack.pop() {
-                    self.push_block(Block::Paragraph {
-                        inlines,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::Paragraph)) {
+                    self.stack.pop();
+                    let term = self.paragraph_terminator();
+                    self.push(term);
                 }
             }
             OwnedMuseEvent::StartHeading { level } => {
-                self.stack.push(Frame::Heading {
-                    level,
-                    inlines: vec![],
-                });
+                let capped = (level as usize).min(5);
+                for _ in 0..capped {
+                    self.push("*");
+                }
+                self.push(" ");
+                self.stack.push(Frame::Heading);
             }
             OwnedMuseEvent::EndHeading => {
-                if let Some(Frame::Heading { level, inlines }) = self.stack.pop() {
-                    self.push_block(Block::Heading {
-                        level,
-                        inlines,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::Heading)) {
+                    self.stack.pop();
+                    self.push("\n\n");
                 }
             }
             OwnedMuseEvent::StartBlockquote => {
-                self.stack.push(Frame::Blockquote { blocks: vec![] });
+                self.push("<quote>\n");
+                self.stack.push(Frame::Blockquote);
             }
             OwnedMuseEvent::EndBlockquote => {
-                if let Some(Frame::Blockquote { blocks }) = self.stack.pop() {
-                    self.push_block(Block::Blockquote {
-                        children: blocks,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::Blockquote)) {
+                    self.stack.pop();
+                    self.push("</quote>\n\n");
                 }
             }
             OwnedMuseEvent::StartVerse => {
-                self.stack.push(Frame::Verse { blocks: vec![] });
+                self.push("<verse>\n");
+                self.stack.push(Frame::Verse);
             }
             OwnedMuseEvent::EndVerse => {
-                if let Some(Frame::Verse { blocks }) = self.stack.pop() {
-                    self.push_block(Block::Verse {
-                        children: blocks,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::Verse)) {
+                    self.stack.pop();
+                    self.push("</verse>\n\n");
                 }
             }
             OwnedMuseEvent::StartCenteredBlock => {
-                self.stack.push(Frame::CenteredBlock { blocks: vec![] });
+                self.push("<center>\n");
+                self.stack.push(Frame::CenteredBlock);
             }
             OwnedMuseEvent::EndCenteredBlock => {
-                if let Some(Frame::CenteredBlock { blocks }) = self.stack.pop() {
-                    self.push_block(Block::CenteredBlock {
-                        children: blocks,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::CenteredBlock)) {
+                    self.stack.pop();
+                    self.push("</center>\n\n");
                 }
             }
             OwnedMuseEvent::StartRightBlock => {
-                self.stack.push(Frame::RightBlock { blocks: vec![] });
+                self.push("<right>\n");
+                self.stack.push(Frame::RightBlock);
             }
             OwnedMuseEvent::EndRightBlock => {
-                if let Some(Frame::RightBlock { blocks }) = self.stack.pop() {
-                    self.push_block(Block::RightBlock {
-                        children: blocks,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::RightBlock)) {
+                    self.stack.pop();
+                    self.push("</right>\n\n");
                 }
             }
             OwnedMuseEvent::StartList { ordered } => {
-                self.stack.push(Frame::List {
-                    ordered,
-                    items: vec![],
-                });
+                self.stack.push(Frame::List { ordered, num: 1 });
             }
             OwnedMuseEvent::EndList => {
-                if let Some(Frame::List { ordered, items }) = self.stack.pop() {
-                    self.push_block(Block::List {
-                        ordered,
-                        items,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::List { .. })) {
+                    self.stack.pop();
+                    self.push("\n");
                 }
             }
             OwnedMuseEvent::StartListItem => {
-                self.stack.push(Frame::ListItem { blocks: vec![] });
+                match self.stack.last_mut() {
+                    Some(Frame::List {
+                        ordered: true, num, ..
+                    }) => {
+                        let prefix = format!(" {num}. ");
+                        *num += 1;
+                        self.push(&prefix);
+                    }
+                    Some(Frame::List { ordered: false, .. }) => self.push(" - "),
+                    _ => {}
+                }
+                self.stack.push(Frame::ListItem);
             }
             OwnedMuseEvent::EndListItem => {
-                if let Some(Frame::ListItem { blocks }) = self.stack.pop()
-                    && let Some(Frame::List { items, .. }) = self.stack.last_mut()
-                {
-                    items.push(blocks);
+                if matches!(self.stack.last(), Some(Frame::ListItem)) {
+                    self.stack.pop();
+                    self.push("\n");
                 }
             }
-            OwnedMuseEvent::StartDefinitionList => {
-                self.stack.push(Frame::DefinitionList { items: vec![] });
-            }
+            OwnedMuseEvent::StartDefinitionList => self.stack.push(Frame::DefinitionList),
             OwnedMuseEvent::EndDefinitionList => {
-                if let Some(Frame::DefinitionList { items }) = self.stack.pop() {
-                    self.push_block(Block::DefinitionList {
-                        items,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::DefinitionList)) {
+                    self.stack.pop();
+                    self.push("\n");
                 }
             }
-            OwnedMuseEvent::StartDefinitionTerm => {
-                self.stack.push(Frame::DefinitionTerm { inlines: vec![] });
-            }
+            OwnedMuseEvent::StartDefinitionTerm => self.stack.push(Frame::DefinitionTerm),
             OwnedMuseEvent::EndDefinitionTerm => {
-                if let Some(Frame::DefinitionTerm { inlines }) = self.stack.pop()
-                    && let Some(Frame::DefinitionList { items }) = self.stack.last_mut()
-                {
-                    items.push((inlines, vec![]));
+                if matches!(self.stack.last(), Some(Frame::DefinitionTerm)) {
+                    self.stack.pop();
+                    self.push(" :: ");
                 }
             }
-            OwnedMuseEvent::StartDefinitionDesc => {
-                self.stack.push(Frame::DefinitionDesc { blocks: vec![] });
-            }
+            OwnedMuseEvent::StartDefinitionDesc => self.stack.push(Frame::DefinitionDesc),
             OwnedMuseEvent::EndDefinitionDesc => {
-                if let Some(Frame::DefinitionDesc { blocks }) = self.stack.pop()
-                    && let Some(Frame::DefinitionList { items }) = self.stack.last_mut()
-                    && let Some(last) = items.last_mut()
-                {
-                    last.1 = blocks;
+                if matches!(self.stack.last(), Some(Frame::DefinitionDesc)) {
+                    self.stack.pop();
+                    self.push("\n");
                 }
             }
-            OwnedMuseEvent::StartTable => {
-                self.stack.push(Frame::Table { rows: vec![] });
-            }
+            OwnedMuseEvent::StartTable => self.stack.push(Frame::Table),
             OwnedMuseEvent::EndTable => {
-                if let Some(Frame::Table { rows }) = self.stack.pop() {
-                    self.push_block(Block::Table {
-                        rows,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::Table)) {
+                    self.stack.pop();
+                    self.push("\n");
                 }
             }
             OwnedMuseEvent::StartTableRow { header } => {
+                self.push(if header { "|| " } else { "| " });
                 self.stack.push(Frame::TableRow {
                     header,
-                    cells: vec![],
+                    cell_idx: 0,
                 });
             }
             OwnedMuseEvent::EndTableRow => {
-                if let Some(Frame::TableRow { header, cells }) = self.stack.pop()
-                    && let Some(Frame::Table { rows }) = self.stack.last_mut()
-                {
-                    rows.push(TableRow { cells, header });
+                if let Some(Frame::TableRow { header, .. }) = self.stack.pop() {
+                    self.push(if header { " ||\n" } else { " |\n" });
                 }
             }
             OwnedMuseEvent::StartTableCell => {
-                self.stack.push(Frame::TableCell { inlines: vec![] });
+                if let Some(Frame::TableRow { header, cell_idx }) = self.stack.last_mut() {
+                    let sep = if *cell_idx > 0 {
+                        Some(if *header { " || " } else { " | " })
+                    } else {
+                        None
+                    };
+                    *cell_idx += 1;
+                    if let Some(sep) = sep {
+                        self.push(sep);
+                    }
+                }
+                self.stack.push(Frame::TableCell);
             }
             OwnedMuseEvent::EndTableCell => {
-                if let Some(Frame::TableCell { inlines }) = self.stack.pop()
-                    && let Some(Frame::TableRow { cells, .. }) = self.stack.last_mut()
-                {
-                    cells.push(inlines);
+                if matches!(self.stack.last(), Some(Frame::TableCell)) {
+                    self.stack.pop();
                 }
             }
             OwnedMuseEvent::StartFootnoteDef { label } => {
-                self.stack.push(Frame::FootnoteDef {
-                    label: label.into_owned(),
-                    inlines: vec![],
-                });
+                self.push("[");
+                self.push(&label);
+                self.push("] ");
+                self.stack.push(Frame::FootnoteDef);
             }
             OwnedMuseEvent::EndFootnoteDef => {
-                if let Some(Frame::FootnoteDef { label, inlines }) = self.stack.pop() {
-                    self.push_block(Block::FootnoteDef {
-                        label,
-                        content: inlines,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::FootnoteDef)) {
+                    self.stack.pop();
+                    self.push("\n\n");
                 }
             }
-            OwnedMuseEvent::HorizontalRule => {
-                self.push_block(Block::HorizontalRule { span: Span::NONE });
-            }
+            OwnedMuseEvent::HorizontalRule => self.push("----\n\n"),
 
-            // ── Leaf block events ─────────────────────────────────────────
             OwnedMuseEvent::LiteralBlock { content } => {
-                self.push_block(Block::LiteralBlock {
-                    content: content.into_owned(),
-                    span: Span::NONE,
-                });
+                self.push("<literal>\n");
+                self.push(&content);
+                if !content.ends_with('\n') {
+                    self.push("\n");
+                }
+                self.push("</literal>\n\n");
             }
             OwnedMuseEvent::SrcBlock { lang, content } => {
-                self.push_block(Block::SrcBlock {
-                    lang: lang.map(|l| l.into_owned()),
-                    content: content.into_owned(),
-                    span: Span::NONE,
-                });
+                if let Some(lang) = &lang {
+                    self.push(&format!("<src lang=\"{lang}\">\n"));
+                } else {
+                    self.push("<src>\n");
+                }
+                self.push(&content);
+                if !content.ends_with('\n') {
+                    self.push("\n");
+                }
+                self.push("</src>\n\n");
             }
             OwnedMuseEvent::CodeBlock { content } => {
-                self.push_block(Block::CodeBlock {
-                    content: content.into_owned(),
-                    span: Span::NONE,
-                });
+                self.push("<example>\n");
+                self.push(&content);
+                if !content.ends_with('\n') {
+                    self.push("\n");
+                }
+                self.push("</example>\n\n");
             }
             OwnedMuseEvent::Comment { content } => {
-                self.push_block(Block::Comment {
-                    content: content.into_owned(),
-                    span: Span::NONE,
-                });
+                self.push(";; ");
+                self.push(&content);
+                self.push("\n\n");
             }
 
             // ── Inline events ─────────────────────────────────────────────
             OwnedMuseEvent::Text(cow) => {
-                self.push_inline(Inline::Text(cow.into_owned(), Span::NONE));
-            }
-            OwnedMuseEvent::StartBold => {
-                self.stack.push(Frame::Bold { inlines: vec![] });
-            }
-            OwnedMuseEvent::EndBold => {
-                if let Some(Frame::Bold { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Bold(inlines, Span::NONE));
+                if self.accepts_inline() {
+                    self.push(&cow);
                 }
             }
-            OwnedMuseEvent::StartItalic => {
-                self.stack.push(Frame::Italic { inlines: vec![] });
-            }
-            OwnedMuseEvent::EndItalic => {
-                if let Some(Frame::Italic { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Italic(inlines, Span::NONE));
-                }
-            }
-            OwnedMuseEvent::StartUnderline => {
-                self.stack.push(Frame::Underline { inlines: vec![] });
-            }
-            OwnedMuseEvent::EndUnderline => {
-                if let Some(Frame::Underline { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Underline(inlines, Span::NONE));
-                }
-            }
+            OwnedMuseEvent::StartBold => self.write_delim_open("**", Frame::Bold),
+            OwnedMuseEvent::EndBold => self.write_delim_close(&Frame::Bold, "**"),
+            OwnedMuseEvent::StartItalic => self.write_delim_open("*", Frame::Italic),
+            OwnedMuseEvent::EndItalic => self.write_delim_close(&Frame::Italic, "*"),
+            OwnedMuseEvent::StartUnderline => self.write_delim_open("_", Frame::Underline),
+            OwnedMuseEvent::EndUnderline => self.write_delim_close(&Frame::Underline, "_"),
             OwnedMuseEvent::StartStrikethrough => {
-                self.stack.push(Frame::Strikethrough { inlines: vec![] });
+                self.write_delim_open("~~", Frame::Strikethrough);
             }
             OwnedMuseEvent::EndStrikethrough => {
-                if let Some(Frame::Strikethrough { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Strikethrough(inlines, Span::NONE));
-                }
+                self.write_delim_close(&Frame::Strikethrough, "~~");
             }
-            OwnedMuseEvent::StartSuperscript => {
-                self.stack.push(Frame::Superscript { inlines: vec![] });
-            }
-            OwnedMuseEvent::EndSuperscript => {
-                if let Some(Frame::Superscript { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Superscript(inlines, Span::NONE));
-                }
-            }
-            OwnedMuseEvent::StartSubscript => {
-                self.stack.push(Frame::Subscript { inlines: vec![] });
-            }
-            OwnedMuseEvent::EndSubscript => {
-                if let Some(Frame::Subscript { inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Subscript(inlines, Span::NONE));
-                }
-            }
+            OwnedMuseEvent::StartSuperscript => self.write_delim_open("^", Frame::Superscript),
+            OwnedMuseEvent::EndSuperscript => self.write_delim_close(&Frame::Superscript, "^"),
+            OwnedMuseEvent::StartSubscript => self.write_delim_open("<sub>", Frame::Subscript),
+            OwnedMuseEvent::EndSubscript => self.write_delim_close(&Frame::Subscript, "</sub>"),
             OwnedMuseEvent::Code(cow) => {
-                self.push_inline(Inline::Code(cow.into_owned(), Span::NONE));
+                if self.accepts_inline() {
+                    self.push("=");
+                    self.push(&cow);
+                    self.push("=");
+                }
             }
             OwnedMuseEvent::StartLink { url } => {
-                self.stack.push(Frame::Link {
-                    url: url.into_owned(),
-                    inlines: vec![],
-                });
+                if self.accepts_inline() {
+                    self.push("[[");
+                    self.push(&url);
+                    self.push("][");
+                }
+                self.stack.push(Frame::Link);
             }
             OwnedMuseEvent::EndLink => {
-                if let Some(Frame::Link { url, inlines }) = self.stack.pop() {
-                    self.push_inline(Inline::Link {
-                        url,
-                        children: inlines,
-                        span: Span::NONE,
-                    });
+                if matches!(self.stack.last(), Some(Frame::Link)) {
+                    self.stack.pop();
+                    if self.accepts_inline() {
+                        self.push("]]");
+                    }
                 }
             }
             OwnedMuseEvent::FootnoteRef { label } => {
-                self.push_inline(Inline::FootnoteRef {
-                    label: label.into_owned(),
-                    span: Span::NONE,
-                });
+                if self.accepts_inline() {
+                    self.push("[");
+                    self.push(&label);
+                    self.push("]");
+                }
             }
             OwnedMuseEvent::LineBreak => {
-                self.push_inline(Inline::LineBreak(Span::NONE));
+                if self.accepts_inline() {
+                    self.push("<br>");
+                }
             }
             OwnedMuseEvent::Anchor { name } => {
-                self.push_inline(Inline::Anchor {
-                    name: name.into_owned(),
-                    span: Span::NONE,
-                });
+                if self.accepts_inline() {
+                    self.push("<anchor ");
+                    self.push(&name);
+                    self.push(">");
+                }
             }
             OwnedMuseEvent::Image { src, alt } => {
-                self.push_inline(Inline::Image {
-                    src: src.into_owned(),
-                    alt: alt.map(|a| a.into_owned()),
-                    span: Span::NONE,
-                });
+                if self.accepts_inline() {
+                    self.push("[[");
+                    self.push(&src);
+                    if let Some(alt) = &alt {
+                        self.push("][");
+                        self.push(alt);
+                    }
+                    self.push("]]");
+                }
             }
         }
     }
 
-    fn push_block(&mut self, block: Block) {
-        match self.stack.last_mut() {
-            Some(Frame::Document { blocks }) => blocks.push(block),
-            Some(Frame::Blockquote { blocks }) => blocks.push(block),
-            Some(Frame::Verse { blocks }) => blocks.push(block),
-            Some(Frame::CenteredBlock { blocks }) => blocks.push(block),
-            Some(Frame::RightBlock { blocks }) => blocks.push(block),
-            Some(Frame::ListItem { blocks }) => blocks.push(block),
-            Some(Frame::DefinitionDesc { blocks }) => blocks.push(block),
-            _ => {} // unexpected context, discard
+    fn write_delim_open(&mut self, delim: &str, frame: Frame) {
+        if self.accepts_inline() {
+            self.push(delim);
         }
+        self.stack.push(frame);
     }
 
-    fn push_inline(&mut self, inline: Inline) {
-        match self.stack.last_mut() {
-            Some(Frame::Paragraph { inlines }) => inlines.push(inline),
-            Some(Frame::Heading { inlines, .. }) => inlines.push(inline),
-            Some(Frame::Bold { inlines }) => inlines.push(inline),
-            Some(Frame::Italic { inlines }) => inlines.push(inline),
-            Some(Frame::Underline { inlines }) => inlines.push(inline),
-            Some(Frame::Strikethrough { inlines }) => inlines.push(inline),
-            Some(Frame::Superscript { inlines }) => inlines.push(inline),
-            Some(Frame::Subscript { inlines }) => inlines.push(inline),
-            Some(Frame::Link { inlines, .. }) => inlines.push(inline),
-            Some(Frame::TableCell { inlines }) => inlines.push(inline),
-            Some(Frame::DefinitionTerm { inlines }) => inlines.push(inline),
-            Some(Frame::FootnoteDef { inlines, .. }) => inlines.push(inline),
-            _ => {} // unexpected context, discard
-        }
-    }
-
-    fn finish(mut self) -> MuseDoc {
-        let blocks = match self.stack.pop() {
-            Some(Frame::Document { blocks }) => blocks,
-            _ => vec![],
-        };
-        MuseDoc {
-            blocks,
-            span: Span::NONE,
-            ..Default::default()
+    fn write_delim_close(&mut self, expected: &Frame, delim: &str) {
+        let matches_top = matches!(
+            (self.stack.last(), expected),
+            (Some(Frame::Bold), Frame::Bold)
+                | (Some(Frame::Italic), Frame::Italic)
+                | (Some(Frame::Underline), Frame::Underline)
+                | (Some(Frame::Strikethrough), Frame::Strikethrough)
+                | (Some(Frame::Superscript), Frame::Superscript)
+                | (Some(Frame::Subscript), Frame::Subscript)
+        );
+        if matches_top {
+            self.stack.pop();
+            // The closing delimiter belongs to the span that just closed,
+            // mirroring `write_delim_open`'s unconditional emission.
+            self.push(delim);
         }
     }
 }
@@ -591,5 +610,202 @@ mod tests {
         let s = String::from_utf8(bytes).unwrap();
         assert!(s.contains("||"), "got: {s:?}");
         assert!(s.contains("Name"), "got: {s:?}");
+    }
+
+    #[test]
+    fn test_writer_metadata_title_page() {
+        let mut w = Writer::new(Vec::<u8>::new());
+        w.write_event(OwnedMuseEvent::StartDocument);
+        w.write_event(OwnedMuseEvent::Metadata {
+            title: Some(Cow::Owned("My Doc".to_string())),
+            author: Some(Cow::Owned("Jane".to_string())),
+            date: None,
+            description: None,
+            keywords: None,
+        });
+        w.write_event(OwnedMuseEvent::StartParagraph);
+        w.write_event(OwnedMuseEvent::Text(Cow::Owned("Body.".to_string())));
+        w.write_event(OwnedMuseEvent::EndParagraph);
+        w.write_event(OwnedMuseEvent::EndDocument);
+        let bytes = w.finish();
+        let s = String::from_utf8(bytes).unwrap();
+        assert_eq!(s, "#title My Doc\n#author Jane\n\nBody.\n\n");
+    }
+
+    /// The streaming `Writer` must produce byte-identical output to the
+    /// tree-based `emit::build` for the same document — including the
+    /// context-dependent `Paragraph` terminator (top level vs list item vs
+    /// blockquote/verse/centered/right), tables, definition lists, and a
+    /// title page (via a hand-built event stream, since `parse()` doesn't
+    /// yet feed `MuseDoc`'s title/author/etc. fields back through
+    /// `events()` for arbitrary round-tripping beyond what's tested here).
+    #[test]
+    fn test_writer_byte_identical_to_builder() {
+        let inputs = [
+            "* Hello\n\nA paragraph.\n",
+            "A paragraph with **bold**, *italic*, _underline_, ~~strike~~, ^super^, <sub>sub</sub>, =code=, [[http://x/][a link]], [1], <br>, <anchor here>, [[img.png][alt text]].\n",
+            " - item one\n - item two\n\n 1. first\n 2. second\n",
+            "term1 :: definition one\nterm2 :: definition two\n",
+            "<quote>\nA quoted paragraph.\n\nSecond paragraph.\n</quote>\n",
+            "<verse>\nline one\nline two\n</verse>\n",
+            "<center>\ncentered text\n</center>\n",
+            "<right>\nright aligned\n</right>\n",
+            "<example>\nfn main() {}\n</example>\n",
+            "<src lang=\"rust\">\nfn main() {}\n</src>\n",
+            "<literal>\nraw stuff\n</literal>\n",
+            ";; a comment\n",
+            "----\n",
+            "|| Name || Age ||\n| Alice | 30 |\n",
+            "[1] A footnote body.\n",
+            " - outer\n\n   - inner a\n   - inner b\n",
+        ];
+        for input in inputs {
+            let (doc, _) = crate::parse(input);
+            let built = crate::emit::build(&doc);
+
+            let mut w = Writer::new(Vec::<u8>::new());
+            for e in crate::events::events(&doc) {
+                w.write_event(e.into_owned());
+            }
+            let streamed = String::from_utf8(w.finish()).unwrap();
+
+            assert_eq!(
+                built, streamed,
+                "streaming Writer diverged from build() for input:\n{input}\n\
+                 build():\n{built:?}\nWriter:\n{streamed:?}"
+            );
+        }
+    }
+
+    /// Regression guard against reintroducing per-event `Block`/`Inline`
+    /// subtree reconstruction, and (sharing the same allocator) a
+    /// peak-memory-stays-roughly-constant guard, both as ratios between a
+    /// small and large run rather than absolute thresholds — this test
+    /// binary's threads share one process-wide `#[global_allocator]`, so an
+    /// absolute threshold isn't robust to unrelated concurrent tests'
+    /// allocation noise, but a genuine unbounded-growth bug still shows up
+    /// as a large ratio between the two runs.
+    #[test]
+    fn test_writer_no_subtree_reconstruction_blowup() {
+        use std::alloc::{GlobalAlloc, Layout, System};
+        use std::cell::Cell;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        struct TrackingAlloc;
+        static ALLOCS: AtomicUsize = AtomicUsize::new(0);
+        // current/peak bytes are tracked per-thread (`thread_local!`, not a
+        // shared `AtomicUsize`): the allocator is process-wide, and `cargo
+        // test` runs other tests concurrently on other threads by default,
+        // so a shared counter lets an unrelated test's allocations inflate
+        // this measurement — confirmed as a real flake in this batch's
+        // `pod-fmt` sibling (a spurious 407x ratio under full-workspace
+        // `cargo test -q`, passing cleanly under `--test-threads=1`).
+        // Thread-local counters make the measurement immune to what other
+        // threads in the same binary do.
+        thread_local! {
+            static CURRENT_BYTES: Cell<usize> = const { Cell::new(0) };
+            static PEAK_BYTES: Cell<usize> = const { Cell::new(0) };
+        }
+        unsafe impl GlobalAlloc for TrackingAlloc {
+            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+                ALLOCS.fetch_add(1, Ordering::Relaxed);
+                let cur = CURRENT_BYTES.with(|c| {
+                    let v = c.get() + layout.size();
+                    c.set(v);
+                    v
+                });
+                PEAK_BYTES.with(|p| {
+                    if cur > p.get() {
+                        p.set(cur);
+                    }
+                });
+                unsafe { System.alloc(layout) }
+            }
+            unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+                CURRENT_BYTES.with(|c| c.set(c.get().saturating_sub(layout.size())));
+                unsafe { System.dealloc(ptr, layout) }
+            }
+        }
+        #[global_allocator]
+        static GLOBAL: TrackingAlloc = TrackingAlloc;
+
+        fn events_for(n: usize) -> Vec<OwnedMuseEvent> {
+            let mut evs = Vec::new();
+            for i in 0..n {
+                evs.push(OwnedMuseEvent::StartHeading { level: 2 });
+                evs.push(OwnedMuseEvent::Text(Cow::Owned(format!("Section {i}"))));
+                evs.push(OwnedMuseEvent::EndHeading);
+                evs.push(OwnedMuseEvent::StartParagraph);
+                evs.push(OwnedMuseEvent::Text(Cow::Owned("plain ".to_string())));
+                evs.push(OwnedMuseEvent::StartBold);
+                evs.push(OwnedMuseEvent::Text(Cow::Owned("bold".to_string())));
+                evs.push(OwnedMuseEvent::EndBold);
+                evs.push(OwnedMuseEvent::EndParagraph);
+                evs.push(OwnedMuseEvent::StartList { ordered: false });
+                for j in 0..2 {
+                    evs.push(OwnedMuseEvent::StartListItem);
+                    evs.push(OwnedMuseEvent::StartParagraph);
+                    evs.push(OwnedMuseEvent::Text(Cow::Owned(format!("item {j}"))));
+                    evs.push(OwnedMuseEvent::EndParagraph);
+                    evs.push(OwnedMuseEvent::EndListItem);
+                }
+                evs.push(OwnedMuseEvent::EndList);
+            }
+            evs
+        }
+
+        fn run(n: usize) -> usize {
+            let before = ALLOCS.load(Ordering::Relaxed);
+            let evs = events_for(n);
+            let after_build = ALLOCS.load(Ordering::Relaxed);
+            let mut out = Vec::new();
+            {
+                let mut w = Writer::new(&mut out);
+                for e in evs {
+                    w.write_event(e);
+                }
+                w.finish();
+            }
+            let after = ALLOCS.load(Ordering::Relaxed);
+            std::hint::black_box(&out);
+            after - after_build.max(before)
+        }
+
+        let small = run(200).max(1);
+        let large = run(2000);
+        let ratio = large as f64 / small as f64;
+        assert!(
+            ratio < 20.0,
+            "allocation count did not scale near-linearly: {small} allocs @200 -> \
+             {large} allocs @2000 (ratio {ratio:.2}); this suggests reintroduced \
+             per-block subtree reconstruction"
+        );
+
+        fn run_peak(n: usize) -> usize {
+            let before = CURRENT_BYTES.with(|c| c.get());
+            PEAK_BYTES.with(|p| p.set(before));
+            let evs = events_for(n);
+            let mut out = Vec::new();
+            {
+                let mut w = Writer::new(&mut out);
+                for e in evs {
+                    w.write_event(e);
+                }
+                w.finish();
+            }
+            std::hint::black_box(&out);
+            PEAK_BYTES.with(|p| p.get()).saturating_sub(before)
+        }
+
+        let small_peak = run_peak(500).max(1);
+        let large_peak = run_peak(5000);
+        let peak_ratio = large_peak as f64 / small_peak as f64;
+        assert!(
+            peak_ratio < 20.0,
+            "peak memory did not stay roughly constant across document sizes: \
+             {small_peak} bytes peak @500 -> {large_peak} bytes peak @5000 \
+             (ratio {peak_ratio:.2}); this suggests the writer is buffering O(document) \
+             instead of O(nesting depth)"
+        );
     }
 }
