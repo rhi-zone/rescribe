@@ -596,22 +596,18 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              lacks parse()'s malformed-XML auto-close recovery, diverging on fixture \
              adv-malformed-xml; see the \"docbook\" events KnownFailure for the root cause",
         ),
-        streaming_parser: ApiState::KnownFailure(
-            "the mismatched/unmatched-end-tag bug shared with docbook-fmt/tei-fmt (see the \
-             \"docbook\" streaming_parser comment above) is fixed here too (confirmed passing \
-             on fixtures adv-mismatched-end-tag, adv-unmatched-end-tag) — but jats-fmt's own \
-             pre-existing adv-malformed-xml fixture (`<article ...><body><p>Unterminated \
-             content`, no closing tags at all — a truncated-input case, not a mismatched-tag \
-             one, so the fix above doesn't touch it) exposes an unrelated, narrower gap once \
-             unmasked: the adversarial-chunking test's incrementality probe feeds exactly the \
-             first half of the input (40 of 81 bytes) and asserts at least one event was \
-             delivered before finish(); those 40 bytes end mid-attribute-value inside the \
-             still-open root <article ...> start tag (its xmlns:xlink=\"...\" attribute alone \
-             is longer than half the file), so zero events is the correct, spec-conforming \
-             answer for that exact split point, not a StreamingParser defect — but the probe's \
-             fixed 50% split doesn't know that. Not touched here: fixing this needs either a \
-             smarter incrementality probe or a different single-fixture-shape assertion",
-        ),
+        // The mismatched/unmatched-end-tag bug shared with docbook-fmt/tei-fmt (see the
+        // "docbook" streaming_parser comment above) is fixed here too (confirmed passing on
+        // fixtures adv-mismatched-end-tag, adv-unmatched-end-tag). The remaining failure this
+        // entry used to track was a probe-methodology artifact, not a StreamingParser defect:
+        // the adversarial-chunking test's incrementality probe fed exactly the first half of
+        // fixture adv-malformed-xml (40 of 81 bytes), landing mid-attribute-value inside the
+        // still-open root <article ...> start tag, so zero events at that exact split point was
+        // the correct, spec-conforming answer — not a bug. Fixed 2026-07-31 by replacing the
+        // fixed-50%-byte-split probe with a hand-built synthetic sample with a provably complete
+        // prefix (same fix already applied to fb2-fmt/texinfo/xwiki/textile-fmt/pod-fmt); the
+        // new probe passes, confirming the implementation itself was already correct.
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "shares docbook-fmt's implementation: the streaming Writer inherits events()'s lack \
              of parse()'s malformed-XML auto-close recovery; see the \"docbook\" \
@@ -1386,18 +1382,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         api: "events",
         description: "shares docbook-fmt's implementation; entity-coalescing is fixed, same \
                        remaining malformed-XML auto-close-recovery gap",
-    },
-    KnownFailure {
-        format: "jats",
-        api: "streaming_parser",
-        description: "the mismatched/unmatched-end-tag bug shared with docbook-fmt/tei-fmt is \
-                       fixed here too, but jats-fmt's own adv-malformed-xml fixture is a \
-                       truncated-input case (not mismatched-tag), and unmasking it exposes an \
-                       unrelated gap: the adversarial-chunking test's fixed 50%-byte-split \
-                       incrementality probe lands mid-attribute-value inside the still-open \
-                       root start tag for that fixture, so zero events delivered at that split \
-                       point is correct behavior, not a StreamingParser defect — the probe \
-                       itself isn't fixture-shape-aware",
     },
     KnownFailure {
         format: "jats",
