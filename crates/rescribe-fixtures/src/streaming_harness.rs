@@ -276,16 +276,22 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              three are downstream of emit_block() (batch.rs:190) re-parsing each accumulated \
              block in isolation; see TODO.md",
         ),
-        // streaming_writer was KnownFailure: Event had no document-metadata
-        // variant, so events() couldn't carry #+TITLE:/#+AUTHOR:/#+CUSTOM_KEY:
-        // lines and writer.rs's DocBuilder::finish hardcoded `metadata:
-        // vec![]`, dropping every leading keyword line (fixtures metadata,
-        // keyword-line). Fixed by adding `Event::Metadata { key, value }`,
-        // emitted by EventIter::next() (parse.rs) alongside the block it
-        // precedes, and handled by DocBuilder::process/finish (writer.rs).
-        // Note Writer is still not incrementally streaming — writer.rs's
-        // module docs state it buffers all events, reconstructs the AST,
-        // then calls emit::build.
+        // streaming_writer was previously content-correct (Event::Metadata carries
+        // #+TITLE:/#+AUTHOR:/#+CUSTOM_KEY: lines) but architecturally hollow
+        // (buffer-all-events-then-reconstruct-the-AST) with no incrementality probe
+        // wired to catch it — CAPABILITIES claimed Wired while the writer.rs module
+        // doc admitted otherwise. Fixed 2026-07-31: rewritten to a single
+        // shared-buffer write-straight-through design (mirroring rst-fmt's Writer).
+        // Document metadata (Event::Metadata) is a documented, deliberate partial
+        // divergence from build()'s exact semantics — build() always moves *all*
+        // metadata to the document's very top regardless of source position, which
+        // a genuinely incremental writer cannot losslessly replicate without
+        // unbounded lookahead; this Writer instead emits each Metadata line
+        // write-through, wherever it arrives. Unobservable in the current fixture
+        // suite (no fixture has metadata after body content starts) — see
+        // writer.rs's module doc and TODO.md. Byte-identical to build() over all
+        // fixtures; the incrementality probe (previously missing from this
+        // harness) now confirms bytes reach the sink before finish().
         streaming_writer: ApiState::Wired,
     },
     // html-fmt is html5ever-backed. CLAUDE.md puts third-party-library-backed

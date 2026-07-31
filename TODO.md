@@ -9,6 +9,63 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-07-31: org-fmt `streaming_writer` hollow-writer defect fixed (and this harness's own
+Wired claim corrected).** Before this fix, `streaming_harness.rs`'s `CAPABILITIES` table
+declared `org`'s `streaming_writer` as `ApiState::Wired`, but its own adjacent comment admitted
+"Writer is still not incrementally streaming" — a documentation-accuracy gap that existed
+because the harness's `org_streaming_writer_matches_builder_over_all_fixtures` test only ever
+checked byte-identical *content*, never wiring the same incrementality probe djot/texinfo/t2t's
+equivalent tests already had. Both problems are fixed together: `org_fmt::writer::Writer`
+(`crates/formats/org-fmt/src/writer.rs`) was rewritten from buffer-all-events-then-reconstruct
+to a single shared `String` output buffer (mirroring `rst-fmt`'s `Writer`), and the missing
+incrementality probe was added to the fixture-suite test in
+`rescribe-fixtures/tests/streaming_apis.rs`.
+
+Construct classification (see the module's doc comment for the full writeup): most constructs
+are write-straight-through, using `emit.rs`'s own two idempotent tail operations
+(`ensure_newline`/`ensure_blank_line`, both operating on the *whole* buffer tail, not a scoped
+span — `emit.rs` itself has no per-construct sub-buffers except `Table`'s cell-width
+measurement) ported directly onto `Writer::out`. This forced a genuinely different
+invalid-context strategy than the other three rewrites: since `ensure_blank_line`'s
+`trim_end()` isn't scoped to a mark, the usual "write speculatively, truncate on invalid
+parent" pattern could incorrectly eat trailing whitespace belonging to earlier, valid content.
+Instead, `accepts_blocks()`/`accepts_inline()` are checked *before* writing anything, pushing a
+`Frame::Discard` marker (which itself doesn't accept blocks/inlines, cascading discard to
+descendants) rather than a real frame when invalid. `List`/`ListItem` need a `list_depth`
+counter (mirroring `BuildContext::list_depth`) plus per-child position/type dispatch (mirroring
+`build_list_item`'s `first`/`Paragraph`/`List`/other match, including a bare-inline-run case
+for list items with no `StartParagraph` wrapper — `events()` emits this for
+`ListItemContent::Inline`). `Table` is genuinely content-dependent (column widths from every
+cell's trimmed formatted-markup length), collecting cells the same way `rst-fmt` captures
+heading plain text.
+
+**Document metadata (`Event::Metadata`) is a documented, deliberate partial divergence from
+`build()`'s exact semantics — not an oversight.** `build()` always moves *all* `OrgDoc.metadata`
+to the very top of the document regardless of where in the source it appeared (confirmed via
+`parse.rs`: `parse_next_block` can pick up a `#+KEY: value` line at any point in the document,
+not just the start). A genuinely incremental writer cannot losslessly replicate "move
+everything to the top" without unbounded lookahead (metadata could appear immediately before
+the *last* block), so this `Writer` instead emits each `Metadata` line write-through, wherever
+it arrives, with the single blank-line-before-next-block rule applied once metadata stops.
+Audited every org fixture for this: none currently has generic metadata after body content
+starts (two apparent counterexamples, `dynamic-block`'s `#+BEGIN:` and `figure`'s
+`#+CAPTION:`/`#+NAME:`, both go through dedicated non-generic-metadata code paths in
+`parse.rs`), so the divergence is currently unobservable in the byte-identical-to-builder
+check — documented rather than silently assumed safe.
+
+Verified byte-identical to `build()` over all 89 org fixtures on the first implementation
+attempt (no formatting bugs found, unlike djot-fmt's two), with the newly-added incrementality
+probe confirming bytes reach the sink before `finish()`. Measured (test-local tracking
+allocator, release build, 5000-section ~759KB synthetic document, discarding sink): peak memory
+4,480 bytes for the streaming Writer vs 1,720,320 bytes for `parse()`+`build()` (384x smaller),
+but throughput went the other way (2.40ms vs 1.33ms, streaming ~1.8x slower) — the same
+per-event-dispatch-overhead-vs-lightweight-builder tradeoff shape found for t2t, not a harness
+artifact (events/AST both built outside the timed window). `CAPABILITIES`'s `org`
+`streaming_writer` comment is corrected to state the fix accurately instead of contradicting
+its own `ApiState::Wired` value.
+
+---
+
 **2026-07-31: t2t `streaming_writer` hollow-writer defect fixed.**
 `t2t::writer::Writer` (`crates/formats/t2t/src/writer.rs`) was rewritten from
 buffer-all-events-then-reconstruct-the-AST to a single shared `String` output buffer,
