@@ -136,18 +136,29 @@ pub enum ApiState {
     /// fuller writeup.
     KnownFailure(&'static str),
     /// The `{format}-fmt` crate structurally does not have this API, for a
-    /// reason documented in `docs/format-audit.md` (e.g. csv/tsv/ris/native
-    /// have no meaningful streaming writer; commonmark-fmt's
-    /// `StreamingParser` is a sanctioned pulldown-cmark exemption per
-    /// CLAUDE.md). This is the *only* path that may be used to mean "this
-    /// check will never exist" — it must cite the documented reason, not be
-    /// used to dodge writing a check that should exist.
+    /// reason documented in `docs/format-audit.md` (e.g. html-fmt's
+    /// `events()`/`StreamingParser` — HTML5 tree construction makes
+    /// incremental delivery impossible per the spec, not a library choice;
+    /// commonmark-fmt's `StreamingParser` is a sanctioned pulldown-cmark
+    /// exemption per CLAUDE.md). This is the *only* path that may be used to
+    /// mean "this check will never exist" — it must cite the documented
+    /// reason, not be used to dodge writing a check that should exist. A
+    /// crate that simply hasn't built the API yet, with no structural
+    /// barrier stopping it (e.g. csv-fmt/tsv-fmt/ris/native, all of which are
+    /// flat record/line-oriented formats a streaming reader or writer could
+    /// trivially be added to), is [`ApiState::NotYetWired`], never this.
     NotApplicable(&'static str),
     /// The API most likely exists in the `-fmt` crate (or its existence
     /// hasn't been confirmed) but this harness does not check it yet. This
-    /// is an honest placeholder, not a claim of absence — see TODO.md for
+    /// is an honest placeholder, not a claim of health — see TODO.md for
     /// the tracked follow-up. Every format must have an explicit line here
-    /// rather than simply not appearing in the harness at all.
+    /// rather than simply not appearing in the harness at all. Also used,
+    /// per the `odt`/`docx`/`pptx` precedent below, when the type has been
+    /// confirmed by reading the source to not exist in the crate *at all*
+    /// yet, but nothing about the format makes it impossible to add —
+    /// "not a claim of absence" describes the common case (nobody has
+    /// looked), not every case; where absence has been confirmed, the entry
+    /// says so explicitly.
     NotYetWired(&'static str),
 }
 
@@ -1318,6 +1329,125 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              confirmed on fixture adjacent_bold (see test output). See TODO.md",
         ),
     },
+    // native/csv-fmt/tsv-fmt/ris audited 2026-08-01 (fourth pass on this
+    // harness). All four crates were confirmed, by reading every file under
+    // `crates/formats/{crate}/src/` in full (native: single lib.rs; csv-fmt/
+    // tsv-fmt/ris: ast.rs + parse.rs + emit.rs, no other modules) and
+    // grepping each for `StreamingParser`/`EventIter`/`fn events`/`mod
+    // events`/`mod batch`/`mod writer`/`impl Iterator`/`fn next(&mut self)`
+    // (zero matches in all four) and each Cargo.toml (zero dependencies in
+    // all four — hand-rolled, no library could be hiding a streaming mode
+    // behind), to have **only** `parse()` (AST reader) and `emit()`/`build()`
+    // (AST builder) — no `events()`, no `StreamingParser<H>`, no streaming
+    // writer exist anywhere in any of the four crates. This is not the
+    // sanctioned commonmark-fmt/html-fmt shape (a real, structural,
+    // documented barrier — pulldown-cmark's `&str` requirement, the HTML5
+    // spec's tree-construction mandate): CSV/TSV/RIS are flat record- or
+    // line-oriented formats (native is a small recursive tree-of-nodes
+    // format) with no such barrier — a chunk-driven reader that yields one
+    // `Row`/`RisEntry`/`NativeNode` event at a time, and a writer that
+    // streams rows/entries straight to a sink, are both straightforward to
+    // add; nobody has built them yet. Per the `ApiState::NotApplicable`
+    // doc comment, that makes this `NotYetWired`, not `NotApplicable`, for
+    // all three APIs across all four formats — building three new APIs from
+    // scratch times four crates is a substantial body of work, not a small
+    // in-scope defect fix, so left as an honest gap rather than attempted
+    // here. This also corrects a stale claim in `ApiState::NotApplicable`'s
+    // own doc comment, written before any of these four crates had actually
+    // been read, which speculatively cited "csv/tsv/ris/native have no
+    // meaningful streaming writer" as a `NotApplicable` example — that
+    // comment has been corrected alongside this entry. See TODO.md.
+    FormatCapabilities {
+        format: "native",
+        events: ApiState::NotYetWired(
+            "no events()/EventIter exists in crates/formats/native/src/lib.rs (the crate's only \
+             source file) — confirmed by reading the whole file (638 lines: NativeError, \
+             NativeDoc/NativeNode/NativeResource/NativeValue, a hand-rolled recursive-descent \
+             Parser, and a recursive build()/build_node() builder; no events module, no \
+             Iterator impl). Nothing in the format (a small recursive tree-of-nodes debug \
+             format) structurally prevents a lazy tree-walk events() like man-fmt's/pod-fmt's; \
+             it just hasn't been written",
+        ),
+        streaming_parser: ApiState::NotYetWired(
+            "no StreamingParser<H>/feed()/finish() type exists in lib.rs — confirmed by reading \
+             the whole file; only the eager, whole-string parse(input: &str) exists. A chunked \
+             parser is plausible (native's grammar is a simple recursive Document{...} bracket \
+             structure) but has not been attempted",
+        ),
+        streaming_writer: ApiState::NotYetWired(
+            "no event-driven Writer type exists in lib.rs — confirmed by reading the whole file; \
+             only the eager build(doc: &NativeDoc) -> String builder exists, which requires the \
+             full NativeDoc tree up front",
+        ),
+    },
+    FormatCapabilities {
+        format: "csv",
+        events: ApiState::NotYetWired(
+            "no events()/EventIter exists anywhere in csv-fmt — confirmed by reading ast.rs, \
+             parse.rs, and emit.rs in full (lib.rs only re-exports parse/emit and CsvDoc/Row/ \
+             Cell/Diagnostic/Span/Severity) and grepping the crate for EventIter/StreamingParser/ \
+             'mod events'/'impl Iterator' (zero matches). CSV is a flat row-oriented format with \
+             no cross-row state in parse.rs (each row is independently delimited), so a \
+             row-at-a-time events() iterator is straightforward to add; it just hasn't been",
+        ),
+        streaming_parser: ApiState::NotYetWired(
+            "no StreamingParser<H> exists — confirmed by reading parse.rs in full: the only \
+             entry point is the eager parse(input: &str) -> (CsvDoc, Vec<Diagnostic>), which \
+             scans the whole input string in one call. A chunk-driven row splitter is plausible \
+             (RFC 4180 CSV has no construct spanning more than one quoted field across a row \
+             boundary) but has not been attempted",
+        ),
+        streaming_writer: ApiState::NotYetWired(
+            "no event-driven Writer exists — confirmed by reading emit.rs in full: the only \
+             entry point is the eager emit(doc: &CsvDoc) -> String builder, which requires the \
+             full CsvDoc up front. A row-at-a-time streaming writer (write header, then each row, \
+             to a sink) is straightforward for CSV's flat grammar; it just hasn't been built",
+        ),
+    },
+    FormatCapabilities {
+        format: "tsv",
+        events: ApiState::NotYetWired(
+            "shares csv-fmt's exact module shape (ast.rs/parse.rs/emit.rs, no events module) — \
+             confirmed by reading all three files in full and grepping for EventIter/ \
+             StreamingParser/'mod events'/'impl Iterator' (zero matches). Same reasoning as csv's \
+             events entry: a row-at-a-time events() iterator is plausible, not yet built",
+        ),
+        streaming_parser: ApiState::NotYetWired(
+            "no StreamingParser<H> exists — confirmed by reading parse.rs in full: only the \
+             eager parse(input: &str) -> (TsvDoc, Vec<Diagnostic>) entry point exists. Same \
+             reasoning as csv's streaming_parser entry",
+        ),
+        streaming_writer: ApiState::NotYetWired(
+            "no event-driven Writer exists — confirmed by reading emit.rs in full: only the \
+             eager emit(doc: &TsvDoc) -> String builder exists. Same reasoning as csv's \
+             streaming_writer entry",
+        ),
+    },
+    FormatCapabilities {
+        format: "ris",
+        events: ApiState::NotYetWired(
+            "no events()/EventIter exists anywhere in ris — confirmed by reading ast.rs, \
+             parse.rs, and emit.rs in full (lib.rs only re-exports parse/emit and RisDoc/ \
+             RisEntry/Diagnostic/Span/Severity plus the ris_type_to_bibtex/bibtex_type_to_ris/ \
+             csl_type_to_ris helpers) and grepping the crate for EventIter/StreamingParser/'mod \
+             events'/'impl Iterator' (zero matches). RIS is a flat, entry-delimited (TY...ER) \
+             citation format with each entry self-contained (parse.rs has no cross-entry state), \
+             so an entry-at-a-time events() iterator is straightforward to add; it just hasn't \
+             been",
+        ),
+        streaming_parser: ApiState::NotYetWired(
+            "no StreamingParser<H> exists — confirmed by reading parse.rs in full: the only \
+             entry point is the eager parse(input: &str) -> (RisDoc, Vec<Diagnostic>). A \
+             chunk-driven per-entry splitter (flush at each ER  - line) is plausible; not yet \
+             attempted",
+        ),
+        streaming_writer: ApiState::NotYetWired(
+            "no event-driven Writer exists — confirmed by reading emit.rs in full: only the \
+             eager emit(doc: &RisDoc) -> String builder exists, requiring the full RisDoc up \
+             front. An entry-at-a-time streaming writer is straightforward for RIS's flat \
+             grammar; it just hasn't been built",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -1350,15 +1480,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "typst",
     "endnotexml",
     "epub",
-    // `native`/`csv`/`tsv`/`ris` do have real crates (`crates/formats/native`,
-    // `csv-fmt`, `tsv-fmt`, `ris`) but have not yet been individually
-    // audited by this harness pass — nobody has read their events()/batch.rs/
-    // writer.rs source yet to determine real ApiState, so an honest
-    // placeholder here (not a guess) is correct per the accuracy bar.
-    "native",
-    "csv",
-    "tsv",
-    "ris",
     // `multimarkdown` and `pdf` have NO standalone {format}-fmt crate:
     // `rescribe-read-multimarkdown`'s Cargo.toml depends on `pulldown-cmark`
     // directly (not on `commonmark-fmt`), so its parsing logic lives in the

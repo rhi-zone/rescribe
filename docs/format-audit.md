@@ -344,6 +344,10 @@ audited this format's cross-API status yet" placeholder, not a claim of absence 
 | haddock | Wired (validates the AST→event expansion layer) | Wired — genuinely incremental with no divergence found: every block-termination rule in `parse.rs` depends only on the block's own content, never cross-block state, so isolated re-parse recovers the same boundaries | Wired (fixed 2026-07-31): `Writer` rewritten to emit incrementally per event instead of buffering into a `Vec<OwnedEvent>` and delegating to `emit::build()` in `finish()`; straight-through except `Property`'s lazy description-separator space (O(1) bool flag). The byte-identical check caught a real, independent bug: `events()` emits a redundant `Text` child inside `Link` that the builder never reads — fixed by suppressing it via a dedicated frame; ~2.9x faster |
 | fountain | Wired (validates the AST→event expansion layer; `events()` returns `OwnedEventIter`) | Wired (fixed 2026-07-30): `StreamingParser` now owns exactly one `StartDocument`/`EndDocument` pair for the whole stream, filtering both out of every per-block re-parse; only the first accumulated block goes through full title-page detection (`crate::events::events`), every later block goes through the new `crate::events::events_body`/`crate::parse::parse_screenplay_only` (skips title-page parsing entirely, so a body line matching a title-page field name is no longer misread as metadata and swallowed) — new fixture `adv-body-line-looks-like-title-field` | Wired (fixed 2026-07-31): `Writer` rewritten to emit incrementally per event instead of buffering into a `Vec<OwnedEvent>` and delegating to `emit()` in `finish()`; mostly straight-through, with `Character`/`Transition` needing bounded per-block text buffering (uppercase transform) and title-page metadata needing O(field-count) buffering. The byte-identical check caught a real, independent bug: `flush_metadata_if_pending` fired on `StartDocument` itself, permanently discarding metadata before it arrived — fixed. ~1.33x faster than the old buffer-then-emit writer, though still slower than the plain builder (789us vs 357us/iter) |
 | man | Wired (validates the AST→event expansion layer; `events()` is `EventIter::new(&parse(input).0)` eagerly collected — same pattern as t2t/pod/haddock/fountain. A real, previously-unknown bug was found and fixed while wiring this check: every inline container — Bold/Italic/Superscript/Subscript/Link — pushed a synthetic children-walking frame with a "dummy" `CloseKind::Paragraph` that was never actually inert, unconditionally emitting a spurious `EndParagraph` when the children frame was exhausted; fixed by adding a real `CloseKind::None` that emits nothing, replacing the dummy at all five inline-container sites) | KnownFailure: `StreamingParser::emit_block()` re-parses each accumulated block in isolation via `events()`, which always wraps its output in its own `StartDocument`/`EndDocument` pair, so `StreamingParser` emits one such pair per block instead of one for the whole document (same root-cause class as t2t/fountain's pre-fix bug, reproducing on every multi-block fixture) | KnownFailure: two stacked defects — `Writer` buffers all events into a `Vec<OwnedManEvent>` and only reconstructs the AST + calls `emit::build()` in `finish()` (self-admitted in its own module doc); independently, `ManEvent` has no variant carrying document metadata, so a `.TH` line's title/section/date/source is always dropped once fed through `events()`, even after the buffering defect is fixed |
+| native | NotYetWired: no `events()`/`EventIter` anywhere in `crates/formats/native/src/lib.rs` (its only source file, read in full) — only the eager whole-string `parse()`/recursive `build()`; nothing format-structural blocks adding one | NotYetWired: no `StreamingParser<H>` type exists in the crate at all | NotYetWired: no event-driven `Writer` exists; only the eager `build(doc: &NativeDoc) -> String` |
+| csv | NotYetWired: no `events()`/`EventIter` anywhere in csv-fmt (ast.rs/parse.rs/emit.rs read in full, zero matches for `EventIter`/`StreamingParser`/`mod events`/`impl Iterator`) — CSV's flat, no-cross-row-state grammar has no structural barrier to one | NotYetWired: no `StreamingParser<H>` type exists in the crate at all; only the eager `parse(input: &str) -> (CsvDoc, Vec<Diagnostic>)` | NotYetWired: no event-driven `Writer` exists; only the eager `emit(doc: &CsvDoc) -> String` |
+| tsv | NotYetWired: shares csv-fmt's exact module shape (ast.rs/parse.rs/emit.rs, no events module); same reasoning as csv | NotYetWired: no `StreamingParser<H>` type exists in the crate at all; only the eager `parse(input: &str) -> (TsvDoc, Vec<Diagnostic>)` | NotYetWired: no event-driven `Writer` exists; only the eager `emit(doc: &TsvDoc) -> String` |
+| ris | NotYetWired: no `events()`/`EventIter` anywhere in `ris` (ast.rs/parse.rs/emit.rs read in full, zero matches) — RIS entries are self-contained (`TY`...`ER`) with no cross-entry parse state, so an entry-at-a-time iterator is structurally straightforward | NotYetWired: no `StreamingParser<H>` type exists in the crate at all; only the eager `parse(input: &str) -> (RisDoc, Vec<Diagnostic>)` | NotYetWired: no event-driven `Writer` exists; only the eager `emit(doc: &RisDoc) -> String` |
 
 **Session tally (2026-07-30):** 26 formats moved from `NOT_YET_AUDITED` to a real, audited
 `CAPABILITIES` entry across three passes this session — org, html, asciidoc, djot, texinfo,
@@ -495,6 +499,43 @@ parsing logic directly in the adapter crate, a CLAUDE.md violation left undocume
 until now — see `NOT_YET_AUDITED`'s inline comments and TODO.md. Fixing it is out of
 scope for this pass. See TODO.md for the full writeup, including the two verified
 `man-fmt` `KnownFailure` repro commands.
+
+**`rtf-fmt` wired** (same session, immediately after `man`; this narrative paragraph was
+not added at the time — recorded here for the record): `events: Wired`,
+`streaming_parser: KnownFailure` (`batch::StreamingParser` buffers all fed bytes and only
+calls `sem_events::events()` once inside `finish()` — a confirmed buffer-then-finish stub,
+`feed()` alone delivers zero events), `streaming_writer: KnownFailure` (`writer::Writer`
+only accepts the low-level `TokenEvent` stream, not the crate's own semantic `Event` type
+`events()`/`StreamingParser` produce — no semantic-event-consuming writer exists at all;
+even re-tokenizing `emit()`'s own output and feeding it back through `Writer` doesn't
+reproduce the canonical bytes, a delimiter-space-policy mismatch confirmed on fixture
+`adjacent_bold`). `CAPABILITIES` reached **37** rows, `NOT_YET_AUDITED` **26**,
+`KNOWN_FAILURES` **28** after this. See TODO.md and the `rtf` row above.
+
+**`native`/`csv`/`tsv`/`ris` audited (2026-08-01, fourth pass on this harness).** All four
+were confirmed, by reading every source file in each crate in full (`native`'s single
+`lib.rs`; `csv-fmt`/`tsv-fmt`/`ris`'s `ast.rs`+`parse.rs`+`emit.rs`) and grepping each for
+`StreamingParser`/`EventIter`/`mod events`/`mod batch`/`mod writer`/`impl Iterator` (zero
+matches in all four, and zero dependencies in each `Cargo.toml` — no library could be
+hiding a streaming mode behind), to have **only** `parse()` (AST reader) and
+`emit()`/`build()` (AST builder) — no `events()`, `StreamingParser<H>`, or streaming writer
+exists in any of the four crates. All twelve cells are declared `NotYetWired`, not
+`NotApplicable`: unlike html-fmt/commonmark-fmt's genuine, documented, spec-imposed
+barriers, nothing about CSV/TSV/RIS (flat, record- or line-oriented, no cross-row/
+cross-entry parser state) or `native` (a small recursive tree-of-nodes debug format) makes
+a chunked reader or an event-driven writer structurally impossible — they simply haven't
+been built, and building three new APIs from scratch across four crates is a substantial
+body of work, not a small in-scope defect fix, so it was left as an honest, specific gap
+rather than attempted here. This also corrects a stale, speculative example in
+`streaming_harness.rs`'s own `ApiState::NotApplicable` doc comment, written before any of
+these four crates had actually been read, which cited "csv/tsv/ris/native have no
+meaningful streaming writer" as a `NotApplicable` precedent — that comment has been
+corrected alongside this entry to point at html-fmt's genuine structural example instead.
+No defects were found or fixed in the four crates' existing `parse()`/`emit()` — all four
+are already marked production/fuzz-clean elsewhere in this document, and no streaming code
+existed to audit for bugs. `CAPABILITIES` now has **41** rows, `NOT_YET_AUDITED` has **22**
+entries, and `KNOWN_FAILURES` is unchanged at **28** entries (no `KnownFailure` was added —
+every one of the twelve new cells is `NotYetWired`, not a failing check).
 
 ### Remaining hand-written formats (crate exists, API not started)
 

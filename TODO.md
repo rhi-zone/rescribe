@@ -5403,3 +5403,70 @@ per-format work; `rtf-fmt` (38 fixtures, the largest remaining corpus) is the na
 
 Verification: `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --check`,
 and `cargo test -q` all pass (see individual commits for exact scopes exercised).
+
+## native/csv-fmt/tsv-fmt/ris audited into the cross-API harness — all NotYetWired, no code exists (2026-08-01)
+
+Fourth pass on `crates/rescribe-fixtures/src/streaming_harness.rs`, picking up the four
+`NOT_YET_AUDITED` entries flagged in the prior (man-fmt/rtf-fmt) session as having a real
+`{format}-fmt`/standalone crate but no individual audit yet: `native`, `csv`, `tsv`, `ris`.
+
+**Verified, not assumed, before writing anything**: `crates/formats/native/src/lib.rs` (the
+crate's only source file, 638 lines) and `crates/formats/{csv-fmt,tsv-fmt,ris}/src/{ast,parse,
+emit}.rs` (each crate's complete source) were read in full, and each crate's directory and
+`Cargo.toml` were checked. Result: all four crates implement **only** `parse()` (an eager,
+whole-input AST reader) and `emit()`/`build()` (an eager AST-to-string builder) — no
+`events()`/`EventIter`, no `StreamingParser<H>`/`batch` module, no event-driven streaming
+`Writer`, anywhere in any of the four. Confirmed by grepping every file in each crate for
+`StreamingParser`/`EventIter`/`mod events`/`mod batch`/`mod writer`/`impl Iterator`/
+`fn next(&mut self)` — zero matches across all four — and by reading each `Cargo.toml`: all four
+have **zero dependencies**, so there is no wrapped library that could be hiding an unexploited
+streaming mode (unlike, say, an XML- or ZIP-backed crate).
+
+**Classified as `ApiState::NotYetWired`, not `NotApplicable`, for all twelve cells** (3 APIs ×
+4 formats). `NotApplicable` requires a genuine structural barrier the harness's existing
+precedents (html-fmt: the HTML5 spec mandates full tree construction before any event can be
+correct; commonmark-fmt: pulldown-cmark requires the complete input as one `&str`, the sole
+CLAUDE.md-sanctioned exemption) — csv/tsv are flat, row-delimited formats with no cross-row
+parser state (`parse.rs` never looks past the current row); RIS entries are self-contained
+between `TY` and `ER  -` lines with no cross-entry state; `native` is a small recursive
+tree-of-nodes debug format with a straightforward recursive-descent grammar. None of these has
+anything analogous to HTML5's tree-construction algorithm or pulldown-cmark's API contract
+forcing whole-input buffering — a chunk-driven reader yielding one row/entry/node at a time, and
+a writer streaming rows/entries straight to a sink, are both plausible additions; nobody has
+built them. Building three new APIs from scratch, times four crates, is a substantial body of
+work (12 new implementations), explicitly out of scope for a harness-wiring/small-defect pass
+per this task's own fence — so left as an honest, specific `NotYetWired` gap, following the
+`odf-fmt` `streaming_parser` precedent ("no `StreamingParser<H>` type exists... at all yet")
+for how to phrase "confirmed absent, not merely unaudited."
+
+**A stale doc comment was corrected.** `ApiState::NotApplicable`'s own doc comment in
+`streaming_harness.rs` cited "csv/tsv/ris/native have no meaningful streaming writer" as an
+example of a legitimate `NotApplicable` — written speculatively, before this pass (or any prior
+one) had actually read any of the four crates' source. Since the actual finding is "no
+structural barrier, just not built yet," that example was wrong and has been replaced with a
+pointer to html-fmt's genuinely-structural precedent, plus an explicit note that a crate with no
+code and no structural barrier is `NotYetWired`, never `NotApplicable`.
+
+**No defects found or fixed.** No streaming code existed in any of the four crates to contain a
+bug, and `parse()`/`emit()` in all four are already tracked elsewhere in `docs/format-audit.md`
+as production/fuzz-clean (807K-1.1M fuzz runs each); this pass did not re-audit that code, since
+the task's scope was specifically the three streaming APIs.
+
+**Tally**: `streaming_harness::CAPABILITIES` grew from 37 to **41** rows (the 4 new formats),
+`NOT_YET_AUDITED` shrank from 26 to **22** entries, `KNOWN_FAILURES` is unchanged at **28**
+entries (no new failing check — every one of the 12 new cells is `NotYetWired`, not a check that
+runs and fails). Verified programmatically (`awk`-scoped `grep -c` over each `pub const` array
+in `streaming_harness.rs`, not by hand-counting the source). No test functions were added to
+`tests/streaming_apis.rs`: per the `docx`/`pptx`/`odf-fmt` precedent, a `NotYetWired` cell has no
+accompanying check to wire (there is no API to check yet) — only the `CAPABILITIES` table entry
+itself, plus `docs/format-audit.md`'s "Cross-API harness inventory" table and this writeup, are
+the artifacts of an honest "looked, found nothing" audit.
+
+**In scope for a future pass, not attempted here**: `rtf` (38 fixtures, wired in the immediately
+preceding session but never got a corresponding `docs/format-audit.md` narrative paragraph until
+this pass added one after the fact — see the "Cross-API harness inventory" section);
+`multimarkdown`/`pdf` (no standalone `-fmt` crate at all, a separate, larger architectural gap);
+building any of the twelve `NotYetWired` APIs found here from scratch for native/csv/tsv/ris.
+
+Verification: `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --check`,
+and `cargo test -q` all pass (0 test failures across the full workspace).
