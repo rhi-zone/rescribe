@@ -129,6 +129,52 @@ fn find_input(dir: &Path) -> Option<PathBuf> {
         .find(|p| p.file_stem().is_some_and(|s| s == "input"))
 }
 
+/// Asserts that a format's `StreamingParser` delivers events incrementally as
+/// input is fed, rather than buffering everything until `finish()`.
+///
+/// This probe is intentionally NOT fixture-driven. The original per-fixture
+/// incrementality probe required partial event delivery at exactly the
+/// 50%-byte offset of a fixture file. A block-granular parser (one that only
+/// emits events at block boundaries, which is correct and expected behavior
+/// for most formats) cannot satisfy an arbitrary 50%-byte split unless that
+/// split happens to land on a block boundary. Because fixtures/spec.md's
+/// "one focused construct per fixture" convention means most fixtures ARE a
+/// single block, the 50%-byte-offset probe was structurally unable to pass
+/// for the large majority of fixtures in some crates -- producing false
+/// KnownFailure entries against implementations that were already correct.
+/// Concretely: pod-fmt had 35 of its 36 fixtures structurally unable to pass
+/// the old probe, and textile-fmt's `acronym` fixture failed because its
+/// first logical line was 66 bytes into a 124-byte file (not at the 50%
+/// mark). Do not "simplify" this back to a byte-offset split of a fixture --
+/// that reintroduces exactly the false failures this helper was built to
+/// eliminate. Instead, callers hand-build a synthetic sample per format with
+/// a block-boundary-complete prefix and a block-boundary-incomplete tail.
+///
+/// Returns `Ok(())` when `delivered_something` is true, or an `Err`
+/// carrying a message naming `format_name` otherwise. A `Result` (rather
+/// than a direct `assert!`) is deliberate: most call sites are folding this
+/// probe's outcome into a running `Result<(), String>` that ultimately goes
+/// through [`assert_or_known_failure`], so a genuine regression here can
+/// still be acknowledged via `KNOWN_FAILURES` instead of unconditionally
+/// hard-panicking. Callers that want a bare panic (no known-failure
+/// acknowledgement path) can do so with `.unwrap()` or an explicit
+/// `if let Err(e) = ... { panic!("{e}") }`.
+fn assert_streaming_parser_is_incremental(
+    format_name: &str,
+    delivered_something: bool,
+) -> Result<(), String> {
+    if delivered_something {
+        Ok(())
+    } else {
+        Err(format!(
+            "{format_name} StreamingParser delivered zero events to the handler after feed() \
+             with a complete prefix (deliberately followed by unterminated/incomplete trailing \
+             content) and before finish() was ever called — feed() must advance real \
+             incremental parser state, not buffer input until finish()"
+        ))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // rst-fmt: events() vs parse(), fully wired
 // ---------------------------------------------------------------------------
@@ -2835,12 +2881,11 @@ fn texinfo_streaming_parser_delivers_events_incrementally() {
     let mut parser = texinfo::StreamingParser::new(move |e| sink.borrow_mut().push(e));
 
     parser.feed(b"@chapter Hello\n\n");
-    assert!(
-        !delivered.borrow().is_empty(),
-        "StreamingParser delivered zero events after feed() with one complete unit (a heading) \
-         and before finish() was ever called — feed() must advance real incremental parser \
-         state, not buffer input until finish()"
-    );
+    if let Err(e) =
+        assert_streaming_parser_is_incremental("texinfo", !delivered.borrow().is_empty())
+    {
+        panic!("{e}");
+    }
     assert!(
         delivered
             .borrow()
@@ -3210,15 +3255,7 @@ fn fb2_streaming_parser_matches_events_and_is_incremental() {
         let mut delivered: Vec<fb2_fmt::Event> = Vec::new();
         let mut parser = fb2_fmt::StreamingParser::new(|e| delivered.push(e));
         parser.feed(probe_input);
-        if delivered.is_empty() {
-            result = Err(
-                "StreamingParser delivered zero events to the handler after feed() with a \
-                 complete StartFictionBook/StartBody/StartSection/StartParagraph/Inline/ \
-                 EndParagraph prefix (deliberately followed by unterminated trailing tags) \
-                 and before finish() was called"
-                    .to_string(),
-            );
-        }
+        result = assert_streaming_parser_is_incremental("fb2", !delivered.is_empty());
     }
     assert_or_known_failure("fb2", "streaming_parser", result);
 }
@@ -3603,15 +3640,7 @@ fn textile_streaming_parser_matches_events_and_is_incremental() {
         let mut delivered: Vec<textile_fmt::TextileEvent> = Vec::new();
         let mut parser = textile_fmt::batch::StreamingParser::new(|e| delivered.push(e));
         parser.feed(probe_input);
-        if delivered.is_empty() {
-            result = Err(
-                "StreamingParser delivered zero events to the handler after feed() with a \
-                 complete StartHeading/EndHeading + StartParagraph/Text/EndParagraph prefix \
-                 (deliberately followed by an unterminated trailing paragraph with no closing \
-                 newline) and before finish() was called"
-                    .to_string(),
-            );
-        }
+        result = assert_streaming_parser_is_incremental("textile", !delivered.is_empty());
         // `parser` intentionally dropped without calling finish(): this probe
         // only needs to observe pre-finish handler state.
     }
@@ -7897,13 +7926,7 @@ fn xwiki_streaming_parser_matches_events_and_is_incremental() {
         let mut delivered: Vec<xwiki::OwnedEvent> = Vec::new();
         let mut parser = xwiki::batch::StreamingParser::new(|e| delivered.push(e));
         parser.feed(&input[..mid]);
-        if delivered.is_empty() {
-            result = Err(
-                "StreamingParser delivered zero events to the handler after feed() with half \
-                 of a two-heading-two-paragraph synthetic document and before finish()"
-                    .to_string(),
-            );
-        }
+        result = assert_streaming_parser_is_incremental("xwiki", !delivered.is_empty());
         // `parser` intentionally dropped without calling finish(): this probe
         // only needs to observe pre-finish handler state.
     }
@@ -8934,14 +8957,8 @@ fn muse_streaming_parser_matches_events_and_is_incremental() {
             let mut delivered: Vec<muse_fmt::OwnedMuseEvent> = Vec::new();
             let mut parser = muse_fmt::batch::StreamingParser::new(|e| delivered.push(e));
             parser.feed(&input[..mid]);
-            if delivered.is_empty() && result.is_ok() {
-                result = Err(format!(
-                    "StreamingParser delivered zero events to the handler after feed() with \
-                     half of fixture {name} ({mid} bytes) and before finish() — expected at \
-                     least one complete top-level block to have been confirmed and flushed by \
-                     the line-buffered block splitter in crates/formats/muse-fmt/src/batch.rs; \
-                     a regression back to buffer-then-finish would reproduce this"
-                ));
+            if result.is_ok() {
+                result = assert_streaming_parser_is_incremental("muse", !delivered.is_empty());
             }
             // `parser` intentionally dropped without calling finish(): this probe
             // only needs to observe pre-finish handler state.
@@ -9668,15 +9685,7 @@ fn pod_streaming_parser_matches_events_and_is_incremental() {
         let mut delivered: Vec<pod_fmt::OwnedEvent> = Vec::new();
         let mut parser = pod_fmt::batch::StreamingParser::new(|e| delivered.push(e));
         parser.feed(probe_input);
-        if delivered.is_empty() {
-            result = Err(
-                "StreamingParser delivered zero events to the handler after feed() with a \
-                 complete StartHeading/EndHeading + StartParagraph/Text/EndParagraph prefix \
-                 (deliberately followed by an unterminated trailing paragraph with no closing \
-                 newline) and before finish() was called"
-                    .to_string(),
-            );
-        }
+        result = assert_streaming_parser_is_incremental("pod", !delivered.is_empty());
     }
     assert_or_known_failure("pod", "streaming_parser", result);
 }
