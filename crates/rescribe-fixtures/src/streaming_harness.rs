@@ -935,14 +935,19 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "xwiki",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "xwiki::batch::StreamingParser buffers all fed bytes into a Vec<u8> and only \
-             parses + delivers events inside finish() (batch.rs:61-72); feed() never advances \
-             real parser state, so no events reach the handler until finish() is called — \
-             found while wiring this harness's incrementality probe",
-        ),
-        // Fixed 2026-07-31 (writer only — the streaming_parser KnownFailure above is separate
-        // and untouched): Writer rewritten to emit incrementally per event instead of
+        // Fixed 2026-07-31 (reader): StreamingParser rewritten from a bare
+        // `buf.extend_from_slice`-then-parse-in-finish() wrapper to a genuine
+        // block-at-a-time incremental parser. `feed()` accumulates one top-level
+        // block (paragraph/heading/list/table/code/macro/quote block — the same
+        // boundaries `parse::Parser::parse`'s dispatch loop uses) and flushes it
+        // (reparsed in isolation + walked with `events::events`) as soon as its
+        // boundary is confirmed, instead of buffering the whole document. Peak
+        // memory measured flat across a 10x input-size increase (~1.97 KB
+        // regardless of document size) vs. the old implementation's ~9.8x
+        // near-linear growth (1.30 MB -> 12.74 MB) for the same synthetic input.
+        streaming_parser: ApiState::Wired,
+        // Fixed 2026-07-31 (writer, same day as the streaming_parser fix above but a
+        // separate change): Writer rewritten to emit incrementally per event instead of
         // buffering into a Vec<OwnedEvent> and delegating to emit::build() inside finish().
         // Fully write-through except Link, which needed genuine reordering ([[label>>url]] —
         // label before url, url known first) via holding url on the frame.
@@ -952,9 +957,9 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // zimwiki's events() is parse()+eager-materialize-then-walk (EventIter::new
     // calls parse::parse(input) then walks into a Vec before returning any
     // event, events.rs:94-102) — the same narrower "Wired" claim as asciidoc.
-    // StreamingParser, unlike xwiki/muse-fmt, is REAL incremental (feed_line
-    // tracks verbatim-block/blank-line boundaries and calls emit_block()
-    // during feed(), batch.rs:93-152).
+    // StreamingParser, like xwiki's (fixed 2026-07-31) but unlike muse-fmt's,
+    // is REAL incremental (feed_line tracks verbatim-block/blank-line
+    // boundaries and calls emit_block() during feed(), batch.rs:93-152).
     FormatCapabilities {
         format: "zimwiki",
         events: ApiState::Wired,
@@ -979,9 +984,9 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // markua's events() is parse()+eager-tree-build-then-walk (EventIter::new,
     // re-exported from parse.rs not events.rs, runs the full recursive-descent
     // Parser::parse() before any event is returned, parse.rs:969-985) — the
-    // same narrower "Wired" claim as asciidoc/zimwiki. StreamingParser, unlike
-    // xwiki/muse-fmt, is REAL incremental block-boundary segmentation
-    // (fenced-code-aware feed_line, batch.rs:108-152).
+    // same narrower "Wired" claim as asciidoc/zimwiki. StreamingParser, like
+    // xwiki's (fixed 2026-07-31) but unlike muse-fmt's, is REAL incremental
+    // block-boundary segmentation (fenced-code-aware feed_line, batch.rs:108-152).
     FormatCapabilities {
         format: "markua",
         events: ApiState::Wired,
@@ -1412,13 +1417,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        the streaming Writer (fed by events(), which does emit a ResetStyle for \
                        it) faithfully re-emits it — a parse()/build() fidelity gap, not a \
                        streaming-API defect",
-    },
-    KnownFailure {
-        format: "xwiki",
-        api: "streaming_parser",
-        description: "xwiki::batch::StreamingParser buffers all fed bytes and only parses + \
-                       delivers events inside finish(); feed() delivers zero events before \
-                       finish() is called",
     },
     KnownFailure {
         format: "muse",

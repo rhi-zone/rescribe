@@ -340,13 +340,16 @@ impl<'a> Parser<'a> {
     }
 }
 
-struct MacroInfo {
-    name: String,
-    params: String,
+pub(crate) struct MacroInfo {
+    pub(crate) name: String,
+    pub(crate) params: String,
 }
 
 /// Try to parse `{{name ...}}` block macro start (non-code).
-fn try_parse_block_macro_start(line: &str) -> Option<MacroInfo> {
+///
+/// `pub(crate)`: also used by [`crate::batch::StreamingParser`] to detect
+/// block-macro boundaries incrementally, one line at a time.
+pub(crate) fn try_parse_block_macro_start(line: &str) -> Option<MacroInfo> {
     if !line.starts_with("{{") {
         return None;
     }
@@ -383,7 +386,9 @@ fn try_parse_block_macro_start(line: &str) -> Option<MacroInfo> {
 }
 
 /// Try to parse `{{name .../}}` self-closing macro.
-fn try_parse_self_closing_macro(line: &str) -> Option<MacroInfo> {
+///
+/// `pub(crate)`: also used by [`crate::batch::StreamingParser`].
+pub(crate) fn try_parse_self_closing_macro(line: &str) -> Option<MacroInfo> {
     if !line.starts_with("{{") || !line.ends_with("/}}") {
         return None;
     }

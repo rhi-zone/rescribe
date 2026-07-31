@@ -7760,15 +7760,19 @@ mod xwiki_events_check {
     }
 }
 
-/// `xwiki::batch::StreamingParser::feed()` is a bare `buf.extend_from_slice`
-/// (crates/formats/xwiki/src/batch.rs:61-63); all parsing happens in
-/// `finish()` (batch.rs:66-72), which calls `parse::parse` then walks the
-/// result with `events::events`. So the adversarial-chunking equivalence
-/// check below is expected to pass trivially (finish() always reproduces
-/// exactly what `events()` computes over the reassembled buffer) — the real
-/// defect this check is built to catch is architectural, not a content
-/// mismatch: does `feed()` deliver any events before `finish()` is called?
-/// It does not.
+/// `xwiki::batch::StreamingParser` was rewritten 2026-07-31 (this session) to
+/// accumulate one top-level block at a time — a paragraph, heading, list,
+/// table, code block, or macro/quote block, the same boundaries
+/// `crate::parse::parse`'s dispatch loop uses — flushing each block to the
+/// handler (reparsed in isolation via `parse::parse` + walked with
+/// `events::events`) as soon as its boundary is confirmed, instead of the
+/// old `buf.extend_from_slice`-only `feed()` that only parsed inside
+/// `finish()`. The adversarial-chunking equivalence check below is a
+/// genuine correctness check now (not the "passes trivially" case the old
+/// buffer-then-finish implementation made it): each fixture's `parse()` ->
+/// `events()` sequence must match `StreamingParser` fed under whole/
+/// single-byte/N-byte/mid-UTF-8 chunkings, which now exercises real
+/// block-by-block state transitions instead of one final reparse.
 #[test]
 fn xwiki_streaming_parser_matches_events_and_is_incremental() {
     let root = fixtures_root().join("xwiki");
@@ -7808,30 +7812,40 @@ fn xwiki_streaming_parser_matches_events_and_is_incremental() {
                 ));
             }
         }
-
-        if input.len() > 32 && !bulk.is_empty() {
-            let mid = input.len() / 2;
-            let mut delivered: Vec<xwiki::OwnedEvent> = Vec::new();
-            let mut parser = xwiki::batch::StreamingParser::new(|e| delivered.push(e));
-            parser.feed(&input[..mid]);
-            if delivered.is_empty() && result.is_ok() {
-                result = Err(format!(
-                    "StreamingParser delivered zero events to the handler after feed() with \
-                     half of fixture {name} ({mid} bytes) and before finish() — \
-                     xwiki::batch::StreamingParser buffers all input into a Vec<u8> \
-                     (crates/formats/xwiki/src/batch.rs:61-63) and only parses and delivers \
-                     events inside finish() (batch.rs:66-72), so feed() never advances real \
-                     incremental parser state"
-                ));
-            }
-            // `parser` intentionally dropped without calling finish(): this probe
-            // only needs to observe pre-finish handler state.
-        }
     }
     assert!(
         checked > 20,
         "expected to check a substantial number of xwiki fixtures, got {checked}"
     );
+
+    // Direct incrementality probe, using a synthetic multi-block document
+    // rather than iterating fixture-by-fixture: several real fixtures (e.g.
+    // `blockquote`, a single `{{quote}}...{{/quote}}` spanning the whole
+    // ~39-byte file) are just one indivisible top-level block, so feeding
+    // exactly their first half can legitimately deliver zero events — that
+    // block's closing tag hasn't been seen yet, which is inherent to
+    // line-oriented block-boundary parsing (the same constraint RST's
+    // directive bodies and XWiki's own macro/quote blocks have), not a
+    // buffer-then-finish defect. A document with two clearly separated
+    // top-level blocks avoids that false positive while still proving
+    // `feed()` delivers events before `finish()` for a normal document.
+    if result.is_ok() {
+        let input = b"= Title =\n\nFirst paragraph.\n\n== Sub ==\n\nSecond paragraph.\n";
+        let mid = input.len() / 2;
+        let mut delivered: Vec<xwiki::OwnedEvent> = Vec::new();
+        let mut parser = xwiki::batch::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(&input[..mid]);
+        if delivered.is_empty() {
+            result = Err(
+                "StreamingParser delivered zero events to the handler after feed() with half \
+                 of a two-heading-two-paragraph synthetic document and before finish()"
+                    .to_string(),
+            );
+        }
+        // `parser` intentionally dropped without calling finish(): this probe
+        // only needs to observe pre-finish handler state.
+    }
+
     assert_or_known_failure("xwiki", "streaming_parser", result);
 }
 
@@ -7911,9 +7925,10 @@ fn xwiki_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
 // xwiki's genuinely lazy walker, in the same spirit as asciidoc's narrower
 // "Wired" claim: the equivalence check validates the AST->event expansion
 // layer (emit_block/emit_inline), not two independent parsers.
-// StreamingParser here, unlike xwiki/muse-fmt, is REAL incremental: feed_line
-// tracks verbatim-block boundaries and blank-line block termination and calls
-// emit_block() during feed(), not deferred to finish() (batch.rs:93-152).
+// StreamingParser here, like xwiki's (fixed 2026-07-31) but unlike muse-fmt's,
+// is REAL incremental: feed_line tracks verbatim-block boundaries and
+// blank-line block termination and calls emit_block() during feed(), not
+// deferred to finish() (batch.rs:93-152).
 // ---------------------------------------------------------------------------
 mod zimwiki_events_check {
     use super::{find_input, fixtures_root};
@@ -8076,7 +8091,8 @@ mod zimwiki_events_check {
 
 /// `StreamingParser` fed a zimwiki fixture under an adversarial chunking must
 /// deliver the same event sequence `events()` delivers over the whole input.
-/// Unlike xwiki/muse-fmt, `zimwiki::batch::StreamingParser::feed()` really is
+/// Like xwiki's (fixed 2026-07-31) but unlike muse-fmt's,
+/// `zimwiki::batch::StreamingParser::feed()` really is
 /// incremental — it tracks verbatim-block (`'''`) boundaries and blank-line
 /// block termination line-by-line and calls `emit_block()` during `feed()`
 /// (batch.rs:93-152) — so divergences found here are genuine block-boundary
@@ -8437,9 +8453,10 @@ mod markua_events_check {
 /// deliver the same event sequence `events()` delivers over the whole input.
 /// `markua::batch::StreamingParser::feed()` is REAL incremental
 /// block-boundary segmentation (fenced-code-aware `feed_line`, batch.rs:108-
-/// 152), unlike xwiki/muse-fmt — `emit_block()` re-parses each accumulated
-/// block via `crate::events::events()`, the same architecture (and bug
-/// class) already tracked for org/rst/asciidoc/zimwiki.
+/// 152), like xwiki's (fixed 2026-07-31) but unlike muse-fmt's —
+/// `emit_block()` re-parses each accumulated block via `crate::events::events()`,
+/// the same architecture (and bug class) already tracked for
+/// org/rst/asciidoc/zimwiki.
 #[test]
 fn markua_streaming_parser_matches_events_under_adversarial_chunking() {
     let root = fixtures_root().join("markua");

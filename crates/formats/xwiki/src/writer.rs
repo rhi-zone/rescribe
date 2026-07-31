@@ -509,17 +509,17 @@ impl<W: Write> Writer<W> {
     }
 }
 
-/// Shared allocator instrumentation for the memory-guard tests below. Only
-/// one `#[global_allocator]` may exist per test binary (all `#[cfg(test)]`
-/// items compile into one binary), so both the allocation-count test and the
-/// peak-memory test share this single allocator and its counters.
+/// Shared allocator instrumentation for the memory-guard tests below (and,
+/// via `pub(crate)`, for [`crate::batch`]'s own memory-guard test — only one
+/// `#[global_allocator]` may exist per test binary, and all `#[cfg(test)]`
+/// items across every module in this crate compile into the same binary).
 #[cfg(test)]
-mod alloc_guard {
+pub(crate) mod alloc_guard {
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::cell::Cell;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    pub(super) static ALLOCS: AtomicUsize = AtomicUsize::new(0);
+    pub(crate) static ALLOCS: AtomicUsize = AtomicUsize::new(0);
     // current/peak bytes are tracked per-thread (`thread_local!`, not a
     // shared `AtomicUsize`): the allocator is process-wide, and `cargo
     // test` runs other tests concurrently on other threads by default, so a
@@ -531,11 +531,11 @@ mod alloc_guard {
     // so the `TEST_LOCK` mutex this file used to serialize just the two
     // memory-guard tests against each other is no longer needed.
     thread_local! {
-        pub(super) static CURRENT: Cell<usize> = const { Cell::new(0) };
-        pub(super) static PEAK: Cell<usize> = const { Cell::new(0) };
+        pub(crate) static CURRENT: Cell<usize> = const { Cell::new(0) };
+        pub(crate) static PEAK: Cell<usize> = const { Cell::new(0) };
     }
 
-    pub(super) struct InstrumentedAlloc;
+    pub(crate) struct InstrumentedAlloc;
 
     unsafe impl GlobalAlloc for InstrumentedAlloc {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
