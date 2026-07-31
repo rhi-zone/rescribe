@@ -1257,6 +1257,67 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              emits '.TH UNTITLED 1 \"\" \"\" \"\"'. See TODO.md",
         ),
     },
+    // rtf-fmt's events() is `SemanticEventIter::new(parse(input).0)` — a
+    // lazy frame-stack walk of the AST parse() already built, not an
+    // independently implemented reader (same pattern as t2t/pod/haddock/
+    // fountain/asciidoc/man above); per that precedent it's still Wired.
+    // sem_events::Event only derived Debug before this pass (src/
+    // sem_events.rs:29) — added PartialEq here so the exact-sequence
+    // events()-vs-AST-projection check in tests/streaming_apis.rs is
+    // possible (RtfDoc/Block/Inline/Align/TableRow already derived it).
+    //
+    // batch::StreamingParser (batch.rs:107-139) buffers all fed bytes into a
+    // Vec<u8> in feed() and only calls sem_events::events(&self.buf) once,
+    // inside finish() — a confirmed buffer-then-finish stub. Its own module
+    // doc (batch.rs:9-18) argues this is an inherent RTF structural
+    // constraint (font/color tables must be parsed before body content is
+    // interpretable) rather than an implementation shortfall, but per this
+    // harness's rule a buffer-then-finish implementation is always
+    // KnownFailure, never NotApplicable, regardless of the format's
+    // structural excuse. Directly verified: feed() alone, without calling
+    // finish(), delivers zero events to the handler for any input.
+    //
+    // writer::Writer (writer.rs) only accepts the low-level TokenEvent type
+    // (from token_events()), not the crate's own semantic Event/OwnedEvent
+    // type that events()/StreamingParser produce — unlike every other Wired
+    // format in this table, rtf-fmt has no writer that consumes its own
+    // semantic event stream at all. Writer itself writes directly to the
+    // sink on every write_event() call with no internal buffering (verified
+    // by reading writer.rs), so it is genuinely incremental at the token
+    // level — but re-tokenizing emit()'s own canonical output via
+    // token_events() and feeding those tokens back through Writer does not
+    // reproduce the canonical bytes: Writer's delimiter-space policy
+    // (writer.rs:57-68 — always a trailing space after a no-param
+    // ControlWord, never after a Some(param) one) systematically diverges
+    // from emit()'s own placement (emit.rs), confirmed directly by
+    // `cargo test -p rescribe-fixtures --test streaming_apis -- rtf
+    // --nocapture` on fixture `adjacent_bold`: build() emits
+    // `\rtf1\ansi\deff0{\fonttbl{\f0 Times New Roman;}}` but the
+    // token-round-tripped Writer output is
+    // `\rtf1\ansi \deff0{\fonttbl {\f0Times New Roman;}}` — every one of
+    // `\ansi`/`\fonttbl`'s missing/extra spaces and `\f0`'s missing space
+    // is this same delimiter-policy mismatch, not an isolated edge case.
+    FormatCapabilities {
+        format: "rtf",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "batch::StreamingParser buffers all fed bytes in feed() and only calls \
+             sem_events::events() once inside finish() (batch.rs:107-139) — a confirmed \
+             buffer-then-finish stub. feed() alone, without finish(), delivers zero events to \
+             the handler for any input, regardless of the module doc's argument that this is an \
+             inherent RTF structural constraint (font/color tables must be parsed before body \
+             content is interpretable) rather than an implementation shortfall. See TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "writer::Writer only accepts TokenEvent (the low-level raw RTF token stream), not \
+             the crate's own semantic Event type that events()/StreamingParser produce — no \
+             events()-fed streaming writer exists in this crate at all. Even at the token level, \
+             re-tokenizing emit()'s own canonical output via token_events() and feeding it back \
+             through Writer does not reproduce the canonical bytes: Writer's delimiter-space \
+             policy (writer.rs:57-68) systematically diverges from emit()'s own placement, \
+             confirmed on fixture adjacent_bold (see test output). See TODO.md",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -1298,16 +1359,16 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "csv",
     "tsv",
     "ris",
-    // `rtf` has a real standalone crate (`rtf-fmt`) but has not yet been
-    // individually audited by this harness pass. `multimarkdown` and `pdf`
-    // have NO standalone {format}-fmt crate either: `rescribe-read-
-    // multimarkdown`'s Cargo.toml depends on `pulldown-cmark` directly (not
-    // on `commonmark-fmt`), so its parsing logic lives in the adapter crate
-    // itself — a further CLAUDE.md "adapter layer must never contain parsing
-    // logic" candidate beyond latex, confirmed by reading its Cargo.toml but
-    // not further investigated here (out of scope for this pass; see
-    // TODO.md). `pdf` was not investigated in this pass.
-    "rtf",
+    // `multimarkdown` and `pdf` have NO standalone {format}-fmt crate:
+    // `rescribe-read-multimarkdown`'s Cargo.toml depends on `pulldown-cmark`
+    // directly (not on `commonmark-fmt`), so its parsing logic lives in the
+    // adapter crate itself — a further CLAUDE.md "adapter layer must never
+    // contain parsing logic" candidate beyond latex, confirmed by reading
+    // its Cargo.toml but not further investigated here (out of scope for
+    // this pass; see TODO.md). `pdf` likewise has no standalone `pdf-fmt`
+    // crate (only `rescribe-read-pdf`) — confirmed by directory listing
+    // `crates/formats/`; not further investigated in this pass. `rtf` was
+    // audited this pass — see its `CAPABILITIES` entry below.
     "multimarkdown",
     "pdf",
     // Pandoc output-format variants of html/latex/ooxml-* with zero fixtures
@@ -1546,6 +1607,26 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        isolated re-parse of the header's own 3 lines mis-triggering \
                        try_parse_header() and silently dropping title/author/date — is fixed via \
                        the new Event::Header variant.)",
+    },
+    KnownFailure {
+        format: "rtf",
+        api: "streaming_parser",
+        description: "rtf_fmt::batch::StreamingParser buffers all fed bytes in feed() and only \
+                       calls sem_events::events() once inside finish() (batch.rs:107-139) — a \
+                       confirmed buffer-then-finish stub; feed() alone (no finish()) delivers \
+                       zero events to the handler for any input",
+    },
+    KnownFailure {
+        format: "rtf",
+        api: "streaming_writer",
+        description: "rtf_fmt::writer::Writer only accepts TokenEvent, not the crate's own \
+                       semantic Event type — no events()-fed streaming writer exists at all; \
+                       separately, even at the token level, Writer's delimiter-space policy \
+                       (writer.rs:57-68: always a trailing space after a no-param ControlWord, \
+                       never after a Some(param) one) systematically diverges from emit()'s own \
+                       placement, so re-tokenizing emit()'s own canonical output and feeding it \
+                       back through Writer does not reproduce those canonical bytes (confirmed \
+                       on fixture adjacent_bold)",
     },
 ];
 

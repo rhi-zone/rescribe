@@ -10700,3 +10700,401 @@ fn man_streaming_writer_matches_builder_over_all_fixtures() {
     }
     assert_or_known_failure("man", "streaming_writer", result);
 }
+
+// ---------------------------------------------------------------------------
+// rtf-fmt: `rtf_fmt::events()` (`sem_events::events`, src/sem_events.rs) is
+// `SemanticEventIter::new(parse(input).0)` — a lazy frame-stack walk of the
+// AST `parse()` already built (same pattern as t2t/pod/haddock/fountain/
+// asciidoc/man above); per that established precedent it is still `Wired`.
+// `sem_events::Event` did not derive `PartialEq` before this pass (only
+// `Debug` — crates/formats/rtf-fmt/src/sem_events.rs:29); added here so this
+// harness's exact-sequence equivalence check (not a lossy shape comparison)
+// is possible, mirroring rst-fmt's `ast_to_events`-vs-`events()` pattern.
+// `RtfDoc`/`Block`/`Inline`/`Align`/`TableRow` all already derived
+// `PartialEq` beforehand.
+//
+// `batch::StreamingParser` (batch.rs:107-139) is a confirmed buffer-then-
+// finish stub, not a genuine incremental parser: `feed()` only appends to an
+// internal `Vec<u8>` (batch.rs:130-132) and `finish()` calls
+// `crate::sem_events::events(&self.buf)` exactly once and forwards every
+// event (batch.rs:135-139) — the module's own doc block (batch.rs:9-18)
+// argues this is an "inherent property of the RTF format" (font/color
+// tables must be parsed before body content is meaningful) rather than an
+// implementation shortfall, but per this harness's rule a buffer-then-
+// finish implementation is always `KnownFailure`, never `NotApplicable`,
+// regardless of the format's structural excuse. Directly verified: feeding
+// any prefix through `feed()` alone (without calling `finish()`) delivers
+// zero events to the handler, for any input.
+//
+// `writer::Writer` (writer.rs) only accepts the low-level `TokenEvent` type
+// (from `token_events()`), not the crate's own semantic `Event`/`OwnedEvent`
+// type that `events()`/`StreamingParser` produce — unlike every other
+// already-`Wired` format in this table, rtf-fmt has no writer that consumes
+// its own semantic event stream at all. Directly verified by the fixture
+// check below: re-tokenizing `emit(&doc)`'s own canonical output via
+// `token_events()` and feeding those tokens back through `Writer` does NOT
+// reproduce the canonical bytes — on fixture `adjacent_bold`, `build()`
+// emits `\rtf1\ansi\deff0{\fonttbl{\f0 Times New Roman;}}` but the
+// token-round-tripped `Writer` output is
+// `\rtf1\ansi \deff0{\fonttbl {\f0Times New Roman;}}`: `Writer`'s
+// delimiter-space policy (writer.rs:57-68 — always a trailing space after a
+// no-param `ControlWord`, never after a `Some(param)` one) systematically
+// diverges from `emit()`'s own placement policy (emit.rs), not just in one
+// isolated edge case. `Writer` itself writes directly to
+// the sink on every `write_event()` call (no internal buffering — confirmed
+// by reading writer.rs top to bottom), so the incrementality probe below
+// passes; only the byte-identity comparison fails.
+// ---------------------------------------------------------------------------
+
+fn rtf_ast_to_events(doc: &rtf_fmt::RtfDoc) -> Vec<rtf_fmt::OwnedEvent> {
+    let mut out = Vec::new();
+    for b in &doc.blocks {
+        rtf_block_events(b, &mut out);
+    }
+    out
+}
+
+fn rtf_block_events(b: &rtf_fmt::Block, out: &mut Vec<rtf_fmt::OwnedEvent>) {
+    use rtf_fmt::Block;
+    use rtf_fmt::Event;
+    match b {
+        Block::Paragraph {
+            inlines,
+            align,
+            para_props,
+            ..
+        } => {
+            out.push(Event::StartParagraph {
+                align: *align,
+                para_props: para_props.clone().into(),
+            });
+            rtf_inline_events(inlines, out);
+            out.push(Event::EndParagraph);
+        }
+        Block::Heading { level, inlines, .. } => {
+            out.push(Event::StartHeading { level: *level });
+            rtf_inline_events(inlines, out);
+            out.push(Event::EndHeading);
+        }
+        Block::CodeBlock { content, .. } => {
+            out.push(Event::StartCodeBlock);
+            out.push(Event::CodeBlockContent(content.clone().into()));
+            out.push(Event::EndCodeBlock);
+        }
+        Block::Blockquote { children, .. } => {
+            out.push(Event::StartBlockquote);
+            for c in children {
+                rtf_block_events(c, out);
+            }
+            out.push(Event::EndBlockquote);
+        }
+        Block::List { ordered, items, .. } => {
+            out.push(Event::StartList { ordered: *ordered });
+            for item in items {
+                out.push(Event::StartListItem);
+                for c in item {
+                    rtf_block_events(c, out);
+                }
+                out.push(Event::EndListItem);
+            }
+            out.push(Event::EndList);
+        }
+        Block::Table { rows, .. } => {
+            out.push(Event::StartTable);
+            for row in rows {
+                out.push(Event::StartTableRow);
+                for cell in &row.cells {
+                    out.push(Event::StartTableCell);
+                    rtf_inline_events(cell, out);
+                    out.push(Event::EndTableCell);
+                }
+                out.push(Event::EndTableRow);
+            }
+            out.push(Event::EndTable);
+        }
+        Block::HorizontalRule { .. } => out.push(Event::HorizontalRule),
+    }
+}
+
+fn rtf_inline_events(inlines: &[rtf_fmt::Inline], out: &mut Vec<rtf_fmt::OwnedEvent>) {
+    use rtf_fmt::Event;
+    use rtf_fmt::Inline;
+    for i in inlines {
+        match i {
+            Inline::Text { text, .. } => out.push(Event::Text(text.clone().into())),
+            Inline::LineBreak { .. } => out.push(Event::LineBreak),
+            Inline::SoftBreak { .. } => out.push(Event::SoftBreak),
+            Inline::Bold { children, .. } => {
+                out.push(Event::StartBold);
+                rtf_inline_events(children, out);
+                out.push(Event::EndBold);
+            }
+            Inline::Italic { children, .. } => {
+                out.push(Event::StartItalic);
+                rtf_inline_events(children, out);
+                out.push(Event::EndItalic);
+            }
+            Inline::Underline { children, .. } => {
+                out.push(Event::StartUnderline);
+                rtf_inline_events(children, out);
+                out.push(Event::EndUnderline);
+            }
+            Inline::Strikethrough { children, .. } => {
+                out.push(Event::StartStrikethrough);
+                rtf_inline_events(children, out);
+                out.push(Event::EndStrikethrough);
+            }
+            Inline::Code { text, .. } => out.push(Event::Code(text.clone().into())),
+            Inline::Link { url, children, .. } => {
+                out.push(Event::StartLink { url: url.clone() });
+                rtf_inline_events(children, out);
+                out.push(Event::EndLink);
+            }
+            Inline::Image { url, alt, .. } => out.push(Event::Image {
+                url: url.clone(),
+                alt: alt.clone(),
+            }),
+            Inline::Superscript { children, .. } => {
+                out.push(Event::StartSuperscript);
+                rtf_inline_events(children, out);
+                out.push(Event::EndSuperscript);
+            }
+            Inline::Subscript { children, .. } => {
+                out.push(Event::StartSubscript);
+                rtf_inline_events(children, out);
+                out.push(Event::EndSubscript);
+            }
+            Inline::FontSize { size, children, .. } => {
+                out.push(Event::StartFontSize { size: *size });
+                rtf_inline_events(children, out);
+                out.push(Event::EndFontSize);
+            }
+            Inline::Color {
+                r, g, b, children, ..
+            } => {
+                out.push(Event::StartColor {
+                    r: *r,
+                    g: *g,
+                    b: *b,
+                });
+                rtf_inline_events(children, out);
+                out.push(Event::EndColor);
+            }
+            Inline::AllCaps { children, .. } => {
+                out.push(Event::StartAllCaps);
+                rtf_inline_events(children, out);
+                out.push(Event::EndAllCaps);
+            }
+            Inline::SmallCaps { children, .. } => {
+                out.push(Event::StartSmallCaps);
+                rtf_inline_events(children, out);
+                out.push(Event::EndSmallCaps);
+            }
+            Inline::Hidden { children, .. } => {
+                out.push(Event::StartHidden);
+                rtf_inline_events(children, out);
+                out.push(Event::EndHidden);
+            }
+            Inline::CharSpan {
+                char_props,
+                children,
+                ..
+            } => {
+                out.push(Event::StartCharSpan {
+                    char_props: char_props.clone(),
+                });
+                rtf_inline_events(children, out);
+                out.push(Event::EndCharSpan);
+            }
+            Inline::Font { name, children, .. } => {
+                out.push(Event::StartFont { name: name.clone() });
+                rtf_inline_events(children, out);
+                out.push(Event::EndFont);
+            }
+            Inline::BgColor {
+                r, g, b, children, ..
+            } => {
+                out.push(Event::StartBgColor {
+                    r: *r,
+                    g: *g,
+                    b: *b,
+                });
+                rtf_inline_events(children, out);
+                out.push(Event::EndBgColor);
+            }
+            Inline::Lang { lcid, children, .. } => {
+                out.push(Event::StartLang { lcid: *lcid });
+                rtf_inline_events(children, out);
+                out.push(Event::EndLang);
+            }
+            Inline::Footnote { content, .. } => {
+                out.push(Event::StartFootnote);
+                for c in content {
+                    rtf_block_events(c, out);
+                }
+                out.push(Event::EndFootnote);
+            }
+        }
+    }
+}
+
+#[test]
+fn rtf_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("rtf");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&root).expect("fixtures/rtf dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let (doc, _diags) = rtf_fmt::parse(&input);
+        let expected = rtf_ast_to_events(&doc);
+        let actual: Vec<_> = rtf_fmt::events(&input).collect();
+        assert_eq!(
+            expected,
+            actual,
+            "events() diverged from the AST projection for fixture {}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of rtf fixtures, got {checked}"
+    );
+}
+
+/// `StreamingParser` buffers all fed bytes and only calls `sem_events::events()`
+/// once, inside `finish()` (batch.rs:107-139) — so its output is byte-for-byte
+/// identical to bulk `events()` regardless of chunking (the adversarial-chunking
+/// equivalence check below always passes), but it is not a genuine incremental
+/// parser: `feed()` alone (without `finish()`) never delivers anything to the
+/// handler, which the incrementality probe below catches.
+#[test]
+fn rtf_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("rtf");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/rtf dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let bulk: Vec<rtf_fmt::OwnedEvent> = rtf_fmt::events(&input).collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser =
+                rtf_fmt::batch::StreamingParser::new(|e: rtf_fmt::OwnedEvent| streamed.push(e));
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of rtf fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let probe_input = br"{\rtf1\ansi\deff0 Hello world\par";
+        let mut delivered: Vec<rtf_fmt::OwnedEvent> = Vec::new();
+        let mut parser = rtf_fmt::batch::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(probe_input);
+        result = assert_streaming_parser_is_incremental("rtf", !delivered.is_empty());
+    }
+    assert_or_known_failure("rtf", "streaming_parser", result);
+}
+
+/// `Writer` only accepts `TokenEvent` (the low-level raw RTF token stream),
+/// not the crate's own semantic `Event` type — there is no events()-fed
+/// streaming writer in this crate at all, unlike every other `Wired` format
+/// in this table. This check re-tokenizes the builder's own canonical output
+/// via `token_events()` (the closest available analogue to feeding a
+/// semantic event stream) and compares `Writer`'s re-serialization back to
+/// that canonical output byte-for-byte.
+#[test]
+fn rtf_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("rtf");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/rtf dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let (doc, _diags) = rtf_fmt::parse(&input);
+        let built = rtf_fmt::emit(&doc);
+
+        let mut w = rtf_fmt::writer::Writer::new(Vec::<u8>::new());
+        for t in rtf_fmt::token_events(built.as_bytes()) {
+            w.write_event(t);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of rtf fixtures, got {checked}"
+    );
+
+    // Incrementality probe: Writer writes directly to the sink on every
+    // write_event() call with no internal buffering, so this is expected to
+    // pass even though the byte-identity check above fails.
+    if result.is_ok() {
+        use rtf_fmt::TokenEvent;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = rtf_fmt::writer::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(TokenEvent::GroupStart {
+            span: Default::default(),
+        });
+        w.write_event(TokenEvent::ControlWord {
+            name: "rtf".into(),
+            param: Some(1),
+            span: Default::default(),
+        });
+        w.write_event(TokenEvent::Text {
+            text: "Hello".into(),
+            span: Default::default(),
+        });
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after GroupStart/ControlWord/Text and \
+                 before finish() — expected genuine incremental writes"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("rtf", "streaming_writer", result);
+}

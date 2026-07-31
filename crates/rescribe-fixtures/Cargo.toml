@@ -108,6 +108,7 @@ pod-fmt = { workspace = true }
 haddock-fmt = { workspace = true }
 fountain-fmt = { workspace = true }
 man-fmt = { workspace = true }
+rtf-fmt = { workspace = true }
 zip = { workspace = true }
 
 # Bidirectional format writer harness tests

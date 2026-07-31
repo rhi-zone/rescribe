@@ -9,6 +9,47 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-01: rtf-fmt wired into the cross-API harness (`events`/`StreamingParser`/streaming
+`Writer`); `rtf` removed from `streaming_harness::NOT_YET_AUDITED`.** `events()`
+(`sem_events::events`) is a lazy frame-stack walk of the AST `parse()` already built — same
+"not independently implemented reader" pattern already established as `Wired` for
+t2t/pod/haddock/fountain/asciidoc/man — and passes an exact events()-vs-AST-projection check
+across all 38 `fixtures/rtf/*` cases (`sem_events::Event` gained `#[derive(PartialEq)]`,
+previously only `Debug`, to make the exact comparison possible;
+`crates/formats/rtf-fmt/src/sem_events.rs:29`).
+
+Two real, confirmed defects found and documented as new `streaming_harness::KNOWN_FAILURES`
+entries (not fixed — both are structural, out of scope for a harness-wiring pass per the task's
+"small, clearly in-scope" bar):
+
+- `batch::StreamingParser` (`crates/formats/rtf-fmt/src/batch.rs:107-139`) is a confirmed
+  buffer-then-finish stub: `feed()` only appends to an internal `Vec<u8>` and `finish()` calls
+  `sem_events::events(&self.buf)` exactly once. The module's own doc argues this is an
+  "inherent property of the RTF format" (font/color tables must be parsed before body content is
+  interpretable) rather than an implementation shortfall — per this harness's explicit rule
+  (a buffer-then-finish stub is always `KnownFailure`, never `NotApplicable`, regardless of the
+  format's structural excuse) it is tracked as `KnownFailure` anyway. Directly verified: `feed()`
+  alone, without `finish()`, delivers zero events to the handler for any input.
+- `writer::Writer` (`crates/formats/rtf-fmt/src/writer.rs`) only accepts the low-level
+  `TokenEvent` type (from `token_events()`), not the crate's own semantic `Event`/`OwnedEvent`
+  type that `events()`/`StreamingParser` produce — unlike every other `Wired` format in this
+  table, rtf-fmt has no writer that consumes its own semantic event stream at all. `Writer`
+  itself writes directly to its sink on every `write_event()` call (genuinely incremental, not
+  buffer-then-finish — the incrementality probe passes), but its delimiter-space policy
+  (`writer.rs:57-68`: always a trailing space after a no-param `ControlWord`, never after a
+  `Some(param)` one) systematically diverges from `emit()`'s own placement policy, confirmed on
+  fixture `fixtures/rtf/adjacent_bold`: `build()` emits
+  `\rtf1\ansi\deff0{\fonttbl{\f0 Times New Roman;}}` but re-tokenizing that same output via
+  `token_events()` and feeding it back through `Writer` produces
+  `\rtf1\ansi \deff0{\fonttbl {\f0Times New Roman;}}`.
+
+`docs/format-audit.md`'s `rtf-fmt` row updated: `batch` ` ` → `~§`, `w-stream` ` ` → `✓§¥` (new
+`¥` footnote explaining the TokenEvent/semantic-Event API-level mismatch). `multimarkdown`/`pdf`
+remain in `NOT_YET_AUDITED` (confirmed via `crates/formats/` directory listing: neither has a
+standalone `-fmt` crate — `rescribe-read-multimarkdown` depends on `pulldown-cmark` directly and
+`rescribe-read-pdf` has no `pdf-fmt` sibling — same class of gap as `latex`, out of scope here).
+`native`/`csv`/`tsv`/`ris` were not reached this pass; still `NOT_YET_AUDITED`.
+
 **2026-07-31: texinfo `StreamingParser` hollow-reader defect fixed (reader-side counterpart to
 the `texinfo` `streaming_writer` fix documented further below in this file, dated
 2026-07-30/2026-07-31).** `texinfo::batch::StreamingParser::feed()`

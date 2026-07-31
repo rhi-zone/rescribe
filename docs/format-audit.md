@@ -258,7 +258,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 
 | Crate | ast | stream | batch | w-stream | w-build |
 |-------|-----|--------|-------|----------|---------|
-| rtf-fmt | ✓ | ~ | | | ✓ |
+| rtf-fmt | ✓ | ~ | ~§ | ✓§¥ | ✓ |
 | rst-fmt | ✓ | ✓ | ✓‡ | ✓ | ✓ |
 | asciidoc | ✓ | ✓ | ✓§ | ✓ | ✓ |
 | org-fmt | ✓ | ✓ | ✓§ | ✓§ | ✓ |
@@ -285,6 +285,18 @@ the full `fixtures/rst/` suite (previously only 6 hand-picked cases were covered
 multi-item definition list is split into one `StartDefinitionList`/`EndDefinitionList` pair
 per item instead of one list spanning all items. Tracked as a `KnownFailure` in
 `streaming_harness.rs` and in TODO.md; not fixed here.
+
+¥ rtf-fmt's `w-stream` (`writer::Writer`) only accepts the low-level `TokenEvent` type (from
+`token_events()`), not the crate's own semantic `Event`/`OwnedEvent` type that
+`events()`/`StreamingParser` produce — unlike every other `✓§`-marked crate in this table,
+rtf-fmt has no writer that consumes its own semantic event stream at all. `Writer` itself
+writes directly to its sink on every `write_event()` call (genuinely incremental, not
+buffer-then-finish), but its delimiter-space policy (`writer.rs:57-68`) systematically
+diverges from `emit()`'s own placement policy, so re-tokenizing `emit()`'s canonical output
+and feeding it back through `Writer` does not reproduce those bytes (confirmed on fixture
+`fixtures/rtf/adjacent_bold`). Tracked as a `KnownFailure` in `streaming_harness.rs` and in
+TODO.md; not fixed here (a real semantic-event-consuming writer would be a new module, out
+of scope for a harness-wiring pass).
 
 ### Cross-API harness inventory (2026-07-30)
 

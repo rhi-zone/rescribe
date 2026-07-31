@@ -26,7 +26,7 @@ use crate::ast::{Align, Block, Inline, TableRow};
 /// Text content uses `Cow<'a, str>` to allow future zero-copy optimisations
 /// without breaking the public API. For the fully-owned variant use
 /// [`OwnedEvent`].
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Event<'a> {
     // ── Block events ─────────────────────────────────────────────────────────
     StartParagraph {

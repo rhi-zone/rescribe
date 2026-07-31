@@ -3277,6 +3277,7 @@ dependencies = [
  "rescribe-write-slideous",
  "rescribe-write-slidy",
  "rst-fmt",
+ "rtf-fmt",
  "serde",
  "serde_json",
  "t2t",
