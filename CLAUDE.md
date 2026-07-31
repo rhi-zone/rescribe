@@ -480,6 +480,18 @@ Types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`. Scope is optional but
 - No worktree isolation on Agent calls unless multiple agents are genuinely running in
   parallel against the same tree. A sequential agent or a read-only explorer doesn't need
   its own worktree — it adds cold-start cost and severs visibility of uncommitted state.
+- Parallelise the work, serialise the integration. Fanning out to parallel worktree agents
+  is fine; merging their branches back is not — integrate one branch at a time, and inside
+  each worktree run `git rebase master` (non-interactive only — no `-i`) to resolve
+  conflicts there before merging. Then `git merge --ff-only`; if it refuses, the branch
+  wasn't fully rebased — rebase again, never fall back to a plain merge. A plain merge
+  buries conflict resolutions inside the merge commit instead of ordinary commits. When
+  several branches touch the same shared file, those resolutions then exist nowhere else —
+  one session merged a parallel batch this way, and a later attempt to linearize the
+  history hit an unrecoverable conflict at commit 129 of 178, because replaying the
+  parents re-surfaces every conflict with no record of how it was resolved. Rebase-first
+  costs the same conflict-resolution effort; the difference is whether it lands as
+  replayable history or gets buried in a merge node that can't be unwound.
 
 ## Disposition
 
