@@ -1204,6 +1204,59 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // honestly rather than chased further.
         streaming_writer: ApiState::Wired,
     },
+    // man-fmt's events() is `EventIter::new(&parse(input).0)`
+    // eagerly-collected — a lazy AST walk, not an independently implemented
+    // reader (same pattern as t2t/pod/haddock/fountain/asciidoc above); per
+    // that precedent it's still Wired. See tests/streaming_apis.rs's man-fmt
+    // section for the full writeup and directly-verified repro commands for
+    // both KnownFailures below.
+    //
+    // Fixed 2026-07-31 (found while wiring this entry): EventIter's handling
+    // of every inline container (Bold/Italic/Superscript/Subscript/Link)
+    // pushed a synthetic children-walking Frame::Inlines with
+    // `close: CloseKind::Paragraph` as a "dummy" — but the dummy was never
+    // actually inert: when that children frame ran out of items it
+    // unconditionally emitted a real, spurious `EndParagraph` event
+    // (regardless of the true enclosing block kind), landing between the
+    // container's content and its real close event
+    // (`Text, EndParagraph(spurious), EndBold, EndParagraph(real)` instead of
+    // `Text, EndBold, EndParagraph`). Caught immediately by this harness's
+    // events()-vs-AST-projection check on fixture `bold` — man-fmt's own
+    // pre-existing events.rs tests only asserted `.any(...)` membership, not
+    // exact event-sequence order, so this shipped undetected. Fixed by
+    // adding a real `CloseKind::None` variant (crates/formats/man-fmt/src/
+    // events.rs) that pops its frame without emitting any event, replacing
+    // the dummy `CloseKind::Paragraph` in all five inline-container sites.
+    FormatCapabilities {
+        format: "man",
+        events: ApiState::Wired,
+        streaming_parser: ApiState::KnownFailure(
+            "man_fmt::batch::StreamingParser's emit_block() re-parses each accumulated block in \
+             isolation via crate::events::events(&text), and events() always wraps its output in \
+             its own StartDocument/EndDocument pair (ManEvent has no way to avoid it), so \
+             StreamingParser emits one such pair per accumulated block instead of one for the \
+             whole document — the same re-parse-each-block-in-isolation root cause already \
+             tracked for t2t-fmt/fountain-fmt, but reproducing on every multi-block fixture \
+             rather than needing a specific trigger. Directly verified: feeding \
+             \".SH NAME\\ntest\\n\\n.SH DESCRIPTION\\nmore text\\n\" through events() yields 1 \
+             StartDocument/14 events total; through StreamingParser yields 2 StartDocument/16 \
+             events total. See TODO.md",
+        ),
+        streaming_writer: ApiState::KnownFailure(
+            "two stacked defects: (1) man_fmt::writer::Writer buffers all events into a \
+             Vec<OwnedManEvent> and only reconstructs the AST + calls emit::build() inside \
+             finish() (writer.rs's own module doc: \"This implementation buffers all events, \
+             reconstructs the AST, then emits\") — the same fake-streaming-writer pattern as \
+             t2t/pod/haddock/fountain/commonmark; (2) independently, ManEvent has no variant \
+             carrying document metadata (ManDoc::title/section/date/source/manual), so \
+             events()-fed writers always drop a .TH line's title/section/date/source even once \
+             (1) is fixed — collect_doc_from_events (events.rs) always builds ManDoc { title: \
+             None, section: None, date: None, source: None, manual: None, .. }. Directly \
+             verified on a .TH TEST 1 \"2024-01-01\" \"Version 1.0\" input: build() emits \
+             '.TH TEST 1 \"2024-01-01\" \"Version 1.0\" \"\"', the events()-fed streaming Writer \
+             emits '.TH UNTITLED 1 \"\" \"\" \"\"'. See TODO.md",
+        ),
+    },
 ];
 
 /// Formats declared with an honest "not yet audited" placeholder: the
@@ -1215,24 +1268,52 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
 /// absence from the table. See the task report / TODO.md for the plan to
 /// retire entries from this list into real `CAPABILITIES` rows.
 pub const NOT_YET_AUDITED: &[&str] = &[
+    // No {format}-fmt crate exists at all — confirmed by directory listing
+    // `crates/formats/` (2026-07-31): only `rescribe-read-{format}`/
+    // `rescribe-write-{format}` adapter crates exist for these ten. There is
+    // no standalone library to audit against the five-API contract this
+    // harness checks. `latex` is the sharpest case: `rescribe-read-latex`
+    // contains a 895-line hand-rolled parser (src/handwritten.rs) plus a
+    // separate 662-line tree-sitter-backed parser (src/treesitter.rs)
+    // directly in the adapter crate — confirmed by reading both files — a
+    // CLAUDE.md "adapter layer must never contain parsing or writing logic"
+    // violation, tracked in TODO.md, but out of scope to fix here (that
+    // requires extracting a real latex-fmt crate, not a harness-wiring task).
     "latex",
-    "man",
     "csl-json",
-    "native",
     "pandoc-json",
     "ipynb",
-    "csv",
-    "tsv",
     "opml",
-    "ris",
     "bibtex",
     "biblatex",
     "typst",
     "endnotexml",
     "epub",
-    "pdf",
+    // `native`/`csv`/`tsv`/`ris` do have real crates (`crates/formats/native`,
+    // `csv-fmt`, `tsv-fmt`, `ris`) but have not yet been individually
+    // audited by this harness pass — nobody has read their events()/batch.rs/
+    // writer.rs source yet to determine real ApiState, so an honest
+    // placeholder here (not a guess) is correct per the accuracy bar.
+    "native",
+    "csv",
+    "tsv",
+    "ris",
+    // `rtf` has a real standalone crate (`rtf-fmt`) but has not yet been
+    // individually audited by this harness pass. `multimarkdown` and `pdf`
+    // have NO standalone {format}-fmt crate either: `rescribe-read-
+    // multimarkdown`'s Cargo.toml depends on `pulldown-cmark` directly (not
+    // on `commonmark-fmt`), so its parsing logic lives in the adapter crate
+    // itself — a further CLAUDE.md "adapter layer must never contain parsing
+    // logic" candidate beyond latex, confirmed by reading its Cargo.toml but
+    // not further investigated here (out of scope for this pass; see
+    // TODO.md). `pdf` was not investigated in this pass.
     "rtf",
     "multimarkdown",
+    "pdf",
+    // Pandoc output-format variants of html/latex/ooxml-* with zero fixtures
+    // (`fixtures/{format}/` has no case directories) — not yet audited and
+    // not prioritized per CLAUDE.md's "fixture suite is the primary
+    // deliverable" ordering (no fixture corpus exists to check against).
     "beamer",
     "revealjs",
     "slidy",
@@ -1434,6 +1515,23 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        the streaming Writer (fed by events(), which does emit a ResetStyle for \
                        it) faithfully re-emits it — a parse()/build() fidelity gap, not a \
                        streaming-API defect",
+    },
+    KnownFailure {
+        format: "man",
+        api: "streaming_parser",
+        description: "man_fmt::batch::StreamingParser's emit_block() re-parses each accumulated \
+                       block in isolation via events(), which always wraps its output in its own \
+                       StartDocument/EndDocument pair, so StreamingParser emits one such pair per \
+                       block instead of one for the whole document",
+    },
+    KnownFailure {
+        format: "man",
+        api: "streaming_writer",
+        description: "man_fmt::writer::Writer buffers all events and only reconstructs the AST + \
+                       calls emit::build() inside finish() (self-admitted in its own module \
+                       doc); separately, ManEvent has no variant carrying document metadata, so \
+                       a .TH line's title/section/date/source is always dropped when the \
+                       streaming Writer is fed by events()",
     },
     KnownFailure {
         format: "t2t",

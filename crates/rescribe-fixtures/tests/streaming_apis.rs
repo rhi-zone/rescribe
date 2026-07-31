@@ -10389,3 +10389,314 @@ fn fountain_streaming_writer_matches_builder_over_all_fixtures() {
     }
     assert_or_known_failure("fountain", "streaming_writer", result);
 }
+
+// ---------------------------------------------------------------------------
+// man-fmt: `man_fmt::man_events()` (`events::events`, src/events.rs) is
+// `EventIter::new(&parse(input).0).map(into_owned).collect()` — a lazy
+// frame-stack walk of the AST `parse()` already built, then eagerly
+// collected, not an independently implemented reader (same pattern as
+// t2t/pod/haddock/asciidoc/fountain above). ManEvent has no variant carrying
+// document metadata (`ManDoc::title`/`section`/`date`/`source`/`manual`, see
+// events.rs's `ManEvent` enum, read in full — no `Metadata`/`StartDocument
+// { .. }` field exists), so `events()` always drops it; the
+// ast_to_events-vs-events() check below only validates the block/inline
+// expansion layer and does not exercise this gap (both sides omit it
+// equally), but it resurfaces as a genuine content-loss bug in the
+// streaming_writer check below, the same expressiveness-gap class already
+// tracked for muse-fmt/org-fmt/texinfo before their Metadata-event fixes.
+//
+// StreamingParser (batch.rs) is a genuine incremental line-buffered block
+// splitter — `feed_line` accumulates lines until a blank line, a `.nf`/`.EX`
+// preformatted-block boundary, or a new macro line ends the current block,
+// then `emit_block()` re-parses just that block's text via
+// `crate::events::events(&text)`. But `events()` always wraps its output in
+// its own `StartDocument`/`EndDocument` pair (see the `ManEvent` walk in
+// events.rs), and `emit_block()` forwards every event that re-parse yields
+// with no filtering (batch.rs: `for event in crate::events::events(&text) {
+// self.handler.handle(event.into_owned()); }`) — the same
+// re-parse-each-block-in-isolation root cause already tracked for
+// t2t-fmt/fountain-fmt, but here it reproduces on every fixture with more
+// than one top-level block instead of needing a title-page-specific trigger.
+// Confirmed directly: `events(".SH NAME\ntest\n\n.SH DESCRIPTION\nmore\n")`
+// yields exactly 1 `StartDocument`, while feeding the same input through
+// `StreamingParser` yields 2 — verified by direct execution, not inferred.
+//
+// Writer buffers all fed events into a `Vec<OwnedManEvent>` and only
+// reconstructs the AST + calls `emit::build()` inside `finish()`
+// (writer.rs's own module doc: "This implementation buffers all events,
+// reconstructs the AST, then emits") — the same fake-streaming-writer
+// pattern as t2t/pod/haddock/fountain/commonmark. It also inherits the
+// events()-metadata-loss gap above: `collect_doc_from_events` always builds
+// `ManDoc { title: None, section: None, date: None, source: None, manual:
+// None, .. }` (events.rs), so a `.TH` line's title/section/date/source is
+// silently dropped when the streaming Writer is fed by `events()`, while
+// `build()` from the real AST preserves it — verified by direct execution
+// on fixture th-header's `.TH` line (`build()` emits `.TH TEST 1
+// "2024-01-01" "Version 1.0" ""`, the streamed-Writer path emits `.TH
+// UNTITLED 1 "" "" ""`).
+// ---------------------------------------------------------------------------
+
+fn man_ast_to_events(doc: &man_fmt::ManDoc) -> Vec<man_fmt::OwnedManEvent> {
+    let mut out = Vec::new();
+    out.push(man_fmt::ManEvent::StartDocument);
+    for b in &doc.blocks {
+        man_block_events(b, &mut out);
+    }
+    out.push(man_fmt::ManEvent::EndDocument);
+    out
+}
+
+fn man_block_events(b: &man_fmt::Block, out: &mut Vec<man_fmt::OwnedManEvent>) {
+    use man_fmt::{Block, ManEvent};
+    match b {
+        Block::Heading { level, inlines, .. } => {
+            out.push(ManEvent::StartHeading { level: *level });
+            man_inline_events(inlines, out);
+            out.push(ManEvent::EndHeading);
+        }
+        Block::Paragraph { inlines, .. } => {
+            out.push(ManEvent::StartParagraph);
+            man_inline_events(inlines, out);
+            out.push(ManEvent::EndParagraph);
+        }
+        Block::IndentedParagraph { inlines, .. } => {
+            out.push(ManEvent::StartIndentedParagraph);
+            man_inline_events(inlines, out);
+            out.push(ManEvent::EndIndentedParagraph);
+        }
+        Block::CodeBlock { content, .. } => out.push(ManEvent::CodeBlock {
+            content: content.clone().into(),
+        }),
+        Block::ExampleBlock { content, .. } => out.push(ManEvent::ExampleBlock {
+            content: content.clone().into(),
+        }),
+        Block::HorizontalRule { .. } => out.push(ManEvent::HorizontalRule),
+        Block::Comment { text, .. } => out.push(ManEvent::Comment {
+            text: text.clone().into(),
+        }),
+        Block::List { ordered, items, .. } => {
+            out.push(ManEvent::StartList { ordered: *ordered });
+            for item in items {
+                out.push(ManEvent::StartListItem);
+                for c in item {
+                    man_block_events(c, out);
+                }
+                out.push(ManEvent::EndListItem);
+            }
+            out.push(ManEvent::EndList);
+        }
+        Block::DefinitionList { items, .. } => {
+            out.push(ManEvent::StartDefinitionList);
+            for (term, desc) in items {
+                out.push(ManEvent::StartDefinitionTerm);
+                man_inline_events(term, out);
+                out.push(ManEvent::EndDefinitionTerm);
+                out.push(ManEvent::StartDefinitionDesc);
+                for c in desc {
+                    man_block_events(c, out);
+                }
+                out.push(ManEvent::EndDefinitionDesc);
+            }
+            out.push(ManEvent::EndDefinitionList);
+        }
+    }
+}
+
+fn man_inline_events(inlines: &[man_fmt::Inline], out: &mut Vec<man_fmt::OwnedManEvent>) {
+    use man_fmt::{Inline, ManEvent};
+    for i in inlines {
+        match i {
+            Inline::Text(s, _) => out.push(ManEvent::Text(s.clone().into())),
+            Inline::Code(s, _) => out.push(ManEvent::Code(s.clone().into())),
+            Inline::Bold(children, _) => {
+                out.push(ManEvent::StartBold);
+                man_inline_events(children, out);
+                out.push(ManEvent::EndBold);
+            }
+            Inline::Italic(children, _) => {
+                out.push(ManEvent::StartItalic);
+                man_inline_events(children, out);
+                out.push(ManEvent::EndItalic);
+            }
+            Inline::Superscript(children, _) => {
+                out.push(ManEvent::StartSuperscript);
+                man_inline_events(children, out);
+                out.push(ManEvent::EndSuperscript);
+            }
+            Inline::Subscript(children, _) => {
+                out.push(ManEvent::StartSubscript);
+                man_inline_events(children, out);
+                out.push(ManEvent::EndSubscript);
+            }
+            Inline::Link { url, children, .. } => {
+                out.push(ManEvent::StartLink {
+                    url: url.clone().into(),
+                });
+                man_inline_events(children, out);
+                out.push(ManEvent::EndLink);
+            }
+        }
+    }
+}
+
+#[test]
+fn man_events_equals_ast_projection_over_all_fixtures() {
+    let root = fixtures_root().join("man");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&root).expect("fixtures/man dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = man_fmt::parse(&input);
+        let expected = man_ast_to_events(&doc);
+        let actual: Vec<_> = man_fmt::man_events(&input)
+            .map(|e| e.into_owned())
+            .collect();
+        assert_eq!(
+            expected,
+            actual,
+            "events() diverged from the AST projection for fixture {}",
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of man fixtures, got {checked}"
+    );
+}
+
+/// `StreamingParser` re-parses each accumulated block in isolation via
+/// `crate::events::events()`, which always wraps its output in its own
+/// `StartDocument`/`EndDocument` pair — so StreamingParser emits one such
+/// pair per block instead of one for the whole document, diverging from
+/// bulk `events()` on any fixture with more than one top-level block. See
+/// the module-level comment above for a directly-verified repro.
+#[test]
+fn man_streaming_parser_matches_events_under_adversarial_chunking() {
+    let root = fixtures_root().join("man");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/man dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read(&input_path).expect("read fixture input");
+        let Ok(input_str) = std::str::from_utf8(&input) else {
+            continue;
+        };
+        let bulk: Vec<man_fmt::OwnedManEvent> = man_fmt::man_events(input_str)
+            .map(|e| e.into_owned())
+            .collect();
+        checked += 1;
+
+        for (chunking_name, chunks) in adversarial_chunkings(&input) {
+            let mut streamed = Vec::new();
+            let mut parser = man_fmt::batch::StreamingParser::new(|e: man_fmt::OwnedManEvent| {
+                streamed.push(e);
+            });
+            for chunk in &chunks {
+                parser.feed(chunk);
+            }
+            parser.finish();
+            if bulk != streamed && result.is_ok() {
+                result = Err(format!(
+                    "StreamingParser diverged from events() for fixture {name} under chunking \
+                     {chunking_name}"
+                ));
+            }
+        }
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of man fixtures, got {checked}"
+    );
+
+    if result.is_ok() {
+        let probe_input = b".SH NAME\ntest\n\n.PP\nUnterminated paragraph text";
+        let mut delivered: Vec<man_fmt::OwnedManEvent> = Vec::new();
+        let mut parser = man_fmt::batch::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(probe_input);
+        result = assert_streaming_parser_is_incremental("man", !delivered.is_empty());
+    }
+    assert_or_known_failure("man", "streaming_parser", result);
+}
+
+/// `Writer` buffers all fed events into a `Vec<OwnedManEvent>` and only
+/// reconstructs the AST + calls `emit::build()` inside `finish()` (see
+/// `crates/formats/man-fmt/src/writer.rs`'s own module doc), and separately
+/// loses document metadata via the events()-layer gap documented above.
+/// Checked via byte-identical comparison against the builder path, plus an
+/// incrementality probe.
+#[test]
+fn man_streaming_writer_matches_builder_over_all_fixtures() {
+    let root = fixtures_root().join("man");
+    let mut checked = 0;
+    let mut result: Result<(), String> = Ok(());
+    for entry in std::fs::read_dir(&root).expect("fixtures/man dir") {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let Some(input_path) = find_input(&path) else {
+            continue;
+        };
+        let input = std::fs::read_to_string(&input_path).expect("read fixture input");
+        let (doc, _diags) = man_fmt::parse(&input);
+        let built = man_fmt::build(&doc);
+
+        let mut w = man_fmt::Writer::new(Vec::<u8>::new());
+        for e in man_fmt::man_events(&input) {
+            w.write_event(e);
+        }
+        let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
+
+        if built != streamed && result.is_ok() {
+            result = Err(format!(
+                "streaming Writer diverged from build() for fixture {name}:\n  build():  \
+                 {built:?}\n  streamed: {streamed:?}"
+            ));
+        }
+        checked += 1;
+    }
+    assert!(
+        checked > 10,
+        "expected to check a substantial number of man fixtures, got {checked}"
+    );
+
+    // Incrementality probe: byte-identical final content (checked above)
+    // only proves correctness, not genuine streaming.
+    if result.is_ok() {
+        use man_fmt::ManEvent;
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
+        let mut w = man_fmt::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(ManEvent::StartParagraph);
+        w.write_event(ManEvent::Text("Hello world".to_string().into()));
+        w.write_event(ManEvent::EndParagraph);
+        let pre_finish = observed.borrow().len();
+        let _ = w.finish();
+        if pre_finish == 0 {
+            result = Err(
+                "Writer wrote zero bytes to the sink after a full StartParagraph/Text/\
+                 EndParagraph sequence and before finish() — man_fmt::writer::Writer buffers \
+                 all events into a Vec<OwnedManEvent> and only reconstructs the AST + calls \
+                 emit::build() inside finish() (crates/formats/man-fmt/src/writer.rs, \
+                 self-admitted in its own module doc), so it is not a genuine incremental \
+                 streaming writer despite content round-tripping correctly"
+                    .to_string(),
+            );
+        }
+    }
+    assert_or_known_failure("man", "streaming_writer", result);
+}

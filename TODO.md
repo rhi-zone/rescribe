@@ -5278,3 +5278,87 @@ for a pre-existing, unrelated failure — `ooxml-codegen`'s `test_generate_wml`/
 `test_eg_definitions` read an external `spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc` file
 not present in this environment, confirmed pre-existing via `git log` on that test file) all
 pass clean: 418 test binaries, 0 failures.
+
+## muse's incrementality probe repaired + man-fmt wired + no-fmt-crate claim verified (2026-07-31)
+
+**muse's probe fixed.** `muse_streaming_parser_matches_events_and_is_incremental` was the one
+call site of `assert_streaming_parser_is_incremental` still using the original fixed-50%-byte
+fixture split (inside the per-fixture loop) instead of a hand-built synthetic sample — skipped
+during the earlier fb2/texinfo/xwiki/textile/jats/pod repair pass because muse's
+`streaming_parser` was already `Wired`, so the repair wasn't required for correctness at the
+time. Replaced with a hand-built sample (`"* Heading\n\nUnterminated paragraph text..."`, run
+once outside the fixture loop, `finish()` never called), matching the other six call sites.
+
+**man-fmt wired into `CAPABILITIES`** (`events: Wired`, `streaming_parser: KnownFailure`,
+`streaming_writer: KnownFailure`), chosen for its 29-fixture corpus (the largest among
+`NOT_YET_AUDITED` entries with a real crate, ahead of `native`'s 25 and `rtf`'s 38 — `rtf` was
+not picked up this pass; see below). `events()` follows the same "parse() then walk the AST"
+shape as t2t/pod/haddock/fountain (`EventIter::new(&doc)` eagerly collected), so per that
+precedent it is `Wired`.
+
+**A real, previously-unknown bug in `man-fmt`'s own `events.rs` was found and fixed** while
+building the events()-vs-AST-projection check (`fixtures/man/bold` failed immediately on first
+exercise): every inline container (Bold/Italic/Superscript/Subscript/Link) pushed a synthetic
+children-walking `Frame::Inlines` with `close: CloseKind::Paragraph` as a "dummy" value — but
+the dummy was never actually inert. When that children frame ran out of items it unconditionally
+emitted a real, spurious `EndParagraph` event, landing between the container's content and its
+real close event (`Text, EndParagraph(spurious), EndBold, EndParagraph(real)` instead of `Text,
+EndBold, EndParagraph`). man-fmt's own pre-existing `events.rs` tests only asserted `.any(...)`
+membership on the event stream, never exact ordering, so this shipped undetected. This is a
+small, well-scoped bug (not an architectural rewrite), so it was fixed in-session: added a real
+`CloseKind::None` variant (crates/formats/man-fmt/src/events.rs) that pops its frame without
+emitting any event, replacing the dummy `CloseKind::Paragraph` at all five inline-container
+sites. Confirmed via `cargo test -p man-fmt` (34+ tests, all passing) and the
+events()-vs-AST-projection check (now passing over all man fixtures).
+
+**Two genuine, remaining `man-fmt` defects tracked as `KnownFailure`** (both directly verified
+by running real code, not inferred from reading):
+- `streaming_parser`: `StreamingParser::emit_block()` re-parses each accumulated block in
+  isolation via `events()`, which always wraps its output in its own `StartDocument`/
+  `EndDocument` pair — so `StreamingParser` emits one such pair per block instead of one for the
+  whole document (same root-cause class as t2t-fmt/fountain-fmt's pre-fix bug, but reproducing
+  on every multi-block fixture, not needing a specific trigger). Verified: `events()` on a
+  2-heading input yields 1 `StartDocument`/14 events; `StreamingParser` on the same input yields
+  2 `StartDocument`/16 events.
+- `streaming_writer`: two stacked defects — (1) `Writer` buffers all events into a
+  `Vec<OwnedManEvent>` and only reconstructs the AST + calls `emit::build()` inside `finish()`
+  (self-admitted in its own module doc, the same fake-streaming-writer pattern as
+  t2t/pod/haddock/fountain/commonmark); (2) independently, `ManEvent` has no variant carrying
+  document metadata (`ManDoc::title`/`section`/`date`/`source`/`manual`), so a `.TH` line's
+  title/section/date/source is always dropped once fed through `events()`, even after (1) is
+  fixed — `collect_doc_from_events` always builds `ManDoc { title: None, .. }`. Verified: on a
+  `.TH TEST 1 "2024-01-01" "Version 1.0"` input, `build()` emits `.TH TEST 1 "2024-01-01`
+  `"Version 1.0" ""`, the events()-fed streaming Writer emits `.TH UNTITLED 1 "" "" ""`.
+
+**The "no `-fmt` crate" claim for 10 formats was verified, not assumed.** Confirmed by listing
+`crates/formats/` (35 crates, alphabetically) and cross-checking against `epub`, `bibtex`,
+`biblatex`, `csl-json`, `endnotexml`, `opml`, `ipynb`, `typst`, `pandoc-json`, `latex` — none of
+the ten has a matching `{format}-fmt` entry; only `rescribe-read-{format}`/`rescribe-write-
+{format}` adapter crates exist. For `latex` specifically: `crates/readers/rescribe-read-latex/
+src/handwritten.rs` is a 895-line hand-rolled parser and `src/treesitter.rs` is a separate
+662-line tree-sitter-backed parser, both directly in the adapter crate (confirmed by reading
+both files in full) — a CLAUDE.md "adapter layer must never contain parsing or writing logic"
+violation. Fixing it (extracting a real `latex-fmt` crate) is out of scope for this pass per the
+task's explicit fence; left in `NOT_YET_AUDITED` with the violation documented inline as a code
+comment. Separately, while investigating `multimarkdown` for the same question,
+`rescribe-read-multimarkdown`'s `Cargo.toml` was found to depend on `pulldown-cmark` directly
+(not on `commonmark-fmt`) — a further, previously-undocumented "parsing logic in the adapter"
+candidate. Not investigated further (out of scope for this pass); noted inline in
+`NOT_YET_AUDITED` and here for a future audit pass.
+
+**`NOT_YET_AUDITED` restructured with per-entry reasons** (was a flat list of 28 names with no
+individual justification): grouped into "no `-fmt` crate exists" (10, the list above), "has a
+real crate but not yet individually audited this pass" (`native`, `csv`, `tsv`, `ris`, `rtf`,
+`multimarkdown`, `pdf`), and "zero-fixture pandoc output-format variants, not prioritized per
+CLAUDE.md's fixture-suite-first ordering" (`beamer`, `revealjs`, `slidy`, `s5`, `dzslides`,
+`slideous`, `context`, `ms`, `icml`, `chunkedhtml`). `man` was removed from the list (now in
+`CAPABILITIES`).
+
+**Not attempted this pass**: wiring additional `NOT_YET_AUDITED` formats beyond `man` (`native`,
+`rtf`, `csv`, `tsv`, `ris`, `multimarkdown` remain honest placeholders) — reading each crate's
+`events.rs`/`batch.rs`/`writer.rs` in full and hand-building an `ast_to_events` projection plus
+three test functions per format (the `man-fmt` pattern above) is substantial, non-parallelizable
+per-format work; `rtf-fmt` (38 fixtures, the largest remaining corpus) is the natural next pick.
+
+Verification: `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --check`,
+and `cargo test -q` all pass (see individual commits for exact scopes exercised).

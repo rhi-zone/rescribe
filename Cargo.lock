@@ -3192,6 +3192,7 @@ dependencies = [
  "html-fmt",
  "jats-fmt",
  "jira-fmt",
+ "man-fmt",
  "markua",
  "mediawiki-fmt",
  "muse-fmt",

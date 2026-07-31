@@ -169,6 +169,19 @@ enum CloseKind {
     Heading,
     DefinitionTerm,
     DefinitionDesc,
+    /// No close event should be emitted. Used for the synthetic `Inlines`
+    /// frame pushed to walk an inline container's children (Bold/Italic/
+    /// Superscript/Subscript/Link): the container's own close event
+    /// (EndBold, EndItalic, ...) is emitted separately via a `Frame::Leaf`
+    /// pushed below the children frame, so the children frame itself must
+    /// not also emit a close event when it runs out of items. Previously
+    /// this used `CloseKind::Paragraph` as a "dummy" value, but the
+    /// dummy was never actually inert: it produced a real, spurious
+    /// `EndParagraph` event every time any inline container's children
+    /// frame was exhausted, regardless of the true enclosing block kind —
+    /// found via rescribe-fixtures' events()-vs-AST-projection check
+    /// (`fixtures/man/bold`).
+    None,
 }
 
 #[derive(Clone, Copy)]
@@ -256,7 +269,7 @@ impl<'a> Iterator for EventIter<'a> {
                                 self.frame_stack.push(Frame::Inlines {
                                     inlines: children,
                                     index: 0,
-                                    close: CloseKind::Paragraph, // dummy, we handle EndBold manually
+                                    close: CloseKind::None,
                                 });
                                 // We'll need to emit EndBold after children
                                 // Insert a leaf for EndBold between bold children and continuation
@@ -279,7 +292,7 @@ impl<'a> Iterator for EventIter<'a> {
                                 self.frame_stack.push(Frame::Inlines {
                                     inlines: children,
                                     index: 0,
-                                    close: CloseKind::Paragraph, // dummy
+                                    close: CloseKind::None,
                                 });
                                 return Some(ManEvent::StartItalic);
                             }
@@ -295,7 +308,7 @@ impl<'a> Iterator for EventIter<'a> {
                                 self.frame_stack.push(Frame::Inlines {
                                     inlines: children,
                                     index: 0,
-                                    close: CloseKind::Paragraph,
+                                    close: CloseKind::None,
                                 });
                                 return Some(ManEvent::StartSuperscript);
                             }
@@ -310,7 +323,7 @@ impl<'a> Iterator for EventIter<'a> {
                                 self.frame_stack.push(Frame::Inlines {
                                     inlines: children,
                                     index: 0,
-                                    close: CloseKind::Paragraph,
+                                    close: CloseKind::None,
                                 });
                                 return Some(ManEvent::StartSubscript);
                             }
@@ -324,7 +337,7 @@ impl<'a> Iterator for EventIter<'a> {
                                 self.frame_stack.push(Frame::Inlines {
                                     inlines: children,
                                     index: 0,
-                                    close: CloseKind::Paragraph,
+                                    close: CloseKind::None,
                                 });
                                 return Some(ManEvent::StartLink {
                                     url: Cow::Borrowed(url),
@@ -342,6 +355,11 @@ impl<'a> Iterator for EventIter<'a> {
                             CloseKind::Heading => return Some(ManEvent::EndHeading),
                             CloseKind::DefinitionTerm => return Some(ManEvent::EndDefinitionTerm),
                             CloseKind::DefinitionDesc => return Some(ManEvent::EndDefinitionDesc),
+                            // An inline container's own close event (EndBold,
+                            // EndItalic, ...) is emitted by a separate
+                            // Frame::Leaf pushed below this children frame;
+                            // this frame itself must not emit anything.
+                            CloseKind::None => continue,
                         }
                     }
                 }
