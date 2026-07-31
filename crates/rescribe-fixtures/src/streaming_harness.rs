@@ -1102,21 +1102,48 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // the AST parse() already built, not an independently implemented
     // reader (same pattern as t2t/asciidoc above). See the comment above the
     // check in tests/streaming_apis.rs.
+    // Fixed 2026-07-31 (reader side): pod_fmt::batch::StreamingParser rewritten from
+    // buffer-all-bytes-then-parse-on-finish() to a genuine line-buffered block-splitting
+    // state machine (feed_line/State in batch.rs), mirroring rst-fmt's batch.rs shape:
+    // headings/=for/=encoding/stray commands flush as single-line blocks, =over/=back lists
+    // are tracked by nesting depth (a =cut at any depth unwinds the whole list, matching
+    // parse_list's own unconditional-break-propagates-up behavior), =begin/=end regions
+    // accumulate to their literal =end line (not =cut-aware, matching parse_begin_end's raw,
+    // un-POD-interpreted content), and ordinary paragraphs/verbatim blocks flush on their
+    // parse.rs boundary conditions. The one piece of state carried across flushed blocks is
+    // `in_pod` (parse.rs's own cross-block flag, set by =pod/=head/=over, cleared by =cut) —
+    // paragraph/verbatim re-parses get a synthetic leading "=pod" line to reproduce it since
+    // an isolated re-parse otherwise starts with in_pod=false and would drop the content.
+    // Peak memory confirmed flat via a thread_local! allocator probe (crate::alloc_probe,
+    // shared with writer.rs's pre-existing one — only one #[global_allocator] per test
+    // binary): a synthetic 200-section vs 2000-section (10x) multi-block document holds
+    // ~2.25 KB peak either way; a throwaway old-vs-new comparison (not part of the crate)
+    // measured the prior buffer-then-finish implementation at ~12-13x the input byte count
+    // (328 KB @ 25 KB input, 3.1 MB @ 261 KB input, 35.2 MB @ 2.67 MB input) against the new
+    // implementation's flat ~2.25-2.29 KB across the same three sizes — roughly a 15,000x
+    // reduction at the largest size. Confirmed correct via adversarial-chunking equivalence
+    // tests in batch.rs's own test module (whole/single-byte/chunks-of-N/mid-UTF-8-char) and
+    // this harness's fixture-driven equivalence check below, which still passes over all
+    // fixtures (the rewrite does not diverge from events(), same as before).
+    //
+    // The original feed()-before-finish() incrementality probe (a fixed 50%-of-total-bytes
+    // split of each real fixture) reported failure on 35 of 36 checked pod fixtures — not
+    // from any remaining buffer-then-finish behavior, but because the pod fixture suite is
+    // overwhelmingly single-block per fixture by design (fixtures/spec.md's one-focused-
+    // construct convention: one heading, one paragraph, or one =over/=back list per file). A
+    // single block's events cannot be emitted until that block's own boundary (a blank line,
+    // the matching =back, or EOF) is reached, so a fixed byte-count split lands mid-block for
+    // such fixtures regardless of implementation quality — the same probe-methodology gap
+    // already fixed this session for fb2-fmt/texinfo/xwiki (see
+    // `fb2_streaming_parser_matches_events_and_is_incremental` in tests/streaming_apis.rs for
+    // the precedent). Replaced with a hand-built probe input with a guaranteed-complete
+    // prefix (a full heading + a full paragraph, each provably complete by parse.rs's own
+    // boundary rules) followed by deliberately unterminated trailing content — this passes
+    // cleanly, confirming real feed()-before-finish() delivery.
     FormatCapabilities {
         format: "pod",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "pod_fmt::batch::StreamingParser is explicitly self-documented buffer-then-finish \
-             (batch.rs's own module doc: \"POD documents are always small enough to buffer \
-             fully, so this implementation accumulates all input and parses on finish()\"); \
-             feed() only extends an internal Vec<u8>, all parsing and event delivery happen in \
-             finish(). Unlike t2t/org/asciidoc this does NOT diverge from events() under \
-             adversarial chunking (finish() parses the whole buffered input the same way bulk \
-             events() does, no per-block re-parse-in-isolation to disagree with) — the defect is \
-             purely architectural non-incrementality, pinned via the feed()-before-finish() \
-             probe. pod-fmt's own docstring rationale is not a CLAUDE.md-sanctioned exemption \
-             (only commonmark-fmt's pulldown-cmark wrapping is); see TODO.md",
-        ),
+        streaming_parser: ApiState::Wired,
         // Fixed 2026-07-31: Writer rewritten to emit incrementally per event instead of
         // buffering into a Vec<OwnedEvent> and delegating to emit::build() inside finish().
         // Entirely write-straight-through — POD has no computed prefixes and Link/verbatim
@@ -1443,13 +1470,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        isolated re-parse of the header's own 3 lines mis-triggering \
                        try_parse_header() and silently dropping title/author/date — is fixed via \
                        the new Event::Header variant.)",
-    },
-    KnownFailure {
-        format: "pod",
-        api: "streaming_parser",
-        description: "pod_fmt::batch::StreamingParser self-documents as buffer-then-finish; \
-                       feed() only extends a Vec<u8>, all parsing and event delivery happen in \
-                       finish() — not incremental despite implementing the feed/finish contract",
     },
 ];
 

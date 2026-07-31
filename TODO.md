@@ -258,6 +258,113 @@ cargo test -q && cargo fmt --check` all pass clean.
 
 ---
 
+**2026-07-31: pod-fmt `StreamingParser` (reader side) rewritten from buffer-then-finish to
+genuine incremental block parsing.** `crates/formats/pod-fmt/src/batch.rs`'s `StreamingParser`
+was, until this fix, explicitly self-documented as buffer-then-finish ("POD documents are
+always small enough to buffer fully, so this implementation accumulates all input and parses
+on finish()") — `feed()` only did `self.buf.extend_from_slice(chunk)`, and all parsing/event
+delivery happened inside `finish()`. Per CLAUDE.md, a crate's own "small enough to buffer"
+rationale is not a sanctioned exemption (only commonmark-fmt's pulldown-cmark wrapping is), so
+this was tracked as a `KnownFailure` in `rescribe-fixtures/src/streaming_harness.rs`
+(`format: "pod", api: "streaming_parser"`), pinned via a `feed()`-before-`finish()`
+incrementality probe. The companion streaming *writer* fix landed the same day (see below);
+this is the reader-side counterpart.
+
+Design: a line-buffered block-splitting state machine (`State::{Idle,Paragraph,Verbatim,
+List{depth},BeginEnd}` in `batch.rs`) mirroring `pod_fmt::parse::Parser::parse_blocks`'s own
+per-line dispatch order exactly — headings/`=for`/`=encoding`/stray `=item`/`=back`/`=end`/
+unknown commands flush as single-line blocks; `=over`...`=back` lists are tracked by nesting
+depth (incremented on each nested `=over`, decremented on each `=back`; a `=cut` at *any*
+depth unwinds and flushes the whole list immediately, matching `parse_list`'s own
+unconditional `=cut` break propagating up through every recursion level — traced by hand
+through the nested-item-body-loop-then-outer-loop control flow); `=begin FORMAT`...`=end
+FORMAT` regions accumulate to their literal `=end` line without matching the format identifier
+and without being `=cut`-aware (raw content is never POD-interpreted, matching
+`parse_begin_end`'s behavior exactly); ordinary paragraphs end on a blank line, a command
+line, or an indented line; verbatim blocks continue through blank lines and only end on a
+non-blank, non-indented line. Each confirmed-complete block is re-parsed standalone via
+`crate::parse::parse()` and its events forwarded via `EventIter` — the same
+re-parse-in-isolation shape rst-fmt/other formats' batch.rs use.
+
+One piece of state genuinely spans blocks: `in_pod` (POD's own cross-block flag, set by
+`=pod`/`=head*`/`=over`, cleared by `=cut`; content lines outside POD mode are dropped
+entirely by `parse::parse` itself). `StreamingParser` tracks the same flag across `feed()`
+calls at its `Idle`-state top-level dispatch (matching `parse_blocks`'s own gate order line by
+line), and — since a standalone re-parse of just a paragraph/verbatim block's lines would
+otherwise start with `in_pod = false` and silently drop the content — prefixes those two block
+kinds' isolated re-parse text with a synthetic leading `=pod` line (itself producing no event)
+to reproduce the same state. List/`=begin` blocks start with a `=` line and need no such
+prefix (POD's own `in_pod` gate only applies to non-`=` lines).
+
+Unlike the org/asciidoc/t2t/djot bug class this session's other streaming-parser rewrites hit
+(cross-block context loss, or a document-wrapper event pair duplicated per block), pod-fmt's
+own `Event` enum has no `StartDocument`/`EndDocument` wrapper at all, so that failure mode
+doesn't apply here. Confirmed via 15 hand-built adversarial-chunking tests in `batch.rs`'s own
+test module (chunk sizes 0/1/3/7/13, including a mid-UTF-8-character split, nested lists,
+verbatim-with-internal-blank-lines, an unclosed `=begin` region, an `=over` block terminated by
+`=cut` with no matching `=back`, and stray `=back`/`=item` commands) plus the pre-existing
+fixture-driven equivalence check in `rescribe-fixtures/tests/streaming_apis.rs`
+(`pod_streaming_parser_matches_events_and_is_incremental`), which still passes over the full
+pod fixture suite — no divergence from `events()` was introduced.
+
+**Peak memory measured via a `thread_local!` allocator probe** (`crate::alloc_probe`,
+extracted out of `writer.rs`'s pre-existing one so both modules' test binaries — which `cargo
+test`'s `--lib` harness links into a single binary — share the one `#[global_allocator]` a
+process may define; `writer.rs`'s tests already had this pattern from a real flake found this
+session, a shared `AtomicUsize` counter picking up 407x noise from concurrently-running
+threads under full-workspace `cargo test -q`, fixed by making the counters `thread_local!`).
+`batch.rs::tests::test_streaming_parser_peak_memory_bounded` feeds a synthetic 200- vs
+2000-section (10x) multi-block document (headings + paragraphs with bold/link inlines) in
+64-byte chunks and asserts the peak-to-peak ratio stays under 20x — measured ~2,253 bytes peak
+@200 sections vs ~2,261 bytes @2000 sections (ratio ~1.00), confirming O(largest block) not
+O(document). A throwaway before/after comparison (a temporary `examples/mem_compare.rs`, not
+committed — reproduced the exact prior `StreamingParser` implementation from git history
+side-by-side with the new one against the same synthetic documents) measured:
+
+| sections | doc bytes | OLD peak (buffer-then-finish) | NEW peak (incremental) | reduction |
+|---|---|---|---|---|
+| 200 | 25,470 | 328,007 B (~12.9x doc) | 2,253 B | ~146x |
+| 2,000 | 260,670 | 3,104,721 B (~11.9x doc) | 2,261 B | ~1,373x |
+| 20,000 | 2,666,670 | 35,208,659 B (~13.2x doc) | 2,285 B | ~15,408x |
+
+The old implementation's peak scaled linearly with input size (~12-13x the raw byte count, the
+full input buffer plus the parsed `PodDoc` AST plus the collected `Vec<OwnedEvent>`); the new
+implementation's peak stays flat regardless of document size, as expected for O(largest
+block).
+
+**The original `feed()`-before-`finish()` incrementality probe in `streaming_apis.rs` (a fixed
+50%-of-total-bytes split of each real fixture) reported `Err` for 35 of 36 checked fixtures —
+a probe-methodology gap, not a real defect, since fixed by replacing the probe rather than
+accepted as a permanent `KnownFailure`.** The pod fixture suite is overwhelmingly one block
+per fixture by design (`fixtures/spec.md`'s single-focused-construct convention — one heading,
+one paragraph, or one `=over`/`=back` list per file). A single block's events cannot be
+emitted until that block's own boundary (a blank line, the matching `=back`, or EOF) is
+reached — architecturally true for *any* correct block-granular incremental parser, not a
+defect — so the probe's fixed 50%-of-total-bytes split lands mid-block on such fixtures
+regardless of implementation quality. Measured directly (a temporary
+`examples/probe_incrementality.rs`, not committed): of the 36 pod fixtures large enough for
+the probe to run (input length > 32 bytes, non-empty `events()` output), only 1
+(`heading-levels`, which has 6 independently-flushing single-line heading blocks) delivered
+any event before the halfway-byte mark; the other 35 are single-block documents where the
+probe's fixed split can never succeed by construction. This is the same probe-methodology gap
+already fixed this session for fb2-fmt/texinfo/xwiki (see
+`fb2_streaming_parser_matches_events_and_is_incremental` in `tests/streaming_apis.rs`, and its
+`fix(fb2-fmt): make StreamingParser genuinely incremental` commit, for the precedent) — a
+fixed-byte-count split of a real fixture is not a valid incrementality test when the fixture
+corpus is dominated by single-block documents; the correct fix is a hand-built probe with a
+guaranteed-complete prefix, not accepting the failure permanently. Applied that fix here too:
+`pod_streaming_parser_matches_events_and_is_incremental`'s per-fixture 50%-split check was
+removed and replaced with a single hand-built probe fed once (not per fixture) — a full
+`=head1` heading (a single-line block, flushes on its own newline) followed by a full ordinary
+paragraph (flushes on the blank line after it), followed by deliberately unterminated trailing
+content with no closing newline at all (so it never reaches `feed_line` and stays harmlessly
+buffered, since `finish()` is never called in this probe). This passes cleanly. `pod`'s
+`streaming_parser` is now `ApiState::Wired` in `streaming_harness.rs`'s `CAPABILITIES` table,
+and the matching `KNOWN_FAILURES` entry (`format: "pod", api: "streaming_parser"`) was
+removed.
+
+---
+
 **2026-07-31: org-fmt `streaming_writer` hollow-writer defect fixed (and this harness's own
 Wired claim corrected).** Before this fix, `streaming_harness.rs`'s `CAPABILITIES` table
 declared `org`'s `streaming_writer` as `ApiState::Wired`, but its own adjacent comment admitted

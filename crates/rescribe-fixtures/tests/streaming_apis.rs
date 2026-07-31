@@ -9564,13 +9564,19 @@ fn pod_events_equals_ast_projection_over_all_fixtures() {
     );
 }
 
-/// `StreamingParser` is explicitly self-documented buffer-then-finish (see
-/// `crates/formats/pod-fmt/src/batch.rs`'s own module doc). Checks (1)
-/// equivalence with `events()` under adversarial chunking (expected to hold,
-/// since finish() parses the whole buffered input the same way bulk
-/// `events()` does — no per-block re-parse to diverge) and (2) incremental
-/// delivery (feed() alone, before finish(), should deliver some events for
-/// large-enough input) — (2) fails, the real defect this check surfaces.
+/// `StreamingParser` was rewritten 2026-07-31 from buffer-all-bytes-then-parse-on-finish() to
+/// a genuine line-buffered incremental block parser (see
+/// `crates/formats/pod-fmt/src/batch.rs` and the `CAPABILITIES` entry in `streaming_harness.rs`
+/// for the full design and measured peak-memory numbers). Checks (1) equivalence with
+/// `events()` under adversarial chunking and (2) incremental delivery via a hand-built probe
+/// with a guaranteed-complete prefix (see below) rather than an arbitrary byte-count split of
+/// a real fixture — the pod fixture suite is overwhelmingly one block per fixture (one
+/// heading, paragraph, or list per `fixtures/spec.md`'s single-construct convention), so a
+/// fixed 50%-byte split of a real fixture routinely lands mid-block with zero events to
+/// deliver, which says nothing about whether the implementation is incremental (the same
+/// probe-methodology gap already fixed this session for fb2-fmt/texinfo/xwiki — see
+/// `fb2_streaming_parser_matches_events_and_is_incremental`'s hand-built probe for the
+/// precedent this one follows).
 #[test]
 fn pod_streaming_parser_matches_events_and_is_incremental() {
     let root = fixtures_root().join("pod");
@@ -9609,26 +9615,46 @@ fn pod_streaming_parser_matches_events_and_is_incremental() {
             }
         }
 
-        if input.len() > 32 && !bulk.is_empty() {
-            let mid = input.len() / 2;
-            let mut delivered: Vec<pod_fmt::OwnedEvent> = Vec::new();
-            let mut parser = pod_fmt::batch::StreamingParser::new(|e| delivered.push(e));
-            parser.feed(&input[..mid]);
-            if delivered.is_empty() && result.is_ok() {
-                result = Err(format!(
-                    "StreamingParser delivered zero events to the handler after feed() with \
-                     half of fixture {name} ({mid} bytes) and before finish() — \
-                     pod_fmt::batch::StreamingParser buffers all input into a Vec<u8> (self- \
-                     documented in crates/formats/pod-fmt/src/batch.rs's module doc) and only \
-                     parses and delivers events inside finish()"
-                ));
-            }
-        }
+        // Deliberately NOT probed here: an arbitrary 50%-byte split of each real
+        // fixture. That was this check's original design and it is
+        // fixture-shape-unaware in exactly the way jats-fmt's own
+        // streaming_parser KnownFailure documents: a 50% split of most pod
+        // fixtures (single heading/paragraph/list documents) lands mid-block,
+        // so zero events delivered at that exact split point is the correct,
+        // spec-conforming answer, not a StreamingParser defect. See the
+        // hand-built probe below instead, which guarantees an unambiguous
+        // complete-prefix boundary.
     }
     assert!(
         checked > 10,
         "expected to check a substantial number of pod fixtures, got {checked}"
     );
+
+    // Incrementality probe: a hand-built input with a definite complete prefix
+    // (a full `=head1` heading — a single-line block that flushes on its own
+    // newline — followed by a full ordinary paragraph, which flushes on the
+    // blank line after it) followed by deliberately unterminated trailing
+    // content (a partial line with no trailing newline at all, so it never
+    // reaches feed_line and stays buffered). Confirms events reach the handler
+    // after feed() alone, before finish() is ever called — the property a
+    // fixed 50%-byte split of a real fixture can't reliably demonstrate for
+    // this format's fixture corpus.
+    if result.is_ok() {
+        let probe_input = b"=head1 Title\n\nComplete paragraph text.\n\n\
+                             Unterminated trailing paragraph with no closing blank line";
+        let mut delivered: Vec<pod_fmt::OwnedEvent> = Vec::new();
+        let mut parser = pod_fmt::batch::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(probe_input);
+        if delivered.is_empty() {
+            result = Err(
+                "StreamingParser delivered zero events to the handler after feed() with a \
+                 complete StartHeading/EndHeading + StartParagraph/Text/EndParagraph prefix \
+                 (deliberately followed by an unterminated trailing paragraph with no closing \
+                 newline) and before finish() was called"
+                    .to_string(),
+            );
+        }
+    }
     assert_or_known_failure("pod", "streaming_parser", result);
 }
 

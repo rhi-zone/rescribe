@@ -15,6 +15,9 @@ pub mod ast;
 pub mod emit;
 pub mod parse;
 
+#[cfg(test)]
+mod alloc_probe;
+
 #[cfg(feature = "reader-streaming")]
 pub mod events;
 
