@@ -27,6 +27,19 @@ use crate::ast::{Block, Inline, MuseDoc};
 pub enum MuseEvent<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartDocument,
+    /// Document-level `#title`/`#author`/`#date`/`#desc`/`#keywords`
+    /// directives, carried as a single event immediately after
+    /// `StartDocument` (before any block events) — mirroring
+    /// [`crate::ast::MuseDoc`]'s five `Option<String>` fields, which
+    /// `parse()` genuinely populates from real `#title`/`#author` syntax.
+    /// All fields `None` means the source document had no directives.
+    Metadata {
+        title: Option<Cow<'a, str>>,
+        author: Option<Cow<'a, str>>,
+        date: Option<Cow<'a, str>>,
+        description: Option<Cow<'a, str>>,
+        keywords: Option<Cow<'a, str>>,
+    },
     EndDocument,
     StartParagraph,
     EndParagraph,
@@ -121,6 +134,19 @@ impl<'a> MuseEvent<'a> {
     pub fn into_owned(self) -> OwnedMuseEvent {
         match self {
             MuseEvent::StartDocument => MuseEvent::StartDocument,
+            MuseEvent::Metadata {
+                title,
+                author,
+                date,
+                description,
+                keywords,
+            } => MuseEvent::Metadata {
+                title: title.map(|s| Cow::Owned(s.into_owned())),
+                author: author.map(|s| Cow::Owned(s.into_owned())),
+                date: date.map(|s| Cow::Owned(s.into_owned())),
+                description: description.map(|s| Cow::Owned(s.into_owned())),
+                keywords: keywords.map(|s| Cow::Owned(s.into_owned())),
+            },
             MuseEvent::EndDocument => MuseEvent::EndDocument,
             MuseEvent::StartParagraph => MuseEvent::StartParagraph,
             MuseEvent::EndParagraph => MuseEvent::EndParagraph,
@@ -212,6 +238,13 @@ impl<'a> EventIter<'a> {
     fn new(doc: &'a MuseDoc) -> Self {
         let mut queue = VecDeque::new();
         queue.push_back(MuseEvent::StartDocument);
+        queue.push_back(MuseEvent::Metadata {
+            title: doc.title.as_deref().map(Cow::Borrowed),
+            author: doc.author.as_deref().map(Cow::Borrowed),
+            date: doc.date.as_deref().map(Cow::Borrowed),
+            description: doc.description.as_deref().map(Cow::Borrowed),
+            keywords: doc.keywords.as_deref().map(Cow::Borrowed),
+        });
         for block in &doc.blocks {
             enqueue_block(block, &mut queue);
         }
@@ -527,9 +560,10 @@ mod tests {
     fn test_events_document_wrapper() {
         let doc = MuseDoc::default();
         let evs: Vec<_> = events(&doc).collect();
-        assert_eq!(evs.len(), 2);
+        assert_eq!(evs.len(), 3);
         assert!(matches!(evs[0], MuseEvent::StartDocument));
-        assert!(matches!(evs[1], MuseEvent::EndDocument));
+        assert!(matches!(evs[1], MuseEvent::Metadata { .. }));
+        assert!(matches!(evs[2], MuseEvent::EndDocument));
     }
 
     #[test]
