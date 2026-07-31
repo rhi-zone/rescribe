@@ -9195,9 +9195,10 @@ fn t2t_streaming_parser_matches_events_under_adversarial_chunking() {
     assert_or_known_failure("t2t", "streaming_parser", result);
 }
 
-/// `Writer` buffers all fed events into a `Vec<OwnedEvent>` and only
-/// reconstructs the AST + calls `emit()` inside `finish()` (see
-/// `crates/formats/t2t/src/writer.rs`'s own module doc). Checked via
+/// `Writer` writes straight through to a single shared output buffer per
+/// event (mirroring `rst-fmt`'s `Writer` design — see
+/// `crates/formats/t2t/src/writer.rs`'s module doc), not a
+/// buffer-then-reconstruct-the-AST fake streaming writer. Checked via
 /// byte-identical comparison against the builder path, plus an
 /// incrementality probe.
 #[test]

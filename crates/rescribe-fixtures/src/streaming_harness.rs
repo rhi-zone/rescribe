@@ -1064,19 +1064,19 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              first block directly via Parser::try_parse_header instead of falling through to \
              the generic re-parse path; see TODO.md",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "t2t::writer::Writer buffers all fed events into a Vec<OwnedEvent> and only \
-             reconstructs the AST + calls emit() inside finish() (writer.rs's own module doc: \
-             \"This implementation buffers all events, reconstructs the AST, then emits\") — the \
-             same fake-streaming-writer pattern as textile/commonmark/org/texinfo; this \
-             non-incrementality is the only remaining failure (the incrementality probe writes \
-             zero bytes to the sink before finish()). The separate defect this entry used to \
-             also cover — Event had no variant carrying doc.title/author/date, so \
-             DocBuilder::finish always reconstructed title: None/author: None/date: None — is \
-             fixed: Event::Header now carries those fields, DocBuilder tracks and threads them \
-             through finish(), and the byte-identical-to-builder content check passes on every \
-             fixture including document-header; see TODO.md",
-        ),
+        // Fixed 2026-07-31: t2t::writer::Writer rewritten from
+        // buffer-all-events-then-reconstruct-the-AST to a single shared-buffer
+        // write-straight-through design (mirroring rst-fmt's Writer). Every t2t
+        // construct turned out to be write-straight-through with no generic
+        // "blank line between siblings" rule needed at all — each block variant's
+        // own emit.rs arm already writes its complete trailing whitespace, so
+        // consecutive children just concatenate (see writer.rs's module doc for
+        // the full writeup, including the three different framings a Paragraph
+        // gets depending on whether its parent is Blockquote/ListItem/
+        // DefinitionDesc/anything else). Byte-identical to emit() over all
+        // fixtures including document-header (Event::Header), with bytes
+        // reaching the sink before finish().
+        streaming_writer: ApiState::Wired,
     },
     // pod-fmt's events() is `pod_fmt::events()` (src/lib.rs) — `parse(input)`
     // then an eager `.collect()` of a lazy frame-stack `EventIter` walk of
@@ -1553,14 +1553,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        isolated re-parse of the header's own 3 lines mis-triggering \
                        try_parse_header() and silently dropping title/author/date — is fixed via \
                        the new Event::Header variant.)",
-    },
-    KnownFailure {
-        format: "t2t",
-        api: "streaming_writer",
-        description: "t2t::writer::Writer buffers all events and only reconstructs the AST + \
-                       emits inside finish() — a fake streaming writer per CLAUDE.md; content \
-                       (including doc.title/author/date, now carried via Event::Header) is \
-                       byte-identical to the builder path, only the incrementality probe fails",
     },
     KnownFailure {
         format: "pod",

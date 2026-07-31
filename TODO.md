@@ -9,6 +9,48 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-07-31: t2t `streaming_writer` hollow-writer defect fixed.**
+`t2t::writer::Writer` (`crates/formats/t2t/src/writer.rs`) was rewritten from
+buffer-all-events-then-reconstruct-the-AST to a single shared `String` output buffer,
+mirroring `rst-fmt`'s `Writer`. Every t2t construct turned out to be write-straight-through —
+reading `emit.rs` end to end found no content-dependent prefix anywhere (heading rule width is
+fixed by `level.min(5)`, not text length; table cells get no column-width padding at all) —
+and, unlike RST/djot, there is no generic "blank line between siblings" rule to implement
+either: every block variant's own `emit.rs` arm already writes its complete trailing
+whitespace, so consecutive children simply concatenate with zero separator logic. The one real
+subtlety: `Paragraph` gets three *different* framings depending on its parent's type (plain
+top-level `"\n\n"`; a `"\t"` prefix + single `"\n"` inside `Blockquote`; no prefix and *no*
+trailing newline at all inside `ListItem`, since `emit.rs`'s item loop concatenates all of an
+item's blocks and writes exactly one `"\n"` after the whole item; no prefix + single `"\n"`
+inside `DefinitionDesc`) — decided at `Paragraph`'s own `Start`/`End` events purely by
+inspecting the parent frame, the same "known at open, applied at close" shape as `rst-fmt`'s
+list-item dispatch. Non-`Paragraph` children of `Blockquote`/`ListItem`/`DefinitionDesc` (a
+nested `List`, `Table`, etc.) get their own *unmodified* top-level formatting — confirmed by
+reading `emit.rs`'s `else { build_block(child, ctx) }` branch, not assumed by analogy with
+RST/djot's blockquotes (which *do* re-indent their full subtree; t2t deliberately does not).
+
+Passed the byte-identity check against `emit()` over every fixture on the first implementation
+attempt — no formatting bugs surfaced during this rewrite (unlike djot-fmt's two). Verified via
+`t2t_streaming_writer_matches_builder_over_all_fixtures` in
+`rescribe-fixtures/tests/streaming_apis.rs`, including the document header (`Event::Header`),
+with bytes reaching the sink before `finish()`. Measured (test-local tracking allocator,
+release build, 5000-section ~769KB synthetic document, discarding sink): peak memory 4,244
+bytes for the streaming Writer vs 1,179,648 bytes for `parse()`+`emit()` (278x smaller) — but
+throughput went the *other* way: 1.78ms streaming vs 0.64ms builder (streaming ~2.8x *slower*).
+Both events and the AST were built outside the timed window (same discipline as
+texinfo/djot-fmt's benchmarks), so this isn't the same harness artifact caught earlier — it's
+architecture: t2t's builder (`build_block`) is an unusually lightweight direct tree recursion
+with almost no per-node work, while the streaming Writer pays a `match` over ~30 event variants
+plus `accepts_blocks()`/`accepts_inline()` frame-stack lookups per *event*, and t2t's event
+granularity (~17 events per synthetic section) is much finer than its block granularity (~5
+blocks per section) — so the per-event dispatch constant factor dominates for this
+particular, very cheap-to-build format. A genuine memory/throughput tradeoff, not a defect —
+noted here rather than silently reported as an unambiguous win. The `t2t/streaming_writer`
+`KNOWN_FAILURES` entry is removed; `CAPABILITIES` now declares
+`streaming_writer: ApiState::Wired`.
+
+---
+
 **2026-07-31: djot-fmt `streaming_writer` hollow-writer defect fixed.**
 `djot_fmt::writer::Writer` (`crates/formats/djot-fmt/src/writer.rs`) was rewritten from
 buffer-all-events-into-`Vec<OwnedEvent>`-then-`events_to_doc()`-then-`emit()` to a single
