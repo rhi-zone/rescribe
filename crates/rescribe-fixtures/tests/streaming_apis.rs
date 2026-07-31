@@ -8954,23 +8954,33 @@ fn muse_streaming_parser_matches_events_and_is_incremental() {
                 ));
             }
         }
-
-        if input.len() > 32 && !bulk.is_empty() {
-            let mid = input.len() / 2;
-            let mut delivered: Vec<muse_fmt::OwnedMuseEvent> = Vec::new();
-            let mut parser = muse_fmt::batch::StreamingParser::new(|e| delivered.push(e));
-            parser.feed(&input[..mid]);
-            if result.is_ok() {
-                result = assert_streaming_parser_is_incremental("muse", !delivered.is_empty());
-            }
-            // `parser` intentionally dropped without calling finish(): this probe
-            // only needs to observe pre-finish handler state.
-        }
     }
     assert!(
         checked > 20,
         "expected to check a substantial number of muse fixtures, got {checked}"
     );
+
+    // Deliberately NOT probed here: an arbitrary 50%-byte split of each real
+    // fixture. That was this check's original design and it is fixture-shape-
+    // unaware: fixtures/spec.md's "one focused construct per fixture"
+    // convention means most muse fixtures are a single block, so a fixed
+    // byte-count split usually lands mid-block regardless of implementation
+    // quality (the same probe-methodology gap already fixed for
+    // fb2-fmt/texinfo/xwiki/textile-fmt/jats-fmt/pod-fmt). See the hand-built
+    // probe below instead, which guarantees an unambiguous complete-prefix
+    // boundary: a single-line heading (a complete top-level block on its
+    // own) followed by a blank line and a paragraph deliberately left
+    // unterminated (no trailing blank line/EOF), so the heading is provably
+    // flushable while the paragraph is provably not yet complete.
+    if result.is_ok() {
+        let probe_input = b"* Heading\n\nUnterminated paragraph text with no closing blank line";
+        let mut delivered: Vec<muse_fmt::OwnedMuseEvent> = Vec::new();
+        let mut parser = muse_fmt::batch::StreamingParser::new(|e| delivered.push(e));
+        parser.feed(probe_input);
+        result = assert_streaming_parser_is_incremental("muse", !delivered.is_empty());
+        // `parser` intentionally dropped without calling finish(): this probe
+        // only needs to observe pre-finish handler state.
+    }
     assert_or_known_failure("muse", "streaming_parser", result);
 }
 
