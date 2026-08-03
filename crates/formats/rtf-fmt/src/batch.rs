@@ -6,16 +6,30 @@
 //! For event-callback style with low-level token events use [`BatchSink`].
 //! For event-callback style with semantic document events use [`StreamingParser`].
 //!
-//! # Memory note — RTF structural constraint
+//! # Memory note — current implementation vs. what the RTF grammar allows
 //!
 //! RTF requires font tables and color tables (declared in the document header)
-//! to be fully parsed before any body content can be semantically interpreted.
-//! This means [`StreamingParser`] must buffer the full document before delivering
-//! semantic events — it is O(full input), unlike the line-oriented format crates.
+//! to be fully parsed before any body content can be semantically interpreted:
+//! `\f<N>`/`\cf<N>` body control words are indices into those tables. But this
+//! is a *bounded* requirement, not an unbounded one — the RTF 1.9.1 grammar
+//! (`<file> ::= '{' <header> <document> '}'`) places the header strictly
+//! before the document body, and the spec text is explicit that the header
+//! groups "must precede the first plain-text character in the document." So
+//! by the time real body content starts, the full font/color tables are
+//! already guaranteed present — a correct incremental parser only needs to
+//! buffer up through the end of the header group (`O(header size)`, not
+//! `O(full input)`), then can stream the body incrementally with no further
+//! buffering need beyond ordinary bounded per-construct lookahead (the same
+//! kind rst-fmt/djot-fmt/etc. already do).
 //!
-//! This is an inherent property of the RTF format, not an implementation
-//! limitation. True incremental RTF streaming would require the caller to
-//! re-supply the header on every chunk, which is not practical.
+//! **This implementation does not do that.** [`StreamingParser::feed`] below
+//! simply appends every chunk to an internal buffer and does all parsing in
+//! `finish()` — a real `O(full input)` buffer-then-finish stub, not a
+//! consequence of anything the RTF grammar itself requires. Building a
+//! genuine incremental reader (buffer only the header group, then stream) is
+//! real implementation work, tracked as still open — see
+//! `streaming_harness::KNOWN_FAILURES`'s `rtf`/`streaming_parser` entry and
+//! `TODO.md` for the full investigation this doc comment reflects.
 //!
 //! # Example — AST style
 //! ```no_run
@@ -108,10 +122,13 @@ impl<F: FnMut(OwnedEvent)> Handler for F {
 ///
 /// # Memory note
 ///
-/// RTF's font and color tables must be parsed before body content can be
-/// interpreted, so this implementation buffers the **full document** before
-/// delivering any events. Memory is O(full input). See the
-/// [module-level docs](self) for details.
+/// This implementation buffers the **full document** before delivering any
+/// events — `feed()` only appends to an internal buffer, and all parsing
+/// happens in `finish()`. Memory is `O(full input)`. RTF's font/color-table-
+/// before-body requirement only justifies buffering `O(header size)`, not
+/// the whole document — this is a real, fixable implementation gap, not an
+/// inherent format constraint. See the [module-level docs](self) for the
+/// full explanation.
 pub struct StreamingParser<H: Handler> {
     buf: Vec<u8>,
     handler: H,

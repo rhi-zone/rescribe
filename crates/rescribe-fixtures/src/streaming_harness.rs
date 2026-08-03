@@ -1395,16 +1395,31 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     //
     // batch::StreamingParser (batch.rs:107-139) buffers all fed bytes into a
     // Vec<u8> in feed() and only calls sem_events::events(&self.buf) once,
-    // inside finish() — a confirmed buffer-then-finish stub. Its own module
-    // doc (batch.rs:9-18) argues this is an inherent RTF structural
-    // constraint (font/color tables must be parsed before body content is
-    // interpretable) rather than an implementation shortfall, but per this
-    // harness's rule a buffer-then-finish implementation is always
-    // KnownFailure, never NotApplicable, regardless of the format's
-    // structural excuse. Directly verified: feed() alone, without calling
-    // finish(), delivers zero events to the handler for any input. This
-    // reader-side gap is unrelated to the streaming_writer fix below and
-    // remains open — not part of this pass's scope.
+    // inside finish() — a confirmed buffer-then-finish stub, O(full input).
+    //
+    // Investigated 2026-08-04 (per CLAUDE.md's exemption bar — cross-referenced against the
+    // actual RTF spec, not the module doc's own prior claim): this is genuinely fixable, NOT a
+    // structural barrier like commonmark-fmt's pulldown-cmark `&str` requirement or html-fmt's
+    // HTML5 tree-construction algorithm (which can rearrange already-emitted nodes based on
+    // later input — true architectural impossibility). The RTF 1.9.1 grammar is
+    // `<file> ::= '{' <header> <document> '}'` — the header (including `<fonttbl>`/
+    // `<colortbl>`) is placed strictly *before* the document body by the formal grammar, and
+    // the spec text is explicit that header groups "must precede the first plain-text
+    // character in the document." So `\f<N>`/`\cf<N>` body references never need lookahead
+    // past the header: by the time real body content starts, the tables are already fully
+    // declared. A correct incremental parser only needs to buffer through the end of the
+    // header group (`O(header size)`, not `O(full input)`), then can stream the body with
+    // only ordinary bounded per-construct lookahead — the same shape rst-fmt/ooxml-wml/
+    // ooxml-sml turned out to have (all initially suspected structural, all fixed instead).
+    // batch.rs's own module doc previously claimed this was "an inherent property of the RTF
+    // format, not an implementation limitation" — that claim is corrected as of this
+    // investigation (see batch.rs's updated module doc). Per the task that prompted this
+    // investigation, the actual incremental rewrite is a bigger job than a small fix and was
+    // NOT attempted here — left open, KnownFailure kept (not promoted to NotApplicable, since
+    // it fails this crate's own "genuinely, provably impossible" bar for that classification).
+    // Directly verified: feed() alone, without calling finish(), delivers zero events to the
+    // handler for any input. This reader-side gap is unrelated to the streaming_writer fix
+    // below and remains open.
     //
     // streaming_writer is now Wired via a new src/sem_writer.rs Writer that
     // consumes Event/OwnedEvent directly (not TokenEvent) — the gap this
@@ -1432,10 +1447,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         streaming_parser: ApiState::KnownFailure(
             "batch::StreamingParser buffers all fed bytes in feed() and only calls \
              sem_events::events() once inside finish() (batch.rs:107-139) — a confirmed \
-             buffer-then-finish stub. feed() alone, without finish(), delivers zero events to \
-             the handler for any input, regardless of the module doc's argument that this is an \
-             inherent RTF structural constraint (font/color tables must be parsed before body \
-             content is interpretable) rather than an implementation shortfall. See TODO.md",
+             buffer-then-finish stub, O(full input). feed() alone, without finish(), delivers \
+             zero events to the handler for any input. Investigated 2026-08-04 against the \
+             actual RTF 1.9.1 grammar (see the CAPABILITIES comment above for the full \
+             writeup): NOT a structural barrier — the grammar places the header (fonttbl/ \
+             colortbl) strictly before the document body (`<file> ::= '{' <header> <document> \
+             '}'`), and the spec text requires header groups to precede the first plain-text \
+             character, so a correct incremental parser only needs to buffer O(header size), \
+             not O(full input), then can stream the body with ordinary bounded lookahead — the \
+             same shape rst-fmt/ooxml-wml/ooxml-sml turned out to have. Genuinely fixable, but \
+             the incremental rewrite is a bigger job than a small fix and was not attempted. \
+             See TODO.md",
         ),
         streaming_writer: ApiState::Wired,
     },
@@ -1795,8 +1817,16 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         api: "streaming_parser",
         description: "rtf_fmt::batch::StreamingParser buffers all fed bytes in feed() and only \
                        calls sem_events::events() once inside finish() (batch.rs:107-139) — a \
-                       confirmed buffer-then-finish stub; feed() alone (no finish()) delivers \
-                       zero events to the handler for any input",
+                       confirmed buffer-then-finish stub, O(full input); feed() alone (no \
+                       finish()) delivers zero events to the handler for any input. Investigated \
+                       2026-08-04 against the actual RTF 1.9.1 grammar and confirmed NOT a \
+                       structural barrier (unlike commonmark-fmt's pulldown-cmark exemption or \
+                       html-fmt's HTML5 tree-construction one) — the grammar places the header \
+                       (fonttbl/colortbl) strictly before the document body, so a correct \
+                       incremental parser only needs to buffer O(header size), not O(full \
+                       input). Genuinely fixable; the incremental rewrite is a bigger job than a \
+                       small fix and was not attempted. See the CAPABILITIES entry above and \
+                       TODO.md for the full investigation",
     },
 ];
 

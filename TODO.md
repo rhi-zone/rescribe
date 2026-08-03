@@ -195,6 +195,50 @@ stand-in, since no semantic writer existed) and passes; the matching `KnownFailu
 `rtf/streaming_parser`'s separate `KnownFailure` (`batch::StreamingParser`'s buffer-then-finish
 stub) is untouched — out of scope for this pass, unrelated to the writer.
 
+---
+
+**2026-08-04: RTF spec investigation — `rtf`/`streaming_parser`'s buffer-then-finish stub is
+NOT a structural constraint, contrary to the module doc's prior claim.** This crate's own
+`batch.rs` module doc previously asserted the `O(full input)` buffering was "an inherent
+property of the RTF format, not an implementation limitation," and the `KNOWN_FAILURES` entry
+repeated that framing without independently verifying it. Investigated directly against the RTF
+1.9.1 specification (not assumed): the formal grammar is `<file> ::= '{' <header> <document>
+'}'`, and the spec text is explicit that header groups (including `<fonttbl>`/`<colortbl>`)
+"must precede the first plain-text character in the document." So `\f<N>`/`\cf<N>` body
+references are indices into tables that are, by grammar requirement — not mere convention —
+always fully declared before any body content appears. A correct incremental parser therefore
+only needs to buffer through the end of the header group (`O(header size)`), then can stream
+the body with ordinary bounded per-construct lookahead, same as any other format crate in this
+codebase.
+
+This is categorically different from the two sanctioned `NotApplicable` exemptions already in
+`streaming_harness.rs`: commonmark-fmt's `StreamingParser` buffers because pulldown-cmark
+requires the full input as `&str` (a real upstream-library API constraint), and html-fmt's
+`events()`/`StreamingParser` can't deliver incrementally because the HTML5 tree-construction
+algorithm can retroactively rearrange nodes already parsed (foster parenting, implied elements,
+adoption agency) based on *later* input — a true architectural impossibility, not a bounded-
+lookahead one. RTF's body content never retroactively changes the interpretation of earlier
+content; it only ever depends on a header the grammar guarantees comes first. This matches the
+shape rst-fmt/ooxml-wml/ooxml-sml turned out to have earlier in this session (all initially
+suspected of a structural excuse, all fixed instead once actually investigated) — not the shape
+of a genuine exemption.
+
+**Not attempted here** (out of scope — building a genuine incremental reader, buffering only
+the header group and streaming the body, is a bigger job than a small bug fix): the `rtf`/
+`streaming_parser` `KNOWN_FAILURES` entry and its matching `CAPABILITIES` comment are corrected
+to state this precisely (no longer citing the format as structurally requiring full-document
+buffering) instead of being promoted to `NotApplicable` (which requires a genuine, provably
+impossible barrier — this doesn't qualify). `batch.rs`'s own module doc and `StreamingParser`'s
+doc comment are also corrected to stop asserting the false "inherent property" claim, since
+leaving a crate's own public docs stating something false would perpetuate exactly the
+confusion this investigation exists to resolve.
+
+Sources consulted: the RTF 1.9.1 grammar and header-precedence spec text (`<file> ::= '{'
+<header> <document> '}'`; header groups "must precede the first plain-text character in the
+document"), cross-referenced via web search against RTF specification mirrors (biblioscape.com's
+RTF 1.5 spec mirror and latex2rtf.sourceforge.net's RTF header page), since Microsoft's original
+RTF 1.9.1 spec PDF was not directly fetchable in this session.
+
 **2026-08-03: commonmark-fmt's streaming `Writer` rewritten from buffer-then-emit to genuine
 write-through streaming; resolves the `commonmark`/`gfm`/`markdown` `streaming_writer`
 `KnownFailure`s (mostly).** `crates/formats/commonmark-fmt/src/writer.rs` previously buffered
