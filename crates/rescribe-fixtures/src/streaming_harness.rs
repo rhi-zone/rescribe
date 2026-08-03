@@ -763,27 +763,22 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // fine-grained (e.g. single-byte) chunking fragmented one text run into one Text
         // event per call — fixed via a `pending_text` accumulator, same shape as the
         // docbook-fmt entity-coalescing fix.
-        streaming_parser: ApiState::KnownFailure(
-            "after the three fixes above, one genuinely distinct, unfixed bug remains, found \
-             via the same adversarial-chunking equivalence check (fixtures hyperlink, \
-             rare-hyperlink-uri, both only under fine-grained chunking like single_byte or \
-             chunks_of_3 — not under whole-input): EventIter::next() treats an OSC 8 \
-             hyperlink as a single atomic token by scanning forward, within one next() call, \
-             all the way to its matching closing OSC 8 sequence (`\\x1b]8;;\\x07`) — but \
-             find_safe_boundary() (batch.rs) has no concept of this pairing, and calls a \
-             complete, well-formed *opening* OSC 8 sequence a safe boundary on its own. Under \
-             chunking, drain_complete() then parses just that opening sequence in isolation, \
-             finds no closing sequence within the truncated slice, and emits a Hyperlink event \
-             with an empty text field immediately instead of buffering through to the close \
-             — the link \
-             text and the close sequence then get parsed separately (as plain Text and a \
-             stray RawEscape) on a later call. Fixing this needs find_safe_boundary() taught \
-             to recognize an opening OSC 8 hyperlink sequence and treat everything up to its \
-             matching closer as one unsplittable unit (the same kind of \"buffer until a \
-             semantic close is seen\" logic html-fmt's StreamingParser already needs for tree \
-             construction) — a real architectural extension, not a small bug fix, so left open \
-             here rather than guessed at.",
-        ),
+        // Fixed 2026-08-03: the fourth, previously-open bug (fixtures hyperlink,
+        // rare-hyperlink-uri, only under fine-grained chunking like single_byte or
+        // chunks_of_3 — not whole-input) is now fixed. find_safe_boundary() (batch.rs) gained a
+        // second pass, truncate_before_unclosed_osc8_hyperlink(), run after the existing
+        // last-ESC-completeness check: it scans the naive-safe prefix for a complete OSC 8
+        // *opening* sequence (`ESC ]8;;<url><BEL|ST>`, non-empty url) with no matching closer
+        // (any later complete `ESC ]8;...` sequence, open or close — mirroring
+        // EventIter::parse_osc_event's own forward-scan termination rule exactly) within that
+        // same prefix, and if found, moves the safe boundary back to that opening sequence's own
+        // ESC byte. This defers the whole open..close span to a later drain_complete()/finish()
+        // call that sees it all at once, instead of exposing the isolated opener to EventIter
+        // and getting a premature empty-text Hyperlink. Confirmed via
+        // ansi_streaming_parser_matches_events_under_adversarial_chunking (previously panicked
+        // "check now PASSES, but is still listed in KNOWN_FAILURES" once the fix landed,
+        // confirming it now holds over every fixture and chunking).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::KnownFailure(
             "downstream of a *different*, still-open issue than the (now-fixed) spurious- \
              ResetStyle bug: for fixture adv-unknown-sgr, `\\x1b[999m` (no-op, no ResetStyle) \
@@ -1808,18 +1803,11 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     // assert_or_known_failure's own rule against masking a fixed bug. See the
     // comment above the check in tests/streaming_apis.rs for the seven root
     // causes that were found and closed.
-    KnownFailure {
-        format: "ansi",
-        api: "streaming_parser",
-        description: "style-loss-across-chunks and inherited spurious-ResetStyle are both fixed \
-                       (2026-07-30); a third, previously-masked bug remains: find_safe_boundary \
-                       calls a complete OSC 8 hyperlink *opening* sequence a safe boundary on \
-                       its own, not knowing EventIter treats the whole open..close span as one \
-                       atomic Hyperlink token, so fine-grained chunking splits it into an \
-                       empty-text Hyperlink plus stray Text/RawEscape (fixtures hyperlink, \
-                       rare-hyperlink-uri) — needs find_safe_boundary taught to await a \
-                       matching OSC 8 closer, a real architectural extension",
-    },
+    // ansi/streaming_parser was a KnownFailure entry here (find_safe_boundary treating a
+    // complete OSC 8 hyperlink *opening* sequence as a safe boundary on its own, splitting the
+    // atomic open..close Hyperlink token under fine-grained chunking); it is now fixed and the
+    // FormatCapabilities entry above reflects it as Wired — no entry left here per
+    // assert_or_known_failure's own rule against masking a fixed bug.
     KnownFailure {
         format: "ansi",
         api: "streaming_writer",

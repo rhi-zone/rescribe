@@ -5783,6 +5783,39 @@ trailing `\x1b[0m` that `events()`/the streaming Writer faithfully preserve — 
 `build()` fidelity gap, not a streaming-API defect) rather than the fixed spurious-ResetStyle
 cause it originally cited.
 
+---
+
+**2026-08-03 (follow-up): the fourth bug above (OSC 8 hyperlink span atomicity) fixed;
+`ansi`/`streaming_parser` `KNOWN_FAILURES` entry removed.** `find_safe_boundary()`
+(`crates/formats/ansi-fmt/src/batch.rs`) now runs a second pass,
+`truncate_before_unclosed_osc8_hyperlink()`, after its existing last-ESC-completeness check: it
+scans the naive-safe prefix for a complete OSC 8 *opening* sequence (`ESC ]8;;<url><BEL|ST>`,
+non-empty url) with no matching closer — any later complete `ESC ]8;...` sequence, open or
+close, mirroring `EventIter::parse_osc_event`'s own forward-scan termination rule exactly (it
+doesn't care whether the terminating sequence is itself a close or the start of a new
+hyperlink) — within that same prefix. If an unclosed opener is found, the safe boundary moves
+back to that opener's own `ESC` byte, so `drain_complete()` defers everything from there on
+until a later call (once the matching close has also arrived) sees the whole open..text..close
+span at once, instead of exposing just the isolated opener to `EventIter` in isolation.
+
+This is not the "buffer until a semantic close is seen" HTML5-tree-construction-style
+architectural extension the original entry expected — OSC 8 hyperlinks have exactly one nesting
+level and a syntactically unambiguous close marker (any later `ESC ]8;...`), so a bounded
+lookahead scan over the already-buffered prefix was sufficient; no unbounded buffering or new
+parser state was needed. If a hyperlink's open sequence arrives but its close never does before
+true EOF, the bytes accumulate in `self.buf` until `finish()`, which (like any other
+still-open construct at end of input) parses whatever remains unconditionally — no different
+from an incomplete raw escape sequence at EOF.
+
+Verified via `cargo test -p rescribe-fixtures
+ansi_streaming_parser_matches_events_under_adversarial_chunking` (previously panicked "check
+now PASSES, but is still listed in KNOWN_FAILURES" once the fix landed, confirming it now holds
+over every fixture and chunking, including `hyperlink`/`rare-hyperlink-uri` under
+`single_byte`/`chunks_of_3`) and `cargo clippy`/`test`/`fmt` scoped to `-p ansi-fmt -p
+rescribe-fixtures` (all green). Full-workspace verification deferred to this session's final
+end-to-end check. No new fixture added — `fixtures/ansi/hyperlink` and
+`fixtures/ansi/rare-hyperlink-uri` already exercised this construct.
+
 ## Merge note: second bugfix-pass reconciliation (2026-07-30)
 
 The docbook/jats/tei end-tag/entity-coalescing/wiki-`parse_list()`/fountain/ansi pass above

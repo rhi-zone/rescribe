@@ -184,6 +184,7 @@ fn find_safe_boundary(buf: &[u8]) -> usize {
 
     // If the last byte is ESC, it might be the start of an escape sequence.
     // Walk backwards to find the last ESC.
+    let mut naive_end = buf.len();
     let mut i = buf.len();
     while i > 0 {
         i -= 1;
@@ -191,16 +192,90 @@ fn find_safe_boundary(buf: &[u8]) -> usize {
             // Check if this ESC starts a potentially incomplete sequence.
             // If there are enough bytes after it to form a complete sequence,
             // include it.  Otherwise, this is the boundary.
-            if is_complete_escape(&buf[i..]) {
-                return buf.len();
+            naive_end = if is_complete_escape(&buf[i..]) {
+                buf.len()
             } else {
-                return i;
-            }
+                i
+            };
+            break;
         }
     }
 
-    // No ESC found — everything is safe.
-    buf.len()
+    truncate_before_unclosed_osc8_hyperlink(buf, naive_end)
+}
+
+/// `EventIter::parse_osc_event` (events.rs) treats a complete OSC 8
+/// hyperlink *opening* sequence (`ESC ] 8 ; ; <url> <BEL|ST>`, non-empty
+/// `<url>`) together with everything up to its matching closing OSC 8
+/// sequence (`ESC ] 8 ; ; <BEL|ST>` — or, per its own forward-scan, *any*
+/// later complete `ESC ]8;...` sequence, open or close) as one atomic
+/// `Hyperlink` token. `naive_end` above has no concept of that pairing: a
+/// complete opening sequence with nothing after it yet is, on its own, a
+/// complete escape sequence, so the naive last-ESC check calls it a safe
+/// boundary. Parsing just that opening sequence in isolation then makes
+/// `EventIter` scan for a close, find none within the truncated slice, and
+/// return a `Hyperlink` event with whatever (possibly empty) text it
+/// collected before hitting the slice's end — instead of buffering through
+/// to the real close.
+///
+/// This scans `buf[..naive_end]` for a complete OSC 8 opening sequence with
+/// no matching closer yet within that same prefix, and if found, moves the
+/// boundary back to that opening sequence's own `ESC` byte — deferring
+/// everything from there on until a future call (once more input,
+/// including the close, has arrived) sees the whole span at once.
+fn truncate_before_unclosed_osc8_hyperlink(buf: &[u8], naive_end: usize) -> usize {
+    let mut pos = 0;
+    let mut pending_open: Option<usize> = None;
+    while pos < naive_end {
+        if buf[pos] != 0x1b || pos + 1 >= naive_end || buf[pos + 1] != b']' {
+            pos += 1;
+            continue;
+        }
+        // Complete OSC sequence starting at `pos`: find its terminator
+        // (BEL or ST) within `buf[..naive_end]`.
+        let content_start = pos + 2;
+        let mut j = content_start;
+        let mut terminator_end = None;
+        while j < naive_end {
+            if buf[j] == 0x07 {
+                terminator_end = Some(j + 1);
+                break;
+            }
+            if buf[j] == 0x1b && j + 1 < naive_end && buf[j + 1] == b'\\' {
+                terminator_end = Some(j + 2);
+                break;
+            }
+            j += 1;
+        }
+        let Some(end) = terminator_end else {
+            // An incomplete OSC sequence within the naive-safe prefix can
+            // only happen at the very end of it (an earlier one would have
+            // been the "last ESC" naive_end itself was computed from), so
+            // there is nothing more to scan.
+            break;
+        };
+        let content = &buf[content_start..j];
+        let is_osc8 = content.starts_with(b"8;");
+        if is_osc8 {
+            if pending_open.is_some() {
+                // Any later complete OSC 8 sequence (open or close) ends
+                // the pending one's link-text scan, matching
+                // parse_osc_event's own forward-scan termination rule.
+                pending_open = None;
+            } else {
+                let has_url = content.strip_prefix(b"8;").is_some_and(|rest| {
+                    rest.iter()
+                        .position(|&b| b == b';')
+                        .is_some_and(|semi| !rest[semi + 1..].is_empty())
+                });
+                if has_url {
+                    pending_open = Some(pos);
+                }
+            }
+        }
+        pos = end;
+    }
+    pending_open.unwrap_or(naive_end)
 }
 
 /// Check if an escape sequence starting at `data[0]` is complete.
