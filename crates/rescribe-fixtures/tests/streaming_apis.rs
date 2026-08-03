@@ -10408,20 +10408,18 @@ fn fountain_streaming_writer_matches_builder_over_all_fixtures() {
 // splitter — `feed_line` accumulates lines until a blank line, a `.nf`/`.EX`
 // preformatted-block boundary, or a new macro line ends the current block,
 // then `emit_block()` re-parses just that block's text via
-// `crate::events::events(&text)`. But `events()` always wraps its output in
-// its own `StartDocument`/`EndDocument` pair (see the `ManEvent` walk in
-// events.rs), and `emit_block()` forwards every event that re-parse yields
-// with no filtering (batch.rs: `for event in crate::events::events(&text) {
-// self.handler.handle(event.into_owned()); }`) — the same
-// re-parse-each-block-in-isolation root cause already tracked for
-// t2t-fmt/fountain-fmt, but here it reproduces on every fixture with more
-// than one top-level block instead of needing a title-page-specific trigger.
-// Confirmed directly: `events(".SH NAME\ntest\n\n.SH DESCRIPTION\nmore\n")`
-// yields exactly 1 `StartDocument`, while feeding the same input through
-// `StreamingParser` yields 2 — verified by direct execution, not inferred.
-// This one remains a KnownFailure (streaming_parser); it is a distinct
-// architectural gap from the streaming_writer fix below and out of scope
-// for it.
+// `crate::events::events(&text)`. `events()` always wraps its output in its
+// own `StartDocument`/`EndDocument` pair (see the `ManEvent` walk in
+// events.rs); this used to leak through into `StreamingParser`, which
+// forwarded every event each re-parse yielded with no filtering, producing
+// one such pair per accumulated block instead of one for the whole document
+// — the same re-parse-each-block-in-isolation root cause already tracked for
+// t2t-fmt/fountain-fmt. Fixed 2026-08-03 the same way: `StreamingParser` now
+// dispatches its own single `StartDocument` in `new()` and `EndDocument` in
+// `finish()`, and `emit_block()` filters `StartDocument`/`EndDocument` out
+// of each re-parsed block's forwarded events. man-fmt's `events()` has no
+// title-page-style "only the first block can mean X" wrinkle (unlike
+// fountain), so no `events_body()`-style second entry point was needed.
 //
 // Writer fixed 2026-08-03: rewritten from a buffer-all-events-then-
 // reconstruct-the-AST-in-finish() writer (the same fake-streaming pattern
@@ -10578,10 +10576,13 @@ fn man_events_equals_ast_projection_over_all_fixtures() {
 
 /// `StreamingParser` re-parses each accumulated block in isolation via
 /// `crate::events::events()`, which always wraps its output in its own
-/// `StartDocument`/`EndDocument` pair — so StreamingParser emits one such
-/// pair per block instead of one for the whole document, diverging from
-/// bulk `events()` on any fixture with more than one top-level block. See
-/// the module-level comment above for a directly-verified repro.
+/// `StartDocument`/`EndDocument` pair. Fixed 2026-08-03: `StreamingParser`
+/// now owns exactly one `StartDocument`/`EndDocument` pair itself
+/// (`StartDocument` dispatched in `new()`, `EndDocument` in `finish()`) and
+/// filters the re-parsed block's own pair out of `emit_block()`'s forwarded
+/// events — see `man_fmt::batch`'s module doc and `StreamingParser::new`'s
+/// doc comment. This test now exercises the fix across every man fixture
+/// under adversarial chunking.
 #[test]
 fn man_streaming_parser_matches_events_under_adversarial_chunking() {
     let root = fixtures_root().join("man");

@@ -1227,7 +1227,7 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // reader (same pattern as t2t/pod/haddock/fountain/asciidoc above); per
     // that precedent it's still Wired. See tests/streaming_apis.rs's man-fmt
     // section for the full writeup and directly-verified repro commands for
-    // the remaining streaming_parser KnownFailure below.
+    // the streaming_parser fix below (was a KnownFailure, fixed 2026-08-03).
     //
     // Fixed 2026-07-31 (found while wiring this entry): EventIter's handling
     // of every inline container (Bold/Italic/Superscript/Subscript/Link)
@@ -1273,18 +1273,25 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "man",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "man_fmt::batch::StreamingParser's emit_block() re-parses each accumulated block in \
-             isolation via crate::events::events(&text), and events() always wraps its output in \
-             its own StartDocument/EndDocument pair (ManEvent has no way to avoid it), so \
-             StreamingParser emits one such pair per accumulated block instead of one for the \
-             whole document — the same re-parse-each-block-in-isolation root cause already \
-             tracked for t2t-fmt/fountain-fmt, but reproducing on every multi-block fixture \
-             rather than needing a specific trigger. Directly verified: feeding \
-             \".SH NAME\\ntest\\n\\n.SH DESCRIPTION\\nmore text\\n\" through events() yields 1 \
-             StartDocument/14 events total; through StreamingParser yields 2 StartDocument/16 \
-             events total. See TODO.md",
-        ),
+        // Fixed 2026-08-03: StreamingParser used to re-parse each accumulated block in
+        // isolation via crate::events::events(&text), and events() always wraps its output
+        // in its own StartDocument/EndDocument pair (ManEvent has no way to avoid it), so
+        // StreamingParser emitted one such pair per accumulated block instead of one for
+        // the whole document — the same re-parse-each-block-in-isolation root cause already
+        // fixed for t2t-fmt/fountain-fmt. Fixed the same way: StreamingParser now owns
+        // exactly one StartDocument/EndDocument pair itself (StartDocument dispatched in
+        // `new()`, EndDocument in `finish()`), and `emit_block()` filters out the
+        // re-parsed block's own StartDocument/EndDocument before forwarding the rest.
+        // man-fmt's events() has no title-page-style "only the first block can mean X"
+        // wrinkle (unlike fountain's title page), so no `events_body()`-style second entry
+        // point was needed here — every block re-parses through the same `events()`.
+        // Confirmed byte-for-byte equal to events() on the exact repro from this entry's
+        // former description (".SH NAME\ntest\n\n.SH DESCRIPTION\nmore text\n") and across
+        // all man fixtures under adversarial chunking.
+        streaming_parser: ApiState::Wired,
+        // streaming_writer fixed 2026-08-03 (see the module-doc-referencing comment above
+        // this struct entry for the two-stacked-defect writeup): now Wired, independently
+        // of the streaming_parser fix directly above.
         streaming_writer: ApiState::Wired,
     },
     // rtf-fmt's events() is `SemanticEventIter::new(parse(input).0)` — a
@@ -1717,14 +1724,10 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        it) faithfully re-emits it — a parse()/build() fidelity gap, not a \
                        streaming-API defect",
     },
-    KnownFailure {
-        format: "man",
-        api: "streaming_parser",
-        description: "man_fmt::batch::StreamingParser's emit_block() re-parses each accumulated \
-                       block in isolation via events(), which always wraps its output in its own \
-                       StartDocument/EndDocument pair, so StreamingParser emits one such pair per \
-                       block instead of one for the whole document",
-    },
+    // man/streaming_parser and man/streaming_writer were both KnownFailure entries here;
+    // both are now fixed (2026-08-03, two independent commits) and the FormatCapabilities
+    // entry above reflects both as Wired — no entry left here per assert_or_known_failure's
+    // own rule against masking a fixed bug.
     KnownFailure {
         format: "t2t",
         api: "streaming_parser",

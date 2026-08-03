@@ -98,13 +98,21 @@ pub struct StreamingParser<H: Handler> {
 
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
+    ///
+    /// Dispatches `StartDocument` immediately: bulk `events()` always wraps
+    /// the whole document in exactly one `StartDocument`/`EndDocument` pair
+    /// (even for empty input), and `StreamingParser` owns that single pair
+    /// itself now rather than forwarding one per re-parsed block (see
+    /// `emit_block`'s doc comment).
     pub fn new(handler: H) -> Self {
-        StreamingParser {
+        let mut parser = StreamingParser {
             handler,
             line_buf: Vec::new(),
             block_lines: Vec::new(),
             state: BlockState::Between,
-        }
+        };
+        parser.handler.handle(OwnedManEvent::StartDocument);
+        parser
     }
 
     /// Feed a chunk of bytes.  May call `handler.handle()` zero or more times.
@@ -179,7 +187,12 @@ impl<H: Handler> StreamingParser<H> {
         self.block_lines.push(line);
     }
 
-    /// Parse the accumulated block lines and deliver events to the handler.
+    /// Re-parse the accumulated block in isolation and forward its events.
+    ///
+    /// The re-parsed block's own `StartDocument`/`EndDocument` pair is
+    /// filtered out here: `StreamingParser` owns exactly one such pair for
+    /// the whole stream (`StartDocument` dispatched in `new()`,
+    /// `EndDocument` in `finish()`), not one per accumulated block.
     fn emit_block(&mut self) {
         if self.block_lines.is_empty() {
             return;
@@ -187,6 +200,12 @@ impl<H: Handler> StreamingParser<H> {
         let text = self.block_lines.join("\n");
         self.block_lines.clear();
         for event in crate::events::events(&text) {
+            if matches!(
+                event,
+                OwnedManEvent::StartDocument | OwnedManEvent::EndDocument
+            ) {
+                continue;
+            }
             self.handler.handle(event.into_owned());
         }
     }
@@ -203,6 +222,7 @@ impl<H: Handler> StreamingParser<H> {
         }
         // Flush any pending block
         self.emit_block();
+        self.handler.handle(OwnedManEvent::EndDocument);
     }
 }
 
