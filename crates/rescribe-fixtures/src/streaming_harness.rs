@@ -651,24 +651,20 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // calls). Confirmed via fixture adv-entity-references (a &amp; b &lt; c &gt; d &apos;
         // e&apos; &quot;f&quot; now yields one Text event, not six).
         //
-        // events is still KnownFailure, though narrower: the malformed-XML auto-close gap
-        // (fixture adv-malformed-xml) that used to surface here is fixed (see the comment
-        // above this FormatCapabilities block); fixing it uncovered a second, previously-
-        // masked, genuinely different defect on fixture line-break (`<sbr></sbr>`, an
-        // explicitly-empty non-self-closing tag) — see the KnownFailure text below.
-        events: ApiState::KnownFailure(
-            "parse()'s AST has no way to distinguish an explicitly-empty non-self-closing tag \
-             (`<sbr></sbr>`) from a self-closing one (`<sbr/>`) — both become a zero-children \
-             `Node::Element` — so events_from_doc's walk_node collapses either into one \
-             `EmptyElement` event, while EventIter (a genuine token-at-a-time pass over \
-             quick_xml, not a walk of the AST) faithfully emits the `<sbr></sbr>` source as \
-             separate StartElement/EndElement tokens, diverging on fixture line-break. Fixing \
-             this needs EventIter to defer emitting a StartElement until it's known whether the \
-             element gets any child event before its own End/EOF — real architecture work, not \
-             a small patch. Unrelated to the malformed-XML auto-close gap this entry used to \
-             track (fixture adv-malformed-xml now passes; see the comment above this \
-             FormatCapabilities block).",
-        ),
+        // events is now Wired: the malformed-XML auto-close gap (fixture adv-malformed-xml)
+        // that used to surface here is fixed (see the comment above this FormatCapabilities
+        // block); fixing it uncovered a second, previously-masked defect on fixture line-break
+        // (`<sbr></sbr>`, an explicitly-empty non-self-closing tag), also now fixed (2026-08-03):
+        // `Node::Element` (ast.rs) gained a `self_closing: bool` field — parse.rs's
+        // `XmlEvent::Empty` arm sets it `true`, the `XmlEvent::End` arm (built from a real
+        // Start+End pair, even with zero children) sets it `false`. `events_from_doc`'s
+        // `walk_node` now checks `self_closing` (not just `children.is_empty()`) before emitting
+        // `EmptyElement` vs. `StartElement`+`EndElement`, so it faithfully distinguishes
+        // `<sbr/>` from `<sbr></sbr>` the same way `EventIter`'s token-at-a-time pass already
+        // did — no architectural change to `EventIter` itself was needed; the AST was the lossy
+        // side, not the streaming reader. `collect_doc` (used by the streaming writer's AST
+        // fallback) sets the field the same way from `Event::EmptyElement`/`Event::EndElement`.
+        events: ApiState::Wired,
         // StreamingParser's drain() (batch.rs) still sets check_end_names=false and
         // allow_unmatched_ends=true on its per-drain-call quick_xml::Reader — that part is
         // architecturally necessary, since each drain() call only ever sees the unconsumed
@@ -685,16 +681,14 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // Fixed 2026-08-03: the malformed-XML auto-close gap (fixture adv-malformed-xml) that
         // used to surface here is fixed alongside events() (see the comment above this
         // FormatCapabilities block) — the streaming Writer is fed by events(), so events()'s
-        // new synthetic closes flow through for free, no writer-side change needed.
-        streaming_writer: ApiState::KnownFailure(
-            "Narrower than before: only downstream of the *other*, newly-surfaced events() gap \
-             on fixture line-break (see the \"docbook\" events KnownFailure) — the streaming \
-             Writer emits the `<sbr></sbr>` source as literal StartElement+EndElement bytes, \
-             while build() (via parse()'s AST, which cannot distinguish an explicitly-empty tag \
-             from a self-closing one) always re-emits a zero-children element as `<sbr/>`. The \
-             Writer is being byte-faithful to the actual source syntax here, and build() is the \
-             lossy side, so this is not a streaming Writer defect either.",
-        ),
+        // new synthetic closes flow through for free, no writer-side change needed. The other,
+        // newly-surfaced line-break (`<sbr></sbr>`) gap is also now fixed, alongside events()'s
+        // self_closing fix above: build() (via parse()'s AST) now also respects
+        // `Node::Element.self_closing` in `emit.rs`'s `emit_node` (only writes the self-closing
+        // `XmlEvent::Empty` form when `self_closing` is true, not merely `children.is_empty()`),
+        // so it is no longer the lossy side either — both build() and the streaming Writer now
+        // faithfully reproduce `<sbr></sbr>` vs. `<sbr/>` from the source.
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "jats",
@@ -1758,45 +1752,13 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        integration-loose-list-item, rare-tight-vs-loose). No writer-side fix can \
                        distinguish that incorrect flag from a genuinely tight list.",
     },
-    KnownFailure {
-        format: "docbook",
-        api: "events",
-        description: "Fixed 2026-08-03: EventIter now tracks open-element names in its own \
-                       `open_stack` (mirroring parse.rs's `stack: Vec<ElementFrame>`) and, on \
-                       EOF/Err, synthesizes an EndElement event per still-open name (innermost \
-                       first) via a new `finalize()` method — the same auto-close recovery \
-                       parse()'s post-loop cleanup already performed, now ported to events() so \
-                       it matches events_from_doc(&parse()) on fixture adv-malformed-xml. Fixing \
-                       that surfaced a second, previously-masked, genuinely different defect on \
-                       fixture line-break: parse()'s AST has no way to distinguish an \
-                       explicitly-empty non-self-closing tag (`<sbr></sbr>`) from a self-closing \
-                       one (`<sbr/>`) — both become a zero-children `Node::Element` — so \
-                       events_from_doc's walk_node collapses either into one `EmptyElement` \
-                       event, while EventIter (a genuine token-at-a-time pass over quick_xml, not \
-                       a walk of the AST) faithfully emits the `<sbr></sbr>` source as separate \
-                       StartElement/EndElement tokens. Fixing this would require EventIter to \
-                       defer emitting a StartElement until it's known whether the element gets \
-                       any child event before its own End/EOF — real architecture work (a \
-                       bounded-depth buffering scheme), not a small patch, so left open here \
-                       rather than guessed at; unrelated to the malformed-XML gap this entry used \
-                       to track (fixture adv-malformed-xml itself now passes).",
-    },
-    KnownFailure {
-        format: "docbook",
-        api: "streaming_writer",
-        description: "Narrower than before: the malformed-XML auto-close-recovery gap (fixture \
-                       adv-malformed-xml) is fixed alongside the events() fix above — the \
-                       streaming Writer is fed by events(), so events()'s new synthetic closes \
-                       flow through for free with no writer-side change needed. What remains is \
-                       downstream of the *other*, newly-surfaced events() gap on fixture \
-                       line-break (see the \"docbook\" events KnownFailure): the streaming Writer \
-                       emits the `<sbr></sbr>` source as literal StartElement+EndElement bytes, \
-                       while build() (via parse()'s AST, which cannot distinguish an \
-                       explicitly-empty tag from a self-closing one) always re-emits a \
-                       zero-children element as `<sbr/>` — the Writer is being byte-faithful to \
-                       the *actual* source syntax here, and build() is the lossy side, so this is \
-                       not a streaming Writer defect either.",
-    },
+    // docbook/events and docbook/streaming_writer were both KnownFailure entries here (the
+    // `<sbr></sbr>`-vs-`<sbr/>` explicitly-empty-tag ambiguity: parse()'s AST couldn't
+    // distinguish them, so events_from_doc/build() collapsed both to the self-closing form).
+    // Both are now fixed — `Node::Element` gained a `self_closing: bool` field threaded through
+    // parse.rs/emit.rs/events.rs — and the FormatCapabilities entry above reflects both as
+    // Wired — no entries left here per assert_or_known_failure's own rule against masking a
+    // fixed bug.
     // odt/streaming_writer was a KnownFailure entry here (12 of 66 fixtures
     // diverging over OdfEvent body-content gaps); it is now fixed and the
     // FormatCapabilities entry above is Wired — no entry left here per

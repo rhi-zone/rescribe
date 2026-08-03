@@ -60,6 +60,17 @@ pub enum Node {
         name: String,
         attrs: Vec<(String, String)>,
         children: Vec<Node>,
+        /// True if the source wrote this as a self-closing tag (`<foo/>`),
+        /// false if it was an explicit open/close pair (`<foo></foo>` when
+        /// `children` is empty, or `<foo>...</foo>` otherwise). Only
+        /// distinguishable when `children` is empty — `<foo/>` and
+        /// `<foo></foo>` both parse to zero children, but are not the same
+        /// source syntax, and losslessness requires preserving which one
+        /// the input actually used (see fixtures/docbook/line-break's
+        /// `<sbr></sbr>`). Irrelevant (but still tracked, always `false`)
+        /// when `children` is non-empty, since only an empty element can be
+        /// self-closing in the first place.
+        self_closing: bool,
         span: Span,
     },
     /// Text content (entities already decoded).
@@ -113,11 +124,13 @@ impl Node {
                 name,
                 attrs,
                 children,
+                self_closing,
                 ..
             } => Node::Element {
                 name: name.clone(),
                 attrs: attrs.clone(),
                 children: children.iter().map(|n| n.strip_spans()).collect(),
+                self_closing: *self_closing,
                 span: Span::NONE,
             },
             Node::Text { content, .. } => Node::Text {

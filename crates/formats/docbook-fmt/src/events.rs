@@ -487,9 +487,10 @@ fn walk_node(node: &crate::ast::Node, events: &mut Vec<OwnedEvent>) {
             name,
             attrs,
             children,
+            self_closing,
             ..
         } => {
-            if children.is_empty() {
+            if children.is_empty() && *self_closing {
                 events.push(Event::EmptyElement {
                     name: Cow::Owned(name.clone()),
                     attrs: attrs.clone(),
@@ -582,6 +583,7 @@ pub fn collect_doc(events: impl IntoIterator<Item = OwnedEvent>) -> crate::ast::
                     name: name.into_owned(),
                     attrs,
                     children: Vec::new(),
+                    self_closing: true,
                     span: Span::NONE,
                 },
                 &mut stack,
@@ -594,6 +596,7 @@ pub fn collect_doc(events: impl IntoIterator<Item = OwnedEvent>) -> crate::ast::
                             name,
                             attrs,
                             children,
+                            self_closing: false,
                             span: Span::NONE,
                         },
                         &mut stack,
@@ -651,6 +654,7 @@ pub fn collect_doc(events: impl IntoIterator<Item = OwnedEvent>) -> crate::ast::
                 name,
                 attrs,
                 children,
+                self_closing: false,
                 span: Span::NONE,
             },
             &mut stack,

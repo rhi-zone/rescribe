@@ -48,9 +48,10 @@ fn emit_node(writer: &mut XmlWriter<Cursor<Vec<u8>>>, node: &Node) {
             name,
             attrs,
             children,
+            self_closing,
             ..
         } => {
-            if children.is_empty() {
+            if children.is_empty() && *self_closing {
                 let mut start = BytesStart::new(name.as_str());
                 for (k, v) in attrs {
                     start.push_attribute((k.as_str(), v.as_str()));
@@ -123,6 +124,7 @@ mod tests {
                     content: "Hello & <world>".into(),
                     span: Span::NONE,
                 }],
+                self_closing: false,
                 span: Span::NONE,
             }],
         };

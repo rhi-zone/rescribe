@@ -5560,6 +5560,56 @@ tests (`{docbook,jats,tei}_{events_equals_ast_projection,streaming_parser_matche
 streaming_writer_byte_identical}_over_all_fixtures`, plus the two narrowed
 `assert_or_known_failure` acknowledgements for docbook) pass.
 
+---
+
+**2026-08-03 (follow-up): docbook-fmt's `<sbr></sbr>`-vs-`<sbr/>` defect fixed; both `docbook`
+`KNOWN_FAILURES` entries removed.** The previous entry above concluded this needed
+`EventIter` to defer `StartElement` emission until it's known whether an element gets a child
+event before its own close — real architecture, left open. On closer inspection this was the
+wrong diagnosis: `EventIter` was never the lossy side — it already faithfully emits
+`<sbr></sbr>`'s separate `StartElement`/`EndElement` tokens straight from `quick_xml`, matching
+the source exactly. The lossy side was `parse()`'s AST (`Node::Element`, `ast.rs`), which has no
+field recording whether the source used a self-closing tag or an explicit empty open/close pair
+— both parse to zero children — so `events_from_doc`'s `walk_node` (which only has the AST to
+look at) can't tell them apart either, and neither could `emit.rs`'s `build()` path (it always
+wrote the self-closing form for a zero-children element, silently normalizing every
+`<sbr></sbr>` in a document to `<sbr/>` — a genuine round-trip/losslessness gap per this
+repository's CLAUDE.md, not just a harness-check mismatch).
+
+**Fix:** `Node::Element` gained a `self_closing: bool` field. `parse.rs`'s `XmlEvent::Empty` arm
+sets it `true`; the `XmlEvent::End` arm (built from a real `Start`+`End` pair, even when the
+element ends up with zero children) sets it `false`; the truncated-input recovery arm (an
+element closed by EOF, never a real close tag) also sets it `false`. `emit.rs`'s `emit_node`
+now writes the self-closing `XmlEvent::Empty` form only when `children.is_empty() &&
+self_closing`, not merely `children.is_empty()`. `events.rs`'s `walk_node` (the
+`ast_to_events`-projection helper this harness's equivalence check drives) got the matching
+change, and `collect_doc` (events → AST, used by the streaming writer's AST fallback) sets the
+field the same way from `Event::EmptyElement` (`true`) / `Event::EndElement` (`false`) — so the
+distinction now survives every direction: `parse → events`, `events → AST`, and `AST → emit`.
+The one adapter-crate call site needing a value, `rescribe-write-docbook`'s `db_element()`
+helper (builds `Node::Element` from the rescribe IR, with no real source syntax to preserve),
+sets `self_closing: true` unconditionally — this exactly matches that adapter's pre-existing
+output (it always wrote the self-closing form for an empty element before this field existed),
+so it's a non-behavior-changing default, not a new choice.
+
+Verified via `cargo test -p rescribe-fixtures docbook` (`docbook_events_equals_ast_projection_
+over_all_fixtures` and `docbook_streaming_writer_byte_identical_to_builder_over_all_fixtures`
+both previously panicked "check now PASSES, but is still listed in KNOWN_FAILURES" once the fix
+landed, confirming both now hold over the whole fixture suite; `docbook_streaming_parser_
+matches_events_under_adversarial_chunking` continued passing) and `cargo clippy`/`test`/`fmt`
+scoped to `-p docbook-fmt -p rescribe-read-docbook -p rescribe-write-docbook -p
+rescribe-fixtures` (all green). Full-workspace verification deferred to this session's final
+end-to-end check.
+
+Not touched: `jats-fmt`/`tei-fmt` share docbook-fmt's implementation shape closely enough that
+they likely have the same latent AST gap, but no fixture in either format's suite currently
+exercises an explicitly-empty non-self-closing tag, so neither shows a failure and neither was
+in this task's scope — worth a follow-up audit if/when a jats/tei fixture needs this construct.
+
+No new fixture added: `fixtures/docbook/line-break` (`<sbr></sbr>`) and
+`fixtures/docbook/adv-empty-para` (`<para/>`) already exercise both forms distinctly — exactly
+why the harness caught the divergence in the first place.
+
 ## wiki-family `parse_list()` marker-type-change defect — fixed in 5 crates, surveyed across 11 (2026-07-30)
 
 The cross-API harness's `zimwiki`/`markua` `KNOWN_FAILURES` entries both independently

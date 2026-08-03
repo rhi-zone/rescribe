@@ -131,6 +131,13 @@ fn db_element(name: &str, attrs: Vec<(String, String)>, children: Vec<DbNode>) -
         name: name.to_string(),
         attrs,
         children,
+        // No real source syntax to preserve here — this element is
+        // synthesized from the rescribe IR, not parsed from DocBook bytes —
+        // so prefer the self-closing form for an empty element, matching
+        // this adapter's pre-existing output exactly (emit() previously
+        // always wrote `<foo/>` for an empty element regardless of this
+        // field, which didn't exist yet).
+        self_closing: true,
         span: docbook_fmt::Span::NONE,
     }
 }

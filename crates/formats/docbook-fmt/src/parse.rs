@@ -146,6 +146,7 @@ pub fn parse(input: &[u8]) -> (DocBookDoc, Vec<Diagnostic>) {
                     name,
                     attrs,
                     children: Vec::new(),
+                    self_closing: true,
                     span: Span {
                         start: pos,
                         end: reader.buffer_position() as usize,
@@ -162,6 +163,7 @@ pub fn parse(input: &[u8]) -> (DocBookDoc, Vec<Diagnostic>) {
                             name: frame.name,
                             attrs: frame.attrs,
                             children: frame.children,
+                            self_closing: false,
                             span: Span {
                                 start: frame.start,
                                 end: reader.buffer_position() as usize,
@@ -283,6 +285,10 @@ pub fn parse(input: &[u8]) -> (DocBookDoc, Vec<Diagnostic>) {
             name: frame.name,
             attrs: frame.attrs,
             children: frame.children,
+            // Recovered from an actual <name ...> open tag with no matching
+            // close ever seen, never a self-closing <name/> (that arrives
+            // as XmlEvent::Empty and is handled separately, above).
+            self_closing: false,
             span: Span::NONE,
         };
         push_node(node, &mut stack, &mut roots);
