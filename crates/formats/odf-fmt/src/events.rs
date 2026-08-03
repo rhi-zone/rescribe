@@ -87,6 +87,12 @@ pub enum OdfEvent<'a> {
     StartCell {
         style_name: Option<Cow<'a, str>>,
         value_type: Option<Cow<'a, str>>,
+        /// The typed value attribute (`office:value`, `office:date-value`, …).
+        value: Option<Cow<'a, str>>,
+        /// `table:number-columns-spanned`.
+        col_span: Option<u32>,
+        /// `table:number-rows-spanned`.
+        row_span: Option<u32>,
         covered: bool,
     },
     /// `</table:table-cell>` closed.
@@ -99,9 +105,21 @@ pub enum OdfEvent<'a> {
     },
     EndNote,
 
+    /// `<text:note-citation>` — the in-text note marker, as flattened text.
+    ///
+    /// Emitted as a single event rather than a Start/Text/End triple: the
+    /// citation is a text-only leaf in every ODF profile, and `parse()`'s
+    /// `Note::citation` is likewise a single `Option<String>`.
+    NoteCitation(Cow<'a, str>),
+    /// `<text:note-body>` opened — its children are ordinary block events.
+    StartNoteBody,
+    /// `</text:note-body>` closed.
+    EndNoteBody,
+
     /// `<draw:frame>` opened.
     StartFrame {
         name: Option<Cow<'a, str>>,
+        style_name: Option<Cow<'a, str>>,
         anchor_type: Option<Cow<'a, str>>,
         width: Option<Cow<'a, str>>,
         height: Option<Cow<'a, str>>,
@@ -111,6 +129,7 @@ pub enum OdfEvent<'a> {
     /// `<draw:image>` inside a frame.
     Image {
         href: Cow<'a, str>,
+        mime_type: Option<Cow<'a, str>>,
     },
 
     /// A run of text.
@@ -123,6 +142,31 @@ pub enum OdfEvent<'a> {
     /// `<text:s/>` — one or more spaces.
     Space {
         count: u32,
+    },
+    /// `<text:soft-hyphen/>`.
+    SoftHyphen,
+    /// `<text:soft-page-break/>`.
+    SoftPageBreak,
+    /// `<text:bookmark/>` or `<text:bookmark-start/>` — a named anchor point.
+    ///
+    /// `<text:bookmark-end/>` produces no event, matching `parse()`, which
+    /// models a bookmark as a single point rather than a range.
+    Bookmark {
+        name: Cow<'a, str>,
+    },
+    /// `<office:annotation>` — an inline comment, as flattened text.
+    ///
+    /// The annotation's `<text:p>` children are joined with a single space
+    /// and all other children (`<dc:creator>`, `<dc:date>`, …) are dropped,
+    /// matching `parse()`'s `Inline::Annotation { content }`.
+    Annotation {
+        content: Cow<'a, str>,
+    },
+    /// An inline field element (`<text:date>`, `<text:page-number>`, …),
+    /// carrying the element name and its flattened text value.
+    Field {
+        name: Cow<'a, str>,
+        value: Cow<'a, str>,
     },
 
     // ── ODS spreadsheet events ─────────────────────────────────────────────
@@ -237,11 +281,65 @@ pub enum OdfEvent<'a> {
         data: Vec<u8>,
     },
 
-    /// An element not otherwise handled.
+    /// An element not otherwise handled, with its full XML captured verbatim
+    /// (opening tag, children, closing tag) so a writer can re-emit it.
+    ///
+    /// The whole subtree is consumed when this event is produced — no events
+    /// are emitted for its descendants. Where the enclosing construct lands
+    /// it (inline run, block sequence, frame body, or nowhere) is decided by
+    /// the consumer, mirroring `parse()`, which produces `Inline::Unknown`,
+    /// `TextBlock::Unknown`, `FrameContent::Other`, or nothing depending on
+    /// the same context.
     Unknown {
         name: Cow<'a, str>,
+        raw: Cow<'a, str>,
     },
 }
+
+/// Text-body elements that open an *inline* content model — inside them,
+/// only the constructs `parser::parse_inlines` recognizes are structural;
+/// everything else is an `Inline::Unknown` raw capture.
+const INLINE_CONTAINERS: &[&str] = &["text:p", "text:h", "text:span", "text:a"];
+
+/// Text-body elements that open a *block* content model.
+const BLOCK_CONTAINERS: &[&str] = &[
+    "text:list",
+    "text:list-item",
+    "text:list-header",
+    "table:table",
+    "table:table-row",
+    "table:table-cell",
+    "table:covered-table-cell",
+    "text:note",
+    "text:note-body",
+    "draw:frame",
+    "draw:text-box",
+];
+
+/// Elements `parser::parse_inlines` recognizes structurally; every other
+/// element encountered in an inline content model is raw-captured.
+const INLINE_RECOGNIZED: &[&str] = &[
+    "text:span",
+    "text:a",
+    "text:note",
+    "draw:frame",
+    "office:annotation",
+];
+
+/// Inline field elements whose text content `parse()` captures as
+/// `Inline::Field`. Kept in sync with `parser::parse_inlines`.
+const FIELD_ELEMENTS: &[&str] = &[
+    "text:page-number",
+    "text:date",
+    "text:time",
+    "text:author-name",
+    "text:author-initials",
+    "text:chapter",
+    "text:file-name",
+    "text:sequence",
+    "text:reference-ref",
+    "text:bookmark-ref",
+];
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -365,6 +463,10 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
     let mut buf = Vec::new();
     let mut in_body = false;
     let mut body_kind = BodyKind::None;
+    // Content model of each open text-body container: `true` = inline.
+    // `open_names` is the parallel element-name stack used to match end tags.
+    let mut text_ctx: Vec<bool> = Vec::new();
+    let mut open_names: Vec<String> = Vec::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -396,8 +498,34 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
                         body_kind = BodyKind::Presentation;
                         events.push_back(OdfEvent::StartPresentation);
                     }
-                    _ if body_kind != BodyKind::None => {
-                        push_start_event(events, &name, e, body_kind);
+                    // Text-body elements are dispatched through a handler that
+                    // gets the reader, because several of them (annotations,
+                    // note citations, fields, and unknown elements captured
+                    // verbatim) consume their own subtree exactly the way
+                    // `parser.rs` does rather than letting the scan descend
+                    // into it.
+                    _ if body_kind == BodyKind::Text => {
+                        let attrs = crate::parser::collect_attrs(e);
+                        buf.clear();
+                        let in_inline = text_ctx.last().copied().unwrap_or(false);
+                        let consumed =
+                            push_text_start_event(events, &name, &attrs, &mut reader, in_inline);
+                        if !consumed {
+                            if INLINE_CONTAINERS.contains(&name.as_str()) {
+                                text_ctx.push(true);
+                                open_names.push(name);
+                            } else if BLOCK_CONTAINERS.contains(&name.as_str()) {
+                                text_ctx.push(false);
+                                open_names.push(name);
+                            }
+                        }
+                        continue;
+                    }
+                    _ if body_kind == BodyKind::Spreadsheet => {
+                        push_spreadsheet_start_event(events, &name, e);
+                    }
+                    _ if body_kind == BodyKind::Presentation => {
+                        push_presentation_start_event(events, &name, e);
                     }
                     _ => {}
                 }
@@ -422,6 +550,18 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
                                 .unwrap_or(1);
                             events.push_back(OdfEvent::Space { count });
                         }
+                        "text:soft-hyphen" => events.push_back(OdfEvent::SoftHyphen),
+                        "text:soft-page-break" => events.push_back(OdfEvent::SoftPageBreak),
+                        "text:bookmark" | "text:bookmark-start" => {
+                            let bm = get_attr(e, b"text:name").unwrap_or_default();
+                            events.push_back(OdfEvent::Bookmark {
+                                name: Cow::Owned(bm),
+                            });
+                        }
+                        // `<text:bookmark-end/>` closes a bookmark range; the
+                        // AST models a bookmark as a point, so it is dropped —
+                        // same as `parser::parse_inlines`.
+                        "text:bookmark-end" => {}
                         "text:p" => {
                             let style_name = get_attr(e, b"text:style-name").map(Cow::Owned);
                             events.push_back(OdfEvent::StartParagraph { style_name });
@@ -431,7 +571,8 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
                             let href = get_attr(e, b"xlink:href")
                                 .map(Cow::Owned)
                                 .unwrap_or(Cow::Borrowed(""));
-                            events.push_back(OdfEvent::Image { href });
+                            let mime_type = get_attr(e, b"draw:mime-type").map(Cow::Owned);
+                            events.push_back(OdfEvent::Image { href, mime_type });
                         }
                         // Self-closing spreadsheet cells (no content)
                         "table:table-cell" | "table:covered-table-cell"
@@ -439,6 +580,15 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
                         {
                             push_spreadsheet_start_event(events, &name, e);
                             push_spreadsheet_end_event(events, &name);
+                        }
+                        // Self-closing text-table cells: `<table:covered-table-cell/>`
+                        // is how a cell covered by a col/row span is written.
+                        "table:table-cell" | "table:covered-table-cell"
+                            if body_kind == BodyKind::Text =>
+                        {
+                            let attrs = crate::parser::collect_attrs(e);
+                            push_text_start_event(events, &name, &attrs, &mut reader, false);
+                            events.push_back(OdfEvent::EndCell);
                         }
                         "table:table-column" => {}
                         _ => {}
@@ -464,6 +614,10 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
                         in_body = false;
                     }
                     _ if body_kind != BodyKind::None => {
+                        if open_names.last().is_some_and(|n| *n == name) {
+                            open_names.pop();
+                            text_ctx.pop();
+                        }
                         push_end_event(events, &name, body_kind);
                     }
                     _ => {}
@@ -475,6 +629,16 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
                     events.push_back(OdfEvent::Text(Cow::Owned(text)));
                 }
             }
+            // Character/entity references (`&#160;`, `&nbsp;`, …) arrive as
+            // their own event, not as part of the surrounding text run.
+            // `parse()` decodes them into `Inline::Text`; without this arm
+            // they were silently dropped (fixture non-breaking-space).
+            Ok(Event::GeneralRef(ref e)) if body_kind != BodyKind::None => {
+                let text = crate::parser::decode_general_ref(e);
+                if !text.is_empty() {
+                    events.push_back(OdfEvent::Text(Cow::Owned(text)));
+                }
+            }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
         }
@@ -482,108 +646,164 @@ fn parse_content_events(xml: &str, events: &mut VecDeque<OdfEvent<'static>>) {
     }
 }
 
-fn push_start_event(
-    events: &mut VecDeque<OdfEvent<'static>>,
-    name: &str,
-    e: &quick_xml::events::BytesStart<'_>,
-    body_kind: BodyKind,
-) {
-    match body_kind {
-        BodyKind::Text => push_text_start_event(events, name, e),
-        BodyKind::Spreadsheet => push_spreadsheet_start_event(events, name, e),
-        BodyKind::Presentation => push_presentation_start_event(events, name, e),
-        BodyKind::None => {}
-    }
-}
-
+/// Handle a `<office:text>`-body start tag.
+///
+/// Takes pre-collected attributes plus the reader, because several ODF text
+/// constructs are leaves whose content `parse()` flattens rather than
+/// descends into (`<office:annotation>`, `<text:note-citation>`, field
+/// elements) and unknown elements are captured verbatim; all of those must
+/// consume their own subtree here so the scan does not also emit events for
+/// their descendants.
+///
+/// `in_inline` says whether the innermost open container has an inline
+/// content model. It matters because the same element name means different
+/// things in the two models: a `<table:table>` that is a child of
+/// `<office:text>` is a real table, while one nested inside a `<text:p>` is
+/// not something `parser::parse_inlines` models at all — it becomes an
+/// `Inline::Unknown` raw capture (fixture path-deeply-nested-table).
+///
+/// Returns `true` if the element's subtree was consumed here, in which case
+/// the caller must not track it as an open container.
+#[allow(clippy::too_many_lines)]
 fn push_text_start_event(
     events: &mut VecDeque<OdfEvent<'static>>,
     name: &str,
-    e: &quick_xml::events::BytesStart<'_>,
-) {
+    attrs: &[(String, String)],
+    reader: &mut quick_xml::Reader<&[u8]>,
+    in_inline: bool,
+) -> bool {
+    let attr = |key: &str| crate::parser::attr_from_list(attrs, key).map(Cow::Owned);
+    if in_inline && !INLINE_RECOGNIZED.contains(&name) && !FIELD_ELEMENTS.contains(&name) {
+        let raw = crate::parser::capture_raw_from_name_attrs(name, attrs, reader);
+        events.push_back(OdfEvent::Unknown {
+            name: Cow::Owned(name.to_owned()),
+            raw: Cow::Owned(raw),
+        });
+        return true;
+    }
     match name {
         "text:p" => {
-            let style_name = get_attr(e, b"text:style-name").map(Cow::Owned);
-            events.push_back(OdfEvent::StartParagraph { style_name });
+            events.push_back(OdfEvent::StartParagraph {
+                style_name: attr("text:style-name"),
+            });
         }
         "text:h" => {
-            let style_name = get_attr(e, b"text:style-name").map(Cow::Owned);
-            let outline_level =
-                get_attr(e, b"text:outline-level").and_then(|s| s.parse::<u32>().ok());
+            let outline_level = crate::parser::attr_from_list(attrs, "text:outline-level")
+                .and_then(|s| s.parse::<u32>().ok());
             events.push_back(OdfEvent::StartHeading {
-                style_name,
+                style_name: attr("text:style-name"),
                 outline_level,
             });
         }
         "text:span" => {
-            let style_name = get_attr(e, b"text:style-name").map(Cow::Owned);
-            events.push_back(OdfEvent::StartSpan { style_name });
+            events.push_back(OdfEvent::StartSpan {
+                style_name: attr("text:style-name"),
+            });
         }
         "text:a" => {
-            let href = get_attr(e, b"xlink:href").map(Cow::Owned);
-            let title = get_attr(e, b"xlink:title").map(Cow::Owned);
-            events.push_back(OdfEvent::StartHyperlink { href, title });
+            events.push_back(OdfEvent::StartHyperlink {
+                href: attr("xlink:href"),
+                title: attr("xlink:title"),
+            });
         }
         "text:list" => {
-            let style_name = get_attr(e, b"text:style-name").map(Cow::Owned);
-            events.push_back(OdfEvent::StartList { style_name });
+            events.push_back(OdfEvent::StartList {
+                style_name: attr("text:style-name"),
+            });
         }
         "text:list-item" | "text:list-header" => {
             events.push_back(OdfEvent::StartListItem);
         }
         "table:table" => {
-            let name_attr = get_attr(e, b"table:name").map(Cow::Owned);
-            let style_name = get_attr(e, b"table:style-name").map(Cow::Owned);
             events.push_back(OdfEvent::StartTable {
-                name: name_attr,
-                style_name,
+                name: attr("table:name"),
+                style_name: attr("table:style-name"),
             });
         }
         "table:table-row" => {
-            let style_name = get_attr(e, b"table:style-name").map(Cow::Owned);
-            events.push_back(OdfEvent::StartRow { style_name });
+            events.push_back(OdfEvent::StartRow {
+                style_name: attr("table:style-name"),
+            });
         }
+        // `<table:table-header-rows>` is transparent: `parse()` flattens its
+        // rows into the enclosing table's row list, so emit nothing and let
+        // the scan continue into the rows.
+        "table:table-header-rows" => {}
         "table:table-cell" | "table:covered-table-cell" => {
-            let style_name = get_attr(e, b"table:style-name").map(Cow::Owned);
-            let value_type = get_attr(e, b"office:value-type").map(Cow::Owned);
-            let covered = name == "table:covered-table-cell";
+            let value = crate::parser::cell_raw_value_attrs(attrs).map(Cow::Owned);
             events.push_back(OdfEvent::StartCell {
-                style_name,
-                value_type,
-                covered,
+                style_name: attr("table:style-name"),
+                value_type: attr("office:value-type"),
+                value,
+                col_span: crate::parser::attr_from_list(attrs, "table:number-columns-spanned")
+                    .and_then(|s| s.parse().ok()),
+                row_span: crate::parser::attr_from_list(attrs, "table:number-rows-spanned")
+                    .and_then(|s| s.parse().ok()),
+                covered: name == "table:covered-table-cell",
             });
         }
         "text:note" => {
-            let note_class = get_attr(e, b"text:note-class")
-                .map(Cow::Owned)
-                .unwrap_or(Cow::Borrowed("footnote"));
-            let id = get_attr(e, b"text:id").map(Cow::Owned);
-            events.push_back(OdfEvent::StartNote { note_class, id });
-        }
-        "draw:frame" => {
-            let frame_name = get_attr(e, b"draw:name").map(Cow::Owned);
-            let anchor_type = get_attr(e, b"text:anchor-type").map(Cow::Owned);
-            let width = get_attr(e, b"svg:width").map(Cow::Owned);
-            let height = get_attr(e, b"svg:height").map(Cow::Owned);
-            events.push_back(OdfEvent::StartFrame {
-                name: frame_name,
-                anchor_type,
-                width,
-                height,
+            let note_class = attr("text:note-class").unwrap_or(Cow::Borrowed("footnote"));
+            events.push_back(OdfEvent::StartNote {
+                note_class,
+                id: attr("text:id"),
             });
         }
+        "text:note-citation" => {
+            let text = crate::parser::read_text_until(reader, "text:note-citation");
+            events.push_back(OdfEvent::NoteCitation(Cow::Owned(text)));
+            return true;
+        }
+        "text:note-body" => events.push_back(OdfEvent::StartNoteBody),
+        "draw:frame" => {
+            events.push_back(OdfEvent::StartFrame {
+                name: attr("draw:name"),
+                style_name: attr("draw:style-name"),
+                anchor_type: attr("text:anchor-type"),
+                width: attr("svg:width"),
+                height: attr("svg:height"),
+            });
+        }
+        "draw:text-box" => events.push_back(OdfEvent::StartTextBox),
         "draw:image" => {
-            let href = get_attr(e, b"xlink:href")
-                .map(Cow::Owned)
-                .unwrap_or(Cow::Borrowed(""));
-            events.push_back(OdfEvent::Image { href });
+            events.push_back(OdfEvent::Image {
+                href: attr("xlink:href").unwrap_or(Cow::Borrowed("")),
+                mime_type: attr("draw:mime-type"),
+            });
+        }
+        "office:annotation" => {
+            let content = crate::parser::read_annotation_text(reader);
+            events.push_back(OdfEvent::Annotation {
+                content: Cow::Owned(content),
+            });
+            return true;
+        }
+        // `parse()`'s block-level reader drops a `<text:soft-page-break>` that
+        // has an explicit end tag rather than modelling it, so consume it and
+        // emit nothing. The self-closing form (the one writers actually
+        // produce) is handled in the `Event::Empty` arm above.
+        "text:soft-page-break" => {
+            crate::parser::skip_element(reader);
+            return true;
+        }
+        _ if FIELD_ELEMENTS.contains(&name) => {
+            let value = crate::parser::read_text_until(reader, name);
+            events.push_back(OdfEvent::Field {
+                name: Cow::Owned(name.to_owned()),
+                value: Cow::Owned(value),
+            });
+            return true;
         }
         _ => {
+            let raw = crate::parser::capture_raw_from_name_attrs(name, attrs, reader);
             events.push_back(OdfEvent::Unknown {
                 name: Cow::Owned(name.to_owned()),
+                raw: Cow::Owned(raw),
             });
+            return true;
         }
     }
+    false
 }
 
 fn push_spreadsheet_start_event(
@@ -679,7 +899,8 @@ fn push_presentation_start_event(
             let href = get_attr(e, b"xlink:href")
                 .map(Cow::Owned)
                 .unwrap_or(Cow::Borrowed(""));
-            events.push_back(OdfEvent::Image { href });
+            let mime_type = get_attr(e, b"draw:mime-type").map(Cow::Owned);
+            events.push_back(OdfEvent::Image { href, mime_type });
         }
         "text:p" => {
             let style_name = get_attr(e, b"text:style-name").map(Cow::Owned);
@@ -714,7 +935,9 @@ fn push_text_end_event(events: &mut VecDeque<OdfEvent<'static>>, name: &str) {
         "table:table-row" => events.push_back(OdfEvent::EndRow),
         "table:table-cell" | "table:covered-table-cell" => events.push_back(OdfEvent::EndCell),
         "text:note" => events.push_back(OdfEvent::EndNote),
+        "text:note-body" => events.push_back(OdfEvent::EndNoteBody),
         "draw:frame" => events.push_back(OdfEvent::EndFrame),
+        "draw:text-box" => events.push_back(OdfEvent::EndTextBox),
         _ => {}
     }
 }

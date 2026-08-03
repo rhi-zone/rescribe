@@ -1078,7 +1078,7 @@ fn parse_table_cell_attrs(
     }
 }
 
-fn cell_raw_value_attrs(attrs: &[(String, String)]) -> Option<String> {
+pub(crate) fn cell_raw_value_attrs(attrs: &[(String, String)]) -> Option<String> {
     for key in [
         "office:value",
         "office:date-value",
@@ -1854,7 +1854,7 @@ fn element_name(raw: &[u8]) -> String {
 }
 
 /// Collect all attributes from a `BytesStart` into an owned `(key, value)` list.
-fn collect_attrs(e: &BytesStart<'_>) -> Vec<(String, String)> {
+pub(crate) fn collect_attrs(e: &BytesStart<'_>) -> Vec<(String, String)> {
     e.attributes()
         .flatten()
         .map(|a| {
@@ -1866,13 +1866,13 @@ fn collect_attrs(e: &BytesStart<'_>) -> Vec<(String, String)> {
 }
 
 /// Look up an attribute value by key in a collected attrs list.
-fn attr_from_list(attrs: &[(String, String)], key: &str) -> Option<String> {
+pub(crate) fn attr_from_list(attrs: &[(String, String)], key: &str) -> Option<String> {
     attrs.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
 }
 
 /// Read the text content of an `<office:annotation>` element.
 /// Collects text from any `<text:p>` children and skips other children.
-fn read_annotation_text(reader: &mut Reader<&[u8]>) -> String {
+pub(crate) fn read_annotation_text(reader: &mut Reader<&[u8]>) -> String {
     let mut parts: Vec<String> = Vec::new();
     let mut buf = Vec::new();
     loop {
@@ -1901,7 +1901,7 @@ fn read_annotation_text(reader: &mut Reader<&[u8]>) -> String {
 }
 
 /// Skip an element and all its children.
-fn skip_element(reader: &mut Reader<&[u8]>) {
+pub(crate) fn skip_element(reader: &mut Reader<&[u8]>) {
     let mut depth = 1u32;
     let mut buf = Vec::new();
     loop {
@@ -1943,7 +1943,7 @@ fn skip_element_children(reader: &mut Reader<&[u8]>, end_tag: &str) {
 }
 
 /// Collect all text content until the closing tag `end_tag`.
-fn read_text_until(reader: &mut Reader<&[u8]>, end_tag: &str) -> String {
+pub(crate) fn read_text_until(reader: &mut Reader<&[u8]>, end_tag: &str) -> String {
     let mut text = String::new();
     let mut depth = 0u32;
     let mut buf = Vec::new();
@@ -2019,7 +2019,7 @@ fn capture_raw_until(reader: &mut Reader<&[u8]>, end_tag: &str) -> String {
 }
 
 /// Capture an element's full XML: opening tag (with given name and pre-collected attrs) + children + closing tag.
-fn capture_raw_from_name_attrs(
+pub(crate) fn capture_raw_from_name_attrs(
     name: &str,
     attrs: &[(String, String)],
     reader: &mut Reader<&[u8]>,
@@ -2049,7 +2049,7 @@ fn capture_raw_from_attrs(
 /// Handles numeric character references (`#N` and `#xN`) and common named HTML entities.
 /// Unknown named entities are returned as empty string (silent drop is acceptable for
 /// format-specific entities that have no Unicode equivalent).
-fn decode_general_ref(raw: &[u8]) -> String {
+pub(crate) fn decode_general_ref(raw: &[u8]) -> String {
     let s = std::str::from_utf8(raw).unwrap_or("");
     if let Some(hex) = s.strip_prefix("#x").or_else(|| s.strip_prefix("#X"))
         && let Ok(n) = u32::from_str_radix(hex, 16)

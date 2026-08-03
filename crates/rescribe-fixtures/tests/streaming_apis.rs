@@ -4674,16 +4674,64 @@ fn tei_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
 // exposed two directly-adjacent bugs blocking its own verification —
 // `StartFrame` had no `width`/`height` (fixture adv-corrupt-image) and
 // self-closing `<office:text/>` wasn't recognized by `events.rs`'s own scan
-// (fixture adv-empty) — both fixed too. The check still fails overall,
-// though: it now surfaces a much larger, pre-existing, and unrelated set of
-// `OdfEvent` vocabulary gaps for inline/block body content (annotations,
-// bookmarks, field elements, soft-hyphen/soft-page-break, table cell
-// col/row-span, footnote/endnote citations, image-caption text-boxes, at
-// least one heading divergence — 12 of 66 odt fixtures), which is a
-// separate, substantially larger body of work than the resource-loss defect
-// this check originally tracked. See `KNOWN_FAILURES["odt"]
-// ["streaming_writer"]` for the current fixture list and TODO.md for the
-// follow-up.
+// (fixture adv-empty) — both fixed too. Fixing that surfaced a much larger,
+// pre-existing, and unrelated set of `OdfEvent` gaps for inline/block body
+// content — 12 of 66 odt fixtures. Those are now fixed too (2026-08-03), and
+// the check passes on all 66. Diagnosing them one by one (diffing the
+// `content.xml` build() emits against the one the streaming Writer emits)
+// found *seven* distinct root causes, not the single "vocabulary gap" bucket
+// the old note implied, and one item in that bucket was simply wrong:
+//
+//  1. Note internals were unmodelled. `OdfEvent` had `StartNote`/`EndNote`
+//     but nothing for `<text:note-citation>` or `<text:note-body>`, so a
+//     note's marker and its entire body were dropped — `DocBuilder` had a
+//     `NoteBody` frame that nothing ever pushed (`#[allow(dead_code)]`).
+//     Added `NoteCitation`, `StartNoteBody`, `EndNoteBody`.
+//     (footnote, footnote-formatted, endnote)
+//  2. Empty-element inline leaves had no variants at all: `<text:soft-hyphen/>`,
+//     `<text:soft-page-break/>`, `<text:bookmark/>`/`<text:bookmark-start/>`.
+//     Added `SoftHyphen`, `SoftPageBreak`, `Bookmark`. **The "heading-only
+//     divergence" nobody had diagnosed is this same bug, not a heading bug**:
+//     fixtures/odt/heading's `<text:h>` simply contains a `<text:bookmark/>`.
+//     (bookmark, heading, soft-hyphen)
+//  3. `<office:annotation>` produced an `Unknown` event whose *children* were
+//     then scanned normally, so the annotation's `<dc:creator>` text leaked
+//     into the enclosing paragraph as body text while the comment itself was
+//     lost — corruption, not just loss. Added `Annotation`, flattened via
+//     `parser::read_annotation_text` exactly as `parse()` does. (annotation)
+//  4. `StartCell` carried neither `table:number-columns-spanned` nor
+//     `table:number-rows-spanned` nor the typed value, and self-closing
+//     `<table:covered-table-cell/>` was only recognized in a *spreadsheet*
+//     body, never a text body — so an entire covered cell vanished and the
+//     row shapes drifted apart. (colspan-rowspan)
+//  5. A block-level `<draw:frame>` was unreachable: `DocBuilder` routed
+//     `EndFrame` through `push_inline` only, which matches nothing when the
+//     open frame is `<office:text>` / a cell / a list item, so the whole frame
+//     was dropped. Now routed to `TextBlock::Frame` outside inline context.
+//     `<draw:text-box>` also had no text-body handling at all. (text-box,
+//     image-caption)
+//  6. Character/entity references arrive as their own `quick_xml`
+//     `Event::GeneralRef`, never as part of the surrounding `Event::Text`.
+//     `parser.rs` has an arm for them; `events.rs` did not, so `&#160;` was
+//     silently dropped. (non-breaking-space)
+//  7. `OdfEvent::Unknown` carried only a name, no raw payload, so
+//     raw-preservation was impossible through the event path. It now carries
+//     the verbatim XML and consumes its subtree, matching `parse()`. This
+//     needed events.rs to track the enclosing content model, because the same
+//     element name means different things in each: a `<table:table>` under
+//     `<office:text>` is a table, while one nested inside a `<text:p>` is
+//     something `parser::parse_inlines` does not model at all and captures
+//     raw. (path-deeply-nested-table)
+//
+// Two genuine losslessness gaps found during this work are *not* streaming
+// defects and remain open on the `parse()` side, where both APIs lose
+// equally: (a) `FrameContent` is an either/or enum and `parse()` gives
+// `<draw:image>` priority, so a `<draw:frame>` holding both an image and a
+// `<draw:text-box>` caption loses the caption (fixtures/odt/image-caption's
+// "Figure 1: A photo." is absent from build()'s own output, so the streaming
+// Writer had to reproduce the same loss to be byte-identical); (b) field
+// elements are recognized only in their `<text:date>…</text:date>` form —
+// the self-closing form is dropped by both paths. See TODO.md.
 #[test]
 fn odf_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
     let root = fixtures_root().join("odt");

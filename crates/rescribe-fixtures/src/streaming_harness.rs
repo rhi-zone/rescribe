@@ -797,8 +797,8 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // exists yet (batch.rs module doc calls it "future" work). The streaming
     // Writer genuinely builds its AST incrementally per event (same
     // sanctioned shape as ooxml-sml's SmlWriter, deferring only ZIP byte
-    // packaging to finish()) but OdfEvent has no variant for mimetype/
-    // meta/styles/images, so round-tripping through it always drops them.
+    // packaging to finish()) and, as of 2026-08-03, is byte-identical to
+    // build() across all 66 odt fixtures.
     FormatCapabilities {
         format: "odt",
         events: ApiState::NotYetWired(
@@ -817,31 +817,7 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              directory lives at the end of the file) and Writer; batch.rs's own module doc \
              calls a true chunked event-delivering parser \"a future StreamingParser\"",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "the resource-loss defect this entry originally tracked (OdfEvent had no variant \
-             carrying mimetype/meta/styles/images) is fixed: OdfEvent now has Mimetype, Meta, \
-             AutomaticStyle, NamedStyle, ListStyle, PageLayout, and EmbeddedImage variants, \
-             produced by events::extract_events reading mimetype/meta.xml/styles.xml/ \
-             content.xml's <office:automatic-styles>/Pictures+media (via parser.rs's \
-             read_zip_text/parse_meta_xml/parse_styles_xml/parse_auto_styles_block, now \
-             pub(crate)) and consumed by batch::DocBuilder::process. Two directly-adjacent bugs \
-             that were blocking verification of that fix were fixed alongside it: StartFrame had \
-             no width/height (draw:frame's svg:width/svg:height were silently dropped, found via \
-             fixture adv-corrupt-image) and self-closing <office:text/> was not recognized by \
-             events.rs's own quick_xml scan (found via fixture adv-empty). However, the \
-             byte-identical-to-builder check still fails: it found the OdfEvent vocabulary has \
-             many other, unrelated pre-existing gaps for inline/block body content — \
-             office:annotation, text:bookmark(-start), field elements (text:date, \
-             text:page-number, etc.), text:soft-hyphen, text:soft-page-break, table cell \
-             col-span/row-span, footnote/endnote citations, draw:text-box inside a text-body \
-             draw:frame (image captions), and at least one heading-only divergence — none of \
-             which relate to mimetype/meta/styles/images. 12 of 66 odt fixtures diverge \
-             (annotation, bookmark, colspan-rowspan, endnote, footnote, footnote-formatted, \
-             heading, image-caption, non-breaking-space, path-deeply-nested-table, soft-hyphen, \
-             text-box). Completing OdfEvent's vocabulary to cover all of this is a substantially \
-             larger, separate body of work than the resource-loss defect this entry originally \
-             tracked; see TODO.md",
-        ),
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "tei",
@@ -1671,16 +1647,71 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "fb2",
         api: "events",
-        description: "fb2_fmt events()/EventIter silently drops Event::Metadata for input \
-                       lacking a literal <description> element, unlike parse()'s AST which \
-                       always carries a (possibly-default) description",
+        description: "Narrowed (2026-08-03): the originally-tracked bug — events()/EventIter \
+                       silently dropping Event::Metadata for input lacking a literal \
+                       <description> element — is fixed (SemanticState now synthesizes a \
+                       default Metadata event, either right before the first other top-level \
+                       child of <FictionBook> or, for a <FictionBook> with no children at all, \
+                       at end-of-input). Fixing it unmasked four further, independent, \
+                       pre-existing events()-vs-AST-projection bugs on fixtures the harness's \
+                       first-divergence-only check hadn't reached before (same failure mode \
+                       documented on the \"commonmark\" entry above) — three are now also \
+                       fixed: (1) a leading Text run immediately before an inline <code> was \
+                       swallowed into the Code element's own content instead of flushed as its \
+                       own Text inline first (fixtures/fb2/code-inline); (2) <table>/<tr>/<td>/ \
+                       <th> push no ParseState frame in handle_start, but handle_end still \
+                       unconditionally popped the generic stack before its table-specific \
+                       arms ran, silently discarding whatever unrelated frame (e.g. the \
+                       enclosing Section) was actually on top and losing the table plus every \
+                       event after it (fixtures/fb2/table-header); (3) <a type=\"note\" \
+                       href=\"#...\"> was never recognized as a footnote reference — always \
+                       built as a generic Link — unlike parse()'s AST, which treats it as \
+                       FootnoteRef structurally regardless of whether the target actually \
+                       exists (fixtures/fb2/adv-broken-footnote-ref). Two more fixtures still \
+                       diverge and are NOT fixed by this pass: fixtures/fb2/adv-malformed is a \
+                       genuine architectural divergence, not a bug — its input has an unclosed \
+                       <FictionBook ...> start tag that swallows the following <body> text \
+                       (confirmed directly against quick_xml's own tokenization), so quick_xml \
+                       only errors once it reaches the orphaned </body> end tag, by which point \
+                       a Section/Paragraph had already been fully tokenized; parse()'s AST \
+                       builder defers attaching a Body's sections to the document until its \
+                       </body> End event is actually dispatched, so it silently drops the \
+                       whole orphaned subtree when the reader errors first, while events() is a \
+                       true pull iterator that had already irrevocably yielded \
+                       StartSection/StartParagraph/EndParagraph/EndSection to the caller before \
+                       the error surfaced — recovering this would require events() to buffer \
+                       and defer emission until validated, which is exactly the \
+                       pre-materialization this crate's EventIter is designed not to do. \
+                       fixtures/fb2/annotation is a genuine, real gap: the book's own \
+                       <description><title-info><annotation> (with <p>/<poem>/<cite>/ \
+                       <subtitle>/<table>/empty-line sub-content) is not modeled at all in \
+                       events.rs's description parsing — SemanticState's DescState has no \
+                       equivalent of parse.rs's recursive AnnotationContent builder, so the \
+                       annotation's whole content is silently discarded and \
+                       TitleInfo.annotation stays None; implementing it is a real, nontrivial \
+                       addition (a second content-model builder paralleling Body/Section's), \
+                       not a quick fix. A related, already-fixed adjacent bug from this pass: a \
+                       description-context self-closing <image> (e.g. inside \
+                       <title-info><coverpage>) used to leak out as a stray top-level \
+                       Event::Image with no AST-side counterpart (fixtures/fb2/cover-image); \
+                       that's now a no-op in events(), matching parse()'s AST, which also does \
+                       not populate TitleInfo.coverpage from it (a separate, pre-existing, \
+                       parse()-side gap, out of scope here since it affects both APIs equally, \
+                       not just events()).",
     },
     KnownFailure {
         format: "fb2",
         api: "streaming_writer",
-        description: "downstream of the fb2/events KnownFailure: the streaming Writer never \
-                       receives Metadata for input lacking <description>, so it never emits a \
-                       <description> element, while the AST builder path always writes one",
+        description: "Narrowed (2026-08-03): downstream of the fb2/events KnownFailure — with \
+                       every events()-side bug fixed this pass also no longer reproducing here \
+                       (the streaming Writer emits the same output as build() for those \
+                       fixtures now), the two events()-side gaps still open there \
+                       (fixtures/fb2/adv-malformed, fixtures/fb2/adv-broken input parsing \
+                       architecture; fixtures/fb2/annotation, unmodeled book annotation \
+                       content) still reproduce downstream here too, for the same underlying \
+                       reasons: the streaming Writer can only emit what events() hands it, and \
+                       build() (via parse()'s AST) diverges from it on exactly those two \
+                       fixtures for the reasons documented on the fb2/events entry.",
     },
     KnownFailure {
         format: "commonmark",
@@ -1766,19 +1797,12 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        the *actual* source syntax here, and build() is the lossy side, so this is \
                        not a streaming Writer defect either.",
     },
-    KnownFailure {
-        format: "odt",
-        api: "streaming_writer",
-        description: "OdfEvent now carries mimetype/meta/styles/images (the originally-tracked \
-                       resource-loss gap is fixed), but the byte-identical-to-builder check \
-                       still fails on 12 of 66 odt fixtures over unrelated, pre-existing \
-                       OdfEvent gaps for inline/block body content: office:annotation, \
-                       text:bookmark(-start), field elements (text:date, text:page-number, \
-                       etc.), text:soft-hyphen, text:soft-page-break, table cell col-span/ \
-                       row-span, footnote/endnote citations, draw:text-box inside a text-body \
-                       draw:frame (image captions), and at least one heading-only divergence; \
-                       see the matching CAPABILITIES entry for the full fixture list",
-    },
+    // odt/streaming_writer was a KnownFailure entry here (12 of 66 fixtures
+    // diverging over OdfEvent body-content gaps); it is now fixed and the
+    // FormatCapabilities entry above is Wired — no entry left here per
+    // assert_or_known_failure's own rule against masking a fixed bug. See the
+    // comment above the check in tests/streaming_apis.rs for the seven root
+    // causes that were found and closed.
     KnownFailure {
         format: "ansi",
         api: "streaming_parser",

@@ -9,6 +9,69 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-03: odf-fmt's `streaming_writer` `KnownFailure` fixed — all 66 odt fixtures are
+now byte-identical between `emit(parse(input))` and feeding `events(input)` through
+`batch::Writer`; `streaming_harness::CAPABILITIES`'s odt row `streaming_writer` is now
+`ApiState::Wired` and the `KNOWN_FAILURES` entry is removed.** The 12 diverging fixtures the
+previous entry lumped under "OdfEvent vocabulary gaps" turned out to be **seven** distinct
+root causes, each confirmed by diffing the emitted `content.xml` of both paths before fixing
+(never inferred from the old description):
+
+1. **Note internals unmodelled** — no event for `<text:note-citation>` or `<text:note-body>`,
+   so a footnote's marker *and its whole body* were dropped. `DocBuilder` even had a
+   `NoteBody` frame that nothing ever pushed (`#[allow(dead_code)]`). Added `NoteCitation`,
+   `StartNoteBody`, `EndNoteBody`. (`footnote`, `footnote-formatted`, `endnote`)
+2. **Empty-element inline leaves had no variants**: `<text:soft-hyphen/>`,
+   `<text:soft-page-break/>`, `<text:bookmark/>`/`<text:bookmark-start/>`. Added
+   `SoftHyphen`, `SoftPageBreak`, `Bookmark`. **The "at least one heading-only divergence"
+   the old entry flagged as undiagnosed was this same bug, not a heading bug at all** —
+   `fixtures/odt/heading`'s `<text:h>` contains a `<text:bookmark/>`. (`bookmark`, `heading`,
+   `soft-hyphen`)
+3. **`<office:annotation>` corrupted the document**, not merely lost it: it produced an
+   `Unknown` event and then the scan descended into its children anyway, so the annotation's
+   `<dc:creator>` text leaked into the enclosing paragraph as body text while the comment
+   itself vanished. Added `Annotation`, flattened via `parser::read_annotation_text` exactly
+   as `parse()` does. (`annotation`)
+4. **Table-cell attributes and self-closing covered cells** — `StartCell` carried neither
+   `table:number-columns-spanned`/`table:number-rows-spanned` nor the typed value, and
+   `<table:covered-table-cell/>` was recognized only in a *spreadsheet* body, never a text
+   body, so a covered cell disappeared and the row shapes drifted. (`colspan-rowspan`)
+5. **Block-level `<draw:frame>` was structurally unreachable** — `DocBuilder` routed
+   `EndFrame` through `push_inline` only, which matches nothing when the open frame is
+   `<office:text>` / a cell / a list item, so the entire frame was dropped. Now routed to
+   `TextBlock::Frame` outside inline context; `<draw:text-box>` also had no text-body
+   handling. (`text-box`, `image-caption`)
+6. **Character/entity references were dropped** — they arrive as their own `quick_xml`
+   `Event::GeneralRef`, never inside the surrounding `Event::Text`. `parser.rs` has an arm
+   for them; `events.rs` did not. (`non-breaking-space`)
+7. **`OdfEvent::Unknown` carried no raw payload**, making raw preservation impossible through
+   the event path. It now carries the verbatim XML and consumes its subtree, matching
+   `parse()`. This required `events.rs` to track the enclosing content model, because the
+   same element name means different things in each: a `<table:table>` under `<office:text>`
+   is a table, while one nested inside a `<text:p>` is something `parser::parse_inlines` does
+   not model at all and captures raw. (`path-deeply-nested-table`)
+
+Fields (`text:date`, `text:page-number`, …) were named in the old description but no odt
+fixture actually exercised them, so they caused none of the 12 divergences; an `OdfEvent::Field`
+variant was added anyway (`parse()` models them as `Inline::Field`).
+
+**Two genuine losslessness gaps found during this work are still open, and both are on the
+`parse()` side, where the AST path and the event path lose equally — neither is a streaming
+defect:**
+
+- `ast::FrameContent` is an either/or enum and `parse()` gives `<draw:image>` priority over a
+  sibling `<draw:text-box>`, so a frame holding an image *and* a caption loses the caption.
+  `fixtures/odt/image-caption`'s "Figure 1: A photo." is absent from `emit(parse(input))`'s own
+  output; the streaming Writer had to reproduce the same loss to be byte-identical. Closing
+  this means reshaping `FrameContent` to hold multiple alternatives (ODF permits a frame to
+  carry several), plus the writer side.
+- Field elements are recognized only in their `<text:date>…</text:date>` form; the
+  self-closing `<text:date/>` form is dropped by both paths.
+- `fixtures/odt/COVERAGE.md` has no entry for field elements, `<text:soft-page-break/>`, or
+  `<text:section>`, and `crates/formats/odf-fmt/tests/generate_fixtures.rs` has an ignored
+  `generate_rare_fields` generator whose `fixtures/odt/rare-fields/` directory was never
+  materialized (it writes only `input.odt`, never `expected.json`).
+
 **2026-08-03: rtf-fmt's `streaming_writer` `KnownFailure` fixed — a new `sem_writer::Writer`
 consumes the crate's own semantic `Event` type; `streaming_harness::CAPABILITIES`'s rtf row
 `streaming_writer` is now `ApiState::Wired`.** Two independent, previously-conflated defects,
@@ -5146,6 +5209,10 @@ Defect classes surfacing again, by name, as the task brief predicted:
   `parse_content_xml` handled that case), so the streaming path always built `OdfBody::Empty`
   instead of `OdfBody::Text(vec![])` — fixed by mirroring `parser.rs`'s handling in the
   `Event::Empty` branch.
+
+  **[CLOSED 2026-08-03 — see the odf-fmt entry at the top of this file for the seven root
+  causes actually found; the categorization below was partly wrong (the "heading divergence"
+  was a bookmark bug) and partly speculative (field elements caused none of the 12).]**
 
   **Still open — much larger, separate gap surfaced by the fix above:** once the
   resource-loss and two adjacent bugs were fixed, the byte-identical-to-builder check still

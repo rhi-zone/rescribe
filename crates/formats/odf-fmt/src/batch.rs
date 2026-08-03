@@ -146,8 +146,7 @@ enum BuildFrame {
         cells: Vec<TableCell>,
     },
     TableCell {
-        style_name: Option<String>,
-        content: Vec<TextBlock>,
+        cell: TableCell,
     },
     #[allow(dead_code)]
     Section {
@@ -202,7 +201,6 @@ enum BuildFrame {
     Note {
         note: Note,
     },
-    #[allow(dead_code)]
     NoteBody {
         content: Vec<TextBlock>,
     },
@@ -378,26 +376,28 @@ impl DocBuilder {
             OdfEvent::StartCell {
                 style_name,
                 value_type,
+                value,
+                col_span,
+                row_span,
                 covered,
             } => {
                 self.stack.push(BuildFrame::TableCell {
-                    style_name: style_name.map(|s| s.into_owned()),
-                    content: vec![],
+                    cell: TableCell {
+                        style_name: style_name.map(|s| s.into_owned()),
+                        value_type: value_type.map(|s| s.into_owned()),
+                        raw_value: value.map(|s| s.into_owned()),
+                        col_span,
+                        row_span,
+                        covered,
+                        content: vec![],
+                    },
                 });
-                let _ = (value_type, covered); // available but not used in text-table cells
             }
             OdfEvent::EndCell => {
-                if let Some(BuildFrame::TableCell {
-                    style_name,
-                    content,
-                }) = self.stack.pop()
+                if let Some(BuildFrame::TableCell { cell }) = self.stack.pop()
                     && let Some(BuildFrame::TableRow { cells, .. }) = self.stack.last_mut()
                 {
-                    cells.push(TableCell {
-                        style_name,
-                        content,
-                        ..Default::default()
-                    });
+                    cells.push(cell);
                 }
             }
 
@@ -530,10 +530,22 @@ impl DocBuilder {
                 self.stack.push(BuildFrame::TextBox { blocks: vec![] });
             }
             OdfEvent::EndTextBox => {
-                if let Some(BuildFrame::TextBox { blocks }) = self.stack.pop()
-                    && let Some(BuildFrame::Shape { shape }) = self.stack.last_mut()
-                {
-                    shape.content = DrawShapeContent::TextBox(blocks);
+                if let Some(BuildFrame::TextBox { blocks }) = self.stack.pop() {
+                    match self.stack.last_mut() {
+                        Some(BuildFrame::Shape { shape }) => {
+                            shape.content = DrawShapeContent::TextBox(blocks);
+                        }
+                        // A `<draw:text-box>` in a text-document `<draw:frame>`
+                        // only wins if the frame has no image: `parse()` gives
+                        // `<draw:image>` priority over any sibling content.
+                        Some(BuildFrame::InlineFrame { frame }) => {
+                            if matches!(frame.content, FrameContent::Empty | FrameContent::Other(_))
+                            {
+                                frame.content = FrameContent::TextBox(blocks);
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
             OdfEvent::StartNotes { style_name } => {
@@ -615,14 +627,31 @@ impl DocBuilder {
                     self.push_inline(Inline::Note(note));
                 }
             }
+            OdfEvent::NoteCitation(citation) => {
+                if let Some(BuildFrame::Note { note }) = self.stack.last_mut() {
+                    note.citation = Some(citation.into_owned());
+                }
+            }
+            OdfEvent::StartNoteBody => {
+                self.stack.push(BuildFrame::NoteBody { content: vec![] });
+            }
+            OdfEvent::EndNoteBody => {
+                if let Some(BuildFrame::NoteBody { content }) = self.stack.pop()
+                    && let Some(BuildFrame::Note { note }) = self.stack.last_mut()
+                {
+                    note.body = content;
+                }
+            }
             OdfEvent::StartFrame {
                 name,
+                style_name,
                 anchor_type,
                 width,
                 height,
             } => {
                 let frame = crate::ast::Frame {
                     name: name.map(|s| s.into_owned()),
+                    style_name: style_name.map(|s| s.into_owned()),
                     anchor_type: anchor_type.map(|s| s.into_owned()),
                     width: width.map(|s| s.into_owned()),
                     height: height.map(|s| s.into_owned()),
@@ -632,16 +661,25 @@ impl DocBuilder {
             }
             OdfEvent::EndFrame => {
                 if let Some(BuildFrame::InlineFrame { frame }) = self.stack.pop() {
-                    self.push_inline(Inline::Frame(frame));
+                    // A `<draw:frame>` is inline only when it sits inside a
+                    // paragraph, heading, span or link; at block level it is a
+                    // `TextBlock::Frame`, which is what `parse()` produces for
+                    // a frame that is a direct child of `<office:text>` or of
+                    // a cell / list item / text box.
+                    if self.in_inline_context() {
+                        self.push_inline(Inline::Frame(frame));
+                    } else {
+                        self.push_block(TextBlock::Frame(frame));
+                    }
                 }
             }
-            OdfEvent::Image { href } => {
-                let href_s = href.into_owned();
+            OdfEvent::Image { href, mime_type } => {
+                let href = href.into_owned();
+                let mime_type = mime_type.map(|s| s.into_owned());
                 if let Some(BuildFrame::InlineFrame { frame }) = self.stack.last_mut() {
-                    frame.content = FrameContent::Image {
-                        href: href_s,
-                        mime_type: None,
-                    };
+                    // Unconditional: `parse()` lets an image override content
+                    // already collected from sibling elements.
+                    frame.content = FrameContent::Image { href, mime_type };
                 }
             }
 
@@ -658,6 +696,28 @@ impl DocBuilder {
             }
             OdfEvent::Space { count } => {
                 self.push_inline(Inline::Space { count });
+            }
+            OdfEvent::SoftHyphen => {
+                self.push_inline(Inline::SoftHyphen);
+            }
+            OdfEvent::SoftPageBreak => {
+                self.push_inline(Inline::SoftPageBreak);
+            }
+            OdfEvent::Bookmark { name } => {
+                self.push_inline(Inline::Bookmark {
+                    name: name.into_owned(),
+                });
+            }
+            OdfEvent::Annotation { content } => {
+                self.push_inline(Inline::Annotation {
+                    content: content.into_owned(),
+                });
+            }
+            OdfEvent::Field { name, value } => {
+                self.push_inline(Inline::Field {
+                    name: name.into_owned(),
+                    value: value.into_owned(),
+                });
             }
 
             // ── Package-level events ──────────────────────────────────────────
@@ -683,8 +743,50 @@ impl DocBuilder {
                 self.doc.images.insert(name, data);
             }
 
-            OdfEvent::Unknown { .. } => {}
+            // Raw-preserved element. Where it lands depends on what is open,
+            // mirroring `parse()`: inline run, block sequence, frame body, or
+            // — inside a table, row or note wrapper, where `parse()` skips
+            // unrecognized children outright — nowhere.
+            OdfEvent::Unknown { name, raw } => {
+                let name = name.into_owned();
+                let raw = raw.into_owned();
+                match self.stack.last_mut() {
+                    Some(
+                        BuildFrame::Paragraph { .. }
+                        | BuildFrame::Heading { .. }
+                        | BuildFrame::Span { .. }
+                        | BuildFrame::Hyperlink { .. },
+                    ) => self.push_inline(Inline::Unknown { name, raw }),
+                    Some(BuildFrame::InlineFrame { frame }) => {
+                        if matches!(frame.content, FrameContent::Empty) {
+                            frame.content = FrameContent::Other(raw);
+                        }
+                    }
+                    Some(
+                        BuildFrame::Text { .. }
+                        | BuildFrame::ListItem { .. }
+                        | BuildFrame::TableCell { .. }
+                        | BuildFrame::Section { .. }
+                        | BuildFrame::TextBox { .. }
+                        | BuildFrame::NoteBody { .. },
+                    ) => self.push_block(TextBlock::Unknown { name, raw }),
+                    _ => {}
+                }
+            }
         }
+    }
+
+    /// Whether the innermost open frame accepts inline content.
+    fn in_inline_context(&self) -> bool {
+        matches!(
+            self.stack.last(),
+            Some(
+                BuildFrame::Paragraph { .. }
+                    | BuildFrame::Heading { .. }
+                    | BuildFrame::Span { .. }
+                    | BuildFrame::Hyperlink { .. }
+            )
+        )
     }
 
     fn attach_shape(&mut self, shape: DrawShape) {
@@ -699,7 +801,7 @@ impl DocBuilder {
         match self.stack.last_mut() {
             Some(BuildFrame::Text { blocks }) => blocks.push(block),
             Some(BuildFrame::ListItem { content }) => content.push(block),
-            Some(BuildFrame::TableCell { content, .. }) => content.push(block),
+            Some(BuildFrame::TableCell { cell }) => cell.content.push(block),
             Some(BuildFrame::Section { content, .. }) => content.push(block),
             Some(BuildFrame::TextBox { blocks }) => blocks.push(block),
             Some(BuildFrame::NoteBody { content }) => content.push(block),
