@@ -153,27 +153,51 @@ pub enum AnsiNode {
     },
     /// An unrecognised escape sequence, preserved verbatim.
     RawEscape { content: String, span: Span },
-    /// An explicit SGR reset (`\x1b[0m`, or an empty SGR parameter list) that
-    /// is a no-op with respect to the running style — i.e. the style was
-    /// already default *before* this reset ran.
+    /// A non-resetting SGR escape group (`\x1b[<params>m`, not an explicit
+    /// reset), carrying the *resulting* running style after it is applied.
     ///
-    /// `Text`/`Hyperlink` nodes capture the *resulting* style after an SGR
-    /// sequence is applied, which is enough to reconstruct a reset that
-    /// actually changes the style (e.g. bold -> default: the next styled
-    /// node's `style` field already reveals the transition, `build()` emits
-    /// `\x1b[0m` from the style diff). But when the reset doesn't change
-    /// anything observable — style was already default, so it stays default
-    /// — no later node's style can ever reveal that a real `\x1b[0m` byte
-    /// sequence was present in the source (e.g. a trailing reset at end of
-    /// input, or a redundant reset after an unrecognized/no-op SGR code, as
-    /// in the `adv-unknown-sgr` fixture). `apply_sgr` used to return
-    /// `(None, pos)` unconditionally for every SGR group, silently dropping
-    /// this case in `build()`. This node preserves exactly that
-    /// otherwise-unobservable case, mirroring `events()`'s
-    /// `Event::ResetStyle` (which is emitted whenever an explicit reset code
-    /// is seen, without needing this narrowing, since events don't need to
-    /// stay index-aligned with a following node the way IR-adapter fixtures
-    /// do).
+    /// One node per source SGR escape sequence, in source order — mirroring
+    /// `events()`'s `Event::SetStyle`. Earlier, `apply_sgr` (parse.rs) only
+    /// ever folded these into a running `style` variable and returned
+    /// `(None, pos)`, so a document with `\x1b[1m\x1b[3mHello` produced a
+    /// single `Text` node carrying the *merged* bold+italic style, with no
+    /// record that two separate escape sequences produced it. `build()`
+    /// (emit.rs) then re-derived a single combined `\x1b[1;3m` from that
+    /// merged style — diverging from `events()`/the streaming `Writer`,
+    /// which independently re-emit `\x1b[1m` and `\x1b[3m` as two separate
+    /// SGR sequences because each source escape produces its own event (see
+    /// fixture `rare-bold-italic`). Giving every SGR group its own AST node
+    /// lets `build()` replay the same one-escape-per-source-group shape
+    /// `events()`/`Writer` already produce, instead of re-deriving a
+    /// possibly-different grouping from a merged style.
+    SetStyle { style: Style, span: Span },
+    /// An explicit SGR reset (`\x1b[0m`, or an empty SGR parameter list).
+    ///
+    /// One node per source reset escape, in source order — mirroring
+    /// `events()`'s `Event::ResetStyle`, which is emitted for *every*
+    /// explicit reset unconditionally, not just ones whose effect would
+    /// otherwise be unobservable. (An earlier, narrower version of this
+    /// node was only emitted when the running style was already empty
+    /// *before* the reset ran — e.g. a trailing `\x1b[0m` after an
+    /// unrecognized/no-op SGR code, as in the `adv-unknown-sgr` fixture —
+    /// because that was the only case a merged-style `Text`/`Hyperlink`
+    /// node could never reveal on its own. That narrowing caused a second,
+    /// larger divergence from `events()`/`Writer`: an *observable* reset,
+    /// e.g. bold -> default before a `Newline` node, produced no AST node
+    /// at all, so `build()` fell back to appending a trailing `\x1b[0m`
+    /// only at end-of-document — after the `Newline` — while `events()`
+    /// emits `ResetStyle` in its original source position, before the
+    /// newline (see fixture `bold`). Emitting a node for every explicit
+    /// reset, unconditionally, fixes both: `build()` now replays resets in
+    /// source order like `events()`/`Writer` do, rather than reconstructing
+    /// them from surrounding node styles.
+    ///
+    /// Consumers that only care about the resulting IR structure (e.g.
+    /// `rescribe-read-ansi`) still want to treat a reset as redundant when
+    /// the running style was already empty beforehand and drop it from
+    /// their own output — that decision now lives in the consumer, which
+    /// can track running style itself by scanning `SetStyle`/`Text`/
+    /// `Hyperlink` nodes in order, rather than in this AST.
     ResetStyle { span: Span },
 }
 
@@ -192,6 +216,7 @@ impl AnsiNode {
             | AnsiNode::ScrollRegion { span, .. }
             | AnsiNode::Hyperlink { span, .. }
             | AnsiNode::RawEscape { span, .. }
+            | AnsiNode::SetStyle { span, .. }
             | AnsiNode::ResetStyle { span } => *span,
         }
     }
@@ -245,6 +270,10 @@ impl AnsiNode {
             },
             AnsiNode::RawEscape { content, .. } => AnsiNode::RawEscape {
                 content: content.clone(),
+                span: Span::NONE,
+            },
+            AnsiNode::SetStyle { style, .. } => AnsiNode::SetStyle {
+                style: style.clone(),
                 span: Span::NONE,
             },
             AnsiNode::ResetStyle { .. } => AnsiNode::ResetStyle { span: Span::NONE },

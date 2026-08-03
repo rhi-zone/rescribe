@@ -116,6 +116,79 @@ node or a single end-of-document epilogue. Left as the `streaming_writer` `Known
 `ansi` (description updated, not flipped to `Wired`) — substantially larger than this pass's
 narrow fix, out of scope for a task specifically bounded to the `adv-unknown-sgr` gap.
 
+**2026-08-04 follow-up: the 24/46 gap above is now closed — `ansi/streaming_writer` flipped to
+`Wired`.** Did exactly the (a)/(b) fix the entry above called for, and confirmed it closes
+both previously-named root causes with a single change (they turned out to be the same gap,
+not two): `AnsiNode` (`crates/formats/ansi-fmt/src/ast.rs`) gained
+`SetStyle { style: Style, span: Span }` alongside the existing `ResetStyle { span }`. `parse_csi`'s
+`m` arm (`parse.rs`) now emits one of these two variants **unconditionally**, once per source
+SGR escape group, exactly mirroring `events.rs`'s `parse_csi_event` `m` arm (the two are now a
+byte-for-byte match in structure) — this supersedes the narrow "only when otherwise
+unobservable" condition from the prior pass entirely; that narrowing is no longer needed
+because the redundant-reset-vs-real-IR-content distinction moved to `rescribe-read-ansi` (see
+below), not to `parse()`. `emit.rs`'s `emit_node` gained a `SetStyle` arm that runs
+`emit_style_transition` at the node's own source position (same function as before, just
+invoked once per `SetStyle`/`ResetStyle` node instead of only at Text/Hyperlink nodes) — this
+makes `build()` replay the same one-escape-per-source-group shape `events()`/the streaming
+`Writer` already produced, fixing SGR-grouping preservation (root cause 2) as a direct
+consequence of fixing trailing-reset-vs-newline ordering (root cause 1), since both were
+downstream of the same "style only lives on the next Text/Hyperlink node" gap.
+
+Verifying against all 46 fixtures (not just `bold`/`rare-bold-italic`) surfaced a third,
+previously undiscovered and unrelated bug: `writer.rs`'s `transition_style`/
+`append_all_style_codes` never handled `double_underline`, `rapid_blink`, or
+`underline_color` at all (missing from both the `needs_reset` condition and the additive
+code-emission branch) — SGR 21/6/58 were silently dropped by the streaming `Writer` whenever
+they were the *only* attribute changing (no other code to carry them along incidentally).
+`emit.rs`'s equivalent function already handled all three correctly; `writer.rs` just never
+had them added, being a genuinely independent implementation per this file's/CLAUDE.md's
+architecture (each of `parse()`/`events()`/`StreamingParser` gets its own optimal
+implementation, not one derived from another) — so the two implementations had silently
+drifted. Fixed by adding the three fields to `writer.rs`'s `needs_reset` check, its additive
+branch, and `append_all_style_codes`, plus a new `append_underline_color_codes` mirroring
+`emit.rs`'s. Needed to close fixture `double-underline` specifically.
+
+`rescribe-read-ansi`'s `build_document_nodes` (crates/readers/rescribe-read-ansi/src/lib.rs)
+was updated to match the new AST shape without changing any IR output: it now tracks its own
+`running_style: Style` as it scans nodes (mirroring what `parse()`'s narrow-condition logic
+used to compute internally) and (1) always drops `SetStyle` nodes — their resulting style is
+already captured on the following Text/Hyperlink node's own `style` field, so they contribute
+nothing to the IR; (2) keeps a `ResetStyle` node as a `raw_inline` `\x1b[0m` only when
+`running_style` was already empty immediately before it (the same "otherwise unobservable"
+condition the old narrow AST-level fix used to enforce, just computed in the adapter now
+instead of in `parse()`), and drops it otherwise since the transition is already visible on
+the following node's style. Verified this reproduces identical IR output to before the change
+for every existing ansi fixture (`cargo test -p rescribe-read-ansi -p rescribe-fixtures`, all
+green, no fixture assertions touched).
+
+Verification: wrote `crates/formats/ansi-fmt/examples/divergence_check.rs` (checks all 46
+fixtures directly and prints every divergence, not just the first, unlike the fixture-suite
+test) — **24/46 diverging before this fix, 0/46 after**, run via `cargo run -p ansi-fmt
+--example divergence_check`. `cargo test -p rescribe-fixtures ansi_streaming_writer_...` now
+passes; `KNOWN_FAILURES`'s `ansi/streaming_writer` entry (`streaming_harness.rs`) removed
+(replaced with a short "was a KnownFailure, now fixed" comment, matching the pattern used for
+other closed entries in that file) and the `FormatCapabilities` entry's `streaming_writer`
+flipped to `ApiState::Wired`. `docs/format-audit.md`'s `ansi` row updated to match. Three
+existing `ansi-fmt` unit tests (`test_256_color`, `test_truecolor`,
+`test_roundtrip_256_color`) asserted on `doc.nodes[0]` being the `Text` node by index, which
+broke once a `SetStyle` node started preceding it — updated to search for the `Text` node by
+kind instead of assuming its index, since node indices are no longer stable once every SGR
+group gets its own node. Full verification: `cargo clippy --all-targets --all-features -- -D
+warnings`, `cargo test -q` (whole workspace), and `cargo fmt --check` all pass (exit 0).
+
+No new fixture was added: `fixtures/ansi/COVERAGE.md` already has every box checked, and the
+scenarios this fix touches (multiple sequential SGR groups before text, a reset before a
+trailing newline) were already exercised by pre-existing fixtures (`rare-bold-italic`,
+`path-deep-sgr`, `bold`, `reset`) — this was an internal AST/writer-fidelity fix, not new
+format-construct support, so CLAUDE.md's "new construct needs a fixture" rule doesn't add a
+requirement here.
+
+The `events` cell for this row is still `NotYetWired` — no `ast_to_events`-projection *check*
+exists for ansi — but its reason changed: the AST no longer lacks a variant for a bare SGR
+sequence (that was the blocker), so a faithful projection is now possible; writing the
+projection function and fixture-driven check itself is unstarted follow-up work, out of scope
+for this pass.
+
 **2026-08-03: fb2-fmt's `events()`/`streaming_writer` `KnownFailure` entries narrowed — the
 originally-tracked `Metadata`-drop bug is fixed, plus three more bugs it unmasked.** The
 tracked bug (`events()`/`EventIter` silently dropping `Event::Metadata` for input lacking a

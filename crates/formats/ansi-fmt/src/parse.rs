@@ -266,24 +266,23 @@ fn parse_csi(
         b'm' => {
             // SGR. `saw_reset` distinguishes "an explicit reset code (`0` or
             // empty) was seen" from "the resulting style just happens to
-            // be/stay empty" (e.g. an unrecognized/no-op code). A reset only
-            // needs its own AST node when it is otherwise unobservable: if
-            // `style` was already empty *before* this SGR group ran, the
-            // running style stays empty (default -> default) and no later
-            // Text/Hyperlink node's `style` field will ever reveal that a
-            // real `\x1b[0m` byte sequence was here (see ResetStyle's doc
-            // comment; this is exactly the adv-unknown-sgr case). When the
-            // style *was* non-empty (e.g. bold -> default), the transition is
-            // already fully captured by whatever Text/Hyperlink node comes
-            // next carrying the now-default style — emitting a node here too
-            // would be redundant and would shift every fixture's node
-            // indices, so it's deliberately skipped in that case.
-            let was_empty = style.is_empty();
+            // be/stay empty" (e.g. an unrecognized/no-op code). Every SGR
+            // group gets its own AST node, in source order — mirroring
+            // events.rs's parse_csi_event 'm' arm exactly, so build() can
+            // replay the same one-escape-per-source-group shape events()/
+            // the streaming Writer already produce (see SetStyle's and
+            // ResetStyle's doc comments for the full rationale).
             let saw_reset = apply_sgr(&params, style, diagnostics, span);
-            if saw_reset && was_empty {
+            if saw_reset {
                 (Some(AnsiNode::ResetStyle { span }), pos)
             } else {
-                (None, pos)
+                (
+                    Some(AnsiNode::SetStyle {
+                        style: style.clone(),
+                        span,
+                    }),
+                    pos,
+                )
             }
         }
         b'A' => {
@@ -657,20 +656,30 @@ mod tests {
     #[test]
     fn test_256_color() {
         let (doc, _) = parse(b"\x1b[38;5;196mRed\x1b[0m");
-        if let AnsiNode::Text { style, .. } = &doc.nodes[0] {
+        let text_node = doc
+            .nodes
+            .iter()
+            .find(|n| matches!(n, AnsiNode::Text { .. }))
+            .expect("expected text node");
+        if let AnsiNode::Text { style, .. } = text_node {
             assert_eq!(style.fg, Some(Color::Palette(196)));
         } else {
-            panic!("expected text node");
+            unreachable!();
         }
     }
 
     #[test]
     fn test_truecolor() {
         let (doc, _) = parse(b"\x1b[38;2;255;128;0mOrange\x1b[0m");
-        if let AnsiNode::Text { style, .. } = &doc.nodes[0] {
+        let text_node = doc
+            .nodes
+            .iter()
+            .find(|n| matches!(n, AnsiNode::Text { .. }))
+            .expect("expected text node");
+        if let AnsiNode::Text { style, .. } = text_node {
             assert_eq!(style.fg, Some(Color::Rgb(255, 128, 0)));
         } else {
-            panic!("expected text node");
+            unreachable!();
         }
     }
 

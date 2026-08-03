@@ -128,13 +128,16 @@ impl<W: Write> Writer<W> {
             || (self.current_style.dim && !target.dim)
             || (self.current_style.italic && !target.italic)
             || (self.current_style.underline && !target.underline)
+            || (self.current_style.double_underline && !target.double_underline)
             || (self.current_style.blink && !target.blink)
+            || (self.current_style.rapid_blink && !target.rapid_blink)
             || (self.current_style.reverse && !target.reverse)
             || (self.current_style.hidden && !target.hidden)
             || (self.current_style.strikethrough && !target.strikethrough)
             || (self.current_style.overline && !target.overline)
             || (self.current_style.fg.is_some() && target.fg.is_none())
-            || (self.current_style.bg.is_some() && target.bg.is_none());
+            || (self.current_style.bg.is_some() && target.bg.is_none())
+            || (self.current_style.underline_color.is_some() && target.underline_color.is_none());
 
         if needs_reset {
             codes.push("0".to_string());
@@ -155,6 +158,9 @@ impl<W: Write> Writer<W> {
             if target.blink && !self.current_style.blink {
                 codes.push("5".to_string());
             }
+            if target.rapid_blink && !self.current_style.rapid_blink {
+                codes.push("6".to_string());
+            }
             if target.reverse && !self.current_style.reverse {
                 codes.push("7".to_string());
             }
@@ -163,6 +169,9 @@ impl<W: Write> Writer<W> {
             }
             if target.strikethrough && !self.current_style.strikethrough {
                 codes.push("9".to_string());
+            }
+            if target.double_underline && !self.current_style.double_underline {
+                codes.push("21".to_string());
             }
             if target.overline && !self.current_style.overline {
                 codes.push("53".to_string());
@@ -176,6 +185,11 @@ impl<W: Write> Writer<W> {
                 && let Some(ref c) = target.bg
             {
                 append_color_codes(c, false, &mut codes);
+            }
+            if target.underline_color != self.current_style.underline_color
+                && let Some(ref c) = target.underline_color
+            {
+                append_underline_color_codes(c, &mut codes);
             }
         }
 
@@ -209,6 +223,9 @@ fn append_all_style_codes(style: &Style, codes: &mut Vec<String>) {
     if style.blink {
         codes.push("5".to_string());
     }
+    if style.rapid_blink {
+        codes.push("6".to_string());
+    }
     if style.reverse {
         codes.push("7".to_string());
     }
@@ -218,6 +235,9 @@ fn append_all_style_codes(style: &Style, codes: &mut Vec<String>) {
     if style.strikethrough {
         codes.push("9".to_string());
     }
+    if style.double_underline {
+        codes.push("21".to_string());
+    }
     if style.overline {
         codes.push("53".to_string());
     }
@@ -226,6 +246,9 @@ fn append_all_style_codes(style: &Style, codes: &mut Vec<String>) {
     }
     if let Some(ref c) = style.bg {
         append_color_codes(c, false, codes);
+    }
+    if let Some(ref c) = style.underline_color {
+        append_underline_color_codes(c, codes);
     }
 }
 
@@ -247,6 +270,26 @@ fn append_color_codes(color: &Color, foreground: bool, codes: &mut Vec<String>) 
             codes.push(format!("{}", b));
         }
         Color::Default => codes.push(format!("{}", base + 9)),
+    }
+}
+
+fn append_underline_color_codes(color: &Color, codes: &mut Vec<String>) {
+    match color {
+        Color::Palette(n) => {
+            codes.push("58".to_string());
+            codes.push("5".to_string());
+            codes.push(format!("{}", n));
+        }
+        Color::Rgb(r, g, b) => {
+            codes.push("58".to_string());
+            codes.push("2".to_string());
+            codes.push(format!("{}", r));
+            codes.push(format!("{}", g));
+            codes.push(format!("{}", b));
+        }
+        _ => {
+            // Standard/bright/default don't apply to underline color.
+        }
     }
 }
 

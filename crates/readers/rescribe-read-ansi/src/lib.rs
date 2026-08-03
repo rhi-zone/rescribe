@@ -7,7 +7,7 @@
 //! - Control sequences (cursor move, erase, etc.) → top-level `raw_block` with `ansi:type` props
 //! - Text content (text, hyperlinks, raw escapes) → grouped into `paragraph` nodes
 
-use ansi_fmt::{AnsiDoc, AnsiNode, Color};
+use ansi_fmt::{AnsiDoc, AnsiNode, Color, Style};
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions};
 use rescribe_std::{node, prop};
 
@@ -56,6 +56,14 @@ fn build_document_nodes(doc: &AnsiDoc) -> Vec<Node> {
     let mut result: Vec<Node> = Vec::new();
     let mut inline_buf: Vec<&AnsiNode> = Vec::new();
     let mut consecutive_newlines: usize = 0;
+    // Tracks the running SGR style as we scan, independently of ansi-fmt's
+    // own AST — used only to decide whether a ResetStyle node is redundant
+    // (see the ResetStyle arm below). ansi-fmt's parse() now emits a
+    // SetStyle/ResetStyle node for every source SGR escape group,
+    // unconditionally, mirroring events() (see ast.rs's SetStyle/ResetStyle
+    // doc comments) — the "is this reset otherwise unobservable" decision
+    // that node emission used to make now lives here instead.
+    let mut running_style = Style::default();
 
     for node in &doc.nodes {
         match node {
@@ -71,10 +79,45 @@ fn build_document_nodes(doc: &AnsiDoc) -> Vec<Node> {
                 // 3+ consecutive newlines: already flushed, ignore extras
             }
 
-            AnsiNode::Text { .. }
-            | AnsiNode::Hyperlink { .. }
-            | AnsiNode::RawEscape { .. }
-            | AnsiNode::ResetStyle { .. } => {
+            // A non-resetting SGR group carries no independent IR content —
+            // the resulting style is already captured on the next
+            // Text/Hyperlink node's own `style` field, which
+            // ansi_node_to_inline reads directly. Track it only to keep
+            // running_style accurate for the ResetStyle decision below.
+            AnsiNode::SetStyle { style, .. } => {
+                running_style = style.clone();
+            }
+
+            // An explicit SGR reset is redundant (dropped, no IR node) when
+            // the running style was already non-empty beforehand — that
+            // transition is fully captured by whatever Text/Hyperlink node
+            // comes next carrying the now-default style. It's only
+            // preserved as a raw_inline when the running style was already
+            // empty beforehand, i.e. the reset is otherwise unobservable
+            // (e.g. a trailing `\x1b[0m` after an unrecognized/no-op SGR
+            // code — see the adv-unknown-sgr fixture).
+            AnsiNode::ResetStyle { .. } => {
+                let was_redundant = !running_style.is_empty();
+                running_style = Style::default();
+                if !was_redundant {
+                    consecutive_newlines = 0;
+                    inline_buf.push(node);
+                }
+            }
+
+            AnsiNode::Text { style, .. } => {
+                running_style = style.clone();
+                consecutive_newlines = 0;
+                inline_buf.push(node);
+            }
+
+            AnsiNode::Hyperlink { style, .. } => {
+                running_style = style.clone();
+                consecutive_newlines = 0;
+                inline_buf.push(node);
+            }
+
+            AnsiNode::RawEscape { .. } => {
                 consecutive_newlines = 0;
                 inline_buf.push(node);
             }

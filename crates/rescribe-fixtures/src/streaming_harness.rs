@@ -729,14 +729,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "ansi",
         events: ApiState::NotYetWired(
-            "no events()-vs-AST-projection check is wired: parse()'s AnsiNode has no variant \
-             for a bare SGR sequence at all — apply_sgr() (parse.rs) folds SGR codes into a \
-             running `style` variable and returns (None, pos), so a run of SGR codes not \
-             immediately followed by text produces zero AST nodes, while events()'s EventIter \
-             unconditionally emits one SetStyle/ResetStyle event per 'm'-terminated CSI group \
-             regardless of what follows — the reverse of the usual defect shape (here parse()'s \
-             own AST is the lossier side), so there is no way to reconstruct a faithful \
-             ast_to_events projection purely from the AST. Separately: events.rs's \
+            "no events()-vs-AST-projection check is wired for ansi. Previously this also \
+             couldn't be wired at all: parse()'s AnsiNode had no variant for a bare SGR \
+             sequence, so a run of SGR codes not immediately followed by text produced zero AST \
+             nodes while events()'s EventIter unconditionally emits one SetStyle/ResetStyle \
+             event per 'm'-terminated CSI group. Fixed 2026-08-04 alongside the streaming_writer \
+             entry below: AnsiNode gained SetStyle{style,span}/ResetStyle{span} variants, \
+             emitted unconditionally per source SGR group (see ast.rs's SetStyle/ResetStyle doc \
+             comments), so parse()'s AST now has a 1:1 node for every events() SetStyle/ \
+             ResetStyle event — a faithful ast_to_events projection is possible. Still \
+             NotYetWired only because no one has written the projection function/fixture-driven \
+             check itself, not because of any remaining AST gap. Separately: events.rs's \
              parse_csi_event 'm' arm used to emit ResetStyle whenever the resulting style was \
              empty, conflating \"style ended up empty\" with \"an explicit reset code was \
              seen\" — an unrecognized/no-op SGR group (e.g. \\x1b[999m) that left style \
@@ -773,33 +776,45 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // "check now PASSES, but is still listed in KNOWN_FAILURES" once the fix landed,
         // confirming it now holds over every fixture and chunking).
         streaming_parser: ApiState::Wired,
-        // Fixed 2026-08-04: the adv-unknown-sgr divergence (`\x1b[999m` no-op followed by a
-        // genuine trailing `\x1b[0m` with nothing left to reset — parse()'s AST had no node
-        // for either SGR group, so build() dropped the real trailing reset that events()'s
-        // ResetStyle/the streaming Writer faithfully reproduced) is fixed: AnsiNode gained a
-        // ResetStyle{span} node, emitted only when an explicit reset is itself a no-op (style
-        // already empty beforehand) — narrower than "every explicit reset" because the latter
-        // shifted node indices for ordinary bold->default resets and broke 4 fixtures already
-        // covered by the fixture-suite check (see KNOWN_FAILURES's ansi/streaming_writer entry
-        // for the full account). Confirmed byte-identical for adv-unknown-sgr specifically.
-        // Left as KnownFailure, not flipped to Wired: fixing it surfaced a much larger,
-        // previously-masked, unrelated gap — 24 of 46 ansi fixtures diverge for two other
-        // reasons (trailing-reset-vs-newline ordering; SGR grouping not preserved across
-        // multiple source escape sequences), both stemming from parse()'s AST only ever
-        // attaching a resulting style to the next Text/Hyperlink node rather than modeling SGR
-        // groups as their own nodes in source order. See KNOWN_FAILURES and TODO.md.
-        streaming_writer: ApiState::KnownFailure(
-            "the adv-unknown-sgr divergence (parse()'s AST silently dropping a genuine, \
-             otherwise-unobservable trailing \\x1b[0m reset) is fixed via a narrow \
-             AnsiNode::ResetStyle node — but the whole-suite check still fails: 24 of 46 \
-             fixtures diverge for two distinct, previously-masked, much larger reasons \
-             (trailing-reset-vs-newline ordering, e.g. fixture bold; SGR grouping not \
-             preserved across multiple source escape sequences, e.g. fixture \
-             rare-bold-italic), both because parse()'s AST only ever attaches a resulting \
-             style to the next Text/Hyperlink node rather than modeling SGR groups as their \
-             own nodes in source order. See KNOWN_FAILURES's ansi/streaming_writer entry and \
-             TODO.md for the full writeup",
-        ),
+        // Fixed 2026-08-04, in two stages. Stage 1 fixed the adv-unknown-sgr divergence
+        // (`\x1b[999m` no-op followed by a genuine trailing `\x1b[0m` with nothing left to
+        // reset) via a narrow AnsiNode::ResetStyle node, emitted only when an explicit reset was
+        // itself a no-op — but verifying beyond that one fixture found the fix was far too
+        // narrow: 24 of 46 ansi fixtures diverged for two distinct, much larger reasons
+        // (trailing-reset-vs-newline ordering, e.g. fixture bold: build() deferred its
+        // "reset at end if style non-empty" epilogue past a trailing Newline node, giving
+        // "...Hello\n\x1b[0m" for source "...Hello\x1b[0m\n"; SGR grouping not preserved across
+        // multiple source escape sequences, e.g. fixture rare-bold-italic: build() re-derived
+        // one merged \x1b[1;3m from the resulting style instead of the source's two separate
+        // \x1b[1m/\x1b[3m groups, which events()/Writer reproduce verbatim). Both traced to the
+        // same root cause: parse()'s AST only ever attached a resulting style to the next
+        // Text/Hyperlink node, discarding both SGR grouping and position relative to
+        // intervening non-text nodes.
+        //
+        // Stage 2 fixed that root cause directly: AnsiNode gained SetStyle{style,span}
+        // (non-resetting SGR groups) alongside the existing ResetStyle{span}, both now emitted
+        // unconditionally — one node per source SGR escape group, in source order, mirroring
+        // events()'s SetStyle/ResetStyle exactly (parse.rs's 'm' arm is now a byte-for-byte
+        // match of events.rs's parse_csi_event 'm' arm). build()'s emit_node transitions style
+        // at each SetStyle/ResetStyle node's own source position instead of only at Text/
+        // Hyperlink nodes, so it now replays the same one-escape-per-source-group shape
+        // events()/Writer already produce. This single AST change covered both previously-named
+        // root causes (they were the same gap, not two separate ones): source order now fixes
+        // trailing-reset-vs-newline ordering, and per-group nodes now fix SGR-grouping
+        // preservation. A third, unrelated, previously-undiscovered bug in writer.rs's
+        // `transition_style`/`append_all_style_codes` (missing double_underline, rapid_blink,
+        // and underline_color entirely — SGR 21/6/58 were silently dropped by the streaming
+        // Writer) was also fixed, needed to close fixture double-underline specifically.
+        // rescribe-read-ansi's build_document_nodes was updated to match the new AST shape:
+        // SetStyle nodes are dropped (their style is already captured on the next Text/
+        // Hyperlink node), and ResetStyle nodes are kept as a raw_inline `\x1b[0m` only when the
+        // adapter's own running-style tracking shows the reset was otherwise unobservable —
+        // reproducing the exact same IR output as before this change for every existing fixture
+        // (verified: rescribe-read-ansi's and rescribe-fixtures' full test suites pass
+        // unchanged). Confirmed via direct measurement (crates/formats/ansi-fmt/examples/
+        // divergence_check.rs, run against all 46 ansi fixtures): 24/46 diverging before this
+        // fix, 0/46 after.
+        streaming_writer: ApiState::Wired,
     },
     // odf-fmt backs odt/ods/odp. events() is a genuine independent
     // implementation (direct quick_xml scan of content.xml, not a
@@ -1824,44 +1839,21 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     // atomic open..close Hyperlink token under fine-grained chunking); it is now fixed and the
     // FormatCapabilities entry above reflects it as Wired — no entry left here per
     // assert_or_known_failure's own rule against masking a fixed bug.
-    KnownFailure {
-        format: "ansi",
-        api: "streaming_writer",
-        description: "the adv-unknown-sgr divergence this entry originally tracked is fixed \
-                       (2026-08-04): AnsiNode gained a ResetStyle{span} variant, emitted by \
-                       parse_csi's 'm' arm exactly when an explicit reset code (0/empty) is \
-                       seen AND the running style was already empty beforehand (apply_sgr now \
-                       returns whether it saw an explicit reset, mirroring events.rs's \
-                       apply_sgr_event) — narrowed to that condition specifically because an \
-                       unconditional ResetStyle node (fired on every reset) shifted node \
-                       indices and broke 4 previously-passing fixtures (nested-sgr-reset, \
-                       rare-inline-in-text, reset, styled-in-paragraph): an ordinary \
-                       bold->default reset is already fully captured by the next \
-                       Text/Hyperlink node's own style field, so a node is only needed for the \
-                       otherwise-unobservable no-op case. build()'s emit_node writes the \
-                       literal \\x1b[0m for this node unconditionally, matching \
-                       events()/Writer's own unconditional ResetStyle handling. Confirmed \
-                       byte-identical for adv-unknown-sgr specifically. But the check still \
-                       fails overall — verifying it directly (outside this harness, which only \
-                       ever surfaces the first divergence per run) found 24 of 46 ansi \
-                       fixtures diverge, for two distinct, previously-masked, much larger \
-                       reasons unrelated to the fixed bug: (1) trailing-reset ordering (e.g. \
-                       fixture bold: build() defers its \"reset at end if style non-empty\" \
-                       epilogue past a trailing Newline node, giving \
-                       \"...Hello\\n\\x1b[0m\" for source \"...Hello\\x1b[0m\\n\" — reset and \
-                       newline swapped) and (2) SGR grouping not preserved (e.g. fixture \
-                       rare-bold-italic: build() re-derives one merged \\x1b[1;3m from the \
-                       resulting style instead of the source's two separate \\x1b[1m/\\x1b[3m \
-                       groups, which events()/Writer reproduce verbatim). Root cause for both: \
-                       parse()'s AST only ever attaches a resulting style to the next \
-                       Text/Hyperlink node, discarding both SGR grouping and position relative \
-                       to intervening non-text nodes — the same gap already named by this \
-                       row's events entry (\"no variant for a bare SGR sequence at all\"), \
-                       just larger in scope than previously known; the specific fixture a \
-                       stale description names isn't a reliable signal since read_dir order is \
-                       filesystem-dependent. See TODO.md for the full writeup and the fix \
-                       needed to close this fully",
-    },
+    // ansi/streaming_writer was a KnownFailure entry here, in two stages (adv-unknown-sgr's
+    // trailing-reset divergence, then a much larger 24-of-46-fixtures divergence it surfaced:
+    // trailing-reset-vs-newline ordering and SGR grouping not preserved across source escape
+    // sequences — both traced to the same root cause, parse()'s AST only ever attaching a
+    // resulting style to the next Text/Hyperlink node instead of modeling SGR groups as their
+    // own nodes in source order). All of it is now fixed (2026-08-04): AnsiNode gained
+    // SetStyle{style,span}/ResetStyle{span} variants, emitted unconditionally, one per source
+    // SGR escape group, mirroring events()'s SetStyle/ResetStyle exactly; build() now
+    // transitions style at each such node's own source position instead of only at Text/
+    // Hyperlink nodes. A third, separate bug (writer.rs's transition_style/
+    // append_all_style_codes silently dropped double_underline/rapid_blink/underline_color
+    // entirely) was fixed alongside it. The FormatCapabilities entry above reflects this as
+    // Wired (24/46 diverging -> 0/46, confirmed via
+    // crates/formats/ansi-fmt/examples/divergence_check.rs) — no entry left here per
+    // assert_or_known_failure's own rule against masking a fixed bug.
     // man/streaming_parser and man/streaming_writer were both KnownFailure entries here;
     // both are now fixed (2026-08-03, two independent commits) and the FormatCapabilities
     // entry above reflects both as Wired — no entry left here per assert_or_known_failure's

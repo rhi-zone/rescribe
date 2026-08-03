@@ -91,6 +91,16 @@ fn emit_node(node: &AnsiNode, out: &mut String, current_style: &mut Style) {
         AnsiNode::RawEscape { content, .. } => {
             out.push_str(content);
         }
+        AnsiNode::SetStyle { style, .. } => {
+            // Transition at the SGR group's own source position — mirrors
+            // Writer::write_event's SetStyle handling. Text/Hyperlink nodes
+            // still call emit_style_transition too (a no-op in the normal
+            // case, since current_style already equals their own style
+            // thanks to this node), which keeps emit() defensive against any
+            // Text/Hyperlink node not preceded by an explicit style node.
+            emit_style_transition(current_style, style, out);
+            *current_style = style.clone();
+        }
         AnsiNode::ResetStyle { .. } => {
             // Emitted unconditionally, even if `current_style` is already
             // default — mirrors events()/Writer's ResetStyle handling, which
@@ -334,10 +344,15 @@ mod tests {
         let (doc, _) = parse(b"\x1b[38;5;196mRed\x1b[0m");
         let emitted = emit(&doc);
         let (doc2, _) = parse(emitted.as_bytes());
-        if let AnsiNode::Text { style, .. } = &doc2.nodes[0] {
+        let text_node = doc2
+            .nodes
+            .iter()
+            .find(|n| matches!(n, AnsiNode::Text { .. }))
+            .expect("expected text node");
+        if let AnsiNode::Text { style, .. } = text_node {
             assert_eq!(style.fg, Some(Color::Palette(196)));
         } else {
-            panic!("expected text");
+            unreachable!();
         }
     }
 }
