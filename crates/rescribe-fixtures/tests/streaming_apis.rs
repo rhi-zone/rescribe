@@ -463,15 +463,18 @@ fn rst_events_equals_ast_projection_over_all_fixtures() {
 /// across the whole document — also fixed, via
 /// `EventIter::with_heading_levels`.
 ///
-/// Fixing both surfaced a third, **still-open** bug of the same root cause
-/// (`emit_block()`'s blank-line flush granularity): ordinary bullet/numbered
+/// Fixing both surfaced a third bug of the same root cause (`emit_block()`'s
+/// blank-line flush granularity), since also fixed: ordinary bullet/numbered
 /// lists spanning blank lines, including blank-line-separated nested
-/// sub-lists, also get split into multiple `StartList`/`EndList` pairs
-/// instead of one — `parse_bullet_list`/`parse_numbered_list`'s real
-/// continuation grammar is considerably richer than the definition-list case
-/// and isn't replicated here. Confirmed on the `nested-list` and
-/// `path-deep-list` fixtures. Tracked as `KnownFailure { format: "rst", api:
-/// "streaming_parser", .. }` (description updated; not `Wired` yet).
+/// sub-lists, also got split into multiple `StartList`/`EndList` pairs
+/// instead of one. `feed_line` now defers the flush the same way for a
+/// blank line following any bullet/numbered list-item marker (at any
+/// indentation), confirming continuation from the next line rather than
+/// replicating `parse_bullet_list`/`parse_numbered_list`'s full continuation
+/// grammar — see the `rst` `CAPABILITIES` entry in `streaming_harness.rs`
+/// for the mechanism and why the more permissive check is still correct.
+/// Confirmed on the `nested-list` and `path-deep-list` fixtures. No longer
+/// tracked in `KNOWN_FAILURES`; `streaming_parser` is `ApiState::Wired`.
 #[test]
 fn rst_streaming_parser_matches_events_under_adversarial_chunking() {
     let root = fixtures_root().join("rst");

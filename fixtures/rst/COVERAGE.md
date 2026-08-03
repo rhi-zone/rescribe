@@ -20,6 +20,7 @@ spec.
 - [x] heading (h3–h6) — `heading-h3`
 - [x] unordered list — `list-unordered`
 - [x] ordered list — `list-ordered`
+- [x] ordered list, items separated by blank lines — `list-ordered-blank-separated`
 - [x] nested list (flattened by parser) — `nested-list`
 - [x] definition list — `definition-list`
 - [x] blockquote — `blockquote`

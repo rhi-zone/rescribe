@@ -197,20 +197,28 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // emit_block(). Both confirmed via fixtures/rst/definition-list and
         // fixtures/rst/heading-h2 directly, and via the adversarial-chunking harness.
         //
-        // Still KnownFailure, not Wired: fixing both surfaced a third, still-open bug of the
-        // same root cause (emit_block()'s blank-line flush granularity) — see below.
-        streaming_parser: ApiState::KnownFailure(
-            "rst-fmt StreamingParser splits ordinary bullet/numbered lists spanning blank \
-             lines — including blank-line-separated nested sub-lists — into multiple \
-             StartList/EndList pairs instead of one, the same emit_block()-blank-line-flush \
-             root cause already fixed for multi-item DefinitionLists and heading-level \
-             numbering (see the fix note above), but parse_bullet_list/parse_numbered_list's \
-             real continuation grammar (does the next non-blank line, at any indentation, \
-             start with the same bullet marker or nest a sub-list) is considerably richer than \
-             the definition-list case and isn't yet replicated in the streaming line-buffering \
-             state machine. Confirmed on the nested-list and path-deep-list fixtures; see \
-             TODO.md",
-        ),
+        // Also fixed 2026-08-03 (same session): the same emit_block()-blank-line-flush root
+        // cause also split ordinary bullet/numbered lists spanning blank lines — including
+        // blank-line-separated nested sub-lists — into multiple StartList/EndList pairs
+        // instead of one. feed_line now applies the same one-line-lookahead deferral used for
+        // DefinitionLists, but with a list-specific confirmation test: when the block's last
+        // accumulated line is a bullet/numbered list-item marker (last_line_is_list_item(), at
+        // *any* indentation — this check now runs before the indented-definition-body check,
+        // since a nested sub-list item like "  - Nested item" is both), a following blank line
+        // no longer flushes immediately. The next line confirms continuation (don't flush) if
+        // it is indented (nested sub-list) or itself a list-item marker (any bullet character
+        // or numeral/`#.`, at any indentation), otherwise the list genuinely ended and the
+        // block flushes normally. This is deliberately permissive rather than replicating
+        // parse_bullet_list/parse_numbered_list's full continuation grammar (matching bullet
+        // character, indent-relative sub-list detection, etc.): emit_block() always re-parses
+        // the whole merged block text through a fresh EventIter, which is the real
+        // recursive-descent grammar, so over-merging two adjacent blocks into one emit_block()
+        // call is safe — that call still emits however many List blocks/items the real parser
+        // decides on for that text, matching what parse()/events() would produce for the same
+        // substring. Confirmed via the nested-list and path-deep-list fixtures directly and via
+        // the adversarial-chunking harness (rst_streaming_parser_matches_events_under_adversarial_chunking,
+        // all fixtures/chunkings green).
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::Wired,
     },
     // djot-fmt's events() and parse() are genuinely independent implementations
@@ -1635,15 +1643,6 @@ pub struct KnownFailure {
 }
 
 pub const KNOWN_FAILURES: &[KnownFailure] = &[
-    KnownFailure {
-        format: "rst",
-        api: "streaming_parser",
-        description: "rst-fmt StreamingParser splits ordinary bullet/numbered lists spanning \
-                       blank lines (including blank-line-separated nested sub-lists) into \
-                       multiple StartList/EndList pairs instead of one — the multi-item \
-                       DefinitionList and cross-block heading-level variants of this bug are \
-                       fixed; see the CAPABILITIES entry above for the full history",
-    },
     KnownFailure {
         format: "fb2",
         api: "events",

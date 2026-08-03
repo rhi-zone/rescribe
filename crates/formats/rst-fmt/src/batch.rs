@@ -108,6 +108,16 @@ pub struct StreamingParser<H: Handler> {
     /// anything else means the block genuinely ended at the blank line and
     /// this line starts a new one.
     pending_term: Option<String>,
+    /// Set alongside `pending_blank` when the accumulated block's last
+    /// content line is a bullet/numbered list item (`last_line_is_list_item`)
+    /// rather than an indented definition body. `parse_bullet_list` /
+    /// `parse_numbered_list` (lib.rs) both keep parsing past a blank line
+    /// when the line that follows still belongs to the list — another item
+    /// at any indentation, or a nested sub-list — so the flush decision is
+    /// deferred the same one-line-lookahead way `pending_blank` already
+    /// defers it for definition-list bodies, just with a different
+    /// confirmation test (see the `pending_blank` handling in `feed_line`).
+    pending_list_blank: bool,
     /// Underline-character-to-heading-level assignment, carried forward
     /// across `emit_block()` calls so a later block's heading numbering
     /// stays consistent with an earlier block's — each `emit_block()` call
@@ -127,6 +137,7 @@ impl<H: Handler> StreamingParser<H> {
             state: BlockState::Between,
             pending_blank: false,
             pending_term: None,
+            pending_list_blank: false,
             heading_levels: Vec::new(),
         }
     }
@@ -187,8 +198,22 @@ impl<H: Handler> StreamingParser<H> {
                 // Second consecutive blank line: no candidate term ever
                 // arrived, so the block genuinely ended at the first blank.
                 self.pending_blank = false;
+                self.pending_list_blank = false;
                 self.emit_block();
                 self.state = BlockState::Between;
+                return;
+            }
+            if !self.block_lines.is_empty() && self.last_line_is_list_item() {
+                // The block's last content line is a bullet/numbered list
+                // item — checked before `last_line_is_indented` below because
+                // a nested sub-list item (e.g. "  - Nested item") is *both*
+                // indented and a list item, and it's the list-item grammar
+                // (any indentation, any marker) that governs continuation
+                // here, not the definition-list-body grammar. Defer the
+                // flush decision until the next line arrives (see
+                // `pending_list_blank`'s doc comment).
+                self.pending_blank = true;
+                self.pending_list_blank = true;
                 return;
             }
             if !self.block_lines.is_empty() && self.last_line_is_indented() {
@@ -205,7 +230,28 @@ impl<H: Handler> StreamingParser<H> {
             return;
         }
 
-        if self.pending_blank {
+        if self.pending_blank && self.pending_list_blank {
+            self.pending_blank = false;
+            self.pending_list_blank = false;
+            let trimmed = line.trim();
+            let is_indented = line.starts_with(' ') || line.starts_with('\t');
+            if is_indented || Self::is_list_item_line(trimmed) {
+                // The list continues: a nested sub-list line (indented) or
+                // another item (any indentation, any marker — the merged
+                // text is re-parsed as a whole by `emit_block`, so the real
+                // recursive-descent grammar in lib.rs makes the final call
+                // on how many lists/items this actually is).
+                self.block_lines.push(String::new());
+                self.block_lines.push(line);
+                self.state = BlockState::Accumulating;
+                return;
+            }
+            // Plain, non-indented, non-list-item line: the list genuinely
+            // ended at the blank line.
+            self.emit_block();
+            self.state = BlockState::Between;
+            // Fall through to process `line` as the start of a new block.
+        } else if self.pending_blank {
             self.pending_blank = false;
             let trimmed = line.trim();
             let is_indented = line.starts_with(' ') || line.starts_with('\t');
@@ -239,6 +285,30 @@ impl<H: Handler> StreamingParser<H> {
         self.block_lines
             .last()
             .is_some_and(|l| !l.trim().is_empty() && (l.starts_with(' ') || l.starts_with('\t')))
+    }
+
+    /// True if the last line in `block_lines` is a bullet or numbered list
+    /// item, at any indentation.
+    fn last_line_is_list_item(&self) -> bool {
+        self.block_lines
+            .last()
+            .is_some_and(|l| Self::is_list_item_line(l.trim()))
+    }
+
+    /// True if `trimmed` (already whitespace-trimmed) is a bullet or
+    /// numbered list item marker — mirrors the marker patterns
+    /// `parse_bullet_list` / `parse_numbered_list` (lib.rs) match on.
+    fn is_list_item_line(trimmed: &str) -> bool {
+        if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ ") {
+            return true;
+        }
+        if let Some(idx) = trimmed.find(". ") {
+            let prefix = &trimmed[..idx];
+            if prefix.chars().all(|c| c.is_ascii_digit()) || prefix == "#" {
+                return true;
+            }
+        }
+        false
     }
 
     fn emit_block(&mut self) {
@@ -275,6 +345,7 @@ impl<H: Handler> StreamingParser<H> {
             self.feed_line(term);
         }
         self.pending_blank = false;
+        self.pending_list_blank = false;
         self.emit_block();
     }
 }

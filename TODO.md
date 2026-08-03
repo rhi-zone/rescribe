@@ -1840,6 +1840,26 @@ fixed by prior sessions; verify against source, not this summary, before relying
    Still tracked as `KnownFailure { format: "rst", api: "streaming_parser" }` — not `Wired` —
    with the description updated to describe the list-splitting bug (the definition-list and
    heading-level causes are gone).
+
+   **Update (2026-08-03): the list-splitting bug above is now also fixed.**
+   `StreamingParser::feed_line` gained a second, list-specific deferral alongside the
+   definition-list one: when the accumulated block's last line is a bullet/numbered list-item
+   marker (`last_line_is_list_item()`, checked at *any* indentation and checked before the
+   indented-definition-body check, since a nested sub-list line like `"  - Nested item"` is
+   both), a following blank line no longer flushes immediately — the next line confirms
+   continuation (indented, or itself a list-item marker of any bullet/numeral) or denies it.
+   This deliberately does *not* replicate `parse_bullet_list`/`parse_numbered_list`'s full
+   continuation grammar (matching bullet character, indent-relative sub-list detection): since
+   `emit_block()` always re-parses the whole merged block text through a fresh `EventIter` —
+   the real recursive-descent grammar — over-merging two adjacent blocks into one `emit_block()`
+   call is safe; that call still emits however many `List` blocks/items the real parser decides
+   for that text. Verified on `nested-list` and `path-deep-list` fixtures directly and via
+   `rst_streaming_parser_matches_events_under_adversarial_chunking` (all fixtures/chunkings
+   green). `KnownFailure { format: "rst", api: "streaming_parser" }` removed from
+   `crates/rescribe-fixtures/src/streaming_harness.rs::KNOWN_FAILURES`; `rst`'s
+   `streaming_parser` field in `CAPABILITIES` is now `ApiState::Wired`. Added
+   `fixtures/rst/list-ordered-blank-separated` (numbered list, blank-separated items — the one
+   list-continuation shape not already covered by `nested-list`/`path-deep-list`).
 6. **`ooxml-sml` streaming writer dropping row properties and cell `style_index`**: already
    fixed and pinned by `crates/formats/ooxml-sml/tests/streaming_writer.rs`'s
    `row_and_cell_attributes_pass_through`; the new harness reproduces the same property
