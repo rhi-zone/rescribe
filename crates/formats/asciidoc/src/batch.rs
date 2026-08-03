@@ -87,19 +87,28 @@ pub struct StreamingParser<H: Handler> {
     line_buf: Vec<u8>,
     block_lines: Vec<String>,
     state: BlockState,
-    /// Whether `StartDocument` has been emitted.
+    /// Whether `StartDocument` has been emitted. Set unconditionally in `new()`; retained
+    /// (rather than emitting `StartDocument` directly and dropping the field) so
+    /// `emit_block()` can still recognize and drop the redundant `StartDocument` each
+    /// per-block `crate::events()` sub-parse produces.
     started: bool,
 }
 
 impl<H: Handler> StreamingParser<H> {
     /// Create a new `StreamingParser` that delivers events to `handler`.
-    pub fn new(handler: H) -> Self {
+    ///
+    /// `events("")` emits an unconditional `StartDocument`/`EndDocument` pair even for
+    /// empty input, so `StartDocument` is emitted here — not deferred until the first
+    /// non-empty block is flushed — to match that contract regardless of whether any
+    /// content is ever fed.
+    pub fn new(mut handler: H) -> Self {
+        handler.handle(OwnedEvent::StartDocument);
         StreamingParser {
             handler,
             line_buf: Vec::new(),
             block_lines: Vec::new(),
             state: BlockState::Between,
-            started: false,
+            started: true,
         }
     }
 
@@ -145,10 +154,30 @@ impl<H: Handler> StreamingParser<H> {
         }
 
         let trimmed = line.trim();
-        // AsciiDoc delimited block markers: 4+ of the same delimiter character
+        // AsciiDoc delimited block markers: 4+ of the same delimiter character,
+        // or `|===` (table).
         if is_delimited_block_marker(trimmed) {
-            if !self.block_lines.is_empty() {
+            // A `[source,...]`/`[verse]`/`[stem]`/`[EXAMPLE]` attribute line or a
+            // `.Block Title` line immediately preceding a delimited-block marker
+            // belongs to the block the marker opens — `parse_block_with_attributes`
+            // and `parse_block_title` both continue parsing past that line into the
+            // delimited block itself. If we flushed the accumulated lines here, that
+            // preceding line would be re-parsed by `emit_block()` in isolation and
+            // hit EOF before ever seeing the delimiter. So find the trailing run of
+            // attribute/title lines (there may be more than one, e.g. `.Title` then
+            // `[source,python]`) and flush only what precedes them, holding the
+            // trailing run back to flush together with the delimited block as one
+            // unit.
+            let mut hold_from = self.block_lines.len();
+            while hold_from > 0
+                && is_attribute_or_title_line(self.block_lines[hold_from - 1].trim())
+            {
+                hold_from -= 1;
+            }
+            if hold_from > 0 {
+                let held: Vec<String> = self.block_lines.split_off(hold_from);
                 self.emit_block();
+                self.block_lines = held;
             }
             let delim = trimmed.to_owned();
             self.state = BlockState::InDelimitedBlock { delim };
@@ -193,20 +222,43 @@ impl<H: Handler> StreamingParser<H> {
             self.feed_line(line);
         }
         self.emit_block();
-        if self.started {
-            self.handler.handle(OwnedEvent::EndDocument);
-        }
+        // `StartDocument` is always emitted in `new()` (see its doc comment), so
+        // `EndDocument` always pairs with it here, regardless of whether any block was
+        // ever flushed — matching `events("")`'s unconditional Start/EndDocument pair.
+        self.handler.handle(OwnedEvent::EndDocument);
     }
 }
 
 /// Returns true if `line` looks like an AsciiDoc delimited block marker.
-/// Markers are 4+ consecutive identical delimiter characters: `-`, `=`, `.`, `_`, `*`, `+`, `/`, `|`.
+/// Markers are 4+ consecutive identical delimiter characters: `-`, `=`, `.`, `_`, `*`, `+`, `/`
+/// (matching `parse::is_delimiter_line`'s `----`/`====`/`****`/`____`/`++++`/`....`/`////`
+/// patterns), plus the table delimiter `|===`, which is a fixed 4-character literal rather
+/// than a run of identical characters (see `parse::parse_next_block`'s `line == "|==="` check
+/// and `parse_table`). AsciiDoc has no other non-identical-run delimited-block opener — CSV/DSV
+/// table variants (`,===`, `:===`) are not implemented by `parse.rs`.
 fn is_delimited_block_marker(line: &str) -> bool {
+    if line == "|===" {
+        return true;
+    }
     if line.len() < 4 {
         return false;
     }
     let ch = line.chars().next().unwrap();
     matches!(ch, '-' | '=' | '.' | '_' | '*' | '+' | '/' | '|') && line.chars().all(|c| c == ch)
+}
+
+/// Returns true if `line` is a block attribute line (`[source,...]`, `[verse]`, `[stem]`,
+/// `[EXAMPLE]`, `[#id]`, `[.role]`, etc.) or a `.Block Title` line — the two constructs
+/// `parse::parse_next_block` continues parsing *past* into the block that follows, rather
+/// than treating as blocks in their own right. Mirrors the checks in
+/// `parse::EventIter::parse_next_block` (line starts with `[` and ends with `]`) and
+/// `parse::EventIter::parse_block_title` (line starts with `.`, isn't `..`/`. ` which are
+/// ordered-list markers).
+fn is_attribute_or_title_line(line: &str) -> bool {
+    if line.starts_with('[') && line.ends_with(']') {
+        return true;
+    }
+    line.starts_with('.') && line.len() > 1 && !line.starts_with("..") && !line.starts_with(". ")
 }
 
 /// Chunk-driven AsciiDoc parser that delivers events to a callback on finish.

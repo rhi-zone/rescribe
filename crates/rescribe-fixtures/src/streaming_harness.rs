@@ -236,32 +236,29 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // the equivalence check validates the AST->event *expansion* layer
     // (expand_block/expand_inline/Frame unwinding), not two independent parsers.
     // See the comment above the check in tests/streaming_apis.rs.
+    // Fixed 2026-08-03: batch.rs's StreamingParser had three distinct bugs, all now fixed.
+    // (a) feed_line flushed accumulated lines as soon as it saw a delimited-block marker,
+    // so a preceding [source,...]/[verse]/[stem]/[EXAMPLE] attribute line or .Block Title
+    // line was re-parsed by emit_block() in isolation and never reached the delimiter (6
+    // fixtures: block-title, code-block-source, callout-code, integration-example-code,
+    // verse-block, math). feed_line now holds back the trailing run of attribute/title
+    // lines and flushes them together with the delimited block as one unit. (b)
+    // is_delimited_block_marker only matched runs of identical characters, so the table
+    // delimiter |=== was never recognized as a delimited-block opener/closer and the blank
+    // line between header and body rows split the table mid-parse (table-header).
+    // is_delimited_block_marker now special-cases the `|===` literal (AsciiDoc's only
+    // non-identical-run delimiter — parse.rs has no CSV/DSV table variants). (c)
+    // StartDocument was only emitted from inside emit_block(), which early-returns on empty
+    // block_lines, so empty input yielded zero events instead of the StartDocument/
+    // EndDocument pair events("") produces (adv-empty). StartDocument is now emitted
+    // unconditionally in new(), and finish() always emits the matching EndDocument. All 85
+    // fixtures now pass under adversarial chunking (asciidoc_streaming_parser_matches_
+    // events_under_adversarial_chunking), and the crate's own test_streaming_matches_bulk
+    // still holds.
     FormatCapabilities {
         format: "asciidoc",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "asciidoc StreamingParser diverges from events() on 8 of 85 fixtures, via three \
-             distinct bugs in batch.rs — none sanctioned by any doc comment (batch.rs and lib.rs \
-             make only an O(largest block) memory claim, and the crate's own \
-             test_streaming_matches_bulk asserts exact parity with events(), so parity is the \
-             crate's own stated contract). (a) feed_line treats a delimited-block marker as a \
-             hard block boundary and flushes accumulated lines first, so a preceding \
-             [source,...]/[verse]/[stem]/[EXAMPLE] attribute line or .Block Title line is \
-             re-parsed by emit_block() as an isolated chunk; parse_block_with_attributes then \
-             hits EOF and falls back to an empty collect_paragraph_content() (emitting \
-             CodeBlockContent(\"\"), MathBlock{content:\"\"} or an empty paragraph), while \
-             parse_block_title returns None so the title is dropped and the following block gets \
-             title: None — 6 fixtures. Note the delimited-block open/close detection itself is \
-             correct; this is not a delimiter-matching bug. (b) is_delimited_block_marker \
-             (batch.rs:204) only matches runs of identical characters, so the table delimiter \
-             |=== is unrecognized, StreamingParser never enters InDelimitedBlock for a table, \
-             and the blank line between header and body splits it — parse_table sees one row \
-             group and emits is_header: false while the rest degrades to a paragraph \
-             (table-header). (c) StartDocument is only emitted from inside emit_block(), which \
-             early-returns on empty block_lines, and finish() gates EndDocument on `started`, so \
-             empty input yields zero events instead of the StartDocument/EndDocument pair \
-             events(\"\") produces (adv-empty). See TODO.md",
-        ),
+        streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::Wired,
     },
     // org-fmt's events() is genuinely independent of parse() — the dependency
@@ -1603,14 +1600,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        invisible to the per-block pre_scan, a pending {.attr} line is flushed \
                        away from the fence it decorates, and the blank-line boundary splits a \
                        multi-item definition list",
-    },
-    KnownFailure {
-        format: "asciidoc",
-        api: "streaming_parser",
-        description: "asciidoc StreamingParser: three distinct batch.rs bugs — feed_line \
-                       flushing an attribute/.title line away from the delimited block it \
-                       modifies, is_delimited_block_marker not recognizing the |=== table \
-                       delimiter, and empty input producing no StartDocument/EndDocument pair",
     },
     KnownFailure {
         format: "rst",

@@ -164,6 +164,37 @@ AST builder path, not just the new writer) — both old and new `Writer`s match 
 dropping `LinkDef` events, so it causes no writer/builder divergence, but it is a real
 losslessness gap per CLAUDE.md's core value proposition, tracked here for a future pass.
 
+**2026-08-03: asciidoc's `StreamingParser` bugs fixed — `streaming_parser` upgraded from
+`KnownFailure` to `ApiState::Wired`.** Three distinct bugs in `crates/formats/asciidoc/src/
+batch.rs`, all fixed:
+- **(a)** `feed_line` treated a delimited-block marker as a hard block boundary and flushed
+  accumulated lines first, so a preceding `[source,...]`/`[verse]`/`[stem]`/`[EXAMPLE]`
+  attribute line or `.Block Title` line was re-parsed by `emit_block()` in isolation, hit EOF,
+  and fell back to empty content (`CodeBlockContent("")`, `MathBlock{content:""}`, or an empty
+  paragraph) with the title dropped (6 fixtures: `block-title`, `code-block-source`,
+  `callout-code`, `integration-example-code`, `verse-block`, `math`). Fixed by having
+  `feed_line` find the trailing run of attribute/title lines before a delimited-block marker
+  and flush only what precedes them, holding the run back to flush together with the
+  delimited block as one unit.
+- **(b)** `is_delimited_block_marker` only matched runs of identical characters, so the table
+  delimiter `|===` was never recognized as a delimited-block opener/closer and the blank line
+  between header and body rows split the table mid-parse (`table-header`). Fixed by
+  special-casing the `|===` literal — AsciiDoc's only non-identical-run delimiter; `parse.rs`
+  has no CSV/DSV table variants to also handle.
+- **(c)** `StartDocument` was only emitted from inside `emit_block()`, which early-returns on
+  empty `block_lines`, so empty input yielded zero events instead of the `StartDocument`/
+  `EndDocument` pair `events("")` produces (`adv-empty`). Fixed by emitting `StartDocument`
+  unconditionally in `StreamingParser::new()` and always pairing `EndDocument` in `finish()`.
+
+All 85 `fixtures/asciidoc/*` fixtures now pass under adversarial chunking
+(`asciidoc_streaming_parser_matches_events_under_adversarial_chunking` in
+`crates/rescribe-fixtures/tests/streaming_apis.rs`), and the crate's own
+`test_streaming_matches_bulk` (`batch.rs`) still holds. The `asciidoc` `KnownFailure` entry
+removed from `streaming_harness::KNOWN_FAILURES`; `CAPABILITIES`' `asciidoc.streaming_parser`
+is now `ApiState::Wired`.
+
+---
+
 **2026-08-03: org-fmt `StreamingParser` fixed — matches `events()` on all 89 org fixtures under
 adversarial chunking (previously 86/89).** Three distinct, previously-unknown bugs in
 `crates/formats/org-fmt/src/batch.rs`'s `feed_line`/`BlockState` machine, all downstream of
