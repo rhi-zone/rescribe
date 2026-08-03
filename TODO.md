@@ -164,6 +164,101 @@ AST builder path, not just the new writer) — both old and new `Writer`s match 
 dropping `LinkDef` events, so it causes no writer/builder divergence, but it is a real
 losslessness gap per CLAUDE.md's core value proposition, tracked here for a future pass.
 
+**2026-08-03: commonmark-fmt's `events()`/`EventIter` — 5 of 6 known/found bugs fixed; one
+(`StartList` tightness) confirmed architecturally unfixable without a public API change and
+left as a narrowed `KnownFailure`.** Follow-up to the writer rewrite above, in
+`crates/formats/commonmark-fmt/src/events.rs` (plus one small `writer.rs` fix needed to keep
+the writer byte-identical after the reader changed shape):
+
+1. **Image alt-text ordering (previously documented bug).** `EventIter`'s "drain pending first"
+   loop structure returned the buffered alt `Text` event on the very next `next()` call while
+   still inside the `PdEvent::Text` match arm, i.e. before `TagEnd::Image` was even reached —
+   real order was `Text(alt), StartImage, EndImage` instead of the documented
+   `StartImage, Text(alt), EndImage`. Fixed: the `Text` handling while `self.image.is_some()`
+   now only appends to the `ImageState::alt` accumulator (no `pending` push); `TagEnd::Image`
+   queues `[Text(alt) if non-empty, EndImage]` and returns `StartImage` — matching the AST
+   projection exactly, including omitting the `Text` event when alt is empty.
+2. **Text coalescing (previously documented bug).** `events()` forwarded pulldown-cmark's raw
+   `Text` events unmerged, while `parse()` deliberately coalesces consecutive `Inline::Text`
+   nodes (`parse.rs`'s `push_inline`, "pulldown-cmark can split a single logical text run into
+   multiple Text events" — e.g. backslash escapes; see fixture `rare-backslash-escape`). Fixed:
+   the non-image, non-code-block `Text` arm now peeks ahead via `next_pd()` and merges any
+   immediately-following raw `Text` events into one `Event::Text` before returning, pushing back
+   the first non-`Text` event via `pending_pd`.
+3. **Missing implicit paragraph wrap for tight list items (newly found, previously masked
+   behind bugs 1/2 — the ast_to_events harness only records the *first* diverging fixture per
+   run, e.g. `e2e-document`).** pulldown-cmark omits `Start`/`End(Paragraph)` around a tight
+   list item's bare inline content, but `parse()`'s AST always wraps that content in an implicit
+   `Block::Paragraph` (`parse.rs`'s `flush_tight_inlines`). `EventIter` was forwarding the bare
+   inline events with no wrapper at all. Fixed with a new pre-dispatch gate in `Iterator::next`:
+   an `item_stack: Vec<bool>` (one entry per open `Tag::Item`, tracking whether a synthetic
+   paragraph is currently open) plus a `text_container_depth` counter (guards against
+   double-wrapping inline content already inside a *real* `Paragraph`/`Heading`/`TableCell`, for
+   loose items). A new `is_inline_flow_event()` helper classifies each raw pulldown event as
+   inline-flow (text/code/inline-html/soft-or-hard-break, or an inline span open/close) or not;
+   the gate opens a synthetic `StartParagraph` the first time inline-flow content arrives
+   directly under an item with no wrapper open, and closes it the moment a non-inline-flow event
+   arrives (a nested block's `Start`, `Rule`, or the item's own `End`) — without buffering the
+   item's content.
+4. **Missing synthetic `TableRow` around table-head cells (newly found the same way, via
+   fixtures `integration-table-in-blockquote`/`path-large-table`).** pulldown-cmark does not
+   emit `Tag::TableRow` for the header row (only body rows get one), but `parse()`'s AST always
+   synthesizes one (`parse.rs`'s `Tag::TableHead` handling pushes a `Frame::TableRow`). Fixed:
+   `Start(Tag::TableHead)` now queues a `StartTableRow` right after `StartTableHead`;
+   `End(TagEnd::TableHead)` now returns `EndTableRow` and queues `EndTableHead`. This required a
+   matching `writer.rs` fix — the Writer previously treated `StartTableHead`/`StartTableRow` as
+   interchangeable (one match arm, one `|` written), so feeding both events in sequence wrote the
+   leading `|` twice. Added a `Frame::TableHead` marker frame: `StartTableHead` pushes it with no
+   output, `StartTableRow` writes the `|` and pushes `Frame::TableRow` (for both head and body
+   rows alike), `EndTableRow` writes the row's `\n`, and `EndTableHead` just pops the marker and
+   writes the alignment row.
+5. **Missing `mailto:` normalization for GFM email autolinks (newly found the same way, via
+   fixture `rare-autolink`).** `parse()`'s `Start(Tag::Link)` handling normalizes
+   `link_type == LinkType::Email` URLs to `mailto:user@example.com` (pulldown-cmark hands back
+   the bare address); `events()`'s `Start(Tag::Link)` discarded `link_type` entirely (`..`) and
+   never applied this. Fixed by mirroring `parse.rs`'s exact normalization.
+6. **`StartList` always reports `tight: true` — NOT fixed, confirmed architectural.** Per the
+   CommonMark spec ("A list is loose if any of its constituent list items are separated by blank
+   lines, or if any of its constituent list items directly contain two block-level elements with
+   a blank line between them"), tightness is a property of the *whole list*, uniform across every
+   item (confirmed by reading `parse.rs`'s own detection logic, which relies on this: pulldown-
+   cmark itself only emits real `Start`/`End(Paragraph)` tags for item content when the whole
+   list is loose). Determining it correctly at the point `StartList` must be emitted requires
+   having seen every item in the list first — not bounded by any constant lookahead — so a
+   genuinely single-pass, `O(nesting depth)` `EventIter` cannot know it in time without either
+   buffering the entire list before emitting `StartList` (defeats streaming for pathological long
+   lists — see fixture `path-long-list`) or changing `Event`'s public shape so `tight` isn't
+   carried on `StartList` (e.g. moving it to `EndList`, or a deferred correction event). Both are
+   out of scope for a bug fix; left open as a design question. This is the one remaining
+   divergence in `commonmark_events_equals_ast_projection_over_all_fixtures` (fixtures
+   `rare-loose-list`, `integration-loose-list-item`, `rare-tight-vs-loose`) and, downstream, in
+   `commonmark_streaming_writer_byte_identical_to_builder_over_all_fixtures` (the Writer renders
+   a loose list without the blank lines between items it requires, since it trusts the incorrect
+   `tight: true` it's fed).
+
+Confirmed via a temporary all-divergences debug test (not committed) that after fixes 1-5, the
+*only* fixtures still diverging from the AST projection (for both `events()` and the streaming
+Writer) are the three tight/loose-boolean ones covered by bug 6 — i.e. no further bugs are
+hiding behind it. `commonmark/gfm/markdown`'s `events` `KnownFailure` and `commonmark`'s
+`streaming_writer` `KnownFailure` entries in `streaming_harness.rs` (`CAPABILITIES` and
+`KNOWN_FAILURES`) rewritten to describe only the remaining bug 6, not the fixed ones.
+`docs/format-audit.md`'s commonmark-fmt row (`w-stream` column) updated `~§` → `✓§` (no longer
+architecturally hollow) and its Cross-API harness inventory row rewritten to match.
+
+Verified: `cargo clippy --all-targets --all-features -- -D warnings` clean; `cargo fmt --check`
+clean; `cargo test -q` — every test binary passes except the pre-existing, unrelated
+`ooxml-codegen`/`codegen_wml.rs` failure (`failed to read wml.rnc: No such file or directory`),
+confirmed via `git stash` to reproduce identically on the clean baseline with no changes from
+this session present, and confirmed to pass when run standalone (`-p ooxml-codegen --test
+codegen_wml`) — an intermittent parallel-test-execution/filesystem race, not a regression.
+`commonmark_events_equals_ast_projection_over_all_fixtures` and
+`commonmark_streaming_writer_byte_identical_to_builder_over_all_fixtures` individually pass
+(`ACKNOWLEDGED KNOWN FAILURE`, narrowed description, both citing only bug 6). No new fixtures
+added — `fixtures/commonmark/image`, `rare-backslash-escape`, `integration-table-in-blockquote`,
+`path-large-table`, `rare-autolink`, `rare-loose-list`, `integration-loose-list-item`, and
+`rare-tight-vs-loose` already existed and already exercise every fixed/remaining construct
+through the `events()`-vs-AST-projection harness, which walks all of `fixtures/commonmark/`.
+
 **2026-08-03: asciidoc's `StreamingParser` bugs fixed — `streaming_parser` upgraded from
 `KnownFailure` to `ApiState::Wired`.** Three distinct bugs in `crates/formats/asciidoc/src/
 batch.rs`, all fixed:

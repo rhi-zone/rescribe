@@ -567,14 +567,20 @@ impl<W: Write> Writer<W> {
                 }
             }
             #[cfg(feature = "tables")]
-            Event::StartTableHead | Event::StartTableRow => {
+            Event::StartTableHead => {
+                // No output here — the nested StartTableRow (always emitted
+                // between StartTableHead/EndTableHead, matching the AST
+                // projection) writes the row's leading `|`.
+                self.stack.push(Frame::TableHead);
+            }
+            #[cfg(feature = "tables")]
+            Event::StartTableRow => {
                 self.push_out("|");
                 self.stack.push(Frame::TableRow);
             }
             #[cfg(feature = "tables")]
             Event::EndTableHead => {
-                if matches!(self.stack.pop(), Some(Frame::TableRow)) {
-                    self.push_out("\n");
+                if matches!(self.stack.pop(), Some(Frame::TableHead)) {
                     let cells: Option<Vec<&'static str>> =
                         if let Some(Frame::Table { alignments, .. }) = self.stack.last() {
                             Some(
@@ -793,6 +799,18 @@ enum Frame {
         mark: usize,
         alignments: Vec<ColumnAlignment>,
     },
+    /// Marker frame while inside `StartTableHead`/`EndTableHead`, distinct
+    /// from the `TableRow` frame pushed by the nested `StartTableRow` that
+    /// wraps the header cells (`events()` and the AST projection both emit
+    /// `StartTableHead, StartTableRow, ..., EndTableRow, EndTableHead`,
+    /// mirroring parse()'s AST — pulldown-cmark itself has no `TableRow` for
+    /// the header, only `parse()` and `events()` synthesize one). Carries no
+    /// output of its own; `StartTableRow` writes the leading `|` and
+    /// `EndTableRow` writes the row's trailing newline for both the head and
+    /// body rows alike, so `EndTableHead` only needs to emit the alignment
+    /// row afterward.
+    #[cfg(feature = "tables")]
+    TableHead,
     #[cfg(feature = "tables")]
     TableRow,
     #[cfg(feature = "tables")]

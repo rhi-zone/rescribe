@@ -116,8 +116,9 @@ pub enum Event<'a> {
     },
     EndLink,
     /// The alt text for the image is provided here as a convenience; it is
-    /// also emitted as one or more [`Event::Text`] events between
-    /// `StartImage` and `EndImage`.
+    /// also emitted as a single [`Event::Text`] event between `StartImage`
+    /// and `EndImage` (omitted when alt text is empty), matching the AST
+    /// projection.
     StartImage {
         url: Cow<'a, str>,
         title: Option<Cow<'a, str>>,
@@ -268,6 +269,23 @@ pub struct EventIter<'a> {
     image: Option<ImageState>,
     /// Stack of list states for tightness tracking.
     list_stack: Vec<ListState>,
+    /// Stack of per-item synthetic-paragraph state, one entry per currently
+    /// open `Tag::Item`. `true` means a synthetic `StartParagraph` is
+    /// currently open for that item (see the pre-dispatch gate in `next()`).
+    /// pulldown-cmark omits `Start/End(Paragraph)` around a tight list
+    /// item's bare inline content, but `parse()`'s AST always wraps that
+    /// content in an implicit `Block::Paragraph` (`parse.rs`'s
+    /// `flush_tight_inlines`) — this stack lets `EventIter` synthesize the
+    /// matching `StartParagraph`/`EndParagraph` pair without buffering the
+    /// item.
+    item_stack: Vec<bool>,
+    /// Depth counter for "real" inline-bearing containers that already
+    /// come with their own explicit open/close tags (`Paragraph`,
+    /// `Heading`, table cells) — incremented/decremented alongside those
+    /// events. The synthetic-paragraph gate only applies at depth 0;
+    /// inline content inside a real `Paragraph` (loose list items) must
+    /// never be double-wrapped.
+    text_container_depth: u32,
     /// Whether `StartDocument` has been emitted yet.
     started: bool,
     /// Whether `EndDocument` has been emitted yet.
@@ -296,6 +314,8 @@ impl<'a> EventIter<'a> {
             code_block: None,
             image: None,
             list_stack: Vec::new(),
+            item_stack: Vec::new(),
+            text_container_depth: 0,
             started: false,
             ended: false,
             link_defs: Some(link_defs),
@@ -353,12 +373,45 @@ impl<'a> Iterator for EventIter<'a> {
 
             use pulldown_cmark::{CodeBlockKind, Event as PdEvent, Tag, TagEnd};
 
+            // Synthetic-paragraph gate for tight list items (see
+            // `item_stack`'s doc comment). Only applies directly under an
+            // `Item` — skipped while buffering a code block or image (their
+            // internal `Text` events are not item-level content) and while
+            // inside a real inline-bearing container (`text_container_depth
+            // > 0`, e.g. a loose item's actual `Paragraph`).
+            if self.code_block.is_none()
+                && self.image.is_none()
+                && self.text_container_depth == 0
+                && let Some(open) = self.item_stack.last().copied()
+            {
+                let is_inline_flow = is_inline_flow_event(&pd_event);
+                if open && !is_inline_flow {
+                    // Leaving the item's bare inline content (a nested
+                    // block starts, or the item itself ends): close the
+                    // synthetic paragraph before letting `pd_event` through.
+                    *self.item_stack.last_mut().unwrap() = false;
+                    self.pending_pd.push_front((pd_event, _range));
+                    return Some(Event::EndParagraph);
+                }
+                if !open && is_inline_flow {
+                    // Bare inline content arriving directly under the item,
+                    // with no wrapping Paragraph from pulldown-cmark: open
+                    // the synthetic paragraph before letting `pd_event`
+                    // through.
+                    *self.item_stack.last_mut().unwrap() = true;
+                    self.pending_pd.push_front((pd_event, _range));
+                    return Some(Event::StartParagraph);
+                }
+            }
+
             match pd_event {
                 // ── Block opens ──────────────────────────────────────────────
                 PdEvent::Start(Tag::Paragraph) => {
+                    self.text_container_depth += 1;
                     return Some(Event::StartParagraph);
                 }
                 PdEvent::Start(Tag::Heading { level, .. }) => {
+                    self.text_container_depth += 1;
                     return Some(Event::StartHeading {
                         level: heading_level_to_u8(level),
                     });
@@ -397,6 +450,7 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 #[cfg(feature = "task-lists")]
                 PdEvent::Start(Tag::Item) => {
+                    self.item_stack.push(false);
                     // Peek ahead: a task-list item is immediately followed by
                     // a `TaskListMarker` event before any other content.
                     match self.next_pd() {
@@ -416,6 +470,7 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 #[cfg(not(feature = "task-lists"))]
                 PdEvent::Start(Tag::Item) => {
+                    self.item_stack.push(false);
                     return Some(Event::StartItem {});
                 }
                 PdEvent::Start(Tag::HtmlBlock) => {
@@ -452,6 +507,13 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 #[cfg(feature = "tables")]
                 PdEvent::Start(Tag::TableHead) => {
+                    // pulldown-cmark does not emit a `Tag::TableRow` around
+                    // the header cells (only body rows get one) — but
+                    // parse()'s AST always synthesizes a `TableRow` wrapper
+                    // for the head (parse.rs's `Tag::TableHead` pushes a
+                    // `Frame::TableRow`). Queue the synthetic StartTableRow
+                    // right after StartTableHead to match.
+                    self.pending.push_back(Event::StartTableRow);
                     return Some(Event::StartTableHead);
                 }
                 #[cfg(feature = "tables")]
@@ -460,6 +522,7 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 #[cfg(feature = "tables")]
                 PdEvent::Start(Tag::TableCell) => {
+                    self.text_container_depth += 1;
                     return Some(Event::StartTableCell);
                 }
 
@@ -475,9 +538,24 @@ impl<'a> Iterator for EventIter<'a> {
                     return Some(Event::StartStrikethrough);
                 }
                 PdEvent::Start(Tag::Link {
-                    dest_url, title, ..
+                    link_type,
+                    dest_url,
+                    title,
+                    ..
                 }) => {
-                    let url = Cow::Owned(dest_url.into_string());
+                    // Email autolinks (`<user@example.com>`) arrive from
+                    // pulldown-cmark with a bare `dest_url`; parse()'s AST
+                    // normalizes it to a `mailto:` URL (see parse.rs's own
+                    // `Start(Tag::Link)` handling) — mirror that here.
+                    let raw_url = dest_url.into_string();
+                    let url = if link_type == pulldown_cmark::LinkType::Email
+                        && !raw_url.starts_with("mailto:")
+                    {
+                        format!("mailto:{raw_url}")
+                    } else {
+                        raw_url
+                    };
+                    let url = Cow::Owned(url);
                     let title = if title.is_empty() {
                         None
                     } else {
@@ -504,12 +582,14 @@ impl<'a> Iterator for EventIter<'a> {
 
                 // ── Block closes ──────────────────────────────────────────────
                 PdEvent::End(TagEnd::Paragraph) => {
+                    self.text_container_depth = self.text_container_depth.saturating_sub(1);
                     if let Some(ls) = self.list_stack.last_mut() {
                         ls.para_count += 1;
                     }
                     return Some(Event::EndParagraph);
                 }
                 PdEvent::End(TagEnd::Heading(level)) => {
+                    self.text_container_depth = self.text_container_depth.saturating_sub(1);
                     return Some(Event::EndHeading {
                         level: heading_level_to_u8(level),
                     });
@@ -529,6 +609,7 @@ impl<'a> Iterator for EventIter<'a> {
                     return Some(Event::EndList);
                 }
                 PdEvent::End(TagEnd::Item) => {
+                    self.item_stack.pop();
                     return Some(Event::EndItem);
                 }
                 PdEvent::End(TagEnd::HtmlBlock) => {
@@ -540,7 +621,11 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 #[cfg(feature = "tables")]
                 PdEvent::End(TagEnd::TableHead) => {
-                    return Some(Event::EndTableHead);
+                    // Close the synthetic head row opened at Start(TableHead)
+                    // before EndTableHead itself, matching the AST's
+                    // StartTableRow/EndTableRow wrapper around head cells.
+                    self.pending.push_back(Event::EndTableHead);
+                    return Some(Event::EndTableRow);
                 }
                 #[cfg(feature = "tables")]
                 PdEvent::End(TagEnd::TableRow) => {
@@ -548,6 +633,7 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 #[cfg(feature = "tables")]
                 PdEvent::End(TagEnd::TableCell) => {
+                    self.text_container_depth = self.text_container_depth.saturating_sub(1);
                     return Some(Event::EndTableCell);
                 }
 
@@ -569,10 +655,24 @@ impl<'a> Iterator for EventIter<'a> {
                     if let Some(state) = self.image.take() {
                         let url = Cow::Owned(state.url);
                         let title = state.title.map(Cow::Owned);
-                        let alt = Cow::Owned(state.alt);
-                        // Queue EndImage; return StartImage now.
+                        // Queue the alt text as a Text event (matching the AST
+                        // projection, which only emits one when alt is
+                        // non-empty) followed by EndImage; return StartImage
+                        // now. Both queued events drain — in order — on
+                        // subsequent next() calls, so the caller observes
+                        // StartImage, Text(alt), EndImage: alt text lands
+                        // strictly *between* the Start/End pair, never before
+                        // StartImage.
+                        if !state.alt.is_empty() {
+                            self.pending
+                                .push_back(Event::Text(Cow::Owned(state.alt.clone())));
+                        }
                         self.pending.push_back(Event::EndImage);
-                        return Some(Event::StartImage { url, title, alt });
+                        return Some(Event::StartImage {
+                            url,
+                            title,
+                            alt: Cow::Owned(state.alt),
+                        });
                     }
                 }
 
@@ -582,19 +682,33 @@ impl<'a> Iterator for EventIter<'a> {
                         state.content.push_str(&text);
                         // Continue — no event emitted yet.
                     } else if let Some(state) = &mut self.image {
+                        // Buffer into the alt-text accumulator only. The
+                        // corresponding Text event is emitted from
+                        // `TagEnd::Image`, strictly between StartImage and
+                        // EndImage — never here, and never before StartImage
+                        // has been returned to the caller.
                         state.alt.push_str(&text);
-                        // Also emit a Text event so consumers between
-                        // StartImage / EndImage can read the alt text inline.
-                        // We push it into pending; it will be drained before
-                        // we emit EndImage (which is already in pending).
-                        // NOTE: StartImage is emitted on Tag::End(Image), so
-                        // at this point we have not yet emitted StartImage.
-                        // The text will flow between Start/End once we emit
-                        // StartImage at End(Image) with pending = [Text, EndImage].
-                        self.pending
-                            .push_back(Event::Text(Cow::Owned(text.into_string())));
                     } else {
-                        return Some(Event::Text(Cow::Owned(text.into_string())));
+                        // Coalesce consecutive raw pulldown-cmark Text events
+                        // into a single Event::Text, matching parse()'s AST
+                        // (push_inline merges consecutive Inline::Text nodes
+                        // because pulldown-cmark can split one logical text
+                        // run into multiple Text events, e.g. backslash
+                        // escapes). Peek ahead: as long as the next raw event
+                        // is also Text with nothing else interleaved, merge
+                        // it into this run instead of returning separately.
+                        let mut merged = text.into_string();
+                        loop {
+                            match self.next_pd() {
+                                Some((PdEvent::Text(more), _)) => merged.push_str(&more),
+                                Some(other) => {
+                                    self.pending_pd.push_front(other);
+                                    break;
+                                }
+                                None => break,
+                            }
+                        }
+                        return Some(Event::Text(Cow::Owned(merged)));
                     }
                 }
                 PdEvent::Code(text) => {
@@ -638,6 +752,46 @@ pub fn events_str(input: &str) -> EventIter<'_> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Whether a raw pulldown-cmark event is part of ongoing inline flow — text
+/// content or an inline span open/close — as opposed to a block-level
+/// construct or item-boundary event. Used by the tight-list-item synthetic
+/// paragraph gate in `Iterator::next()`: this is the exact set of events
+/// that keep a synthetic paragraph open (or open one), everything else
+/// closes it.
+fn is_inline_flow_event(ev: &pulldown_cmark::Event<'_>) -> bool {
+    use pulldown_cmark::{Event as PdEvent, Tag, TagEnd};
+    matches!(
+        ev,
+        PdEvent::Text(_)
+            | PdEvent::Code(_)
+            | PdEvent::InlineHtml(_)
+            | PdEvent::SoftBreak
+            | PdEvent::HardBreak
+            | PdEvent::Start(Tag::Emphasis)
+            | PdEvent::End(TagEnd::Emphasis)
+            | PdEvent::Start(Tag::Strong)
+            | PdEvent::End(TagEnd::Strong)
+            | PdEvent::Start(Tag::Link { .. })
+            | PdEvent::End(TagEnd::Link)
+            | PdEvent::Start(Tag::Image { .. })
+            | PdEvent::End(TagEnd::Image)
+    ) || is_inline_flow_strikethrough(ev)
+}
+
+#[cfg(feature = "strikethrough")]
+fn is_inline_flow_strikethrough(ev: &pulldown_cmark::Event<'_>) -> bool {
+    use pulldown_cmark::{Event as PdEvent, Tag, TagEnd};
+    matches!(
+        ev,
+        PdEvent::Start(Tag::Strikethrough) | PdEvent::End(TagEnd::Strikethrough)
+    )
+}
+
+#[cfg(not(feature = "strikethrough"))]
+fn is_inline_flow_strikethrough(_ev: &pulldown_cmark::Event<'_>) -> bool {
+    false
+}
 
 fn heading_level_to_u8(level: pulldown_cmark::HeadingLevel) -> u8 {
     use pulldown_cmark::HeadingLevel;

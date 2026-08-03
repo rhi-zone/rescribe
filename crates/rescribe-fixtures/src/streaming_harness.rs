@@ -508,29 +508,38 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "commonmark",
         events: ApiState::KnownFailure(
-            "commonmark_fmt events()/EventIter has two distinct, real divergences from \
-             parse()'s AST, both found via this harness's ast_to_events projection check: (1) \
-             for images, EventIter's \"drain pending first\" loop structure \
-             (crates/formats/commonmark-fmt/src/events.rs's Iterator::next) returns the \
-             buffered alt Text event on the very next next() call issued while still inside the \
-             PdEvent::Text match arm — i.e. before the matching TagEnd::Image is even reached — \
-             so the real event order is Text(alt), StartImage, EndImage instead of the \
-             documented StartImage, Text(alt), EndImage (reproduced with \
-             fixtures/commonmark/image: real output is \"Alt text![Alt text](photo.jpg)\", \
-             duplicating the alt text outside the image markup); (2) events() forwards \
-             pulldown-cmark's raw Text events unmerged, while parse() deliberately coalesces \
-             consecutive Inline::Text nodes (src/parse.rs's push_inline, comment \"pulldown-cmark \
-             can split a single logical text run into multiple Text events\") — e.g. a broken \
-             link like \"[text\" parses to one Text node but events() yields three separate Text \
-             events for the same run (fixtures/commonmark/adv-broken-link); (3) newly found while \
-             rewriting the streaming writer (2026-08-03): `EventIter`'s `StartList` always \
-             reports `tight: true`, per its own \"Tightness is unknown until we see paragraphs; \
-             emit with tight=true tentatively\" comment in events.rs — never corrected once the \
-             real tightness becomes known, so any loose list (e.g. \
-             fixtures/commonmark/rare-loose-list, integration-loose-list-item, \
-             rare-tight-vs-loose) diverges from parse()'s AST. This test's loop only records the \
-             *first* fixture that diverges, so this third bug was masked behind (1)/(2) in the \
-             test's own failure message even though it was already silently present.",
+            "commonmark_fmt events()/EventIter has one remaining real divergence from parse()'s \
+             AST, found via this harness's ast_to_events projection check. Three prior bugs \
+             (image Text(alt)-before-StartImage ordering, unmerged consecutive Text runs, and a \
+             missing implicit StartParagraph/EndParagraph wrap around tight list items' bare \
+             inline content — the last one only surfaced once the first two were fixed, since \
+             this test's loop records only the *first* diverging fixture) were fixed 2026-08-03, \
+             along with two more bugs the same fix round uncovered the same way (a missing \
+             synthetic StartTableRow/EndTableRow around table-head cells, since pulldown-cmark \
+             never emits Tag::TableRow for the header row but parse()'s AST always synthesizes \
+             one; and Start(Tag::Link)'s missing GFM email-autolink `mailto:` URL normalization, \
+             which parse()'s AST applies but events() previously didn't). The one remaining bug: \
+             `EventIter`'s `StartList` always reports `tight: true`, per its own \"Tightness is \
+             unknown until we see paragraphs; emit with tight=true tentatively\" comment in \
+             events.rs — never corrected once the real tightness becomes known, so any loose \
+             list (fixtures/commonmark/rare-loose-list, integration-loose-list-item, \
+             rare-tight-vs-loose) diverges from parse()'s AST on that one field. This is not a \
+             loop-ordering or buffering bug like the others — it is architectural: per the \
+             CommonMark spec (\"A list is loose if any of its constituent list items are \
+             separated by blank lines, or if any of its constituent list items directly contain \
+             two block-level elements with a blank line between them\"), tightness is a property \
+             of the *entire* list (uniform across all its items — pulldown-cmark itself only \
+             emits real Start/End(Paragraph) tags for item content when the whole list is loose, \
+             confirmed by reading parse.rs's own tight/loose detection, which relies on exactly \
+             that per-item Paragraph-tag presence). Determining it correctly at the point \
+             StartList must be emitted requires seeing every item in the list — not bounded by a \
+             constant lookahead — so a genuinely single-pass, O(nesting depth) EventIter cannot \
+             know it in time. Fixing this without regressing the streaming guarantee would \
+             require either buffering the entire list before emitting StartList (defeats \
+             streaming for pathological long lists, e.g. fixtures/commonmark/path-long-list) or \
+             changing Event's public shape so tight isn't carried on StartList (e.g. moving it to \
+             EndList, or a deferred correction event) — both are out of scope for a bug fix and \
+             left as an open design question in TODO.md.",
         ),
         streaming_parser: ApiState::NotApplicable(
             "commonmark-fmt's StreamingParser buffering all input before parsing with \
@@ -543,20 +552,25 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              write-through streaming design — single shared `out: String` buffer, `O(nesting \
              depth)` frame stack, per-top-level-block flush; see the crate's own module doc for \
              the full write-through/deferred construct classification. The buffer-then-emit \
-             defect this entry used to track is fixed: byte-identical-to-builder confirmed for \
-             every construct in the crate's own tests. One residual divergence remains, and it \
-             is not this writer's bug: fixtures/commonmark/image fails as a downstream \
-             consequence of the events()/EventIter Text/StartImage ordering bug documented in \
-             the \"events\" field above — the leaked Text(alt) arrives before Frame::Image is \
-             pushed, so the Writer's discard-inside-image logic never sees it. See the \
-             commonmark/streaming_writer KnownFailure entry.",
+             defect this entry used to track is fixed. The Writer's table-head handling was also \
+             updated (a new Frame::TableHead marker) to match events()'s corrected \
+             StartTableHead/StartTableRow/EndTableRow/EndTableHead shape without double-writing \
+             the row's leading `|`. The one residual divergence is a downstream consequence of \
+             the events()/EventIter list-tightness bug documented in the \"events\" field above \
+             (not a writer bug): a loose list's StartList carries tight: true from events(), so \
+             the Writer renders it without the blank lines between items that a loose list \
+             requires (fixtures/commonmark/rare-loose-list, integration-loose-list-item, \
+             rare-tight-vs-loose). No writer-side fix can distinguish that incorrect flag from a \
+             genuinely tight list.",
         ),
     },
     FormatCapabilities {
         format: "gfm",
         events: ApiState::KnownFailure(
             "shares commonmark-fmt with the \"commonmark\" format entry above; same \
-             unmerged-Text-events-vs-coalesced-AST defect applies",
+             StartList-tight-always-true defect applies (the image/text-coalescing/tight-item/\
+             table-head/mailto bugs fixed 2026-08-03 apply here too, since gfm is a thin wrapper \
+             over the same commonmark-fmt crate)",
         ),
         streaming_parser: ApiState::NotApplicable(
             "shares commonmark-fmt with the \"commonmark\" format entry above; same sanctioned \
@@ -571,7 +585,9 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         format: "markdown",
         events: ApiState::KnownFailure(
             "shares commonmark-fmt with the \"commonmark\" format entry above; same \
-             unmerged-Text-events-vs-coalesced-AST defect applies",
+             StartList-tight-always-true defect applies (the image/text-coalescing/tight-item/\
+             table-head/mailto bugs fixed 2026-08-03 apply here too, since markdown is a thin \
+             wrapper over the same commonmark-fmt crate)",
         ),
         streaming_parser: ApiState::NotApplicable(
             "shares commonmark-fmt with the \"commonmark\" format entry above; same sanctioned \
@@ -1669,24 +1685,29 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "commonmark",
         api: "events",
-        description: "commonmark_fmt events() has three real bugs: (1) for images, Text(alt) is \
-                       delivered before StartImage instead of between StartImage/EndImage as \
-                       documented (an EventIter::next() loop-ordering bug); (2) consecutive Text \
-                       runs are not coalesced the way parse()'s AST does; (3) StartList always \
-                       reports tight: true, never corrected once real tightness is known (see the \
-                       CAPABILITIES entry above for detail) — found 2026-08-03 while rewriting the \
-                       streaming writer",
+        description: "commonmark_fmt events() has one remaining real bug: StartList always \
+                       reports tight: true, never corrected once real tightness is known (see \
+                       the CAPABILITIES entry above for the full CommonMark-spec-grounded \
+                       explanation of why this can't be fixed within a genuinely single-pass, \
+                       O(nesting depth) EventIter without changing Event's public shape). Five \
+                       other bugs found the same way (this harness's ast_to_events projection \
+                       check, which only reports the first diverging fixture per run, so later \
+                       bugs stayed masked behind earlier ones) were fixed 2026-08-03: image \
+                       Text(alt)-before-StartImage ordering, unmerged consecutive Text runs, a \
+                       missing implicit paragraph wrap around tight list items' bare inline \
+                       content, a missing synthetic TableRow around table-head cells, and a \
+                       missing mailto: URL normalization for GFM email autolinks.",
     },
     KnownFailure {
         format: "gfm",
         api: "events",
-        description: "shares commonmark-fmt's unmerged-Text-events defect (see the \
+        description: "shares commonmark-fmt's StartList-tight-always-true defect (see the \
                        \"commonmark\" KnownFailure entry above)",
     },
     KnownFailure {
         format: "markdown",
         api: "events",
-        description: "shares commonmark-fmt's unmerged-Text-events defect (see the \
+        description: "shares commonmark-fmt's StartList-tight-always-true defect (see the \
                        \"commonmark\" KnownFailure entry above)",
     },
     KnownFailure {
@@ -1695,15 +1716,16 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "commonmark_fmt::writer::Writer was rewritten to a genuine write-through \
                        streaming design (2026-08-03) and is byte-identical to build() for every \
                        construct exercised in its own crate-level tests; the buffer-then-emit \
-                       defect this entry used to track is fixed. One residual divergence remains \
-                       for fixtures/commonmark/image specifically, and it is not this writer's \
-                       bug: it is a downstream consequence of the events()/EventIter \
-                       Text/StartImage ordering bug (see the commonmark/events KnownFailure \
-                       above) — the leaked Text(alt) event arrives before Frame::Image is pushed, \
-                       so the Writer's discard-inside-image logic never sees it and it is emitted \
-                       as ordinary paragraph text, producing \"Alt text![Alt text](photo.jpg)\" \
-                       instead of \"![Alt text](photo.jpg)\". No writer-side fix can distinguish \
-                       that leaked event from genuine prose preceding an image.",
+                       defect this entry used to track is fixed, and the Writer's table-head \
+                       handling was updated to match events()'s corrected \
+                       StartTableHead/StartTableRow shape. One residual divergence remains, and \
+                       it is not this writer's bug: it is a downstream consequence of the \
+                       events()/EventIter list-tightness bug (see the commonmark/events \
+                       KnownFailure above) — a loose list's StartList carries tight: true from \
+                       events(), so the Writer omits the blank lines between items that a loose \
+                       list requires (fixtures/commonmark/rare-loose-list, \
+                       integration-loose-list-item, rare-tight-vs-loose). No writer-side fix can \
+                       distinguish that incorrect flag from a genuinely tight list.",
     },
     KnownFailure {
         format: "docbook",
