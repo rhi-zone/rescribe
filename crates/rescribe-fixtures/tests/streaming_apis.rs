@@ -10395,15 +10395,14 @@ fn fountain_streaming_writer_matches_builder_over_all_fixtures() {
 // `EventIter::new(&parse(input).0).map(into_owned).collect()` — a lazy
 // frame-stack walk of the AST `parse()` already built, then eagerly
 // collected, not an independently implemented reader (same pattern as
-// t2t/pod/haddock/asciidoc/fountain above). ManEvent has no variant carrying
-// document metadata (`ManDoc::title`/`section`/`date`/`source`/`manual`, see
-// events.rs's `ManEvent` enum, read in full — no `Metadata`/`StartDocument
-// { .. }` field exists), so `events()` always drops it; the
-// ast_to_events-vs-events() check below only validates the block/inline
-// expansion layer and does not exercise this gap (both sides omit it
-// equally), but it resurfaces as a genuine content-loss bug in the
-// streaming_writer check below, the same expressiveness-gap class already
-// tracked for muse-fmt/org-fmt/texinfo before their Metadata-event fixes.
+// t2t/pod/haddock/asciidoc/fountain above).
+//
+// Fixed 2026-08-03: `ManEvent` now carries a `Metadata` variant
+// (`ManDoc::title`/`section`/`date`/`source`/`manual`), emitted once by
+// `EventIter` right after `StartDocument` (mirroring t2t-fmt's
+// `Event::Header`) and consumed by `collect_doc_from_events` — the
+// ast_to_events-vs-events() check below now asserts on it via
+// `man_ast_to_events` inserting the same `Metadata` event.
 //
 // StreamingParser (batch.rs) is a genuine incremental line-buffered block
 // splitter — `feed_line` accumulates lines until a blank line, a `.nf`/`.EX`
@@ -10420,25 +10419,31 @@ fn fountain_streaming_writer_matches_builder_over_all_fixtures() {
 // Confirmed directly: `events(".SH NAME\ntest\n\n.SH DESCRIPTION\nmore\n")`
 // yields exactly 1 `StartDocument`, while feeding the same input through
 // `StreamingParser` yields 2 — verified by direct execution, not inferred.
+// This one remains a KnownFailure (streaming_parser); it is a distinct
+// architectural gap from the streaming_writer fix below and out of scope
+// for it.
 //
-// Writer buffers all fed events into a `Vec<OwnedManEvent>` and only
-// reconstructs the AST + calls `emit::build()` inside `finish()`
-// (writer.rs's own module doc: "This implementation buffers all events,
-// reconstructs the AST, then emits") — the same fake-streaming-writer
-// pattern as t2t/pod/haddock/fountain/commonmark. It also inherits the
-// events()-metadata-loss gap above: `collect_doc_from_events` always builds
-// `ManDoc { title: None, section: None, date: None, source: None, manual:
-// None, .. }` (events.rs), so a `.TH` line's title/section/date/source is
-// silently dropped when the streaming Writer is fed by `events()`, while
-// `build()` from the real AST preserves it — verified by direct execution
-// on fixture th-header's `.TH` line (`build()` emits `.TH TEST 1
-// "2024-01-01" "Version 1.0" ""`, the streamed-Writer path emits `.TH
-// UNTITLED 1 "" "" ""`).
+// Writer fixed 2026-08-03: rewritten from a buffer-all-events-then-
+// reconstruct-the-AST-in-finish() writer (the same fake-streaming pattern
+// as t2t/pod/haddock/fountain/commonmark) to a genuine incremental writer —
+// see `crates/formats/man-fmt/src/writer.rs`'s module doc for the full
+// construct-by-construct classification. It also picks up the
+// `ManEvent::Metadata` fix above: a `.TH` line's title/section/date/source
+// is now preserved end to end through `events()` — verified directly on
+// fixture th-header's `.TH` line (`build()` and the events()-fed streaming
+// Writer both now emit `.TH TEST 1 "2024-01-01" "Version 1.0" ""`).
 // ---------------------------------------------------------------------------
 
 fn man_ast_to_events(doc: &man_fmt::ManDoc) -> Vec<man_fmt::OwnedManEvent> {
     let mut out = Vec::new();
     out.push(man_fmt::ManEvent::StartDocument);
+    out.push(man_fmt::ManEvent::Metadata {
+        title: doc.title.clone().map(Into::into),
+        section: doc.section.clone().map(Into::into),
+        date: doc.date.clone().map(Into::into),
+        source: doc.source.clone().map(Into::into),
+        manual: doc.manual.clone().map(Into::into),
+    });
     for b in &doc.blocks {
         man_block_events(b, &mut out);
     }
@@ -10632,12 +10637,11 @@ fn man_streaming_parser_matches_events_under_adversarial_chunking() {
     assert_or_known_failure("man", "streaming_parser", result);
 }
 
-/// `Writer` buffers all fed events into a `Vec<OwnedManEvent>` and only
-/// reconstructs the AST + calls `emit::build()` inside `finish()` (see
-/// `crates/formats/man-fmt/src/writer.rs`'s own module doc), and separately
-/// loses document metadata via the events()-layer gap documented above.
-/// Checked via byte-identical comparison against the builder path, plus an
-/// incrementality probe.
+/// `Writer` is now a genuine incremental writer (see
+/// `crates/formats/man-fmt/src/writer.rs`'s module doc) and `ManEvent`
+/// carries `.TH` metadata via `ManEvent::Metadata`, so this fixture sweep is
+/// no longer a `KnownFailure`. Checked via byte-identical comparison against
+/// the builder path, plus an incrementality probe.
 #[test]
 fn man_streaming_writer_matches_builder_over_all_fixtures() {
     let root = fixtures_root().join("man");

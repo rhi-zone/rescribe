@@ -15,6 +15,20 @@ pub enum ManEvent<'a> {
     // ── Block events ──────────────────────────────────────────────────────────
     StartDocument,
     EndDocument,
+    /// The man page's `.TH` title-header fields, emitted once immediately
+    /// after `StartDocument`. Mirrors `ManDoc.title`/`.section`/`.date`/
+    /// `.source`/`.manual` — a fixed 5-field atomic unit (not a generic
+    /// metadata bag), so it gets one dedicated variant rather than five
+    /// separate events, the same shape as t2t-fmt's `Event::Header`.
+    /// Always emitted (even when every field is `None`), matching
+    /// `emit::build`'s unconditional `.TH` line.
+    Metadata {
+        title: Option<Cow<'a, str>>,
+        section: Option<Cow<'a, str>>,
+        date: Option<Cow<'a, str>>,
+        source: Option<Cow<'a, str>>,
+        manual: Option<Cow<'a, str>>,
+    },
     StartParagraph,
     EndParagraph,
     StartIndentedParagraph,
@@ -88,6 +102,19 @@ impl<'a> ManEvent<'a> {
             ManEvent::StartLink { url } => ManEvent::StartLink {
                 url: Cow::Owned(url.into_owned()),
             },
+            ManEvent::Metadata {
+                title,
+                section,
+                date,
+                source,
+                manual,
+            } => ManEvent::Metadata {
+                title: title.map(|c| Cow::Owned(c.into_owned())),
+                section: section.map(|c| Cow::Owned(c.into_owned())),
+                date: date.map(|c| Cow::Owned(c.into_owned())),
+                source: source.map(|c| Cow::Owned(c.into_owned())),
+                manual: manual.map(|c| Cow::Owned(c.into_owned())),
+            },
             // All other variants contain no borrowed data.
             ManEvent::StartDocument => ManEvent::StartDocument,
             ManEvent::EndDocument => ManEvent::EndDocument,
@@ -131,6 +158,9 @@ pub struct EventIter<'a> {
     doc: &'a ManDoc,
     frame_stack: Vec<Frame<'a>>,
     started: bool,
+    /// Whether the `Metadata` event (emitted once, right after
+    /// `StartDocument`) has been delivered yet.
+    metadata_emitted: bool,
     finished: bool,
 }
 
@@ -204,6 +234,7 @@ impl<'a> EventIter<'a> {
             doc,
             frame_stack: Vec::new(),
             started: false,
+            metadata_emitted: false,
             finished: false,
         }
     }
@@ -224,6 +255,17 @@ impl<'a> Iterator for EventIter<'a> {
                 index: 0,
             });
             return Some(ManEvent::StartDocument);
+        }
+
+        if !self.metadata_emitted {
+            self.metadata_emitted = true;
+            return Some(ManEvent::Metadata {
+                title: self.doc.title.as_deref().map(Cow::Borrowed),
+                section: self.doc.section.as_deref().map(Cow::Borrowed),
+                date: self.doc.date.as_deref().map(Cow::Borrowed),
+                source: self.doc.source.as_deref().map(Cow::Borrowed),
+                manual: self.doc.manual.as_deref().map(Cow::Borrowed),
+            });
         }
 
         loop {
@@ -538,8 +580,28 @@ pub fn events(input: &str) -> impl Iterator<Item = OwnedManEvent> + '_ {
 pub fn collect_doc_from_events(events: impl Iterator<Item = OwnedManEvent>) -> ManDoc {
     let mut block_stack: Vec<BlockFrame> = vec![BlockFrame::Document { blocks: Vec::new() }];
     let mut inline_ctx: Vec<InlineFrame> = Vec::new();
+    let mut title = None;
+    let mut section = None;
+    let mut date = None;
+    let mut source = None;
+    let mut manual = None;
 
     for event in events {
+        if let ManEvent::Metadata {
+            title: t,
+            section: s,
+            date: d,
+            source: src,
+            manual: man,
+        } = event
+        {
+            title = t.map(Cow::into_owned);
+            section = s.map(Cow::into_owned);
+            date = d.map(Cow::into_owned);
+            source = src.map(Cow::into_owned);
+            manual = man.map(Cow::into_owned);
+            continue;
+        }
         handle_event(event, &mut block_stack, &mut inline_ctx);
     }
 
@@ -549,11 +611,11 @@ pub fn collect_doc_from_events(events: impl Iterator<Item = OwnedManEvent>) -> M
     };
 
     ManDoc {
-        title: None,
-        section: None,
-        date: None,
-        source: None,
-        manual: None,
+        title,
+        section,
+        date,
+        source,
+        manual,
         blocks,
         span: Span::NONE,
     }
@@ -646,6 +708,10 @@ fn handle_event(
         ManEvent::StartDocument => {
             // Already initialized with Document frame
         }
+        // Handled directly in `collect_doc_from_events` before this function
+        // is called (it doesn't touch block_stack/inline_ctx); kept here as
+        // a no-op only so the match stays exhaustive for any other caller.
+        ManEvent::Metadata { .. } => {}
         ManEvent::StartParagraph => {
             block_stack.push(BlockFrame::Paragraph {
                 inlines: Vec::new(),
@@ -960,29 +1026,15 @@ mod tests {
     /// non-leaking implementation frees the parsed doc when each call
     /// returns, so net bytes should stay small and bounded, not grow
     /// linearly with the number of calls.
+    ///
+    /// Uses the crate-wide shared tracking allocator (`crate::test_alloc`)
+    /// rather than declaring its own `#[global_allocator]` — Rust permits
+    /// only one per test binary, and `writer.rs`'s tests need one too. See
+    /// `test_alloc`'s module doc for why `CURRENT` is thread-local, not a
+    /// shared `AtomicUsize`.
     #[test]
     fn test_events_no_per_call_leak() {
-        use std::alloc::{GlobalAlloc, Layout, System};
-        use std::sync::atomic::{AtomicIsize, Ordering};
-
-        struct CountingAlloc;
-        static NET_BYTES: AtomicIsize = AtomicIsize::new(0);
-        // This crate denies `unsafe` in production code (see lib.rs); the
-        // `GlobalAlloc` impl below is test-only harness plumbing to measure
-        // allocation behavior and is explicitly opted back in here.
-        #[allow(unsafe_code)]
-        unsafe impl GlobalAlloc for CountingAlloc {
-            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-                NET_BYTES.fetch_add(layout.size() as isize, Ordering::Relaxed);
-                unsafe { System.alloc(layout) }
-            }
-            unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-                NET_BYTES.fetch_sub(layout.size() as isize, Ordering::Relaxed);
-                unsafe { System.dealloc(ptr, layout) }
-            }
-        }
-        #[global_allocator]
-        static GLOBAL: CountingAlloc = CountingAlloc;
+        use crate::test_alloc::CURRENT;
 
         // A document with enough structure that parsing it allocates a
         // non-trivial amount (headings, paragraphs, bold/italic spans, a
@@ -1001,7 +1053,7 @@ mod tests {
 
         // Warm up (first call may pay one-time allocator/thread-cache costs).
         let _ = doc_events(input);
-        let baseline = NET_BYTES.load(Ordering::Relaxed);
+        let baseline = CURRENT.with(std::cell::Cell::get) as i64;
 
         const CALLS: usize = 200;
         for _ in 0..CALLS {
@@ -1009,7 +1061,7 @@ mod tests {
             assert!(!evs.is_empty());
         }
 
-        let after = NET_BYTES.load(Ordering::Relaxed);
+        let after = CURRENT.with(std::cell::Cell::get) as i64;
         let growth = after - baseline;
 
         // A leaking implementation retains one parsed ManDoc (and its Vec<Event>

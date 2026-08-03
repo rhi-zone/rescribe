@@ -5470,3 +5470,119 @@ building any of the twelve `NotYetWired` APIs found here from scratch for native
 
 Verification: `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --check`,
 and `cargo test -q` all pass (0 test failures across the full workspace).
+
+## man-fmt's streaming_writer fixed: genuine incremental writer + ManEvent::Metadata (2026-08-03)
+
+**Both `man-fmt` `KnownFailure` defects tracked for `streaming_writer` are fixed.** Confirmed the
+original bugs first, directly, before touching code (`cargo test -p rescribe-fixtures --test
+streaming_apis -- man --nocapture`, and a scratch example printing `parse()`+`build()` on a
+`.TH TEST 1 "2024-01-01" "Version 1.0"` input): `build()` from the real AST correctly emits
+`.TH TEST 1 "2024-01-01" "Version 1.0" ""`, while the old events()-fed streaming `Writer` emitted
+`.TH UNTITLED 1 "" "" ""` — `ManEvent` had no metadata-carrying variant, so `collect_doc_from_
+events` always built `ManDoc { title: None, .. }`. Separately, `writer.rs`'s own module doc
+admitted "This implementation buffers all events, reconstructs the AST, then emits" — the same
+fake-streaming-writer pattern already fixed this session in t2t-fmt/pod-fmt/haddock-fmt/
+fountain-fmt/bbcode/creole/dokuwiki/mediawiki/tikiwiki/twiki/vimwiki/zimwiki/markua/muse/xwiki.
+
+**Fix 1 — `ManEvent::Metadata`.** Added a variant carrying `title`/`section`/`date`/`source`/
+`manual` (all `Option<Cow<'a, str>>`), mirroring t2t-fmt's `Event::Header` (a fixed-field atomic
+unit, not a generic metadata bag). `EventIter::next()` emits it exactly once, immediately after
+`StartDocument` (a new `metadata_emitted: bool` field gates this). Unlike t2t's `Header` (only
+emitted when at least one field is set), `Metadata` is always emitted — `build()`'s own `.TH`
+line is unconditional, so events()-fed input needs the same unconditional signal.
+`collect_doc_from_events` now intercepts `Metadata` before it reaches `handle_event` (which keeps
+a no-op arm only for match-exhaustiveness) and threads the five fields into the returned
+`ManDoc` instead of hardcoding `None` for all of them.
+
+**Fix 2 — `Writer` rewritten as a genuine incremental writer** (`crates/formats/man-fmt/src/
+writer.rs`), following the `rst-fmt`/`t2t-fmt` shape: a single shared `out: String` buffer plus a
+frame stack of marks/scalars (never accumulated subtree content), flushing each completed
+top-level block to the sink as soon as it closes. Reading `emit.rs` end to end found almost every
+construct write-straight-through, with exactly two bounded (not O(document)) exceptions:
+- **The `.TH` line** needs its five fields before it can be written, and must be first in the
+  output — O(field count) buffering via `ManEvent::Metadata` above, written by a dedicated
+  `write_th` method called from `write_event` before any block event reaches `process()`.
+- **Heading text.** `emit.rs`'s `Block::Heading` arm uses `extract_text()`, not
+  `build_inlines()` — *all* inline markup (bold/italic/superscript/subscript/link wrappers, and
+  escaping) is dropped from a heading's title, only raw flattened text survives, uppercased. A
+  heading's text must therefore be assembled before the `.SH`/`.SS` line can be written —
+  O(heading text length), one nesting frame, not O(document size). Implemented by *not* pushing
+  an `Inline`/`Link` frame for a heading's nested inline containers at all (checked via
+  `in_heading()`, true whenever the stack top is a `Heading` frame) — `Text`/`Code` events append
+  raw content straight into the `Heading` frame's `text: String` field, and `Start`/`EndBold`,
+  `Italic`, `Superscript`, `Subscript`, `Link` become no-ops while it's on top (matching
+  `extract_text`'s recursive-into-children, drop-the-wrapper behavior, including dropping a
+  `Link`'s URL entirely).
+
+`emit.rs`'s `Block::List`/`Block::DefinitionList` arms give a `Paragraph` child different framing
+by *parent type*, not position — bare (no `.PP\n` marker) directly inside a `ListItem` or
+`DefinitionDesc`, full `.PP\n` form everywhere else — decided at `StartParagraph`/`EndParagraph`
+purely by inspecting the parent frame already on the stack, the same "known at open, applied at
+close" shape t2t-fmt's writer uses for its own parent-dependent framing.
+
+**A real, subtle bug was found and fixed while wiring this**, not present in `emit.rs` itself:
+the first draft's `newline()` helper (mirroring `emit.rs`'s `BuildContext::newline`, "write `\n`
+only if the buffer doesn't already end with one") checked `self.out.ends_with('\n')` directly —
+correct for the tree-based builder's single never-cleared buffer, but wrong here, since `out` is
+cleared after every top-level block flushes. Right after a flush, `out.is_empty()` is true, and
+an empty string's `ends_with('\n')` is `false`, so `newline()` spuriously inserted a blank line
+before every second-and-later top-level block (verified directly: `.TH ...\n\n.SH TEST\n\n.SH
+NAME\n\n.PP\ntest\n` instead of `.TH ...\n.SH TEST\n.SH NAME\n.PP\ntest\n`). Fixed by proving (by
+reading every `EndX` arm in `process()`) that every top-level block's own close logic always
+writes a trailing `\n` before the flush that empties the buffer, so an empty buffer is always
+logically preceded by a newline — `newline()` now treats "empty" the same as "already ends with
+`\n`" (`if !self.out.is_empty() && !self.out.ends_with('\n')`).
+
+**A second, independent, pre-existing bug was found (not fixed — out of scope for this task)**:
+`parse.rs`'s `.TH` handling *also* synthesizes a `Block::Heading { level: 1, .. }` from the
+title, in addition to setting `ManDoc.title` — so `build()` on real `.TH` input duplicates the
+title as a spurious `.SH TITLE` line in the body (verified: `.TH TEST 1 ...\n.SH NAME\n` parses
+to blocks `[Heading{level:1,"TEST"}, Heading{level:2,"NAME"}, ...]`, and `build()` on that doc
+emits `.SH TEST` right after the `.TH` line, before the real `.SH NAME`). This is a `parse()`/
+`build()`-level bug affecting *both* the tree builder and the (now-fixed) streaming writer
+identically, since both walk the same `ManDoc.blocks` — not a streaming-API-specific defect, so
+the byte-identical-to-`build()` test correctly does not flag it (both sides reproduce it the same
+way). Left as a documented gap here rather than fixed, since fixing `parse()`'s title/heading
+duplication is outside this task's fence (`man-fmt`'s streaming *writer*, not its reader).
+
+**Two new tests** (`crates/formats/man-fmt/src/writer.rs`): `test_writer_byte_identical_to_
+builder` (12 hand-built inputs spanning `.TH`, headings with markup/links, all inline kinds,
+code/example blocks, ordered/unordered lists, definition lists, `.sp`, comments, `.IP`) and
+`test_writer_th_metadata_via_events`, pinning the `.TH` fix directly. Both pass, plus the
+existing `rescribe-fixtures` byte-identical sweep now passes over the full `fixtures/man/`
+corpus (previously `KnownFailure`).
+
+**Allocator instrumentation consolidated.** `man-fmt`'s `events.rs` already had its own
+`#[global_allocator]`-declaring test (`test_events_no_per_call_leak`, tracking net bytes via a
+crate-local `CountingAlloc`) from an earlier pass; Rust permits only one `#[global_allocator]`
+per test binary, and the new writer tests need peak-memory tracking too. Extracted a shared
+`crate::test_alloc` module (`#[cfg(test)]`-gated, included from `lib.rs`) with a single
+`TrackingAlloc` + thread-local `CURRENT`/`PEAK` cells (thread-local, not a shared `AtomicUsize` —
+the shared-counter design caused a real cross-thread flake in 12+ crates this session under
+`cargo test`'s default concurrent-test execution), and rewired `events.rs`'s existing leak-guard
+test to read `CURRENT` instead of declaring its own allocator.
+
+**Peak memory measured directly** (`test_writer_peak_memory_and_throughput_report`, `#[ignore]`d,
+run with `--release --ignored --nocapture`): on a synthetic 929,494-byte / 5000-section document,
+the streaming `Writer` peaks at **4,235 bytes** versus `parse()`+`build()`'s **2,162,703 bytes**
+— a **~511x** reduction. Throughput is ~0.83x of the (very lightweight) builder — noted honestly
+per CLAUDE.md rather than chased further, the same finer-event-dispatch-granularity tradeoff
+already documented for t2t-fmt. A separate `test_writer_no_subtree_reconstruction_blowup` guards
+near-linear allocation count in event count (200 vs 2000 sections).
+
+**`KNOWN_FAILURES` diff**: the `man`/`streaming_writer` entry removed entirely (was two
+paragraphs describing the stacked defects above). The paired `man`/`streaming_parser`
+`KnownFailure` (the `StreamingParser::emit_block()` isolated-block-reparse issue, a distinct
+architectural gap) is untouched — confirmed still failing and still correctly acknowledged after
+this change (`man_streaming_parser_matches_events_under_adversarial_chunking` still prints
+`ACKNOWLEDGED KNOWN FAILURE [man/streaming_parser]`). `CAPABILITIES`'s `man` row's
+`streaming_writer` field promoted `KnownFailure(..)` → `Wired`; the `events`/`streaming_parser`
+fields and their explanatory comment block updated to describe the `Metadata` variant and point
+at the still-open `streaming_parser` gap rather than re-describing the now-fixed writer.
+`docs/format-audit.md`'s `man` row updated to match.
+
+Verification: `cargo clippy -p man-fmt -p rescribe-fixtures --all-targets --all-features -- -D
+warnings`, `cargo test -q` (full workspace; the only 2 failures, `ooxml-codegen`'s
+`test_generate_wml`/`test_eg_definitions`, are a pre-existing missing-fixture-file issue
+confirmed via `git stash` to reproduce identically on `master`, unrelated to this change), and
+`cargo fmt --check` all pass clean.

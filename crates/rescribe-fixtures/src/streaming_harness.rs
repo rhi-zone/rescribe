@@ -1220,7 +1220,7 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // reader (same pattern as t2t/pod/haddock/fountain/asciidoc above); per
     // that precedent it's still Wired. See tests/streaming_apis.rs's man-fmt
     // section for the full writeup and directly-verified repro commands for
-    // both KnownFailures below.
+    // the remaining streaming_parser KnownFailure below.
     //
     // Fixed 2026-07-31 (found while wiring this entry): EventIter's handling
     // of every inline container (Bold/Italic/Superscript/Subscript/Link)
@@ -1238,6 +1238,31 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // adding a real `CloseKind::None` variant (crates/formats/man-fmt/src/
     // events.rs) that pops its frame without emitting any event, replacing
     // the dummy `CloseKind::Paragraph` in all five inline-container sites.
+    //
+    // streaming_writer fixed 2026-08-03: two stacked defects. (1)
+    // man_fmt::writer::Writer buffered all events into a Vec<OwnedManEvent>
+    // and only reconstructed the AST + called emit::build() inside
+    // finish() — rewritten to a genuine incremental writer (single shared
+    // `out: String` buffer + a frame stack of marks/scalars, flushing each
+    // completed top-level block to the sink as soon as it closes), the same
+    // shape as t2t-fmt's/fountain-fmt's writers. Only two constructs need
+    // bounded (not O(document)) buffering: the `.TH` line's five fields
+    // (O(field count), via the new `ManEvent::Metadata` below) and a
+    // heading's flattened text (O(heading text length) — `emit.rs`'s
+    // `Block::Heading` arm uses `extract_text()`, not `build_inlines()`, so
+    // all inline markup inside a heading is dropped, not just re-escaped).
+    // (2) ManEvent had no variant carrying document metadata
+    // (ManDoc::title/section/date/source/manual), so events()-fed writers
+    // always dropped a .TH line's title/section/date/source even once (1)
+    // was fixed — collect_doc_from_events (events.rs) always built ManDoc {
+    // title: None, section: None, date: None, source: None, manual: None,
+    // .. }. Fixed by adding `ManEvent::Metadata { title, section, date,
+    // source, manual }`, emitted once by EventIter immediately after
+    // StartDocument (mirroring t2t-fmt's `Event::Header`), and consumed by
+    // collect_doc_from_events. Directly verified on a .TH TEST 1
+    // "2024-01-01" "Version 1.0" input: build() and the events()-fed
+    // streaming Writer now both emit
+    // '.TH TEST 1 "2024-01-01" "Version 1.0" ""'.
     FormatCapabilities {
         format: "man",
         events: ApiState::Wired,
@@ -1253,20 +1278,7 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              StartDocument/14 events total; through StreamingParser yields 2 StartDocument/16 \
              events total. See TODO.md",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "two stacked defects: (1) man_fmt::writer::Writer buffers all events into a \
-             Vec<OwnedManEvent> and only reconstructs the AST + calls emit::build() inside \
-             finish() (writer.rs's own module doc: \"This implementation buffers all events, \
-             reconstructs the AST, then emits\") — the same fake-streaming-writer pattern as \
-             t2t/pod/haddock/fountain/commonmark; (2) independently, ManEvent has no variant \
-             carrying document metadata (ManDoc::title/section/date/source/manual), so \
-             events()-fed writers always drop a .TH line's title/section/date/source even once \
-             (1) is fixed — collect_doc_from_events (events.rs) always builds ManDoc { title: \
-             None, section: None, date: None, source: None, manual: None, .. }. Directly \
-             verified on a .TH TEST 1 \"2024-01-01\" \"Version 1.0\" input: build() emits \
-             '.TH TEST 1 \"2024-01-01\" \"Version 1.0\" \"\"', the events()-fed streaming Writer \
-             emits '.TH UNTITLED 1 \"\" \"\" \"\"'. See TODO.md",
-        ),
+        streaming_writer: ApiState::Wired,
     },
     // rtf-fmt's events() is `SemanticEventIter::new(parse(input).0)` — a
     // lazy frame-stack walk of the AST parse() already built, not an
@@ -1705,15 +1717,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        block in isolation via events(), which always wraps its output in its own \
                        StartDocument/EndDocument pair, so StreamingParser emits one such pair per \
                        block instead of one for the whole document",
-    },
-    KnownFailure {
-        format: "man",
-        api: "streaming_writer",
-        description: "man_fmt::writer::Writer buffers all events and only reconstructs the AST + \
-                       calls emit::build() inside finish() (self-admitted in its own module \
-                       doc); separately, ManEvent has no variant carrying document metadata, so \
-                       a .TH line's title/section/date/source is always dropped when the \
-                       streaming Writer is fed by events()",
     },
     KnownFailure {
         format: "t2t",

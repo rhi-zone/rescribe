@@ -15,6 +15,8 @@ pub mod batch;
 pub mod emit;
 pub mod events;
 pub mod parse;
+#[cfg(test)]
+mod test_alloc;
 pub mod writer;
 
 // Re-export key types for convenience.
