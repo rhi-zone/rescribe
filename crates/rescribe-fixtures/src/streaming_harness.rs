@@ -394,12 +394,7 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "docx",
-        events: ApiState::KnownFailure(
-            "ooxml-wml events() drops the Text event and reverses End-tag \
-             order for the common <w:p><w:r><w:t> shape (no <w:pPr> before \
-             the run) — a read_props()/queue() clobber bug found while \
-             wiring this harness; see TODO.md",
-        ),
+        events: ApiState::Wired,
         streaming_parser: ApiState::NotYetWired(
             "ooxml-wml::batch::BatchParser exists (crates/formats/ooxml-wml/src/batch.rs) \
              but is not yet exercised by this harness; a fixture-driven chunking check \
@@ -416,14 +411,7 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "pptx",
-        events: ApiState::KnownFailure(
-            "ooxml-pml events() cannot reach slide text at all: dispatch_start() \
-             has no entry for <p:txBody> (and nvSpPr/style), so it falls into \
-             skip_element() and the whole subtree is dropped — open, documented \
-             bug, see TODO.md. It also shares ooxml-wml's Text-drop / \
-             End-tag-reversal queue() clobber bug once a txBody-reaching fix \
-             lets it get as far as a paragraph/run.",
-        ),
+        events: ApiState::Wired,
         streaming_parser: ApiState::NotYetWired(
             "ooxml-pml::batch exists but not yet exercised by this harness",
         ),
@@ -1655,17 +1643,6 @@ pub struct KnownFailure {
 }
 
 pub const KNOWN_FAILURES: &[KnownFailure] = &[
-    KnownFailure {
-        format: "docx",
-        api: "events",
-        description: "ooxml-wml events() Text-drop / End-tag-reversal queue() clobber bug",
-    },
-    KnownFailure {
-        format: "pptx",
-        api: "events",
-        description: "ooxml-pml events() cannot reach slide text (no txBody in dispatch_start) \
-                       + shares the wml Text-drop/reversal bug",
-    },
     KnownFailure {
         format: "rst",
         api: "streaming_parser",

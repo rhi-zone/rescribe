@@ -23,6 +23,7 @@
 //! ```
 
 use std::borrow::Cow;
+use std::collections::VecDeque;
 
 use quick_xml::Reader;
 use quick_xml::events::Event as XmlEvent;
@@ -49,12 +50,31 @@ pub fn events(bytes: &[u8]) -> PmlEventIter<'_> {
 
 enum XmlInfo {
     ContainerStart(PmlStartKind),
-    HyperlinkStart { rel_id: Option<String> },
+    /// A structural wrapper we descend into without emitting an event (e.g.
+    /// `<p:txBody>`, whose actual content — `<a:p>` paragraphs — is what
+    /// `dispatch_start` tracks).
+    TransparentStart,
+    HyperlinkStart {
+        rel_id: Option<String>,
+    },
     Leaf(PmlEvent<'static>),
     End,
     Text(String),
     Eof,
     Other,
+}
+
+/// Element local names that wrap tracked content and must be descended into
+/// rather than skipped. `events()` takes the raw content of a
+/// `ppt/slides/slideN.xml` part, so `<p:sld>`/`<p:cSld>`/`<p:spTree>` are the
+/// document's own root structure (every `<p:sp>` on the slide lives inside
+/// them) and `<p:txBody>` wraps a shape's/cell's paragraphs. None of these
+/// have a dedicated `PmlEvent`; if they are not descended into (previously:
+/// they fell through to `skip_element()`, since none is a tracked
+/// container), the entire paragraph/run/text subtree beneath them — i.e. all
+/// slide text — is silently dropped.
+fn is_transparent_wrapper(local: &[u8]) -> bool {
+    matches!(local, b"sld" | b"cSld" | b"spTree" | b"txBody")
 }
 
 // ---------------------------------------------------------------------------
@@ -63,9 +83,13 @@ enum XmlInfo {
 
 type PmlEventOwned = PmlEvent<'static>;
 
-#[derive(Debug)]
-struct ContextFrame {
-    kind: PmlStartKind,
+/// Context entry for the nesting stack.
+#[derive(Debug, Clone, Copy)]
+enum ContextFrame {
+    /// A container that produced a `Start…` event and owes an `End…`.
+    Tracked(PmlStartKind),
+    /// A wrapper descended into silently; its end tag produces nothing.
+    Transparent,
 }
 
 /// True streaming PPTX event iterator.
@@ -73,12 +97,18 @@ pub struct PmlEventIter<'input> {
     reader: Reader<&'input [u8]>,
     buf: Vec<u8>,
     stack: Vec<ContextFrame>,
-    pending: [Option<PmlEventOwned>; 2],
+    /// Events queued ahead of the main read loop. See `queue` for why this
+    /// must be prepended to, not overwritten.
+    pending: VecDeque<PmlEventOwned>,
     started: bool,
     done: bool,
-    /// Set when `read_shape_transform` consumes `</p:sp>` before finding `<p:spPr>`.
-    /// Signals the ContainerStart handler to skip pushing a frame and queue EndShape.
-    shape_ended_during_scan: bool,
+    /// Set when a container's own end tag is consumed while scanning ahead
+    /// for its content (`read_shape_transform` finding `</p:sp>` before
+    /// `<p:spPr>`, or `read_props` finding the container's own `End` before
+    /// its props element). Signals `open()` to pop the frame it
+    /// speculatively pushed, since the matching `End…` event has already
+    /// been queued and no end tag remains in the stream to pop it.
+    close_immediately: bool,
 }
 
 impl<'input> PmlEventIter<'input> {
@@ -89,25 +119,43 @@ impl<'input> PmlEventIter<'input> {
             reader,
             buf: Vec::with_capacity(512),
             stack: Vec::new(),
-            pending: [None, None],
+            pending: VecDeque::new(),
             started: false,
             done: false,
-            shape_ended_during_scan: false,
+            close_immediately: false,
         }
     }
 
     fn drain_pending(&mut self) -> Option<PmlEventOwned> {
-        if let Some(e) = self.pending[0].take() {
-            self.pending[0] = self.pending[1].take();
-            Some(e)
-        } else {
-            None
-        }
+        self.pending.pop_front()
     }
 
-    fn queue(&mut self, first: PmlEventOwned, second: Option<PmlEventOwned>) {
-        self.pending[0] = Some(first);
-        self.pending[1] = second;
+    /// Prepend an event to the pending queue — see `WmlEventIter::queue` in
+    /// ooxml-wml's `events.rs` for the full rationale: a nested `open()`/
+    /// `read_props` call may already have queued an event (e.g. `Text`)
+    /// before this call's own event is queued, and that already-queued
+    /// event is textually *after* this one, so overwriting instead of
+    /// prepending would silently drop it.
+    fn queue(&mut self, event: PmlEventOwned) {
+        self.pending.push_front(event);
+    }
+
+    /// Build the `Start…` event for a container and push its frame, unless
+    /// scanning ahead for its content already consumed its own end tag.
+    ///
+    /// The frame is pushed *before* `build_start_event` runs so that a
+    /// nested container found before this one's expected content (e.g. a
+    /// `<p:r>` found while scanning `<p:p>` for `<a:pPr>`) pushes its own
+    /// frame *after* this one, keeping `End` tags popping in the right
+    /// order.
+    fn open(&mut self, kind: PmlStartKind) -> PmlEventOwned {
+        self.stack.push(ContextFrame::Tracked(kind));
+        let ev = self.build_start_event(kind);
+        if self.close_immediately {
+            self.close_immediately = false;
+            self.stack.pop();
+        }
+        ev
     }
 }
 
@@ -130,31 +178,23 @@ impl<'input> Iterator for PmlEventIter<'input> {
             let info = self.read_xml_info();
             match info {
                 XmlInfo::ContainerStart(kind) => {
-                    let start_event = self.build_start_event(kind);
-                    if self.shape_ended_during_scan {
-                        // build_start_event consumed </p:sp> — emit Start then End
-                        // without pushing a frame (there is no matching end tag left).
-                        self.shape_ended_during_scan = false;
-                        self.pending[0] = Some(end_event_for(kind));
-                    } else {
-                        self.stack.push(ContextFrame { kind });
-                    }
-                    return Some(start_event);
+                    return Some(self.open(kind));
+                }
+                XmlInfo::TransparentStart => {
+                    self.stack.push(ContextFrame::Transparent);
                 }
                 XmlInfo::HyperlinkStart { rel_id } => {
-                    self.stack.push(ContextFrame {
-                        kind: PmlStartKind::Hyperlink,
-                    });
+                    self.stack
+                        .push(ContextFrame::Tracked(PmlStartKind::Hyperlink));
                     return Some(PmlEvent::StartHyperlink {
                         rel_id: rel_id.map(Cow::Owned),
                     });
                 }
                 XmlInfo::Leaf(e) => return Some(e),
-                XmlInfo::End => {
-                    if let Some(frame) = self.stack.pop() {
-                        return Some(end_event_for(frame.kind));
-                    }
-                }
+                XmlInfo::End => match self.stack.pop() {
+                    Some(ContextFrame::Tracked(kind)) => return Some(end_event_for(kind)),
+                    Some(ContextFrame::Transparent) | None => {}
+                },
                 XmlInfo::Text(t) => {
                     if !t.is_empty() {
                         return Some(PmlEvent::Text(Cow::Owned(t)));
@@ -194,6 +234,9 @@ impl<'input> PmlEventIter<'input> {
                 if is_text_element(&local) {
                     let text = read_text_content(&mut self.reader);
                     return XmlInfo::Text(text);
+                }
+                if is_transparent_wrapper(&local) {
+                    return XmlInfo::TransparentStart;
                 }
                 skip_element(&mut self.reader);
                 XmlInfo::Other
@@ -242,6 +285,9 @@ impl<'input> PmlEventIter<'input> {
                     let text = read_text_content(&mut self.reader);
                     return PropsOrInfo::Info(XmlInfo::Text(text));
                 }
+                if is_transparent_wrapper(&local) {
+                    return PropsOrInfo::Info(XmlInfo::TransparentStart);
+                }
                 skip_element(&mut self.reader);
                 PropsOrInfo::Info(XmlInfo::Other)
             }
@@ -276,25 +322,25 @@ impl<'input> PmlEventIter<'input> {
     fn build_start_event(&mut self, kind: PmlStartKind) -> PmlEvent<'static> {
         match kind {
             PmlStartKind::Paragraph => {
-                let props = self.read_props::<TextParagraphProperties>(b"pPr");
+                let props = self.read_props::<TextParagraphProperties>(b"pPr", kind);
                 PmlEvent::StartParagraph {
                     props: Box::new(props),
                 }
             }
             PmlStartKind::Run => {
-                let props = self.read_props::<TextCharacterProperties>(b"rPr");
+                let props = self.read_props::<TextCharacterProperties>(b"rPr", kind);
                 PmlEvent::StartRun {
                     props: Box::new(props),
                 }
             }
             PmlStartKind::Table => {
-                let props = self.read_props::<CTTableProperties>(b"tblPr");
+                let props = self.read_props::<CTTableProperties>(b"tblPr", kind);
                 PmlEvent::StartTable {
                     props: Box::new(props),
                 }
             }
             PmlStartKind::TableCell => {
-                let props = self.read_props::<CTTableCellProperties>(b"tcPr");
+                let props = self.read_props::<CTTableCellProperties>(b"tcPr", kind);
                 PmlEvent::StartTableCell {
                     props: Box::new(props),
                 }
@@ -318,33 +364,68 @@ impl<'input> PmlEventIter<'input> {
     /// Consumes children up to and including `<p:spPr>`. Remaining children
     /// (`<p:style>`, `<p:txBody>`, etc.) are left for the normal SAX loop.
     /// On malformed input where `</p:sp>` is consumed before `<p:spPr>` is found,
-    /// sets `self.shape_ended_during_scan` so the caller skips the frame push.
+    /// queues the matching `EndShape` and sets `self.close_immediately` so
+    /// `open()` pops the frame it speculatively pushed.
+    ///
+    /// Uses the same `read_xml_info_or_props` scan as `read_props` (rather
+    /// than an unconditional `skip_element` on every non-`spPr` child) so
+    /// that a shape without `<p:spPr>` — schema-valid content can omit it —
+    /// does not have its `<p:txBody>` (or any other tracked/transparent
+    /// child) silently discarded before the normal SAX loop ever sees it.
     fn read_shape_transform(&mut self) -> (Option<ShapeTransform>, Option<ShapeGeometry>) {
-        let mut buf = Vec::new();
         loop {
-            buf.clear();
-            match self.reader.read_event_into(&mut buf) {
-                Ok(XmlEvent::Start(ref e)) => {
-                    let local = local_name_owned(e.local_name().as_ref());
-                    if local == b"spPr" {
-                        return self.extract_xfrm_from_sppr();
+            match self.read_xml_info_or_props(b"spPr") {
+                PropsOrInfo::IsProps { is_empty } => {
+                    if is_empty {
+                        return (None, None);
                     }
-                    skip_element(&mut self.reader);
+                    return self.extract_xfrm_from_sppr();
                 }
-                Ok(XmlEvent::Empty(_)) => {}
-                Ok(XmlEvent::End(_)) => {
-                    // Consumed </p:sp> — signal caller not to push frame.
-                    self.shape_ended_during_scan = true;
-                    break;
+                PropsOrInfo::Info(XmlInfo::TransparentStart) => {
+                    self.stack.push(ContextFrame::Transparent);
+                    return (None, None);
                 }
-                Ok(XmlEvent::Eof) | Err(_) => {
+                PropsOrInfo::Info(XmlInfo::ContainerStart(child_kind)) => {
+                    let child_event = self.open(child_kind);
+                    self.queue(child_event);
+                    return (None, None);
+                }
+                PropsOrInfo::Info(XmlInfo::HyperlinkStart { rel_id }) => {
+                    let ev = PmlEvent::StartHyperlink {
+                        rel_id: rel_id.map(Cow::Owned),
+                    };
+                    self.stack
+                        .push(ContextFrame::Tracked(PmlStartKind::Hyperlink));
+                    self.queue(ev);
+                    return (None, None);
+                }
+                PropsOrInfo::Info(XmlInfo::Text(t)) => {
+                    if t.trim().is_empty() {
+                        // Inter-element whitespace from pretty-printed XML —
+                        // not real content, keep scanning for <p:spPr> or a
+                        // tracked child.
+                    } else {
+                        self.queue(PmlEvent::Text(Cow::Owned(t)));
+                        return (None, None);
+                    }
+                }
+                PropsOrInfo::Info(XmlInfo::End) => {
+                    // Consumed </p:sp> before any <p:spPr> — queue the
+                    // matching EndShape now, since no end tag remains in the
+                    // stream to trigger it later.
+                    self.queue(end_event_for(PmlStartKind::Shape));
+                    self.close_immediately = true;
+                    return (None, None);
+                }
+                PropsOrInfo::Info(XmlInfo::Eof) => {
                     self.done = true;
-                    break;
+                    return (None, None);
                 }
-                _ => {}
+                PropsOrInfo::Info(XmlInfo::Leaf(_)) | PropsOrInfo::Info(XmlInfo::Other) => {
+                    // continue scanning
+                }
             }
         }
-        (None, None)
     }
 
     /// Read the contents of an already-opened `<p:spPr>` element and extract
@@ -457,7 +538,18 @@ impl<'input> PmlEventIter<'input> {
         adjustments
     }
 
-    fn read_props<T: FromXml + Default>(&mut self, expected_local: &[u8]) -> T {
+    /// Scan ahead for the props child element.
+    ///
+    /// If the very next event is the expected props element, parse and
+    /// return it. Otherwise queue the event for normal processing and
+    /// return `T::default()`. `owner` is the container this props scan is
+    /// for, needed to build the correct `End…` event if `owner`'s own end
+    /// tag is hit before any props element appears.
+    fn read_props<T: FromXml + Default>(
+        &mut self,
+        expected_local: &[u8],
+        owner: PmlStartKind,
+    ) -> T {
         loop {
             match self.read_xml_info_or_props(expected_local) {
                 PropsOrInfo::IsProps { is_empty } => {
@@ -474,29 +566,44 @@ impl<'input> PmlEventIter<'input> {
                     let start = quick_xml::events::BytesStart::from_content(content, name_len);
                     return T::from_xml(&mut self.reader, &start, is_empty).unwrap_or_default();
                 }
+                PropsOrInfo::Info(XmlInfo::TransparentStart) => {
+                    self.stack.push(ContextFrame::Transparent);
+                    return T::default();
+                }
                 PropsOrInfo::Info(XmlInfo::ContainerStart(child_kind)) => {
-                    let child_event = self.build_start_event(child_kind).into_owned();
-                    self.stack.push(ContextFrame { kind: child_kind });
-                    self.queue(child_event, None);
+                    // A tracked child started before we saw the props
+                    // element; `open` handles pushing its frame (and any of
+                    // its own further-nested children) in the right order.
+                    let child_event = self.open(child_kind);
+                    self.queue(child_event);
                     return T::default();
                 }
                 PropsOrInfo::Info(XmlInfo::HyperlinkStart { rel_id }) => {
                     let ev = PmlEvent::StartHyperlink {
                         rel_id: rel_id.map(Cow::Owned),
                     };
-                    self.stack.push(ContextFrame {
-                        kind: PmlStartKind::Hyperlink,
-                    });
-                    self.queue(ev, None);
+                    self.stack
+                        .push(ContextFrame::Tracked(PmlStartKind::Hyperlink));
+                    self.queue(ev);
                     return T::default();
                 }
                 PropsOrInfo::Info(XmlInfo::Text(t)) => {
-                    if !t.trim().is_empty() {
-                        self.queue(PmlEvent::Text(Cow::Owned(t)), None);
+                    if t.trim().is_empty() {
+                        // Inter-element whitespace from pretty-printed XML —
+                        // not real content, keep scanning for the props
+                        // element or a tracked child.
+                    } else {
+                        self.queue(PmlEvent::Text(Cow::Owned(t)));
+                        return T::default();
                     }
-                    return T::default();
                 }
                 PropsOrInfo::Info(XmlInfo::End) => {
+                    // The container closed before any props element
+                    // appeared. Its own end tag has already been consumed,
+                    // so queue the matching `End…` and tell `open` not to
+                    // leave a frame that nothing would ever pop.
+                    self.queue(end_event_for(owner));
+                    self.close_immediately = true;
                     return T::default();
                 }
                 PropsOrInfo::Info(XmlInfo::Eof) => {

@@ -21,14 +21,19 @@
 //!    instead of hardcoding `Rect`, verified by reading the emitted `.pptx`
 //!    back through the AST reader.
 //!
-//! These are split rather than driven end-to-end through `pml_events()` on
-//! a full `<p:sp>` because the true SAX reader has a separate, pre-existing
-//! gap unrelated to geometry: `dispatch_start` does not recognize
-//! `<p:txBody>` as a transparent container, so `read_xml_info`'s fallback
-//! (`skip_element` for any unrecognized `Start`) skips a shape's entire text
-//! body — paragraphs and runs inside `<p:txBody>` are never reached. That
-//! gap is documented in TODO.md rather than fixed here (fixing it is a
-//! general `events.rs` rework, out of scope for the geometry fix).
+//! These were originally split (rather than driven end-to-end through
+//! `pml_events()` on a full `<p:sp>`) because the true SAX reader had a
+//! separate, pre-existing gap unrelated to geometry: `dispatch_start` did
+//! not recognize `<p:txBody>` (nor `<p:sld>`/`<p:cSld>`/`<p:spTree>`) as
+//! transparent containers, so `read_xml_info`'s fallback (`skip_element` for
+//! any unrecognized `Start`) skipped a shape's entire text body — paragraphs
+//! and runs inside `<p:txBody>` were never reached. That gap is now fixed
+//! (see `ooxml_pml::events::is_transparent_wrapper` and
+//! `crates/rescribe-fixtures/tests/streaming_apis.rs`'s
+//! `pml_events_reaches_slide_text*` tests, which exercise the full
+//! `<p:sp>`-with-`<p:txBody>` path end-to-end); these tests remain split
+//! because isolating reader-geometry-extraction from writer-geometry-
+//! emission is still the clearer failure signal for a geometry regression.
 
 use ooxml_dml::generated::EGGeometry;
 use ooxml_pml::{PmlEvent, PmlWriter, Presentation, ShapeGeometry, ShapeTransform, pml_events};

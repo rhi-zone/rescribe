@@ -1529,6 +1529,56 @@ fixed by prior sessions; verify against source, not this summary, before relying
    Tracked as `KnownFailure { format: "pptx", api: "events" }` (the same entry as #2, since
    once txBody-reachability is fixed the shared queue-clobber bug would still corrupt the
    result).
+
+   **Update 2026-08-03: both #2 and #4 fixed.** `ooxml-wml/src/events.rs`'s `open()` now
+   pushes the container's `ContextFrame` *before* calling `build_start_event` (not after),
+   so a child container discovered during the parent's props scan pushes its own frame
+   strictly after the parent's, restoring correct `End…` pop order; `queue()`'s `pending`
+   field changed from a fixed `[Option<WmlEvent>; 2]` to a `VecDeque<WmlEvent>` that
+   `queue()` prepends to (`push_front`) instead of overwriting, so a `Text` event queued by
+   a deeply nested scan-ahead call (three levels for `<w:p><w:r><w:t>`) is no longer
+   clobbered by an outer call's own queued event. `ooxml-pml/src/events.rs` needed the
+   identical fix ported by hand (confirmed independent implementation, not copy-derived —
+   its `PmlEventIter`/`read_props`/`read_shape_transform` have a different shape from wml's,
+   just the same bug class), plus its own separate fix for #4: `is_transparent_wrapper`
+   added (matching wml's), covering not just `<p:txBody>` but also `<p:sld>`/`<p:cSld>`/
+   `<p:spTree>` — verified against the real `fixtures/pptx/slide/input.pptx`'s
+   `ppt/slides/slide1.xml` that *all three* are needed (`events()` on that real file produced
+   zero `StartShape` events at all without them, not just missing text, since `<p:sld>` is
+   the document's own root). `read_shape_transform` (the `<p:sp>`-scanning-for-`<p:spPr>`
+   lookahead) was rewritten to share `read_props`'s `PropsOrInfo`-based scan instead of an
+   unconditional `skip_element` on every non-`spPr` child, since schema-valid shapes may
+   omit `<p:spPr>` entirely and the old unconditional skip silently discarded `<p:txBody>`
+   whenever that happened. That rewrite surfaced a real regression risk in both crates'
+   `read_props`/`read_shape_transform`: any text node, even whitespace-only from
+   pretty-printed XML, was ending the scan-ahead early (verified: it broke
+   `ooxml-pml/tests/streaming_writer_geometry.rs`'s pre-existing hand-formatted fixtures) —
+   never triggered by real Word/PowerPoint output (never pretty-printed) but a real hazard
+   for any other consumer of these general-purpose crates feeding hand-authored/reformatted
+   XML, so all three Text-branches (wml's `read_props`, pml's `read_props`, pml's
+   `read_shape_transform`) now only end the scan on non-whitespace text. New tests in
+   `crates/rescribe-fixtures/tests/streaming_apis.rs`:
+   `wml_events_reaches_and_correctly_orders_paragraph_text` (now genuinely passes, not just
+   acknowledged-failing), `pml_events_reaches_slide_text` (same), and a new
+   `pml_events_reaches_slide_text_with_sppr_present` covering the schema-typical
+   `<p:spPr>`-present path specifically (verified transform/geometry extraction still works
+   after the `read_shape_transform` rewrite). Manually verified end-to-end against the real
+   `fixtures/docx/paragraph/input.docx` and `fixtures/pptx/slide/input.pptx` files' actual
+   `events()` output (not just synthetic fixtures) — both reach all text with correct
+   nesting. `streaming_harness::KNOWN_FAILURES`'s `docx`/`pptx` `events` entries removed;
+   `FormatCapabilities.events` promoted to `Wired` for both; `docs/format-audit.md`'s stale
+   `‡` footnote (referencing this now-fixed bug) retired. Verification: `cargo clippy
+   --all-targets --all-features -D warnings`, `cargo fmt --check`, `cargo test -p ooxml-wml
+   -q`, `cargo test -p ooxml-pml -q`, the four targeted
+   `crates/rescribe-fixtures/tests/streaming_apis.rs` tests individually, the full
+   `streaming_apis.rs` suite (98 tests), and a full workspace `cargo test -q` — all clean
+   except the pre-existing `ooxml-codegen`/`test_generate_wml`/`test_eg_definitions`
+   `wml.rnc`-missing-file gap (see that entry elsewhere in this file), independently
+   reconfirmed via `git stash`/rerun to reproduce identically with none of this session's
+   changes present, and observed to be intermittent — passes when run in isolation
+   (`cargo test -p ooxml-codegen --test codegen_wml`), fails when run as part of the full
+   workspace suite, consistent with the shared-target-dir/parallel-build flake class this
+   file already documents for rst-fmt.
 5. **Original finding**: wiring `rst_streaming_parser_matches_events_under_adversarial_chunking`
    across the *entire* `fixtures/rst/` suite (rst-fmt's own pre-existing streaming tests
    covered only 6 hand-picked chunk-splitting cases, none a multi-item definition list) found

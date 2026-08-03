@@ -12,6 +12,7 @@
 //! held in memory simultaneously.
 
 use std::borrow::Cow;
+use std::collections::VecDeque;
 
 use quick_xml::Reader;
 use quick_xml::events::Event as XmlEvent;
@@ -103,8 +104,12 @@ pub struct WmlEventIter<'input> {
     buf: Vec<u8>,
     /// Nesting stack of container elements we have opened.
     stack: Vec<ContextFrame>,
-    /// Up to two events queued ahead of the main read loop.
-    pending: [Option<WmlEventOwned>; 2],
+    /// Events queued ahead of the main read loop. Deeper nested `open()`/
+    /// `read_props` calls (a container found before the props element they
+    /// were scanning for) push onto the front via `queue`, not the back, so
+    /// an outer call's own queued event ends up correctly ordered *before*
+    /// whatever a nested call already queued — see `queue`.
+    pending: VecDeque<WmlEventOwned>,
     /// True until the first event (StartDocument) has been yielded.
     started: bool,
     /// True once we have hit Eof or an unrecoverable error.
@@ -123,7 +128,7 @@ impl<'input> WmlEventIter<'input> {
             reader,
             buf: Vec::with_capacity(512),
             stack: Vec::new(),
-            pending: [None, None],
+            pending: VecDeque::new(),
             started: false,
             done: false,
             close_immediately: false,
@@ -132,30 +137,47 @@ impl<'input> WmlEventIter<'input> {
 
     /// Build the `Start…` event for a container and push its frame, unless
     /// `read_props` already consumed the container's own end tag.
+    ///
+    /// The frame is pushed *before* `build_start_event` runs, not after:
+    /// `build_start_event` (via `read_props`) may discover a child container
+    /// before the expected props element and recurse into `open()` for that
+    /// child. If this container's own frame were pushed only after that
+    /// nested call returns, the child's frame would land on the stack
+    /// *below* this container's frame instead of above it, and `End` tags
+    /// would later pop them in reversed order.
     fn open(&mut self, kind: WmlStartKind) -> WmlEvent<'static> {
+        self.stack.push(ContextFrame::Tracked(kind));
         let ev = self.build_start_event(kind);
         if self.close_immediately {
+            // `read_props` already consumed this container's own end tag
+            // (e.g. `<w:p></w:p>`) and queued the matching `End…` event, so
+            // no frame should remain on the stack to be popped later.
             self.close_immediately = false;
-        } else {
-            self.stack.push(ContextFrame::Tracked(kind));
+            self.stack.pop();
         }
         ev
     }
 
-    /// Queue at most two events to be returned before resuming the main loop.
-    fn queue(&mut self, first: WmlEventOwned, second: Option<WmlEventOwned>) {
-        self.pending[0] = Some(first);
-        self.pending[1] = second;
+    /// Prepend an event to the pending queue.
+    ///
+    /// This must be a *prepend*, not an overwrite: when `read_props` finds a
+    /// child container before the props element it was scanning for, it
+    /// calls `open()` on that child, which may itself recurse arbitrarily
+    /// deep (e.g. `<w:p><w:r><w:t>` — a paragraph whose first child is a run
+    /// whose first child is text, none of them preceded by a props
+    /// element). Each such nested call queues its own event before
+    /// unwinding, so by the time an outer call queues *its* event, `pending`
+    /// may already hold events queued by nested calls — events that, in
+    /// document order, come *after* this one. Overwriting `pending` instead
+    /// of prepending silently drops those already-queued events (this was
+    /// the source of the events() Text-drop bug).
+    fn queue(&mut self, event: WmlEventOwned) {
+        self.pending.push_front(event);
     }
 
     /// Drain the front of the pending queue.
     fn drain_pending(&mut self) -> Option<WmlEventOwned> {
-        if let Some(e) = self.pending[0].take() {
-            self.pending[0] = self.pending[1].take();
-            Some(e)
-        } else {
-            None
-        }
+        self.pending.pop_front()
     }
 }
 
@@ -419,7 +441,7 @@ impl<'input> WmlEventIter<'input> {
                 PropsOrInfo::Info(XmlInfo::ContainerStart(child_kind)) => {
                     // A tracked child started before we saw the props element.
                     let child_event = self.open(child_kind);
-                    self.queue(child_event, None);
+                    self.queue(child_event);
                     return T::default();
                 }
                 PropsOrInfo::Info(XmlInfo::HyperlinkStart { rel_id, anchor }) => {
@@ -429,11 +451,11 @@ impl<'input> WmlEventIter<'input> {
                     };
                     self.stack
                         .push(ContextFrame::Tracked(WmlStartKind::Hyperlink));
-                    self.queue(ev, None);
+                    self.queue(ev);
                     return T::default();
                 }
                 PropsOrInfo::Info(XmlInfo::Leaf(ev)) => {
-                    self.queue(ev, None);
+                    self.queue(ev);
                     return T::default();
                 }
                 PropsOrInfo::Info(XmlInfo::End) => {
@@ -441,15 +463,19 @@ impl<'input> WmlEventIter<'input> {
                     // (e.g. `<w:p></w:p>`). Its own end tag has already been
                     // consumed, so queue the matching `End…` and tell `open` not
                     // to push a frame that nothing would ever pop.
-                    self.queue(end_event_for(owner), None);
+                    self.queue(end_event_for(owner));
                     self.close_immediately = true;
                     return T::default();
                 }
                 PropsOrInfo::Info(XmlInfo::Text(t)) => {
-                    if !t.trim().is_empty() {
-                        self.queue(WmlEvent::Text(Cow::Owned(t)), None);
+                    if t.trim().is_empty() {
+                        // Inter-element whitespace from pretty-printed XML —
+                        // not real content, keep scanning for the props
+                        // element or a tracked child.
+                    } else {
+                        self.queue(WmlEvent::Text(Cow::Owned(t)));
+                        return T::default();
                     }
-                    return T::default();
                 }
                 PropsOrInfo::Info(XmlInfo::Eof) => {
                     self.done = true;
