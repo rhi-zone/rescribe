@@ -9075,34 +9075,53 @@ fn muse_streaming_writer_byte_identical_to_builder_over_all_fixtures() {
 // StreamingParser is a genuine per-block incremental parser (batch.rs's
 // feed_line/BlockState machine flushes each accumulated block via
 // emit_block() as soon as a blank line or fence boundary is seen, not only
-// at finish()) but emit_block() re-parses each block's text in isolation via
-// crate::events::events(&text), and events() always wraps its output in its
-// own StartDocument/EndDocument pair — so bulk events() over the whole
-// document emits exactly one such pair, but StreamingParser emits one PER
-// accumulated block, diverging on every fixture with more than one top-level
-// block (heading-h2, horizontal-rule, path-many-sections, comp-heading-list,
-// definition-list, etc. — not just the two fixtures originally called out
-// here). This is the same "re-parse each block alone, lose cross-block
-// context" root cause already documented for org-fmt/asciidoc/fountain's
-// StreamingParsers; the definition-list fixture is one instance of it (the
-// blank line between items ends the accumulated block, see feed_line's
-// blank-line branch, batch.rs:143-150, splitting one multi-item
-// DefinitionList into two DefinitionList event pairs).
+// at finish()). It used to re-parse each block's text in isolation via
+// crate::events::events(&text) and forward that re-parse's own
+// StartDocument/EndDocument pair verbatim — so bulk events() over the whole
+// document emitted exactly one such pair, but StreamingParser emitted one
+// PER accumulated block, diverging on every fixture with more than one
+// top-level block. This is now fixed: StreamingParser::new() dispatches a
+// single StartDocument directly (mirroring fountain-fmt's batch.rs), finish()
+// dispatches the matching EndDocument, and both emit_block() and
+// try_emit_header()'s trailing-content path filter
+// Event::StartDocument/EndDocument out of every per-block re-parse's forwarded
+// events. Confirmed via a hand-built adversarial-chunking test added to t2t's
+// own batch.rs test module (whole/single-byte/chunks-of-7/chunks-of-37 over a
+// synthetic multi-block sample) plus the fixture-driven equivalence check
+// below.
 //
 // The document-header-specific defect that used to live alongside the above
 // — an isolated re-parse of the header's own three lines re-triggering
 // `try_parse_header()` (parse.rs:70) and producing a spurious *empty*
 // StartDocument/EndDocument pair with the header's title/author/date
-// silently dropped (Event had no variant to carry them) — is now fixed:
-// `Event::Header { title, author, date }` was added, and StreamingParser
-// (batch.rs's `try_emit_header`) recognizes the first block of the stream
-// directly via `Parser::try_parse_header` instead of falling through to the
-// generic re-parse-via-events() path, so the header round-trips and no
-// longer produces a spurious empty pair. The still-open general per-block
-// StartDocument/EndDocument duplication (above) is unrelated to headers and
-// remains the reason `t2t_streaming_parser_matches_events_under_adversarial_chunking`
+// silently dropped (Event had no variant to carry them) — was already fixed
+// before this session: `Event::Header { title, author, date }` was added,
+// and StreamingParser (batch.rs's `try_emit_header`) recognizes the first
+// block of the stream directly via `Parser::try_parse_header` instead of
+// falling through to the generic re-parse-via-events() path.
+//
+// Three distinct, pre-existing root causes remain (unmasked now that the
+// StartDocument/EndDocument duplication no longer swamps every multi-block
+// fixture), affecting 4 of the ~50 fixtures — see the KnownFailure entry in
+// `streaming_harness::KNOWN_FAILURES` for the full detail on each:
+// (1) definition-list — parse_definition_list (parse.rs:412) merges
+// consecutive ': '-item blocks across a blank line into one DefinitionList
+// at the whole-document level; StreamingParser has no construct-aware
+// continuation state across its blank-line block boundary, so it emits one
+// DefinitionList pair per item instead of one merged list — this is the
+// fixture originally called out in this comment, and it is still open, just
+// for a different reason (list-merging state, not the document wrapper).
+// (2) adv-heading-no-close / adv-link-no-close — Parser::try_parse_header
+// reads self.lines[0..3] of the whole document without checking they're
+// contiguous, misdetecting a title/date spanning a blank-line block
+// boundary that StreamingParser's per-block try_emit_header correctly does
+// not (a bug in the reference parse()/events() behavior itself, not in
+// StreamingParser). (3) adv-unclosed-code — an EOF-terminated fence's
+// CodeBlock content includes a trailing newline in the whole-document parse
+// but not in StreamingParser's block_lines.join("\n") reconstruction. These
+// are why `t2t_streaming_parser_matches_events_under_adversarial_chunking`
 // still fails overall — see `document-header`'s own streamed output for
-// confirmation the header itself is now carried correctly.
+// confirmation the header itself is carried correctly.
 //
 // Writer used to buffer all events into a Vec<OwnedEvent> and only
 // reconstruct the AST + call emit() inside finish() (writer.rs's own module

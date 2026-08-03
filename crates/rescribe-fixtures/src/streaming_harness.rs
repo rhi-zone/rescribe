@@ -1086,25 +1086,46 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "t2t",
         events: ApiState::Wired,
+        // Fixed (StartDocument/EndDocument duplication): StreamingParser used to re-parse each
+        // accumulated block in isolation via crate::events::events(&text), and events() always
+        // wraps its output in its own StartDocument/EndDocument pair, so StreamingParser used to
+        // emit one such pair per accumulated block instead of one for the whole document,
+        // diverging on every fixture with more than one top-level block. StreamingParser now
+        // dispatches its own single StartDocument in new() and EndDocument in finish() (mirroring
+        // fountain-fmt's batch.rs), filtering the wrapper pair out of every per-block re-parse's
+        // output (emit_block() and try_emit_header()'s trailing-content path both filter
+        // Event::StartDocument/EndDocument). Confirmed via adversarial-chunking equivalence
+        // against events() over every fixture, plus a hand-built synthetic-sample adversarial
+        // test added to t2t's own batch.rs (whole/single-byte/chunks-of-7/chunks-of-37) asserting
+        // exactly one StartDocument/EndDocument pair. The related, already-fixed
+        // document-header-specific defect (Event::Header / try_emit_header) is unaffected by
+        // this change.
         streaming_parser: ApiState::KnownFailure(
-            "t2t::batch::StreamingParser genuinely flushes events per accumulated block as fed \
-             (not only at finish()), but emit_block() re-parses each block's text in isolation \
-             via crate::events::events(&text), and events() always wraps its output in its own \
-             StartDocument/EndDocument pair — the same \"re-parse each block alone, lose \
-             cross-block context\" root cause already tracked for org-fmt/asciidoc/fountain. \
-             Bulk events() over the whole document emits exactly one such pair, but \
-             StreamingParser emits one per accumulated block, diverging on every fixture with \
-             more than one top-level block (heading-h2, horizontal-rule, path-many-sections, \
-             comp-heading-list, definition-list, etc. — not limited to definition-list, where \
-             the blank line between items, batch.rs's feed_line blank-line branch, \
-             batch.rs:143-150, ends the accumulated block, splitting one multi-item \
-             DefinitionList into two DefinitionList event pairs). The related \
-             document-header-specific defect — an isolated re-parse of the 3-line header block \
-             re-triggering try_parse_header() and producing a spurious *empty* \
-             StartDocument/EndDocument pair with title/author/date silently dropped — is fixed: \
-             Event::Header was added and StreamingParser's try_emit_header() recognizes the \
-             first block directly via Parser::try_parse_header instead of falling through to \
-             the generic re-parse path; see TODO.md",
+            "Narrower than before: the StartDocument/EndDocument-per-block duplication is fixed \
+             (see the comment above this entry). Three distinct, pre-existing root causes \
+             remain, on 4 of the fixture suite's ~50 fixtures: (1) definition-list — \
+             parse_definition_list (parse.rs:412) deliberately skips blank lines between \
+             consecutive ': '-prefixed items so the whole-document parser merges them into one \
+             DefinitionList block, but StreamingParser's feed_line treats every blank line as a \
+             hard block boundary (batch.rs's blank-line branch) with no construct-aware \
+             continuation state, so two ': '-item blocks separated by a blank line each become \
+             their own isolated StartDefinitionList/EndDefinitionList pair instead of one merged \
+             list — a genuine cross-block state gap (same class as the fix in this entry, but for \
+             a different construct: DefinitionList continuation, not the document wrapper). (2) \
+             adv-heading-no-close and adv-link-no-close — crate::parse::Parser::try_parse_header \
+             (parse.rs:70) inspects raw self.lines[0..3] of the *whole* document without checking \
+             those 3 lines are contiguous (no intervening blank line), so when the first block is \
+             a single line that fails every specific rejection check (not a closed \
+             heading/list/table/quote/etc. — an unclosed heading opener or unclosed link opener \
+             both qualify) it misdetects a title/date spanning across a block boundary that the \
+             per-block StreamingParser correctly treats as two separate blocks (StreamingParser's \
+             own try_emit_header only ever sees the first block's lines, which are too few to \
+             match); this is a bug in the whole-document parse()/events() reference behavior \
+             itself, not in StreamingParser's block accumulation. (3) adv-unclosed-code — an \
+             EOF-terminated code fence with no closing ``` marker: the whole-document parser's \
+             CodeBlock content includes a trailing newline, but StreamingParser's emit_block() \
+             reconstructs block text via self.block_lines.join(\"\\n\") which never appends one, \
+             so the two CodeBlock contents differ by a single trailing '\\n'. See TODO.md.",
         ),
         // Fixed 2026-07-31: t2t::writer::Writer rewritten from
         // buffer-all-events-then-reconstruct-the-AST to a single shared-buffer
@@ -1731,16 +1752,24 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "t2t",
         api: "streaming_parser",
-        description: "t2t::batch::StreamingParser's emit_block() re-parses each accumulated \
-                       block in isolation, and events() always wraps its output in its own \
-                       StartDocument/EndDocument pair, so StreamingParser emits one such pair \
-                       per block instead of one for the whole document — reproduces on any \
-                       fixture with more than one top-level block, e.g. a blank line splitting a \
-                       multi-item DefinitionList into one StartDefinitionList/EndDefinitionList \
-                       pair per item. (The narrower document-header instance of this — an \
-                       isolated re-parse of the header's own 3 lines mis-triggering \
-                       try_parse_header() and silently dropping title/author/date — is fixed via \
-                       the new Event::Header variant.)",
+        description: "Narrowed: the StartDocument/EndDocument-per-block duplication is fixed \
+                       (StreamingParser now dispatches exactly one StartDocument in new() and \
+                       one EndDocument in finish(), filtering the wrapper pair out of every \
+                       per-block re-parse's own events() output). Three distinct, pre-existing \
+                       root causes remain on 4 fixtures: (1) definition-list — \
+                       parse_definition_list (parse.rs:412) merges consecutive ': '-item blocks \
+                       across a blank line into one DefinitionList at the whole-document level; \
+                       StreamingParser has no construct-aware continuation state across its \
+                       blank-line block boundary, so it emits one DefinitionList pair per item \
+                       instead of one merged list. (2) adv-heading-no-close / adv-link-no-close \
+                       — Parser::try_parse_header (parse.rs:70) reads self.lines[0..3] of the \
+                       whole document without checking they're contiguous, so it misdetects a \
+                       title/date spanning a blank-line block boundary that StreamingParser's \
+                       per-block try_emit_header correctly does not (a bug in the reference \
+                       parse()/events() behavior itself). (3) adv-unclosed-code — an \
+                       EOF-terminated fence's CodeBlock content includes a trailing newline in \
+                       the whole-document parse but not in StreamingParser's \
+                       block_lines.join(\"\\n\") reconstruction. See TODO.md.",
     },
     KnownFailure {
         format: "rtf",

@@ -193,6 +193,59 @@ module-doc-sanctioned exceptions (loose lists, drawers with blank lines):
 `streaming_harness::CAPABILITIES`'s `"org"` entry's `streaming_parser` changed from
 `KnownFailure` to `Wired`; the matching `KNOWN_FAILURES` entry removed.
 
+---
+
+**2026-08-03: t2t-fmt `StreamingParser` StartDocument/EndDocument-per-block duplication fixed;
+three narrower, pre-existing defects surfaced and now tracked separately.** Follow-up to the
+2026-07-30 t2t pass below, which fixed the document-header-specific defect but explicitly left
+the general per-block wrapper-pair duplication open. Fixed here: `StreamingParser::new()`
+(`crates/formats/t2t/src/batch.rs`) now dispatches a single `Event::StartDocument` directly and
+`finish()` dispatches the matching `EndDocument` — mirroring the pattern already used for
+fountain-fmt's `StreamingParser` — while `emit_block()` and `try_emit_header()`'s
+trailing-content path both filter `Event::StartDocument`/`EndDocument` out of every per-block
+re-parse's forwarded events (each block is still re-parsed in isolation via
+`crate::events::events(&text)`, which always wraps its own output in a wrapper pair; that
+wrapper pair is now discarded rather than forwarded). Confirmed via a new hand-built
+adversarial-chunking test suite added to `t2t`'s own `batch.rs` test module
+(`test_streaming_matches_events_adversarial_{whole,single_byte,chunks_of_7,chunks_of_37}` and
+`test_streaming_matches_events_single_start_end_document`, over a synthetic multi-block sample
+covering a document header, multiple heading levels, a paragraph, a code block, a list, a
+table, a definition list, and a horizontal rule), plus the pre-existing fixture-driven
+`t2t_streaming_parser_matches_events_under_adversarial_chunking` in
+`crates/rescribe-fixtures/tests/streaming_apis.rs`.
+
+That fixture-driven check still does not pass outright — fixing the wrapper-pair duplication
+unmasked three distinct, pre-existing root causes on 4 of the ~50 fixtures that the coarser
+bug had been swamping:
+- **`definition-list`**: `parse_definition_list` (`parse.rs:412`) deliberately skips blank
+  lines between consecutive `: `-prefixed items so the whole-document parser merges them into
+  one `DefinitionList` block; `StreamingParser` has no construct-aware continuation state
+  across its blank-line block boundary, so it emits one `DefinitionList` pair per item instead
+  of one merged list. This is the fixture originally named in the `KnownFailure` text from the
+  2026-07-30 pass — it remains open, now for a narrower, different reason (list-merging state,
+  not the document wrapper).
+- **`adv-heading-no-close` / `adv-link-no-close`**: `Parser::try_parse_header` (`parse.rs:70`)
+  reads `self.lines[0..3]` of the *whole* document without checking those 3 lines are
+  contiguous (no intervening blank line). When the first block is a single line that fails
+  every specific rejection check (an unclosed heading opener or unclosed link opener both
+  qualify, since neither is a *closed* heading/list/table/quote/etc.), the whole-document parse
+  misdetects a title/date spanning across a blank-line block boundary that `StreamingParser`'s
+  per-block `try_emit_header` correctly does not (its own first-block line count is too short
+  to pass `try_parse_header`'s `len() < 3` guard). This is a bug in the reference
+  `parse()`/`events()` behavior itself, not in `StreamingParser`'s block accumulation.
+- **`adv-unclosed-code`**: an EOF-terminated code fence with no closing ` ``` ` marker. The
+  whole-document parser's `CodeBlock` content includes a trailing newline; `StreamingParser`'s
+  `emit_block()` reconstructs block text via `self.block_lines.join("\n")`, which never appends
+  a trailing newline, so the two `CodeBlock` contents differ by exactly one trailing `'\n'`.
+
+`streaming_harness::CAPABILITIES`'s `t2t`/`streaming_parser` entry and the matching
+`KNOWN_FAILURES` entry were both narrowed (not removed) to describe only these three remaining
+root causes. Not attempted here (out of scope for this pass — three separate, unrelated fixes,
+each needing its own careful change): the `parse_definition_list` cross-block merge state, the
+`try_parse_header` contiguity check, and the fenced-block trailing-newline reconstruction.
+
+---
+
 **2026-08-01: rtf-fmt wired into the cross-API harness (`events`/`StreamingParser`/streaming
 `Writer`); `rtf` removed from `streaming_harness::NOT_YET_AUDITED`.** `events()`
 (`sem_events::events`) is a lazy frame-stack walk of the AST `parse()` already built — same
