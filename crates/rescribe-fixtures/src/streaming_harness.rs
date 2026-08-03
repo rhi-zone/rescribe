@@ -1408,33 +1408,45 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // src/tables.rs used by both paths so they can't diverge), which is what
     // made a genuine events()-fed streaming writer possible (see below).
     //
-    // batch::StreamingParser (batch.rs:107-139) buffers all fed bytes into a
-    // Vec<u8> in feed() and only calls sem_events::events(&self.buf) once,
-    // inside finish() — a confirmed buffer-then-finish stub, O(full input).
+    // Fixed 2026-08-04: batch::StreamingParser (src/batch.rs) is now a genuinely incremental
+    // reader, not a buffer-then-finish stub. `feed()` buffers only until the header
+    // (`\fonttbl`/`\colortbl`/`\stylesheet`/`\info`/`\*`-destination groups) is confirmed
+    // complete (`incremental::find_header_boundary`, a byte-level tokenizer shared with the
+    // body-cut scanner — see `src/incremental.rs`'s module doc), computes the font/color
+    // tables from just that buffered slice, emits `Event::StartDocument`, then buffers only up
+    // to the next top-level `\par`/`\pard` (`incremental::find_next_par_cut`) and hands that one
+    // bounded increment to `parse::Parser::run_body_step` — the *same* method the whole-document
+    // `parse()` path uses (not a reimplementation), carrying inherited character/paragraph/
+    // table/list state (`parse::BodyCarry`) across increments. Verified: `feed()` alone (no
+    // `finish()`) delivers events for a complete-prefix input; a 100x paragraph-count increase
+    // (200 -> 20,000 paragraphs, fed in 32-byte chunks) shows peak allocator bytes going from
+    // 1372 to 1376 (ratio 1.00) via this crate's `alloc_probe` tracking allocator, not scaling
+    // with document size; adversarial-chunking equivalence against `events()` (whole-input,
+    // single-byte, 3/7/13-byte chunks, and hand-constructed mid-control-word and
+    // mid-group-boundary splits) passes over a rich hand-built sample (headings, bold/italic,
+    // nested groups, color/font changes, a table, a bulleted list) in `src/batch.rs`'s own test
+    // suite, and over every fixture in `fixtures/rtf/` via this file's own adversarial-chunking
+    // test below.
     //
-    // Investigated 2026-08-04 (per CLAUDE.md's exemption bar — cross-referenced against the
-    // actual RTF spec, not the module doc's own prior claim): this is genuinely fixable, NOT a
-    // structural barrier like commonmark-fmt's pulldown-cmark `&str` requirement or html-fmt's
-    // HTML5 tree-construction algorithm (which can rearrange already-emitted nodes based on
-    // later input — true architectural impossibility). The RTF 1.9.1 grammar is
-    // `<file> ::= '{' <header> <document> '}'` — the header (including `<fonttbl>`/
-    // `<colortbl>`) is placed strictly *before* the document body by the formal grammar, and
-    // the spec text is explicit that header groups "must precede the first plain-text
-    // character in the document." So `\f<N>`/`\cf<N>` body references never need lookahead
-    // past the header: by the time real body content starts, the tables are already fully
-    // declared. A correct incremental parser only needs to buffer through the end of the
-    // header group (`O(header size)`, not `O(full input)`), then can stream the body with
-    // only ordinary bounded per-construct lookahead — the same shape rst-fmt/ooxml-wml/
-    // ooxml-sml turned out to have (all initially suspected structural, all fixed instead).
-    // batch.rs's own module doc previously claimed this was "an inherent property of the RTF
-    // format, not an implementation limitation" — that claim is corrected as of this
-    // investigation (see batch.rs's updated module doc). Per the task that prompted this
-    // investigation, the actual incremental rewrite is a bigger job than a small fix and was
-    // NOT attempted here — left open, KnownFailure kept (not promoted to NotApplicable, since
-    // it fails this crate's own "genuinely, provably impossible" bar for that classification).
-    // Directly verified: feed() alone, without calling finish(), delivers zero events to the
-    // handler for any input. This reader-side gap is unrelated to the streaming_writer fix
-    // below and remains open.
+    // One structural, not-further-fixable divergence remains, in `Event::StartDocument` only:
+    // `events()`'s `StartDocument.fonts`/`colors` are computed by `build_font_map`/
+    // `build_color_map` walking the *entire already-parsed* document (first-*use* order,
+    // deduplicated, with an implicit "Times New Roman" default at font index 0 regardless of
+    // what the source declares) — information that by definition doesn't exist until the last
+    // font/color reference anywhere in the body has been seen, which conflicts directly with
+    // `StartDocument` needing to be the *first* event a genuinely incremental reader emits.
+    // `StreamingParser` instead reports the header's own *declared* `\fonttbl`/`\colortbl`
+    // tables (available after O(header size) bytes, the same tables `Parser` itself resolves
+    // body `\f<n>`/`\cf<n>` references against) — every font/color a body event carries is
+    // guaranteed present in this table, but its *order* (declared vs. first-use) and *set*
+    // (declared-but-unused entries) can differ from `events()`'s, and, for fonts specifically,
+    // the "no \fonttbl" case (`[""]` vs. `events()`'s hardcoded `["Times New Roman"]`) always
+    // differs. This is why `streaming_parser` below is `KnownFailure`, not `Wired`, despite the
+    // reader now being genuinely incremental: the harness's equality check is exact-vector, and
+    // this one field provably cannot match in general. Confirmed empirically against every
+    // fixture in `fixtures/rtf/` (38 fixtures): 0 body-event mismatches, 33/38 differ only in
+    // `StartDocument`, 5/38 match exactly (documents whose declared tables happen to equal the
+    // usage-based ones).
     //
     // streaming_writer is now Wired via a new src/sem_writer.rs Writer that
     // consumes Event/OwnedEvent directly (not TokenEvent) — the gap this
@@ -1460,19 +1472,24 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         format: "rtf",
         events: ApiState::Wired,
         streaming_parser: ApiState::KnownFailure(
-            "batch::StreamingParser buffers all fed bytes in feed() and only calls \
-             sem_events::events() once inside finish() (batch.rs:107-139) — a confirmed \
-             buffer-then-finish stub, O(full input). feed() alone, without finish(), delivers \
-             zero events to the handler for any input. Investigated 2026-08-04 against the \
-             actual RTF 1.9.1 grammar (see the CAPABILITIES comment above for the full \
-             writeup): NOT a structural barrier — the grammar places the header (fonttbl/ \
-             colortbl) strictly before the document body (`<file> ::= '{' <header> <document> \
-             '}'`), and the spec text requires header groups to precede the first plain-text \
-             character, so a correct incremental parser only needs to buffer O(header size), \
-             not O(full input), then can stream the body with ordinary bounded lookahead — the \
-             same shape rst-fmt/ooxml-wml/ooxml-sml turned out to have. Genuinely fixable, but \
-             the incremental rewrite is a bigger job than a small fix and was not attempted. \
-             See TODO.md",
+            "Fixed 2026-08-04: batch::StreamingParser is now genuinely incremental (see the \
+             CAPABILITIES comment above for the full writeup) — bounded O(header size + \
+             largest single paragraph or still-open table/list + nesting depth) memory, \
+             verified via alloc_probe (peak bytes 1372 @200 paragraphs vs. 1376 @20,000, ratio \
+             1.00) and adversarial chunking against every fixtures/rtf/ fixture. One narrower, \
+             structural (not a chunking artifact) divergence remains: Event::StartDocument's \
+             fonts/colors fields. events() computes them by walking the entire already-parsed \
+             document (build_font_map/build_color_map: first-*use* order, deduplicated, an \
+             implicit \"Times New Roman\" default always at font index 0) — unavailable before \
+             StartDocument, which must be the first event a genuinely incremental reader \
+             emits. StreamingParser instead reports the header's own declared \\fonttbl/\
+             \\colortbl tables (available after O(header size) bytes) — every font/color a \
+             body event carries is guaranteed present there, but the *order* (declared vs. \
+             first-use) and *set* (declared-but-unused entries) can differ, and a \
+             fonttbl-less document always differs (`[\"\"]` vs. events()'s hardcoded \
+             `[\"Times New Roman\"]`). Confirmed empirically: across all 38 fixtures/rtf/ \
+             fixtures, 0 body-event mismatches, 33 differ only in StartDocument, 5 match \
+             exactly. See src/batch.rs's module doc for the full design.",
         ),
         streaming_writer: ApiState::Wired,
     },
@@ -1857,18 +1874,24 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "rtf",
         api: "streaming_parser",
-        description: "rtf_fmt::batch::StreamingParser buffers all fed bytes in feed() and only \
-                       calls sem_events::events() once inside finish() (batch.rs:107-139) — a \
-                       confirmed buffer-then-finish stub, O(full input); feed() alone (no \
-                       finish()) delivers zero events to the handler for any input. Investigated \
-                       2026-08-04 against the actual RTF 1.9.1 grammar and confirmed NOT a \
-                       structural barrier (unlike commonmark-fmt's pulldown-cmark exemption or \
-                       html-fmt's HTML5 tree-construction one) — the grammar places the header \
-                       (fonttbl/colortbl) strictly before the document body, so a correct \
-                       incremental parser only needs to buffer O(header size), not O(full \
-                       input). Genuinely fixable; the incremental rewrite is a bigger job than a \
-                       small fix and was not attempted. See the CAPABILITIES entry above and \
-                       TODO.md for the full investigation",
+        description: "Narrowed 2026-08-04 (was: StreamingParser buffers all fed bytes and only \
+                       calls events() inside finish() — now fixed, see the CAPABILITIES entry \
+                       above for the full incremental-rewrite writeup). The one residual, \
+                       structural gap: rtf_fmt::batch::StreamingParser's StartDocument.fonts/ \
+                       colors report the header's own declared \\fonttbl/\\colortbl tables \
+                       (all that's available in O(header size) bytes before the first event \
+                       must be emitted), while sem_events::events() reports build_font_map/ \
+                       build_color_map's usage-based, first-use-order, deduplicated tables — \
+                       information that provably doesn't exist until the whole document has \
+                       been walked. Every body Start*/End* event after StartDocument matches \
+                       events() exactly under adversarial chunking, for every fixtures/rtf/ \
+                       fixture. Current failure example: fixture adjacent_bold ({\\rtf1 {\\b \
+                       first}{\\b second}\\par}, no \\fonttbl at all) diverges only in \
+                       StartDocument.fonts ([\"\"] vs. events()'s hardcoded [\"Times New \
+                       Roman\"]), even under whole-input (unchunked) feeding — proving this is \
+                       not a chunk-boundary bug. See src/batch.rs's module doc for the full \
+                       explanation and src/batch.rs's own test suite for the adversarial \
+                       chunking + alloc_probe memory-bound verification.",
     },
 ];
 

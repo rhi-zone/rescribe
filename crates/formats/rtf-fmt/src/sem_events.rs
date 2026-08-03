@@ -172,6 +172,19 @@ pub struct SemanticEventIter {
 }
 
 impl SemanticEventIter {
+    /// Build an iterator over just the block-level events for `blocks` — no
+    /// `StartDocument`/`EndDocument` bracket. Used by
+    /// [`crate::batch::StreamingParser`] to turn each incrementally-parsed
+    /// batch of `Block`s into the same `Start*`/`End*` event sequence
+    /// [`events`] would have produced for them, without re-deriving the
+    /// block→event expansion logic (`expand_block`/`expand_inline` below) a
+    /// second time.
+    pub(crate) fn from_blocks(blocks: Vec<Block>) -> Self {
+        SemanticEventIter {
+            frame_stack: vec![Frame::Blocks(blocks.into_iter())],
+        }
+    }
+
     fn new(doc: crate::ast::RtfDoc) -> Self {
         // Computed once, from the already-fully-parsed AST, before the first
         // event is yielded — see Event::StartDocument's doc comment.

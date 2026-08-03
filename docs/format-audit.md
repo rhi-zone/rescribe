@@ -258,7 +258,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 
 | Crate | ast | stream | batch | w-stream | w-build |
 |-------|-----|--------|-------|----------|---------|
-| rtf-fmt | ✓ | ~ | ~§ | ✓¥ | ✓ |
+| rtf-fmt | ✓ | ~ | ✓§Δ | ✓¥ | ✓ |
 | rst-fmt | ✓ | ✓ | ✓‡ | ✓ | ✓ |
 | asciidoc | ✓ | ✓ | ✓§ | ✓ | ✓ |
 | org-fmt | ✓ | ✓ | ✓ | ✓§ | ✓ |
@@ -285,6 +285,20 @@ the full `fixtures/rst/` suite (previously only 6 hand-picked cases were covered
 multi-item definition list is split into one `StartDefinitionList`/`EndDefinitionList` pair
 per item instead of one list spanning all items. Tracked as a `KnownFailure` in
 `streaming_harness.rs` and in TODO.md; not fixed here.
+
+Δ rtf-fmt's `batch` (`StreamingParser`) was rewritten 2026-08-04 from a buffer-then-finish stub
+to a genuinely incremental reader (`O(header size + largest single paragraph or still-open
+table/list + nesting depth)`, verified via `alloc_probe`: peak bytes 1372 @200 paragraphs vs.
+1376 @20,000, ratio 1.00) — see `crates/formats/rtf-fmt/src/batch.rs`'s module doc and
+`crates/formats/rtf-fmt/src/incremental.rs` for the design. One structural (not a chunking bug)
+divergence from `events()` remains, in `Event::StartDocument.fonts`/`colors` only: `events()`
+computes these by walking the entire already-parsed document, information that provably cannot
+exist before `StartDocument`, which must be the first event a genuinely incremental reader
+emits; `StreamingParser` reports the header's own declared `\fonttbl`/`\colortbl` tables instead
+(available in `O(header size)` bytes). Confirmed against all 38 `fixtures/rtf/*` fixtures: 0
+body-event mismatches, 33/38 differ only in `StartDocument`, 5/38 match exactly. Tracked as a
+narrowed `KnownFailure` in `streaming_harness.rs` (`rtf`/`streaming_parser`), not `NotApplicable`
+(the divergence is real and field-specific, not "this API doesn't apply here").
 
 ¥ rtf-fmt's `w-stream` is now `crate::sem_writer::Writer` (fixed 2026-08-03), a new module
 consuming the crate's own semantic `Event`/`OwnedEvent` type directly — the low-level

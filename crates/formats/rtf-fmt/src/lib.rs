@@ -47,6 +47,7 @@ mod ast;
 pub mod batch;
 mod emit;
 mod events;
+mod incremental;
 mod parse;
 mod sem_events;
 pub mod sem_writer;

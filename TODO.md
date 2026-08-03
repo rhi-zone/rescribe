@@ -300,6 +300,74 @@ document"), cross-referenced via web search against RTF specification mirrors (b
 RTF 1.5 spec mirror and latex2rtf.sourceforge.net's RTF header page), since Microsoft's original
 RTF 1.9.1 spec PDF was not directly fetchable in this session.
 
+---
+
+**2026-08-04: `rtf`/`streaming_parser` implemented as a genuine incremental reader (the rewrite
+the investigation above left open).** `crates/formats/rtf-fmt/src/batch.rs::StreamingParser` no
+longer buffers the whole document. New module `crates/formats/rtf-fmt/src/incremental.rs` holds
+a chunk-boundary-tolerant tokenizer (`next_token`, shared by two scans built on it:
+`find_header_boundary` and `find_next_par_cut`) that mirrors `parse::Parser`'s own byte-level
+dispatch closely enough that misclassification only ever changes *when* a boundary is found, not
+what gets parsed once found.
+
+- **Header phase**: `feed()` buffers until `find_header_boundary` confirms the header
+  (`\fonttbl`/`\colortbl`/`\stylesheet`/`\info`/`\*`-destination groups) is complete, computes the
+  font/color tables from just that slice (`parse_font_table`/`parse_color_table`, now
+  `pub(crate)`), emits `Event::StartDocument`, then hands the **whole** buffered prefix (not a
+  truncated slice) into the body phase — a bare control word between `{\rtf1` and the first
+  header group (e.g. `\ql` in `{\rtf1 \ql left\par...}`) has a real effect
+  (`handle_control_word` sets alignment) that must still run; only the header's *destination
+  groups* are skippable, and `run_body_step` already knows how to skip those itself.
+- **Body phase**: buffers only up to the next top-level `\par`/`\pard`
+  (`find_next_par_cut`, opaque-region-aware — suppressed inside skip/footnote destination
+  groups, matching `is_skip_group`/`is_footnote_group`'s exact classification, extracted to free
+  functions `is_skip_group_prefix`/`is_footnote_group_prefix` so both the full parser and the
+  scanner share one definition) and hands that one increment to a new
+  `Parser::run_body_step`/`Parser::finalize_body` pair — `Parser::run` itself is now just
+  `skip_rtf_header` + one `run_body_step` call + one `finalize_body` call, refactored into a
+  reusable `BodyCarry` struct (inherited character/paragraph/table/list state) so the same code
+  parses one call for the whole document or many calls for many increments. The very first
+  increment additionally needs `Parser::skip_rtf_header` run on it (mirroring what `Parser::run`
+  does once), since that increment still has the document's own leading `{` in front of it.
+- **`\binN` exception**: a `\binN` control word's raw payload is skipped as one atomic token
+  (matching `handle_control_word`'s `"bin"` arm), so a chunk boundary inside a large embedded
+  picture/object is buffered until the whole payload arrives — bounded by that blob's size, not
+  the document's, but real.
+
+**Verified** (not assumed): `cargo test -p rtf-fmt -q` — 86 passed, 1 ignored, 0 failed (incl.
+`incremental`'s own unit tests and `batch::tests`' new adversarial-chunking suite: whole-input,
+single-byte, 3/7/13-byte chunks, and hand-constructed mid-control-word/mid-group-boundary splits,
+over a rich hand-built sample covering headings, bold/italic, nested groups, color/font changes, a
+table, and a bulleted list). `cargo clippy -p rtf-fmt --all-targets --all-features -- -D
+warnings` — clean. A memory-guard test using this crate's own `alloc_probe` tracking allocator
+(`test_streaming_parser_memory_bounded_by_header_not_document`) feeds a 200-paragraph and a
+20,000-paragraph synthetic document in 32-byte chunks: peak allocator bytes 1372 vs. 1376 (ratio
+1.00) — genuinely flat, not scaling with paragraph count (the first version of this test measured
+127x before a test-harness bug — collecting every delivered event into a `Vec` that itself grew
+with document size — was found and fixed; a second version measured 71x before a second
+test-harness bug — the synthetic input `Vec<u8>` itself being built before resetting the peak
+counter — was found and fixed; both are documented in the test's own comments as a caution against
+mis-measuring a test's own scaffolding as the thing under test).
+`crates/rescribe-fixtures/tests/streaming_apis.rs::rtf_streaming_parser_matches_events_under_adversarial_chunking`
+now exercises real chunking of the real `StreamingParser` (it always did — this was the harness's
+enforcement mechanism the whole time, previously always green only because the old stub replayed
+`events()` exactly regardless of chunking).
+
+**One structural gap intentionally left open, not a chunking bug**: `Event::StartDocument`'s
+`fonts`/`colors` fields. `events()` computes them via `build_font_map`/`build_color_map`, which
+walk the *entire already-parsed* document (first-*use* order, deduplicated, an implicit "Times New
+Roman" default always at font index 0) — this is by construction unavailable before
+`StartDocument`, which must be the first event a genuinely incremental reader emits without
+buffering the whole document. `StreamingParser` instead reports the header's own *declared*
+`\fonttbl`/`\colortbl` tables (available after `O(header size)` bytes — the same tables `Parser`
+resolves body `\f<n>`/`\cf<n>` references against). Checked empirically against all 38
+`fixtures/rtf/*` fixtures: 0 body-event mismatches (every `Start*`/`End*`/`Text` event after
+`StartDocument` matches `events()` exactly under every adversarial chunking), 33/38 differ only in
+`StartDocument`, 5/38 match exactly. `streaming_harness::KNOWN_FAILURES`'s `rtf`/`streaming_parser`
+entry is narrowed (not removed) to describe exactly this residual field-level gap, since the
+harness's equivalence check is exact-vector and this one field provably cannot match in general —
+see that entry and `crates/formats/rtf-fmt/src/batch.rs`'s module doc for the full explanation.
+
 **2026-08-03: commonmark-fmt's streaming `Writer` rewritten from buffer-then-emit to genuine
 write-through streaming; resolves the `commonmark`/`gfm`/`markdown` `streaming_writer`
 `KnownFailure`s (mostly).** `crates/formats/commonmark-fmt/src/writer.rs` previously buffered
@@ -4134,8 +4202,9 @@ direct recursive descent, independent of events().
 - rst-fmt: blank-line separation + directive body (O(largest block))
 - asciidoc: blank-line separation + delimited blocks (O(largest block))
 - djot-fmt: blank-line separation + fenced code / div (O(largest block))
-- rtf-fmt: O(full input) — documented structural constraint; cannot be improved
-  without significant parser refactoring (font/color table dependency)
+- rtf-fmt: was O(full input), believed a documented structural constraint — corrected
+  2026-08-04: not structural, and now actually fixed (see the 2026-08-04 entry above);
+  O(header size + largest single paragraph or still-open table/list + nesting depth)
 - commonmark-fmt: O(full input) — pulldown-cmark requires full `&str`; exemption documented
 
 **`Cow::Borrowed` — DONE for djot-fmt (2026-03-28):**

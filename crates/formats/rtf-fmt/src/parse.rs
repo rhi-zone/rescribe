@@ -110,6 +110,49 @@ struct TableAccum {
     row_start: usize,
 }
 
+/// Body-parsing state that must survive across independently-processed
+/// increments of body content: the current inherited character/paragraph
+/// formatting (`state`/`state_stack`/`current_align`/`current_para_props`),
+/// whatever paragraph/table-cell text is mid-accumulation
+/// (`current_para`/`current_text`/`text_start`), and the table/list
+/// accumulators (which span multiple `\par`s before they're flushed as a
+/// completed `Block`).
+///
+/// [`Parser::run`] uses one of these internally for its single whole-document
+/// pass; [`batch::StreamingParser`] (crate `batch` module) keeps one alive
+/// across many [`Parser::run_body_step`] calls, one per bounded increment of
+/// buffered body bytes, so it never needs the whole document in memory at
+/// once. Byte-offset fields (`text_start`/`para_start`/`list_start`) are only
+/// meaningful within a single increment's own byte numbering — spans built
+/// from them are not used by [`crate::sem_events`]'s `Event` type (which
+/// carries no span), so incremental callers are free to renumber each
+/// increment from 0.
+#[derive(Default)]
+pub(crate) struct BodyCarry {
+    state: TextState,
+    state_stack: Vec<TextState>,
+    current_para: Vec<Inline>,
+    current_text: String,
+    text_start: usize,
+    para_start: usize,
+    current_align: Align,
+    current_para_props: String,
+    tbl: TableAccum,
+    lst: ListAccum,
+    list_start: usize,
+}
+
+impl BodyCarry {
+    pub(crate) fn new(start_pos: usize) -> Self {
+        BodyCarry {
+            text_start: start_pos,
+            para_start: start_pos,
+            list_start: start_pos,
+            ..Default::default()
+        }
+    }
+}
+
 impl TableAccum {
     /// Flush any fully-accumulated table into `paragraphs`.  Call this before
     /// pushing a non-table paragraph (on `\pard`).
@@ -125,7 +168,7 @@ impl TableAccum {
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
-struct Parser<'a> {
+pub(crate) struct Parser<'a> {
     input: &'a [u8],
     pos: usize,
     pub diagnostics: Vec<Diagnostic>,
@@ -150,7 +193,12 @@ impl<'a> Parser<'a> {
 
     /// Construct a sub-parser that inherits the color table, font table, and
     /// code page from the parent document, but parses a different byte slice.
-    fn with_tables(
+    ///
+    /// Used both for self-contained sub-parses (footnote groups) and — via
+    /// [`Parser::run_body_step`]/[`Parser::finalize_body`] — as the entry
+    /// point [`batch::StreamingParser`] uses to parse one bounded increment
+    /// of body content at a time.
+    pub(crate) fn with_tables(
         input: &'a [u8],
         color_table: Vec<(u8, u8, u8)>,
         font_table: Vec<String>,
@@ -176,25 +224,27 @@ impl<'a> Parser<'a> {
 
     fn run(&mut self) -> Vec<Block> {
         self.skip_rtf_header();
+        let mut carry = BodyCarry::new(self.pos);
+        let mut paragraphs = self.run_body_step(&mut carry);
+        paragraphs.extend(self.finalize_body(carry));
+        normalize_blocks(paragraphs)
+    }
 
-        let mut state = TextState::default();
-        let mut state_stack: Vec<TextState> = Vec::new();
+    /// Process `self.input[self.pos..]` to its end, mutating `carry` and
+    /// returning whatever `Block`s got completed along the way (a paragraph
+    /// on `\par`/`\pard`, a table on `\pard` closing a table, a list on a
+    /// list-type change). Anything still in progress at end-of-slice (a
+    /// partial paragraph, an open table row, an open list) is left in
+    /// `carry` for the *next* call — this is what lets [`batch::StreamingParser`]
+    /// feed one bounded increment of body content at a time and still
+    /// produce the exact same blocks [`Parser::run`] would have, just spread
+    /// across more calls. [`Parser::run`] itself is just this method called
+    /// once over the whole document, followed by [`Parser::finalize_body`].
+    ///
+    /// Does *not* call [`Parser::skip_rtf_header`] — callers that are mid-body
+    /// (as every incremental caller is) must not re-run header detection.
+    pub(crate) fn run_body_step(&mut self, carry: &mut BodyCarry) -> Vec<Block> {
         let mut paragraphs: Vec<Block> = Vec::new();
-        let mut current_para: Vec<Inline> = Vec::new();
-        let mut current_text = String::new();
-        let mut text_start = self.pos;
-        let mut para_start = self.pos;
-        let mut current_align = Align::Default;
-        // Accumulates raw RTF paragraph-layout control words verbatim so they
-        // can be preserved in the AST and re-emitted without loss.
-        let mut current_para_props = String::new();
-        let mut tbl = TableAccum::default();
-        // ── List accumulation ──────────────────────────────────────────────
-        // `current_list_kind` is set by `{\*\pn\pnlvlblt}` / `{\*\pn\pnlvlbody}`
-        // within the current paragraph.  `\pard` resets it.
-        // `list_items` + `list_ordered` accumulate the current open list.
-        let mut lst = ListAccum::default();
-        let mut list_start = self.pos;
 
         while self.pos < self.input.len() {
             let Some(byte) = self.current_byte() else {
@@ -215,17 +265,17 @@ impl<'a> Parser<'a> {
                             &word,
                             param,
                             word_start,
-                            &mut state,
-                            &mut current_text,
-                            &mut text_start,
-                            &mut current_para,
+                            &mut carry.state,
+                            &mut carry.current_text,
+                            &mut carry.text_start,
+                            &mut carry.current_para,
                             &mut paragraphs,
-                            &mut para_start,
-                            &mut current_align,
-                            &mut current_para_props,
-                            &mut tbl,
-                            &mut lst,
-                            &mut list_start,
+                            &mut carry.para_start,
+                            &mut carry.current_align,
+                            &mut carry.current_para_props,
+                            &mut carry.tbl,
+                            &mut carry.lst,
+                            &mut carry.list_start,
                         );
                     } else if next == b'\'' {
                         // \'XX hex-encoded byte (Windows-1252).
@@ -245,22 +295,24 @@ impl<'a> Parser<'a> {
                             let code = ((h as char).to_digit(16).unwrap() * 16
                                 + (l as char).to_digit(16).unwrap())
                                 as u8;
-                            if current_text.is_empty() {
-                                text_start = self.pos;
+                            if carry.current_text.is_empty() {
+                                carry.text_start = self.pos;
                             }
-                            current_text.push(codepage_to_char(self.codepage, code));
+                            carry
+                                .current_text
+                                .push(codepage_to_char(self.codepage, code));
                         }
                     } else {
                         // Control symbol
                         match next {
-                            b'\\' => current_text.push('\\'),
-                            b'{' => current_text.push('{'),
-                            b'}' => current_text.push('}'),
-                            b'~' => current_text.push('\u{00A0}'), // non-breaking space
-                            b'-' => {}                             // optional hyphen — ignore
-                            b'_' => current_text.push('\u{2011}'), // non-breaking hyphen
-                            b'\n' | b'\r' => {}                    // escaped newline = ignored
-                            _ => {} // unknown control symbol — ignore
+                            b'\\' => carry.current_text.push('\\'),
+                            b'{' => carry.current_text.push('{'),
+                            b'}' => carry.current_text.push('}'),
+                            b'~' => carry.current_text.push('\u{00A0}'), // non-breaking space
+                            b'-' => {}                                   // optional hyphen — ignore
+                            b'_' => carry.current_text.push('\u{2011}'), // non-breaking hyphen
+                            b'\n' | b'\r' => {} // escaped newline = ignored
+                            _ => {}             // unknown control symbol — ignore
                         }
                         self.advance();
                     }
@@ -271,24 +323,24 @@ impl<'a> Parser<'a> {
                     if self.is_footnote_group() {
                         // Parse footnote / endnote content into an Inline::Footnote
                         // at the current position, flushing any pending text first.
-                        if !current_text.is_empty() {
-                            let span = Span::new(text_start, self.pos);
-                            current_para.push(make_inline(
-                                &current_text,
-                                &state,
+                        if !carry.current_text.is_empty() {
+                            let span = Span::new(carry.text_start, self.pos);
+                            carry.current_para.push(make_inline(
+                                &carry.current_text,
+                                &carry.state,
                                 span,
                                 &self.color_table,
                                 &self.font_table,
                             ));
-                            current_text.clear();
+                            carry.current_text.clear();
                         }
                         let fn_start = self.pos;
                         let footnote_content = self.parse_footnote_group();
-                        current_para.push(Inline::Footnote {
+                        carry.current_para.push(Inline::Footnote {
                             content: footnote_content,
                             span: Span::new(fn_start, self.pos),
                         });
-                        text_start = self.pos;
+                        carry.text_start = self.pos;
                     } else if self.is_skip_group() {
                         // Before skipping, check if this is a `{\*\pn...}` group
                         // that carries list-style information (\pnlvlblt / \pnlvlbody).
@@ -296,33 +348,33 @@ impl<'a> Parser<'a> {
                         if rest.starts_with(b"\\*") {
                             let group_bytes = self.extract_balanced_group();
                             if let Some(kind) = Parser::detect_list_kind(group_bytes) {
-                                lst.current_kind = Some(kind);
+                                carry.lst.current_kind = Some(kind);
                             }
                         } else {
                             self.skip_balanced_group();
                         }
                     } else {
-                        state_stack.push(state.clone());
+                        carry.state_stack.push(carry.state.clone());
                     }
                 }
 
                 b'}' => {
                     // Flush pending text before restoring state
-                    if !current_text.is_empty() {
-                        let span = Span::new(text_start, self.pos);
-                        current_para.push(make_inline(
-                            &current_text,
-                            &state,
+                    if !carry.current_text.is_empty() {
+                        let span = Span::new(carry.text_start, self.pos);
+                        carry.current_para.push(make_inline(
+                            &carry.current_text,
+                            &carry.state,
                             span,
                             &self.color_table,
                             &self.font_table,
                         ));
-                        current_text.clear();
+                        carry.current_text.clear();
                     }
-                    text_start = self.pos;
+                    carry.text_start = self.pos;
                     // Restore parent group's state
-                    if let Some(prev) = state_stack.pop() {
-                        state = prev;
+                    if let Some(prev) = carry.state_stack.pop() {
+                        carry.state = prev;
                     }
                     self.advance();
                 }
@@ -332,74 +384,69 @@ impl<'a> Parser<'a> {
                 }
 
                 _ => {
-                    if current_text.is_empty() {
-                        text_start = self.pos;
+                    if carry.current_text.is_empty() {
+                        carry.text_start = self.pos;
                     }
-                    current_text.push(codepage_to_char(self.codepage, byte));
+                    carry
+                        .current_text
+                        .push(codepage_to_char(self.codepage, byte));
                     self.advance();
                 }
             }
         }
 
-        // Flush remaining
-        if !current_text.is_empty() {
-            let span = Span::new(text_start, self.pos);
-            current_para.push(make_inline(
-                &current_text,
-                &state,
+        paragraphs
+    }
+
+    /// Flush whatever is still in progress in `carry` at true end-of-document
+    /// (no more bytes will ever arrive): pending text, an unterminated table
+    /// row/table, a pending list, and the final partial paragraph. Mirrors
+    /// exactly what [`Parser::run`] used to do at the end of its single pass.
+    pub(crate) fn finalize_body(&mut self, mut carry: BodyCarry) -> Vec<Block> {
+        let mut paragraphs: Vec<Block> = Vec::new();
+        if !carry.current_text.is_empty() {
+            let span = Span::new(carry.text_start, self.pos);
+            carry.current_para.push(make_inline(
+                &carry.current_text,
+                &carry.state,
                 span,
                 &self.color_table,
                 &self.font_table,
             ));
         }
         // Flush any pending table row / table before flushing the final paragraph.
-        if tbl.in_table && !current_para.is_empty() {
+        if carry.tbl.in_table && !carry.current_para.is_empty() {
             // Unterminated last cell: treat current_para as the last cell.
-            tbl.current_row.push(std::mem::take(&mut current_para));
+            carry
+                .tbl
+                .current_row
+                .push(std::mem::take(&mut carry.current_para));
         }
-        if !tbl.current_row.is_empty() {
-            tbl.table_rows.push(TableRow {
-                cells: std::mem::take(&mut tbl.current_row),
-                span: Span::new(tbl.row_start, self.pos),
+        if !carry.tbl.current_row.is_empty() {
+            carry.tbl.table_rows.push(TableRow {
+                cells: std::mem::take(&mut carry.tbl.current_row),
+                span: Span::new(carry.tbl.row_start, self.pos),
             });
         }
-        tbl.flush_table(&mut paragraphs, self.pos);
+        carry.tbl.flush_table(&mut paragraphs, self.pos);
         // Flush any pending list.
-        lst.flush_list(&mut paragraphs, list_start, self.pos);
-        if !current_para.is_empty() {
+        carry
+            .lst
+            .flush_list(&mut paragraphs, carry.list_start, self.pos);
+        if !carry.current_para.is_empty() {
             paragraphs.push(Block::Paragraph {
-                inlines: merge_text_inlines(current_para),
-                align: current_align,
-                para_props: current_para_props,
-                span: Span::new(para_start, self.pos),
+                inlines: merge_text_inlines(carry.current_para),
+                align: carry.current_align,
+                para_props: carry.current_para_props,
+                span: Span::new(carry.para_start, self.pos),
             });
         }
-
-        // Normalize: merge adjacent Text nodes in every paragraph so that
-        // round-trip (parse → emit → parse) yields a structurally identical
-        // AST regardless of how text happened to be flushed during parsing.
         paragraphs
-            .into_iter()
-            .map(|b| match b {
-                Block::Paragraph {
-                    inlines,
-                    align,
-                    para_props,
-                    span,
-                } => Block::Paragraph {
-                    inlines: merge_text_inlines(inlines),
-                    align,
-                    para_props,
-                    span,
-                },
-                other => other,
-            })
-            .collect()
     }
 
     /// Skip past the `\rtf1` header word so we start processing at the
     /// document body.
-    fn skip_rtf_header(&mut self) {
+    pub(crate) fn skip_rtf_header(&mut self) {
         let pattern = b"\\rtf";
         if let Some(pos) = self.input.windows(pattern.len()).position(|w| w == pattern) {
             self.pos = pos;
@@ -420,39 +467,7 @@ impl<'a> Parser<'a> {
     /// Return `true` if the current position is the start of a group that
     /// should be skipped wholesale (font table, color table, picture data, etc.)
     fn is_skip_group(&self) -> bool {
-        let rest = &self.input[self.pos..];
-
-        // `{\*\...}` destination groups
-        if rest.starts_with(b"\\*") {
-            return true;
-        }
-
-        const SKIP_PREFIXES: &[&[u8]] = &[
-            b"\\fonttbl",
-            b"\\colortbl",
-            b"\\stylesheet",
-            b"\\info",
-            b"\\pict",
-            b"\\object",
-            b"\\header",
-            b"\\footer",
-            b"\\headerl",
-            b"\\headerr",
-            b"\\footerl",
-            b"\\footerr",
-            b"\\fldinst",
-            // Annotations: skip so they don't bleed into main text.
-            // (Footnotes/endnotes are now handled by is_footnote_group().)
-            b"\\annotation",
-            // Table of contents / index entry markers
-            b"\\tc",
-            b"\\xe",
-            // List override / numbering tables
-            b"\\listoverridetable",
-            b"\\listtable",
-        ];
-
-        SKIP_PREFIXES.iter().any(|p| rest.starts_with(p))
+        is_skip_group_prefix(&self.input[self.pos..])
     }
 
     /// Skip a balanced `{...}` group.  Called when `pos` is just past the
@@ -483,22 +498,7 @@ impl<'a> Parser<'a> {
     /// Return `true` if the current position (already past `{`) begins a
     /// `\footnote` or `\endnote` group that we should parse rather than skip.
     fn is_footnote_group(&self) -> bool {
-        let rest = &self.input[self.pos..];
-        // Must start with \footnote or \endnote followed by a word boundary
-        for prefix in [b"\\footnote".as_slice(), b"\\endnote".as_slice()] {
-            if rest.starts_with(prefix) {
-                let after = rest.get(prefix.len()).copied();
-                // word boundary: space, \, {, }, digit, or end
-                if matches!(
-                    after,
-                    None | Some(b' ') | Some(b'\\') | Some(b'{') | Some(b'}')
-                ) || after.map(|b| b.is_ascii_digit()).unwrap_or(false)
-                {
-                    return true;
-                }
-            }
-        }
-        false
+        is_footnote_group_prefix(&self.input[self.pos..])
     }
 
     /// Extract the current balanced group (caller has already consumed `{`)
@@ -1450,6 +1450,94 @@ impl<'a> Parser<'a> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/// Merge adjacent Text nodes in every top-level `Block::Paragraph` so that
+/// round-trip (parse → emit → parse) yields a structurally identical AST
+/// regardless of how text happened to be flushed during parsing. Applied
+/// once over the whole document by [`Parser::run`], and — for exactly the
+/// same reason — once per increment by [`crate::batch::StreamingParser`]
+/// (`batch.rs`), since each increment's blocks are emitted immediately
+/// rather than being collected for one final blanket pass.
+pub(crate) fn normalize_blocks(blocks: Vec<Block>) -> Vec<Block> {
+    blocks
+        .into_iter()
+        .map(|b| match b {
+            Block::Paragraph {
+                inlines,
+                align,
+                para_props,
+                span,
+            } => Block::Paragraph {
+                inlines: merge_text_inlines(inlines),
+                align,
+                para_props,
+                span,
+            },
+            other => other,
+        })
+        .collect()
+}
+
+/// Return `true` if `rest` (bytes immediately following a just-consumed `{`)
+/// starts a group that should be skipped wholesale (font table, color table,
+/// picture data, etc.) rather than descended into. Free function so both
+/// [`Parser::is_skip_group`] and the incremental cut-point scanner in
+/// [`crate::incremental`] use exactly the same classification — no risk of
+/// the two ever silently diverging.
+pub(crate) fn is_skip_group_prefix(rest: &[u8]) -> bool {
+    // `{\*\...}` destination groups
+    if rest.starts_with(b"\\*") {
+        return true;
+    }
+
+    const SKIP_PREFIXES: &[&[u8]] = &[
+        b"\\fonttbl",
+        b"\\colortbl",
+        b"\\stylesheet",
+        b"\\info",
+        b"\\pict",
+        b"\\object",
+        b"\\header",
+        b"\\footer",
+        b"\\headerl",
+        b"\\headerr",
+        b"\\footerl",
+        b"\\footerr",
+        b"\\fldinst",
+        // Annotations: skip so they don't bleed into main text.
+        // (Footnotes/endnotes are now handled by is_footnote_group_prefix().)
+        b"\\annotation",
+        // Table of contents / index entry markers
+        b"\\tc",
+        b"\\xe",
+        // List override / numbering tables
+        b"\\listoverridetable",
+        b"\\listtable",
+    ];
+
+    SKIP_PREFIXES.iter().any(|p| rest.starts_with(p))
+}
+
+/// Return `true` if `rest` (bytes immediately following a just-consumed `{`)
+/// begins a `\footnote` or `\endnote` group that should be parsed rather than
+/// skipped. Free function for the same reason as [`is_skip_group_prefix`].
+pub(crate) fn is_footnote_group_prefix(rest: &[u8]) -> bool {
+    // Must start with \footnote or \endnote followed by a word boundary
+    for prefix in [b"\\footnote".as_slice(), b"\\endnote".as_slice()] {
+        if rest.starts_with(prefix) {
+            let after = rest.get(prefix.len()).copied();
+            // word boundary: space, \, {, }, digit, or end
+            if matches!(
+                after,
+                None | Some(b' ') | Some(b'\\') | Some(b'{') | Some(b'}')
+            ) || after.map(|b| b.is_ascii_digit()).unwrap_or(false)
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Format a paragraph-layout control word for raw accumulation in `para_props`.
 ///
 /// Produces `\word` (no param) or `\wordN` (with integer param).
@@ -1618,7 +1706,7 @@ fn make_inline(
 
 /// Pre-scan the input for a `\colortbl` group and parse its RGB entries.
 /// Index 0 is the auto color (no RGB), subsequent entries are RGB triples.
-fn parse_color_table(input: &[u8]) -> Vec<(u8, u8, u8)> {
+pub(crate) fn parse_color_table(input: &[u8]) -> Vec<(u8, u8, u8)> {
     let mut colors = vec![(0u8, 0u8, 0u8)]; // index 0 = auto/default
     let pattern = b"{\\colortbl";
     let Some(start) = input.windows(pattern.len()).position(|w| w == pattern) else {
@@ -1674,7 +1762,7 @@ fn parse_color_table(input: &[u8]) -> Vec<(u8, u8, u8)> {
 ///
 /// Returns a `Vec<String>` where index N is the name of `\fN`.  Index 0 is
 /// always present (default font).  Fonts not declared are left as empty strings.
-fn parse_font_table(input: &[u8]) -> Vec<String> {
+pub(crate) fn parse_font_table(input: &[u8]) -> Vec<String> {
     let pattern = b"{\\fonttbl";
     let Some(start) = input.windows(pattern.len()).position(|w| w == pattern) else {
         return vec![String::new()]; // index 0 = default (empty)
@@ -1852,7 +1940,7 @@ fn merge_text_inlines(inlines: Vec<Inline>) -> Vec<Inline> {
 /// remapped per the Windows-1252 code page.  0xA0–0xFF map to Latin-1.
 /// Pre-scan the input for `\ansicpg<N>` and return the declared code page.
 /// Returns 1252 (Windows Western) if not found.
-fn parse_ansicpg(input: &[u8]) -> u16 {
+pub(crate) fn parse_ansicpg(input: &[u8]) -> u16 {
     let needle = b"\\ansicpg";
     let Some(start) = input.windows(needle.len()).position(|w| w == needle) else {
         return 1252;
