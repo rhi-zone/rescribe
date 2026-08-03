@@ -264,9 +264,27 @@ fn parse_csi(
 
     match terminator {
         b'm' => {
-            // SGR.
-            apply_sgr(&params, style, diagnostics, span);
-            (None, pos)
+            // SGR. `saw_reset` distinguishes "an explicit reset code (`0` or
+            // empty) was seen" from "the resulting style just happens to
+            // be/stay empty" (e.g. an unrecognized/no-op code). A reset only
+            // needs its own AST node when it is otherwise unobservable: if
+            // `style` was already empty *before* this SGR group ran, the
+            // running style stays empty (default -> default) and no later
+            // Text/Hyperlink node's `style` field will ever reveal that a
+            // real `\x1b[0m` byte sequence was here (see ResetStyle's doc
+            // comment; this is exactly the adv-unknown-sgr case). When the
+            // style *was* non-empty (e.g. bold -> default), the transition is
+            // already fully captured by whatever Text/Hyperlink node comes
+            // next carrying the now-default style — emitting a node here too
+            // would be redundant and would shift every fixture's node
+            // indices, so it's deliberately skipped in that case.
+            let was_empty = style.is_empty();
+            let saw_reset = apply_sgr(&params, style, diagnostics, span);
+            if saw_reset && was_empty {
+                (Some(AnsiNode::ResetStyle { span }), pos)
+            } else {
+                (None, pos)
+            }
         }
         b'A' => {
             let n = parse_single_param(&params, 1);
@@ -458,17 +476,31 @@ fn parse_osc(
 
 // ── SGR application ───────────────────────────────────────────────────────────
 
-fn apply_sgr(params: &str, style: &mut Style, diagnostics: &mut Vec<Diagnostic>, span: Span) {
+/// Applies the SGR codes to `style`, returning `true` iff an explicit reset
+/// code (`0`, or an empty code between/around `;` separators) was among
+/// them — as opposed to the resulting style simply *happening* to be empty
+/// (e.g. every code in the sequence was unrecognized and silently skipped,
+/// leaving style unchanged). Mirrors `events.rs`'s `apply_sgr_event`.
+fn apply_sgr(
+    params: &str,
+    style: &mut Style,
+    diagnostics: &mut Vec<Diagnostic>,
+    span: Span,
+) -> bool {
     if params.is_empty() {
         *style = Style::default();
-        return;
+        return true;
     }
+    let mut saw_reset = false;
     let codes: Vec<&str> = params.split(';').collect();
     let mut i = 0;
     while i < codes.len() {
         let code = codes[i].trim();
         match code {
-            "0" | "" => *style = Style::default(),
+            "0" | "" => {
+                *style = Style::default();
+                saw_reset = true;
+            }
             "1" => style.bold = true,
             "2" => style.dim = true,
             "3" => style.italic = true,
@@ -549,6 +581,7 @@ fn apply_sgr(params: &str, style: &mut Style, diagnostics: &mut Vec<Diagnostic>,
         }
         i += 1;
     }
+    saw_reset
 }
 
 /// Parse 5;n or 2;r;g;b after an SGR 38/48/58 code.

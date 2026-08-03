@@ -71,7 +71,10 @@ fn build_document_nodes(doc: &AnsiDoc) -> Vec<Node> {
                 // 3+ consecutive newlines: already flushed, ignore extras
             }
 
-            AnsiNode::Text { .. } | AnsiNode::Hyperlink { .. } | AnsiNode::RawEscape { .. } => {
+            AnsiNode::Text { .. }
+            | AnsiNode::Hyperlink { .. }
+            | AnsiNode::RawEscape { .. }
+            | AnsiNode::ResetStyle { .. } => {
                 consecutive_newlines = 0;
                 inline_buf.push(node);
             }
@@ -246,6 +249,13 @@ fn ansi_node_to_inline(n: &AnsiNode) -> Node {
         AnsiNode::RawEscape { content, .. } => Node::new(node::RAW_INLINE)
             .prop(prop::FORMAT, "ansi")
             .prop(prop::CONTENT, content.clone()),
+
+        // Explicit SGR reset with no (or no-op) style change to carry it —
+        // preserve the literal bytes the same way RawEscape does, so a
+        // trailing/no-op `\x1b[0m` round-trips through the IR too.
+        AnsiNode::ResetStyle { .. } => Node::new(node::RAW_INLINE)
+            .prop(prop::FORMAT, "ansi")
+            .prop(prop::CONTENT, "\x1b[0m"),
 
         // Control sequences shouldn't reach here (handled in build_document_nodes),
         // but provide a safe fallback.

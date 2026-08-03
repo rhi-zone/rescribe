@@ -9,6 +9,67 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-04: ansi-fmt's `adv-unknown-sgr` `streaming_writer` `KnownFailure` fixed — narrowed,
+not closed: verifying it surfaced a much larger, previously-masked gap.** The tracked bug
+(`\x1b[999m`, an unrecognized/no-op SGR code, followed by `\x1b[0m`, a genuine explicit reset
+with nothing left to reset — `parse()`'s AST had no node for either SGR group at all, so
+`build()` silently dropped the trailing `\x1b[0m` while the streaming `Writer`, fed by
+`events()`, faithfully re-emitted it) is fixed: `AnsiNode` gained a `ResetStyle { span }`
+variant (`crates/formats/ansi-fmt/src/ast.rs`), emitted by `parse_csi`'s `m` arm
+(`parse.rs`) exactly when an explicit reset code (`0` or empty) is seen *and* the running
+style was already empty beforehand — `apply_sgr` now returns whether it saw an explicit
+reset, mirroring `events.rs`'s existing `apply_sgr_event`. This condition is deliberately
+narrow: an unconditional `ResetStyle` node (emitted for every reset, matching/changing or
+not) was tried first and inserted an extra node between the styled and follow-on plain-text
+nodes for any ordinary bold→default-style transition, shifting node indices and breaking 4
+previously-passing fixtures (`nested-sgr-reset`, `rare-inline-in-text`, `reset`,
+`styled-in-paragraph`) — an ordinary reset is already fully captured by the next
+Text/Hyperlink node's own `style` field, so a node is only needed for the otherwise-
+unobservable no-op case. `emit.rs`'s `emit_node` writes the literal `\x1b[0m` for this node
+unconditionally (not conditioned on whether `current_style` already differs), matching
+`events()`/`Writer`'s own unconditional `ResetStyle` handling. `rescribe-read-ansi`'s adapter
+routes the new node through the inline path as a `raw_inline`/`ansi:` `\x1b[0m`, the same
+pattern as `RawEscape`. Confirmed byte-identical between `build()` and the streaming
+`Writer` for `adv-unknown-sgr` specifically, and the full `ansi-fmt`/`rescribe-read-ansi`/
+`rescribe-write-ansi`/`rescribe-fixtures` test suites plus `cargo clippy --all-targets
+--all-features -- -D warnings` and `cargo fmt --check` all pass.
+
+**Still open — much larger, separate gap surfaced by the fix above, not attempted in this
+pass:** the whole-suite check
+(`ansi_streaming_writer_byte_identical_to_builder_over_all_fixtures`) still fails: 24 of 46
+ansi fixtures diverge between `build()` and the streaming `Writer` (verified directly,
+outside the harness, since the harness itself only ever surfaces the *first* divergence per
+run). Two distinct root causes, both stemming from `parse()`'s AST only ever attaching a
+*resulting* style to the next Text/Hyperlink node rather than modeling SGR groups as their
+own nodes in source order:
+1. **Trailing-reset ordering** (e.g. `bold`, `italic`, `underline`, `fg-standard`, and 15
+   more single-attribute fixtures): when a reset is followed only by non-text nodes (a
+   trailing `Newline`) before end of input, `build()`'s "reset at end if style non-empty"
+   epilogue fires *after* those trailing nodes are emitted, while `events()`/`Writer` emits
+   the reset at its actual source position. `build()` gives `"...Hello\n\x1b[0m"` for source
+   `"...Hello\x1b[0m\n"` — reset and newline swapped.
+2. **SGR grouping not preserved** (e.g. `rare-bold-italic`, `path-deep-sgr`,
+   `path-many-colors`, `nested-sgr-reset`, `reset`): when a source has multiple separate SGR
+   groups in sequence (`\x1b[1m\x1b[3mHello`), `parse()`'s AST only records the final
+   resulting style on the Text node, so `build()` re-derives and re-serializes it as one
+   merged group (`\x1b[1;3m`), while `events()`/`Writer` reproduce the original grouping
+   verbatim (`\x1b[1m\x1b[3m`).
+
+This is why the `events` cell's `NotYetWired` reason for this row ("no faithful
+`ast_to_events` projection exists" because "`parse()`'s AST has no variant for a bare SGR
+sequence at all") was already naming the same underlying gap — it's larger in scope than
+originally understood, not confined to the one fixture the description previously singled
+out. The `read_dir`-order dependency means the *specific* fixture named in a stale
+description isn't a reliable signal of scope — always re-derive from a direct, full-suite
+check rather than trusting which fixture a prior pass's text happened to name. Closing this
+fully likely requires: (a) giving `parse()`'s AST an explicit node per SGR group (like the
+narrow `ResetStyle` above, generalized and made unconditional) so grouping and position
+relative to intervening nodes both survive, and (b) having `build()` emit style transitions
+from those nodes in source order rather than deferring everything to the next Text/Hyperlink
+node or a single end-of-document epilogue. Left as the `streaming_writer` `KnownFailure` for
+`ansi` (description updated, not flipped to `Wired`) — substantially larger than this pass's
+narrow fix, out of scope for a task specifically bounded to the `adv-unknown-sgr` gap.
+
 **2026-08-03: fb2-fmt's `events()`/`streaming_writer` `KnownFailure` entries narrowed — the
 originally-tracked `Metadata`-drop bug is fixed, plus three more bugs it unmasked.** The
 tracked bug (`events()`/`EventIter` silently dropping `Event::Metadata` for input lacking a

@@ -153,6 +153,28 @@ pub enum AnsiNode {
     },
     /// An unrecognised escape sequence, preserved verbatim.
     RawEscape { content: String, span: Span },
+    /// An explicit SGR reset (`\x1b[0m`, or an empty SGR parameter list) that
+    /// is a no-op with respect to the running style — i.e. the style was
+    /// already default *before* this reset ran.
+    ///
+    /// `Text`/`Hyperlink` nodes capture the *resulting* style after an SGR
+    /// sequence is applied, which is enough to reconstruct a reset that
+    /// actually changes the style (e.g. bold -> default: the next styled
+    /// node's `style` field already reveals the transition, `build()` emits
+    /// `\x1b[0m` from the style diff). But when the reset doesn't change
+    /// anything observable — style was already default, so it stays default
+    /// — no later node's style can ever reveal that a real `\x1b[0m` byte
+    /// sequence was present in the source (e.g. a trailing reset at end of
+    /// input, or a redundant reset after an unrecognized/no-op SGR code, as
+    /// in the `adv-unknown-sgr` fixture). `apply_sgr` used to return
+    /// `(None, pos)` unconditionally for every SGR group, silently dropping
+    /// this case in `build()`. This node preserves exactly that
+    /// otherwise-unobservable case, mirroring `events()`'s
+    /// `Event::ResetStyle` (which is emitted whenever an explicit reset code
+    /// is seen, without needing this narrowing, since events don't need to
+    /// stay index-aligned with a following node the way IR-adapter fixtures
+    /// do).
+    ResetStyle { span: Span },
 }
 
 impl AnsiNode {
@@ -169,7 +191,8 @@ impl AnsiNode {
             | AnsiNode::RestoreCursor { span }
             | AnsiNode::ScrollRegion { span, .. }
             | AnsiNode::Hyperlink { span, .. }
-            | AnsiNode::RawEscape { span, .. } => *span,
+            | AnsiNode::RawEscape { span, .. }
+            | AnsiNode::ResetStyle { span } => *span,
         }
     }
 
@@ -224,6 +247,7 @@ impl AnsiNode {
                 content: content.clone(),
                 span: Span::NONE,
             },
+            AnsiNode::ResetStyle { .. } => AnsiNode::ResetStyle { span: Span::NONE },
         }
     }
 }

@@ -91,6 +91,17 @@ fn emit_node(node: &AnsiNode, out: &mut String, current_style: &mut Style) {
         AnsiNode::RawEscape { content, .. } => {
             out.push_str(content);
         }
+        AnsiNode::ResetStyle { .. } => {
+            // Emitted unconditionally, even if `current_style` is already
+            // default — mirrors events()/Writer's ResetStyle handling, which
+            // always writes the literal `\x1b[0m` bytes rather than diffing
+            // against the running style. This is what makes a source-level
+            // no-op reset (e.g. a trailing `\x1b[0m` after style already
+            // returned to default) round-trip instead of being silently
+            // dropped (see the "adv-unknown-sgr" fixture).
+            out.push_str("\x1b[0m");
+            *current_style = Style::default();
+        }
     }
 }
 
