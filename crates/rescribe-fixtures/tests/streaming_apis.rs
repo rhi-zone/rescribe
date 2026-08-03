@@ -441,23 +441,52 @@ fn rst_events_equals_ast_projection_over_all_fixtures() {
 
 /// Equivalence check: `StreamingParser` fed `input` under an adversarial
 /// chunking must deliver the same event sequence `events()` delivers over
-/// the whole input at once, with one documented, sanctioned exception:
-/// forward-declared RST link targets, which `StreamingParser` does not
-/// resolve (see `crates/formats/rst-fmt/src/batch.rs` module docs) while
-/// `events()`/`parse()` pre-scan for them — fixtures exercising that are
-/// excluded rather than flagged as a bug.
+/// the whole input at once, with one documented, sanctioned exception class:
+/// forward/cross-block-declared RST link targets and substitutions, which
+/// `StreamingParser` does not resolve (each flushed block is re-parsed via a
+/// fresh `EventIter`, so `link_targets`/`substitutions` collected in one
+/// block aren't visible to a later block — see `crates/formats/rst-fmt/src/
+/// batch.rs` module docs) while `events()`/`parse()` pre-scan the whole
+/// input for them — fixtures exercising that are excluded rather than
+/// flagged as a bug.
 ///
 /// Wiring this check (previously nothing drove `StreamingParser` against
 /// more than rst-fmt's own hand-picked 6 chunk-splitting cases) surfaced a
-/// real, previously-unknown bug: multi-item RST definition lists get
-/// closed and reopened as separate `StartDefinitionList`/`EndDefinitionList`
-/// pairs per item in `StreamingParser`, instead of one list spanning all
-/// items the way `events()` produces. Tracked as `KnownFailure { format:
-/// "rst", api: "streaming_parser", .. }`.
+/// real bug, since fixed: multi-item RST definition lists got closed and
+/// reopened as separate `StartDefinitionList`/`EndDefinitionList` pairs per
+/// item in `StreamingParser`, instead of one list spanning all items the way
+/// `events()` produces (`feed_line` now defers the blank-line flush with a
+/// one-line lookahead mirroring `parse_definition_list`'s own `peek_line()`
+/// check). Fixing it surfaced a second bug it had been masking (this check
+/// only reports the first divergence per run): re-parsing each block in
+/// isolation reset heading-level numbering per block instead of carrying it
+/// across the whole document — also fixed, via
+/// `EventIter::with_heading_levels`.
+///
+/// Fixing both surfaced a third, **still-open** bug of the same root cause
+/// (`emit_block()`'s blank-line flush granularity): ordinary bullet/numbered
+/// lists spanning blank lines, including blank-line-separated nested
+/// sub-lists, also get split into multiple `StartList`/`EndList` pairs
+/// instead of one — `parse_bullet_list`/`parse_numbered_list`'s real
+/// continuation grammar is considerably richer than the definition-list case
+/// and isn't replicated here. Confirmed on the `nested-list` and
+/// `path-deep-list` fixtures. Tracked as `KnownFailure { format: "rst", api:
+/// "streaming_parser", .. }` (description updated; not `Wired` yet).
 #[test]
 fn rst_streaming_parser_matches_events_under_adversarial_chunking() {
     let root = fixtures_root().join("rst");
-    const SKIP: &[&str] = &["anonymous-link", "citation"];
+    // anonymous-link/citation/link-target-url/rare-link-named: forward-declared
+    // link targets. substitution/path-substitutions: forward/cross-block-declared
+    // substitutions. All are the same sanctioned cross-block-resolution
+    // limitation described above, not bugs.
+    const SKIP: &[&str] = &[
+        "anonymous-link",
+        "citation",
+        "link-target-url",
+        "rare-link-named",
+        "substitution",
+        "path-substitutions",
+    ];
     let mut checked = 0;
     let mut result: Result<(), String> = Ok(());
     for entry in std::fs::read_dir(&root).expect("fixtures/rst dir") {

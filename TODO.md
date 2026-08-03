@@ -1529,14 +1529,53 @@ fixed by prior sessions; verify against source, not this summary, before relying
    Tracked as `KnownFailure { format: "pptx", api: "events" }` (the same entry as #2, since
    once txBody-reachability is fixed the shared queue-clobber bug would still corrupt the
    result).
-5. **New finding, not in the original bug list**: wiring
-   `rst_streaming_parser_matches_events_under_adversarial_chunking` across the *entire*
-   `fixtures/rst/` suite (rst-fmt's own pre-existing streaming tests covered only 6
-   hand-picked chunk-splitting cases, none a multi-item definition list) found that
-   `StreamingParser` closes and reopens a multi-item RST definition list as one
-   `StartDefinitionList`/`EndDefinitionList` pair *per item*, instead of one list spanning
-   all items the way `events()` produces. Tracked as `KnownFailure { format: "rst", api:
-   "streaming_parser" }`; not fixed here.
+5. **Original finding**: wiring `rst_streaming_parser_matches_events_under_adversarial_chunking`
+   across the *entire* `fixtures/rst/` suite (rst-fmt's own pre-existing streaming tests
+   covered only 6 hand-picked chunk-splitting cases, none a multi-item definition list) found
+   that `StreamingParser` closed and reopened a multi-item RST definition list as one
+   `StartDefinitionList`/`EndDefinitionList` pair *per item*, instead of one list spanning all
+   items the way `events()` produces.
+
+   **Fixed**: `rst-fmt`'s `batch::StreamingParser::feed_line` (`crates/formats/rst-fmt/src/
+   batch.rs`) used to treat *every* blank line as ending the accumulated block, splitting a
+   multi-item definition list at each blank line between a term/definition pair and the next.
+   It now defers the flush decision with a one-line lookahead mirroring `parse_definition_list`
+   in `lib.rs` (which itself skips blank lines rather than stopping at them): a blank line
+   whose preceding content ends in an indented definition body holds the flush until the
+   following line arrives, confirming (next line non-indented, then indented — same shape
+   `parse_definition_list`'s own `peek_line()` checks) or denying (anything else) that another
+   item follows. Verified on `fixtures/rst/definition-list` (two items) directly and via the
+   adversarial-chunking harness.
+
+   Fixing this surfaced a second, independent, previously-masked bug on the same check (it
+   only reports the first divergence per run, and `definition-list` sorted first
+   alphabetically): re-parsing each flushed block via a fresh `EventIter` in isolation reset
+   the underline-character-to-heading-level assignment per block, so a level-2 heading in a
+   later block was renumbered level 1 (`heading-h2` fixture). **Also fixed**: added
+   `EventIter::with_heading_levels`/`EventIter::heading_levels` (`crates/formats/rst-fmt/src/
+   lib.rs`) so `StreamingParser` can carry the heading-level state forward across
+   `emit_block()` calls, the same way it needed to for the definition-list fix.
+
+   Fixing both surfaced a **third, still-open** issue, same root cause (`emit_block()`'s
+   blank-line flush granularity), not fixed in this pass: ordinary bullet/numbered lists
+   spanning blank lines — including their blank-line-separated nested sub-lists — also get
+   split into multiple `StartList`/`EndList` pairs instead of one, since
+   `parse_bullet_list`/`parse_numbered_list`'s real continuation grammar ("does the next
+   non-blank line, at any indentation, start with the same bullet marker or nest a sub-list")
+   is considerably richer than the definition-list case and isn't replicated by the streaming
+   line-buffering state machine. Confirmed on `nested-list` and `path-deep-list` fixtures.
+   Separately (not a bug — the same class of limitation `batch.rs`'s own module doc already
+   documents for RST link targets, just not yet documented for substitutions): forward/
+   cross-block-declared substitutions (`substitution`, `path-substitutions` fixtures) and two
+   more forward-declared-link-target fixtures (`rare-link-named`, `link-target-url`) don't
+   resolve under `StreamingParser` either, because `link_targets`/`substitutions` are
+   collected fresh per re-parsed block, same as the pre-existing documented link-target
+   limitation. Added to the equivalence test's `SKIP` list alongside the pre-existing
+   `anonymous-link`/`citation` entries.
+
+   Still tracked as `KnownFailure { format: "rst", api: "streaming_parser" }` — not `Wired` —
+   with the description updated to describe the list-splitting bug (the definition-list and
+   heading-level causes are gone).
 6. **`ooxml-sml` streaming writer dropping row properties and cell `style_index`**: already
    fixed and pinned by `crates/formats/ooxml-sml/tests/streaming_writer.rs`'s
    `row_and_cell_attributes_pass_through`; the new harness reproduces the same property

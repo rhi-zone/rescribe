@@ -181,13 +181,35 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "rst",
         events: ApiState::Wired,
+        // Fixed 2026-08-03: StreamingParser::feed_line used to treat every blank line as
+        // ending the accumulated block, splitting a multi-item DefinitionList into one
+        // StartDefinitionList/EndDefinitionList pair per item. It now defers the flush
+        // decision with a one-line lookahead mirroring parse_definition_list's own
+        // peek_line() check (lib.rs): a blank line whose preceding content ends in an
+        // indented definition body holds the flush until the next line confirms (non-indented
+        // then indented => another item) or denies (anything else => block really ended) a
+        // continuation. Fixing it surfaced a second, previously-masked bug (this check only
+        // reports the first divergence per run, and definition-list sorted first
+        // alphabetically): each flushed block is re-parsed via a fresh EventIter in isolation,
+        // which reset heading-level numbering per block instead of carrying it across the
+        // whole document (heading-h2 fixture) — fixed via the new
+        // EventIter::with_heading_levels/heading_levels, threaded through StreamingParser's
+        // emit_block(). Both confirmed via fixtures/rst/definition-list and
+        // fixtures/rst/heading-h2 directly, and via the adversarial-chunking harness.
+        //
+        // Still KnownFailure, not Wired: fixing both surfaced a third, still-open bug of the
+        // same root cause (emit_block()'s blank-line flush granularity) — see below.
         streaming_parser: ApiState::KnownFailure(
-            "rst-fmt StreamingParser closes and reopens a multi-item DefinitionList as one \
-             StartDefinitionList/EndDefinitionList pair per item, instead of one list spanning \
-             all items the way events() produces — found while wiring this harness's \
-             adversarial-chunking equivalence check across all rst fixtures (rst-fmt's own \
-             pre-existing streaming tests only covered 6 hand-picked cases, none a multi-item \
-             definition list); see TODO.md",
+            "rst-fmt StreamingParser splits ordinary bullet/numbered lists spanning blank \
+             lines — including blank-line-separated nested sub-lists — into multiple \
+             StartList/EndList pairs instead of one, the same emit_block()-blank-line-flush \
+             root cause already fixed for multi-item DefinitionLists and heading-level \
+             numbering (see the fix note above), but parse_bullet_list/parse_numbered_list's \
+             real continuation grammar (does the next non-blank line, at any indentation, \
+             start with the same bullet marker or nest a sub-list) is considerably richer than \
+             the definition-list case and isn't yet replicated in the streaming line-buffering \
+             state machine. Confirmed on the nested-list and path-deep-list fixtures; see \
+             TODO.md",
         ),
         streaming_writer: ApiState::Wired,
     },
@@ -1604,9 +1626,11 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "rst",
         api: "streaming_parser",
-        description: "rst-fmt StreamingParser splits a multi-item DefinitionList into one \
-                       StartDefinitionList/EndDefinitionList pair per item instead of one list \
-                       spanning all items",
+        description: "rst-fmt StreamingParser splits ordinary bullet/numbered lists spanning \
+                       blank lines (including blank-line-separated nested sub-lists) into \
+                       multiple StartList/EndList pairs instead of one — the multi-item \
+                       DefinitionList and cross-block heading-level variants of this bug are \
+                       fixed; see the CAPABILITIES entry above for the full history",
     },
     KnownFailure {
         format: "fb2",

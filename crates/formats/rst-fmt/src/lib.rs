@@ -1726,6 +1726,41 @@ impl<'a> EventIter<'a> {
         }
     }
 
+    /// Like [`EventIter::new`], but seeds the underline-character-to-level
+    /// assignment (normally built up fresh, in order of first appearance,
+    /// over the whole input) from `heading_levels` instead of starting empty.
+    ///
+    /// For a single call over a whole document, [`EventIter::new`] is always
+    /// correct and this constructor is unnecessary. It exists for callers
+    /// that parse one document in successive, independently-scoped chunks
+    /// (e.g. a chunk-driven streaming parser that re-parses each accumulated
+    /// block via a fresh `EventIter`) and need heading levels to stay
+    /// consistent across those chunk boundaries — without it, every chunk's
+    /// first heading would be renumbered level 1 regardless of its true
+    /// position in the document. Call [`EventIter::heading_levels`] after
+    /// exhausting one chunk's iterator to get the state to carry into the
+    /// next.
+    pub fn with_heading_levels(input: &'a str, heading_levels: Vec<char>) -> Self {
+        let mut parser = Parser::new(input);
+        parser.heading_levels = heading_levels;
+        parser.collect_link_targets();
+        parser.collect_anonymous_targets();
+        parser.collect_substitutions();
+        Self {
+            parser,
+            frame_stack: Vec::new(),
+            iter_done: false,
+        }
+    }
+
+    /// The underline-character-to-level assignment accumulated so far.
+    /// Meaningful once the iterator has been exhausted (see
+    /// [`EventIter::with_heading_levels`]); mid-iteration it reflects only
+    /// the headings parsed up to whatever point `next()` has reached.
+    pub fn heading_levels(&self) -> &[char] {
+        &self.parser.heading_levels
+    }
+
     fn expand_block(&mut self, block: Block<'a>) {
         match block {
             Block::Paragraph { inlines } => {

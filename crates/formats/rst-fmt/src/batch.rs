@@ -94,6 +94,27 @@ pub struct StreamingParser<H: Handler> {
     line_buf: Vec<u8>,
     block_lines: Vec<String>,
     state: BlockState,
+    /// Set when a blank line arrives while the accumulated block's last
+    /// content line is an indented definition body. The flush decision is
+    /// deferred until the next line arrives, since — per `parse_definition_list`
+    /// in `lib.rs`, which skips blank lines rather than stopping at them — a
+    /// blank line between one definition-list item's body and the next
+    /// item's term does not end the list.
+    pending_blank: bool,
+    /// A non-indented, non-directive line seen immediately after a
+    /// `pending_blank` is held here, undecided, until the line after it
+    /// arrives: indented confirms it's another definition-list term
+    /// (`parse_definition_list`'s own one-line `peek_line()` lookahead),
+    /// anything else means the block genuinely ended at the blank line and
+    /// this line starts a new one.
+    pending_term: Option<String>,
+    /// Underline-character-to-heading-level assignment, carried forward
+    /// across `emit_block()` calls so a later block's heading numbering
+    /// stays consistent with an earlier block's — each `emit_block()` call
+    /// re-parses its block text in isolation via a fresh `EventIter`, which
+    /// would otherwise treat every block's first heading as level 1. See
+    /// `EventIter::with_heading_levels`.
+    heading_levels: Vec<char>,
 }
 
 impl<H: Handler> StreamingParser<H> {
@@ -104,6 +125,9 @@ impl<H: Handler> StreamingParser<H> {
             line_buf: Vec::new(),
             block_lines: Vec::new(),
             state: BlockState::Between,
+            pending_blank: false,
+            pending_term: None,
+            heading_levels: Vec::new(),
         }
     }
 
@@ -138,12 +162,64 @@ impl<H: Handler> StreamingParser<H> {
             // Fall through to process this line as a new block start
         }
 
+        // A candidate definition-list term is awaiting confirmation from this
+        // line: indented confirms the list continues, anything else means the
+        // previous block already ended at the blank line before `term`.
+        if let Some(term) = self.pending_term.take() {
+            let is_blank = line.trim().is_empty();
+            let is_indented = (line.starts_with(' ') || line.starts_with('\t')) && !is_blank;
+            if is_indented {
+                self.block_lines.push(String::new());
+                self.block_lines.push(term);
+                self.block_lines.push(line);
+                self.state = BlockState::Accumulating;
+                return;
+            }
+            self.emit_block();
+            self.state = BlockState::Between;
+            self.feed_line(term);
+            self.feed_line(line);
+            return;
+        }
+
         if line.trim().is_empty() {
+            if self.pending_blank {
+                // Second consecutive blank line: no candidate term ever
+                // arrived, so the block genuinely ended at the first blank.
+                self.pending_blank = false;
+                self.emit_block();
+                self.state = BlockState::Between;
+                return;
+            }
+            if !self.block_lines.is_empty() && self.last_line_is_indented() {
+                // The block's last content line is an indented definition
+                // body — defer the flush decision until the next non-blank
+                // line arrives (see `pending_blank`'s doc comment).
+                self.pending_blank = true;
+                return;
+            }
             if !self.block_lines.is_empty() {
                 self.emit_block();
             }
             self.state = BlockState::Between;
             return;
+        }
+
+        if self.pending_blank {
+            self.pending_blank = false;
+            let trimmed = line.trim();
+            let is_indented = line.starts_with(' ') || line.starts_with('\t');
+            if !is_indented && !trimmed.starts_with(".. ") {
+                // Candidate term — hold it until the line after it confirms
+                // or denies an indented definition body.
+                self.pending_term = Some(line);
+                return;
+            }
+            // Indented, or a directive/comment: not a definition-list term
+            // candidate, so the block genuinely ended at the blank line.
+            self.emit_block();
+            self.state = BlockState::Between;
+            // Fall through to process `line` as the start of a new block.
         }
 
         let trimmed = line.trim();
@@ -157,15 +233,26 @@ impl<H: Handler> StreamingParser<H> {
         self.block_lines.push(line);
     }
 
+    /// True if the last line in `block_lines` is a non-blank, indented line
+    /// (an RST definition body, block quote, or directive-body continuation).
+    fn last_line_is_indented(&self) -> bool {
+        self.block_lines
+            .last()
+            .is_some_and(|l| !l.trim().is_empty() && (l.starts_with(' ') || l.starts_with('\t')))
+    }
+
     fn emit_block(&mut self) {
         if self.block_lines.is_empty() {
             return;
         }
         let text = self.block_lines.join("\n");
         self.block_lines.clear();
-        for event in crate::events(&text) {
+        let mut iter =
+            crate::EventIter::with_heading_levels(&text, std::mem::take(&mut self.heading_levels));
+        for event in iter.by_ref() {
             self.handler.handle(event.into_owned());
         }
+        self.heading_levels = iter.heading_levels().to_vec();
     }
 
     /// Flush any remaining input and deliver final events.
@@ -177,6 +264,17 @@ impl<H: Handler> StreamingParser<H> {
             let line = String::from_utf8_lossy(&self.line_buf).into_owned();
             self.feed_line(line);
         }
+        if let Some(term) = self.pending_term.take() {
+            // EOF arrived instead of a confirming line — `term` has no
+            // indented continuation (matching `parse_definition_list`'s own
+            // `peek_line()` returning `None` at EOF), so it does not extend
+            // the previous block. Flush that block, then process `term` as
+            // the start of its own trailing block.
+            self.emit_block();
+            self.state = BlockState::Between;
+            self.feed_line(term);
+        }
+        self.pending_blank = false;
         self.emit_block();
     }
 }
