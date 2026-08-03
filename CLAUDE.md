@@ -340,8 +340,7 @@ cd docs && bun dev # Local docs
 
 After creating a new worktree, run `scripts/setup-worktree-target.sh` (mac/linux) or
 `scripts/setup-worktree-target.ps1` (windows) once to share the build cache across
-worktrees. direnv/nix users get this automatically via `.envrc`/`flake.nix` already and
-don't need to run it, though it's harmless if they do. The script writes the shared
+worktrees — this applies regardless of direnv/nix. The script writes the shared
 `target-dir` to `.cargo/config.local.toml`, an untracked, per-worktree file pulled in by
 the tracked `.cargo/config.toml` via its `include` key (stable since Rust 1.94) — running
 the script never dirties the tracked config file.
