@@ -223,6 +223,22 @@ impl<H: Handler> StreamingParser<H> {
     /// bytes, resolving ambiguous trailing text.
     pub fn finish(mut self) {
         self.drain(true);
+        // `drain`'s own Eof arm only runs when the (rebuilt-per-iteration)
+        // reader is actually asked to read past the end of `byte_buf` — but
+        // once every complete token has been consumed, `byte_buf` goes
+        // empty and `drain`'s loop returns *before* ever building that
+        // reader (see the `byte_buf.is_empty()` early return), so that arm
+        // is never reached for well-formed input that leaves no unconsumed
+        // tail. Call it here unconditionally instead — it's idempotent
+        // (guarded by `DescState::metadata_emitted`) — so a description-less
+        // document still gets its synthesized default Metadata event,
+        // matching `events()`/`XmlEventIter::step`'s Eof handling.
+        if !self.failed {
+            self.state.finalize_missing_description();
+            while let Some(sem_ev) = self.state.pending.pop_front() {
+                self.handler.handle(sem_ev);
+            }
+        }
     }
 
     /// Attempt to drain as many complete XML tokens as possible from
@@ -258,6 +274,10 @@ impl<H: Handler> StreamingParser<H> {
                 Ok(XmlEvent::Eof) => {
                     if is_final {
                         self.byte_buf.clear();
+                        self.state.finalize_missing_description();
+                        while let Some(sem_ev) = self.state.pending.pop_front() {
+                            self.handler.handle(sem_ev);
+                        }
                     }
                     return;
                 }
@@ -377,6 +397,14 @@ struct DescState {
     in_title_info: bool,
     in_doc_info: bool,
     in_pub_info: bool,
+    /// Set once `finalize_description` has pushed an [`Event::Metadata`].
+    /// Lets the Eof/end-of-input path (`XmlEventIter::step`,
+    /// `StreamingParser::drain`) tell whether the input ever contained a
+    /// literal `<description>` element; if not, it synthesizes a default
+    /// Metadata event so `events()` matches `parse()`'s AST, which always
+    /// carries a (possibly-default) `description` field via
+    /// `FictionBook::default()`.
+    metadata_emitted: bool,
     // pending leaf-text target
     leaf_target: Option<LeafTarget>,
 }
@@ -455,6 +483,15 @@ enum ParseState {
         link_kind: Option<String>,
         children: Vec<InlineElement>,
     },
+    /// Marker for an open `<a type="note" href="#...">` footnote reference,
+    /// mirroring `parse.rs`'s `StackItem::FootnoteRef`: any `<a>` with
+    /// `type="note"` and a fragment `href` is a footnote reference
+    /// structurally, whether or not the target actually exists elsewhere in
+    /// the document (see fixtures/fb2/adv-broken-footnote-ref).
+    FootnoteRef {
+        href: String,
+        children: Vec<InlineElement>,
+    },
     Binary {
         id: String,
         content_type: String,
@@ -493,6 +530,7 @@ impl<'a> XmlEventIter<'a> {
         self.buf.clear();
         match self.reader.read_event_into(&mut self.buf) {
             Ok(XmlEvent::Eof) => {
+                self.state.finalize_missing_description();
                 self.done = true;
             }
             Ok(ev) => {
@@ -518,12 +556,14 @@ impl SemanticState {
                 let name = local_name_str(e.local_name().as_ref());
                 let attrs = collect_attrs(e);
                 self.flush_text_if_needed(&name, false);
+                self.maybe_finalize_missing_description_before(&name);
                 self.handle_start(&name, attrs);
             }
             XmlEvent::Empty(e) => {
                 let name = local_name_str(e.local_name().as_ref());
                 let attrs = collect_attrs(e);
                 self.flush_text_if_needed(&name, false);
+                self.maybe_finalize_missing_description_before(&name);
                 self.handle_empty(&name, attrs);
             }
             XmlEvent::End(e) => {
@@ -575,8 +615,18 @@ impl SemanticState {
         }
         // Leaf tags: flush only on End (the text is consumed by handle_end itself)
         if is_leaf_tag(tag) {
-            if !is_end {
-                // on Start: nothing to flush yet
+            if !is_end && tag == "code" {
+                // Unlike the other leaf tags (all metadata/description leaf
+                // fields, which never appear interleaved with surrounding
+                // body text), `<code>` is a genuine inline element that can
+                // appear mixed with plain text inside a paragraph, e.g.
+                // `Use <code>printf()</code> for output`. Any text
+                // accumulated *before* this Start must be flushed as its
+                // own Text inline now — otherwise handle_end's `code` arm
+                // (which takes the whole of `current_text` verbatim as the
+                // Code element's content) would swallow the preceding plain
+                // text into the code span instead.
+                self.flush_inline_text();
             }
             return;
         }
@@ -624,7 +674,8 @@ impl SemanticState {
                 | ParseState::VerseLine { .. }
                 | ParseState::TextAuthor { .. }
                 | ParseState::InlineWrapper { .. }
-                | ParseState::Link { .. } => return true,
+                | ParseState::Link { .. }
+                | ParseState::FootnoteRef { .. } => return true,
                 ParseState::Section
                 | ParseState::Body
                 | ParseState::Cite
@@ -654,7 +705,9 @@ impl SemanticState {
                     inlines.push(InlineElement::Text(text));
                     return;
                 }
-                ParseState::InlineWrapper { children, .. } | ParseState::Link { children, .. } => {
+                ParseState::InlineWrapper { children, .. }
+                | ParseState::Link { children, .. }
+                | ParseState::FootnoteRef { children, .. } => {
                     children.push(InlineElement::Text(text));
                     return;
                 }
@@ -678,7 +731,9 @@ impl SemanticState {
                     inlines.push(el);
                     return;
                 }
-                ParseState::InlineWrapper { children, .. } | ParseState::Link { children, .. } => {
+                ParseState::InlineWrapper { children, .. }
+                | ParseState::Link { children, .. }
+                | ParseState::FootnoteRef { children, .. } => {
                     children.push(el);
                     return;
                 }
@@ -819,11 +874,18 @@ impl SemanticState {
             "a" => {
                 let href = attrs.get("href").cloned().unwrap_or_default();
                 let kind = attrs.get("type").cloned();
-                self.stack.push(ParseState::Link {
-                    href,
-                    link_kind: kind,
-                    children: Vec::new(),
-                });
+                if kind.as_deref() == Some("note") && href.starts_with('#') {
+                    self.stack.push(ParseState::FootnoteRef {
+                        href,
+                        children: Vec::new(),
+                    });
+                } else {
+                    self.stack.push(ParseState::Link {
+                        href,
+                        link_kind: kind,
+                        children: Vec::new(),
+                    });
+                }
             }
             "binary" => {
                 let id = attrs.get("id").cloned().unwrap_or_default();
@@ -845,6 +907,21 @@ impl SemanticState {
             "empty-line" => {
                 self.pending.push_back(Event::EmptyLine);
             }
+            // A `<coverpage><image .../></coverpage>` inside `<title-info>`
+            // (or any other description-context `<image>`, e.g. inside the
+            // book's own `<annotation>`, which isn't modeled at all yet
+            // either — see the fb2/events KnownFailure) is not modeled by
+            // `TitleInfo::coverpage` on either the events()/EventIter or the
+            // parse()/AST side despite the field existing (`parse()` never
+            // populates it — it stays `None`), so this must be a no-op
+            // here too, not fall through to the generic body-content arm
+            // below: that arm unconditionally pushes a top-level
+            // `Event::Image`, leaking a stray event with no AST-side
+            // counterpart into the stream (reproducible on
+            // fixtures/fb2/cover-image, whose `<image>` is not inside any
+            // inline context that `in_inline_context()` would catch either,
+            // since it's a direct child of `<coverpage>`).
+            "image" if self.desc.in_description => {}
             "image" => {
                 let href = attrs.get("href").cloned().unwrap_or_default();
                 let img = Image {
@@ -909,6 +986,45 @@ impl SemanticState {
             let text = std::mem::take(&mut self.current_text).trim().to_string();
             self.push_inline(InlineElement::Code(text));
             return;
+        }
+
+        // Table structure: like `code` above, `table`/`tr`/`td`/`th` push no
+        // frame onto `self.stack` in `handle_start` (they thread state
+        // through `current_table`/`current_table_row`/`current_table_cell`
+        // instead — see the "Handle table element endings outside the
+        // stack" comment this arm replaces), so they must be special-cased
+        // here too, before the generic `self.stack.pop()` below. Previously
+        // this fell through to that pop unconditionally, which popped and
+        // silently discarded whatever unrelated frame (e.g. the enclosing
+        // `Section`) actually was on top of the stack for every `</table>`/
+        // `</tr>`/`</td>`/`</th>`, corrupting the stack for the rest of the
+        // document and losing the table (and every event after it) —
+        // reproducible on fixtures/fb2/table-header.
+        match name {
+            "table" => {
+                if let Some(t) = self.current_table.take() {
+                    self.pending.push_back(Event::Table(t));
+                }
+                return;
+            }
+            "tr" => {
+                if let (Some(row), Some(t)) =
+                    (self.current_table_row.take(), self.current_table.as_mut())
+                {
+                    t.row.push(row);
+                }
+                return;
+            }
+            "td" | "th" => {
+                if let (Some(cell), Some(row)) = (
+                    self.current_table_cell.take(),
+                    self.current_table_row.as_mut(),
+                ) {
+                    row.cell.push(cell);
+                }
+                return;
+            }
+            _ => {}
         }
 
         let item = match self.stack.pop() {
@@ -985,6 +1101,9 @@ impl SemanticState {
                     children,
                 });
             }
+            ParseState::FootnoteRef { href, children } => {
+                self.push_inline(InlineElement::FootnoteRef { href, children });
+            }
             ParseState::Binary { id, content_type } => {
                 // fallback — normally handled at top
                 let text = std::mem::take(&mut self.current_text);
@@ -998,31 +1117,6 @@ impl SemanticState {
                 }
             }
             ParseState::Description | ParseState::Annotation => {}
-        }
-
-        // Handle table element endings outside the stack
-        match name {
-            "table" => {
-                if let Some(t) = self.current_table.take() {
-                    self.pending.push_back(Event::Table(t));
-                }
-            }
-            "tr" => {
-                if let (Some(row), Some(t)) =
-                    (self.current_table_row.take(), self.current_table.as_mut())
-                {
-                    t.row.push(row);
-                }
-            }
-            "td" | "th" => {
-                if let (Some(cell), Some(row)) = (
-                    self.current_table_cell.take(),
-                    self.current_table_row.as_mut(),
-                ) {
-                    row.cell.push(cell);
-                }
-            }
-            _ => {}
         }
     }
 
@@ -1306,7 +1400,47 @@ impl SemanticState {
         self.desc.in_doc_info = false;
         self.desc.in_pub_info = false;
         self.desc.leaf_target = None;
+        self.desc.metadata_emitted = true;
         self.pending.push_back(Event::Metadata(Box::new(desc)));
+    }
+
+    /// Called before dispatching any top-level (direct child of
+    /// `<FictionBook>`) Start/Empty element other than `<description>`
+    /// itself. Schema-valid FB2 always has `<description>` as the *first*
+    /// child of `<FictionBook>`, and `parse()`'s AST-to-events projection
+    /// (`fb2_ast_to_events` in the test harness) always places `Metadata`
+    /// immediately after `StartFictionBook`, regardless of where (or
+    /// whether) a literal `<description>` appeared in the source. So if a
+    /// document is missing `<description>` and the first other top-level
+    /// element (e.g. `<body>`, `<stylesheet>`, `<binary>`) is about to
+    /// start, synthesize the default Metadata event *now* rather than
+    /// waiting for end-of-input — otherwise it would land at the very end
+    /// of the event stream instead of right after `StartFictionBook`,
+    /// diverging from the AST projection on ordering even though both
+    /// carry the same (default) content.
+    fn maybe_finalize_missing_description_before(&mut self, name: &str) {
+        if name != "description"
+            && !self.desc.metadata_emitted
+            && matches!(self.stack.last(), Some(ParseState::FictionBook))
+        {
+            self.finalize_missing_description();
+        }
+    }
+
+    /// Called once at end-of-input (whole-slice Eof or `StreamingParser`
+    /// finish) if no `<description>` element was ever seen, so `events()`
+    /// still yields a Metadata event carrying a default `Description` —
+    /// matching `parse()`'s AST, which always has a `description` field
+    /// (`FictionBook::default()`), never an absent one. Also the sole path
+    /// for a `<FictionBook>` with no other top-level children at all (e.g.
+    /// `<FictionBook></FictionBook>`), where
+    /// `maybe_finalize_missing_description_before` never gets a chance to
+    /// fire since no further Start/Empty element ever arrives.
+    fn finalize_missing_description(&mut self) {
+        if !self.desc.metadata_emitted {
+            self.desc.metadata_emitted = true;
+            self.pending.push_back(Event::Metadata(Box::default()));
+        }
     }
 }
 

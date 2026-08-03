@@ -9,6 +9,62 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-03: fb2-fmt's `events()`/`streaming_writer` `KnownFailure` entries narrowed — the
+originally-tracked `Metadata`-drop bug is fixed, plus three more bugs it unmasked.** The
+tracked bug (`events()`/`EventIter` silently dropping `Event::Metadata` for input lacking a
+literal `<description>` element — affected 34/58 fixtures) is fixed: `SemanticState` now
+synthesizes a default `Metadata` event, either right before the first other top-level child
+of `<FictionBook>` (matching source order for schema-valid documents) or at end-of-input for
+a `<FictionBook>` with no children at all. Fixing it unmasked four further, independent
+`events()`-vs-AST-projection bugs the harness's first-divergence-only check hadn't reached
+before (same masking pattern as the commonmark `events()` fixes below) — three fixed this
+pass:
+1. **Leading text before an inline `<code>` was swallowed into the `Code` element's own
+   content** instead of flushed as its own `Text` inline first (`flush_text_if_needed`
+   treated `code`, a genuine mixed-inline leaf, the same as the metadata-only leaf tags that
+   never appear interleaved with body text). Fixture: `code-inline`.
+2. **`<table>`/`<tr>`/`<td>`/`<th>` push no `ParseState` frame in `handle_start`** (they
+   thread state through `current_table`/`current_table_row`/`current_table_cell` instead),
+   but `handle_end` still unconditionally popped the generic stack before its table-specific
+   arms ran — silently discarding whatever unrelated frame (e.g. the enclosing `Section`) was
+   actually on top, corrupting the stack and losing the table plus every event after it.
+   Fixture: `table-header`.
+3. **`<a type="note" href="#...">` was never recognized as a footnote reference in
+   `events()`** — always built as a generic `Link` — unlike `parse()`'s AST, which treats it
+   as `FootnoteRef` structurally regardless of whether the target actually exists. Fixture:
+   `adv-broken-footnote-ref`.
+4. A related, already-fixed adjacent bug: a description-context self-closing `<image>` (e.g.
+   inside `<title-info><coverpage>`) used to leak out as a stray top-level `Event::Image` with
+   no AST-side counterpart; now a no-op in `events()`, matching `parse()`'s AST (which also
+   doesn't populate `TitleInfo.coverpage` from it — a separate, pre-existing, `parse()`-side
+   gap out of scope here since it affects both APIs equally). Fixture: `cover-image`.
+
+A `parse.rs`-only bug (not `events()`) was fixed alongside: `<custom-info>`'s text content was
+being stolen by `parse.rs`'s unconditional `flush_text()` call on every non-leaf End tag
+before `handle_end` could read it, so `parse()`'s own AST — not just `events()` — used to
+report empty `CustomInfo.content` for real input. Fixture: `custom-info`.
+
+Two fixtures still diverge, intentionally left open (see the narrowed `fb2`/`events` and
+`fb2`/`streaming_writer` `KNOWN_FAILURES` entries in `streaming_harness.rs` for the full
+reasoning): `adv-malformed` is a genuine architectural streaming-vs-batch divergence on
+malformed XML, not a bug — `parse()`'s AST builder can silently drop an already-tokenized
+subtree when the reader errors before its enclosing element's End event dispatches, while
+`events()`'s true pull-iterator design has already irrevocably yielded those events to the
+caller by the time the error surfaces; recovering this would require `events()` to buffer and
+defer emission until validated, exactly the pre-materialization `EventIter` is designed not
+to do. `annotation` is a genuine unimplemented feature: the book's own
+`<description><title-info><annotation>` sub-content (with `<p>`/`<poem>`/`<cite>`/
+`<subtitle>`/`<table>`/empty-line children) isn't modeled at all in `events.rs`'s description
+parsing — a real second content-model builder paralleling `Body`/`Section`'s, not a quick fix.
+
+Verified: `cargo clippy -p fb2-fmt -p rescribe-fixtures --all-targets --all-features -- -D
+warnings` clean; `cargo fmt --check` clean; full `cargo test -q -p fb2-fmt -p
+rescribe-fixtures` all green (0 failures across every suite, including
+`fb2_events_equals_ast_projection_over_all_fixtures`,
+`fb2_streaming_parser_matches_events_and_is_incremental`, and
+`fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures`, each now only reporting
+the two acknowledged `KnownFailure` fixtures).
+
 **2026-08-03: odf-fmt's `streaming_writer` `KnownFailure` fixed — all 66 odt fixtures are
 now byte-identical between `emit(parse(input))` and feeding `events(input)` through
 `batch::Writer`; `streaming_harness::CAPABILITIES`'s odt row `streaming_writer` is now

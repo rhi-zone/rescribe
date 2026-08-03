@@ -172,10 +172,20 @@ impl Parser {
                 }
                 Ok(Event::End(e)) => {
                     let name = local_name_str(e.local_name().as_ref());
-                    // For leaf text elements and binary, don't flush (preserve current_text)
+                    // For leaf text elements, binary, and custom-info, don't flush
+                    // (preserve current_text so handle_end can consume it directly).
+                    // custom-info isn't in is_leaf_tag/pushed as StackItem::LeafText
+                    // (it needs to carry `info_type` through from Start to End, which
+                    // the data-less LeafText marker can't hold), but its text content
+                    // is read the same way — straight out of current_text in
+                    // handle_end's StackItem::CustomInfo arm — so it needs the same
+                    // flush exemption or that text is stolen out from under it here
+                    // and handle_end always sees an empty string (the bug this
+                    // exemption fixes; see fixtures/fb2/custom-info).
                     let is_leaf = is_leaf_tag(&name);
                     let is_binary = name == "binary";
-                    if !is_leaf && !is_binary {
+                    let is_custom_info = name == "custom-info";
+                    if !is_leaf && !is_binary && !is_custom_info {
                         self.flush_text();
                     }
                     self.handle_end(&name);
