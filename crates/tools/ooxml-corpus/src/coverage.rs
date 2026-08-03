@@ -246,7 +246,7 @@ impl CorpusCoverage {
             .iter()
             .map(|(e, c)| (e.as_str(), *c))
             .collect();
-        freq.sort_by(|a, b| b.1.cmp(&a.1));
+        freq.sort_by_key(|(_, c)| std::cmp::Reverse(*c));
         freq
     }
 
@@ -430,7 +430,7 @@ impl CoverageReport {
             .iter()
             .map(|(e, c)| (e.clone(), *c))
             .collect();
-        unknown.sort_by(|a, b| b.1.cmp(&a.1));
+        unknown.sort_by_key(|(_, c)| std::cmp::Reverse(*c));
         let unknown = unknown.into_iter().take(20).collect();
 
         Self {

@@ -859,20 +859,18 @@ impl SemanticState {
                     self.pending.push_back(Event::Image(img));
                 }
             }
-            "sequence" => {
-                // handled in description state only
-                if self.desc.in_description {
-                    let seq = Sequence {
-                        name: attrs.get("name").cloned().unwrap_or_default(),
-                        number: attrs.get("number").and_then(|v| v.parse().ok()),
-                    };
-                    if self.desc.in_title_info {
-                        self.desc.ti.sequence.push(seq);
-                    } else if self.desc.in_pub_info
-                        && let Some(pi) = self.desc.pi.as_mut()
-                    {
-                        pi.sequence.push(seq);
-                    }
+            // handled in description state only
+            "sequence" if self.desc.in_description => {
+                let seq = Sequence {
+                    name: attrs.get("name").cloned().unwrap_or_default(),
+                    number: attrs.get("number").and_then(|v| v.parse().ok()),
+                };
+                if self.desc.in_title_info {
+                    self.desc.ti.sequence.push(seq);
+                } else if self.desc.in_pub_info
+                    && let Some(pi) = self.desc.pi.as_mut()
+                {
+                    pi.sequence.push(seq);
                 }
             }
             _ => {}

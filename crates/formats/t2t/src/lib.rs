@@ -44,10 +44,7 @@ mod tests {
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
             Block::Heading {
-                level,
-                numbered,
-                inlines: _,
-                ..
+                level, numbered, ..
             } => {
                 assert_eq!(*level, 1);
                 assert!(!*numbered);

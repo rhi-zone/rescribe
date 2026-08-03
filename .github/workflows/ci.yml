@@ -17,7 +17,7 @@ jobs:
       # Version must match rust-toolchain.toml / flake.nix (rustToolchain), so
       # `cargo fmt --check` here agrees with local `nix develop` and the
       # pre-commit hook. Bump all three together.
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.91.1
+      - uses: dtolnay/rust-toolchain@1.97.1
       - uses: Swatinem/rust-cache@v2
       - name: Build with default features
         run: cargo build

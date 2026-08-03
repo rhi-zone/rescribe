@@ -656,14 +656,14 @@ impl RunExt for types::Run {
                 }
                 types::RunContent::Tab(_) => out.push('\t'),
                 types::RunContent::Cr(_) => out.push('\n'),
-                types::RunContent::Br(br) => {
-                    // Page/column breaks aren't text; only text-wrapping breaks produce newlines
+                // Page/column breaks aren't text; only text-wrapping breaks produce newlines
+                types::RunContent::Br(br)
                     if !matches!(
                         br.r#type,
                         Some(types::STBrType::Page) | Some(types::STBrType::Column)
-                    ) {
-                        out.push('\n');
-                    }
+                    ) =>
+                {
+                    out.push('\n');
                 }
                 _ => {}
             }

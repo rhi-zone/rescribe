@@ -1101,13 +1101,11 @@ fn parse_slide_master(xml: &[u8], path: &str) -> SlideMaster {
                             }
                         }
                     }
-                    b"a:srgbClr" => {
-                        if background_color.is_none() {
-                            for attr in e.attributes().filter_map(|a| a.ok()) {
-                                if attr.key.as_ref() == b"val" {
-                                    background_color =
-                                        Some(String::from_utf8_lossy(&attr.value).into_owned());
-                                }
+                    b"a:srgbClr" if background_color.is_none() => {
+                        for attr in e.attributes().filter_map(|a| a.ok()) {
+                            if attr.key.as_ref() == b"val" {
+                                background_color =
+                                    Some(String::from_utf8_lossy(&attr.value).into_owned());
                             }
                         }
                     }

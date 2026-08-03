@@ -3008,15 +3008,15 @@ impl WorkbookBuilder {
                 // Pivot table rels: one per pivot entry for this sheet.
                 #[cfg(feature = "sml-pivot")]
                 {
-                    let mut prel = pivot_rel_id_start;
-                    for (pi, _pt) in sheet.pivot_tables.iter().enumerate() {
+                    for (prel, (pi, _pt)) in
+                        (pivot_rel_id_start..).zip(sheet.pivot_tables.iter().enumerate())
+                    {
                         let global_pivot = next_pivot_num + pi;
                         sheet_rels.push_str(&format!(
                             r#"  <Relationship Id="rId{}" Type="{}" Target="../pivotTables/pivotTable{}.xml"/>"#,
                             prel, REL_PIVOT_TABLE, global_pivot
                         ));
                         sheet_rels.push('\n');
-                        prel += 1;
                     }
                 }
 
@@ -3846,11 +3846,11 @@ impl WorkbookBuilder {
 
         // Clone pre-built worksheet and fill in the rows
         let mut worksheet = sheet.worksheet.clone();
-        worksheet.sheet_data = Box::new(types::SheetData {
+        *worksheet.sheet_data = types::SheetData {
             row: rows,
             #[cfg(feature = "extra-children")]
             extra_children: Vec::new(),
-        });
+        };
 
         // Apply column outline levels and collapsed flags (if any).
         // We update existing Column entries in place; if a column has outline/collapsed

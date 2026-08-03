@@ -75,7 +75,7 @@ fn main() {
     println!();
 
     let mut words: Vec<_> = unknown_words.into_iter().collect();
-    words.sort_by(|a, b| b.1.cmp(&a.1));
+    words.sort_by_key(|b| std::cmp::Reverse(b.1));
     println!("Top unknown control words (by file count):");
     for (word, count) in words.iter().take(40) {
         println!("  {count:5}  \\{word}");

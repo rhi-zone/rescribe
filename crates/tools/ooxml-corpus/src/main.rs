@@ -635,7 +635,7 @@ fn print_summary(analysis: &CorpusAnalysis) {
 
         // Sort by count (descending)
         let mut error_vec: Vec<_> = analysis.errors.iter().collect();
-        error_vec.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+        error_vec.sort_by_key(|(_, v)| std::cmp::Reverse(v.len()));
 
         for (category, errors) in error_vec {
             println!();

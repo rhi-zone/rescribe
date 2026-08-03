@@ -780,20 +780,14 @@ fn parse_block_attrs(s: &str) -> Option<(BlockAttrs, usize)> {
                 i += 1;
             }
             b'{' => {
-                if let Some(close) = s[i + 1..].find('}') {
-                    attrs.style = Some(s[i + 1..i + 1 + close].to_string());
-                    i = i + 1 + close + 1;
-                } else {
-                    return None;
-                }
+                let close = s[i + 1..].find('}')?;
+                attrs.style = Some(s[i + 1..i + 1 + close].to_string());
+                i = i + 1 + close + 1;
             }
             b'[' => {
-                if let Some(close) = s[i + 1..].find(']') {
-                    attrs.lang = Some(s[i + 1..i + 1 + close].to_string());
-                    i = i + 1 + close + 1;
-                } else {
-                    return None;
-                }
+                let close = s[i + 1..].find(']')?;
+                attrs.lang = Some(s[i + 1..i + 1 + close].to_string());
+                i = i + 1 + close + 1;
             }
             b'<' if i + 1 < bytes.len() && bytes[i + 1] == b'>' => {
                 // <> = justify

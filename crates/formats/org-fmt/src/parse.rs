@@ -1560,24 +1560,22 @@ pub(crate) fn parse_inline_content(text: &str) -> Vec<Inline> {
                 }
             }
             // LaTeX fragment: \(...\) or entity: \word
-            '\\' => {
-                if pos + 1 < chars.len() {
-                    // \(...\) inline math
-                    if chars[pos + 1] == '('
-                        && let Some((math, end)) = parse_latex_fragment(&chars, pos)
-                    {
-                        nodes.push(math);
-                        pos = end;
-                        continue;
-                    }
-                    // \word entity (letter start)
-                    if chars[pos + 1].is_alphabetic()
-                        && let Some((entity, end)) = parse_entity(&chars, pos)
-                    {
-                        nodes.push(entity);
-                        pos = end;
-                        continue;
-                    }
+            '\\' if pos + 1 < chars.len() => {
+                // \(...\) inline math
+                if chars[pos + 1] == '('
+                    && let Some((math, end)) = parse_latex_fragment(&chars, pos)
+                {
+                    nodes.push(math);
+                    pos = end;
+                    continue;
+                }
+                // \word entity (letter start)
+                if chars[pos + 1].is_alphabetic()
+                    && let Some((entity, end)) = parse_entity(&chars, pos)
+                {
+                    nodes.push(entity);
+                    pos = end;
+                    continue;
                 }
             }
             _ => {}

@@ -206,10 +206,8 @@ impl Converter {
                 b"title" if text.is_empty() => {
                     text = String::from_utf8_lossy(&attr.value).to_string();
                 }
-                b"xmlUrl" | b"htmlUrl" | b"url" => {
-                    if url.is_none() {
-                        url = Some(String::from_utf8_lossy(&attr.value).to_string());
-                    }
+                b"xmlUrl" | b"htmlUrl" | b"url" if url.is_none() => {
+                    url = Some(String::from_utf8_lossy(&attr.value).to_string());
                 }
                 _ => {}
             }

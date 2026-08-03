@@ -2299,7 +2299,7 @@ mod font_bg_tests {
             doc.blocks
         );
         let Block::Table { rows, .. } = &doc.blocks[0] else {
-            panic!("expected table as first block, got: {:?}", &doc.blocks[0]);
+            panic!("expected table as first block, got: {:?}", doc.blocks[0]);
         };
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].cells.len(), 2);
