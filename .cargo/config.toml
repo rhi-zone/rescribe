@@ -1,9 +1,21 @@
 # Machine-local overrides (currently: the shared target-dir written by
 # scripts/setup-worktree-target.sh / .ps1 for contributors without
 # direnv/nix). Untracked, per-worktree, never committed — see
-# .cargo/config.local.toml's own comment and .gitignore. `optional = true`
-# so a fresh worktree that hasn't run the setup script yet still works.
-include = [{ path = "config.local.toml", optional = true }]
+# .cargo/config.local.toml's own comment and .gitignore.
+#
+# NOTE: this was briefly `include = [{ path = "config.local.toml", optional
+# = true }]` (the per-entry `{ path = ..., optional = true }` table form),
+# added on the claim that cargo 1.97.1 supported it. The actually-installed
+# toolchain here is cargo 1.91.1, which rejects that form outright ("failed
+# to parse key `include`... expected string but found table in list") --
+# confirmed by direct reproduction in an isolated scratch directory, not by
+# reading a changelog. That broke `cargo` for every command, in every
+# worktree, unconditionally. Reverted to the plain string form, which cargo
+# has supported for longer and which behaves identically for the "file may
+# not exist yet" case: a missing `config.local.toml` is silently skipped
+# with no error either way (also confirmed by direct reproduction) -- the
+# `optional = true` was never actually load-bearing for that behavior.
+include = ["config.local.toml"]
 
 # Reduce target/ directory bloat
 [profile.dev]
