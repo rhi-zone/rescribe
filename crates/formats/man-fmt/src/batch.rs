@@ -94,6 +94,12 @@ pub struct StreamingParser<H: Handler> {
     /// Complete lines of the block currently being accumulated.
     block_lines: Vec<String>,
     state: BlockState,
+    /// Whether the single cross-stream `Metadata` event has been forwarded
+    /// yet. Mirrors the `StartDocument`/`EndDocument` ownership described on
+    /// `emit_block`: bulk `events()` emits exactly one `Metadata`, right
+    /// after `StartDocument`, and `StreamingParser` must too — not one per
+    /// re-parsed block.
+    metadata_emitted: bool,
 }
 
 impl<H: Handler> StreamingParser<H> {
@@ -110,6 +116,7 @@ impl<H: Handler> StreamingParser<H> {
             line_buf: Vec::new(),
             block_lines: Vec::new(),
             state: BlockState::Between,
+            metadata_emitted: false,
         };
         parser.handler.handle(OwnedManEvent::StartDocument);
         parser
@@ -193,6 +200,16 @@ impl<H: Handler> StreamingParser<H> {
     /// filtered out here: `StreamingParser` owns exactly one such pair for
     /// the whole stream (`StartDocument` dispatched in `new()`,
     /// `EndDocument` in `finish()`), not one per accumulated block.
+    ///
+    /// `Metadata` gets the same single-owner treatment: bulk `events()`
+    /// unconditionally emits exactly one `Metadata` event per document
+    /// (even when every field is `None`), immediately after `StartDocument`.
+    /// Since every re-parsed block also runs a full (isolated) `events()`
+    /// pass, every block — not just the one carrying the real `.TH` line —
+    /// produces its own `Metadata`. Only the first one seen is forwarded;
+    /// later ones (necessarily all-`None`, since a document has at most one
+    /// `.TH`) are dropped. If no block ever carries `.TH`, no `Metadata` is
+    /// forwarded here at all — `finish()` supplies the required fallback.
     fn emit_block(&mut self) {
         if self.block_lines.is_empty() {
             return;
@@ -205,6 +222,12 @@ impl<H: Handler> StreamingParser<H> {
                 OwnedManEvent::StartDocument | OwnedManEvent::EndDocument
             ) {
                 continue;
+            }
+            if matches!(event, OwnedManEvent::Metadata { .. }) {
+                if self.metadata_emitted {
+                    continue;
+                }
+                self.metadata_emitted = true;
             }
             self.handler.handle(event.into_owned());
         }
@@ -222,6 +245,20 @@ impl<H: Handler> StreamingParser<H> {
         }
         // Flush any pending block
         self.emit_block();
+        // If no re-parsed block ever carried a `.TH` line (including the
+        // empty-input case, where no block was ever accumulated at all),
+        // bulk `events()` still emits one all-`None` `Metadata` event right
+        // after `StartDocument`. Supply that fallback here so the event
+        // sequence always contains exactly one `Metadata`.
+        if !self.metadata_emitted {
+            self.handler.handle(OwnedManEvent::Metadata {
+                title: None,
+                section: None,
+                date: None,
+                source: None,
+                manual: None,
+            });
+        }
         self.handler.handle(OwnedManEvent::EndDocument);
     }
 }
