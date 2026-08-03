@@ -245,6 +245,51 @@ rescribe-fixtures` all green (0 failures across every suite, including
 `fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures`, each now only reporting
 the two acknowledged `KnownFailure` fixtures).
 
+**2026-08-04: fb2-fmt `annotation` gap independently re-scoped — confirmed genuinely
+substantial, not implemented (scoping investigation only, no code change).** Followed up on
+the "not a quick fix" claim in the 2026-08-03 entry above by reading `fb2-fmt`'s `parse.rs`/
+`events.rs` directly rather than trusting the prior note at face value:
+- The one fixture that exercises this (`fixtures/fb2/annotation`) only contains a single
+  `<p>` child, but `parse.rs`'s `StackItem::Annotation` finalization
+  (`parse.rs:647-654`) maps the *full* `SectionContent` enum onto `AnnotationContent`
+  (`Para`/`EmptyLine`/`Poem`/`Cite`/`Subtitle`/`Table`) — i.e. the format's own content model
+  for `<annotation>` is exactly as rich as `<section>`'s, the fixture just doesn't exercise
+  all of it. A fix that only handled `<p>` (matching the one fixture) would still silently
+  leak `<poem>`/`<cite>`/`<table>`/`<subtitle>` inside an annotation as loose top-level events
+  instead of folding them into `TitleInfo.annotation` — a partial fix, not acceptable per this
+  repo's no-silent-drops bar.
+- `events.rs`'s `ParseState::Annotation` is a bare marker (`events.rs:898-900`, handled as a
+  no-op at close, `events.rs:1119`); `<p>`/`<poem>`/`<cite>`/`<table>`/`<subtitle>` inside it
+  fall through to the *generic* section-content handling and get pushed straight to `pending`
+  as top-level events (confirmed for `<table>` specifically at `events.rs:1004-1008`, which
+  unconditionally does `self.pending.push_back(Event::Table(t))` on `</table>` regardless of
+  context — the same leak class as the already-fixed `cover-image` bug, but for `<table>`,
+  `<poem>`, `<cite>`, `<subtitle>` simultaneously).
+- The blocker isn't `<p>` (already generically collected as `inlines` via the shared
+  `ParseState::Paragraph` used everywhere) or `<table>` (already built as an owned struct via
+  `current_table`, needs only a context-check redirect — small). It's `<poem>`/`<cite>`:
+  today `events.rs` only ever *streams* their sub-elements (`StartPoem`/`StartStanza`/
+  `VerseLine`/`EndStanza`/`EndPoem`, `StartCite`/…/`EndCite`) directly to the caller; there is
+  no production code anywhere in `events.rs` that materializes an owned `Poem`/`Cite`/`Stanza`
+  struct (the only code that does, `collect_poem_events`/`collect_cite_events` in
+  `events.rs`, walks the *opposite* direction — AST → events — and is `#[cfg(test)]`-only, not
+  reusable production logic). Building an annotation-scoped `Poem`/`Cite` means porting
+  `parse.rs`'s multi-level nested dispatch (`Stanza`'s finalize needs its parent to be
+  `Poem`; `VerseLine`'s finalize needs its parent to be `Stanza`; `Cite`/`TextAuthor`'s
+  finalize needs to know their *grandparent* context to route correctly among
+  `Section`/`Epigraph`/`Annotation`) — roughly 40+ interdependent match arms across
+  `parse.rs`'s `handle_start`/`handle_end` (`parse.rs:363-536`, `:576-907`) — into `events.rs`'s
+  flat `ParseState` stack, without regressing the existing non-annotation streaming behavior
+  (today's `<poem>`/`<cite>` events fire incrementally as each sub-element closes; annotation
+  context needs full buffering before any event fires, since the whole thing must end up
+  packaged inside a single `Event::Metadata(Box<Description>)`).
+- Conclusion: this is a real second content-model builder, not a bounded fix in the class of
+  the three bugs fixed in the entry above (each ~5-20 lines, single localized root cause) or
+  the odt vocabulary fixes (7 independent small root causes). Left unimplemented; `annotation`
+  KnownFailure text in `streaming_harness.rs` and `docs/format-audit.md` already described
+  this accurately and needed no correction, just independent confirmation. No code changed
+  this pass.
+
 **2026-08-03: odf-fmt's `streaming_writer` `KnownFailure` fixed — all 66 odt fixtures are
 now byte-identical between `emit(parse(input))` and feeding `events(input)` through
 `batch::Writer`; `streaming_harness::CAPABILITIES`'s odt row `streaming_writer` is now

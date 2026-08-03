@@ -1753,7 +1753,26 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        annotation's whole content is silently discarded and \
                        TitleInfo.annotation stays None; implementing it is a real, nontrivial \
                        addition (a second content-model builder paralleling Body/Section's), \
-                       not a quick fix. A related, already-fixed adjacent bug from this pass: a \
+                       not a quick fix. Independently re-scoped 2026-08-04 (investigation \
+                       only, no code change): confirmed via direct reading of both files — \
+                       events.rs has no production code anywhere that materializes an owned \
+                       Poem/Cite/Stanza struct (collect_poem_events/collect_cite_events walk \
+                       the opposite direction, AST-to-events, and are #[cfg(test)]-only); \
+                       building one means porting parse.rs's multi-level nested dispatch \
+                       (Stanza's finalize needs its parent to be Poem, VerseLine's needs its \
+                       parent to be Stanza, Cite/TextAuthor need their grandparent context to \
+                       route among Section/Epigraph/Annotation) spanning ~40+ interdependent \
+                       match arms in parse.rs's handle_start/handle_end, without regressing \
+                       the existing non-annotation streaming behavior (today's <poem>/<cite> \
+                       events fire incrementally per sub-element; annotation context needs \
+                       full buffering first since the whole thing packages into one \
+                       Event::Metadata). <p> alone (the only content the one annotation \
+                       fixture exercises) and <table> (already built as an owned struct via \
+                       current_table, needing only a context-check redirect) would be small, \
+                       but a partial fix covering only those would still silently leak \
+                       <poem>/<cite>/<subtitle> content nested in an annotation as top-level \
+                       events instead of folding it into TitleInfo.annotation — not \
+                       attempted. A related, already-fixed adjacent bug from this pass: a \
                        description-context self-closing <image> (e.g. inside \
                        <title-info><coverpage>) used to leak out as a stray top-level \
                        Event::Image with no AST-side counterpart (fixtures/fb2/cover-image); \
