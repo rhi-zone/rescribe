@@ -1160,33 +1160,39 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // exactly one StartDocument/EndDocument pair. The related, already-fixed
         // document-header-specific defect (Event::Header / try_emit_header) is unaffected by
         // this change.
-        streaming_parser: ApiState::KnownFailure(
-            "Narrower than before: the StartDocument/EndDocument-per-block duplication is fixed \
-             (see the comment above this entry). Three distinct, pre-existing root causes \
-             remain, on 4 of the fixture suite's ~50 fixtures: (1) definition-list — \
-             parse_definition_list (parse.rs:412) deliberately skips blank lines between \
-             consecutive ': '-prefixed items so the whole-document parser merges them into one \
-             DefinitionList block, but StreamingParser's feed_line treats every blank line as a \
-             hard block boundary (batch.rs's blank-line branch) with no construct-aware \
-             continuation state, so two ': '-item blocks separated by a blank line each become \
-             their own isolated StartDefinitionList/EndDefinitionList pair instead of one merged \
-             list — a genuine cross-block state gap (same class as the fix in this entry, but for \
-             a different construct: DefinitionList continuation, not the document wrapper). (2) \
-             adv-heading-no-close and adv-link-no-close — crate::parse::Parser::try_parse_header \
-             (parse.rs:70) inspects raw self.lines[0..3] of the *whole* document without checking \
-             those 3 lines are contiguous (no intervening blank line), so when the first block is \
-             a single line that fails every specific rejection check (not a closed \
-             heading/list/table/quote/etc. — an unclosed heading opener or unclosed link opener \
-             both qualify) it misdetects a title/date spanning across a block boundary that the \
-             per-block StreamingParser correctly treats as two separate blocks (StreamingParser's \
-             own try_emit_header only ever sees the first block's lines, which are too few to \
-             match); this is a bug in the whole-document parse()/events() reference behavior \
-             itself, not in StreamingParser's block accumulation. (3) adv-unclosed-code — an \
-             EOF-terminated code fence with no closing ``` marker: the whole-document parser's \
-             CodeBlock content includes a trailing newline, but StreamingParser's emit_block() \
-             reconstructs block text via self.block_lines.join(\"\\n\") which never appends one, \
-             so the two CodeBlock contents differ by a single trailing '\\n'. See TODO.md.",
-        ),
+        // Fixed 2026-08-03 (three distinct root causes, all confirmed via
+        // t2t_streaming_parser_matches_events_under_adversarial_chunking, now passing over the
+        // whole fixture suite): (1) definition-list — parse_definition_list (parse.rs) skips
+        // any number of blank lines between consecutive ': '-prefixed items and only stops once
+        // a following non-blank line fails to start with ": ", merging them into one
+        // DefinitionList at the whole-document level. StreamingParser's feed_line now defers
+        // the flush decision on a blank line the same way rst-fmt's/djot-fmt's DefinitionList
+        // fixes do: when the accumulating block is a definition list
+        // (block_is_definition_list(), first line starts with ": "), a blank line is held
+        // (pending_deflist_blank) rather than flushing immediately, and the next non-blank line
+        // decides — another ": "-prefixed line continues the same block, anything else flushes
+        // it as already-ended. (2) adv-heading-no-close / adv-link-no-close — this was actually
+        // a bug in the whole-document parse()/events() reference itself, not in StreamingParser:
+        // Parser::try_parse_header (parse.rs) treated an *unclosed* heading opener ("=" not
+        // closed by a matching "=") or unclosed link opener ("[" with no closing "]") as
+        // ordinary header title text, then blindly consumed the next two lines as author/date —
+        // even when those lines actually belonged to an unrelated block across a blank-line
+        // boundary, silently discarding that block's content. try_parse_header now also rejects
+        // lines starting with 1-5 '='s or with '[' (an unambiguous attempted heading/link opener,
+        // closed or not), matching the existing rejection checks for closed headings and other
+        // block markers. Both parse()/events() and StreamingParser now agree, and no content is
+        // silently dropped. (3) adv-unclosed-code — an EOF-terminated code/raw fence with no
+        // closing marker: the whole-document parser's Parser::new splits the entire input on
+        // '\n' up front, so a trailing newline in the original input always produces one extra,
+        // synthetic empty trailing "line" that parse_verbatim_block/parse_raw_block include in
+        // an unterminated block's content (since they never see a closing marker to stop
+        // early), producing a trailing '\n' that isn't really source text.
+        // StreamingParser::finish() now replicates that artifact: when EOF is reached while
+        // still BlockState::InFenced (no closer ever seen) and the original input had a genuine
+        // trailing newline (line_buf was empty before draining any leftover partial line), an
+        // extra empty line is appended to block_lines before the final emit_block() re-parse, so
+        // its content trailing-newline matches events()'s.
+        streaming_parser: ApiState::Wired,
         // Fixed 2026-07-31: t2t::writer::Writer rewritten from
         // buffer-all-events-then-reconstruct-the-AST to a single shared-buffer
         // write-straight-through design (mirroring rst-fmt's Writer). Every t2t
@@ -1829,28 +1835,11 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     // both are now fixed (2026-08-03, two independent commits) and the FormatCapabilities
     // entry above reflects both as Wired — no entry left here per assert_or_known_failure's
     // own rule against masking a fixed bug.
-    KnownFailure {
-        format: "t2t",
-        api: "streaming_parser",
-        description: "Narrowed: the StartDocument/EndDocument-per-block duplication is fixed \
-                       (StreamingParser now dispatches exactly one StartDocument in new() and \
-                       one EndDocument in finish(), filtering the wrapper pair out of every \
-                       per-block re-parse's own events() output). Three distinct, pre-existing \
-                       root causes remain on 4 fixtures: (1) definition-list — \
-                       parse_definition_list (parse.rs:412) merges consecutive ': '-item blocks \
-                       across a blank line into one DefinitionList at the whole-document level; \
-                       StreamingParser has no construct-aware continuation state across its \
-                       blank-line block boundary, so it emits one DefinitionList pair per item \
-                       instead of one merged list. (2) adv-heading-no-close / adv-link-no-close \
-                       — Parser::try_parse_header (parse.rs:70) reads self.lines[0..3] of the \
-                       whole document without checking they're contiguous, so it misdetects a \
-                       title/date spanning a blank-line block boundary that StreamingParser's \
-                       per-block try_emit_header correctly does not (a bug in the reference \
-                       parse()/events() behavior itself). (3) adv-unclosed-code — an \
-                       EOF-terminated fence's CodeBlock content includes a trailing newline in \
-                       the whole-document parse but not in StreamingParser's \
-                       block_lines.join(\"\\n\") reconstruction. See TODO.md.",
-    },
+    // t2t/streaming_parser was a KnownFailure entry here (three distinct root causes: a
+    // definition-list continuation gap, a try_parse_header contiguity bug shared with
+    // parse()/events() themselves, and an EOF-fence trailing-newline mismatch); all three are
+    // now fixed and the FormatCapabilities entry above reflects it as Wired — no entry left
+    // here per assert_or_known_failure's own rule against masking a fixed bug.
     KnownFailure {
         format: "rtf",
         api: "streaming_parser",

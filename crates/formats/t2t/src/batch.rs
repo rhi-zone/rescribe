@@ -97,6 +97,16 @@ pub struct StreamingParser<H: Handler> {
     /// header (title/author/date) can only ever be the first block of the
     /// whole stream, so header detection is only attempted once.
     at_document_start: bool,
+    /// Set when a blank line arrives while the accumulated block is a
+    /// definition list (its first line starts with `": "`). Held,
+    /// undecided, until the next non-blank line arrives: `parse_definition_
+    /// list` (parse.rs) skips any number of blank lines between items and
+    /// only stops once a following non-blank line fails to start with
+    /// `": "`, so a lone blank-line-based flush (the default for every
+    /// other block kind) would incorrectly split a multi-item definition
+    /// list at each blank line instead of merging it into the single
+    /// `DefinitionList` block the whole-document parser produces.
+    pending_deflist_blank: bool,
 }
 
 impl<H: Handler> StreamingParser<H> {
@@ -114,6 +124,7 @@ impl<H: Handler> StreamingParser<H> {
             block_lines: Vec::new(),
             state: BlockState::Between,
             at_document_start: true,
+            pending_deflist_blank: false,
         };
         parser.handler.handle(OwnedEvent::StartDocument);
         parser
@@ -153,13 +164,38 @@ impl<H: Handler> StreamingParser<H> {
             return;
         }
 
-        // Blank line: end of current block
+        // Blank line: end of current block, unless the block is a
+        // definition list (see `pending_deflist_blank`'s doc comment) — in
+        // that case the flush decision is deferred to the next non-blank
+        // line, which is a continuation (another `": "` term) or a genuine
+        // end.
         if line.trim().is_empty() {
+            if !self.block_lines.is_empty() && self.block_is_definition_list() {
+                self.block_lines.push(line);
+                self.pending_deflist_blank = true;
+                return;
+            }
             if !self.block_lines.is_empty() {
                 self.emit_block();
             }
             self.state = BlockState::Between;
             return;
+        }
+
+        if self.pending_deflist_blank {
+            self.pending_deflist_blank = false;
+            if !line.starts_with(": ") {
+                // Not a continuation: the definition list genuinely ended
+                // at the blank line(s) already appended to `block_lines`
+                // (harmless — `parse_definition_list` just skips trailing
+                // blanks). Flush it, then process `line` as the start of a
+                // fresh block.
+                self.emit_block();
+                self.state = BlockState::Between;
+                self.feed_line(line);
+                return;
+            }
+            // Another `": "` term: the list continues as one block.
         }
 
         // Fenced block start
@@ -186,6 +222,16 @@ impl<H: Handler> StreamingParser<H> {
         // Regular line
         self.state = BlockState::Accumulating;
         self.block_lines.push(line);
+    }
+
+    /// True if the currently-accumulating block is a definition list — its
+    /// first line starts with `": "`, matching the dispatch check `Parser::
+    /// parse` (parse.rs) uses to decide whether to call
+    /// `parse_definition_list` in the first place.
+    fn block_is_definition_list(&self) -> bool {
+        self.block_lines
+            .first()
+            .is_some_and(|l| l.starts_with(": "))
     }
 
     /// Parse the accumulated block lines and deliver events to the handler.
@@ -265,12 +311,37 @@ impl<H: Handler> StreamingParser<H> {
 
     /// Flush any remaining input and deliver final events.
     pub fn finish(mut self) {
+        // `line_buf` is empty here only if the fed byte stream ended exactly
+        // on a `\n` boundary — i.e. the original input had a genuine
+        // trailing newline. Recorded before draining any leftover partial
+        // line below, which would otherwise make this always-empty.
+        let input_had_trailing_newline = self.line_buf.is_empty();
         if !self.line_buf.is_empty() {
             if self.line_buf.last() == Some(&b'\r') {
                 self.line_buf.pop();
             }
             let line = String::from_utf8_lossy(&self.line_buf).into_owned();
             self.feed_line(line);
+        }
+        if input_had_trailing_newline
+            && matches!(self.state, BlockState::InFenced { .. })
+            && !self.block_lines.is_empty()
+        {
+            // EOF reached with no closing fence marker ever seen. The
+            // whole-document parser (`Parser::new`, parse.rs) splits the
+            // *entire* input on `\n` up front, so a trailing newline in the
+            // original input always produces one extra, synthetic empty
+            // trailing "line" — and `parse_verbatim_block`/`parse_raw_block`
+            // include every remaining line (including that synthetic one,
+            // since they never see a closing marker to stop early) in the
+            // block's content, producing a trailing '\n' that isn't really
+            // part of the source text. `block_lines.join("\n")` below has no
+            // such artifact (it only joins the lines actually accumulated),
+            // so it's added back here to match: re-parsing the joined text
+            // then reproduces the same synthetic empty trailing line, and
+            // therefore the same trailing '\n' in content, that the
+            // whole-document parser produces for the same input.
+            self.block_lines.push(String::new());
         }
         self.emit_block();
         self.handler.handle(OwnedEvent::EndDocument);

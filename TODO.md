@@ -491,6 +491,43 @@ each needing its own careful change): the `parse_definition_list` cross-block me
 
 ---
 
+**2026-08-03 (follow-up): all three t2t-fmt `streaming_parser` root causes above fixed;
+`KNOWN_FAILURES` entry removed, `CAPABILITIES` promoted to `Wired`.**
+
+- **`definition-list`**: `StreamingParser::feed_line` (`crates/formats/t2t/src/batch.rs`) now
+  defers the blank-line flush decision for a block whose first line starts with `": "`
+  (`block_is_definition_list()`), the same one-line-lookahead pattern already used for
+  rst-fmt's/djot-fmt's DefinitionList fixes: a blank line is held (`pending_deflist_blank`)
+  rather than flushing immediately, and the next non-blank line decides — another `": "`-prefixed
+  line continues the block, anything else means it already ended.
+- **`adv-heading-no-close` / `adv-link-no-close`**: fixed in the reference parser itself, not in
+  `StreamingParser` — `Parser::try_parse_header` (`crates/formats/t2t/src/parse.rs`) now also
+  rejects a first line starting with 1-5 `'='`s or with `'['` as header title text, even when
+  unclosed (previously only a *closed* heading was rejected via `try_parse_heading`). Without
+  this, an unclosed heading/link opener as line 1 was swallowed as a header title, and the next
+  two lines were blindly consumed as author/date even when they belonged to an unrelated block
+  across a blank-line boundary — silently discarding that block's content. This was a genuine
+  data-loss bug in `parse()`/`events()`, not just a streaming-parser divergence.
+- **`adv-unclosed-code`**: `StreamingParser::finish()` now replicates the whole-document parser's
+  trailing-newline artifact for an EOF-terminated, never-closed fence: `Parser::new` splits the
+  entire input on `'\n'` up front, so a trailing newline in the original input always produces
+  one extra synthetic empty trailing "line" that `parse_verbatim_block`/`parse_raw_block` include
+  in an unterminated block's content. `finish()` now appends an equivalent empty line to
+  `block_lines` before its final re-parse, but only when the original fed byte stream truly ended
+  on a `'\n'` boundary (`line_buf` was empty before draining any leftover partial line) and the
+  block is still `BlockState::InFenced` (no closer ever seen).
+
+Verified via `cargo test -p rescribe-fixtures t2t_streaming_parser_matches_events_under_
+adversarial_chunking` (now passes cleanly over the whole fixture suite — previously panicked
+with "check now PASSES, but is still listed in KNOWN_FAILURES", confirming the fix) and `cargo
+clippy`/`test`/`fmt` scoped to `-p t2t -p rescribe-fixtures` (all green). Full-workspace
+verification deferred to this session's final end-to-end check. No new fixture added — the
+existing `definition-list`/`adv-heading-no-close`/`adv-link-no-close`/`adv-unclosed-code`
+fixtures already exercised these constructs; this pass fixed bugs against them, not new
+constructs.
+
+---
+
 **2026-08-01: rtf-fmt wired into the cross-API harness (`events`/`StreamingParser`/streaming
 `Writer`); `rtf` removed from `streaming_harness::NOT_YET_AUDITED`.** `events()`
 (`sem_events::events`) is a lazy frame-stack walk of the AST `parse()` already built — same

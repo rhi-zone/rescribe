@@ -91,6 +91,25 @@ impl<'a> Parser<'a> {
         if self.try_parse_heading(self.lines[0]).is_some() {
             return (None, None, None);
         }
+        // Line 1 looks like an *attempted* heading or link opener that failed to close
+        // (e.g. "= Heading without closing marker" or "[link without closing bracket ...").
+        // Without this check, try_parse_header would still treat it as a header title and
+        // blindly consume lines 2-3 as author/date — even when those lines actually belong
+        // to an unrelated, later top-level block separated from line 1 by a blank line (the
+        // per-block StreamingParser, which parses line 1 in isolation and correctly finds no
+        // closing marker, does not make this mistake — see fixtures adv-heading-no-close/
+        // adv-link-no-close). A line starting with a run of 1-5 '='s or with '[' is
+        // unambiguously an attempt at one of those two constructs, closed or not, so it is
+        // never legitimate header title text.
+        if first.starts_with('[') {
+            return (None, None, None);
+        }
+        {
+            let leading_eq = first.chars().take_while(|&c| c == '=').count();
+            if (1..=5).contains(&leading_eq) {
+                return (None, None, None);
+            }
+        }
 
         let title = {
             let t = self.lines[0].trim();
