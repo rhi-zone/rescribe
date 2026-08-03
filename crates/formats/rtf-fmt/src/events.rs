@@ -17,6 +17,17 @@ pub enum TokenEvent {
     ControlWord {
         name: String,
         param: Option<i32>,
+        /// Whether a single ASCII space delimiter immediately followed this
+        /// control word in the source and was consumed as part of it (RTF's
+        /// "optional space delimiter" rule). This space carries no semantic
+        /// meaning on its own, but a re-serializer that wants to reproduce
+        /// the *exact source bytes* (not just an RTF-equivalent
+        /// reformatting) needs to know whether it was there — the presence
+        /// or absence of this space is otherwise unrecoverable once
+        /// tokenized, since `read_control_word` discards the consumed byte.
+        /// See `writer::Writer::write_event`, which uses this field
+        /// directly instead of guessing from `name`/`param`.
+        had_delimiter_space: bool,
         span: Span,
     },
     /// `\X` where X is a single non-alpha character (e.g. `\\`, `\{`, `\}`, `\'`)
@@ -80,10 +91,11 @@ impl<'a> Iterator for TokenEventIter<'a> {
                     }
                     let next = self.current_byte()?;
                     if next.is_ascii_lowercase() {
-                        let (name, param) = self.read_control_word();
+                        let (name, param, had_delimiter_space) = self.read_control_word();
                         return Some(TokenEvent::ControlWord {
                             name,
                             param,
+                            had_delimiter_space,
                             span: Span::new(start, self.pos),
                         });
                     } else if next == b'\'' {
@@ -157,7 +169,11 @@ impl<'a> TokenEventIter<'a> {
     /// Read a control word name and optional numeric parameter.
     ///
     /// Called after the `\` and after verifying the next byte is ascii-lowercase.
-    fn read_control_word(&mut self) -> (String, Option<i32>) {
+    /// Returns `(name, param, had_delimiter_space)` — the third element
+    /// records whether a single trailing space delimiter was present and
+    /// consumed, so callers that need byte-exact re-serialization don't lose
+    /// that information.
+    fn read_control_word(&mut self) -> (String, Option<i32>, bool) {
         let mut name = String::new();
         while self.pos < self.input.len() {
             match self.current_byte() {
@@ -196,11 +212,12 @@ impl<'a> TokenEventIter<'a> {
         };
 
         // Optional trailing space is a delimiter; consume it
-        if self.pos < self.input.len() && self.current_byte() == Some(b' ') {
+        let had_delimiter_space = self.pos < self.input.len() && self.current_byte() == Some(b' ');
+        if had_delimiter_space {
             self.advance();
         }
 
-        (name, param)
+        (name, param, had_delimiter_space)
     }
 }
 
@@ -253,6 +270,61 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    /// `had_delimiter_space` must faithfully record whether a space was
+    /// actually present in the source after a control word — the ONLY way a
+    /// downstream re-serializer can recover this otherwise-discarded bit.
+    /// See `writer::Writer::write_event`'s regression test
+    /// `test_writer_byte_identical_delimiter_space` for the full round-trip.
+    #[test]
+    fn test_events_had_delimiter_space() {
+        let with_space: Vec<_> = token_events(br"\ansi \deff0").collect();
+        let TokenEvent::ControlWord {
+            had_delimiter_space,
+            ..
+        } = &with_space[0]
+        else {
+            panic!("expected ControlWord");
+        };
+        assert!(*had_delimiter_space, "\\ansi is followed by a space");
+
+        let without_space: Vec<_> = token_events(br"\ansi\deff0").collect();
+        let TokenEvent::ControlWord {
+            had_delimiter_space,
+            ..
+        } = &without_space[0]
+        else {
+            panic!("expected ControlWord");
+        };
+        assert!(
+            !*had_delimiter_space,
+            "\\ansi is directly followed by \\deff0, no space"
+        );
+
+        // A control word with a numeric param behaves the same way.
+        let param_with_space: Vec<_> = token_events(br"\f0 Times").collect();
+        let TokenEvent::ControlWord {
+            had_delimiter_space,
+            ..
+        } = &param_with_space[0]
+        else {
+            panic!("expected ControlWord");
+        };
+        assert!(*had_delimiter_space, "\\f0 is followed by a space");
+
+        let param_without_space: Vec<_> = token_events(br"\u65?").collect();
+        let TokenEvent::ControlWord {
+            had_delimiter_space,
+            ..
+        } = &param_without_space[0]
+        else {
+            panic!("expected ControlWord");
+        };
+        assert!(
+            !*had_delimiter_space,
+            "\\u65 is directly followed by '?', no space"
+        );
     }
 
     #[test]

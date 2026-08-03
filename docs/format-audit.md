@@ -258,7 +258,7 @@ Features (all ship as Cargo features, all on by default — see `docs/format-lib
 
 | Crate | ast | stream | batch | w-stream | w-build |
 |-------|-----|--------|-------|----------|---------|
-| rtf-fmt | ✓ | ~ | ~§ | ✓§¥ | ✓ |
+| rtf-fmt | ✓ | ~ | ~§ | ✓¥ | ✓ |
 | rst-fmt | ✓ | ✓ | ✓‡ | ✓ | ✓ |
 | asciidoc | ✓ | ✓ | ✓§ | ✓ | ✓ |
 | org-fmt | ✓ | ✓ | ✓§ | ✓§ | ✓ |
@@ -286,17 +286,31 @@ multi-item definition list is split into one `StartDefinitionList`/`EndDefinitio
 per item instead of one list spanning all items. Tracked as a `KnownFailure` in
 `streaming_harness.rs` and in TODO.md; not fixed here.
 
-¥ rtf-fmt's `w-stream` (`writer::Writer`) only accepts the low-level `TokenEvent` type (from
-`token_events()`), not the crate's own semantic `Event`/`OwnedEvent` type that
-`events()`/`StreamingParser` produce — unlike every other `✓§`-marked crate in this table,
-rtf-fmt has no writer that consumes its own semantic event stream at all. `Writer` itself
-writes directly to its sink on every `write_event()` call (genuinely incremental, not
-buffer-then-finish), but its delimiter-space policy (`writer.rs:57-68`) systematically
-diverges from `emit()`'s own placement policy, so re-tokenizing `emit()`'s canonical output
-and feeding it back through `Writer` does not reproduce those bytes (confirmed on fixture
-`fixtures/rtf/adjacent_bold`). Tracked as a `KnownFailure` in `streaming_harness.rs` and in
-TODO.md; not fixed here (a real semantic-event-consuming writer would be a new module, out
-of scope for a harness-wiring pass).
+¥ rtf-fmt's `w-stream` is now `crate::sem_writer::Writer` (fixed 2026-08-03), a new module
+consuming the crate's own semantic `Event`/`OwnedEvent` type directly — the low-level
+`writer::Writer`/`TokenEvent` path this cell used to point at is a separate, lower-level API,
+not the tracked `w-stream` contract. It solves RTF's genuine structural constraint (the
+`\fonttbl`/`\colortbl` header must precede any `\f<n>`/`\cf<n>` body reference, but which
+fonts/colors are used can only be known by having walked the whole document) without
+buffering the body: `sem_events::Event` gained a `StartDocument { fonts, colors }` variant,
+always the first event, carrying the exact tables `emit()` computes
+(`crate::tables::build_font_map`/`build_color_map`, factored out so the two independent
+emission paths can't diverge) — computed for free from the AST `events()` already fully
+parses before yielding anything. `Writer` writes and flushes the header immediately on
+`StartDocument`, then writes every construct straight through, flushing again whenever its
+small `O(nesting depth)` context stack (tracking only blockquote/list-item paragraph elision,
+per-table-row cell count via one in-place `\cellx` insert, and the link empty-children
+fallback) returns to empty — never buffering the whole document. Confirmed byte-identical to
+`build()` over every rtf fixture, and genuinely incremental (bytes reach the sink before
+`finish()`; peak memory ratio < 20x across a 10x increase in synthetic paragraph count,
+`crates/formats/rtf-fmt/src/sem_writer.rs::test_writer_peak_memory_bounded`). Separately, the
+low-level `writer::Writer`/`TokenEvent` path had an independent, deeper bug: the tokenizer
+silently discarded whether a control word's optional trailing-space delimiter was present in
+the source, so no re-serialization policy keyed off `name`/`param` could reconstruct it
+(`\f0 Times` has a delimiter space, `\u65?` does not, both are param-carrying — `emit()`'s
+spacing is a stylistic per-call-site choice, not a function of token shape). Fixed by adding
+`TokenEvent::ControlWord::had_delimiter_space`, populated by the tokenizer and consumed
+verbatim instead of any heuristic. See TODO.md.
 
 ### Cross-API harness inventory (2026-07-30)
 

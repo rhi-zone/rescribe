@@ -28,6 +28,26 @@ use crate::ast::{Align, Block, Inline, TableRow};
 /// [`OwnedEvent`].
 #[derive(Debug, PartialEq)]
 pub enum Event<'a> {
+    // ── Document events ──────────────────────────────────────────────────────
+    /// Always the first event. Carries the exact font/color tables
+    /// ([`crate::tables::build_font_map`]/[`crate::tables::build_color_map`])
+    /// a byte-identical-to-`emit()` streaming writer needs to write the
+    /// `\fonttbl`/`\colortbl` header *before* any body content, without
+    /// buffering the whole document first: RTF requires these tables to
+    /// precede any `\f<n>`/`\cf<n>` reference, but the tables themselves can
+    /// only be computed by having walked the whole document — `events()`
+    /// already parses the full document before yielding its first event (see
+    /// the module-level memory note), so paying that cost once, up front, to
+    /// summarize the tables here is free relative to what `events()` was
+    /// already doing, and turns a whole-document-buffering requirement in
+    /// the writer into a single small piece of up-front state.
+    StartDocument {
+        fonts: Vec<String>,
+        colors: Vec<(u8, u8, u8)>,
+    },
+    /// Always the last event.
+    EndDocument,
+
     // ── Block events ─────────────────────────────────────────────────────────
     StartParagraph {
         align: Align,
@@ -153,10 +173,17 @@ pub struct SemanticEventIter {
 
 impl SemanticEventIter {
     fn new(doc: crate::ast::RtfDoc) -> Self {
+        // Computed once, from the already-fully-parsed AST, before the first
+        // event is yielded — see Event::StartDocument's doc comment.
+        let fonts = crate::tables::build_font_map(&doc);
+        let colors = crate::tables::build_color_map(&doc);
         let mut iter = SemanticEventIter {
             frame_stack: Vec::new(),
         };
+        iter.frame_stack.push(Frame::Emit(Event::EndDocument));
         iter.frame_stack.push(Frame::Blocks(doc.blocks.into_iter()));
+        iter.frame_stack
+            .push(Frame::Emit(Event::StartDocument { fonts, colors }));
         iter
     }
 
@@ -467,8 +494,18 @@ mod tests {
     #[test]
     fn test_semantic_events_empty_doc() {
         let evs: Vec<_> = events(br"{\rtf1}").collect();
-        // Empty RTF doc — should produce no events (no blocks)
-        assert!(evs.is_empty());
+        // Empty RTF doc — no blocks, but StartDocument/EndDocument still
+        // bracket the (empty) body, since emit()'s header is unconditional.
+        assert_eq!(
+            evs,
+            vec![
+                OwnedEvent::StartDocument {
+                    fonts: vec!["Times New Roman".to_string()],
+                    colors: vec![],
+                },
+                OwnedEvent::EndDocument,
+            ]
+        );
     }
 
     #[test]

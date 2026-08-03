@@ -10730,31 +10730,64 @@ fn man_streaming_writer_matches_builder_over_all_fixtures() {
 // any prefix through `feed()` alone (without calling `finish()`) delivers
 // zero events to the handler, for any input.
 //
-// `writer::Writer` (writer.rs) only accepts the low-level `TokenEvent` type
-// (from `token_events()`), not the crate's own semantic `Event`/`OwnedEvent`
-// type that `events()`/`StreamingParser` produce — unlike every other
-// already-`Wired` format in this table, rtf-fmt has no writer that consumes
-// its own semantic event stream at all. Directly verified by the fixture
-// check below: re-tokenizing `emit(&doc)`'s own canonical output via
-// `token_events()` and feeding those tokens back through `Writer` does NOT
-// reproduce the canonical bytes — on fixture `adjacent_bold`, `build()`
-// emits `\rtf1\ansi\deff0{\fonttbl{\f0 Times New Roman;}}` but the
-// token-round-tripped `Writer` output is
-// `\rtf1\ansi \deff0{\fonttbl {\f0Times New Roman;}}`: `Writer`'s
-// delimiter-space policy (writer.rs:57-68 — always a trailing space after a
-// no-param `ControlWord`, never after a `Some(param)` one) systematically
-// diverges from `emit()`'s own placement policy (emit.rs), not just in one
-// isolated edge case. `Writer` itself writes directly to
-// the sink on every `write_event()` call (no internal buffering — confirmed
-// by reading writer.rs top to bottom), so the incrementality probe below
-// passes; only the byte-identity comparison fails.
+// `streaming_writer` is now fixed by two independent changes, both directly
+// verified below:
+//
+// (1) `sem_writer::Writer` (crates/formats/rtf-fmt/src/sem_writer.rs) is a
+// new, genuinely incremental writer consuming the crate's own semantic
+// `Event`/`OwnedEvent` type — the gap this entry used to track ("rtf-fmt has
+// no writer that consumes its own semantic event stream at all"). It solves
+// RTF's real structural constraint (the `\fonttbl`/`\colortbl` header must
+// precede any `\f<n>`/`\cf<n>` body reference, but which fonts/colors are
+// used can only be known by having walked the whole document) without
+// buffering the body: `Event::StartDocument`, always the first event, now
+// carries the exact tables (`rtf_fmt::build_font_map`/`build_color_map`),
+// computed once from the AST `events()` already has fully parsed before
+// yielding anything — so the header can be written and flushed immediately,
+// and every subsequent `StartFont`/`StartColor`/`StartBgColor` event is a
+// plain lookup into a table already known in full. `out` is flushed to the
+// sink whenever the writer's small context stack returns to empty (between
+// top-level blocks), so memory is `O(largest top-level block/table-row +
+// nesting depth)`, not `O(document size)` — verified by
+// `test_writer_peak_memory_bounded` (crate-internal, alloc-probe based) and
+// `test_writer_is_incremental` (bytes reach an `ObservableSink` before
+// `finish()`).
+//
+// (2) The low-level `writer::Writer` (writer.rs) had a second, independent
+// defect even at the `TokenEvent` level, traced to its true root cause: the
+// tokenizer (`events.rs::read_control_word`) silently discarded whether a
+// control word's optional trailing-space delimiter was present in the
+// source. No re-serialization *policy* keyed off `name`/`param` can recover
+// that already-discarded bit (confirmed directly: `\f0 Times` has a
+// delimiter space and `\u65?` does not, despite both being param-carrying
+// control words — `emit()`'s spacing is a stylistic per-call-site choice,
+// not a function of token shape). Fixed by adding
+// `TokenEvent::ControlWord::had_delimiter_space`, populated by the
+// tokenizer and consumed verbatim by `Writer::write_event` instead of any
+// heuristic — see `events.rs::test_events_had_delimiter_space` and
+// `writer.rs::test_writer_byte_identical_delimiter_space`.
+//
+// The check below now exercises (1) directly: `sem_writer::Writer` fed by
+// `events()`, compared byte-for-byte against `build()`, over every rtf
+// fixture, plus the incrementality probe.
 // ---------------------------------------------------------------------------
 
 fn rtf_ast_to_events(doc: &rtf_fmt::RtfDoc) -> Vec<rtf_fmt::OwnedEvent> {
     let mut out = Vec::new();
+    // events() always brackets the body in StartDocument/EndDocument;
+    // StartDocument carries the exact font/color tables emit() computes
+    // (rtf_fmt::build_font_map/build_color_map — the same functions, not a
+    // re-derivation), so a byte-identical-to-build() streaming writer can
+    // write the \fonttbl/\colortbl header immediately instead of buffering
+    // the whole body to discover it. See sem_writer.rs's module doc.
+    out.push(rtf_fmt::Event::StartDocument {
+        fonts: rtf_fmt::build_font_map(doc),
+        colors: rtf_fmt::build_color_map(doc),
+    });
     for b in &doc.blocks {
         rtf_block_events(b, &mut out);
     }
+    out.push(rtf_fmt::Event::EndDocument);
     out
 }
 
@@ -11027,13 +11060,9 @@ fn rtf_streaming_parser_matches_events_under_adversarial_chunking() {
     assert_or_known_failure("rtf", "streaming_parser", result);
 }
 
-/// `Writer` only accepts `TokenEvent` (the low-level raw RTF token stream),
-/// not the crate's own semantic `Event` type — there is no events()-fed
-/// streaming writer in this crate at all, unlike every other `Wired` format
-/// in this table. This check re-tokenizes the builder's own canonical output
-/// via `token_events()` (the closest available analogue to feeding a
-/// semantic event stream) and compares `Writer`'s re-serialization back to
-/// that canonical output byte-for-byte.
+/// `sem_writer::Writer` is fed by `events()` directly (not a token
+/// re-tokenization stand-in) and compared byte-for-byte against `build()`,
+/// over every rtf fixture, plus an incrementality probe.
 #[test]
 fn rtf_streaming_writer_matches_builder_over_all_fixtures() {
     let root = fixtures_root().join("rtf");
@@ -11052,9 +11081,9 @@ fn rtf_streaming_writer_matches_builder_over_all_fixtures() {
         let (doc, _diags) = rtf_fmt::parse(&input);
         let built = rtf_fmt::emit(&doc);
 
-        let mut w = rtf_fmt::writer::Writer::new(Vec::<u8>::new());
-        for t in rtf_fmt::token_events(built.as_bytes()) {
-            w.write_event(t);
+        let mut w = rtf_fmt::sem_writer::Writer::new(Vec::<u8>::new());
+        for e in rtf_fmt::events(&input) {
+            w.write_event(e);
         }
         let streamed = String::from_utf8(w.finish()).expect("streaming writer output is UTF-8");
 
@@ -11071,31 +11100,22 @@ fn rtf_streaming_writer_matches_builder_over_all_fixtures() {
         "expected to check a substantial number of rtf fixtures, got {checked}"
     );
 
-    // Incrementality probe: Writer writes directly to the sink on every
-    // write_event() call with no internal buffering, so this is expected to
-    // pass even though the byte-identity check above fails.
+    // Incrementality probe: the header (from StartDocument) is written and
+    // flushed to the sink immediately, well before finish().
     if result.is_ok() {
-        use rtf_fmt::TokenEvent;
+        use rtf_fmt::OwnedEvent as Event;
         let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::<u8>::new()));
-        let mut w = rtf_fmt::writer::Writer::new(ObservableSink(observed.clone()));
-        w.write_event(TokenEvent::GroupStart {
-            span: Default::default(),
-        });
-        w.write_event(TokenEvent::ControlWord {
-            name: "rtf".into(),
-            param: Some(1),
-            span: Default::default(),
-        });
-        w.write_event(TokenEvent::Text {
-            text: "Hello".into(),
-            span: Default::default(),
+        let mut w = rtf_fmt::sem_writer::Writer::new(ObservableSink(observed.clone()));
+        w.write_event(Event::StartDocument {
+            fonts: vec!["Times New Roman".to_string()],
+            colors: vec![],
         });
         let pre_finish = observed.borrow().len();
         let _ = w.finish();
         if pre_finish == 0 {
             result = Err(
-                "Writer wrote zero bytes to the sink after GroupStart/ControlWord/Text and \
-                 before finish() — expected genuine incremental writes"
+                "Writer wrote zero bytes to the sink after StartDocument and before finish() \
+                 — expected genuine incremental writes"
                     .to_string(),
             );
         }

@@ -9,6 +9,73 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-03: rtf-fmt's `streaming_writer` `KnownFailure` fixed — a new `sem_writer::Writer`
+consumes the crate's own semantic `Event` type; `streaming_harness::CAPABILITIES`'s rtf row
+`streaming_writer` is now `ApiState::Wired`.** Two independent, previously-conflated defects,
+both directly verified before fixing (per this repo's disposition: never guess a fix, confirm
+root cause first):
+
+1. **No events()-fed streaming writer existed at all.** `writer::Writer` only accepted the
+   low-level `TokenEvent` type. Fixed by adding `crates/formats/rtf-fmt/src/sem_writer.rs`
+   (`Writer<W: Write>`, `write_event(OwnedEvent)`/`finish() -> W`) — a genuinely independent
+   emission path from `emit()`, never constructing an `RtfDoc` or calling `emit::emit`.
+
+   The real design problem: RTF requires `\fonttbl`/`\colortbl` declared in the header,
+   *before* any `\f<n>`/`\cf<n>` body reference, but which fonts/colors are used (and their
+   index order) can only be known by having walked the whole document — a writer that
+   discovered them as it went would have to buffer the entire body until the last event
+   before it could write the header (`O(document size)`, exactly the defect being removed).
+   Resolved by adding `sem_events::Event::StartDocument { fonts, colors }`, always the first
+   event: `events()` already fully parses the document into an `RtfDoc` before yielding
+   anything (a pre-existing, documented property), so computing the tables at that point
+   costs nothing extra in *retained* memory — the AST is transient, only the small table
+   survives into the event. `crate::tables` (new module) factors `collect_used_fonts`/
+   `collect_used_colors`/`build_font_map`/`build_color_map` out of `emit.rs` so `emit()` and
+   `sem_events::events()` compute the identical tables from one implementation, not two that
+   could silently diverge. `Writer` writes and flushes the header immediately on
+   `StartDocument`, then writes every other construct straight through — headings, code
+   blocks, bold/italic/…, inline color/font/lang spans, footnotes are all fully determined at
+   `Start*`/`End*` time from that event's payload plus the (already-known) tables, no
+   lookahead. Three genuinely deferred pieces, each bounded by its own construct's size, not
+   the document's: blockquote/list-item paragraph elision (an `O(nesting depth)` context
+   stack remembers the nearest enclosing container, since the event stream reports a
+   `Paragraph` the same way regardless of parent, but `emit()` elides its `\pard...\par`
+   wrapper only inside `Blockquote`/`ListItem`), a table row's `\cellx` list (cell count isn't
+   known until `EndTableRow`; resolved via one `String::insert_str` at a recorded mark, the
+   same "write-through + one in-place insert" technique `rst-fmt`'s `Writer` uses for
+   headings/figure captions), and a `Link`'s empty-children URL fallback (same in-place-insert
+   technique). `out` flushes to the sink whenever the context stack returns to empty, so
+   memory is `O(largest top-level block/table-row + nesting depth)`, confirmed via a
+   crate-internal alloc-probe test (peak-memory ratio < 20x across a 10x paragraph-count
+   increase) — not the shared-`AtomicUsize`-allocator flake pattern found this session in 12+
+   sibling crates; uses `thread_local!` counters per `muse-fmt`/`pod-fmt`'s established
+   pattern. Confirmed byte-identical to `build()` over every `fixtures/rtf/*` case, plus an
+   incrementality probe (bytes reach an `ObservableSink` before `finish()`).
+
+2. **`writer::Writer`'s (`TokenEvent`-level) delimiter-space policy was wrong — but the true
+   root cause was one level deeper than the original bug report.** The original diagnosis
+   ("always a trailing space after a no-param `ControlWord`, never after a `Some(param)`
+   one") was directly verified to be backwards on some cases and right on others, which was
+   itself the signal to dig further rather than just flip the polarity: `\ansi\deff0` (no
+   param, no space) vs. `\f0 Times` (param, space) already falsifies any fixed name/param-keyed
+   rule. Traced to the actual cause: `events.rs::read_control_word` consumed and silently
+   discarded whether a trailing space delimiter was present in the source (`\f0 Times` has
+   one, `\u65?` does not, both are param-carrying — `emit()`'s spacing is a stylistic
+   per-call-site choice baked into hand-written format strings, not a function of token
+   shape), so the bit needed to reproduce it exactly was gone by the time `Writer` saw the
+   token stream — no re-serialization *policy* could win. Fixed at the source: added
+   `TokenEvent::ControlWord::had_delimiter_space: bool`, populated by the tokenizer and
+   consumed verbatim by `writer::Writer::write_event` instead of any heuristic. See
+   `events.rs::test_events_had_delimiter_space` and
+   `writer.rs::test_writer_byte_identical_delimiter_space`.
+
+`crates/rescribe-fixtures/tests/streaming_apis.rs::rtf_streaming_writer_matches_builder_over_all_fixtures`
+now feeds `sem_writer::Writer` via `rtf_fmt::events()` directly (previously a token-retokenize
+stand-in, since no semantic writer existed) and passes; the matching `KnownFailure` entry in
+`streaming_harness.rs` and this file's rtf/streaming_writer bullet are removed accordingly.
+`rtf/streaming_parser`'s separate `KnownFailure` (`batch::StreamingParser`'s buffer-then-finish
+stub) is untouched — out of scope for this pass, unrelated to the writer.
+
 **2026-08-01: rtf-fmt wired into the cross-API harness (`events`/`StreamingParser`/streaming
 `Writer`); `rtf` removed from `streaming_harness::NOT_YET_AUDITED`.** `events()`
 (`sem_events::events`) is a lazy frame-stack walk of the AST `parse()` already built — same

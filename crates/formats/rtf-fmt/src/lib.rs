@@ -23,8 +23,11 @@
 //! pub struct batch::BatchParser { .. }   // feed/finish → (RtfDoc, Vec<Diagnostic>)
 //! pub struct batch::BatchSink<F> { .. }  // feed/finish → delivers TokenEvent tokens via callback
 //!
-//! // Streaming writer — RTF token serializer
+//! // Streaming writer — RTF token serializer (low-level, TokenEvent)
 //! pub struct writer::Writer<W: Write> { .. } // write_event(TokenEvent) / finish() → W
+//!
+//! // Streaming writer — semantic document-level event serializer
+//! pub struct sem_writer::Writer<W: Write> { .. } // write_event(OwnedEvent) / finish() → W
 //!
 //! // Builder writer
 //! pub fn emit(doc: &RtfDoc) -> String;
@@ -38,12 +41,16 @@
 //! canonical form before round-tripping.  Verified by the fuzz round-trip
 //! harness (`fuzz_rtf_roundtrip`).
 
+#[cfg(test)]
+mod alloc_probe;
 mod ast;
 pub mod batch;
 mod emit;
 mod events;
 mod parse;
 mod sem_events;
+pub mod sem_writer;
+mod tables;
 pub mod writer;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────
@@ -55,3 +62,7 @@ pub use sem_events::{Event, OwnedEvent, SemanticEventIter, events, events_str};
 // Token-level event API (raw RTF tokens)
 pub use events::{TokenEvent, token_events, token_events_str};
 pub use parse::{parse, parse_str};
+// Shared font/color table computation — used by both `emit()` and
+// `sem_events::events()`'s `Event::StartDocument`, and by any caller that
+// needs to replicate their exact index assignment.
+pub use tables::{build_color_map, build_font_map, collect_used_colors, collect_used_fonts};

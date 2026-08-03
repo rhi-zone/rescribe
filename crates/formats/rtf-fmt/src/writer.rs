@@ -4,8 +4,10 @@
 //! writes the corresponding RTF bytes to the underlying `Write` sink.
 //!
 //! This is the inverse of the `token_events()` tokenizer: feeding the output of
-//! `token_events(input)` into a `Writer` should reproduce the original RTF bytes
-//! (modulo whitespace normalization in control word delimiters).
+//! `token_events(input)` into a `Writer` reproduces the original RTF bytes
+//! exactly, including each control word's optional trailing-space delimiter
+//! (`TokenEvent::ControlWord::had_delimiter_space` carries that bit, which
+//! would otherwise be unrecoverable once tokenized).
 //!
 //! # Example
 //! ```no_run
@@ -15,7 +17,7 @@
 //! let mut w = Writer::new(Vec::<u8>::new());
 //! // Reproduce a minimal RTF document from tokens
 //! w.write_event(TokenEvent::GroupStart { span: Default::default() });
-//! w.write_event(TokenEvent::ControlWord { name: "rtf".into(), param: Some(1), span: Default::default() });
+//! w.write_event(TokenEvent::ControlWord { name: "rtf".into(), param: Some(1), had_delimiter_space: false, span: Default::default() });
 //! w.write_event(TokenEvent::Text { text: "Hello".into(), span: Default::default() });
 //! w.write_event(TokenEvent::GroupEnd { span: Default::default() });
 //! let bytes = w.finish();
@@ -30,17 +32,11 @@ use std::io::Write;
 /// [`finish`](Writer::finish) to recover the sink.
 pub struct Writer<W: Write> {
     sink: W,
-    /// Track whether the previous output was a control word (to know if we
-    /// need a delimiter space before the next one or before literal text).
-    last_was_control: bool,
 }
 
 impl<W: Write> Writer<W> {
     pub fn new(sink: W) -> Self {
-        Writer {
-            sink,
-            last_was_control: false,
-        }
+        Writer { sink }
     }
 
     /// Write one RTF token event to the sink.
@@ -48,23 +44,33 @@ impl<W: Write> Writer<W> {
         match event {
             TokenEvent::GroupStart { .. } => {
                 let _ = self.sink.write_all(b"{");
-                self.last_was_control = false;
             }
             TokenEvent::GroupEnd { .. } => {
                 let _ = self.sink.write_all(b"}");
-                self.last_was_control = false;
             }
-            TokenEvent::ControlWord { name, param, .. } => {
+            TokenEvent::ControlWord {
+                name,
+                param,
+                had_delimiter_space,
+                ..
+            } => {
                 let _ = self.sink.write_all(b"\\");
                 let _ = self.sink.write_all(name.as_bytes());
                 if let Some(n) = param {
                     let _ = write!(self.sink, "{}", n);
-                    // Numeric parameter: no trailing space needed (delimiter is end of digits)
-                    self.last_was_control = false;
-                } else {
-                    // Word-only control word: needs a trailing space as delimiter
+                }
+                // Whether a trailing space delimiter is written is NOT
+                // derivable from `name`/`param` alone — RTF only requires
+                // one when needed to disambiguate what follows, and
+                // `emit()`'s own canonical output includes stylistic spaces
+                // that aren't structurally required at all (e.g. `\f0
+                // Times` has one, `\u65?` does not, both are
+                // param-carrying). `had_delimiter_space` is the exact bit
+                // the tokenizer recorded from the source; reproducing it
+                // verbatim is the only way to get byte-identical
+                // re-serialization instead of a merely-valid reformatting.
+                if had_delimiter_space {
                     let _ = self.sink.write_all(b" ");
-                    self.last_was_control = true;
                 }
             }
             TokenEvent::ControlSymbol { ch, hex_byte, .. } => {
@@ -80,13 +86,11 @@ impl<W: Write> Writer<W> {
                     let s = ch.encode_utf8(&mut buf);
                     let _ = self.sink.write_all(s.as_bytes());
                 }
-                self.last_was_control = false;
             }
             TokenEvent::Text { text, .. } => {
                 // RTF text: escape { } \ characters
                 let escaped = escape_rtf_text(&text);
                 let _ = self.sink.write_all(escaped.as_bytes());
-                self.last_was_control = false;
             }
         }
     }
@@ -133,6 +137,7 @@ mod tests {
         w.write_event(TokenEvent::ControlWord {
             name: "rtf".into(),
             param: Some(1),
+            had_delimiter_space: false,
             span: span(),
         });
         let bytes = w.finish();
@@ -145,10 +150,38 @@ mod tests {
         w.write_event(TokenEvent::ControlWord {
             name: "par".into(),
             param: None,
+            had_delimiter_space: true,
             span: span(),
         });
         let bytes = w.finish();
         assert_eq!(bytes, b"\\par ");
+    }
+
+    /// The bit `TokenEvent::ControlWord::had_delimiter_space` exists
+    /// specifically for: reproducing the exact source bytes, not just a
+    /// valid reformatting. Both directions (space present / space absent)
+    /// must round-trip for both param and no-param control words.
+    #[test]
+    fn test_writer_byte_identical_delimiter_space() {
+        for input in [
+            &br"\ansi \deff0"[..],
+            &br"\ansi\deff0"[..],
+            &br"\f0 Times"[..],
+            &br"\u65?"[..],
+        ] {
+            let tokens: Vec<_> = crate::events::token_events(input).collect();
+            let mut w = Writer::new(Vec::<u8>::new());
+            for t in tokens {
+                w.write_event(t);
+            }
+            let output = w.finish();
+            assert_eq!(
+                output,
+                input,
+                "delimiter-space round-trip diverged for {:?}",
+                String::from_utf8_lossy(input)
+            );
+        }
     }
 
     #[test]
@@ -197,9 +230,15 @@ mod tests {
                 TokenEvent::GroupEnd { .. } => TokenEvent::GroupEnd {
                     span: Span::new(0, 0),
                 },
-                TokenEvent::ControlWord { name, param, .. } => TokenEvent::ControlWord {
+                TokenEvent::ControlWord {
                     name,
                     param,
+                    had_delimiter_space,
+                    ..
+                } => TokenEvent::ControlWord {
+                    name,
+                    param,
+                    had_delimiter_space,
                     span: Span::new(0, 0),
                 },
                 TokenEvent::ControlSymbol { ch, hex_byte, .. } => TokenEvent::ControlSymbol {

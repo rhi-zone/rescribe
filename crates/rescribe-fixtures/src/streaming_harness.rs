@@ -1288,6 +1288,12 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // sem_events.rs:29) — added PartialEq here so the exact-sequence
     // events()-vs-AST-projection check in tests/streaming_apis.rs is
     // possible (RtfDoc/Block/Inline/Align/TableRow already derived it).
+    // events() now also always brackets its output in a new
+    // Event::StartDocument{fonts, colors}/EndDocument pair — StartDocument
+    // carries the exact font/color tables build()/emit() compute
+    // (rtf_fmt::build_font_map/build_color_map, factored into a shared
+    // src/tables.rs used by both paths so they can't diverge), which is what
+    // made a genuine events()-fed streaming writer possible (see below).
     //
     // batch::StreamingParser (batch.rs:107-139) buffers all fed bytes into a
     // Vec<u8> in feed() and only calls sem_events::events(&self.buf) once,
@@ -1298,28 +1304,30 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // harness's rule a buffer-then-finish implementation is always
     // KnownFailure, never NotApplicable, regardless of the format's
     // structural excuse. Directly verified: feed() alone, without calling
-    // finish(), delivers zero events to the handler for any input.
+    // finish(), delivers zero events to the handler for any input. This
+    // reader-side gap is unrelated to the streaming_writer fix below and
+    // remains open — not part of this pass's scope.
     //
-    // writer::Writer (writer.rs) only accepts the low-level TokenEvent type
-    // (from token_events()), not the crate's own semantic Event/OwnedEvent
-    // type that events()/StreamingParser produce — unlike every other Wired
-    // format in this table, rtf-fmt has no writer that consumes its own
-    // semantic event stream at all. Writer itself writes directly to the
-    // sink on every write_event() call with no internal buffering (verified
-    // by reading writer.rs), so it is genuinely incremental at the token
-    // level — but re-tokenizing emit()'s own canonical output via
-    // token_events() and feeding those tokens back through Writer does not
-    // reproduce the canonical bytes: Writer's delimiter-space policy
-    // (writer.rs:57-68 — always a trailing space after a no-param
-    // ControlWord, never after a Some(param) one) systematically diverges
-    // from emit()'s own placement (emit.rs), confirmed directly by
-    // `cargo test -p rescribe-fixtures --test streaming_apis -- rtf
-    // --nocapture` on fixture `adjacent_bold`: build() emits
-    // `\rtf1\ansi\deff0{\fonttbl{\f0 Times New Roman;}}` but the
-    // token-round-tripped Writer output is
-    // `\rtf1\ansi \deff0{\fonttbl {\f0Times New Roman;}}` — every one of
-    // `\ansi`/`\fonttbl`'s missing/extra spaces and `\f0`'s missing space
-    // is this same delimiter-policy mismatch, not an isolated edge case.
+    // streaming_writer is now Wired via a new src/sem_writer.rs Writer that
+    // consumes Event/OwnedEvent directly (not TokenEvent) — the gap this
+    // entry used to track. It solves the same font/color-table-before-body
+    // structural constraint the reader has, but without buffering: since
+    // Event::StartDocument now carries the finished tables up front (see
+    // above), the writer emits and flushes the \fonttbl/\colortbl header
+    // immediately, then writes every top-level block straight through,
+    // flushing again whenever its small O(nesting depth) context stack
+    // returns to empty — never buffering the whole document. Separately, the
+    // low-level writer::Writer/TokenEvent path (writer.rs) had a second,
+    // deeper bug: the tokenizer (events.rs::read_control_word) silently
+    // discarded whether a control word's optional trailing-space delimiter
+    // was present in the source, so no re-serialization policy keyed off
+    // name/param could have reconstructed it (confirmed: `\f0 Times` has a
+    // delimiter space, `\u65?` does not, both are param-carrying — the
+    // spacing is a stylistic per-call-site choice in emit.rs, not a function
+    // of token shape). Fixed by adding
+    // TokenEvent::ControlWord::had_delimiter_space, populated by the
+    // tokenizer and consumed verbatim by writer::Writer instead of any
+    // heuristic.
     FormatCapabilities {
         format: "rtf",
         events: ApiState::Wired,
@@ -1331,15 +1339,7 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              inherent RTF structural constraint (font/color tables must be parsed before body \
              content is interpretable) rather than an implementation shortfall. See TODO.md",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "writer::Writer only accepts TokenEvent (the low-level raw RTF token stream), not \
-             the crate's own semantic Event type that events()/StreamingParser produce — no \
-             events()-fed streaming writer exists in this crate at all. Even at the token level, \
-             re-tokenizing emit()'s own canonical output via token_events() and feeding it back \
-             through Writer does not reproduce the canonical bytes: Writer's delimiter-space \
-             policy (writer.rs:57-68) systematically diverges from emit()'s own placement, \
-             confirmed on fixture adjacent_bold (see test output). See TODO.md",
-        ),
+        streaming_writer: ApiState::Wired,
     },
     // native/csv-fmt/tsv-fmt/ris audited 2026-08-01 (fourth pass on this
     // harness). All four crates were confirmed, by reading every file under
@@ -1739,18 +1739,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        calls sem_events::events() once inside finish() (batch.rs:107-139) — a \
                        confirmed buffer-then-finish stub; feed() alone (no finish()) delivers \
                        zero events to the handler for any input",
-    },
-    KnownFailure {
-        format: "rtf",
-        api: "streaming_writer",
-        description: "rtf_fmt::writer::Writer only accepts TokenEvent, not the crate's own \
-                       semantic Event type — no events()-fed streaming writer exists at all; \
-                       separately, even at the token level, Writer's delimiter-space policy \
-                       (writer.rs:57-68: always a trailing space after a no-param ControlWord, \
-                       never after a Some(param) one) systematically diverges from emit()'s own \
-                       placement, so re-tokenizing emit()'s own canonical output and feeding it \
-                       back through Writer does not reproduce those canonical bytes (confirmed \
-                       on fixture adjacent_bold)",
     },
 ];
 
