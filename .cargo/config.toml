@@ -1,13 +1,9 @@
-# NOTE: deliberately NOT setting [build] target-dir here. A relative
-# target-dir is resolved against the location of whichever config file
-# supplies it, and this file is git-tracked — so once any git worktree is
-# created from a commit that includes a `target-dir = "..."` line here, that
-# worktree's own (closer) copy of this file would win outright and resolve
-# the path against *its own* root, creating a fresh local target/ instead of
-# sharing one. That defeats the point for every future worktree. The shared
-# target dir is instead set dynamically via CARGO_TARGET_DIR in .envrc,
-# computed from `git rev-parse --git-common-dir` — see .envrc for why that's
-# safe across worktrees and this isn't.
+# Machine-local overrides (currently: the shared target-dir written by
+# scripts/setup-worktree-target.sh / .ps1 for contributors without
+# direnv/nix). Untracked, per-worktree, never committed — see
+# .cargo/config.local.toml's own comment and .gitignore. `optional = true`
+# so a fresh worktree that hasn't run the setup script yet still works.
+include = [{ path = "config.local.toml", optional = true }]
 
 # Reduce target/ directory bloat
 [profile.dev]

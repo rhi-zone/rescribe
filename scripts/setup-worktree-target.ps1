@@ -3,8 +3,8 @@ Share one target/ dir across the main checkout and every git worktree of
 this repo (windows). For contributors who don't use direnv or
 `nix develop` -- both of those already set CARGO_TARGET_DIR dynamically,
 see .envrc and flake.nix. This script gets the same effect via
-.cargo/config.toml's [build] target-dir for anyone running plain `cargo`
-outside of direnv/nix.
+.cargo/config.local.toml's [build] target-dir for anyone running plain
+`cargo` outside of direnv/nix.
 
 Run once per worktree, from inside that worktree:
   scripts/setup-worktree-target.ps1
@@ -13,12 +13,10 @@ Safe to re-run (idempotent) and safe to run in a worktree that already
 gets CARGO_TARGET_DIR from direnv/nix -- CARGO_TARGET_DIR, if set, takes
 precedence over this file's target-dir, so this is inert for those users.
 
-NOTE: this edits .cargo/config.toml *in the worktree you run it from*.
-That file is git-tracked, so this intentionally makes it locally dirty
-(git status will show it modified). This is expected and is why the
-tracked copy of .cargo/config.toml deliberately omits target-dir -- see
-the comment at the top of that file. Do not commit this edit; it bakes
-in a machine-specific absolute path.
+This writes to .cargo/config.local.toml, which is untracked (see
+.gitignore) and included by the tracked .cargo/config.toml via its
+`include` key. It never touches the tracked config.toml, so the tracked
+file stays clean regardless of how many worktrees run this script.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -35,7 +33,7 @@ $commonDirAbs = (Resolve-Path -LiteralPath $gitCommonDir).Path
 $targetDir = ((Split-Path -Parent $commonDirAbs) -replace '\\', '/') + "/target"
 
 $configDir = ".cargo"
-$configFile = ".cargo/config.toml"
+$configFile = ".cargo/config.local.toml"
 if (-not (Test-Path -LiteralPath $configDir)) {
   New-Item -ItemType Directory -Path $configDir | Out-Null
 }
@@ -70,7 +68,7 @@ if ($content -match '(?m)^target-dir\s*=.*$') {
   Write-Host "Added to existing [build] table: $targetLine in $configFile"
 } else {
   # No [build] table at all -- append a new one.
-  $append = "`n# Local-only: shared target dir across worktrees of this repo.`n# Set by scripts/setup-worktree-target.sh or .ps1 -- do not commit this edit.`n[build]`n$targetLine`n"
+  $append = "`n# Machine-local: shared target dir across worktrees of this repo.`n# Set by scripts/setup-worktree-target.sh or .ps1. This file is`n# untracked (see .gitignore) -- included by .cargo/config.toml.`n[build]`n$targetLine`n"
   Add-Content -LiteralPath $configFile -Value $append -NoNewline
   Write-Host "Appended new [build] table: $targetLine in $configFile"
 }

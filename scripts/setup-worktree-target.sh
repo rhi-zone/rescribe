@@ -3,8 +3,8 @@
 # this repo (mac/linux). For contributors who don't use direnv or
 # `nix develop` -- both of those already set CARGO_TARGET_DIR dynamically,
 # see .envrc and flake.nix. This script gets the same effect via
-# .cargo/config.toml's [build] target-dir for anyone running plain `cargo`
-# outside of direnv/nix.
+# .cargo/config.local.toml's [build] target-dir for anyone running plain
+# `cargo` outside of direnv/nix.
 #
 # Run once per worktree, from inside that worktree:
 #   scripts/setup-worktree-target.sh
@@ -13,12 +13,10 @@
 # gets CARGO_TARGET_DIR from direnv/nix -- CARGO_TARGET_DIR, if set, takes
 # precedence over this file's target-dir, so this is inert for those users.
 #
-# NOTE: this edits .cargo/config.toml *in the worktree you run it from*.
-# That file is git-tracked, so this intentionally makes it locally dirty
-# (git status will show it modified). This is expected and is why the
-# tracked copy of .cargo/config.toml deliberately omits target-dir -- see
-# the comment at the top of that file. Do not commit this edit; it bakes
-# in a machine-specific absolute path.
+# This writes to .cargo/config.local.toml, which is untracked (see
+# .gitignore) and included by the tracked .cargo/config.toml via its
+# `include` key. It never touches the tracked config.toml, so the tracked
+# file stays clean regardless of how many worktrees run this script.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
@@ -29,7 +27,7 @@ git_common_dir=$(git rev-parse --git-common-dir)
 common_dir_abs=$(cd "$git_common_dir" && pwd -P)
 target_dir="$(dirname "$common_dir_abs")/target"
 
-config_file=".cargo/config.toml"
+config_file=".cargo/config.local.toml"
 mkdir -p .cargo
 touch "$config_file"
 
@@ -61,8 +59,9 @@ else
   # No [build] table at all -- append a new one.
   {
     echo ""
-    echo "# Local-only: shared target dir across worktrees of this repo."
-    echo "# Set by scripts/setup-worktree-target.sh or .ps1 -- do not commit this edit."
+    echo "# Machine-local: shared target dir across worktrees of this repo."
+    echo "# Set by scripts/setup-worktree-target.sh or .ps1. This file is"
+    echo "# untracked (see .gitignore) -- included by .cargo/config.toml."
     echo "[build]"
     echo "$target_line"
   } >> "$config_file"

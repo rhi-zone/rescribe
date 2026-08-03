@@ -1,5 +1,6 @@
 # Rust
 /target/
+/.cargo/config.local.toml
 
 # Nix
 result
