@@ -338,6 +338,11 @@ cargo clippy       # Lint
 cd docs && bun dev # Local docs
 ```
 
+After creating a new worktree, run `scripts/setup-worktree-target.sh` (mac/linux) or
+`scripts/setup-worktree-target.ps1` (windows) once to share the build cache across
+worktrees. direnv/nix users get this automatically via `.envrc`/`flake.nix` already and
+don't need to run it, though it's harmless if they do.
+
 ## Testing
 
 Pandoc fixtures at `~/git/pandoc/test/` can be used as local reference inputs (GPL - don't copy into repo).
