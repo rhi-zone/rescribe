@@ -53,6 +53,24 @@
             jing-trang
           ];
           LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH";
+
+          # Share one target/ dir across the main checkout and every git
+          # worktree of this repo (including .claude/worktrees/* used by
+          # background agents), instead of each worktree accumulating its own
+          # multi-GB target/. Mirrors the logic in .envrc, for anyone who runs
+          # `nix develop` directly instead of relying on direnv.
+          # git-common-dir always resolves to the same shared .git directory
+          # regardless of which worktree runs this, so it's safe for every
+          # future worktree too. Cargo already mutexes concurrent builds
+          # against a shared target dir via target/.cargo-lock, so this only
+          # serializes builds across worktrees rather than parallelizing
+          # them. Set CARGO_TARGET_DIR yourself before entering the shell to
+          # override.
+          shellHook = ''
+            if git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null); then
+              export CARGO_TARGET_DIR="''${CARGO_TARGET_DIR:-$(dirname "$(realpath "$git_common_dir")")/target}"
+            fi
+          '';
         };
 
         # Fuzzing shell with nightly Rust
@@ -68,6 +86,13 @@
             clang
           ];
           LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH";
+
+          # See devShells.default for why this is needed and how it works.
+          shellHook = ''
+            if git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null); then
+              export CARGO_TARGET_DIR="''${CARGO_TARGET_DIR:-$(dirname "$(realpath "$git_common_dir")")/target}"
+            fi
+          '';
         };
       }
     );
