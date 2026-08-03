@@ -18,7 +18,6 @@
 use ooxml_codegen::{
     CodegenConfig, FeatureMappings, NameMappings, generate, generate_parsers, parse_rnc,
 };
-use std::fs;
 use std::path::Path;
 
 fn load_sml_schema() -> Option<ooxml_codegen::Schema> {
@@ -30,7 +29,7 @@ fn load_sml_schema() -> Option<ooxml_codegen::Schema> {
         eprintln!("skipping: schema not found at {path} (run scripts/ooxml/download-spec.sh)");
         return None;
     }
-    let input = fs::read_to_string(path).expect("failed to read sml.rnc");
+    let input = ooxml_codegen::read_spec_file(path);
     Some(parse_rnc(&input).expect("failed to parse sml.rnc"))
 }
 

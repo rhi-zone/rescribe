@@ -345,6 +345,17 @@ worktrees — this applies regardless of direnv/nix. The script writes the share
 the tracked `.cargo/config.toml` via its `include` key (stable since Rust 1.94) — running
 the script never dirties the tracked config file.
 
+Also run `scripts/setup-worktree-spec.sh` (mac/linux) or `scripts/setup-worktree-spec.ps1`
+(windows) once per fresh worktree. `spec/` (ECMA-376 schema files consumed by
+`ooxml-wml`/`-sml`/`-dml`/`-pml`'s `build.rs` and `ooxml-codegen`'s tests) is gitignored —
+confirmed non-redistributable, so it's never committed — and `git worktree add` only checks
+out tracked files, so a fresh worktree is missing it entirely. **If you see `ooxml-codegen`
+tests fail with something like "failed to read wml.rnc: No such file or directory," that is
+this gap, not a flake** — run the setup script (it symlinks the missing entries back to the
+main checkout's `spec/`) rather than writing it off as pre-existing/unrelated. See the
+2026-08-04 TODO.md entry for the full investigation (including why several prior sessions
+misdiagnosed this as an intermittent parallel-build race).
+
 ## Testing
 
 Pandoc fixtures at `~/git/pandoc/test/` can be used as local reference inputs (GPL - don't copy into repo).

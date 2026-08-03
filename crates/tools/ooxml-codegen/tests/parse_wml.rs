@@ -1,5 +1,4 @@
 use ooxml_codegen::parse_rnc;
-use std::fs;
 
 #[test]
 fn test_parse_wml_rnc() {
@@ -7,7 +6,7 @@ fn test_parse_wml_rnc() {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc"
     );
-    let input = fs::read_to_string(path).expect("failed to read wml.rnc");
+    let input = ooxml_codegen::read_spec_file(path);
 
     let schema = parse_rnc(&input).expect("failed to parse wml.rnc");
 

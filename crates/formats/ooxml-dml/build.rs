@@ -59,7 +59,7 @@ fn main() {
 
     // Parse the shared types schema first
     let mut combined_schema = if Path::new(&shared_path).exists() {
-        let shared_input = fs::read_to_string(&shared_path).expect("failed to read shared types");
+        let shared_input = ooxml_codegen::read_spec_file(&shared_path);
         parse_rnc(&shared_input).expect("failed to parse shared types")
     } else {
         Schema {
@@ -70,8 +70,7 @@ fn main() {
 
     // Parse and merge the relationship reference schema (for r:id, r:embed, etc.)
     if Path::new(&rel_path).exists() {
-        let rel_input =
-            fs::read_to_string(&rel_path).expect("failed to read relationship references");
+        let rel_input = ooxml_codegen::read_spec_file(&rel_path);
         let rel_schema = parse_rnc(&rel_input).expect("failed to parse relationship references");
         for ns in rel_schema.namespaces {
             if !combined_schema
@@ -86,7 +85,7 @@ fn main() {
     }
 
     // Parse and merge the DML schema
-    let dml_input = fs::read_to_string(&dml_path).expect("failed to read dml-main.rnc");
+    let dml_input = ooxml_codegen::read_spec_file(&dml_path);
     let dml_schema = parse_rnc(&dml_input).expect("failed to parse dml-main.rnc");
 
     // Merge: add DML namespaces and definitions (DML takes precedence for duplicates)
@@ -103,7 +102,7 @@ fn main() {
 
     // Parse and merge the DML chart schema (ECMA-376 §21.2)
     if Path::new(&chart_path).exists() {
-        let chart_input = fs::read_to_string(&chart_path).expect("failed to read dml-chart.rnc");
+        let chart_input = ooxml_codegen::read_spec_file(&chart_path);
         let chart_schema = parse_rnc(&chart_input).expect("failed to parse dml-chart.rnc");
         for ns in chart_schema.namespaces {
             if !combined_schema
@@ -119,8 +118,7 @@ fn main() {
 
     // Parse and merge the DML diagram schema (ECMA-376 §21.4)
     if Path::new(&diagram_path).exists() {
-        let diagram_input =
-            fs::read_to_string(&diagram_path).expect("failed to read dml-diagram.rnc");
+        let diagram_input = ooxml_codegen::read_spec_file(&diagram_path);
         let diagram_schema = parse_rnc(&diagram_input).expect("failed to parse dml-diagram.rnc");
         for ns in diagram_schema.namespaces {
             if !combined_schema

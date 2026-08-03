@@ -1,5 +1,4 @@
 use ooxml_codegen::{CodegenConfig, generate, parse_rnc};
-use std::fs;
 
 #[test]
 fn test_eg_definitions() {
@@ -9,7 +8,7 @@ fn test_eg_definitions() {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc"
     );
-    let input = fs::read_to_string(path).expect("failed to read wml.rnc");
+    let input = ooxml_codegen::read_spec_file(path);
     let schema = parse_rnc(&input).expect("failed to parse wml.rnc");
 
     let eg_defs: Vec<_> = schema
@@ -49,7 +48,7 @@ fn test_generate_wml() {
         env!("CARGO_MANIFEST_DIR"),
         "/../../../spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc"
     );
-    let input = fs::read_to_string(path).expect("failed to read wml.rnc");
+    let input = ooxml_codegen::read_spec_file(path);
 
     let schema = parse_rnc(&input).expect("failed to parse wml.rnc");
 

@@ -9,6 +9,52 @@ Per-format status is tracked in `docs/format-audit.md` using the maturity pipeli
 (0-Stub → 1-Partial → 2-Fixtures → 3-Harness → 4-Fuzz → 5-Production).
 This file describes milestones, format tiers, and cross-cutting work.
 
+**2026-08-04: the recurring `ooxml-codegen`/`wml.rnc`-missing-file "flake" (see the several
+entries elsewhere in this file that misdiagnosed it as pre-existing/unrelated/intermittent)
+is fixed at the root cause: it's not a flake, it's a fresh-worktree environment gap.**
+`spec/OfficeOpenXML-RELAXNG-Strict/`, `spec/OfficeOpenXML-RELAXNG-Transitional/` (the one
+`ooxml-wml`/`-sml`/`-dml`/`-pml`'s `build.rs` and `ooxml-codegen`'s tests actually read), and
+the sibling ECMA-376 schema/XSD directories under `spec/` are gitignored (`.gitignore`'s
+`/spec/*` rule, with `spec/*.yaml`/`spec/fixtures/`/parts of `spec/odf/` tracked as the
+exceptions) — confirmed non-redistributable (no license/copyright statement found in the
+ECMA-376 schema files or Parts 1/2, per the ADR 0013 investigation already in this file) so
+committing them to git was correctly ruled out. `git worktree add` only checks out tracked
+files, so every fresh worktree got just the small tracked exception set and was missing the
+rest, which is why `wml.rnc` (and friends) were "not found" in worktree after worktree while
+the main checkout was fine — not an intermittent parallel-build race as multiple prior
+entries concluded (confirmed by testing in an actual disposable `git worktree add --detach`,
+not one of the already-active session worktrees). Traced the files' origin: the exact zips
+vendored under `spec/` (`OfficeOpenXML-RELAXNG-Strict.zip`, `-Transitional.zip`,
+`-XMLSchema-Strict.zip`, `-XMLSchema-Transitional.zip`, `-DrawingMLGeometries.zip`,
+`-SpreadsheetMLStyles.zip`) are byte-for-byte identical (verified via `sha256sum`) to files
+mirrored at `https://c-rex.net/samples/ooxml/e1/_res/ecma376/` — these used to be hosted
+directly by ECMA alongside the ECMA-376 parts but no longer are (current
+ecma-international.org only serves the four Part PDFs/zips that `scripts/ooxml/download-spec.sh`
+already fetches); `OfficeOpenXML-WordprocessingMLArtBorders.zip` and both
+`OpenPackagingConventions-*.zip` were not found at any mirror URL tried. Given the
+redistribution question is already settled (non-redistributable, don't commit) and a
+third-party mirror is a weaker link than "share the one copy a contributor already vendored
+locally," went with the cheaper, more robust fix: **`scripts/setup-worktree-spec.sh` /
+`.ps1`** (new, following `scripts/setup-worktree-target.sh`'s established per-worktree setup
+pattern) symlink whatever's missing under a fresh worktree's `spec/` back to the main
+checkout's `spec/`, entry by entry (not the whole directory — `spec/` already has real,
+tracked content in every worktree, and `spec/odf/` specifically mixes tracked
+(`odf-1.2.rnc`) and gitignored (`odf-1.3.rnc`) files, so the script recurses one level into
+already-real directories to fill in just the missing entries). Verified safe: nothing in
+`crates/` writes to `spec/` (only `read_to_string`/`PathBuf` joins), so a shared symlinked
+copy across worktrees cannot develop worktree-specific drift. As a backstop for the case
+where the main checkout itself has no `spec/` yet (first-time clone, no worktree involved),
+added `ooxml_codegen::read_spec_file()` (`crates/tools/ooxml-codegen/src/lib.rs`) — wraps
+`fs::read_to_string` with a panic message that names the actual cause and points at both
+scripts, wired into all four `ooxml-{wml,sml,dml,pml}/build.rs` and the four
+`ooxml-codegen` tests that previously called `fs::read_to_string(...).expect("failed to read
+wml.rnc")` directly. Verified end-to-end in a real disposable worktree (`git worktree add
+--detach`, removed after): reproduced the original bare "No such file or directory" failure,
+confirmed the new panic message is self-diagnosing, ran `setup-worktree-spec.sh`, confirmed
+idempotency (second run links 0 new entries), and confirmed `cargo test -p ooxml-codegen`
+(all 4 previously-failing tests) and `cargo build -p ooxml-{wml,sml,dml,pml}` both pass
+using only the symlinked `spec/`.
+
 **2026-08-04: ansi-fmt's `adv-unknown-sgr` `streaming_writer` `KnownFailure` fixed — narrowed,
 not closed: verifying it surfaced a much larger, previously-masked gap.** The tracked bug
 (`\x1b[999m`, an unrecognized/no-op SGR code, followed by `\x1b[0m`, a genuine explicit reset

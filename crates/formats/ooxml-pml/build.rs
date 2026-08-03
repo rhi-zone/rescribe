@@ -62,7 +62,7 @@ fn main() {
 
     // Parse the shared types schema first
     let mut combined_schema = if Path::new(&shared_path).exists() {
-        let shared_input = fs::read_to_string(&shared_path).expect("failed to read shared types");
+        let shared_input = ooxml_codegen::read_spec_file(&shared_path);
         parse_rnc(&shared_input).expect("failed to parse shared types")
     } else {
         Schema {
@@ -72,7 +72,7 @@ fn main() {
     };
 
     // Parse and merge the PML schema
-    let pml_input = fs::read_to_string(&pml_path).expect("failed to read pml.rnc");
+    let pml_input = ooxml_codegen::read_spec_file(&pml_path);
     let pml_schema = parse_rnc(&pml_input).expect("failed to parse pml.rnc");
 
     // Merge: add PML namespaces and definitions (PML takes precedence for duplicates)

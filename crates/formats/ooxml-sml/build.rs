@@ -60,7 +60,7 @@ fn main() {
 
     // Parse the shared types schema first
     let mut combined_schema = if Path::new(&shared_path).exists() {
-        let shared_input = fs::read_to_string(&shared_path).expect("failed to read shared types");
+        let shared_input = ooxml_codegen::read_spec_file(&shared_path);
         parse_rnc(&shared_input).expect("failed to parse shared types")
     } else {
         Schema {
@@ -71,8 +71,7 @@ fn main() {
 
     // Parse and merge the relationship reference schema (for r:id, r:embed, etc.)
     if Path::new(&rel_path).exists() {
-        let rel_input =
-            fs::read_to_string(&rel_path).expect("failed to read relationship references");
+        let rel_input = ooxml_codegen::read_spec_file(&rel_path);
         let rel_schema = parse_rnc(&rel_input).expect("failed to parse relationship references");
         for ns in rel_schema.namespaces {
             if !combined_schema
@@ -87,7 +86,7 @@ fn main() {
     }
 
     // Parse and merge the SML schema
-    let sml_input = fs::read_to_string(&sml_path).expect("failed to read sml.rnc");
+    let sml_input = ooxml_codegen::read_spec_file(&sml_path);
     let sml_schema = parse_rnc(&sml_input).expect("failed to parse sml.rnc");
 
     // Merge: add SML namespaces and definitions (SML takes precedence for duplicates)

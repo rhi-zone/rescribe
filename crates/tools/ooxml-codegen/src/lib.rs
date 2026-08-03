@@ -12,6 +12,32 @@ pub mod parser;
 pub mod parser_gen;
 pub mod serializer_gen;
 
+/// Read a file under `spec/` with a clear, actionable panic message if it's
+/// missing, instead of a bare "No such file or directory" that reads like an
+/// unrelated environment flake.
+///
+/// `spec/` holds large, gitignored reference material (see `.gitignore`'s
+/// `/spec/*` rule and `docs/ooxml/SPEC.md`). `git worktree add` only checks
+/// out tracked files, so a fresh worktree gets no `spec/` at all unless one
+/// of these has been run there:
+///   - `scripts/setup-worktree-spec.sh` (symlinks to the main checkout's
+///     `spec/`, if that checkout already has one populated)
+///   - `scripts/ooxml/download-spec.sh` (downloads the ECMA-376 parts fresh)
+pub fn read_spec_file(path: &str) -> String {
+    std::fs::read_to_string(path).unwrap_or_else(|e| {
+        panic!(
+            "failed to read spec file '{path}': {e}\n\n\
+             This is expected the first time you build in a fresh checkout \
+             or git worktree: spec/ is gitignored reference material \
+             (ECMA-376 schema files) that `git worktree add` does not copy.\n\
+             Fix, from the repo root:\n  \
+             scripts/setup-worktree-spec.sh   # if the main checkout already has spec/ populated\n\
+             scripts/ooxml/download-spec.sh   # otherwise, fetch it fresh (then extract the zips)\n\
+             See docs/ooxml/SPEC.md for the expected spec/ layout."
+        )
+    })
+}
+
 pub use analysis::{ModuleReport, analyze_schema};
 pub use ast::{DatatypeParam, Definition, Namespace, Pattern, QName, Schema};
 pub use codegen::{CodegenConfig, FeatureMappings, ModuleMappings, NameMappings, generate};
