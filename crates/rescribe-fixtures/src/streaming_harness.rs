@@ -481,7 +481,15 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              consecutive Inline::Text nodes (src/parse.rs's push_inline, comment \"pulldown-cmark \
              can split a single logical text run into multiple Text events\") — e.g. a broken \
              link like \"[text\" parses to one Text node but events() yields three separate Text \
-             events for the same run (fixtures/commonmark/adv-broken-link)",
+             events for the same run (fixtures/commonmark/adv-broken-link); (3) newly found while \
+             rewriting the streaming writer (2026-08-03): `EventIter`'s `StartList` always \
+             reports `tight: true`, per its own \"Tightness is unknown until we see paragraphs; \
+             emit with tight=true tentatively\" comment in events.rs — never corrected once the \
+             real tightness becomes known, so any loose list (e.g. \
+             fixtures/commonmark/rare-loose-list, integration-loose-list-item, \
+             rare-tight-vs-loose) diverges from parse()'s AST. This test's loop only records the \
+             *first* fixture that diverges, so this third bug was masked behind (1)/(2) in the \
+             test's own failure message even though it was already silently present.",
         ),
         streaming_parser: ApiState::NotApplicable(
             "commonmark-fmt's StreamingParser buffering all input before parsing with \
@@ -490,18 +498,17 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              \"Limitations\" doc comment and src/batch.rs's own \"# Limitation\" section",
         ),
         streaming_writer: ApiState::KnownFailure(
-            "two independent findings: (1) commonmark_fmt::writer::Writer buffers all fed events \
-             into a Vec<OwnedEvent> and only reconstructs the AST + calls emit() inside finish() \
-             — explicitly self-admitted in crates/formats/commonmark-fmt/src/writer.rs's own \
-             module doc: \"the internal implementation is buffer-then-emit for correctness \
-             (reuses the proven emit() path)\" — unrelated to the sanctioned pulldown-cmark \
-             StreamingParser exemption (the writer never touches pulldown-cmark) and a fake \
-             streaming writer per CLAUDE.md; (2) for fixtures/commonmark/image specifically, the \
-             byte-identical-to-builder check fails as a downstream consequence of the events() \
-             Text/StartImage ordering bug (see the commonmark/events KnownFailure) — the leaked \
-             Text(alt) arrives before Frame::Image is pushed, so the Writer's discard-inside-\
-             image logic never sees it and it is emitted as ordinary paragraph text, producing \
-             \"Alt text![Alt text](photo.jpg)\" instead of \"![Alt text](photo.jpg)\"",
+            "commonmark_fmt::writer::Writer was rewritten (2026-08-03) to a genuine \
+             write-through streaming design — single shared `out: String` buffer, `O(nesting \
+             depth)` frame stack, per-top-level-block flush; see the crate's own module doc for \
+             the full write-through/deferred construct classification. The buffer-then-emit \
+             defect this entry used to track is fixed: byte-identical-to-builder confirmed for \
+             every construct in the crate's own tests. One residual divergence remains, and it \
+             is not this writer's bug: fixtures/commonmark/image fails as a downstream \
+             consequence of the events()/EventIter Text/StartImage ordering bug documented in \
+             the \"events\" field above — the leaked Text(alt) arrives before Frame::Image is \
+             pushed, so the Writer's discard-inside-image logic never sees it. See the \
+             commonmark/streaming_writer KnownFailure entry.",
         ),
     },
     FormatCapabilities {
@@ -515,8 +522,8 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              pulldown-cmark StreamingParser exemption applies",
         ),
         streaming_writer: ApiState::KnownFailure(
-            "shares commonmark-fmt with the \"commonmark\" format entry above; same \
-             buffer-then-emit streaming writer defect applies",
+            "shares commonmark-fmt's now-genuinely-streaming Writer with the \"commonmark\" \
+             format entry above, including its one residual events()-caused divergence",
         ),
     },
     FormatCapabilities {
@@ -530,8 +537,8 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
              pulldown-cmark StreamingParser exemption applies",
         ),
         streaming_writer: ApiState::KnownFailure(
-            "shares commonmark-fmt with the \"commonmark\" format entry above; same \
-             buffer-then-emit streaming writer defect applies",
+            "shares commonmark-fmt's now-genuinely-streaming Writer with the \"commonmark\" \
+             format entry above, including its one residual events()-caused divergence",
         ),
     },
     // docbook-fmt, jats-fmt, tei-fmt are byte-identical in implementation
@@ -1601,10 +1608,13 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "commonmark",
         api: "events",
-        description: "commonmark_fmt events() has two real bugs: (1) for images, Text(alt) is \
+        description: "commonmark_fmt events() has three real bugs: (1) for images, Text(alt) is \
                        delivered before StartImage instead of between StartImage/EndImage as \
                        documented (an EventIter::next() loop-ordering bug); (2) consecutive Text \
-                       runs are not coalesced the way parse()'s AST does",
+                       runs are not coalesced the way parse()'s AST does; (3) StartList always \
+                       reports tight: true, never corrected once real tightness is known (see the \
+                       CAPABILITIES entry above for detail) — found 2026-08-03 while rewriting the \
+                       streaming writer",
     },
     KnownFailure {
         format: "gfm",
@@ -1621,21 +1631,18 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "commonmark",
         api: "streaming_writer",
-        description: "commonmark_fmt::writer::Writer buffers all events and only reconstructs \
-                       the AST + emits inside finish(), self-admitted in its own module doc; \
-                       unrelated to the sanctioned pulldown-cmark StreamingParser exemption",
-    },
-    KnownFailure {
-        format: "gfm",
-        api: "streaming_writer",
-        description: "shares commonmark-fmt's buffer-then-emit streaming Writer defect (see the \
-                       \"commonmark\" KnownFailure entry above)",
-    },
-    KnownFailure {
-        format: "markdown",
-        api: "streaming_writer",
-        description: "shares commonmark-fmt's buffer-then-emit streaming Writer defect (see the \
-                       \"commonmark\" KnownFailure entry above)",
+        description: "commonmark_fmt::writer::Writer was rewritten to a genuine write-through \
+                       streaming design (2026-08-03) and is byte-identical to build() for every \
+                       construct exercised in its own crate-level tests; the buffer-then-emit \
+                       defect this entry used to track is fixed. One residual divergence remains \
+                       for fixtures/commonmark/image specifically, and it is not this writer's \
+                       bug: it is a downstream consequence of the events()/EventIter \
+                       Text/StartImage ordering bug (see the commonmark/events KnownFailure \
+                       above) — the leaked Text(alt) event arrives before Frame::Image is pushed, \
+                       so the Writer's discard-inside-image logic never sees it and it is emitted \
+                       as ordinary paragraph text, producing \"Alt text![Alt text](photo.jpg)\" \
+                       instead of \"![Alt text](photo.jpg)\". No writer-side fix can distinguish \
+                       that leaked event from genuine prose preceding an image.",
     },
     KnownFailure {
         format: "docbook",

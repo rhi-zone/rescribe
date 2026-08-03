@@ -672,13 +672,14 @@ Method: read production `lib.rs`/`writer.rs`/`batch.rs`/`events.rs` directly, no
 `Cargo.toml` features or this doc's own prior stage claims. Full findings, code
 quotes, and per-crate detail: `/tmp` audit transcript folded into this section below.
 
-**26 of 43 crates (60%) have a hollow streaming writer** — buffers all events,
+**25 of 43 crates (58%) have a hollow streaming writer** — buffers all events,
 reconstructs a full AST via a frame/`DocBuilder` stack, then calls the builder's own
 `emit`/`build` function, exactly the rst-fmt anti-pattern: `bbcode-fmt`, `creole`,
-`dokuwiki`, `asciidoc`, `djot-fmt`, `commonmark-fmt`, `fountain-fmt`, `haddock-fmt`,
+`dokuwiki`, `asciidoc`, `djot-fmt`, `fountain-fmt`, `haddock-fmt`,
 `jira-fmt`, `man-fmt`, `markua`, `mediawiki-fmt`, `muse-fmt`, `pod-fmt`, `org-fmt`,
 `ooxml-pml`, `ooxml-wml`, `odf-fmt`, `textile-fmt`, `texinfo`, `tikiwiki`, `twiki`,
-`vimwiki-fmt`, `xwiki`, `zimwiki`, `t2t`.
+`vimwiki-fmt`, `xwiki`, `zimwiki`, `t2t`. (`commonmark-fmt` was in this list at the
+original 2026-07-28 audit; fixed 2026-08-03, see the "Clean" bullet below.)
 
 **`StreamingParser` buffers O(full input)** (violates the contract; bounded
 per-token/per-block buffering like docbook-fmt's or rst-fmt's is fine) in:
@@ -766,7 +767,14 @@ writers are achievable there too, unlike `ooxml-pml`/`ooxml-wml`/`odf-fmt`),
 block via `stack: Vec<Frame>`, not a whole-document rebuild; has the only
 `no_orphan_modules.rs` guard against silent `mod` drops from bad merges),
 `html-fmt` (writer clean; `StreamingParser`'s full-buffer behavior is an honestly
-documented, structurally-justified HTML5 limitation).
+documented, structurally-justified HTML5 limitation), `commonmark-fmt` (writer
+fixed 2026-08-03 — same `stack: Vec<Frame>` + single shared `out: String` buffer
+shape as `rst-fmt`; flushes each completed top-level block; byte-identical to
+`emit()` for every construct exercised in the crate's own tests; `events()`/
+`StreamingParser` untouched — the latter is the sanctioned pulldown-cmark
+exemption, the former still has its own pre-existing, separate bugs, now three
+instead of two — see the commonmark/events KnownFailure in
+`rescribe-fixtures`).
 
 **Most consequential single finding:** `ooxml-wml` (DOCX) — CLAUDE.md names OOXML
 (DOCX/XLSX/PPTX) as the priority target for the full three-API architecture because
@@ -786,9 +794,10 @@ are affected:**
    `haddock-fmt`, `jira-fmt`, `markua`, `mediawiki-fmt`, `t2t`, `twiki`,
    `vimwiki-fmt`, `zimwiki`, `creole`.
 3. Writer hollow only, both reader-side APIs legitimate: `asciidoc`, `djot-fmt`,
-   `odf-fmt`, `commonmark-fmt`, `org-fmt`.
+   `odf-fmt`, `org-fmt`.
 4. No streaming API claimed, honest gap: `csv-fmt`, `ris`, `tsv-fmt`, `native`.
 5. Clean: `docbook-fmt`, `jats-fmt`, `tei-fmt`, `ansi-fmt`, `ooxml-sml`, `rst-fmt`,
+   `commonmark-fmt` (writer fixed 2026-08-03),
    `html-fmt` (one documented exception), `fb2-fmt` (one undocumented-but-honest gap
    on `StreamingParser` only).
 

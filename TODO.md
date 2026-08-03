@@ -76,6 +76,94 @@ stand-in, since no semantic writer existed) and passes; the matching `KnownFailu
 `rtf/streaming_parser`'s separate `KnownFailure` (`batch::StreamingParser`'s buffer-then-finish
 stub) is untouched — out of scope for this pass, unrelated to the writer.
 
+**2026-08-03: commonmark-fmt's streaming `Writer` rewritten from buffer-then-emit to genuine
+write-through streaming; resolves the `commonmark`/`gfm`/`markdown` `streaming_writer`
+`KnownFailure`s (mostly).** `crates/formats/commonmark-fmt/src/writer.rs` previously buffered
+every fed event into a `Vec<OwnedEvent>` and only reconstructed an equivalent `CmDoc` (via a
+second `DocBuilder` frame-machine parallel to `parse.rs`) + called `emit()` inside `finish()` —
+self-admitted in its own module doc, a fake streaming API per CLAUDE.md, unrelated to the
+sanctioned pulldown-cmark `StreamingParser` exemption (the writer never touches pulldown-cmark
+at all). Rewritten to the same architecture this session brought `rst-fmt` to: one shared
+`out: String` buffer, an `O(nesting depth)` `Vec<Frame>` stack holding only marks + small
+scalars, each top-level block flushed to the sink as soon as it closes. Investigating
+`crate::emit` (the ground truth) showed CommonMark needs *less* deferral than RST: only
+`Blockquote` (uniform `"> "` per-line prefix) and `ListItem` (marker + continuation indent) need
+the deferred mark-then-reindent-in-place treatment RST uses for `Blockquote`/`Admonition`/
+`CodeBlock`; `Paragraph`/`Heading`/`CodeBlock`/`HtmlBlock`/`ThematicBreak`/every inline span are
+write-through, and — a genuine surprise versus RST's width-computing table — GFM `Table` is
+*also* write-through, since `crate::emit::emit_table` does no column-width alignment pass at
+all (pipe tables don't require padded columns).
+
+Verified before touching anything: `cargo test -p rescribe-fixtures --test streaming_apis --
+commonmark` showed both `commonmark/events` and `commonmark/streaming_writer` as
+`ACKNOWLEDGED KNOWN FAILURE`s pre-fix (the harness was already green, just via the
+known-failure escape hatch — confirms this was a real, previously undetected-as-fixable-in-
+isolation defect, not a false positive).
+
+Byte-identical-to-`emit()` confirmed across a construct-mix test suite (headings, lists incl.
+nested, code blocks, blockquotes incl. nested, links, images, hard breaks, escaping) plus the
+crate's pre-existing tests; an `ObservableSink`-based incrementality probe confirms bytes reach
+the sink before `finish()`; a buffer-size guard test confirms `Writer::out` stays under 8KB
+across 5000 synthetic top-level sections instead of growing with document size. Peak-memory
+comparison (ad hoc allocator-tracking example, not committed): pre-collecting events once
+(isolating the writer's own footprint from pulldown-cmark's own inherent whole-document parse
+tree, a separate, sanctioned reader-side cost) and streaming a ~6MB synthetic document (20,000
+sections of heading+paragraph+nested-list+blockquote+code-block) through the writer showed the
+new `Writer`'s own allocation footprint staying flat (~0.6-2.5MB, fluctuating, not trending up)
+across 700K+ events, while reproducing the old code's exact shape (buffer `Vec<OwnedEvent>`,
+then a second full `parse()`+`emit()` pass) on the same pre-collected events grew monotonically
+with event count (74MB → 148MB over the same range) — confirms the old writer's footprint was
+genuinely unbounded with document size and the new one is not.
+
+Two content bugs found and fixed/routed-around during this work, both pre-existing and outside
+`writer.rs`'s own scope (both in `events.rs`, the reader, which this task was explicitly told
+not to touch):
+- **Newly found, not previously documented**: `EventIter`'s `StartList` always reports
+  `tight: true` — see its own "Tightness is unknown until we see paragraphs; emit with
+  tight=true tentatively" comment — and is never corrected once real tightness becomes known.
+  Any loose list (`fixtures/commonmark/rare-loose-list`, `integration-loose-list-item`,
+  `rare-tight-vs-loose`) therefore diverges from `parse()`'s AST when round-tripped through
+  `events()`. Added as bug (3) to the existing `commonmark/events` `KnownFailure` (both the
+  `CAPABILITIES` and `KNOWN_FAILURES` entries in `streaming_harness.rs`) — it was silently
+  present all along but masked because `commonmark_events_equals_ast_projection_over_all_fixtures`
+  only records the *first* diverging fixture per run, and `adv-broken-link`'s pre-existing
+  bug happened to sort first.
+- **Already documented, confirmed still present, routed around in tests**: the
+  Text-before-`StartImage` ordering bug in `EventIter`. The new `Writer`, like the old one, has
+  no way to distinguish a leaked alt-text `Text` event from genuine prose preceding an image, so
+  it faithfully reproduces `"Alt text![Alt text](photo.jpg)"` for `fixtures/commonmark/image` —
+  same as before. The crate's own `test_writer_byte_identical_to_builder` deliberately excludes
+  bare top-level-image and loose-list inputs (both trip these `events()` bugs) rather than
+  asserting on output no writer could get right; `fixtures/commonmark/image` remains a narrowed
+  `commonmark/streaming_writer` `KnownFailure` in `rescribe-fixtures` (previously covered the
+  buffer-then-emit defect + this one; now only this one).
+
+Also found and fixed, real but tangential: the old `DocBuilder`'s tight-list-item handling had a
+latent reordering bug — text at the top of a tight item followed by a nested block-level
+construct (e.g. `- text\n  - nested\n`) came out with the nested construct emitted *before* the
+text, because `tight_inlines` was accumulated separately from `blocks` and only appended (as a
+synthesized paragraph) at `EndItem`, after any nested blocks already collected. The new
+write-through design writes events in true arrival order, so it cannot exhibit this — verified
+by `test_writer_tight_item_text_before_nested_list_order`.
+
+`crates/formats/commonmark-fmt/src/emit.rs`'s `list_item_marker`/`escape_text`/`escape_url`/
+`escape_title` made `pub(crate)` so the new writer reuses them directly rather than duplicating
+the formatting-decision logic. Confirmed `cargo test`/`cargo test --all-features`/each
+individual construct-feature (`tables`, `task-lists`, `strikethrough`, `frontmatter`) all pass;
+`cargo clippy --all-targets --all-features -- -D warnings` clean; `cargo fmt --check` clean.
+`docs/format-audit.md`'s streaming-fidelity-inventory section updated (25 of 43 hollow writers,
+down from 26; `commonmark-fmt` moved from severity category 3 to category 5/"Clean").
+`streaming_harness::CAPABILITIES`/`KNOWN_FAILURES` entries for `commonmark`/`gfm`/`markdown`
+updated to match (streaming_writer state: `KnownFailure` narrowed from "buffer-then-emit" to
+just the residual `events()`-caused image divergence, not removed to `Wired` outright since one
+real divergence remains and it would be dishonest to mark it `Wired`).
+
+Pre-existing, separate, out-of-scope gap noted but not touched: `crate::emit::emit()` never
+emits `CmDoc::link_defs` at all (reference-style link definitions are silently dropped by the
+AST builder path, not just the new writer) — both old and new `Writer`s match this by also
+dropping `LinkDef` events, so it causes no writer/builder divergence, but it is a real
+losslessness gap per CLAUDE.md's core value proposition, tracked here for a future pass.
+
 **2026-08-01: rtf-fmt wired into the cross-API harness (`events`/`StreamingParser`/streaming
 `Writer`); `rtf` removed from `streaming_harness::NOT_YET_AUDITED`.** `events()`
 (`sem_events::events`) is a lazy frame-stack walk of the AST `parse()` already built — same

@@ -337,7 +337,7 @@ impl Emitter {
 ///
 /// The indent width is the number of spaces needed to align continuation lines
 /// with the content after the marker.
-fn list_item_marker(kind: &ListKind, idx: usize) -> (String, usize) {
+pub(crate) fn list_item_marker(kind: &ListKind, idx: usize) -> (String, usize) {
     match kind {
         ListKind::Unordered { marker } => {
             let m = format!("{marker} ");
@@ -375,7 +375,7 @@ fn list_item_marker(kind: &ListKind, idx: usize) -> (String, usize) {
 /// the text is emitted inline. Over-escaping causes pulldown-cmark to split a
 /// single Text event into two (e.g. "text\." → ["text", "."]) which breaks
 /// the roundtrip equality check.
-fn escape_text(s: &str) -> String {
+pub(crate) fn escape_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 4);
     for c in s.chars() {
         if matches!(c, '\\' | '*' | '_' | '`' | '[' | '~' | '<') {
@@ -391,7 +391,7 @@ fn escape_text(s: &str) -> String {
 /// CommonMark destinations don't need heavy escaping — only literal `)` and
 /// spaces need special treatment. We wrap in angle brackets if the URL contains
 /// spaces or parentheses, which is the safest approach.
-fn escape_url(url: &str) -> String {
+pub(crate) fn escape_url(url: &str) -> String {
     if url.contains(' ')
         || url.contains('(')
         || url.contains(')')
@@ -407,7 +407,7 @@ fn escape_url(url: &str) -> String {
 }
 
 /// Escape a title string for use inside `"…"` delimiters.
-fn escape_title(t: &str) -> String {
+pub(crate) fn escape_title(t: &str) -> String {
     t.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
