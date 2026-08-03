@@ -219,29 +219,55 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "djot",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "djot-fmt StreamingParser diverges from events() on 6 of 79 fixtures, via four \
-             distinct bugs in batch.rs, none sanctioned by any doc comment. (a) BlockState::InDiv \
-             is a flag, not a counter: the InDiv arm tests `trimmed == \":::\"` for the close, so \
-             a nested `::: level2` opener is accumulated as content while the first bare `:::` \
-             ends the whole block — and because the Between arm's opener test is \
-             `starts_with(\":::\")`, every leftover closer is then misread as a NEW div opener, \
-             so emit_block() re-parses `\":::\\n:::\"` as a spurious empty div. adv-nested-divs \
-             (20 openers/closers) gains exactly 20 events, path-deep-divs (100/100) exactly 100. \
-             This also falsifies the StreamingParser doc comment at batch.rs:80-84 claiming div \
-             blocks are buffered until their closing marker. (b) link-reference: emit_block() \
-             re-parses each block in isolation via crate::events(), so EventIter::new's \
-             pre_scan() (parse.rs:1048) never sees a [label]: url definition living in a \
-             different block and the reference resolves to url: \"\". (c) block-attr-on-code: the \
-             fence-open branch of feed_line flushes a pending `{.python}` block-attribute line as \
-             its own block before starting InFencedCode, so it becomes a pending_attr dropped at \
-             EOF and the fence gets classes: []. The same flush exists in the `:::` branch. \
-             (d) definition-list, e2e-rich: the blank-line arm of feed_line unconditionally calls \
-             emit_block(), splitting a multi-item definition list into one \
-             StartDefinitionList/EndDefinitionList pair per item — the same bug class already \
-             tracked for rst-fmt, though here only the top-level blank-line boundary is at fault \
-             (parse_definition_list_direct itself is fine). See TODO.md",
-        ),
+        // Fixed 2026-08-03: four distinct batch.rs bugs, all in
+        // crates/formats/djot-fmt/src/batch.rs unless noted.
+        // (a) BlockState::InDiv was a flag, not a counter, so a nested
+        // `::: level2` opener was accumulated as content while the first
+        // bare `:::` ended the whole block, and every leftover closer was
+        // then misread as a new div opener. `InDiv` now carries `depth:
+        // usize`, incremented on `::: class` (nested opener) and
+        // decremented on bare `:::` (closer), mirroring parse.rs's
+        // `find_div_close_generic` (the ground truth `events()`/`parse()`
+        // already use for closer matching).
+        // (b) link-reference: emit_block() re-parses each block in
+        // isolation, so a block's own pre_scan never saw a `[label]: url`
+        // definition living in a sibling block. StreamingParser now keeps a
+        // persistent `link_defs` table accumulated across every block fed,
+        // plus a `deferred`/`deferred_mode` queue: once a block contains an
+        // explicit reference-style link (`][`), that block and everything
+        // after it is held until `finish()`, then emitted against the fully
+        // -accumulated `link_defs` via a new `EventIter::
+        // new_with_extra_link_defs` constructor (parse.rs). That
+        // constructor initially caused a second bug — each per-block
+        // EventIter's end-of-document logic re-emits every entry in
+        // `link_defs` as a trailing `LinkDef` event, so injected
+        // resolution-only extras were being re-emitted by every block that
+        // needed them, producing duplicate `LinkDef` events. Fixed by
+        // adding `local_link_def_count` to `EventIter` so only defs found
+        // by that input's own pre_scan are drained into trailing events;
+        // externally-supplied extras are resolution data only. Bare
+        // shortcut references (`[label]` with no second bracket) are not
+        // detected by the `][` heuristic and are not deferred — see the
+        // caveat on `StreamingParser`'s doc comment in batch.rs.
+        // (c) block-attr-on-code: the fence-open and `:::`-open branches of
+        // feed_line used to flush a pending `{.python}` block-attribute
+        // line as its own throwaway block before starting the new state, so
+        // it became a `pending_attr` on a discarded EventIter and was
+        // dropped. Both branches now check `block_is_only_pending_attrs()`
+        // and, when true, carry the attribute line(s) into the new block
+        // instead of flushing them away.
+        // (d) definition-list, e2e-rich: the blank-line arm of feed_line
+        // unconditionally called emit_block(), splitting a multi-item
+        // definition list into one StartDefinitionList/EndDefinitionList
+        // pair per item (same bug class as rst-fmt's). Blank lines are now
+        // held (`held_blanks`) until the next non-blank line reveals
+        // whether they're a real block boundary or a loose-list separator
+        // (both sides are list/definition-list starts, via
+        // `is_list_start_line`/`block_starts_with_list`).
+        // Verified via djot_streaming_parser_matches_events_under_
+        // adversarial_chunking (tests/streaming_apis.rs) over all 79
+        // fixtures under every adversarial chunking.
+        streaming_parser: ApiState::Wired,
         // Fixed 2026-07-31: djot_fmt::writer::Writer rewritten from
         // buffer-all-events-then-reconstruct-the-AST to a single shared-buffer
         // write-straight-through design (mirroring rst-fmt's Writer), with three
@@ -1612,16 +1638,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         api: "events",
         description: "ooxml-pml events() cannot reach slide text (no txBody in dispatch_start) \
                        + shares the wml Text-drop/reversal bug",
-    },
-    KnownFailure {
-        format: "djot",
-        api: "streaming_parser",
-        description: "djot-fmt StreamingParser: four distinct batch.rs bugs — BlockState::InDiv \
-                       is a flag not a counter (nested ::: divs unbalance and leftover closers \
-                       are misread as new openers), out-of-block link-reference definitions are \
-                       invisible to the per-block pre_scan, a pending {.attr} line is flushed \
-                       away from the fence it decorates, and the blank-line boundary splits a \
-                       multi-item definition list",
     },
     KnownFailure {
         format: "rst",

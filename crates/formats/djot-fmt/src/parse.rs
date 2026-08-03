@@ -973,6 +973,13 @@ pub struct EventIter<'a> {
     pos: usize, // current line index
     pub(crate) diagnostics: Vec<Diagnostic>,
     pub(crate) link_defs: Vec<LinkDef>,
+    /// Number of entries at the front of `link_defs` that came from this
+    /// input's own `pre_scan` (as opposed to `new_with_extra_link_defs`'s
+    /// externally-supplied defs). Only this prefix is drained into trailing
+    /// `LinkDef` events at end-of-document — extras exist purely to resolve
+    /// references within this input and must not be re-emitted as if they
+    /// were defined here (see `new_with_extra_link_defs`).
+    local_link_def_count: usize,
     pub(crate) footnote_defs: Vec<FootnoteDef>,
     /// Pending block attribute from `{...}` line before a block.
     pending_attr: Option<Attr>,
@@ -1035,12 +1042,43 @@ impl<'a> EventIter<'a> {
             pos: 0,
             diagnostics: Vec::new(),
             link_defs: Vec::new(),
+            local_link_def_count: 0,
             footnote_defs: Vec::new(),
             pending_attr: None,
             frame_stack: Vec::new(),
             phase: Phase::Blocks,
         };
         parser.pre_scan();
+        parser.local_link_def_count = parser.link_defs.len();
+        parser
+    }
+
+    /// Like [`EventIter::new`], but seeds `link_defs` with additional
+    /// definitions collected from *outside* `input` before running this
+    /// input's own `pre_scan`.
+    ///
+    /// Used by [`crate::batch::StreamingParser`] to resolve link references
+    /// that live in a different block than their `[label]: url` definition —
+    /// `pre_scan` only ever sees the text it's given, and the streaming
+    /// parser calls this per-block, not over the whole document.
+    ///
+    /// `extra_link_defs` is resolution data only — it is available to
+    /// `resolve_link` lookups throughout this input, but (unlike defs found
+    /// by this input's own `pre_scan`) is never drained into a trailing
+    /// `LinkDef` event. Each block the streaming parser feeds through this
+    /// constructor is treated as its own "document" for iteration purposes;
+    /// if extras were re-emitted per block, a def true living in block N
+    /// would be emitted again by every other block that also needed it for
+    /// resolution, producing duplicate `LinkDef` events the bulk `events()`
+    /// parser (a single `EventIter` over the whole document) never does.
+    pub(crate) fn new_with_extra_link_defs(input: &'a str, extra_link_defs: Vec<LinkDef>) -> Self {
+        let mut parser = Self::new(input);
+        // Local defs (found in `input` itself by `pre_scan`) take precedence
+        // on label collision by staying first — `resolve_link` (see
+        // `parse_inlines`) uses the first match for a given label.
+        // `local_link_def_count` already reflects only the local prefix, set
+        // above before this extend.
+        parser.link_defs.extend(extra_link_defs);
         parser
     }
 
@@ -2279,7 +2317,14 @@ impl<'a> Iterator for EventIter<'a> {
                                     label: fn_def.label,
                                 }));
                         }
-                        let lds = std::mem::take(&mut self.link_defs);
+                        // Only the local prefix (this input's own pre_scan
+                        // results) gets a trailing LinkDef event — extras
+                        // supplied via `new_with_extra_link_defs` are
+                        // resolution data, not definitions belonging to this
+                        // input (see that constructor's doc comment).
+                        let local_count = self.local_link_def_count.min(self.link_defs.len());
+                        let lds: Vec<LinkDef> = self.link_defs.drain(..local_count).collect();
+                        self.link_defs.clear();
                         for ld in lds.into_iter().rev() {
                             self.frame_stack.push(Frame::Event(OwnedEvent::LinkDef {
                                 label: ld.label,
@@ -3232,7 +3277,7 @@ fn is_thematic_break(s: &str) -> bool {
     s.chars().all(|c| c == first || c == ' ') && s.chars().filter(|&c| c == first).count() >= 3
 }
 
-fn looks_like_attr_line(s: &str) -> bool {
+pub(crate) fn looks_like_attr_line(s: &str) -> bool {
     let s = s.trim();
     if !s.starts_with('{') || !s.ends_with('}') {
         return false;
@@ -3303,7 +3348,7 @@ pub fn parse_attr(s: &str) -> Option<Attr> {
     Some(attr)
 }
 
-fn parse_link_def(s: &str) -> Option<LinkDef> {
+pub(crate) fn parse_link_def(s: &str) -> Option<LinkDef> {
     // `[label]: url` or `[label]: url "title"`
     if !s.starts_with('[') {
         return None;
@@ -3362,7 +3407,7 @@ fn parse_url_title(s: &str) -> (String, Option<String>) {
 // ── List marker detection ────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, PartialEq)]
-enum ListMarker {
+pub(crate) enum ListMarker {
     Bullet(BulletStyle),
     Ordered {
         style: OrderedStyle,
@@ -3478,7 +3523,7 @@ fn to_roman(n: u32) -> String {
     result
 }
 
-fn detect_list_marker(s: &str) -> Option<ListMarker> {
+pub(crate) fn detect_list_marker(s: &str) -> Option<ListMarker> {
     if s.is_empty() {
         return None;
     }

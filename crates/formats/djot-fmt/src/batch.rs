@@ -75,20 +75,58 @@ enum BlockState {
     InFencedCode {
         fence: String,
     },
-    /// Inside a div block (`:::` … `:::`).
-    InDiv,
+    /// Inside a div block (`:::` … `:::`), possibly nested. `depth` counts
+    /// unclosed `:::`-openers seen so far (starts at 1 for the outermost
+    /// div). A bare `:::` line (no trailing class text) decrements `depth`;
+    /// the block ends when `depth` reaches 0. A `::: class` line (trailing
+    /// text after the colons) is a *nested* opener and increments `depth` —
+    /// mirrors `find_div_close_generic`'s depth tracking in parse.rs, which
+    /// is the ground truth for how `events()`/`parse()` match div closers.
+    InDiv {
+        depth: usize,
+    },
 }
 
 /// Chunked streaming Djot parser that delivers events to a [`Handler`].
 ///
-/// Memory: O(largest block). Fenced code blocks and div blocks are buffered
-/// until their closing fence/marker. All other content is buffered until the
-/// next blank line.
+/// Memory: O(largest block) for the common case. Fenced code blocks and div
+/// blocks (including nested divs) are buffered until their closing
+/// fence/marker. All other content is buffered until the next blank line
+/// that doesn't continue a list/definition-list (see [`BlockState`] and
+/// `feed_line`'s blank-line handling).
+///
+/// One exception: a block containing an explicit reference-style link
+/// (`[text][label]`) can't be resolved against a same-block `pre_scan` alone
+/// — the `[label]: url` definition may live in an earlier *or later* block.
+/// Once such a block is seen, this parser switches into a document-buffering
+/// mode for the rest of the input (`deferred`), so `link_defs` accumulated
+/// from every block fed so far — and every block still to come — are all
+/// available by the time deferred blocks are actually emitted, at
+/// [`finish`](StreamingParser::finish). This trades O(largest block) memory
+/// for O(remaining document) memory, but only for documents that use
+/// explicit reference-style links; documents without them never enter this
+/// mode. Bare shortcut references (`[label]` with no second bracket pair)
+/// are not detected by this heuristic and are not deferred — a caller
+/// relying on forward-declared shortcut references may still see an
+/// unresolved link from `StreamingParser` where `events()` would have
+/// resolved it. See TODO.md.
 pub struct StreamingParser<H: Handler> {
     handler: H,
     line_buf: Vec<u8>,
     block_lines: Vec<String>,
+    /// Blank lines seen since the last content line, held back (not yet
+    /// merged into `block_lines` or flushed) until the next non-blank line
+    /// reveals whether they end the block or are a loose-list separator.
+    held_blanks: Vec<String>,
     state: BlockState,
+    /// Link definitions collected from every block fed so far (see the
+    /// struct doc's note on `deferred`).
+    link_defs: Vec<crate::ast::LinkDef>,
+    /// Once true, every subsequent completed block is pushed to `deferred`
+    /// instead of being emitted immediately, preserving document order
+    /// until `finish()` flushes them with the final `link_defs`.
+    deferred_mode: bool,
+    deferred: Vec<String>,
 }
 
 impl<H: Handler> StreamingParser<H> {
@@ -98,7 +136,11 @@ impl<H: Handler> StreamingParser<H> {
             handler,
             line_buf: Vec::new(),
             block_lines: Vec::new(),
+            held_blanks: Vec::new(),
             state: BlockState::Between,
+            link_defs: Vec::new(),
+            deferred_mode: false,
+            deferred: Vec::new(),
         }
     }
 
@@ -136,28 +178,61 @@ impl<H: Handler> StreamingParser<H> {
             return;
         }
 
-        // Inside div: accumulate until `:::`
-        if matches!(self.state, BlockState::InDiv) {
-            let is_end = trimmed == ":::";
+        // Inside div: accumulate, tracking nesting depth (see BlockState::InDiv).
+        if let BlockState::InDiv { depth } = self.state {
             self.block_lines.push(line);
-            if is_end {
-                self.emit_block();
-                self.state = BlockState::Between;
+            if let Some(stripped) = trimmed.strip_prefix(":::") {
+                let rest = stripped.trim();
+                if rest.is_empty() {
+                    // Bare `:::` — closes one level of nesting.
+                    let new_depth = depth - 1;
+                    if new_depth == 0 {
+                        self.emit_block();
+                        self.state = BlockState::Between;
+                    } else {
+                        self.state = BlockState::InDiv { depth: new_depth };
+                    }
+                } else {
+                    // `::: class` — a nested opener.
+                    self.state = BlockState::InDiv { depth: depth + 1 };
+                }
             }
             return;
         }
 
         if trimmed.is_empty() {
-            if !self.block_lines.is_empty() {
-                self.emit_block();
+            if self.block_lines.is_empty() {
+                self.state = BlockState::Between;
+                return;
             }
-            self.state = BlockState::Between;
+            // Hold the blank line: whether it ends the current block or is
+            // a loose-list separator is only decidable once the next
+            // non-blank line arrives (see below).
+            self.held_blanks.push(line);
             return;
+        }
+
+        // A non-blank line arrived with blank lines pending. If both the
+        // held block and this new line are list/definition-list starts,
+        // the blank run is a loose-list separator, not a block boundary —
+        // merge it in and keep accumulating. Otherwise the blank run really
+        // did end the block: flush now, then fall through to classify this
+        // line as usual.
+        if !self.held_blanks.is_empty() {
+            let continues_list =
+                is_list_start_line(&trimmed) && block_starts_with_list(&self.block_lines);
+            if continues_list {
+                self.block_lines.append(&mut self.held_blanks);
+            } else {
+                self.emit_block();
+                self.held_blanks.clear();
+                self.state = BlockState::Between;
+            }
         }
 
         // Fenced code block open: line is 3+ backticks or tildes
         if let Some(fence) = detect_fence(&trimmed) {
-            if !self.block_lines.is_empty() {
+            if !self.block_lines.is_empty() && !block_is_only_pending_attrs(&self.block_lines) {
                 self.emit_block();
             }
             self.state = BlockState::InFencedCode { fence };
@@ -167,10 +242,10 @@ impl<H: Handler> StreamingParser<H> {
 
         // Div block open: line starting with `:::`
         if trimmed.starts_with(":::") && trimmed.len() >= 3 {
-            if !self.block_lines.is_empty() {
+            if !self.block_lines.is_empty() && !block_is_only_pending_attrs(&self.block_lines) {
                 self.emit_block();
             }
-            self.state = BlockState::InDiv;
+            self.state = BlockState::InDiv { depth: 1 };
             self.block_lines.push(line);
             return;
         }
@@ -185,7 +260,35 @@ impl<H: Handler> StreamingParser<H> {
         }
         let text = self.block_lines.join("\n");
         self.block_lines.clear();
-        for event in crate::events(&text) {
+
+        // Collect any `[label]: url` definitions in this block so blocks
+        // elsewhere (earlier — via `deferred` — or later) can resolve
+        // references against them; see the struct doc.
+        for candidate in text.split('\n') {
+            let t = candidate.trim();
+            if t.starts_with('[')
+                && !t.starts_with("[^")
+                && let Some(ld) = crate::parse::parse_link_def(t)
+            {
+                self.link_defs.push(ld);
+            }
+        }
+
+        if !self.deferred_mode && contains_explicit_ref_link(&text) {
+            self.deferred_mode = true;
+        }
+
+        if self.deferred_mode {
+            self.deferred.push(text);
+        } else {
+            self.emit_text_block(&text);
+        }
+    }
+
+    fn emit_text_block(&mut self, text: &str) {
+        for event in
+            crate::events::EventIter::new_with_extra_link_defs(text, self.link_defs.clone())
+        {
             self.handler.handle(event.into_owned());
         }
     }
@@ -199,8 +302,56 @@ impl<H: Handler> StreamingParser<H> {
             let line = String::from_utf8_lossy(&self.line_buf).into_owned();
             self.feed_line(line);
         }
+        if !self.held_blanks.is_empty() {
+            self.held_blanks.clear();
+        }
         self.emit_block();
+        let deferred = std::mem::take(&mut self.deferred);
+        for text in deferred {
+            self.emit_text_block(&text);
+        }
     }
+}
+
+/// True if `trimmed` starts a bullet/ordered/definition list item.
+fn is_list_start_line(trimmed: &str) -> bool {
+    trimmed == ":"
+        || trimmed.starts_with(": ")
+        || crate::parse::detect_list_marker(trimmed).is_some()
+}
+
+/// True if the first line of an accumulated block is itself a list start —
+/// used to decide whether a blank line inside `block_lines` is a loose-list
+/// separator rather than a block boundary.
+fn block_starts_with_list(block_lines: &[String]) -> bool {
+    block_lines
+        .first()
+        .is_some_and(|l| is_list_start_line(l.trim()))
+}
+
+/// True if every line accumulated so far is a pending block-attribute line
+/// (`{.python}`, `{#id}`, …). Used to decide whether a fence/div opener
+/// should absorb a preceding attribute line into the same block (so the
+/// attribute reaches the fence/div it decorates) instead of flushing it away
+/// as its own block, where it would set `pending_attr` on a throwaway
+/// `EventIter` and never be read.
+fn block_is_only_pending_attrs(block_lines: &[String]) -> bool {
+    !block_lines.is_empty()
+        && block_lines.iter().all(|l| {
+            let t = l.trim();
+            t.starts_with('{') && crate::parse::looks_like_attr_line(t)
+        })
+}
+
+/// Heuristic for "this block might contain an explicit reference-style link
+/// (`[text][label]`) whose `[label]: url` definition lives in a different
+/// block". Deliberately conservative (a false positive only costs memory,
+/// via `deferred_mode`); a `][` substring is unambiguous for this syntax and
+/// can't appear inside a footnote reference (`[^label]`) or an inline link
+/// with an explicit URL (`[text](url)`).
+fn contains_explicit_ref_link(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.windows(2).any(|w| w == b"][")
 }
 
 /// If `line` is a fenced code opener (3+ backticks or 3+ tildes), return the

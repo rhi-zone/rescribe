@@ -5893,3 +5893,84 @@ warnings`, `cargo test -q` (full workspace; the only 2 failures, `ooxml-codegen`
 `test_generate_wml`/`test_eg_definitions`, are a pre-existing missing-fixture-file issue
 confirmed via `git stash` to reproduce identically on `master`, unrelated to this change), and
 `cargo fmt --check` all pass clean.
+
+---
+
+**2026-08-03: djot-fmt `StreamingParser` — all four `batch.rs` bugs from the 2026-08-01
+`KNOWN_FAILURES` entry fixed; `djot`/`streaming_parser` promoted to `ApiState::Wired`.**
+Confirmed byte-for-byte equal to `events()` under adversarial chunking (whole/single-byte/
+chunks-of-N/mid-UTF-8-char) over all 79 `fixtures/djot/*` fixtures
+(`djot_streaming_parser_matches_events_under_adversarial_chunking`,
+`crates/rescribe-fixtures/tests/streaming_apis.rs`).
+
+(a) `BlockState::InDiv` (`batch.rs`) now carries `depth: usize` instead of being a bare variant.
+The InDiv arm tracks `::: class` (trailing text after the colons — a nested opener,
+`depth += 1`) vs. bare `:::` (a closer, `depth -= 1`; the block ends when `depth` reaches 0),
+mirroring `find_div_close_generic`'s own depth tracking in `parse.rs` — the ground truth
+`events()`/`parse()` already use for closer matching. `adv-nested-divs` (20 openers/closers) and
+`path-deep-divs` (100/100) both pass.
+
+(b) link-reference: fixed by two changes working together. First, `StreamingParser` gained a
+persistent `link_defs: Vec<LinkDef>` field accumulated from every block fed so far (scanned in
+`emit_block()` before each block is dispatched), plus a `deferred_mode`/`deferred: Vec<String>`
+queue — once a block's text contains an explicit reference-style link (`][`, an unambiguous
+substring: can't appear inside `[^label]` footnote refs or `[text](url)` inline links), that
+block and everything fed after it is held (preserving document order) instead of being emitted
+immediately, until `finish()` flushes them all against the now-fully-accumulated `link_defs`
+table. This required a new `EventIter::new_with_extra_link_defs(input, extra)` constructor
+(`parse.rs`) that seeds a fresh per-block `EventIter`'s `link_defs` with externally-supplied
+defs after running that input's own `pre_scan` (which only ever sees the one block's text).
+
+That alone introduced a second, subtler bug: `EventIter::next()`'s end-of-document logic drains
+*all* of `self.link_defs` into trailing `LinkDef` events (existing behavior, added in the
+2026-07-30 `Event::LinkDef` work) — including the injected extras. Since every deferred block
+gets constructed with the same accumulated `link_defs` snapshot, a definition living in block N
+was being re-emitted as a duplicate `LinkDef` event by every other deferred block that also
+needed it for resolution (3 `LinkDef` events for 1 real definition, on the `link-reference`
+fixture, caught by the harness test's own adversarial-chunking run rather than assumed fixed).
+Fixed by adding `local_link_def_count: usize` to `EventIter`, set immediately after `new()`'s own
+`pre_scan()` (i.e. before any `extend`), so only the prefix of `link_defs` that came from this
+input's own scan is drained into trailing events — `new_with_extra_link_defs`'s extras are
+resolution data only, never re-emitted as if they were defined in that block.
+
+Known, documented gap (not a fixture regression — no fixture exercises it): bare shortcut
+references (`[label]` with no second bracket pair) aren't matched by the `][` heuristic and
+therefore aren't deferred; a caller relying on a forward-declared shortcut reference could still
+see it resolve to `url: ""` from `StreamingParser` where `events()` would have resolved it. Noted
+as a caveat on `StreamingParser`'s doc comment (`batch.rs`), not tracked as a `KnownFailure`
+since `assert_or_known_failure` only tracks confirmed, fixture-observed failures.
+
+(c) block-attr-on-code: the fence-open and `:::`-open branches of `feed_line` used to
+unconditionally flush any pending accumulated lines before starting the new state — so a
+`{.python}` block-attribute line sitting alone in `block_lines` got flushed as its own throwaway
+block, where a disposable `EventIter` set `pending_attr` and then discarded it at end-of-block,
+never reaching the fence it was meant to decorate. Both branches now check a new
+`block_is_only_pending_attrs()` helper and, when the accumulated lines are only pending `{...}`
+attribute line(s), carry them into the new block instead of flushing them away. Confirmed both
+the fence-open and `:::`-open cases had the identical bug shape, as the task briefing suspected;
+both fixed with the same helper.
+
+(d) definition-list, e2e-rich: the blank-line arm of `feed_line` used to call `emit_block()`
+unconditionally, splitting a multi-item definition list into one
+`StartDefinitionList`/`EndDefinitionList` pair per item (`parse_definition_list_direct` itself
+was already correct — confirmed by inspection, it consumes blank lines as item-continuation
+lines just fine when given the whole list's text as one block). Same bug class as rst-fmt's
+concurrent fix, but only the top-level blank-line boundary was at fault here. Fixed by holding
+blank lines (`held_blanks: Vec<String>`) instead of flushing on sight: when the next non-blank
+line arrives, the held blanks are only treated as a real block boundary if the accumulated block
+and the new line aren't *both* list/definition-list starts (new `is_list_start_line`/
+`block_starts_with_list` helpers, the latter checking only the first line of the accumulated
+block) — otherwise the blank run is merged back into `block_lines` as a loose-list separator and
+accumulation continues.
+
+`streaming_harness.rs`'s `djot`/`streaming_parser` `KnownFailure` entry was removed from
+`KNOWN_FAILURES` (a fixed check left in `KNOWN_FAILURES` would silently mask a future
+regression — `assert_or_known_failure` panics if it doesn't) and the `CAPABILITIES` table's
+`streaming_parser` field promoted to `ApiState::Wired` with a fix-by-fix comment.
+`docs/format-audit.md`'s djot row updated to match.
+
+Verification: `cargo clippy --all-targets --all-features -- -D warnings` and `cargo fmt --check`
+both pass; `cargo test -q` passes across the workspace (the only failures seen,
+`ooxml-codegen`'s `test_eg_definitions`/`test_generate_wml`, are a pre-existing environment gap —
+a missing `spec/OfficeOpenXML-RELAXNG-Transitional/wml.rnc` external file, unrelated to this
+change and untouched by it).
