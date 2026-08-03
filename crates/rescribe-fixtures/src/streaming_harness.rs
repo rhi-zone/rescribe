@@ -595,10 +595,10 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         ),
     },
     // docbook-fmt, jats-fmt, tei-fmt are byte-identical in implementation
-    // shape (verified via `diff` across batch.rs/writer.rs: only doc
-    // comments and AST/event type names differ), so the same bugs — found by
-    // this harness, not present in any prior audit — applied to all three
-    // identically. All three ARE genuinely independent/incremental
+    // shape (verified via `diff` across batch.rs/events.rs/writer.rs: only
+    // doc comments and AST/event type names differ), so the same bugs —
+    // found by this harness, not present in any prior audit — applied to all
+    // three identically. All three ARE genuinely independent/incremental
     // implementations (events() pulls tokens straight off quick_xml::Reader
     // without building an AST; the streaming Writer calls quick_xml::Writer
     // directly per event with no buffering) — these are logic bugs, not
@@ -606,8 +606,27 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     // end-tag bug (StreamingParser silently accepting malformed XML that
     // events() correctly rejects) has since been fixed identically in all
     // three via a hand-tracked open-element stack in batch.rs; the events()
-    // entity-coalescing gap has also since been fixed (see below); the
-    // streaming_writer auto-close-recovery gap remains open.
+    // entity-coalescing gap has also since been fixed (see below).
+    //
+    // Fixed 2026-08-03 (all three, identically): the malformed-XML
+    // auto-close-recovery gap. `EventIter` (events.rs) now tracks open
+    // element names in its own `open_stack` (mirroring parse.rs's `stack:
+    // Vec<ElementFrame>`) and, on EOF/`Err`, synthesizes an `EndElement`
+    // event per still-open name (innermost first) via a new `finalize()`
+    // method — the same recovery parse.rs's post-loop cleanup already
+    // performed for `parse()`, now genuinely ported to `events()` (not
+    // delegated to `parse()`) rather than just stopping dead. This fixed
+    // `events()`/`events_from_doc(&parse())` equivalence on fixture
+    // adv-malformed-xml for all three formats, and the streaming Writer
+    // (fed by `events()`) picked up the same recovery for free with no
+    // writer-side change. `StreamingParser` (batch.rs) needed its own,
+    // separate port of the identical recovery (it already had its own
+    // hand-tracked `open_stack` for the mismatched/unmatched-end-tag fix
+    // above; a new `close_unclosed_elements()` method dispatches the same
+    // synthetic `EndElement`s to the handler at every point `drain()` can
+    // terminate for good — plain EOF, a fatal XML `Err`, and the two
+    // manual tag-mismatch branches) — without it, `StreamingParser` would
+    // have silently regressed relative to the now-recovering `events()`.
     FormatCapabilities {
         format: "docbook",
         // Fixed 2026-07-30: events()/EventIter used to emit one Text event per resolved
@@ -620,20 +639,23 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // calls). Confirmed via fixture adv-entity-references (a &amp; b &lt; c &gt; d &apos;
         // e&apos; &quot;f&quot; now yields one Text event, not six).
         //
-        // events is still KnownFailure, though, because a *different*, already-tracked gap
-        // (the streaming_writer entry below: events() lacks parse()'s malformed-XML
-        // auto-close recovery) also surfaces through this same events()-vs-
-        // events_from_doc(&parse()) equivalence check, via fixture adv-malformed-xml — that
-        // fixture has no entities in it at all, so this is not a re-regression of the
-        // entity-coalescing bug, just a second, unrelated cause tripping the same check.
+        // events is still KnownFailure, though narrower: the malformed-XML auto-close gap
+        // (fixture adv-malformed-xml) that used to surface here is fixed (see the comment
+        // above this FormatCapabilities block); fixing it uncovered a second, previously-
+        // masked, genuinely different defect on fixture line-break (`<sbr></sbr>`, an
+        // explicitly-empty non-self-closing tag) — see the KnownFailure text below.
         events: ApiState::KnownFailure(
-            "parse() auto-closes unclosed elements on malformed XML (synthetic EndElement \
-             nodes, see parse.rs's 'unclosed element' diagnostics) but events()/EventIter has \
-             no such recovery — it stops at the genuine XML parse error with no synthetic \
-             close events — so events() diverges from events_from_doc(&parse()) for fixture \
-             adv-malformed-xml specifically (not an entity-coalescing issue: that part is \
-             fixed, see the events field's doc comment above). Same root cause as the \
-             streaming_writer KnownFailure below.",
+            "parse()'s AST has no way to distinguish an explicitly-empty non-self-closing tag \
+             (`<sbr></sbr>`) from a self-closing one (`<sbr/>`) — both become a zero-children \
+             `Node::Element` — so events_from_doc's walk_node collapses either into one \
+             `EmptyElement` event, while EventIter (a genuine token-at-a-time pass over \
+             quick_xml, not a walk of the AST) faithfully emits the `<sbr></sbr>` source as \
+             separate StartElement/EndElement tokens, diverging on fixture line-break. Fixing \
+             this needs EventIter to defer emitting a StartElement until it's known whether the \
+             element gets any child event before its own End/EOF — real architecture work, not \
+             a small patch. Unrelated to the malformed-XML auto-close gap this entry used to \
+             track (fixture adv-malformed-xml now passes; see the comment above this \
+             FormatCapabilities block).",
         ),
         // StreamingParser's drain() (batch.rs) still sets check_end_names=false and
         // allow_unmatched_ends=true on its per-drain-call quick_xml::Reader — that part is
@@ -644,29 +666,33 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // against that stack by hand: a mismatch or an End against an empty stack pushes a
         // Diagnostic and stops draining for good, mirroring parse()'s "fatal diagnostic +
         // stop" behavior on a genuine XML error. Fixed and confirmed passing (fixtures
-        // adv-malformed-xml, adv-unmatched-end-tag).
+        // adv-malformed-xml, adv-unmatched-end-tag). Also now performs the same
+        // malformed-XML auto-close recovery as events() (close_unclosed_elements(), see the
+        // comment above this FormatCapabilities block), keeping it in sync with events()'s fix.
         streaming_parser: ApiState::Wired,
+        // Fixed 2026-08-03: the malformed-XML auto-close gap (fixture adv-malformed-xml) that
+        // used to surface here is fixed alongside events() (see the comment above this
+        // FormatCapabilities block) — the streaming Writer is fed by events(), so events()'s
+        // new synthetic closes flow through for free, no writer-side change needed.
         streaming_writer: ApiState::KnownFailure(
-            "downstream of the events() gap above: parse() has explicit malformed-XML recovery \
-             (auto-closes unclosed elements with synthetic EndElement nodes, see parse.rs's \
-             'unclosed element' diagnostics) so build() always emits well-formed output, but \
-             events()/EventIter has no such recovery — it just stops at the same parse error \
-             with no synthetic close events — so the streaming Writer (fed by events()) emits \
-             truncated, unclosed XML for the same malformed input build() recovers from \
-             (fixture adv-malformed-xml)",
+            "Narrower than before: only downstream of the *other*, newly-surfaced events() gap \
+             on fixture line-break (see the \"docbook\" events KnownFailure) — the streaming \
+             Writer emits the `<sbr></sbr>` source as literal StartElement+EndElement bytes, \
+             while build() (via parse()'s AST, which cannot distinguish an explicitly-empty tag \
+             from a self-closing one) always re-emits a zero-children element as `<sbr/>`. The \
+             Writer is being byte-faithful to the actual source syntax here, and build() is the \
+             lossy side, so this is not a streaming Writer defect either.",
         ),
     },
     FormatCapabilities {
         format: "jats",
-        // Fixed alongside docbook-fmt (byte-identical events.rs shape); entity-coalescing is
-        // confirmed working. Still KnownFailure for the same unrelated malformed-XML
-        // auto-close-recovery reason as docbook's events entry above (jats has its own
-        // adv-malformed-xml fixture, a truncated-input case, that trips the same gap).
-        events: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation (byte-identical events.rs shape): events() \
-             lacks parse()'s malformed-XML auto-close recovery, diverging on fixture \
-             adv-malformed-xml; see the \"docbook\" events KnownFailure for the root cause",
-        ),
+        // Fixed 2026-08-03 alongside docbook-fmt (byte-identical events.rs shape); the
+        // malformed-XML auto-close-recovery gap (jats's own adv-malformed-xml fixture, a
+        // truncated-input case) is fixed the same way. Unlike docbook-fmt, no jats fixture
+        // exercises an explicitly-empty non-self-closing tag, so the events()-vs-
+        // events_from_doc(&parse()) check now passes cleanly over the whole fixture suite —
+        // genuinely Wired, not narrowed.
+        events: ApiState::Wired,
         // The mismatched/unmatched-end-tag bug shared with docbook-fmt/tei-fmt (see the
         // "docbook" streaming_parser comment above) is fixed here too (confirmed passing on
         // fixtures adv-mismatched-end-tag, adv-unmatched-end-tag). The remaining failure this
@@ -679,11 +705,12 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         // prefix (same fix already applied to fb2-fmt/texinfo/xwiki/textile-fmt/pod-fmt); the
         // new probe passes, confirming the implementation itself was already correct.
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation: the streaming Writer inherits events()'s lack \
-             of parse()'s malformed-XML auto-close recovery; see the \"docbook\" \
-             streaming_writer KnownFailure",
-        ),
+        // Fixed 2026-08-03 alongside docbook-fmt: the streaming Writer is fed by events(), so
+        // events()'s new malformed-XML auto-close recovery (see the comment above the
+        // "docbook" FormatCapabilities entry) flows through for free. Unlike docbook-fmt, no
+        // jats fixture hits the separate explicitly-empty-tag defect either, so this is
+        // genuinely Wired.
+        streaming_writer: ApiState::Wired,
     },
     // ansi-fmt: events()/StreamingParser/Writer are all genuinely
     // independent, incremental implementations (EventIter advances its own
@@ -814,23 +841,23 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "tei",
-        // Fixed alongside docbook-fmt (byte-identical events.rs shape); entity-coalescing is
-        // confirmed working. Still KnownFailure for the same unrelated malformed-XML
-        // auto-close-recovery reason as docbook's events entry above.
-        events: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation (byte-identical events.rs shape): events() \
-             lacks parse()'s malformed-XML auto-close recovery, diverging on fixture \
-             adv-malformed-xml; see the \"docbook\" events KnownFailure for the root cause",
-        ),
+        // Fixed 2026-08-03 alongside docbook-fmt (byte-identical events.rs shape); the
+        // malformed-XML auto-close-recovery gap (tei's own adv-malformed-xml fixture, which
+        // combines mismatched *and* unclosed end tags — see the "docbook" FormatCapabilities
+        // comment above) is fixed the same way. Unlike docbook-fmt, no tei fixture exercises
+        // an explicitly-empty non-self-closing tag, so the events()-vs-
+        // events_from_doc(&parse()) check now passes cleanly over the whole fixture suite —
+        // genuinely Wired, not narrowed.
+        events: ApiState::Wired,
         // Fixed alongside docbook-fmt/jats-fmt (byte-identical batch.rs shape); see the
         // "docbook" streaming_parser comment above. Confirmed passing (fixture
         // adv-malformed-xml, adv-unmatched-end-tag).
         streaming_parser: ApiState::Wired,
-        streaming_writer: ApiState::KnownFailure(
-            "shares docbook-fmt's implementation: the streaming Writer inherits events()'s lack \
-             of parse()'s malformed-XML auto-close recovery; see the \"docbook\" \
-             streaming_writer KnownFailure",
-        ),
+        // Fixed 2026-08-03 alongside docbook-fmt: the streaming Writer is fed by events(), so
+        // events()'s new malformed-XML auto-close recovery flows through for free. Unlike
+        // docbook-fmt, no tei fixture hits the separate explicitly-empty-tag defect either, so
+        // this is genuinely Wired.
+        streaming_writer: ApiState::Wired,
     },
     // bbcode-fmt: events() is `parse::parse(input)` followed by a tree walk
     // (events.rs's `events()` literally calls `crate::parse::parse(input)`
@@ -1704,39 +1731,41 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
     KnownFailure {
         format: "docbook",
         api: "events",
-        description: "entity-coalescing is fixed (2026-07-30); still fails on fixture \
-                       adv-malformed-xml for the unrelated, still-open reason: events() lacks \
-                       parse()'s malformed-XML auto-close recovery (same root cause as the \
-                       streaming_writer entry below)",
+        description: "Fixed 2026-08-03: EventIter now tracks open-element names in its own \
+                       `open_stack` (mirroring parse.rs's `stack: Vec<ElementFrame>`) and, on \
+                       EOF/Err, synthesizes an EndElement event per still-open name (innermost \
+                       first) via a new `finalize()` method — the same auto-close recovery \
+                       parse()'s post-loop cleanup already performed, now ported to events() so \
+                       it matches events_from_doc(&parse()) on fixture adv-malformed-xml. Fixing \
+                       that surfaced a second, previously-masked, genuinely different defect on \
+                       fixture line-break: parse()'s AST has no way to distinguish an \
+                       explicitly-empty non-self-closing tag (`<sbr></sbr>`) from a self-closing \
+                       one (`<sbr/>`) — both become a zero-children `Node::Element` — so \
+                       events_from_doc's walk_node collapses either into one `EmptyElement` \
+                       event, while EventIter (a genuine token-at-a-time pass over quick_xml, not \
+                       a walk of the AST) faithfully emits the `<sbr></sbr>` source as separate \
+                       StartElement/EndElement tokens. Fixing this would require EventIter to \
+                       defer emitting a StartElement until it's known whether the element gets \
+                       any child event before its own End/EOF — real architecture work (a \
+                       bounded-depth buffering scheme), not a small patch, so left open here \
+                       rather than guessed at; unrelated to the malformed-XML gap this entry used \
+                       to track (fixture adv-malformed-xml itself now passes).",
     },
     KnownFailure {
         format: "docbook",
         api: "streaming_writer",
-        description: "downstream of the events() gap: parse() auto-closes unclosed elements on \
-                       malformed XML but events() has no such recovery, so the streaming Writer \
-                       emits truncated/unclosed output where build() recovers",
-    },
-    KnownFailure {
-        format: "jats",
-        api: "events",
-        description: "shares docbook-fmt's implementation; entity-coalescing is fixed, same \
-                       remaining malformed-XML auto-close-recovery gap",
-    },
-    KnownFailure {
-        format: "jats",
-        api: "streaming_writer",
-        description: "shares docbook-fmt's implementation; same malformed-XML recovery gap",
-    },
-    KnownFailure {
-        format: "tei",
-        api: "events",
-        description: "shares docbook-fmt's implementation; entity-coalescing is fixed, same \
-                       remaining malformed-XML auto-close-recovery gap",
-    },
-    KnownFailure {
-        format: "tei",
-        api: "streaming_writer",
-        description: "shares docbook-fmt's implementation; same malformed-XML recovery gap",
+        description: "Narrower than before: the malformed-XML auto-close-recovery gap (fixture \
+                       adv-malformed-xml) is fixed alongside the events() fix above — the \
+                       streaming Writer is fed by events(), so events()'s new synthetic closes \
+                       flow through for free with no writer-side change needed. What remains is \
+                       downstream of the *other*, newly-surfaced events() gap on fixture \
+                       line-break (see the \"docbook\" events KnownFailure): the streaming Writer \
+                       emits the `<sbr></sbr>` source as literal StartElement+EndElement bytes, \
+                       while build() (via parse()'s AST, which cannot distinguish an \
+                       explicitly-empty tag from a self-closing one) always re-emits a \
+                       zero-children element as `<sbr/>` — the Writer is being byte-faithful to \
+                       the *actual* source syntax here, and build() is the lossy side, so this is \
+                       not a streaming Writer defect either.",
     },
     KnownFailure {
         format: "odt",

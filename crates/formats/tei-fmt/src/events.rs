@@ -109,13 +109,27 @@ pub struct EventIter<'a> {
     /// any); replaced once a `Doctype` event is produced. See `parse.rs`'s
     /// module docs for why a single forward pass is sufficient.
     entity_resolver: EntityResolver,
-    /// One-token lookahead: when `next()` merges a run of adjacent
-    /// text-equivalent tokens (`Text`, resolved char/predefined/DTD
+    /// Names of currently-open elements, pushed on `StartElement` and popped
+    /// on the matching `EndElement` — mirrors `parse.rs`'s `stack: Vec<
+    /// ElementFrame>`, but only the name is needed here (there is no tree to
+    /// build). `quick_xml::Reader`'s default `check_end_names = true` means
+    /// an `Ok(XmlEvent::End(..))` is only ever produced for a tag that
+    /// matches the innermost open element, so this stays in sync without
+    /// EventIter needing its own mismatch detection; a *mismatched* closing
+    /// tag surfaces as `Err` from the reader instead (see the `Eof`/`Err`
+    /// arms below). Used to synthesize the same "unclosed element" recovery
+    /// `parse()` performs at EOF/error (see parse.rs's post-loop cleanup).
+    open_stack: Vec<String>,
+    /// A FIFO of events to return before reading more input. Two producers
+    /// feed it: (1) one-token lookahead — when `next()` merges a run of
+    /// adjacent text-equivalent tokens (`Text`, resolved char/predefined/DTD
     /// entities) into a single `Event::Text`, it inevitably reads one token
-    /// *past* the end of that run to discover the run is over. That token
-    /// can't be "unread" from `quick_xml::Reader`, so it's stashed here and
-    /// returned on the very next `next()` call instead of being read again.
-    pending: Option<Event<'a>>,
+    /// *past* the end of that run to discover the run is over, and that
+    /// token can't be "unread" from `quick_xml::Reader`, so it's queued here
+    /// instead of being read again; (2) synthetic `EndElement` events for
+    /// any names left on `open_stack` when `Eof`/`Err` is reached, matching
+    /// `parse()`'s auto-close recovery (see `finalize`).
+    pending: std::collections::VecDeque<Event<'a>>,
 }
 
 impl<'a> EventIter<'a> {
@@ -128,8 +142,37 @@ impl<'a> EventIter<'a> {
             done: false,
             diagnostics: Vec::new(),
             entity_resolver: EntityResolver::new(DtdEntities::empty()),
-            pending: None,
+            open_stack: Vec::new(),
+            pending: std::collections::VecDeque::new(),
         }
+    }
+
+    /// Called once the reader reaches `Eof` or `Err`: closes out any
+    /// still-open elements by pushing an "unclosed element" diagnostic and a
+    /// synthetic `EndElement` event per name remaining on `open_stack`
+    /// (innermost first), exactly mirroring parse.rs's post-loop cleanup —
+    /// so `events()` produces the same recovered structure as
+    /// `events_from_doc(&parse())` for malformed/truncated input instead of
+    /// just stopping dead. `merged_text` is any in-progress text run that
+    /// was about to be flushed (matching parse()'s `flush_text!` call before
+    /// its own `break`); it is returned first, ahead of the synthetic
+    /// closes, matching parse()'s ordering (text flushed before the
+    /// post-loop cleanup runs).
+    fn finalize(&mut self, merged_text: Option<String>) -> Option<Event<'a>> {
+        self.done = true;
+        while let Some(name) = self.open_stack.pop() {
+            self.diagnostics.push(crate::ast::Diagnostic {
+                message: format!("unclosed element <{name}>"),
+                span: crate::ast::Span::NONE,
+            });
+            self.pending.push_back(Event::EndElement {
+                name: Cow::Owned(name),
+            });
+        }
+        if let Some(text) = merged_text {
+            return Some(Event::Text(Cow::Owned(text)));
+        }
+        self.pending.pop_front()
     }
 
     /// Diagnostics accumulated so far (populated as iteration proceeds).
@@ -142,13 +185,16 @@ impl<'a> Iterator for EventIter<'a> {
     type Item = Event<'a>;
 
     fn next(&mut self) -> Option<Event<'a>> {
+        // Queued events from a previous call (see `pending`'s doc comment —
+        // either stashed lookahead or synthetic closes from `finalize`)
+        // always take priority over reading more input, and must be drained
+        // even after `self.done` is set (that's exactly how `finalize`'s
+        // synthetic closes get delivered one per `next()` call).
+        if let Some(ev) = self.pending.pop_front() {
+            return Some(ev);
+        }
         if self.done {
             return None;
-        }
-        // A stashed lookahead token from a previous call (see `pending`'s
-        // doc comment) always takes priority over reading more input.
-        if let Some(ev) = self.pending.take() {
-            return Some(ev);
         }
 
         // Accumulates a run of adjacent text-equivalent tokens (`Text`,
@@ -173,7 +219,7 @@ impl<'a> Iterator for EventIter<'a> {
             ($ev:expr) => {{
                 let ev = $ev;
                 if let Some(text) = merged_text.take() {
-                    self.pending = Some(ev);
+                    self.pending.push_back(ev);
                     return Some(Event::Text(Cow::Owned(text)));
                 }
                 return Some(ev);
@@ -229,6 +275,7 @@ impl<'a> Iterator for EventIter<'a> {
                 Ok(XmlEvent::Start(e)) => {
                     let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
                     let attrs = read_attrs_owned(&e);
+                    self.open_stack.push(name.clone());
                     emit_or_stash!(Event::StartElement {
                         name: Cow::Owned(name),
                         attrs,
@@ -244,6 +291,13 @@ impl<'a> Iterator for EventIter<'a> {
                 }
                 Ok(XmlEvent::End(e)) => {
                     let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                    // `check_end_names = true` (the reader's default, set in
+                    // `new()`) guarantees quick_xml only ever hands back an
+                    // `Ok(End)` for a tag matching the innermost open
+                    // element — a genuine mismatch surfaces as `Err` instead
+                    // (see the `Err` arm below) — so this always pops the
+                    // element `Start` just pushed.
+                    self.open_stack.pop();
                     emit_or_stash!(Event::EndElement {
                         name: Cow::Owned(name),
                     });
@@ -291,11 +345,7 @@ impl<'a> Iterator for EventIter<'a> {
                     )));
                 }
                 Ok(XmlEvent::Eof) => {
-                    self.done = true;
-                    if let Some(text) = merged_text.take() {
-                        return Some(Event::Text(Cow::Owned(text)));
-                    }
-                    return None;
+                    return self.finalize(merged_text.take());
                 }
                 Err(e) => {
                     self.diagnostics.push(crate::ast::Diagnostic {
@@ -305,11 +355,7 @@ impl<'a> Iterator for EventIter<'a> {
                             end: pos,
                         },
                     });
-                    self.done = true;
-                    if let Some(text) = merged_text.take() {
-                        return Some(Event::Text(Cow::Owned(text)));
-                    }
-                    return None;
+                    return self.finalize(merged_text.take());
                 }
             }
         }

@@ -4951,10 +4951,23 @@ Defect classes surfacing again, by name, as the task brief predicted:
      emits well-formed output, but `events()` has no such recovery — it just stops at the
      parse error — so the streaming `Writer` (fed by `events()`) emits truncated/unclosed
      XML for input `build()` recovers from cleanly.
-  Fix belongs in `docbook-fmt`'s `events.rs`/`batch.rs` (then propagate the same diff to
-  `jats-fmt`/`tei-fmt`, given the crates are kept in lockstep) — see
+  Fixed 2026-08-03 (all three crates identically): `EventIter` (`events.rs`) now tracks
+  open-element names in its own `open_stack` and, on EOF/`Err`, synthesizes an `EndElement`
+  per still-open name (innermost first) via a new `finalize()` method — the same recovery
+  `parse()`'s post-loop cleanup performs. `StreamingParser` (`batch.rs`) needed its own,
+  separate `close_unclosed_elements()` doing the equivalent at every point `drain()` can
+  terminate (plain EOF, a fatal `Err`, and both manual tag-mismatch branches) — without it,
+  `StreamingParser` would have regressed relative to the now-recovering `events()`. Fixing
+  the events() gap surfaced a fourth, previously-masked, genuinely different defect in
+  docbook-fmt only (jats-fmt/tei-fmt fixtures don't exercise it): `parse()`'s AST can't
+  distinguish an explicitly-empty non-self-closing tag (`<sbr></sbr>`) from a self-closing
+  one (`<sbr/>`) — both are a zero-children `Node::Element` — so `events_from_doc`'s walk
+  collapses either into one `EmptyElement`, while `events()`'s direct token pass faithfully
+  emits `<sbr></sbr>`'s separate Start/End tokens (fixture `line-break`). Left open — fixing
+  it needs `EventIter` to defer a `StartElement`'s emission until it's known whether the
+  element gets a child before its own close, real architecture work, not a small patch. See
   `streaming_harness::KNOWN_FAILURES` for the exact fixture names (`adv-entity-references`,
-  `adv-malformed-xml`).
+  `adv-malformed-xml`, `line-break`).
 
 - **Event-enum expressiveness gap** (`odf-fmt`, backing `odt`/`ods`/`odp`): `OdfEvent` had
   no variant carrying the document's `mimetype`, `meta` (title/author/date), `styles.xml`
@@ -5096,12 +5109,15 @@ every `EndElement` event pops and compares. A mismatch, or an `End` against an e
 pushes a `Diagnostic` (message shape mirrors `parse()`'s own quick-xml-error wrapping,
 `"XML parse error: ..."`) and sets a new `failed` field so draining stops for good — the
 same "fatal diagnostic + stop" behavior `parse()` gets for free from quick-xml's own
-`check_end_names = true` erroring out of `read_event_into`. Deliberately does *not*
-replicate `parse()`'s further "auto-close still-open elements at EOF" recovery step (that
-recovery is AST-shaped — synthetic `EndElement` nodes closing a tree — and doesn't have an
-obvious event-stream analog); simplest option that satisfies "always at least one
-`Diagnostic`, never silently accepted" was chosen, matching what the task's design-fork
-question explicitly allowed.
+`check_end_names = true` erroring out of `read_event_into`. At the time this fix was made,
+deliberately did *not* replicate `parse()`'s further "auto-close still-open elements at EOF"
+recovery step, judging it AST-shaped with no obvious event-stream analog. **Superseded
+2026-08-03**: that recovery step *does* have a direct event-stream analog — synthesize an
+`EndElement` per still-open name instead of a synthetic AST node — and was added to both
+`events.rs`'s `EventIter` (a new `finalize()` method) and `batch.rs`'s `StreamingParser` (a
+new `close_unclosed_elements()` method, called at every point `drain()` can terminate for
+good) in all three crates; see the "docbook/jats/tei malformed-XML auto-close recovery"
+entry below for the full writeup.
 
 Applied identically to `docbook-fmt`, `jats-fmt`, `tei-fmt` (confirmed still byte-identical
 in shape via `diff` across all three `batch.rs` files before editing — only doc comments
@@ -5124,14 +5140,100 @@ defect, just a fixed-50%-split probe that isn't fixture-shape-aware. Not fixed h
 scope for this task); would need either a smarter incrementality probe or a differently-
 shaped single fixture that doesn't have its very first token straddle the midpoint.
 
-`streaming_writer` entries for all three formats deliberately left untouched (still
-`KnownFailure`) — that's bug (3) above, a separate, still-open gap (`events()` lacking
-`parse()`'s malformed-XML auto-close recovery, which the streaming Writer inherits).
+`streaming_writer` entries for all three formats were left untouched at the time (still
+`KnownFailure`) — that's bug (3) above, `events()` lacking `parse()`'s malformed-XML
+auto-close recovery, which the streaming Writer inherits. **Fixed 2026-08-03** alongside
+the `events()` fix itself; see the "docbook/jats/tei malformed-XML auto-close recovery"
+entry below.
 
 New fixtures: `fixtures/{docbook,tei}/adv-unmatched-end-tag`, `fixtures/jats/adv-unmatched-
 end-tag`, `fixtures/jats/adv-mismatched-end-tag` (jats needed its own mismatch fixture since
 its existing `adv-malformed-xml` never exercised end-tag mismatch at all). `COVERAGE.md`
 updated for all three formats' Adversarial sections.
+
+## docbook/jats/tei malformed-XML auto-close recovery — events()/StreamingParser ported to match parse() (2026-08-03)
+
+The one remaining root cause behind all 6 `docbook`/`jats`/`tei` `events`/`streaming_writer`
+`KNOWN_FAILURES` entries (per the "Cross-API harness" and entity-coalescing entries above):
+`parse()` recovers from malformed/truncated XML by auto-closing every still-open element at
+EOF/error (`parse.rs`'s post-loop cleanup: pop `stack: Vec<ElementFrame>`, push an "unclosed
+element" `Diagnostic`, and synthesize a `Node::Element` per frame with whatever children it
+had accumulated so far — LIFO, innermost first), so `build()` always emits well-formed
+output for input `parse()` accepted. `events()`/`EventIter` had no equivalent: it just
+stopped dead at the same EOF/error with no synthetic close events, diverging from
+`events_from_doc(&parse())` (fixtures `adv-malformed-xml` in docbook-fmt/tei-fmt; jats-fmt's
+own `adv-malformed-xml` is a truncated-input variant, not a mismatched-tag one, but hits the
+same gap) — and the streaming `Writer`, fed by `events()`, inherited the same truncation.
+
+**Fix, identical in all three crates** (re-confirmed byte-identical shape via `diff` across
+`events.rs`/`batch.rs` before splicing in the fix — only doc comments and AST/event type
+names differ):
+
+- `EventIter` (`events.rs`) gained an `open_stack: Vec<String>` field, pushed on every
+  `StartElement` and popped on every `EndElement`. Because the reader's default
+  `check_end_names = true` guarantees `quick_xml` only ever returns `Ok(End)` for a tag
+  matching the innermost open element (a genuine mismatch surfaces as `Err` instead), this
+  stays in sync without `EventIter` needing its own mismatch-detection logic — confirmed by
+  tracing the docbook `adv-malformed-xml` fixture (`<article><para>Unclosed<para>Another
+  </article>`): the mismatched `</article>` against open `<para>` is rejected by quick-xml
+  itself as `Err`, exactly the codepath `parse.rs`'s own (now largely dead, for the default
+  `check_end_names = true` reader) "mismatched closing tag" branch was written to guard
+  against. On `Eof`/`Err`, a new `finalize()` method pops `open_stack` and pushes a synthetic
+  `EndElement` per name (plus an "unclosed element" `Diagnostic`, matching `parse()`'s
+  message) into a small `pending` queue, delivered one per subsequent `next()` call — the
+  `pending: Option<Event<'a>>` field (previously used only for text-run lookahead) became a
+  `VecDeque` to hold more than one queued event, and the `if self.done { return None }` guard
+  was moved to fire only *after* the pending queue is drained, so `finalize()`'s synthetic
+  closes still get delivered even once `done` is set.
+- `StreamingParser` (`batch.rs`) needed a *separate* port of the same recovery (per
+  CLAUDE.md's "independent implementations" rule — not delegating to `EventIter`): a new
+  `close_unclosed_elements()` method pops its own pre-existing `open_stack` (already tracked
+  for the mismatched/unmatched-end-tag fix above) and dispatches a synthetic `EndElement` per
+  name straight to the `Handler`. Called at every point `drain()` can terminate for good:
+  plain EOF (both the top-of-loop `self.pending.is_empty()` early return *and* the
+  `Ok(XmlEvent::Eof)` match arm — these are two distinct codepaths and the first fix attempt
+  missed the early-return one, caught immediately by
+  `*_streaming_parser_matches_events_under_adversarial_chunking` regressing on fixture
+  `adv-malformed-xml` under `chunking whole`), a fatal `Err`, and both manual
+  tag-mismatch branches (the mismatched-frame branch pushes the popped frame back onto
+  `open_stack` first, since it — and everything above it — is now "unclosed", mirroring what
+  the single-`Reader` case gets for free from `check_end_names`).
+
+**Fixing `events()` surfaced two more things, only one of them a real bug:**
+
+1. **A genuine `StreamingParser` regression** (not present before this session): before this
+   fix, both `events()` and `StreamingParser` lacked auto-close recovery and so agreed with
+   each other (both just stopped early) — `docbook`/`tei` `streaming_parser` were correctly
+   `Wired`. Fixing `events()` alone, without also fixing `StreamingParser`, would have broken
+   that agreement. Fixed by porting the identical recovery to `StreamingParser` (above); all
+   three formats' `*_streaming_parser_matches_events_under_adversarial_chunking` tests still
+   pass.
+2. **A second, previously-masked, genuinely unrelated defect, docbook-fmt only**: the
+   `events()`-vs-`events_from_doc(&parse())` check iterates fixtures and reports only the
+   *first* divergence found; before this fix, `adv-malformed-xml` (sorted early
+   alphabetically) always won that race. Once it stopped diverging, the check reached fixture
+   `line-break` (`<sbr></sbr>`, an explicitly-empty non-self-closing tag) and found it
+   diverges too: `parse()`'s AST has no way to distinguish an explicitly-empty non-self-
+   closing tag from a self-closing one (`<sbr/>`) — both are a zero-children `Node::Element`
+   — so `events_from_doc`'s `walk_node` collapses either into one `EmptyElement` event, while
+   `EventIter` (a genuine token-at-a-time pass over `quick_xml`, not a walk of the AST)
+   faithfully emits the source's separate `StartElement`/`EndElement` tokens. This is *not*
+   the malformed-XML gap this session was scoped to fix — it's a distinct AST-expressiveness
+   limitation that would need `EventIter` to defer a `StartElement`'s emission until it's
+   known whether the element gets a child event before its own close (real architecture: a
+   bounded-depth buffering scheme, not a one-token lookahead), so left open rather than
+   guessed at. No jats-fmt or tei-fmt fixture hits this — their `events`/`streaming_writer`
+   `KNOWN_FAILURES` entries are fully removed (genuinely `Wired`); docbook-fmt's two entries
+   are narrowed to describe this defect precisely instead of removed.
+
+**`KNOWN_FAILURES`/`FormatCapabilities` updated:** `jats`/`tei` `events` and
+`streaming_writer` entries fully removed (flip to `ApiState::Wired`) — confirmed passing via
+`cargo test -p rescribe-fixtures --test streaming_apis jats_`/`tei_`. `docbook`'s `events`
+and `streaming_writer` entries kept as `KnownFailure` but rewritten to describe the
+`line-break`/`<sbr></sbr>` defect, not the (now-fixed) malformed-XML one. All 9 relevant
+tests (`{docbook,jats,tei}_{events_equals_ast_projection,streaming_parser_matches_events,
+streaming_writer_byte_identical}_over_all_fixtures`, plus the two narrowed
+`assert_or_known_failure` acknowledgements for docbook) pass.
 
 ## wiki-family `parse_list()` marker-type-change defect — fixed in 5 crates, surveyed across 11 (2026-07-30)
 

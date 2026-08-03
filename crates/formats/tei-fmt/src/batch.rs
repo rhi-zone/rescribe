@@ -183,6 +183,7 @@ impl<H: Handler> StreamingParser<H> {
                 // once we know for certain no more input will extend it.
                 if is_final {
                     self.flush_pending_text();
+                    self.close_unclosed_elements();
                 }
                 return;
             }
@@ -212,6 +213,7 @@ impl<H: Handler> StreamingParser<H> {
                     }
                     if is_final {
                         self.flush_pending_text();
+                        self.close_unclosed_elements();
                     }
                     return;
                 }
@@ -278,8 +280,19 @@ impl<H: Handler> StreamingParser<H> {
                                         ),
                                         span: Span::NONE,
                                     });
+                                    // Put the mismatched frame back before
+                                    // closing out: it (and everything still
+                                    // above it) is "unclosed" from here on,
+                                    // matching parse()'s/events()'s recovery
+                                    // for the equivalent single-Reader case
+                                    // (quick_xml's check_end_names would
+                                    // raise this as a fatal `Err`, and the
+                                    // post-error auto-close cleanup runs
+                                    // over the whole remaining stack).
+                                    self.open_stack.push(expected);
                                     self.pending.clear();
                                     self.failed = true;
+                                    self.close_unclosed_elements();
                                     return;
                                 }
                                 None => {
@@ -292,6 +305,7 @@ impl<H: Handler> StreamingParser<H> {
                                     });
                                     self.pending.clear();
                                     self.failed = true;
+                                    self.close_unclosed_elements();
                                     return;
                                 }
                             },
@@ -328,6 +342,7 @@ impl<H: Handler> StreamingParser<H> {
                             span: Span::NONE,
                         });
                         self.pending.clear();
+                        self.close_unclosed_elements();
                     }
                     // Otherwise: assume the error is due to a token spanning
                     // the chunk boundary (unterminated tag/comment/CDATA/
@@ -335,6 +350,23 @@ impl<H: Handler> StreamingParser<H> {
                     return;
                 }
             }
+        }
+    }
+
+    /// Close out any still-open elements by dispatching a synthetic
+    /// `EndElement` event (and an "unclosed element" diagnostic) per name
+    /// remaining on `open_stack`, innermost first — mirrors `parse.rs`'s
+    /// post-loop cleanup and `events.rs`'s `EventIter::finalize`, so
+    /// `StreamingParser` recovers from malformed/truncated input the same
+    /// way `events()` now does instead of just stopping.
+    fn close_unclosed_elements(&mut self) {
+        while let Some(name) = self.open_stack.pop() {
+            self.diagnostics.push(Diagnostic {
+                message: format!("unclosed element <{name}>"),
+                span: Span::NONE,
+            });
+            self.handler
+                .handle(OwnedEvent::EndElement { name: name.into() });
         }
     }
 }
