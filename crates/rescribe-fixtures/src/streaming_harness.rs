@@ -270,23 +270,31 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     FormatCapabilities {
         format: "org",
         events: ApiState::Wired,
-        streaming_parser: ApiState::KnownFailure(
-            "org-fmt StreamingParser diverges from events() on 3 of 89 org fixtures, via three \
-             distinct previously-unknown bugs in batch.rs's feed_line/BlockState machine — none \
-             covered by the two exceptions batch.rs's module docs sanction (loose lists, drawers \
-             containing blank lines), as none of the three fixtures has a loose list or a \
-             drawer. (a) blockquote-nested: BlockState::InSpecialBlock stores only a single \
-             expected end keyword with no nesting depth, so a nested #+BEGIN_QUOTE's #+END_QUOTE \
-             closes the outer block early — parse.rs:521 tracks begin_marker depth for exactly \
-             this reason and the streaming path simply lacks it. (b) code-block-name: feed_line \
-             calls emit_block() unconditionally before entering a #+BEGIN_ block, so a preceding \
-             affiliated #+NAME: line is re-parsed alone (setting pending_name with no following \
-             block) and the code block emits name: None. (c) integration-list-code: feed_line \
-             trims the line before its #+BEGIN_ test, so an indented code block inside a list \
-             item reads as a top-level block start and the item is split from its child. All \
-             three are downstream of emit_block() (batch.rs:190) re-parsing each accumulated \
-             block in isolation; see TODO.md",
-        ),
+        // Fixed 2026-08-03: batch.rs's feed_line/BlockState machine had three distinct
+        // previously-unknown bugs, all downstream of emit_block() (batch.rs) re-parsing each
+        // accumulated block in isolation, none covered by the two exceptions batch.rs's module
+        // docs sanction (loose lists, drawers containing blank lines). (a) blockquote-nested:
+        // BlockState::InSpecialBlock stored only a single expected end keyword with no nesting
+        // depth, so a nested #+BEGIN_QUOTE's #+END_QUOTE closed the outer block early —
+        // InSpecialBlock now carries a `depth: usize` counter incremented/decremented on
+        // same-keyword BEGIN/END lines, mirroring the nesting counter
+        // parse::EventIter::parse_block already tracks (parse.rs:521). (b) code-block-name:
+        // feed_line called emit_block() unconditionally before entering a #+BEGIN_ block, so a
+        // preceding affiliated #+NAME: line was re-parsed alone (setting pending_name with no
+        // following block) and the code block emitted name: None — feed_line now recognizes a
+        // trailing run of affiliated-keyword lines (`#+` but not `#+BEGIN`) immediately before a
+        // BEGIN_ line and keeps them attached to the same accumulated block, so a single
+        // events() call over the combined text threads pending_name to the block the way
+        // parse::EventIter::parse_next_block does. (c) integration-list-code: feed_line trimmed
+        // the line before its #+BEGIN_ test, so an indented code block inside a list item read
+        // as a top-level block start and the item was split from its child — the check now
+        // matches the untrimmed line (`line.to_uppercase().starts_with("#+BEGIN_")`, no trim),
+        // mirroring parse::EventIter::parse_next_block (parse.rs:252), so an indented #+BEGIN_
+        // falls through to the "Regular line" branch and stays continuation text of the list
+        // item, matching parse()'s own documented limitation for this fixture. Confirmed via
+        // org_streaming_parser_matches_events_under_adversarial_chunking passing over all 89 org
+        // fixtures (previously 86/89).
+        streaming_parser: ApiState::Wired,
         // streaming_writer was previously content-correct (Event::Metadata carries
         // #+TITLE:/#+AUTHOR:/#+CUSTOM_KEY: lines) but architecturally hollow
         // (buffer-all-events-then-reconstruct-the-AST) with no incrementality probe
@@ -1582,14 +1590,6 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        flushing an attribute/.title line away from the delimited block it \
                        modifies, is_delimited_block_marker not recognizing the |=== table \
                        delimiter, and empty input producing no StartDocument/EndDocument pair",
-    },
-    KnownFailure {
-        format: "org",
-        api: "streaming_parser",
-        description: "org-fmt StreamingParser: three distinct feed_line/BlockState bugs — no \
-                       nesting depth in InSpecialBlock, emit_block() flushing an affiliated \
-                       #+NAME: line away from its block, and the #+BEGIN_ test trimming so an \
-                       indented list-item code block reads as top-level",
     },
     KnownFailure {
         format: "rst",

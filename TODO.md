@@ -164,6 +164,35 @@ AST builder path, not just the new writer) — both old and new `Writer`s match 
 dropping `LinkDef` events, so it causes no writer/builder divergence, but it is a real
 losslessness gap per CLAUDE.md's core value proposition, tracked here for a future pass.
 
+**2026-08-03: org-fmt `StreamingParser` fixed — matches `events()` on all 89 org fixtures under
+adversarial chunking (previously 86/89).** Three distinct, previously-unknown bugs in
+`crates/formats/org-fmt/src/batch.rs`'s `feed_line`/`BlockState` machine, all downstream of
+`emit_block()` re-parsing each accumulated block in isolation, none covered by `batch.rs`'s
+module-doc-sanctioned exceptions (loose lists, drawers with blank lines):
+
+- **blockquote-nested**: `BlockState::InSpecialBlock` stored only a single expected end keyword
+  string, no nesting depth, so a nested `#+BEGIN_QUOTE`'s `#+END_QUOTE` closed the *outer* block
+  early. Fixed by giving `InSpecialBlock` a `depth: usize` counter, incremented/decremented on
+  same-keyword `#+BEGIN_`/`#+END_` lines — the streaming-path equivalent of the nesting counter
+  `parse::EventIter::parse_block` already tracks (`parse.rs:521`).
+- **code-block-name**: `feed_line` called `emit_block()` unconditionally on seeing `#+BEGIN_`,
+  so a preceding affiliated `#+NAME:` line got flushed and re-parsed alone (setting
+  `pending_name` with no following block to attach it to), and the code block emitted
+  `name: None`. Fixed by detecting a trailing run of affiliated-keyword lines (`#+` but not
+  `#+BEGIN`) immediately before a `#+BEGIN_` line and keeping them in the same accumulated block,
+  so one `events()` call over the combined text threads `pending_name` to the block the way
+  `parse::EventIter::parse_next_block` does (`parse.rs:208-220,262-274`).
+- **integration-list-code**: `feed_line` trimmed the line before its `#+BEGIN_` test, so an
+  indented code fence inside a list item was read as a fresh top-level block, splitting the list
+  item from its child. Fixed by matching on the untrimmed line
+  (`line.to_uppercase().starts_with("#+BEGIN_")`, no trim), mirroring
+  `parse::EventIter::parse_next_block` (`parse.rs:252`, also untrimmed) — an indented `#+BEGIN_`
+  now falls through to the "Regular line" branch and stays continuation text of the list item,
+  matching the fixture's documented parser limitation rather than diverging from it.
+
+`streaming_harness::CAPABILITIES`'s `"org"` entry's `streaming_parser` changed from
+`KnownFailure` to `Wired`; the matching `KNOWN_FAILURES` entry removed.
+
 **2026-08-01: rtf-fmt wired into the cross-API harness (`events`/`StreamingParser`/streaming
 `Writer`); `rtf` removed from `streaming_harness::NOT_YET_AUDITED`.** `events()`
 (`sem_events::events`) is a lazy frame-stack walk of the AST `parse()` already built — same

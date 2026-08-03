@@ -93,8 +93,17 @@ enum BlockState {
     /// Ends on the next blank line or special-block start.
     Accumulating,
     /// Inside a `#+BEGIN_xxx`…`#+END_xxx` special block.
-    /// The `end` field holds the expected end keyword in uppercase.
-    InSpecialBlock { end: String },
+    /// `begin_marker`/`end_marker` are the uppercase `#+BEGIN_XXX`/`#+END_XXX`
+    /// prefixes for this block's keyword; `depth` counts still-open *nested*
+    /// same-keyword blocks (e.g. a `#+BEGIN_QUOTE` inside a `#+BEGIN_QUOTE`),
+    /// mirroring the nesting counter `parse::EventIter::parse_block` tracks
+    /// (parse.rs:521) so a nested block's `#+END_` doesn't close the outer
+    /// block early.
+    InSpecialBlock {
+        begin_marker: String,
+        end_marker: String,
+        depth: usize,
+    },
 }
 
 /// Chunked streaming Org-mode parser that delivers events to a [`Handler`].
@@ -140,20 +149,39 @@ impl<H: Handler> StreamingParser<H> {
 
     fn feed_line(&mut self, line: String) {
         // ── Inside a special block ──────────────────────────────────────────
-        // Compute is_end first (borrows self.state), then drop borrow before
-        // mutating self.block_lines / self.state.
-        let is_end_of_special: Option<bool> =
-            if let BlockState::InSpecialBlock { ref end } = self.state {
-                Some(line.trim().to_uppercase() == end.as_str())
-            } else {
-                None
-            };
+        // Compute is_begin/is_end first (borrows self.state), then drop the
+        // borrow before mutating self.block_lines / self.state. Matching is
+        // starts_with on the *untrimmed*, uppercased line — mirroring
+        // parse::EventIter::parse_block (parse.rs:528-539), which never trims
+        // either — so nesting depth tracking stays consistent with the
+        // BEGIN_/END_ detection below.
+        let special: Option<(bool, bool, usize)> = if let BlockState::InSpecialBlock {
+            ref begin_marker,
+            ref end_marker,
+            depth,
+        } = self.state
+        {
+            let line_upper = line.to_uppercase();
+            let is_begin = line_upper.starts_with(begin_marker.as_str());
+            let is_end = line_upper.starts_with(end_marker.as_str());
+            Some((is_begin, is_end, depth))
+        } else {
+            None
+        };
 
-        if let Some(is_end) = is_end_of_special {
+        if let Some((is_begin, is_end, depth)) = special {
             self.block_lines.push(line);
-            if is_end {
+            if is_end && depth == 0 {
                 self.emit_block();
                 self.state = BlockState::Between;
+            } else if let BlockState::InSpecialBlock { depth, .. } = &mut self.state {
+                // Track nesting depth of same-keyword BEGIN/END pairs so a
+                // nested block's END doesn't close the outer block early.
+                if is_begin {
+                    *depth += 1;
+                } else if is_end {
+                    *depth = depth.saturating_sub(1);
+                }
             }
             return;
         }
@@ -168,15 +196,40 @@ impl<H: Handler> StreamingParser<H> {
         }
 
         // ── Special block start ─────────────────────────────────────────────
-        let upper_trimmed = line.trim().to_uppercase();
-        if upper_trimmed.starts_with("#+BEGIN_") {
-            if !self.block_lines.is_empty() {
+        // Match on the untrimmed line, like parse::EventIter::parse_next_block
+        // (parse.rs:252: `line.to_uppercase().starts_with("#+BEGIN_")`, no
+        // trim). An indented `#+BEGIN_` (e.g. inside a list item) is therefore
+        // *not* treated as a block start here either — it falls through to
+        // the "Regular line" branch below and stays attached to whatever
+        // block is accumulating, matching parse.rs's own documented
+        // limitation (fixtures/org/integration-list-code: the code fence
+        // inside a list item is continuation text, not a nested code block).
+        let line_upper = line.to_uppercase();
+        if line_upper.starts_with("#+BEGIN_") {
+            // A run of affiliated-keyword lines (e.g. `#+NAME:`) immediately
+            // preceding this BEGIN_ must stay attached to the same block so a
+            // single events() call on the combined text can thread
+            // `pending_name` to the block the way
+            // parse::EventIter::parse_next_block does (parse.rs:208-220,
+            // 262-274) — flushing them first would re-parse `#+NAME:` alone,
+            // dropping the name.
+            let all_affiliated = !self.block_lines.is_empty()
+                && self.block_lines.iter().all(|l| {
+                    let u = l.to_uppercase();
+                    u.starts_with("#+") && !u.starts_with("#+BEGIN")
+                });
+            if !self.block_lines.is_empty() && !all_affiliated {
                 self.emit_block();
             }
-            let rest = upper_trimmed.strip_prefix("#+BEGIN_").unwrap_or("");
+            let rest = line_upper.strip_prefix("#+BEGIN_").unwrap_or("");
             let keyword = rest.split_whitespace().next().unwrap_or("");
-            let end = format!("#+END_{}", keyword);
-            self.state = BlockState::InSpecialBlock { end };
+            let begin_marker = format!("#+BEGIN_{}", keyword);
+            let end_marker = format!("#+END_{}", keyword);
+            self.state = BlockState::InSpecialBlock {
+                begin_marker,
+                end_marker,
+                depth: 0,
+            };
             self.block_lines.push(line);
             return;
         }

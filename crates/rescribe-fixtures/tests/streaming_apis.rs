@@ -897,12 +897,12 @@ mod org_events_check {
 ///
 /// org-fmt's `batch.rs` module docs sanction exactly two behavioural
 /// exceptions — loose lists emitted as separate single-item lists, and
-/// drawers containing blank lines being split. Neither covers any of the
-/// divergences this check actually finds: none of the three failing fixtures
-/// contains a loose list or a drawer. They are three distinct, previously
-/// unknown bugs, all downstream of `emit_block()` (batch.rs:190) re-parsing
-/// each accumulated block in isolation, but each cutting the block in the
-/// wrong place for a different reason. See the `KnownFailure` entry.
+/// drawers containing blank lines being split. Three previously-unknown bugs
+/// outside those exceptions used to make this fail on 3 of 89 fixtures
+/// (nested `#+BEGIN_QUOTE` closing early, an affiliated `#+NAME:` line
+/// dropped from its block, an indented list-item code block misread as
+/// top-level) — see the `streaming_harness::CAPABILITIES` "org" entry's
+/// `streaming_parser` doc comment for the fix. Now passes over all 89.
 #[test]
 fn org_streaming_parser_matches_events_under_adversarial_chunking() {
     let root = fixtures_root().join("org");
