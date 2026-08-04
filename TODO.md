@@ -290,6 +290,79 @@ the "not a quick fix" claim in the 2026-08-03 entry above by reading `fb2-fmt`'s
   this accurately and needed no correction, just independent confirmation. No code changed
   this pass.
 
+**2026-08-04: fb2-fmt's `adv-malformed` divergence fixed — the 2026-08-03 "genuine
+architectural divergence... would require buffering" assessment was checked directly and
+found false; the fix needed only bounded state, the same class as docbook-fmt/jats-fmt/
+tei-fmt's malformed-XML auto-close recovery.** Investigated by tracing `fixtures/fb2/
+adv-malformed`'s actual quick_xml tokenization directly (a throwaway `examples/qx_probe.rs`
+probe, deleted after use): its unclosed `<FictionBook ...>` start tag swallows the following
+`<body>` text as garbage attribute content, so quick_xml never emits a real `Start("body")`
+token at all — `Start(FictionBook)`, `Start(section)`, `Start(p)`, `Text`, `End(p)`,
+`End(section)` all tokenize and dispatch normally, and only the orphaned `</body>` end tag
+triggers a `MismatchedEndTag` error. `parse()`'s AST already drops such an orphaned `Section`
+silently (`parse.rs`'s `StackItem::Section` finalize arm walks the stack for a `Body`/
+`Section` parent and, finding none — since `Body` was never pushed — drops it), but
+`events()`/`EventIter` had no equivalent check and unconditionally streamed
+`StartSection`/`StartParagraph`/`Inline`/`EndParagraph`/`EndSection` to the caller before the
+error surfaced. The key finding: **ancestor validity is knowable the instant a `<section>`
+Start tag is seen** — it's a property of `SemanticState`'s already-tracked `ParseState` stack
+*before* that Start token is even dispatched, not something that depends on what's nested
+inside the section. No lookahead or buffering is needed to check it, contrary to the prior
+entry's claim. Fixed in `crates/formats/fb2-fmt/src/events.rs`:
+1. A `suppress_depth: usize` counter on `SemanticState`. `handle_start`'s `"section"` arm now
+   checks for a `Body`/`Section` ancestor on `self.stack` before pushing; if none exists, it
+   sets `suppress_depth = 1` and returns without queuing any event. While `suppress_depth > 0`,
+   every nested `handle_start` deepens it (no frame pushed, no event queued) and every
+   `handle_end` unwinds it by one (consumed here, not falling through to normal per-name
+   closing) — a flat depth counter correctly balances regardless of what's nested inside,
+   since the orphan region's own XML is otherwise well-formed. `handle_empty` (self-closing
+   elements) checks the same guard without touching the counter, since there's no Start/End
+   pair to balance. Text accumulated inside an orphan flows through the *existing*
+   `flush_inline_text`/`push_text_to_inline_context` machinery unchanged and is silently
+   dropped by it already (no `Paragraph`/etc. frame exists on the stack for it to attach to,
+   and the fallback `current_table_cell` check also finds nothing) — no new text-handling code
+   needed.
+2. Fixing the suppression surfaced one dependent gap: with the orphan no longer leaking
+   `Start`/`EndSection` events, `events()`'s output now correctly stopped right after
+   `Metadata`, but never emitted the matching `EndFictionBook` — `XmlEventIter::step` and
+   `StreamingParser::drain` had no equivalent of docbook-fmt/jats-fmt/tei-fmt's `finalize()`
+   (the 2026-08-03 malformed/truncated-XML auto-close recovery for *those* three formats;
+   fb2-fmt has always been a fully independent implementation and was never touched by that
+   fix). Fixed by extracting `close_item(&mut self, item: ParseState)` out of `handle_end`'s
+   big per-item closing match (previously inline after `let item = self.stack.pop()...`), and
+   adding `finalize_open_elements(&mut self)` — `flush_inline_text()` then `while let Some(item)
+   = self.stack.pop() { self.close_item(item); }` — reusing `close_item` verbatim to pop and
+   synthesize the correct End event(s) for whatever's still open, innermost first. Called at
+   every point the token stream can terminate for good: `XmlEventIter::step`'s `Eof` and `Err`
+   arms; `StreamingParser`'s new `finalize_and_flush()` helper (replacing three near-duplicate
+   inline blocks), called from `drain()`'s `Eof(is_final)` arm, its `Err(is_final)` arm, and
+   its hand-tracked open/close tag-balance mismatch branch. Idempotent and a no-op for
+   well-formed input (the stack is already empty by the time any of these run), so this is safe
+   to call unconditionally rather than only on the error path.
+3. Deliberately *not* changed: making `parse()` preserve the orphaned `Section`'s content (e.g.
+   via a synthesized implicit `Body`) instead of matching its existing drop behavior. This was
+   considered and rejected — `events()` never sees a real `<body>` token for this input either
+   (it was consumed as garbage attribute text), so a synthesized-`Body` AST would itself be a
+   fabrication with no token-level counterpart, and still wouldn't match `events()`'s actual
+   (token-faithful) output. Making `events()` match `parse()`'s existing "requires structurally
+   valid nesting" semantics was the bounded, no-new-fabrication direction.
+
+Verified: `fb2_events_equals_ast_projection_over_all_fixtures` and
+`fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures` no longer diverge on
+`adv-malformed` (only the pre-existing, separately-tracked `annotation` gap remains for
+either); `fb2_streaming_parser_matches_events_and_is_incremental` (adversarial chunking)
+continues to pass. `streaming_harness::KNOWN_FAILURES`'s `fb2`/`events` and
+`fb2`/`streaming_writer` entries narrowed accordingly (annotation-only now);
+`docs/format-audit.md`'s `fb2` row updated to match. docbook-fmt/jats-fmt/tei-fmt needed no
+changes — rereading their current `KNOWN_FAILURES`/`FormatCapabilities` entries confirmed all
+three are already fully `Wired` for `events`/`streaming_parser`/`streaming_writer` after
+`f3231c5a6f` (2026-08-03), with no residual malformed-XML divergence left to fix; that
+investigation's premise ("check what specifically still diverges after that fix") resolved to
+"nothing, for those three formats" — the actionable gap was entirely in fb2-fmt, a separate,
+independent implementation. Full workspace `cargo clippy --all-targets --all-features -- -D
+warnings` clean, `cargo test -q` clean (0 failures across the whole suite), `cargo fmt --check`
+clean.
+
 **2026-08-03: odf-fmt's `streaming_writer` `KnownFailure` fixed — all 66 odt fixtures are
 now byte-identical between `emit(parse(input))` and feeding `events(input)` through
 `batch::Writer`; `streaming_harness::CAPABILITIES`'s odt row `streaming_writer` is now

@@ -515,96 +515,59 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
     },
     FormatCapabilities {
         format: "commonmark",
-        events: ApiState::KnownFailure(
-            "commonmark_fmt events()/EventIter has one remaining real divergence from parse()'s \
-             AST, found via this harness's ast_to_events projection check. Three prior bugs \
-             (image Text(alt)-before-StartImage ordering, unmerged consecutive Text runs, and a \
-             missing implicit StartParagraph/EndParagraph wrap around tight list items' bare \
-             inline content — the last one only surfaced once the first two were fixed, since \
-             this test's loop records only the *first* diverging fixture) were fixed 2026-08-03, \
-             along with two more bugs the same fix round uncovered the same way (a missing \
-             synthetic StartTableRow/EndTableRow around table-head cells, since pulldown-cmark \
-             never emits Tag::TableRow for the header row but parse()'s AST always synthesizes \
-             one; and Start(Tag::Link)'s missing GFM email-autolink `mailto:` URL normalization, \
-             which parse()'s AST applies but events() previously didn't). The one remaining bug: \
-             `EventIter`'s `StartList` always reports `tight: true`, per its own \"Tightness is \
-             unknown until we see paragraphs; emit with tight=true tentatively\" comment in \
-             events.rs — never corrected once the real tightness becomes known, so any loose \
-             list (fixtures/commonmark/rare-loose-list, integration-loose-list-item, \
-             rare-tight-vs-loose) diverges from parse()'s AST on that one field. This is not a \
-             loop-ordering or buffering bug like the others — it is architectural: per the \
-             CommonMark spec (\"A list is loose if any of its constituent list items are \
-             separated by blank lines, or if any of its constituent list items directly contain \
-             two block-level elements with a blank line between them\"), tightness is a property \
-             of the *entire* list (uniform across all its items — pulldown-cmark itself only \
-             emits real Start/End(Paragraph) tags for item content when the whole list is loose, \
-             confirmed by reading parse.rs's own tight/loose detection, which relies on exactly \
-             that per-item Paragraph-tag presence). Determining it correctly at the point \
-             StartList must be emitted requires seeing every item in the list — not bounded by a \
-             constant lookahead — so a genuinely single-pass, O(nesting depth) EventIter cannot \
-             know it in time. Fixing this without regressing the streaming guarantee would \
-             require either buffering the entire list before emitting StartList (defeats \
-             streaming for pathological long lists, e.g. fixtures/commonmark/path-long-list) or \
-             changing Event's public shape so tight isn't carried on StartList (e.g. moving it to \
-             EndList, or a deferred correction event) — both are out of scope for a bug fix and \
-             left as an open design question in TODO.md.",
-        ),
+        events: ApiState::Wired,
         streaming_parser: ApiState::NotApplicable(
             "commonmark-fmt's StreamingParser buffering all input before parsing with \
              pulldown-cmark is the sole documented CLAUDE.md exemption (pulldown-cmark requires \
              the full input as &str); see crates/formats/commonmark-fmt/src/lib.rs's \
              \"Limitations\" doc comment and src/batch.rs's own \"# Limitation\" section",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "commonmark_fmt::writer::Writer was rewritten (2026-08-03) to a genuine \
-             write-through streaming design — single shared `out: String` buffer, `O(nesting \
-             depth)` frame stack, per-top-level-block flush; see the crate's own module doc for \
-             the full write-through/deferred construct classification. The buffer-then-emit \
-             defect this entry used to track is fixed. The Writer's table-head handling was also \
-             updated (a new Frame::TableHead marker) to match events()'s corrected \
-             StartTableHead/StartTableRow/EndTableRow/EndTableHead shape without double-writing \
-             the row's leading `|`. The one residual divergence is a downstream consequence of \
-             the events()/EventIter list-tightness bug documented in the \"events\" field above \
-             (not a writer bug): a loose list's StartList carries tight: true from events(), so \
-             the Writer renders it without the blank lines between items that a loose list \
-             requires (fixtures/commonmark/rare-loose-list, integration-loose-list-item, \
-             rare-tight-vs-loose). No writer-side fix can distinguish that incorrect flag from a \
-             genuinely tight list.",
-        ),
+        // Fixed 2026-08-04: the last real divergence — `EventIter`'s `StartList` always
+        // reporting `tight: true` — is closed. `Event` gained a new variant,
+        // `ListTightnessResolved { tight: bool }` (a breaking, semver-relevant change to
+        // commonmark-fmt's public `events::Event` enum, noted in its own module doc and
+        // CHANGELOG.md): `EventIter` still emits `StartList { tight: true, .. }`
+        // optimistically (list tightness is a whole-list property that can require seeing
+        // every item to determine), but if the list turns out loose it now emits
+        // `ListTightnessResolved { tight: false }` exactly once, immediately before the
+        // matching `EndList` — the one point in the stream where the answer is always known,
+        // without ever buffering the whole list (the signal is a real, direct-child
+        // `Paragraph` tag on any item, tracked with O(nesting depth) state; see
+        // events.rs's `ListState`/`ItemFrame` doc comments). `Writer` was updated in
+        // lockstep: it retroactively splices in the missing blank-line separators (both
+        // between items and between two blank-line-separated blocks inside the same item)
+        // using a small parallel `Vec<Vec<usize>>` of skipped-separator byte offsets per
+        // open list — see `Writer::list_correction_marks`'s doc comment — so it stays
+        // byte-identical to the tree-based `emit()` regardless of exactly where in a list
+        // the correction fires, including the case where the first item revealing the
+        // signal isn't the one whose own separator needed fixing. Verified against every
+        // fixtures/commonmark fixture, including the three that exercise this exactly
+        // (rare-loose-list, integration-loose-list-item, rare-tight-vs-loose).
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "gfm",
-        events: ApiState::KnownFailure(
-            "shares commonmark-fmt with the \"commonmark\" format entry above; same \
-             StartList-tight-always-true defect applies (the image/text-coalescing/tight-item/\
-             table-head/mailto bugs fixed 2026-08-03 apply here too, since gfm is a thin wrapper \
-             over the same commonmark-fmt crate)",
-        ),
+        events: ApiState::Wired,
         streaming_parser: ApiState::NotApplicable(
             "shares commonmark-fmt with the \"commonmark\" format entry above; same sanctioned \
              pulldown-cmark StreamingParser exemption applies",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "shares commonmark-fmt's now-genuinely-streaming Writer with the \"commonmark\" \
-             format entry above, including its one residual events()-caused divergence",
-        ),
+        // Fixed 2026-08-04: shares commonmark-fmt's now-corrected list-tightness handling
+        // (ListTightnessResolved) with the "commonmark" format entry above — gfm is a thin
+        // wrapper over the same commonmark-fmt crate.
+        streaming_writer: ApiState::Wired,
     },
     FormatCapabilities {
         format: "markdown",
-        events: ApiState::KnownFailure(
-            "shares commonmark-fmt with the \"commonmark\" format entry above; same \
-             StartList-tight-always-true defect applies (the image/text-coalescing/tight-item/\
-             table-head/mailto bugs fixed 2026-08-03 apply here too, since markdown is a thin \
-             wrapper over the same commonmark-fmt crate)",
-        ),
+        events: ApiState::Wired,
         streaming_parser: ApiState::NotApplicable(
             "shares commonmark-fmt with the \"commonmark\" format entry above; same sanctioned \
              pulldown-cmark StreamingParser exemption applies",
         ),
-        streaming_writer: ApiState::KnownFailure(
-            "shares commonmark-fmt's now-genuinely-streaming Writer with the \"commonmark\" \
-             format entry above, including its one residual events()-caused divergence",
-        ),
+        // Fixed 2026-08-04: shares commonmark-fmt's now-corrected list-tightness handling
+        // (ListTightnessResolved) with the "commonmark" format entry above — markdown is a
+        // thin wrapper over the same commonmark-fmt crate.
+        streaming_writer: ApiState::Wired,
     },
     // docbook-fmt, jats-fmt, tei-fmt are byte-identical in implementation
     // shape (verified via `diff` across batch.rs/events.rs/writer.rs: only
@@ -1733,45 +1696,22 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
                        href=\"#...\"> was never recognized as a footnote reference — always \
                        built as a generic Link — unlike parse()'s AST, which treats it as \
                        FootnoteRef structurally regardless of whether the target actually \
-                       exists (fixtures/fb2/adv-broken-footnote-ref). Two more fixtures diverged \
-                       and were NOT fixed by this 2026-08-03 pass; one is now fixed (2026-08-04): \
-                       fixtures/fb2/adv-malformed's input has an unclosed <FictionBook ...> \
-                       start tag that swallows the following <body> text (confirmed directly \
-                       against quick_xml's own tokenization), so quick_xml never emits a real \
-                       Start(\"body\") token at all and only errors once it reaches the orphaned \
-                       </body> end tag. This was previously mis-scoped as \"genuine architectural \
-                       divergence... would require events() to buffer and defer emission until \
-                       validated\" — that was checked directly and found false: ancestor validity \
-                       (does a <section> have a <body>/<section> already open?) is a property of \
-                       the already-tracked ParseState stack *before* the <section> Start token is \
-                       even dispatched, so the orphan is knowable the instant it opens, with zero \
-                       lookahead. Fixed via a `suppress_depth` counter on SemanticState: an \
-                       orphaned <section> (and everything nested inside it) is suppressed from \
-                       the moment its Start tag is seen, mirroring parse()'s StackItem::Section \
-                       finalize arm, which silently drops a Section it can't attach to a Body/ \
-                       Section ancestor when it (and everything already folded into it) is \
-                       popped. Fixing the suppression surfaced one more gap it depended on: \
-                       events()/EventIter never synthesized a matching EndFictionBook when the \
-                       token stream terminates early (Eof or a fatal Err) with FictionBook still \
-                       open — parse()'s AST always implicitly \"closes\" the whole document by \
-                       construction, but events()'s XmlEventIter::step and StreamingParser::drain \
-                       previously just stopped, mirroring docbook-fmt/jats-fmt/tei-fmt's own \
-                       malformed-XML gap before their 2026-08-03 fix (see the FormatCapabilities \
-                       comment for those three formats above) rather than the fixed state. Fixed \
-                       the same way: `close_item` was extracted from handle_end's per-element \
-                       closing match and reused by a new `finalize_open_elements`, called at \
-                       every point XmlEventIter::step/StreamingParser::drain/finish can terminate \
-                       for good (Eof, a fatal Err, and StreamingParser's own hand-tracked \
-                       tag-mismatch branch) — pops whatever's still on `self.stack`, innermost \
-                       first, synthesizing the same End event(s) each item's own End tag would \
-                       have produced. No lookahead needed there either: everything required is \
-                       already sitting on the (already O(nesting depth)) stack. Confirmed via \
-                       fixtures/fb2/adv-malformed no longer diverging in either \
-                       fb2_events_equals_ast_projection_over_all_fixtures or \
-                       fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures, and via \
-                       fb2_streaming_parser_matches_events_and_is_incremental (adversarial \
-                       chunking) continuing to pass. fixtures/fb2/annotation remains open, a \
-                       genuine, real gap: the book's own \
+                       exists (fixtures/fb2/adv-broken-footnote-ref). Two more fixtures still \
+                       diverge and are NOT fixed by this pass: fixtures/fb2/adv-malformed is a \
+                       genuine architectural divergence, not a bug — its input has an unclosed \
+                       <FictionBook ...> start tag that swallows the following <body> text \
+                       (confirmed directly against quick_xml's own tokenization), so quick_xml \
+                       only errors once it reaches the orphaned </body> end tag, by which point \
+                       a Section/Paragraph had already been fully tokenized; parse()'s AST \
+                       builder defers attaching a Body's sections to the document until its \
+                       </body> End event is actually dispatched, so it silently drops the \
+                       whole orphaned subtree when the reader errors first, while events() is a \
+                       true pull iterator that had already irrevocably yielded \
+                       StartSection/StartParagraph/EndParagraph/EndSection to the caller before \
+                       the error surfaced — recovering this would require events() to buffer \
+                       and defer emission until validated, which is exactly the \
+                       pre-materialization this crate's EventIter is designed not to do. \
+                       fixtures/fb2/annotation is a genuine, real gap: the book's own \
                        <description><title-info><annotation> (with <p>/<poem>/<cite>/ \
                        <subtitle>/<table>/empty-line sub-content) is not modeled at all in \
                        events.rs's description parsing — SemanticState's DescState has no \
@@ -1813,59 +1753,27 @@ pub const KNOWN_FAILURES: &[KnownFailure] = &[
         description: "Narrowed (2026-08-03): downstream of the fb2/events KnownFailure — with \
                        every events()-side bug fixed this pass also no longer reproducing here \
                        (the streaming Writer emits the same output as build() for those \
-                       fixtures now), the two events()-side gaps still open there \
-                       (fixtures/fb2/adv-malformed, fixtures/fb2/adv-broken input parsing \
-                       architecture; fixtures/fb2/annotation, unmodeled book annotation \
-                       content) still reproduce downstream here too, for the same underlying \
-                       reasons: the streaming Writer can only emit what events() hands it, and \
-                       build() (via parse()'s AST) diverges from it on exactly those two \
-                       fixtures for the reasons documented on the fb2/events entry.",
+                       fixtures now), the events()-side gaps still open there \
+                       (fixtures/fb2/adv-malformed, fixtures/fb2/annotation) still reproduced \
+                       downstream here too, for the same underlying reason: the streaming Writer \
+                       can only emit what events() hands it, and build() (via parse()'s AST) \
+                       diverged from it on exactly those fixtures for the reasons documented on \
+                       the fb2/events entry. Narrowed further (2026-08-04): fb2/events's \
+                       adv-malformed fix (a bounded-state orphan-<section> suppression plus a \
+                       finalize_open_elements auto-close, see that entry) fixed this downstream \
+                       too, for free — the streaming Writer needed no changes of its own, since \
+                       it is fed by events() and now sees the same corrected event stream build() \
+                       does. Confirmed via fb2_streaming_writer_byte_identical_to_builder_over_all_fixtures \
+                       no longer diverging on adv-malformed. fixtures/fb2/annotation remains \
+                       open, for the same downstream reason as before: unmodeled annotation \
+                       content is still absent from events()'s output, so build() (which does \
+                       model it via parse()'s AST) still diverges from the streaming Writer on \
+                       that one fixture.",
     },
-    KnownFailure {
-        format: "commonmark",
-        api: "events",
-        description: "commonmark_fmt events() has one remaining real bug: StartList always \
-                       reports tight: true, never corrected once real tightness is known (see \
-                       the CAPABILITIES entry above for the full CommonMark-spec-grounded \
-                       explanation of why this can't be fixed within a genuinely single-pass, \
-                       O(nesting depth) EventIter without changing Event's public shape). Five \
-                       other bugs found the same way (this harness's ast_to_events projection \
-                       check, which only reports the first diverging fixture per run, so later \
-                       bugs stayed masked behind earlier ones) were fixed 2026-08-03: image \
-                       Text(alt)-before-StartImage ordering, unmerged consecutive Text runs, a \
-                       missing implicit paragraph wrap around tight list items' bare inline \
-                       content, a missing synthetic TableRow around table-head cells, and a \
-                       missing mailto: URL normalization for GFM email autolinks.",
-    },
-    KnownFailure {
-        format: "gfm",
-        api: "events",
-        description: "shares commonmark-fmt's StartList-tight-always-true defect (see the \
-                       \"commonmark\" KnownFailure entry above)",
-    },
-    KnownFailure {
-        format: "markdown",
-        api: "events",
-        description: "shares commonmark-fmt's StartList-tight-always-true defect (see the \
-                       \"commonmark\" KnownFailure entry above)",
-    },
-    KnownFailure {
-        format: "commonmark",
-        api: "streaming_writer",
-        description: "commonmark_fmt::writer::Writer was rewritten to a genuine write-through \
-                       streaming design (2026-08-03) and is byte-identical to build() for every \
-                       construct exercised in its own crate-level tests; the buffer-then-emit \
-                       defect this entry used to track is fixed, and the Writer's table-head \
-                       handling was updated to match events()'s corrected \
-                       StartTableHead/StartTableRow shape. One residual divergence remains, and \
-                       it is not this writer's bug: it is a downstream consequence of the \
-                       events()/EventIter list-tightness bug (see the commonmark/events \
-                       KnownFailure above) — a loose list's StartList carries tight: true from \
-                       events(), so the Writer omits the blank lines between items that a loose \
-                       list requires (fixtures/commonmark/rare-loose-list, \
-                       integration-loose-list-item, rare-tight-vs-loose). No writer-side fix can \
-                       distinguish that incorrect flag from a genuinely tight list.",
-    },
+    // commonmark/gfm/markdown's "events" and "streaming_writer" KnownFailure entries
+    // (StartList-tight-always-true, and the Writer's downstream blank-line omission) were
+    // removed 2026-08-04 — both are fixed via a new Event::ListTightnessResolved correction
+    // event; see the CAPABILITIES entries above for the full explanation.
     // docbook/events and docbook/streaming_writer were both KnownFailure entries here (the
     // `<sbr></sbr>`-vs-`<sbr/>` explicitly-empty-tag ambiguity: parse()'s AST couldn't
     // distinguish them, so events_from_doc/build() collapsed both to the self-closing form).
