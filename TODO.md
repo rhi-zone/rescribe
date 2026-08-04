@@ -7325,3 +7325,115 @@ bug class above; adding a fidelity-warning mechanism to any of the ten writers; 
 still-open policy call from the 2026-07-28 entry above (whether these ten output-only targets
 should ever get a real standalone `{format}-fmt` crate, given they have no reader and no
 round-trip consumer).
+
+## `typst-fmt` crate extracted; both adapters become thin translators (2026-08-04)
+
+Closed the `typst` "no standalone crate" violation logged 2026-07-31 (and reflagged as a
+"currently incomplete" reader gap, `docs/format-audit.md`): `rescribe-read-typst`
+(1231 lines) called `typst_syntax::parse` directly in production code; `rescribe-write-typst`
+(508 lines) hand-rolled a `Node`→Typst-markup emitter with no backing crate at all.
+
+**New crate**: `crates/formats/typst-fmt`, wrapping `typst-syntax` (crates.io, official,
+same github.com/typst/typst org as the compiler — same sanctioned-wrap category as
+pulldown-cmark for commonmark-fmt). Domain-typed `TypstDoc`/`Block`/`Inline` AST (own type,
+not `typst_syntax::SyntaxNode` directly — the writer side needs something it can *construct*,
+and the fuzz roundtrip property needs one shared type on both ends; `SyntaxNode` is a
+rowan-style tree meant to be produced by parsing, not hand-assembled). All five reader/writer
+APIs independently implemented:
+- `parse()` — thin wrap of `typst_syntax::parse` plus a tree walk building `TypstDoc`
+  (`parse.rs`), relocated from `rescribe-read-typst`'s pre-existing AST-building logic.
+- `events()` — a cursor-based walk (`EventIter`'s explicit `Vec<Task>` work stack, each
+  `next()` doing O(1) work) over the already-parsed structure (`events.rs`). Honestly a
+  post-parse walk, not a from-scratch incremental parse — `typst-syntax` has no native
+  event/SAX mode, so there is no way to avoid parsing to a tree first. Same class of design
+  as bbcode-fmt's `events()` (`parse()` + walk, no format-spec reason forcing it, still
+  legitimately Wired).
+- `StreamingParser<H>`/`BatchParser` — buffer all input until `finish()` (`batch.rs`). A
+  **second CLAUDE.md-sanctioned "buffer all input" exemption**, alongside commonmark-fmt's
+  pulldown-cmark: `typst-syntax`'s only from-scratch parse entry points (`parse`,
+  `parse_code`, `parse_math`) require the full input `&str` — no chunk-fed parse API exists
+  upstream. (`typst_syntax::reparse`/`Source::edit` are edit-based *re*parsing of an
+  already-built tree for editor-style incremental updates, not applicable to parsing from
+  nothing — confirmed by reading `typst-syntax`'s public API, not assumed.) CLAUDE.md's
+  "-fmt crates are not rescribe internals" section updated to name both exceptions
+  explicitly, each with its own accurate limitation.
+- `emit()` — builder writer, `TypstDoc` → Typst markup bytes (`emit.rs`), relocated from
+  `rescribe-write-typst`'s hand-rolled emitter.
+- `Writer` — event-driven streaming writer (`writer.rs`), genuinely incremental (no internal
+  buffering of the whole document), verified byte-identical to `emit()` over a construct
+  sample in the crate's own test.
+
+**Two genuine bugs found and fixed** while adding a native-AST roundtrip test
+(`roundtrip_covers_every_construct` in `lib.rs`), both inherited unnoticed from
+`rescribe-write-typst`'s pre-existing emitter (never roundtrip-tested before this
+extraction): (1) `Block::DefinitionList` was emitted wrapped in `#terms(...)` —
+not valid Typst syntax at all (term-list markup is only valid directly in markup, one
+`/ term: desc` line per entry, no wrapping function call); parse() never produced this
+shape either, so the bug was entirely invisible without a roundtrip check. (2) Equation
+source text (`Inline::MathInline`/`Inline::MathDisplay`) and the "unknown function call"
+raw-block/raw-inline fallback text were extracted via `SyntaxNode::text()`, which returns
+an empty string for any composite ("inner") node — text only lives on leaf/token nodes;
+`typst-syntax`'s `Equation`/`FuncCall` nodes are composite. Fixed by using
+`SyntaxNode::into_text()` everywhere this crate extracts raw source text from a
+typst-syntax node.
+
+**Two small AST additions** discovered while relocating the pre-existing IR mapping (not a
+redesign — same behavior, now correctly attributed): `Inline::MathDisplay` (a block-style
+equation appearing in paragraph/inline position, preserving the pre-existing reader's
+"don't split the paragraph around it" behavior — distinct from `Block::MathDisplay`, the
+writer's standalone block-level construct, never produced by `parse()`); and
+`Inline::SmallCaps`/`Inline::Quoted` (the pre-existing writer emitted `#smallcaps[...]` and
+`"..."`/`'...'` for `SMALL_CAPS`/`QUOTED` IR nodes, but typst-fmt initially had no AST
+variant for either — the reader never produced them, so the first extraction pass missed
+them). Adding `"smallcaps"` to `is_inline_func`/`convert_func_call_inline` in the process
+made `#smallcaps[...]` a real recognized construct on the *reader* side for the first time
+(previously fell into the "unknown function" raw-block fallback, splitting it out of its
+enclosing paragraph) — new fixture `fixtures/typst/small-caps` added in the same commit,
+`COVERAGE.md` box checked. `Inline::Quoted` remains writer-only (Typst's `"..."` is a
+`SmartQuote` token wrapping plain text, not a nestable span construct — documented on the
+variant).
+
+**Adapters rewritten as thin translators**: `rescribe-read-typst`/`rescribe-write-typst` no
+longer contain any parsing/writing logic — both are pure `typst_fmt::{Block,Inline}` <-> IR
+`Node` translation, same construct mapping as before (relocated, not redesigned).
+`rescribe-read-typst`'s `eval` feature (full `typst` compiler crate, HTML-based evaluation,
+`parse_evaluated()`) is unchanged, out of scope per this vertical's brief — it now takes
+`typst-syntax` as an eval-only optional dependency since the always-on syntax-only path no
+longer needs it directly.
+
+**Fuzz targets**: `fuzz_typst_fmt_reader` (no-panic gate: `parse()`/`events()`/
+`StreamingParser` on arbitrary UTF-8) and `fuzz_typst_fmt_roundtrip` (native-AST roundtrip:
+`parse(emit(arbitrary_ast)).strip_spans() == arbitrary_ast`, per CLAUDE.md's "Roundtrip
+direction matters"). Both compile clean; `cargo-fuzz` itself is not installed in this
+session's sandbox (same caveat as opml-fmt/endnotexml-fmt), so the roundtrip generator was
+instead validated standalone against ~300k pseudo-random byte buffers (documented inline in
+the fuzz target and in its own module docs) before being committed — found and fixed several
+generator-side issues along the way that are Typst grammar properties, not crate bugs:
+`Strong`/`Emph` bare single-character delimiters (`*`, `_`) require a non-word character on
+*both* sides to open/close at all (verified empirically against `typst-syntax`, not assumed);
+the generator sidesteps the whole ambiguity class by making `Strong`/`Emph` always the last
+item in whatever `inlines()` list generates them.
+
+**Harness wiring**: `typst` moved from `streaming_harness::NOT_YET_AUDITED` to a real
+`CAPABILITIES` entry (events/streaming_parser/streaming_writer all `Wired`, rationale
+documented inline). No new `tests/streaming_apis.rs` instantiation added — typst-fmt's own
+in-crate smoke tests (`events()`==`events_from_doc` projection, `StreamingParser`==`events()`,
+streaming `Writer`==builder `emit()`) cover the same equivalence properties in-crate instead.
+
+**Not attempted this pass** (construct coverage remains incomplete, see
+`fixtures/typst/COVERAGE.md`): heading levels 3–6, `#grid`, horizontal lines,
+`#bibliography`/`#outline`/`#pagebreak`, `@label`/`<label>` references, `#highlight`/
+`#overline`/text color/font size, math functions, `#set`/`#show` rules, document metadata via
+`#set document(...)`, `#include`. `typst` is therefore R:3/W:3 in `docs/format-audit.md`
+(API modes + fixtures + harness complete; fuzz not literally run via `cargo-fuzz`; construct
+coverage gaps remain), not yet 5-Production.
+
+Verification: `cargo clippy -p typst-fmt -p rescribe-read-typst -p rescribe-write-typst -p
+rescribe-fixtures --all-targets --all-features -- -D warnings` — clean for the first three
+crates individually; the four-crate combined invocation hits a pre-existing, unrelated
+`fb2-fmt` clippy failure (`clippy::collapsible_match` in `crates/formats/fb2-fmt/src/
+events.rs:1451`, confirmed present on `fb2-fmt` alone with no changes from this session —
+introduced in commit `d4b8bcbfb3`, not touched here) pulled in transitively by
+`rescribe-fixtures`'s full dependency graph; not fixed here, out of scope for this vertical.
+`cargo test -p typst-fmt -p rescribe-read-typst -p rescribe-write-typst -p rescribe-fixtures
+-q` and `cargo fmt --check` on the three typst-fmt-vertical crates: both exit 0.
