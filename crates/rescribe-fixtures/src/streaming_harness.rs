@@ -866,6 +866,42 @@ pub const CAPABILITIES: &[FormatCapabilities] = &[
         streaming_parser: ApiState::Wired,
         streaming_writer: ApiState::Wired,
     },
+    FormatCapabilities {
+        format: "endnotexml",
+        // endnotexml-fmt is a from-scratch crate (2026-08-04), extracted from
+        // rescribe-read-endnotexml/rescribe-write-endnotexml (which called quick_xml directly
+        // in production code, a pre-existing CLAUDE.md violation logged in TODO.md), following
+        // the opml-fmt template. EndNote XML's schema is larger and deeper than OPML's (nested
+        // contributor role lists, multiple title variants, `<style>` markup runs inside field
+        // content), so the AST/event vocabulary is domain-typed at the container level
+        // (Record/Contributors/Titles/Periodical/Urls/Dates get their own
+        // Start*/End* event pairs) but generic at the leaf level: any leaf field or
+        // unrecognized element becomes `StartElement{name,attrs}`/inline-content/`EndElement`,
+        // keyed by its exact source tag name — see ast.rs's and events.rs's module docs for the
+        // full rationale, including how this streams `<style>` runs incrementally (Text/
+        // StartStyle/EndStyle/nested StartElement events) rather than buffering a whole field's
+        // content into one aggregate event.
+        //
+        // Verified via this harness's own checks over all fixtures, not asserted from design
+        // alone. Two defects surfaced and were fixed before this entry was written: (1) using a
+        // pretty-printing `quick_xml::Writer::new_with_indent` in `emit()`/the streaming
+        // `Writer` corrupted meaningful whitespace between `<style>` runs (the auto-indenter
+        // injects its own whitespace around every tag) — fixed by switching both to the
+        // non-indenting `Writer::new`, matching the pre-existing rescribe-write-endnotexml
+        // writer's identical choice. (2) `events_from_doc`'s per-record field emission order
+        // was an arbitrary struct-field order that didn't match real EndNote export order
+        // (observed directly from the existing fixture files: `ref-type`, `contributors`,
+        // `titles`, `dates`, then `volume`/`pages`/`urls`/etc., with `rec-number`/
+        // `foreign-keys` last) — fixed by reordering `events_from_doc`'s and `emit()`'s field
+        // emission to match, both consistently (this is a known, documented limitation shared
+        // with opml-fmt's identical `Head` design: record field order is canonicalized on
+        // write, not preserved verbatim for a source file with a nonstandard order — content
+        // fidelity is exact regardless, only field order is not byte-for-byte guaranteed for
+        // files exported by tools that reorder these particular fields).
+        events: ApiState::Wired,
+        streaming_parser: ApiState::Wired,
+        streaming_writer: ApiState::Wired,
+    },
     // bbcode-fmt: events() is `parse::parse(input)` followed by a tree walk
     // (events.rs's `events()` literally calls `crate::parse::parse(input)`
     // then walks the resulting `BbcodeDoc`) — the same non-independent shape
@@ -1659,7 +1695,6 @@ pub const NOT_YET_AUDITED: &[&str] = &[
     "bibtex",
     "biblatex",
     "typst",
-    "endnotexml",
     "epub",
     // `multimarkdown` and `pdf` have NO standalone {format}-fmt crate:
     // `rescribe-read-multimarkdown`'s Cargo.toml depends on `pulldown-cmark`
