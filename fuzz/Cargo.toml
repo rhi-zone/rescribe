@@ -337,6 +337,9 @@ path = "../crates/formats/endnotexml-fmt"
 [dependencies.typst-fmt]
 path = "../crates/formats/typst-fmt"
 
+[dependencies.multimarkdown-fmt]
+path = "../crates/formats/multimarkdown-fmt"
+
 [[bin]]
 name = "fuzz_markdown_reader"
 path = "fuzz_targets/markdown_reader.rs"
@@ -1147,6 +1150,20 @@ bench = false
 [[bin]]
 name = "fuzz_typst_fmt_roundtrip"
 path = "fuzz_targets/typst_fmt_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_multimarkdown_fmt_reader"
+path = "fuzz_targets/multimarkdown_fmt_reader.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_multimarkdown_fmt_roundtrip"
+path = "fuzz_targets/multimarkdown_fmt_roundtrip.rs"
 test = false
 doc = false
 bench = false

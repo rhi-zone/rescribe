@@ -909,6 +909,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "multimarkdown-fmt"
+version = "0.1.0"
+dependencies = [
+ "commonmark-fmt",
+]
+
+[[package]]
 name = "muse-fmt"
 version = "0.1.0"
 
@@ -1427,6 +1434,7 @@ dependencies = [
  "jats-fmt",
  "libfuzzer-sys",
  "mediawiki-fmt",
+ "multimarkdown-fmt",
  "odf-fmt",
  "opml-fmt",
  "rescribe-core",
