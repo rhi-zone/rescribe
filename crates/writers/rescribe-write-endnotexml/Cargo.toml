@@ -1,9 +1,15 @@
 [package]
 name = "rescribe-write-endnotexml"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "EndNote XML writer for rescribe"
 
 [dependencies]
-rescribe-core = { path = "../../rescribe-core" }
-rescribe-std = { path = "../../nodes/rescribe-std" }
-quick-xml = "0.39"
+rescribe-core = { workspace = true }
+rescribe-std = { workspace = true }
+endnotexml-fmt = { workspace = true }
+
+[dev-dependencies]
+rescribe-read-endnotexml = { workspace = true }

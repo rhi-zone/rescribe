@@ -1,25 +1,44 @@
 //! EndNote XML reader for rescribe.
 //!
-//! Parses EndNote XML bibliography files into rescribe's document IR,
-//! using the `bibliography`/`bibliography_entry`/`bibliography_field`
-//! node kinds (see `rescribe_std::node` and ADR 0005 in the rescribe
-//! repo). EndNote XML field content can carry `<style>` markup elements
-//! (bold/italic/underline/sub/superscript runs) — those are converted to
-//! real inline nodes rather than flattened to plain text, since
-//! `bibliography_field` children are ordinary inline nodes.
+//! Thin AST→IR adapter over [`endnotexml_fmt`] (the standalone EndNote XML
+//! parser/AST/emitter crate — see its docs for the format grammar). All XML
+//! parsing lives in `endnotexml-fmt`; this crate only translates
+//! `endnotexml_fmt::EndNoteDoc` into rescribe's `Document`, using the
+//! `bibliography`/`bibliography_entry`/`bibliography_field` node kinds (see
+//! `rescribe_std::node` and ADR 0005). Per CLAUDE.md's adapter-layer rule,
+//! no `quick_xml` (or any XML tokenizer) appears in this crate's production
+//! code.
 //!
-//! # Example
+//! # Mapping
 //!
-//! ```ignore
-//! use rescribe_read_endnotexml::parse;
+//! Each `Record` becomes one `bibliography_entry`, carrying `endnote:type`
+//! (the `ref-type` code), `endnote:key` (a generated or `label`/
+//! `rec-number`-derived cite key), and — when present — `endnote:ref-type-name`,
+//! `endnote:rec-number`, `endnote:label`.
 //!
-//! let xml = r#"<?xml version="1.0"?>
-//! <xml><records><record>...</record></records></xml>"#;
-//! let result = parse(xml).unwrap();
-//! ```
+//! Each recognized field becomes a `bibliography_field` child tagged with
+//! both `field:role` (the semantic vocabulary other bibliography formats
+//! share) and `endnote:field` (the exact source element path, e.g.
+//! `titles/secondary-title`, `urls/related-urls/url`), so the writer can
+//! reconstruct the original nested wrapper without guessing a shape from
+//! `field:role` alone. Any field this reader doesn't have a dedicated
+//! mapping for (EndNote's schema is exporter-dependent — `custom1`..
+//! `custom7`, `research-notes`, `work-type`, ...) becomes a `misc` field
+//! instead of being dropped — this includes both `Record::extra` (unknown
+//! top-level elements) and every container's own `extra` bucket (unknown
+//! children of `<contributors>`/`<titles>`/`<periodical>`/`<urls>`/
+//! `<dates>`/`<foreign-keys>`), which `endnotexml-fmt`'s AST captures
+//! losslessly even where the pre-existing reader this crate replaces did
+//! not (see `endnotexml_fmt::ast` module docs).
+//!
+//! `<style face="...">` runs in field content become real
+//! `emphasis`/`strong`/`underline`/`superscript`/`subscript` inline nodes
+//! (recursively) rather than flattened text, since `bibliography_field`
+//! children are ordinary inline nodes — deciding what a given `face` value
+//! *means* is this adapter's job (see [`inline_to_ir`]); `endnotexml-fmt`
+//! itself only records the `face` string verbatim.
 
-use quick_xml::Reader;
-use quick_xml::events::Event;
+use endnotexml_fmt::{Dates, EndNoteDoc, Inline, Record};
 use rescribe_core::{ConversionResult, Document, Node, ParseError, ParseOptions, Properties};
 use rescribe_std::{PropValue, node, prop};
 use std::collections::HashMap;
@@ -34,15 +53,9 @@ pub fn parse_with_options(
     input: &str,
     _options: &ParseOptions,
 ) -> Result<ConversionResult<Document>, ParseError> {
-    let roots = parse_xml_tree(input);
+    let (doc, _diagnostics): (EndNoteDoc, _) = endnotexml_fmt::parse(input.as_bytes());
 
-    let mut records = Vec::new();
-    find_all(&roots, "record", &mut records);
-
-    let entries: Vec<Node> = records
-        .iter()
-        .map(|record| convert_record(children_of(record)))
-        .collect();
+    let entries: Vec<Node> = doc.records.iter().map(convert_record).collect();
 
     let content = if entries.is_empty() {
         Node::new(node::DOCUMENT)
@@ -58,415 +71,199 @@ pub fn parse_with_options(
     }))
 }
 
-// ---------------------------------------------------------------------------
-// Minimal generic XML tree (this adapter's own concern is EndNote's element
-// vocabulary -> IR mapping below; the tree itself is just enough structure
-// to walk that vocabulary without a fragile flat state machine, since
-// EndNote's schema nests to varying depths and field content can itself
-// contain child elements (`<style>`)).
-// ---------------------------------------------------------------------------
-
-enum XmlNode {
-    Element {
-        name: String,
-        attrs: Vec<(String, String)>,
-        children: Vec<XmlNode>,
-    },
-    Text(String),
-}
-
-/// (element name, attrs, children-so-far) for one level of open-element
-/// nesting during tree construction.
-type OpenElement = (String, Vec<(String, String)>, Vec<XmlNode>);
-
-fn parse_xml_tree(input: &str) -> Vec<XmlNode> {
-    let mut reader = Reader::from_str(input);
-    // `trim_text` stays off: EndNote field content can be split across
-    // several `<style>` runs (`<style face="normal">A </style><style
-    // face="italic">Great</style>`), and a global trim would eat the
-    // meaningful inter-run space along with real exporters' harmless
-    // inter-element indentation whitespace — the two are indistinguishable
-    // to the parser. Structural indentation between record-level elements
-    // is never a problem in practice since every lookup below selects
-    // specific named children (`find_child`/`find_children`), silently
-    // skipping any stray whitespace-only `Text` siblings.
-    reader.config_mut().trim_text(false);
-
-    let mut stack: Vec<OpenElement> = Vec::new();
-    let mut roots: Vec<XmlNode> = Vec::new();
-    let mut buf = Vec::new();
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => {
-                let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                let attrs = read_attrs(&e);
-                stack.push((name, attrs, Vec::new()));
-            }
-            Ok(Event::Empty(e)) => {
-                let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                let attrs = read_attrs(&e);
-                push_node(
-                    &mut stack,
-                    &mut roots,
-                    XmlNode::Element {
-                        name,
-                        attrs,
-                        children: Vec::new(),
-                    },
-                );
-            }
-            Ok(Event::End(_)) => {
-                if let Some((name, attrs, children)) = stack.pop() {
-                    push_node(
-                        &mut stack,
-                        &mut roots,
-                        XmlNode::Element {
-                            name,
-                            attrs,
-                            children,
-                        },
-                    );
-                }
-            }
-            Ok(Event::Text(e)) => {
-                let text = e.xml_content().map(|c| c.to_string()).unwrap_or_default();
-                if !text.is_empty() {
-                    push_node(&mut stack, &mut roots, XmlNode::Text(text));
-                }
-            }
-            Ok(Event::CData(e)) => {
-                let text = String::from_utf8_lossy(e.as_ref()).to_string();
-                if !text.is_empty() {
-                    push_node(&mut stack, &mut roots, XmlNode::Text(text));
-                }
-            }
-            Ok(Event::Eof) => break,
-            // Malformed input: stop rather than panic (adversarial safety);
-            // whatever was parsed so far is still returned.
-            Err(_) => break,
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    roots
-}
-
-fn read_attrs(e: &quick_xml::events::BytesStart) -> Vec<(String, String)> {
-    e.attributes()
-        .filter_map(|a| a.ok())
-        .map(|a| {
-            let key = String::from_utf8_lossy(a.key.as_ref()).to_string();
-            let value = a
-                .unescape_value()
-                .map(|c| c.to_string())
-                .unwrap_or_default();
-            (key, value)
-        })
-        .collect()
-}
-
-fn push_node(stack: &mut [OpenElement], roots: &mut Vec<XmlNode>, node: XmlNode) {
-    if let Some(top) = stack.last_mut() {
-        top.2.push(node);
-    } else {
-        roots.push(node);
-    }
-}
-
-fn children_of(node: &XmlNode) -> &[XmlNode] {
-    match node {
-        XmlNode::Element { children, .. } => children,
-        XmlNode::Text(_) => &[],
-    }
-}
-
-fn attr<'a>(node: &'a XmlNode, key: &str) -> Option<&'a str> {
-    match node {
-        XmlNode::Element { attrs, .. } => attrs
-            .iter()
-            .find(|(k, _)| k == key)
-            .map(|(_, v)| v.as_str()),
-        XmlNode::Text(_) => None,
-    }
-}
-
-fn find_all<'a>(nodes: &'a [XmlNode], name: &str, out: &mut Vec<&'a XmlNode>) {
-    for n in nodes {
-        if let XmlNode::Element {
-            name: n_name,
-            children,
-            ..
-        } = n
-        {
-            if n_name == name {
-                out.push(n);
-            }
-            find_all(children, name, out);
-        }
-    }
-}
-
-fn find_child<'a>(nodes: &'a [XmlNode], name: &str) -> Option<&'a XmlNode> {
-    nodes
-        .iter()
-        .find(|n| matches!(n, XmlNode::Element { name: n_name, .. } if n_name == name))
-}
-
-fn find_children<'a>(nodes: &'a [XmlNode], name: &str) -> Vec<&'a XmlNode> {
-    nodes
-        .iter()
-        .filter(|n| matches!(n, XmlNode::Element { name: n_name, .. } if n_name == name))
-        .collect()
-}
-
-/// Flatten all descendant text (ignoring element boundaries) — used only
-/// for fields that are never expected to carry markup (numeric codes,
-/// years, record numbers).
-fn text_of(node: &XmlNode) -> String {
-    let mut out = String::new();
-    text_of_into(node, &mut out);
-    out
-}
-
-fn text_of_into(node: &XmlNode, out: &mut String) {
-    match node {
-        XmlNode::Text(t) => out.push_str(t),
-        XmlNode::Element { children, .. } => {
-            for c in children {
-                text_of_into(c, out);
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// EndNote element vocabulary -> IR
-// ---------------------------------------------------------------------------
-
-/// Record-level children handled by dedicated logic below. Everything else
-/// becomes a generic `misc` field rather than being silently dropped.
-const SPECIAL_ELEMENTS: &[&str] = &[
-    "ref-type",
-    "rec-number",
-    "label",
-    "foreign-keys",
-    "contributors",
-    "titles",
-    "dates",
-    "volume",
-    "number",
-    "pages",
-    "publisher",
-    "pub-location",
-    "isbn",
-    "issn",
-    "electronic-resource-num",
-    "urls",
-    "url",
-    "abstract",
-    "keywords",
-    "notes",
-];
-
-fn convert_record(children: &[XmlNode]) -> Node {
+fn convert_record(record: &Record) -> Node {
     let mut fields = Vec::new();
 
-    let ref_type_code = find_child(children, "ref-type")
-        .map(text_of)
-        .unwrap_or_default();
-    let ref_type_name = find_child(children, "ref-type").and_then(|n| attr(n, "name"));
-
-    let rec_number = find_child(children, "rec-number").map(text_of);
-    let label = find_child(children, "label").map(text_of);
-
-    if let Some(fk) = find_child(children, "foreign-keys") {
-        for key in find_children(children_of(fk), "key") {
+    if let Some(fk) = &record.foreign_keys {
+        for key in &fk.keys {
             let mut field = Node::new(node::BIBLIOGRAPHY_FIELD)
                 .prop(prop::FIELD_ROLE, "misc")
                 .prop("endnote:field", "foreign-keys/key")
-                .child(Node::new(node::TEXT).prop(prop::CONTENT, text_of(key)));
-            if let Some(app) = attr(key, "app") {
-                field = field.prop("endnote:app", app.to_string());
+                .child(Node::new(node::TEXT).prop(prop::CONTENT, key.text.clone()));
+            if let Some(app) = &key.app {
+                field = field.prop("endnote:app", app.clone());
             }
-            if let Some(db_id) = attr(key, "db-id") {
-                field = field.prop("endnote:db-id", db_id.to_string());
+            if let Some(db_id) = &key.db_id {
+                field = field.prop("endnote:db-id", db_id.clone());
             }
             fields.push(field);
         }
+        for el in &fk.extra {
+            fields.push(misc_field(
+                &format!("foreign-keys/{}", el.name),
+                &el.children,
+            ));
+        }
     }
 
-    if let Some(contributors) = find_child(children, "contributors") {
-        let cc = children_of(contributors);
-        if let Some(authors) = find_child(cc, "authors") {
-            for author in find_children(children_of(authors), "author") {
-                fields.push(person_field("author", author, "authors/author"));
-            }
+    if let Some(c) = &record.contributors {
+        for person in &c.authors {
+            fields.push(inline_field("author", "authors/author", person));
         }
-        if let Some(authors) = find_child(cc, "secondary-authors") {
-            for author in find_children(children_of(authors), "author") {
-                fields.push(person_field("editor", author, "secondary-authors/author"));
-            }
+        for person in &c.secondary_authors {
+            fields.push(inline_field("editor", "secondary-authors/author", person));
         }
         // Tertiary/subsidiary authors have no `field:role` equivalent —
         // raw-preserved as misc rather than dropped.
-        for (wrapper, tag) in [
-            ("tertiary-authors", "tertiary-authors/author"),
-            ("subsidiary-authors", "subsidiary-authors/author"),
-        ] {
-            if let Some(authors) = find_child(cc, wrapper) {
-                for author in find_children(children_of(authors), "author") {
-                    fields.push(inline_field("misc", author, tag));
-                }
-            }
+        for person in &c.tertiary_authors {
+            fields.push(inline_field("misc", "tertiary-authors/author", person));
         }
-    }
-
-    if let Some(titles) = find_child(children, "titles") {
-        let tc = children_of(titles);
-        if let Some(title) = find_child(tc, "title") {
-            fields.push(inline_field("title", title, "titles/title"));
+        for person in &c.subsidiary_authors {
+            fields.push(inline_field("misc", "subsidiary-authors/author", person));
         }
-        if let Some(secondary) = find_child(tc, "secondary-title") {
-            fields.push(inline_field(
-                "container_title",
-                secondary,
-                "titles/secondary-title",
+        for el in &c.extra {
+            fields.push(misc_field(
+                &format!("contributors/{}", el.name),
+                &el.children,
             ));
         }
-        if let Some(tertiary) = find_child(tc, "tertiary-title") {
-            fields.push(inline_field("misc", tertiary, "titles/tertiary-title"));
+    }
+
+    if let Some(t) = &record.titles {
+        if let Some(title) = &t.title {
+            fields.push(inline_field("title", "titles/title", title));
+        }
+        if let Some(secondary) = &t.secondary_title {
+            fields.push(inline_field(
+                "container_title",
+                "titles/secondary-title",
+                secondary,
+            ));
+        }
+        if let Some(tertiary) = &t.tertiary_title {
+            fields.push(inline_field("misc", "titles/tertiary-title", tertiary));
+        }
+        for el in &t.extra {
+            fields.push(misc_field(&format!("titles/{}", el.name), &el.children));
         }
     }
 
-    if let Some(volume) = find_child(children, "volume") {
-        fields.push(inline_field("volume", volume, "volume"));
-    }
-    if let Some(number) = find_child(children, "number") {
-        fields.push(inline_field("issue", number, "number"));
+    if let Some(p) = &record.periodical {
+        if let Some(full_title) = &p.full_title {
+            fields.push(inline_field("misc", "periodical/full-title", full_title));
+        }
+        for el in &p.extra {
+            fields.push(misc_field(&format!("periodical/{}", el.name), &el.children));
+        }
     }
 
-    if let Some(pages) = find_child(children, "pages") {
+    if let Some(volume) = &record.volume {
+        fields.push(inline_field("volume", "volume", volume));
+    }
+    if let Some(number) = &record.number {
+        fields.push(inline_field("issue", "number", number));
+    }
+    if let Some(pages) = &record.pages {
         push_pages(&mut fields, pages);
     }
-
-    if let Some(publisher) = find_child(children, "publisher") {
-        fields.push(inline_field("publisher", publisher, "publisher"));
+    if let Some(publisher) = &record.publisher {
+        fields.push(inline_field("publisher", "publisher", publisher));
     }
-    if let Some(loc) = find_child(children, "pub-location") {
-        fields.push(inline_field("publisher_location", loc, "pub-location"));
+    if let Some(loc) = &record.pub_location {
+        fields.push(inline_field("publisher_location", "pub-location", loc));
     }
-    if let Some(isbn) = find_child(children, "isbn") {
-        fields.push(identifier_field("isbn", &text_of(isbn), "isbn"));
+    if let Some(isbn) = &record.isbn {
+        fields.push(identifier_field("isbn", isbn, "isbn"));
     }
-    if let Some(issn) = find_child(children, "issn") {
-        fields.push(identifier_field("issn", &text_of(issn), "issn"));
+    if let Some(issn) = &record.issn {
+        fields.push(identifier_field("issn", issn, "issn"));
     }
-    if let Some(doi) = find_child(children, "electronic-resource-num") {
-        fields.push(identifier_field(
-            "doi",
-            &text_of(doi),
-            "electronic-resource-num",
-        ));
+    if let Some(doi) = &record.electronic_resource_num {
+        fields.push(identifier_field("doi", doi, "electronic-resource-num"));
     }
 
-    if let Some(urls) = find_child(children, "urls") {
-        let uc = children_of(urls);
-        for (wrapper, tag) in [
-            ("related-urls", "urls/related-urls/url"),
-            ("pdf-urls", "urls/pdf-urls/url"),
-        ] {
-            if let Some(w) = find_child(uc, wrapper) {
-                for url in find_children(children_of(w), "url") {
-                    fields.push(identifier_field("url", &text_of(url), tag));
-                }
-            }
+    if let Some(u) = &record.urls {
+        for url in &u.related_urls {
+            fields.push(identifier_field("url", url, "urls/related-urls/url"));
+        }
+        for url in &u.pdf_urls {
+            fields.push(identifier_field("url", url, "urls/pdf-urls/url"));
+        }
+        for el in &u.extra {
+            fields.push(misc_field(&format!("urls/{}", el.name), &el.children));
         }
     }
     // A bare top-level `<url>` (outside `<urls>`) also occurs in practice —
     // handled the same as `related-urls/url` rather than dropped.
-    if let Some(url) = find_child(children, "url") {
-        fields.push(identifier_field("url", &text_of(url), "url"));
+    if let Some(url) = &record.bare_url {
+        fields.push(identifier_field("url", url, "url"));
     }
 
-    if let Some(abstract_) = find_child(children, "abstract") {
-        fields.push(inline_field("misc", abstract_, "abstract"));
+    if let Some(abstract_) = &record.abstract_ {
+        fields.push(inline_field("misc", "abstract", abstract_));
     }
-    if let Some(notes) = find_child(children, "notes") {
-        fields.push(inline_field("misc", notes, "notes"));
+    if let Some(notes) = &record.notes {
+        fields.push(inline_field("misc", "notes", notes));
     }
-    if let Some(keywords) = find_child(children, "keywords") {
-        for keyword in find_children(children_of(keywords), "keyword") {
-            fields.push(inline_field("misc", keyword, "keywords/keyword"));
-        }
+    for keyword in &record.keywords {
+        fields.push(inline_field("misc", "keywords/keyword", keyword));
     }
 
-    // Everything else at the record level: generic fallback, nothing
-    // silently dropped even for EndNote fields this reader doesn't know
-    // about by name (EndNote's field vocabulary is large and
-    // exporter-dependent — `custom1`..`custom7`, `research-notes`,
-    // `remote-database-name`, `language`, `work-type`, `section`, ...).
-    for child in children {
-        if let XmlNode::Element { name, .. } = child
-            && !SPECIAL_ELEMENTS.contains(&name.as_str())
-        {
-            fields.push(inline_field("misc", child, name));
-        }
+    // Any other record-level element this reader doesn't know by name:
+    // generic fallback, nothing silently dropped even for EndNote fields
+    // this reader doesn't recognize (EndNote's field vocabulary is large
+    // and exporter-dependent — `custom1`..`custom7`, `research-notes`,
+    // `remote-database-name`, `language`, `work-type`, ...).
+    for el in &record.extra {
+        fields.push(misc_field(&el.name, &el.children));
     }
 
-    let cite_key = label
+    let cite_key = record
+        .label
         .clone()
         .filter(|s| !s.is_empty())
-        .or_else(|| rec_number.clone().filter(|s| !s.is_empty()))
-        .unwrap_or_else(|| generate_cite_key(children));
+        .or_else(|| record.rec_number.clone().filter(|s| !s.is_empty()))
+        .unwrap_or_else(|| generate_cite_key(record));
 
     let mut entry_node = Node::new(node::BIBLIOGRAPHY_ENTRY)
-        .prop("endnote:type", ref_type_code)
+        .prop("endnote:type", record.ref_type.code.clone())
         .prop("endnote:key", cite_key);
-    if let Some(name) = ref_type_name {
-        entry_node = entry_node.prop("endnote:ref-type-name", name.to_string());
+    if let Some(name) = &record.ref_type.name {
+        entry_node = entry_node.prop("endnote:ref-type-name", name.clone());
     }
-    if let Some(rec_number) = rec_number.filter(|s| !s.is_empty()) {
+    if let Some(rec_number) = record.rec_number.clone().filter(|s| !s.is_empty()) {
         entry_node = entry_node.prop("endnote:rec-number", rec_number);
     }
-    if let Some(label) = label.filter(|s| !s.is_empty()) {
+    if let Some(label) = record.label.clone().filter(|s| !s.is_empty()) {
         entry_node = entry_node.prop("endnote:label", label);
     }
 
-    if let Some(dates) = find_child(children, "dates") {
-        let dc = children_of(dates);
-        if let Some(year) = find_child(dc, "year") {
-            let text = text_of(year);
+    if let Some(dates) = &record.dates {
+        if let Some(year) = &dates.year {
+            let text = endnotexml_fmt::parse::flatten_inline_text(year);
             if let Ok(y) = text.trim().parse::<i64>() {
                 let mut map = HashMap::new();
                 map.insert("year".to_string(), PropValue::Int(y));
                 entry_node = entry_node.prop(prop::DATE, PropValue::Map(map));
             } else if !text.is_empty() {
-                fields.push(inline_field("misc", year, "dates/year"));
+                fields.push(inline_field("misc", "dates/year", year));
             }
         }
-        if let Some(pub_dates) = find_child(dc, "pub-dates")
-            && let Some(date) = find_child(children_of(pub_dates), "date")
-        {
+        if let Some(pub_date) = &dates.pub_date {
             // A free-text pub-date (e.g. "Jan 15") has no unambiguous
             // year/month/day parse without guessing a locale's month-name
             // convention — kept as a misc field instead.
-            fields.push(inline_field("misc", date, "dates/pub-dates/date"));
+            fields.push(inline_field("misc", "dates/pub-dates/date", pub_date));
+        }
+        for el in &dates.extra {
+            fields.push(misc_field(&format!("dates/{}", el.name), &el.children));
         }
     }
 
     entry_node.children(fields)
 }
 
-fn generate_cite_key(children: &[XmlNode]) -> String {
-    let author = find_child(children, "contributors")
-        .and_then(|c| find_child(children_of(c), "authors"))
-        .and_then(|a| find_children(children_of(a), "author").into_iter().next())
-        .map(text_of);
-    let year = find_child(children, "dates")
-        .and_then(|d| find_child(children_of(d), "year"))
-        .map(text_of);
+fn generate_cite_key(record: &Record) -> String {
+    let author = record
+        .contributors
+        .as_ref()
+        .and_then(|c| c.authors.first())
+        .map(|a| endnotexml_fmt::parse::flatten_inline_text(a));
+    let year = record
+        .dates
+        .as_ref()
+        .and_then(|d: &Dates| d.year.as_ref())
+        .map(|y| endnotexml_fmt::parse::flatten_inline_text(y));
 
     let author_part = author
         .map(|a| {
@@ -484,23 +281,22 @@ fn generate_cite_key(children: &[XmlNode]) -> String {
     format!("{}{}", author_part, year.unwrap_or_default())
 }
 
-/// Build a `bibliography_field` from an author `XmlNode`, converting
-/// `<style>` markup (if any — rare but valid inside `<author>`) the same
-/// way as any other field.
-fn person_field(role: &str, node: &XmlNode, tag: &str) -> Node {
-    inline_field(role, node, tag)
-}
-
-/// Build a `bibliography_field` whose children are `node`'s content
-/// converted through `convert_inline_children` — this is where `<style>`
-/// markup becomes real `emphasis`/`strong`/... nodes instead of being
-/// flattened to plain text, the one place among these four formats where
-/// the field-node design (vs. a flat string) actually earns its keep.
-fn inline_field(role: &str, node: &XmlNode, tag: &str) -> Node {
+/// Build a `bibliography_field` whose children are `inline`'s content
+/// converted through [`inline_to_ir`] — this is where `<style>` markup
+/// becomes real `emphasis`/`strong`/... nodes instead of being flattened to
+/// plain text.
+fn inline_field(role: &str, tag: &str, inline: &[Inline]) -> Node {
     Node::new(node::BIBLIOGRAPHY_FIELD)
         .prop(prop::FIELD_ROLE, role)
         .prop("endnote:field", tag)
-        .children(convert_inline_children(children_of(node)))
+        .children(inline_to_ir(inline))
+}
+
+/// A raw-preserved field for content this reader doesn't have a dedicated
+/// `field:role` mapping for — used both for `Record::extra` (unknown
+/// top-level elements) and every container's own `extra` bucket.
+fn misc_field(tag: &str, inline: &[Inline]) -> Node {
+    inline_field("misc", tag, inline)
 }
 
 fn identifier_field(scheme: &str, text: &str, tag: &str) -> Node {
@@ -519,9 +315,9 @@ fn identifier_field(scheme: &str, text: &str, tag: &str) -> Node {
 /// bibtex/csl-json/docbook page-splitting logic); anything else (markup,
 /// non-numeric labels, multiple separators) is kept whole as a `misc`
 /// field, `<style>` markup included, rather than guessing.
-fn push_pages(fields: &mut Vec<Node>, pages: &XmlNode) {
-    let inline = convert_inline_children(children_of(pages));
-    if let [single] = inline.as_slice()
+fn push_pages(fields: &mut Vec<Node>, pages: &[Inline]) {
+    let inline_ir = inline_to_ir(pages);
+    if let [single] = inline_ir.as_slice()
         && single.kind.as_str() == node::TEXT
         && let Some(text) = single.props.get_str(prop::CONTENT)
     {
@@ -550,7 +346,7 @@ fn push_pages(fields: &mut Vec<Node>, pages: &XmlNode) {
         Node::new(node::BIBLIOGRAPHY_FIELD)
             .prop(prop::FIELD_ROLE, "misc")
             .prop("endnote:field", "pages")
-            .children(inline),
+            .children(inline_ir),
     );
 }
 
@@ -561,37 +357,40 @@ fn text_field(role: &str, text: &str, tag: &str) -> Node {
         .child(Node::new(node::TEXT).prop(prop::CONTENT, text.to_string()))
 }
 
-/// Convert a field's XML children to inline IR nodes. Plain text becomes a
-/// `TEXT` node; `<style face="...">` becomes the matching inline markup
-/// node (`emphasis`/`strong`/`underline`/`superscript`/`subscript`) wrapped
-/// around its own (recursively converted) content — `face="normal"` (or
-/// any unrecognized/absent face) passes its content through unwrapped.
-/// Any other unexpected element is also passed through transparently
-/// (its content flattened in, rather than dropped) since EndNote's actual
-/// exporters occasionally nest other presentation wrappers here.
-fn convert_inline_children(children: &[XmlNode]) -> Vec<Node> {
+/// Convert a field's `endnotexml-fmt` inline content to IR inline nodes.
+/// Plain text becomes a `TEXT` node; `Style { face, .. }` becomes the
+/// matching inline markup node (`emphasis`/`strong`/`underline`/
+/// `superscript`/`subscript`) wrapped around its own (recursively
+/// converted) content — `face == "normal"` (or any unrecognized/absent
+/// face) passes its content through unwrapped. `Other` (an element
+/// `endnotexml-fmt` doesn't recognize as `<style>`) is also passed through
+/// transparently (its content flattened in, rather than dropped), since
+/// EndNote's actual exporters occasionally nest other presentation wrappers
+/// here — deciding *how* to interpret `face`/unrecognized elements is this
+/// adapter's job; `endnotexml-fmt` itself only records them verbatim.
+fn inline_to_ir(inline: &[Inline]) -> Vec<Node> {
     let mut out = Vec::new();
-    for child in children {
-        match child {
-            XmlNode::Text(t) => {
+    for item in inline {
+        match item {
+            Inline::Text(t) => {
                 if !t.is_empty() {
                     out.push(Node::new(node::TEXT).prop(prop::CONTENT, t.clone()));
                 }
             }
-            XmlNode::Element { name, .. } if name == "style" => {
-                out.extend(convert_style(child));
+            Inline::Style { face, children } => {
+                out.extend(convert_style(face, children));
             }
-            XmlNode::Element { children, .. } => {
-                out.extend(convert_inline_children(children));
+            Inline::Other { children, .. } => {
+                out.extend(inline_to_ir(children));
             }
         }
     }
     out
 }
 
-fn convert_style(style: &XmlNode) -> Vec<Node> {
-    let inner = convert_inline_children(children_of(style));
-    let face = attr(style, "face").unwrap_or("normal").to_lowercase();
+fn convert_style(face: &str, children: &[Inline]) -> Vec<Node> {
+    let inner = inline_to_ir(children);
+    let face = face.to_lowercase();
     let wrap = |kind: &str, children: Vec<Node>| vec![Node::new(kind).children(children)];
     if face.contains("bold") && face.contains("italic") {
         wrap(
@@ -718,5 +517,40 @@ mod tests {
             Some("Great")
         );
         assert_eq!(title.children[2].kind.as_str(), node::TEXT);
+    }
+
+    #[test]
+    fn test_unknown_record_element_preserved() {
+        let xml = r#"<xml><records><record>
+  <ref-type>13</ref-type>
+  <custom1>foo</custom1>
+</record></records></xml>"#;
+        let result = parse(xml).unwrap();
+        let doc = result.value;
+        let entry = &doc.content.children[0].children[0];
+        let misc = entry
+            .children
+            .iter()
+            .find(|c| c.props.get_str("endnote:field") == Some("custom1"))
+            .unwrap();
+        assert_eq!(misc.props.get_str(prop::FIELD_ROLE), Some("misc"));
+    }
+
+    #[test]
+    fn test_foreign_keys() {
+        let xml = r#"<xml><records><record>
+  <ref-type>17</ref-type>
+  <foreign-keys><key app="EN" db-id="abc123">42</key></foreign-keys>
+</record></records></xml>"#;
+        let result = parse(xml).unwrap();
+        let doc = result.value;
+        let entry = &doc.content.children[0].children[0];
+        let key_field = entry
+            .children
+            .iter()
+            .find(|c| c.props.get_str("endnote:field") == Some("foreign-keys/key"))
+            .unwrap();
+        assert_eq!(key_field.props.get_str("endnote:app"), Some("EN"));
+        assert_eq!(key_field.props.get_str("endnote:db-id"), Some("abc123"));
     }
 }

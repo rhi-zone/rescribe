@@ -9,4 +9,4 @@ description = "EndNote XML reader for rescribe"
 [dependencies]
 rescribe-core = { workspace = true }
 rescribe-std = { workspace = true }
-quick-xml = { workspace = true }
+endnotexml-fmt = { workspace = true }
